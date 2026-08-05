@@ -88,6 +88,18 @@ fun typos(target: Target) > Command {
     }};
 }
 
+
+// The spell's own account of itself, read by the docs generator. It lives here
+// rather than in a table keyed by spell name inside that generator, so a rename
+// carries the prose with it instead of stranding it under a name that is gone.
+// The source language this spell adapts. It tags the spell node, so a `language:`
+// query groups the adapter with that language's files and symbols.
+export fun mgs_getLanguage() > str { return "markdown"; }
+
+export fun mgs_getDocDescription() > str { return "Markdown docs spell: markdownlint, prettier, and typos for linting, formatting, and spell-checking prose."; }
+export fun mgs_getDocIntro() > str { return "The `markdown` spell lints and formats Markdown. `markdownlint` enforces style, `prettier` checks formatting, and `typos` catches known misspellings; the `rw` charm turns each check into an in-place fix."; }
+export fun mgs_listDocTags() > [str] { return ["markdown", "docs", "prettier", "lint"]; }
+
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"markdownlint": markdownlint, "prettier": prettier, "typos": typos};
 }

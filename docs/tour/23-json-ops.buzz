@@ -1,0 +1,124 @@
+// JSON ops: read a tool's output as data, not as a string. Most mainstream tools
+// grew a JSON mode - `go mod edit -json`, `cargo metadata`, `docker inspect` - and
+// the usual magusfile then re-implements the decode by hand off `.stdout`. An op can
+// instead DECLARE that its output is one JSON document, and magus decodes it once.
+//
+// The declaration lives in the spell, on the Command:
+//
+//     fun goModJSON(target: Target) > Command {
+//         return Command{bin = "go", args = ["mod", "edit", "-json"], returns_json = true};
+//     }
+//
+// Two things that declaration is NOT.
+//
+// It is not DETECTION. magus never sniffs stdout to guess whether it looks like
+// JSON: that would make the return type depend on run-time data, so a tool that
+// failed and printed an error would silently change what the op returns.
+//
+// It is not the op's NAME. `go-mod-edit-json` reads like a promise and is not one -
+// a name is a label, not a contract. An op called `metadata` may return JSON and an
+// op called `foo-json` may not. `magus describe spell <name>` reports the declared
+// return type; that is where you look.
+//
+// What you get back is the exec record you already know, plus a `json` member
+// holding the same Boxed that serialize\jsonDecode returns - so it answers to q()
+// and the typed accessors, and there is one JSON shape in the language rather than
+// a second one magus invented.
+//
+// ---------------------------------------------------------------------------
+// The one footgun, and the rail that catches it: MGS1025
+// ---------------------------------------------------------------------------
+//
+// A charm rewrites an op's argv at run time. So a charm on a JSON op can reach the
+// very argument that selected JSON - and it would break under a charm the op's
+// author never ran, which is the worst way to find out.
+//
+// MGS1025 WARNS where a charm could do that. It is a heuristic, not a proof: magus
+// cannot tell which argument selects a tool's output format, so it cannot know that
+// a given replace is wrong. An append is simply the only shape that CANNOT unselect
+// a format, so anything else is worth a second look.
+//
+//     // FLAGGED by MGS1025 - replace could land on the argument that selected JSON:
+//     fun cargoMetadata(target: Target) > Command {
+//         return Command{bin = "cargo", args = ["metadata", "--format-version", "1"],
+//             returns_json = true, charms = {
+//                 "gha": replace(args, "--format-version", "--format-version=2"),
+//             }};
+//     }
+//
+//     // CLEAN - the format argument survives and the charm only adds to it:
+//     fun cargoMetadata(target: Target) > Command {
+//         return Command{bin = "cargo", args = ["metadata", "--format-version", "1"],
+//             returns_json = true, charms = {
+//                 "debug": append(args, "--verbose"),
+//             }};
+//     }
+//
+// When the replace IS correct - it rewrites an unrelated flag, or swaps one JSON
+// mode for another - say so, and the warning goes away:
+//
+//     export fun mgs_listJSONCharmExceptions() > {str: str} {
+//         return {"cargo-metadata": "gha swaps --format-version 1 for 2; both are JSON"};
+//     }
+//
+// A reason is required, the same nolint model magus uses for an unprobed bin: an
+// undeclared exception is indistinguishable from an author who never considered it.
+//
+// And if a charm genuinely needs a DIFFERENT output format, it is not a charm on
+// this op - it is a different op. A charm expresses one intent applied to the same
+// work (rw makes a check write, debug adds verbosity); changing what the command
+// RETURNS is different work. `go-mod-edit` and `go-mod-edit-json` are that shape:
+// siblings, one returning a verdict and one returning data.
+
+import "magus";
+import "std";
+import "magus/spell/golang";
+
+magus\project({
+    "spells": [golang],
+});
+
+// The raw string is still there. Nothing was taken away - `json` is additive, so an
+// op that gains returns_json does not break a caller already reading `.stdout`.
+export fun raw(ctx: magus\Context, args: [str]) > void {
+    final r = golang["go-mod-edit-json"](ctx);
+    std\print("stdout is still a string, bytes: {r.stdout.len()}");
+}
+
+// The decoded value. q() walks the document and the typed accessor pulls the leaf:
+// stringValue() on a str, integerValue() on an int, listValue() on a list. Reaching
+// for the wrong one tells you so, rather than handing back a surprise.
+export fun decoded(ctx: magus\Context, args: [str]) > void {
+    final mod = golang["go-mod-edit-json"](ctx).json;
+    std\print("module: " + mod.q("Module").q("Path").stringValue());
+    std\print("go:     " + mod.q("Go").stringValue());
+}
+
+// Failure is still failure. The exit code decides whether stdout is even a candidate
+// for decoding, so a tool that dies mid-run reports as a tool that died - `json` is
+// simply not set, and the caller reads `code` and `stderr` exactly as before. The
+// one new error is an op that DECLARED returns_json and emitted something else,
+// which is a spell-authoring bug and says so, naming the op.
+export fun careful(ctx: magus\Context, args: [str]) > void {
+    final r = golang["go-mod-edit-json"](ctx);
+    if (r.code != 0) {
+        std\print("the tool failed; no json to read, same as any other op");
+        return;
+    }
+    std\print("module: " + r.json.q("Module").q("Path").stringValue());
+}
+
+// A charm still composes with a JSON op - it just has to append. `debug` adds a flag
+// and the format argument survives, so the decode is unaffected and `json` is still
+// there. That is what MGS1025 nudges toward: prefer an append, and argue for the
+// rest.
+//
+// Run this as `magus run charmed:debug` to see the charm apply.
+export fun charmed(ctx: magus\Context, args: [str]) > void {
+    final r = golang["go-mod-edit-json"](ctx);
+    if (r.code != 0) {
+        std\print("tool failed; nothing to decode");
+        return;
+    }
+    std\print("decoded under whatever charms are active: " + r.json.q("Module").q("Path").stringValue());
+}

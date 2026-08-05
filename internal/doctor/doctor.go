@@ -183,6 +183,7 @@ func (r *runner) run(wsErr error) Report {
 		r.checkBespokePhaseFragmentTargets(projects),
 		r.checkSpellProbeCoverage(projects),
 		r.checkSpellOpNaming(projects),
+		r.checkJSONOpCharms(projects),
 		r.checkUnreachedFootprintDecls(projects),
 		r.checkRedundantFootprintGlobs(projects),
 		r.checkDeadOutputGlobs(projects),

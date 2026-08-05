@@ -86,6 +86,18 @@ fun bufBreaking(target: Target) > Command {
     }};
 }
 
+
+// The spell's own account of itself, read by the docs generator. It lives here
+// rather than in a table keyed by spell name inside that generator, so a rename
+// carries the prose with it instead of stranding it under a name that is gone.
+// The source language this spell adapts. It tags the spell node, so a `language:`
+// query groups the adapter with that language's files and symbols.
+export fun mgs_getLanguage() > str { return "protobuf"; }
+
+export fun mgs_getDocDescription() > str { return "Protobuf spell: buf build, lint, format, and code generation from .proto sources."; }
+export fun mgs_getDocIntro() > str { return "The `protobuf` spell forks the `buf` CLI to build, lint, format, and generate from Protobuf sources. It declares `gen/**` as its outputs so magus caches generated code correctly. It is named for the domain rather than for `buf`, leaving room for a second protobuf tool."; }
+export fun mgs_listDocTags() > [str] { return ["protobuf", "buf", "codegen", "lint"]; }
+
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {
         "buf-build": bufBuild,

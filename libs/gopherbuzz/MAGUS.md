@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2581 nodes** and **5857 edges** (schema v7). Query it instead of grepping:
+This workspace has a knowledge graph of **2622 nodes** and **5919 edges** (schema v7). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -52,11 +52,11 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | charm | 9 | `magus query kind:charm` | `rw`, `cd`, `snapshot` |
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `magus` |
 | method | 162 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 58 | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS4001` |
-| doc | 283 | `magus query kind:doc` | `docs/reference/buzz/index.md`, `docs/concepts/spells.md`, `docs/documentation.md` |
-| dir | 144 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
-| file | 242 | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 1307 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| diagnostic | 59 | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS3001` |
+| doc | 284 | `magus query kind:doc` | `docs/concepts/spells.md`, `docs/reference/buzz/index.md`, `docs/documentation.md` |
+| dir | 144 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `docs/reference/codes/magusfile`, `std/examples/fs` |
+| file | 243 | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
+| function | 1345 | `magus query kind:function` | `sel`, `sendObject`, `send` |
 | import | 125 | `magus query kind:import` | `magus`, `std`, `fs` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 

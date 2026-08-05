@@ -33,6 +33,14 @@ fun verifyAttestation(target: Target) > Command { return Command{bin = "cosign",
 fun signBlob(target: Target) > Command { return Command{bin = "cosign", args = ["sign-blob", "--yes"]}; }
 fun verifyBlob(target: Target) > Command { return Command{bin = "cosign", args = ["verify-blob"]}; }
 
+
+// The spell's own account of itself, read by the docs generator. It lives here
+// rather than in a table keyed by spell name inside that generator, so a rename
+// carries the prose with it instead of stranding it under a name that is gone.
+export fun mgs_getDocDescription() > str { return "Sigstore spell: cosign sign, attest, verify, verify-attestation, and the blob pair for artifacts and images."; }
+export fun mgs_getDocIntro() > str { return "The `sigstore` spell forks the Sigstore `cosign` CLI to sign, attest, and verify artifacts - registry images and plain files (the blob pair) alike. Signing and attestation pass `--yes` for non-interactive (CI) use. Credentials ride the environment, and the sandbox scrubs it: pass `COSIGN_*` (and, for keyless OIDC in GitHub Actions, `ACTIONS_ID_TOKEN_REQUEST_URL`/`ACTIONS_ID_TOKEN_REQUEST_TOKEN`) through `sandbox.env.passthrough` in magus.yaml, or signing fails with an auth error that never names the scrub."; }
+export fun mgs_listDocTags() > [str] { return ["cosign", "sigstore", "signing", "supply-chain"]; }
+
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {
         "cosign-sign": sign,

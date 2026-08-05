@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -35,82 +36,25 @@ import (
 // intro, tags, source directory) that isn't derivable from the Descriptor. The
 // ops table and per-op detail are generated; this only supplies the prose.
 type spellInfo struct {
-	dir         string   // source directory under spells/ (e.g. "golang" for the "go" spell)
-	language    string   // human language/toolchain label, or "" for language-agnostic tools
-	description string   // one-sentence frontmatter description
-	intro       string   // one-paragraph page intro
-	tags        []string // extra frontmatter tags (name + "spell" are always added)
-	aliases     []string // old clean URLs that redirect here (the short spell names pre-rename)
+	dir      string   // source directory under spells/ (e.g. "golang" for the "go" spell)
+	language string   // human language/toolchain label, or "" for language-agnostic tools
+	aliases  []string // old clean URLs that redirect here (the pre-rename spell names)
 }
 
-// spellMeta is the authored metadata keyed by runtime spell name (Descriptor.Name).
-// Every built-in must have an entry; main() exits non-zero on a spell with no
-// entry, so a newly added spell can't ship an unlabeled page.
+// spellMeta is what belongs to the docs SITE rather than to a spell: the clean URLs
+// a renamed spell used to live at. Everything a spell can say about ITSELF - its
+// description, intro, tags, language - is declared in spell.buzz (mgs_getDocDescription
+// and friends) and read off the Descriptor, so a rename carries the prose with it.
+//
+// This table used to hold that prose too, keyed by spell name, and that was the bug:
+// renaming docker to oci left its page describing "the `docker` spell" under a key
+// that no longer existed, and the generator hard-failed on the missing entry. A spell
+// with no entry here is now perfectly fine - it simply has no retired URLs.
 var spellMeta = map[string]spellInfo{
-	"go": {
-		dir: "golang", language: "Go",
-		description: "Go toolchain spell: build, test, vet, fmt, gofumpt, mod-tidy, golangci-lint, and govulncheck as magus ops.",
-		intro:       "The `go` spell wires the Go toolchain into a magusfile: each op forks a `go` (or `gofmt`/`gofumpt`) subcommand directly, with no shell. golangci-lint and govulncheck run from PATH - pinned by whatever the workspace uses (mise, asdf, a system package) - and the spell's named version probes record which, so a linter upgrade moves the cache key.",
-		tags:        []string{"go", "golang", "build", "test", "lint"},
-	},
-	"rust": {
-		dir: "rust", language: "Rust",
-		description: "Rust toolchain spell: cargo build, check, test, clippy, fmt, run, doc, bench, audit, and deny as magus ops.",
-		intro:       "The `rust` spell wires Cargo into a magusfile. Each op forks a `cargo` subcommand directly with no baked-in flags: the build profile (`--release`) and lint policy (`-- -D warnings`) are the magusfile's to append through the op's args option.",
-		tags:        []string{"rust", "cargo", "build", "test"},
-		aliases:     []string{"concepts/spells/rs"},
-	},
-	"typescript": {
-		dir: "typescript", language: "TypeScript",
-		description: "TypeScript toolchain spell: tsc, eslint, prettier, vitest, jest, install, and audit run through the project package manager.",
-		aliases:     []string{"concepts/spells/ts"},
-		intro:       "The `typescript` spell wires a TypeScript project's tooling into a magusfile, forking each tool through the project package manager. Its ops record `pnpm`, and the engine substitutes each project's detected manager (npm, yarn, or bun) at fork time: the project's `package_manager` option first, then `package.json`'s `packageManager` field, then the lockfile, then pnpm. It is an opaque spell: `preflight` composes the individual checks into one target.",
-		tags:        []string{"typescript", "node", "eslint", "vitest"},
-	},
-	"python": {
-		dir: "python", language: "Python",
-		description: "Python toolchain spell: pytest, ruff check/format, mypy, pyright, black, pip-audit, and uv build/sync as magus ops.",
-		intro:       "The `python` spell wires a Python project's tooling into a magusfile through `uv`. Tests, linting (ruff), type-checking (mypy or pyright), and formatting (ruff-format or black) run as `uv run` subcommands so they resolve from the project's locked environment; uv-sync installs that environment for a preflight target.",
-		tags:        []string{"python", "uv", "pytest", "ruff"},
-		aliases:     []string{"concepts/spells/py"},
-	},
-	"markdown": {
-		dir: "markdown", language: "Markdown",
-		description: "Markdown docs spell: markdownlint, prettier, and typos for linting, formatting, and spell-checking prose.",
-		intro:       "The `markdown` spell lints and formats Markdown. `markdownlint` enforces style, `prettier` checks formatting, and `typos` catches known misspellings; the `rw` charm turns each check into an in-place fix.",
-		tags:        []string{"markdown", "docs", "prettier", "lint"},
-		aliases:     []string{"concepts/spells/md"},
-	},
-	"docker": {
-		dir: "docker", language: "Docker",
-		description: "Docker spell: image build, build-check, buildx, hadolint linting, and trivy/scout image scanning.",
-		intro:       "The `docker` spell forks the `docker` CLI (and `hadolint`) to build images and lint Dockerfiles. `docker-build-check` runs the builder's `--check` preflight without producing an image, and `trivy`/`docker-scout` scan a built image for the `security` target.",
-		tags:        []string{"docker", "container", "image", "hadolint"},
-	},
-	"buf": {
-		dir: "buf", language: "Protobuf",
-		description: "Buf spell: protobuf build, lint, format, and code generation.",
-		intro:       "The `buf` spell forks the `buf` CLI to build, lint, format, and generate from Protobuf sources. It declares `gen/**` as its outputs so magus caches generated code correctly.",
-		tags:        []string{"protobuf", "buf", "codegen", "lint"},
-	},
-	"cosign": {
-		dir: "cosign", language: "",
-		description: "Cosign spell: sign, attest, verify, verify-attestation, and the blob pair for artifacts and images.",
-		intro:       "The `cosign` spell forks the Sigstore `cosign` CLI to sign, attest, and verify artifacts - registry images and plain files (the blob pair) alike. Signing and attestation pass `--yes` for non-interactive (CI) use. Credentials ride the environment, and the sandbox scrubs it: pass `COSIGN_*` (and, for keyless OIDC in GitHub Actions, `ACTIONS_ID_TOKEN_REQUEST_URL`/`ACTIONS_ID_TOKEN_REQUEST_TOKEN`) through `sandbox.env.passthrough` in magus.yaml, or signing fails with an auth error that never names the scrub.",
-		tags:        []string{"cosign", "sigstore", "signing", "supply-chain"},
-	},
-	"buzz": {
-		dir: "buzz", language: "Buzz",
-		description: "Buzz spell: check and test .buzz sources, plus run them through the magus interpreter.",
-		intro:       "The `buzz` spell checks and tests Buzz sources. Each op finds every `.buzz` file and runs `buzz --check`, `buzz --test`, or the magus interpreter over it.",
-		tags:        []string{"buzz", "gopherbuzz", "check", "test"},
-	},
-	"bash": {
-		dir: "bash", language: "Shell",
-		description: "Bash spell: shellcheck linting, shfmt formatting, and bats tests for shell scripts.",
-		intro:       "The `bash` spell covers the shell lifecycle: `shellcheck` lints every `.sh`/`.bash` file, `shfmt` formats them (diff by default, rewrite under `rw`), and `bats` runs a test suite. Extensionless shebang scripts are a known limit - list them explicitly via op args.",
-		tags:        []string{"bash", "shell", "shellcheck", "lint"},
-	},
+	"rust":       {aliases: []string{"concepts/spells/rs"}},
+	"typescript": {aliases: []string{"concepts/spells/ts"}},
+	"python":     {aliases: []string{"concepts/spells/py"}},
+	"markdown":   {aliases: []string{"concepts/spells/md"}},
 }
 
 // repoRoot is the module root, resolved once so the args table's source links
@@ -140,8 +84,8 @@ func main() {
 	builtins := spellruntime.Builtins()
 	names := make([]string, 0, len(builtins))
 	for name := range builtins {
-		if _, ok := spellMeta[name]; !ok {
-			fmt.Fprintf(os.Stderr, "magus-spelldocs: built-in spell %q has no spellMeta entry; add one\n", name)
+		if builtins[name].DocDescription == "" {
+			fmt.Fprintf(os.Stderr, "magus-spelldocs: built-in spell %q declares no mgs_getDocDescription; add one to its spell.buzz\n", name)
 			os.Exit(1)
 		}
 		names = append(names, name)
@@ -211,20 +155,20 @@ func renderSpell(d spells.Descriptor) string {
 	meta := spellMeta[d.Name]
 	var b strings.Builder
 
-	tags := append([]string{d.Name, "spell"}, meta.tags...)
+	tags := append([]string{d.Name, "spell"}, d.DocTags...)
 	tags = append(tags, "tools")
 	docs.WriteFrontmatter(&b, docs.Frontmatter{
 		Title:       d.Name + " spell",
 		Aliases:     meta.aliases,
-		Description: meta.description,
+		Description: d.DocDescription,
 		Tags:        dedupe(tags),
 	})
 
 	fmt.Fprintf(&b, "# %s\n\n", d.Name)
-	fmt.Fprintf(&b, "%s\n\n", meta.intro)
+	fmt.Fprintf(&b, "%s\n\n", d.DocIntro)
 
 	// Facts derivable from the Descriptor, as a short definition list.
-	fmt.Fprintf(&b, "**Runtime name:** `%s` (source `spells/%s/`)\n\n", d.Name, meta.dir)
+	fmt.Fprintf(&b, "**Runtime name:** `%s` (source `spells/%s/`)\n\n", d.Name, sourceDir(d.Name))
 	if len(d.VersionCmd) > 0 {
 		fmt.Fprintf(&b, "**Version probe:** `%s`\n\n", strings.Join(d.VersionCmd, " "))
 	} else {
@@ -252,7 +196,7 @@ func renderSpell(d spells.Descriptor) string {
 		fmt.Fprintf(&b, "**Opaque:** yes (its outputs are not enumerable, so magus treats the whole workspace as the cache input).\n\n")
 	}
 
-	opDocs := parseOpDocs(meta.dir)
+	opDocs := parseOpDocs(sourceDir(d.Name))
 	ops := d.OpNames()
 
 	writeArgsSection(&b, d.Name)
@@ -370,13 +314,12 @@ func injectSpellList(path string, builtins map[string]spells.Descriptor, names [
 	fmt.Fprintln(&table, "|-------|----------|-----|---------|")
 	for _, name := range names {
 		d := builtins[name]
-		meta := spellMeta[name]
-		lang := meta.language
-		if lang == "" {
-			lang = "-"
-		}
+		// The spell's declared language (mgs_getLanguage), title-cased for display. A
+		// spell that adapts no single language (oci, sigstore) declares none and reads
+		// as "-", which is the honest answer rather than a label invented here.
+		lang := displayLanguage(d.Language)
 		// Link is relative to docs/spells.md: spells/<name>.md -> /spells/<name>/.
-		fmt.Fprintf(&table, "| [`%s`](spells/%s.md) | %s | %d | %s |\n", name, name, lang, len(d.Ops), meta.description)
+		fmt.Fprintf(&table, "| [`%s`](spells/%s.md) | %s | %d | %s |\n", name, name, lang, len(d.Ops), d.DocDescription)
 	}
 
 	rebuilt := src[:headEnd] + table.String() + src[ei:]
@@ -521,4 +464,43 @@ func dedupe(items []string) []string {
 		out = append(out, s)
 	}
 	return out
+}
+
+// sourceDir resolves a spell's source directory by asking the tree which directory
+// declares that name, rather than restating the mapping in a table. Spell name and
+// source directory are independent by design, so this reads mgs_getName out of each
+// spells/<dir>/spell.buzz and matches - a derivation that cannot drift.
+func sourceDir(name string) string {
+	entries, err := os.ReadDir(spellsDir)
+	if err != nil {
+		return name
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		src, err := os.ReadFile(filepath.Join(spellsDir, e.Name(), "spell.buzz"))
+		if err != nil {
+			continue
+		}
+		if m := spellNameRe.FindSubmatch(src); m != nil && string(m[1]) == name {
+			return e.Name()
+		}
+	}
+	return name
+}
+
+// spellNameRe matches the mgs_getName declaration every spell carries.
+var spellNameRe = regexp.MustCompile(`mgs_getName\(\)\s*>\s*str\s*\{\s*return\s+"([^"]+)"`)
+
+// displayLanguage title-cases a spell's declared language for the index table, and
+// reports "-" for a spell that adapts none.
+func displayLanguage(lang string) string {
+	switch lang {
+	case "":
+		return "-"
+	case "typescript":
+		return "TypeScript"
+	}
+	return strings.ToUpper(lang[:1]) + lang[1:]
 }

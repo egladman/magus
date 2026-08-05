@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2581,
-  "edge_count": 5856,
+  "node_count": 2622,
+  "edge_count": 5917,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -234,6 +234,14 @@
       "label": "MGS1024",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1024/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1025",
+      "kind": "diagnostic",
+      "label": "MGS1025",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1025/"
       }
     },
     {
@@ -1315,7 +1323,7 @@
       "source": "docs/reference",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "152",
+        "dir_files": "153",
         "dir_languages": "markdown"
       }
     },
@@ -1348,7 +1356,7 @@
       "source": "docs/reference/codes",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "74",
+        "dir_files": "75",
         "dir_languages": "markdown"
       }
     },
@@ -1392,7 +1400,7 @@
       "source": "docs/reference/codes/magusfile",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "24",
+        "dir_files": "25",
         "dir_languages": "markdown"
       }
     },
@@ -1480,7 +1488,7 @@
       "source": "docs/tour",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "22",
+        "dir_files": "23",
         "dir_languages": "buzz"
       }
     },
@@ -2870,8 +2878,8 @@
       "attrs": {
         "role": "doc",
         "section": "concepts",
-        "tags": "go,spell,golang,build,test,lint,tools",
-        "title": "go spell"
+        "tags": "golang,spell,go,build,test,lint,tools",
+        "title": "golang spell"
       }
     },
     {
@@ -2894,8 +2902,8 @@
       "attrs": {
         "role": "doc",
         "section": "concepts",
-        "tags": "docker,spell,container,image,hadolint,tools",
-        "title": "docker spell"
+        "tags": "oci,spell,docker,container,image,hadolint,tools",
+        "title": "oci spell"
       }
     },
     {
@@ -2906,8 +2914,8 @@
       "attrs": {
         "role": "doc",
         "section": "concepts",
-        "tags": "buf,spell,protobuf,codegen,lint,tools",
-        "title": "buf spell"
+        "tags": "protobuf,spell,buf,codegen,lint,tools",
+        "title": "protobuf spell"
       }
     },
     {
@@ -2942,8 +2950,8 @@
       "attrs": {
         "role": "doc",
         "section": "concepts",
-        "tags": "cosign,spell,sigstore,signing,supply-chain,tools",
-        "title": "cosign spell"
+        "tags": "sigstore,spell,cosign,signing,supply-chain,tools",
+        "title": "sigstore spell"
       }
     },
     {
@@ -4234,6 +4242,18 @@
         "section": "reference",
         "tags": "MGS1024,magusfile,spells,naming,conventions,doctor",
         "title": "MGS1024: spell op named against the formula"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/magusfile/MGS1025.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/magusfile/MGS1025.md",
+      "source": "docs/reference/codes/magusfile/MGS1025.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1025,magusfile,spells,charms,json,doctor",
+        "title": "MGS1025: a charm can unselect a JSON op's format"
       }
     },
     {
@@ -5803,6 +5823,15 @@
       "kind": "file",
       "label": "docs/tour/22-service-adoption.buzz",
       "source": "docs/tour/22-service-adoption.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
+      "id": "file:docs/tour/23-json-ops.buzz",
+      "kind": "file",
+      "label": "docs/tour/23-json-ops.buzz",
+      "source": "docs/tour/23-json-ops.buzz",
       "attrs": {
         "language": "buzz"
       }
@@ -9892,7 +9921,7 @@
       "kind": "function",
       "label": "collectDemos",
       "doc": "collectDemos maps each concept docSlug to the FIRST tour step that demonstrates it (its title + card anchor), pre-walk, so renderFile can inject a \"see the demo\" callout on the matching concept page.",
-      "source": "docs/site/tour.buzz:174",
+      "source": "docs/site/tour.buzz:177",
       "attrs": {
         "exported": "true"
       }
@@ -9918,7 +9947,7 @@
       "id": "function:docs/site/tour.buzz:renderTourPage",
       "kind": "function",
       "label": "renderTourPage",
-      "source": "docs/site/tour.buzz:184",
+      "source": "docs/site/tour.buzz:187",
       "attrs": {
         "exported": "true"
       }
@@ -10760,6 +10789,46 @@
       "label": "mgs_listTargets",
       "doc": "One map of op name to handler, same as any spell: a handler returning a Service is what makes the op long-running and shared, rather than a separate kind of declaration.",
       "source": "docs/tour/22-service-adoption.buzz:75",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/23-json-ops.buzz:careful",
+      "kind": "function",
+      "label": "careful",
+      "doc": "Failure is still failure. The exit code decides whether stdout is even a candidate for decoding, so a tool that dies mid-run reports as a tool that died - `json` is simply not set, and the caller reads `code` and `stderr` exactly as before. The one new error is an op that DECLARED returns_json and emitted something else, which is a spell-authoring bug and says so, naming the op.",
+      "source": "docs/tour/23-json-ops.buzz:102",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/23-json-ops.buzz:charmed",
+      "kind": "function",
+      "label": "charmed",
+      "doc": "A charm still composes with a JSON op - it just has to append. `debug` adds a flag and the format argument survives, so the decode is unaffected and `json` is still there. That is what MGS1025 nudges toward: prefer an append, and argue for the rest.  Run this as `magus run charmed:debug` to see the charm apply.",
+      "source": "docs/tour/23-json-ops.buzz:117",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/23-json-ops.buzz:decoded",
+      "kind": "function",
+      "label": "decoded",
+      "doc": "The decoded value. q() walks the document and the typed accessor pulls the leaf: stringValue() on a str, integerValue() on an int, listValue() on a list. Reaching for the wrong one tells you so, rather than handing back a surprise.",
+      "source": "docs/tour/23-json-ops.buzz:91",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/23-json-ops.buzz:raw",
+      "kind": "function",
+      "label": "raw",
+      "doc": "The raw string is still there. Nothing was taken away - `json` is additive, so an op that gains returns_json does not break a caller already reading `.stdout`.",
+      "source": "docs/tour/23-json-ops.buzz:83",
       "attrs": {
         "exported": "true"
       }
@@ -16905,6 +16974,34 @@
       "source": "spells/bash/spell.buzz:80"
     },
     {
+      "id": "function:spells/bash/spell.buzz:mgs_getDocDescription",
+      "kind": "function",
+      "label": "mgs_getDocDescription",
+      "source": "spells/bash/spell.buzz:92",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/bash/spell.buzz:mgs_getDocIntro",
+      "kind": "function",
+      "label": "mgs_getDocIntro",
+      "source": "spells/bash/spell.buzz:93",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/bash/spell.buzz:mgs_getLanguage",
+      "kind": "function",
+      "label": "mgs_getLanguage",
+      "doc": "The spell's own account of itself, read by the docs generator. It lives here rather than in a table keyed by spell name inside that generator, so a rename carries the prose with it instead of stranding it under a name that is gone. The source language this spell adapts. It tags the spell node, so a `language:` query groups the adapter with that language's files and symbols.",
+      "source": "spells/bash/spell.buzz:90",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:spells/bash/spell.buzz:mgs_getName",
       "kind": "function",
       "label": "mgs_getName",
@@ -16919,6 +17016,15 @@
       "label": "mgs_getVersionCommands",
       "doc": "shellcheck, shfmt, and bats are PATH binaries pinned by no manifest, each a verdict decider: upgrading one changes which scripts pass while every cache entry replays the old verdict (the docker spell's hadolint note is the long version). Named probes record UNPROBED when absent, so a workspace binding only shellcheck pays nothing for the others.",
       "source": "spells/bash/spell.buzz:20",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/bash/spell.buzz:mgs_listDocTags",
+      "kind": "function",
+      "label": "mgs_listDocTags",
+      "source": "spells/bash/spell.buzz:94",
       "attrs": {
         "exported": "true"
       }
@@ -16957,7 +17063,7 @@
       "id": "function:spells/bash/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/bash/spell.buzz:84",
+      "source": "spells/bash/spell.buzz:96",
       "attrs": {
         "exported": "true"
       }
@@ -16998,6 +17104,34 @@
       "source": "spells/buzz/spell.buzz:71"
     },
     {
+      "id": "function:spells/buzz/spell.buzz:mgs_getDocDescription",
+      "kind": "function",
+      "label": "mgs_getDocDescription",
+      "source": "spells/buzz/spell.buzz:84",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/buzz/spell.buzz:mgs_getDocIntro",
+      "kind": "function",
+      "label": "mgs_getDocIntro",
+      "source": "spells/buzz/spell.buzz:85",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/buzz/spell.buzz:mgs_getLanguage",
+      "kind": "function",
+      "label": "mgs_getLanguage",
+      "doc": "The spell's own account of itself, read by the docs generator. It lives here rather than in a table keyed by spell name inside that generator, so a rename carries the prose with it instead of stranding it under a name that is gone. The source language this spell adapts. It tags the spell node, so a `language:` query groups the adapter with that language's files and symbols.",
+      "source": "spells/buzz/spell.buzz:82",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:spells/buzz/spell.buzz:mgs_getName",
       "kind": "function",
       "label": "mgs_getName",
@@ -17012,6 +17146,15 @@
       "label": "mgs_getVersionCommands",
       "doc": "No mgs_getVersionCommand: `magus buzz` only reports magus's own version, and the upstream `buzz` toolchain isn't reliably on PATH - a failing PRIMARY probe warns on every run. The upstream toolchain is a NAMED probe instead: a named probe records UNPROBED when the binary is absent (see the go spell's golangci-lint note), so workspaces without upstream buzz pay nothing, and where it is installed an upgrade moves the cache key for buzz-check/buzz-test verdicts.",
       "source": "spells/buzz/spell.buzz:40",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/buzz/spell.buzz:mgs_listDocTags",
+      "kind": "function",
+      "label": "mgs_listDocTags",
+      "source": "spells/buzz/spell.buzz:86",
       "attrs": {
         "exported": "true"
       }
@@ -17039,7 +17182,7 @@
       "id": "function:spells/buzz/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/buzz/spell.buzz:76",
+      "source": "spells/buzz/spell.buzz:88",
       "attrs": {
         "exported": "true"
       }
@@ -17851,8 +17994,8 @@
       "id": "function:spells/golang/spell.buzz:goModJSON",
       "kind": "function",
       "label": "goModJSON",
-      "doc": "Captures Go's structured module view for the spell's higher-level Buzz helper. This is deliberately a separate read-only op: `-json` and `-print` are distinct Go modes, while go-mod-edit remains the one command that applies derived edits.",
-      "source": "spells/golang/spell.buzz:135"
+      "doc": "Captures Go's structured module view for the spell's higher-level Buzz helper. This is deliberately a separate read-only op: `-json` and `-print` are distinct Go modes, while go-mod-edit remains the one command that applies derived edits.  returns_json declares that stdout is one JSON document, so the caller gets a decoded `json` member (a serialize Boxed) alongside the raw `stdout` instead of parsing it itself. It implies capture.",
+      "source": "spells/golang/spell.buzz:139"
     },
     {
       "id": "function:spells/golang/spell.buzz:goModTidy",
@@ -17876,14 +18019,14 @@
       "id": "function:spells/golang/spell.buzz:goVet",
       "kind": "function",
       "label": "goVet",
-      "source": "spells/golang/spell.buzz:138"
+      "source": "spells/golang/spell.buzz:142"
     },
     {
       "id": "function:spells/golang/spell.buzz:goVulncheck",
       "kind": "function",
       "label": "goVulncheck",
       "doc": "Invoked directly rather than through `go tool`, for the same reason as golangCILint above: `go tool govulncheck` requires the binary in the module's tool block, and a workspace that had not put it there got \"no such tool\" - so the op could not run at all. On PATH it is pinned by whatever the workspace uses, and mgs_getVersionCommands records which. The version probe moves the key on a binary upgrade, but the VERDICT also tracks the live Go vulndb: a newly published CVE flips it with zero input change. Compo",
-      "source": "spells/golang/spell.buzz:147"
+      "source": "spells/golang/spell.buzz:151"
     },
     {
       "id": "function:spells/golang/spell.buzz:gofumpt",
@@ -17898,6 +18041,25 @@
       "label": "golangCILint",
       "doc": "Invoked directly rather than through `go tool`: golangci-lint generates no code, so it has none of the generator/runtime lockstep that keeps protoc-gen-go pinned in go.mod. `go tool golangci-lint` also required the binary in the module's tool block, and a workspace that had not put it there got \"no such tool\" - the op could not run at all. On PATH it is pinned by whatever the workspace uses (mise, asdf, a system package), and the spell's version probe records which.",
       "source": "spells/golang/spell.buzz:105"
+    },
+    {
+      "id": "function:spells/golang/spell.buzz:mgs_getDocDescription",
+      "kind": "function",
+      "label": "mgs_getDocDescription",
+      "doc": "The spell's own account of itself, read by the docs generator. It lives here rather than in a table keyed by spell name inside that generator, so a rename carries the prose with it instead of stranding it under a name that is gone.",
+      "source": "spells/golang/spell.buzz:165",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/golang/spell.buzz:mgs_getDocIntro",
+      "kind": "function",
+      "label": "mgs_getDocIntro",
+      "source": "spells/golang/spell.buzz:166",
+      "attrs": {
+        "exported": "true"
+      }
     },
     {
       "id": "function:spells/golang/spell.buzz:mgs_getLanguage",
@@ -17933,6 +18095,15 @@
       "label": "mgs_getVersionCommands",
       "doc": "golangci-lint and govulncheck are the OTHER binaries this spell drives, and now that they run from PATH rather than `go tool` they are pinned outside the module graph - so `go version` no longer implies either. An upgrade to either changes which code passes while every cache entry replays the old verdict, and these probes are what move the key.  Absent, one records UNPROBED and its op fails with a clear \"not found\" rather than the probe failing the whole run - a workspace that binds the go spell only to bui",
       "source": "spells/golang/spell.buzz:34",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/golang/spell.buzz:mgs_listDocTags",
+      "kind": "function",
+      "label": "mgs_listDocTags",
+      "source": "spells/golang/spell.buzz:167",
       "attrs": {
         "exported": "true"
       }
@@ -17981,7 +18152,7 @@
       "id": "function:spells/golang/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/golang/spell.buzz:157",
+      "source": "spells/golang/spell.buzz:169",
       "attrs": {
         "exported": "true"
       }
@@ -18001,13 +18172,41 @@
       "kind": "function",
       "label": "scipGo",
       "doc": "scip is the reserved op that runs the Go SCIP indexer for the knowledge graph. The indexer is a PATH binary (install it with mise, not via go tool), so the op forks it directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-go writes there via --output. Run through sh so the env var expands.",
-      "source": "spells/golang/spell.buzz:153"
+      "source": "spells/golang/spell.buzz:157"
     },
     {
       "id": "function:spells/markdown/spell.buzz:markdownlint",
       "kind": "function",
       "label": "markdownlint",
       "source": "spells/markdown/spell.buzz:60"
+    },
+    {
+      "id": "function:spells/markdown/spell.buzz:mgs_getDocDescription",
+      "kind": "function",
+      "label": "mgs_getDocDescription",
+      "source": "spells/markdown/spell.buzz:99",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/markdown/spell.buzz:mgs_getDocIntro",
+      "kind": "function",
+      "label": "mgs_getDocIntro",
+      "source": "spells/markdown/spell.buzz:100",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/markdown/spell.buzz:mgs_getLanguage",
+      "kind": "function",
+      "label": "mgs_getLanguage",
+      "doc": "The spell's own account of itself, read by the docs generator. It lives here rather than in a table keyed by spell name inside that generator, so a rename carries the prose with it instead of stranding it under a name that is gone. The source language this spell adapts. It tags the spell node, so a `language:` query groups the adapter with that language's files and symbols.",
+      "source": "spells/markdown/spell.buzz:97",
+      "attrs": {
+        "exported": "true"
+      }
     },
     {
       "id": "function:spells/markdown/spell.buzz:mgs_getName",
@@ -18033,6 +18232,15 @@
       "kind": "function",
       "label": "mgs_listClaimedGlobs",
       "source": "spells/markdown/spell.buzz:28",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/markdown/spell.buzz:mgs_listDocTags",
+      "kind": "function",
+      "label": "mgs_listDocTags",
+      "source": "spells/markdown/spell.buzz:101",
       "attrs": {
         "exported": "true"
       }
@@ -18071,7 +18279,7 @@
       "id": "function:spells/markdown/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/markdown/spell.buzz:91",
+      "source": "spells/markdown/spell.buzz:103",
       "attrs": {
         "exported": "true"
       }
@@ -18133,6 +18341,25 @@
       "source": "spells/oci/spell.buzz:51"
     },
     {
+      "id": "function:spells/oci/spell.buzz:mgs_getDocDescription",
+      "kind": "function",
+      "label": "mgs_getDocDescription",
+      "doc": "The spell's own account of itself, read by the docs generator. It lives here rather than in a table keyed by spell name inside that generator, so a rename carries the prose with it instead of stranding it under a name that is gone.",
+      "source": "spells/oci/spell.buzz:69",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/oci/spell.buzz:mgs_getDocIntro",
+      "kind": "function",
+      "label": "mgs_getDocIntro",
+      "source": "spells/oci/spell.buzz:70",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:spells/oci/spell.buzz:mgs_getName",
       "kind": "function",
       "label": "mgs_getName",
@@ -18161,6 +18388,15 @@
       }
     },
     {
+      "id": "function:spells/oci/spell.buzz:mgs_listDocTags",
+      "kind": "function",
+      "label": "mgs_listDocTags",
+      "source": "spells/oci/spell.buzz:71",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:spells/oci/spell.buzz:mgs_listInstallHints",
       "kind": "function",
       "label": "mgs_listInstallHints",
@@ -18183,7 +18419,7 @@
       "id": "function:spells/oci/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/oci/spell.buzz:65",
+      "source": "spells/oci/spell.buzz:73",
       "attrs": {
         "exported": "true"
       }
@@ -18279,6 +18515,34 @@
       "source": "spells/protobuf/spell.buzz:51"
     },
     {
+      "id": "function:spells/protobuf/spell.buzz:mgs_getDocDescription",
+      "kind": "function",
+      "label": "mgs_getDocDescription",
+      "source": "spells/protobuf/spell.buzz:97",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/protobuf/spell.buzz:mgs_getDocIntro",
+      "kind": "function",
+      "label": "mgs_getDocIntro",
+      "source": "spells/protobuf/spell.buzz:98",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/protobuf/spell.buzz:mgs_getLanguage",
+      "kind": "function",
+      "label": "mgs_getLanguage",
+      "doc": "The spell's own account of itself, read by the docs generator. It lives here rather than in a table keyed by spell name inside that generator, so a rename carries the prose with it instead of stranding it under a name that is gone. The source language this spell adapts. It tags the spell node, so a `language:` query groups the adapter with that language's files and symbols.",
+      "source": "spells/protobuf/spell.buzz:95",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:spells/protobuf/spell.buzz:mgs_getName",
       "kind": "function",
       "label": "mgs_getName",
@@ -18292,6 +18556,15 @@
       "kind": "function",
       "label": "mgs_getVersionCommand",
       "source": "spells/protobuf/spell.buzz:27",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/protobuf/spell.buzz:mgs_listDocTags",
+      "kind": "function",
+      "label": "mgs_listDocTags",
+      "source": "spells/protobuf/spell.buzz:99",
       "attrs": {
         "exported": "true"
       }
@@ -18319,7 +18592,7 @@
       "id": "function:spells/protobuf/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/protobuf/spell.buzz:89",
+      "source": "spells/protobuf/spell.buzz:101",
       "attrs": {
         "exported": "true"
       }
@@ -18330,6 +18603,25 @@
       "label": "black",
       "doc": "black is the mainstream formatter alternative to ruff-format, offered per the eslint-vs-biome pattern; the magusfile picks one. Base --check is read-only; rw drops it to write, mirroring ruffFormat.",
       "source": "spells/python/spell.buzz:85"
+    },
+    {
+      "id": "function:spells/python/spell.buzz:mgs_getDocDescription",
+      "kind": "function",
+      "label": "mgs_getDocDescription",
+      "doc": "The spell's own account of itself, read by the docs generator. It lives here rather than in a table keyed by spell name inside that generator, so a rename carries the prose with it instead of stranding it under a name that is gone.",
+      "source": "spells/python/spell.buzz:131",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/python/spell.buzz:mgs_getDocIntro",
+      "kind": "function",
+      "label": "mgs_getDocIntro",
+      "source": "spells/python/spell.buzz:132",
+      "attrs": {
+        "exported": "true"
+      }
     },
     {
       "id": "function:spells/python/spell.buzz:mgs_getLanguage",
@@ -18370,6 +18662,15 @@
       }
     },
     {
+      "id": "function:spells/python/spell.buzz:mgs_listDocTags",
+      "kind": "function",
+      "label": "mgs_listDocTags",
+      "source": "spells/python/spell.buzz:133",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:spells/python/spell.buzz:mgs_listIgnoreDirs",
       "kind": "function",
       "label": "mgs_listIgnoreDirs",
@@ -18403,7 +18704,7 @@
       "id": "function:spells/python/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/python/spell.buzz:127",
+      "source": "spells/python/spell.buzz:135",
       "attrs": {
         "exported": "true"
       }
@@ -18553,6 +18854,25 @@
       "source": "spells/rust/spell.buzz:103"
     },
     {
+      "id": "function:spells/rust/spell.buzz:mgs_getDocDescription",
+      "kind": "function",
+      "label": "mgs_getDocDescription",
+      "doc": "The spell's own account of itself, read by the docs generator. It lives here rather than in a table keyed by spell name inside that generator, so a rename carries the prose with it instead of stranding it under a name that is gone.",
+      "source": "spells/rust/spell.buzz:127",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/rust/spell.buzz:mgs_getDocIntro",
+      "kind": "function",
+      "label": "mgs_getDocIntro",
+      "source": "spells/rust/spell.buzz:128",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:spells/rust/spell.buzz:mgs_getLanguage",
       "kind": "function",
       "label": "mgs_getLanguage",
@@ -18591,6 +18911,15 @@
       }
     },
     {
+      "id": "function:spells/rust/spell.buzz:mgs_listDocTags",
+      "kind": "function",
+      "label": "mgs_listDocTags",
+      "source": "spells/rust/spell.buzz:129",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:spells/rust/spell.buzz:mgs_listIgnoreDirs",
       "kind": "function",
       "label": "mgs_listIgnoreDirs",
@@ -18624,7 +18953,7 @@
       "id": "function:spells/rust/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/rust/spell.buzz:123",
+      "source": "spells/rust/spell.buzz:131",
       "attrs": {
         "exported": "true"
       }
@@ -18653,6 +18982,25 @@
       "source": "spells/sigstore/spell.buzz:26"
     },
     {
+      "id": "function:spells/sigstore/spell.buzz:mgs_getDocDescription",
+      "kind": "function",
+      "label": "mgs_getDocDescription",
+      "doc": "The spell's own account of itself, read by the docs generator. It lives here rather than in a table keyed by spell name inside that generator, so a rename carries the prose with it instead of stranding it under a name that is gone.",
+      "source": "spells/sigstore/spell.buzz:40",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/sigstore/spell.buzz:mgs_getDocIntro",
+      "kind": "function",
+      "label": "mgs_getDocIntro",
+      "source": "spells/sigstore/spell.buzz:41",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:spells/sigstore/spell.buzz:mgs_getName",
       "kind": "function",
       "label": "mgs_getName",
@@ -18671,10 +19019,19 @@
       }
     },
     {
+      "id": "function:spells/sigstore/spell.buzz:mgs_listDocTags",
+      "kind": "function",
+      "label": "mgs_listDocTags",
+      "source": "spells/sigstore/spell.buzz:42",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:spells/sigstore/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/sigstore/spell.buzz:36",
+      "source": "spells/sigstore/spell.buzz:44",
       "attrs": {
         "exported": "true"
       }
@@ -18762,6 +19119,25 @@
       "source": "spells/typescript/spell.buzz:215"
     },
     {
+      "id": "function:spells/typescript/spell.buzz:mgs_getDocDescription",
+      "kind": "function",
+      "label": "mgs_getDocDescription",
+      "doc": "The spell's own account of itself, read by the docs generator. It lives here rather than in a table keyed by spell name inside that generator, so a rename carries the prose with it instead of stranding it under a name that is gone.",
+      "source": "spells/typescript/spell.buzz:241",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/typescript/spell.buzz:mgs_getDocIntro",
+      "kind": "function",
+      "label": "mgs_getDocIntro",
+      "source": "spells/typescript/spell.buzz:242",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:spells/typescript/spell.buzz:mgs_getLanguage",
       "kind": "function",
       "label": "mgs_getLanguage",
@@ -18828,6 +19204,15 @@
       }
     },
     {
+      "id": "function:spells/typescript/spell.buzz:mgs_listDocTags",
+      "kind": "function",
+      "label": "mgs_listDocTags",
+      "source": "spells/typescript/spell.buzz:243",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:spells/typescript/spell.buzz:mgs_listIgnoreDirs",
       "kind": "function",
       "label": "mgs_listIgnoreDirs",
@@ -18880,8 +19265,7 @@
       "id": "function:spells/typescript/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "doc": "mgs_listTargets is typed `any` (not {str: fun(Target) Command}) because dev-server mixes in a Service-returning op alongside the Command-returning ones.",
-      "source": "spells/typescript/spell.buzz:237",
+      "source": "spells/typescript/spell.buzz:245",
       "attrs": {
         "exported": "true"
       }
@@ -22442,7 +22826,8 @@
       "kind": "spell",
       "label": "bash",
       "attrs": {
-        "declared": "true"
+        "declared": "true",
+        "language": "bash"
       }
     },
     {
@@ -22450,7 +22835,8 @@
       "kind": "spell",
       "label": "buzz",
       "attrs": {
-        "declared": "true"
+        "declared": "true",
+        "language": "buzz"
       }
     },
     {
@@ -22477,7 +22863,8 @@
       "kind": "spell",
       "label": "markdown",
       "attrs": {
-        "declared": "true"
+        "declared": "true",
+        "language": "markdown"
       }
     },
     {
@@ -22490,7 +22877,8 @@
       "kind": "spell",
       "label": "protobuf",
       "attrs": {
-        "declared": "true"
+        "declared": "true",
+        "language": "protobuf"
       }
     },
     {
@@ -26157,6 +26545,14 @@
     },
     {
       "source": "dir:docs/reference/codes/magusfile",
+      "target": "doc:docs/reference/codes/magusfile/MGS1025.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1025.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/magusfile",
       "target": "doc:docs/reference/codes/magusfile/README.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -26882,6 +27278,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/tour/22-service-adoption.buzz"
+    },
+    {
+      "source": "dir:docs/tour",
+      "target": "file:docs/tour/23-json-ops.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/23-json-ops.buzz"
     },
     {
       "source": "dir:evals/tasks",
@@ -31437,7 +31841,31 @@
     },
     {
       "source": "doc:docs/concepts/spells.md",
+      "target": "doc:docs/concepts/spells/golang.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spells.md"
+    },
+    {
+      "source": "doc:docs/concepts/spells.md",
       "target": "doc:docs/concepts/spells/markdown.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spells.md"
+    },
+    {
+      "source": "doc:docs/concepts/spells.md",
+      "target": "doc:docs/concepts/spells/oci.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spells.md"
+    },
+    {
+      "source": "doc:docs/concepts/spells.md",
+      "target": "doc:docs/concepts/spells/protobuf.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -31454,6 +31882,14 @@
     {
       "source": "doc:docs/concepts/spells.md",
       "target": "doc:docs/concepts/spells/rust.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spells.md"
+    },
+    {
+      "source": "doc:docs/concepts/spells.md",
+      "target": "doc:docs/concepts/spells/sigstore.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -31557,7 +31993,31 @@
     },
     {
       "source": "doc:docs/concepts/spells.md",
+      "target": "spell:golang",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/concepts/spells.md"
+    },
+    {
+      "source": "doc:docs/concepts/spells.md",
       "target": "spell:markdown",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/concepts/spells.md"
+    },
+    {
+      "source": "doc:docs/concepts/spells.md",
+      "target": "spell:oci",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/concepts/spells.md"
+    },
+    {
+      "source": "doc:docs/concepts/spells.md",
+      "target": "spell:protobuf",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.5,
@@ -31574,6 +32034,14 @@
     {
       "source": "doc:docs/concepts/spells.md",
       "target": "spell:rust",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/concepts/spells.md"
+    },
+    {
+      "source": "doc:docs/concepts/spells.md",
+      "target": "spell:sigstore",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.5,
@@ -32925,6 +33393,22 @@
     },
     {
       "source": "doc:docs/guides/authoring-spells.md",
+      "target": "doc:docs/concepts/spells/golang.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/authoring-spells.md"
+    },
+    {
+      "source": "doc:docs/guides/authoring-spells.md",
+      "target": "doc:docs/concepts/spells/oci.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/authoring-spells.md"
+    },
+    {
+      "source": "doc:docs/guides/authoring-spells.md",
       "target": "doc:docs/concepts/wards.md",
       "relation": "references",
       "confidence": "extracted",
@@ -32949,7 +33433,23 @@
     },
     {
       "source": "doc:docs/guides/authoring-spells.md",
+      "target": "spell:golang",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/guides/authoring-spells.md"
+    },
+    {
+      "source": "doc:docs/guides/authoring-spells.md",
       "target": "spell:markdown",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/guides/authoring-spells.md"
+    },
+    {
+      "source": "doc:docs/guides/authoring-spells.md",
+      "target": "spell:oci",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.5,
@@ -37130,6 +37630,46 @@
       "confidence": "inferred",
       "score": 0.5,
       "provenance": "docs/reference/codes/magusfile/MGS1024.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1025.md",
+      "target": "diagnostic:MGS1024",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1025.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1025.md",
+      "target": "diagnostic:MGS1025",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1025.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1025.md",
+      "target": "doc:docs/concepts/charms.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1025.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1025.md",
+      "target": "doc:docs/concepts/operations.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1025.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1025.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1024.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1025.md"
     },
     {
       "source": "doc:docs/reference/codes/magusfile/README.md",
@@ -45458,6 +45998,62 @@
       "confidence": "inferred",
       "score": 0.7,
       "provenance": "docs/tour/22-service-adoption.buzz"
+    },
+    {
+      "source": "file:docs/tour/23-json-ops.buzz",
+      "target": "function:docs/tour/23-json-ops.buzz:careful",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/23-json-ops.buzz"
+    },
+    {
+      "source": "file:docs/tour/23-json-ops.buzz",
+      "target": "function:docs/tour/23-json-ops.buzz:charmed",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/23-json-ops.buzz"
+    },
+    {
+      "source": "file:docs/tour/23-json-ops.buzz",
+      "target": "function:docs/tour/23-json-ops.buzz:decoded",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/23-json-ops.buzz"
+    },
+    {
+      "source": "file:docs/tour/23-json-ops.buzz",
+      "target": "function:docs/tour/23-json-ops.buzz:raw",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/23-json-ops.buzz"
+    },
+    {
+      "source": "file:docs/tour/23-json-ops.buzz",
+      "target": "import:magus",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/23-json-ops.buzz"
+    },
+    {
+      "source": "file:docs/tour/23-json-ops.buzz",
+      "target": "import:magus/spell/golang",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/23-json-ops.buzz"
+    },
+    {
+      "source": "file:docs/tour/23-json-ops.buzz",
+      "target": "import:std",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/23-json-ops.buzz"
     },
     {
       "source": "file:evals/magusfile.buzz",
@@ -53877,6 +54473,30 @@
     },
     {
       "source": "file:spells/bash/spell.buzz",
+      "target": "function:spells/bash/spell.buzz:mgs_getDocDescription",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/bash/spell.buzz"
+    },
+    {
+      "source": "file:spells/bash/spell.buzz",
+      "target": "function:spells/bash/spell.buzz:mgs_getDocIntro",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/bash/spell.buzz"
+    },
+    {
+      "source": "file:spells/bash/spell.buzz",
+      "target": "function:spells/bash/spell.buzz:mgs_getLanguage",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/bash/spell.buzz"
+    },
+    {
+      "source": "file:spells/bash/spell.buzz",
       "target": "function:spells/bash/spell.buzz:mgs_getName",
       "relation": "contains",
       "confidence": "extracted",
@@ -53886,6 +54506,14 @@
     {
       "source": "file:spells/bash/spell.buzz",
       "target": "function:spells/bash/spell.buzz:mgs_getVersionCommands",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/bash/spell.buzz"
+    },
+    {
+      "source": "file:spells/bash/spell.buzz",
+      "target": "function:spells/bash/spell.buzz:mgs_listDocTags",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -53981,6 +54609,30 @@
     },
     {
       "source": "file:spells/buzz/spell.buzz",
+      "target": "function:spells/buzz/spell.buzz:mgs_getDocDescription",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/buzz/spell.buzz"
+    },
+    {
+      "source": "file:spells/buzz/spell.buzz",
+      "target": "function:spells/buzz/spell.buzz:mgs_getDocIntro",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/buzz/spell.buzz"
+    },
+    {
+      "source": "file:spells/buzz/spell.buzz",
+      "target": "function:spells/buzz/spell.buzz:mgs_getLanguage",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/buzz/spell.buzz"
+    },
+    {
+      "source": "file:spells/buzz/spell.buzz",
       "target": "function:spells/buzz/spell.buzz:mgs_getName",
       "relation": "contains",
       "confidence": "extracted",
@@ -53990,6 +54642,14 @@
     {
       "source": "file:spells/buzz/spell.buzz",
       "target": "function:spells/buzz/spell.buzz:mgs_getVersionCommands",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/buzz/spell.buzz"
+    },
+    {
+      "source": "file:spells/buzz/spell.buzz",
+      "target": "function:spells/buzz/spell.buzz:mgs_listDocTags",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -55869,6 +56529,22 @@
     },
     {
       "source": "file:spells/golang/spell.buzz",
+      "target": "function:spells/golang/spell.buzz:mgs_getDocDescription",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/golang/spell.buzz"
+    },
+    {
+      "source": "file:spells/golang/spell.buzz",
+      "target": "function:spells/golang/spell.buzz:mgs_getDocIntro",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/golang/spell.buzz"
+    },
+    {
+      "source": "file:spells/golang/spell.buzz",
       "target": "function:spells/golang/spell.buzz:mgs_getLanguage",
       "relation": "contains",
       "confidence": "extracted",
@@ -55894,6 +56570,14 @@
     {
       "source": "file:spells/golang/spell.buzz",
       "target": "function:spells/golang/spell.buzz:mgs_getVersionCommands",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/golang/spell.buzz"
+    },
+    {
+      "source": "file:spells/golang/spell.buzz",
+      "target": "function:spells/golang/spell.buzz:mgs_listDocTags",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -55981,6 +56665,30 @@
     },
     {
       "source": "file:spells/markdown/spell.buzz",
+      "target": "function:spells/markdown/spell.buzz:mgs_getDocDescription",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/markdown/spell.buzz"
+    },
+    {
+      "source": "file:spells/markdown/spell.buzz",
+      "target": "function:spells/markdown/spell.buzz:mgs_getDocIntro",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/markdown/spell.buzz"
+    },
+    {
+      "source": "file:spells/markdown/spell.buzz",
+      "target": "function:spells/markdown/spell.buzz:mgs_getLanguage",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/markdown/spell.buzz"
+    },
+    {
+      "source": "file:spells/markdown/spell.buzz",
       "target": "function:spells/markdown/spell.buzz:mgs_getName",
       "relation": "contains",
       "confidence": "extracted",
@@ -55998,6 +56706,14 @@
     {
       "source": "file:spells/markdown/spell.buzz",
       "target": "function:spells/markdown/spell.buzz:mgs_listClaimedGlobs",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/markdown/spell.buzz"
+    },
+    {
+      "source": "file:spells/markdown/spell.buzz",
+      "target": "function:spells/markdown/spell.buzz:mgs_listDocTags",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -56125,6 +56841,22 @@
     },
     {
       "source": "file:spells/oci/spell.buzz",
+      "target": "function:spells/oci/spell.buzz:mgs_getDocDescription",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/oci/spell.buzz"
+    },
+    {
+      "source": "file:spells/oci/spell.buzz",
+      "target": "function:spells/oci/spell.buzz:mgs_getDocIntro",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/oci/spell.buzz"
+    },
+    {
+      "source": "file:spells/oci/spell.buzz",
       "target": "function:spells/oci/spell.buzz:mgs_getName",
       "relation": "contains",
       "confidence": "extracted",
@@ -56142,6 +56874,14 @@
     {
       "source": "file:spells/oci/spell.buzz",
       "target": "function:spells/oci/spell.buzz:mgs_getVersionCommands",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/oci/spell.buzz"
+    },
+    {
+      "source": "file:spells/oci/spell.buzz",
+      "target": "function:spells/oci/spell.buzz:mgs_listDocTags",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -56293,6 +57033,30 @@
     },
     {
       "source": "file:spells/protobuf/spell.buzz",
+      "target": "function:spells/protobuf/spell.buzz:mgs_getDocDescription",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/protobuf/spell.buzz"
+    },
+    {
+      "source": "file:spells/protobuf/spell.buzz",
+      "target": "function:spells/protobuf/spell.buzz:mgs_getDocIntro",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/protobuf/spell.buzz"
+    },
+    {
+      "source": "file:spells/protobuf/spell.buzz",
+      "target": "function:spells/protobuf/spell.buzz:mgs_getLanguage",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/protobuf/spell.buzz"
+    },
+    {
+      "source": "file:spells/protobuf/spell.buzz",
       "target": "function:spells/protobuf/spell.buzz:mgs_getName",
       "relation": "contains",
       "confidence": "extracted",
@@ -56302,6 +57066,14 @@
     {
       "source": "file:spells/protobuf/spell.buzz",
       "target": "function:spells/protobuf/spell.buzz:mgs_getVersionCommand",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/protobuf/spell.buzz"
+    },
+    {
+      "source": "file:spells/protobuf/spell.buzz",
+      "target": "function:spells/protobuf/spell.buzz:mgs_listDocTags",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -56357,6 +57129,22 @@
     },
     {
       "source": "file:spells/python/spell.buzz",
+      "target": "function:spells/python/spell.buzz:mgs_getDocDescription",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/python/spell.buzz"
+    },
+    {
+      "source": "file:spells/python/spell.buzz",
+      "target": "function:spells/python/spell.buzz:mgs_getDocIntro",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/python/spell.buzz"
+    },
+    {
+      "source": "file:spells/python/spell.buzz",
       "target": "function:spells/python/spell.buzz:mgs_getLanguage",
       "relation": "contains",
       "confidence": "extracted",
@@ -56382,6 +57170,14 @@
     {
       "source": "file:spells/python/spell.buzz",
       "target": "function:spells/python/spell.buzz:mgs_getVersionCommands",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/python/spell.buzz"
+    },
+    {
+      "source": "file:spells/python/spell.buzz",
+      "target": "function:spells/python/spell.buzz:mgs_listDocTags",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -56613,6 +57409,22 @@
     },
     {
       "source": "file:spells/rust/spell.buzz",
+      "target": "function:spells/rust/spell.buzz:mgs_getDocDescription",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/rust/spell.buzz"
+    },
+    {
+      "source": "file:spells/rust/spell.buzz",
+      "target": "function:spells/rust/spell.buzz:mgs_getDocIntro",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/rust/spell.buzz"
+    },
+    {
+      "source": "file:spells/rust/spell.buzz",
       "target": "function:spells/rust/spell.buzz:mgs_getLanguage",
       "relation": "contains",
       "confidence": "extracted",
@@ -56638,6 +57450,14 @@
     {
       "source": "file:spells/rust/spell.buzz",
       "target": "function:spells/rust/spell.buzz:mgs_getVersionCommands",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/rust/spell.buzz"
+    },
+    {
+      "source": "file:spells/rust/spell.buzz",
+      "target": "function:spells/rust/spell.buzz:mgs_listDocTags",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -56717,6 +57537,22 @@
     },
     {
       "source": "file:spells/sigstore/spell.buzz",
+      "target": "function:spells/sigstore/spell.buzz:mgs_getDocDescription",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/sigstore/spell.buzz"
+    },
+    {
+      "source": "file:spells/sigstore/spell.buzz",
+      "target": "function:spells/sigstore/spell.buzz:mgs_getDocIntro",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/sigstore/spell.buzz"
+    },
+    {
+      "source": "file:spells/sigstore/spell.buzz",
       "target": "function:spells/sigstore/spell.buzz:mgs_getName",
       "relation": "contains",
       "confidence": "extracted",
@@ -56726,6 +57562,14 @@
     {
       "source": "file:spells/sigstore/spell.buzz",
       "target": "function:spells/sigstore/spell.buzz:mgs_getVersionCommand",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/sigstore/spell.buzz"
+    },
+    {
+      "source": "file:spells/sigstore/spell.buzz",
+      "target": "function:spells/sigstore/spell.buzz:mgs_listDocTags",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -56845,6 +57689,22 @@
     },
     {
       "source": "file:spells/typescript/spell.buzz",
+      "target": "function:spells/typescript/spell.buzz:mgs_getDocDescription",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/typescript/spell.buzz"
+    },
+    {
+      "source": "file:spells/typescript/spell.buzz",
+      "target": "function:spells/typescript/spell.buzz:mgs_getDocIntro",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/typescript/spell.buzz"
+    },
+    {
+      "source": "file:spells/typescript/spell.buzz",
       "target": "function:spells/typescript/spell.buzz:mgs_getLanguage",
       "relation": "contains",
       "confidence": "extracted",
@@ -56894,6 +57754,14 @@
     {
       "source": "file:spells/typescript/spell.buzz",
       "target": "function:spells/typescript/spell.buzz:mgs_listClaimedGlobs",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/typescript/spell.buzz"
+    },
+    {
+      "source": "file:spells/typescript/spell.buzz",
+      "target": "function:spells/typescript/spell.buzz:mgs_listDocTags",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -69604,6 +70472,14 @@
     {
       "source": "target:docs:site-generate",
       "target": "file:docs/tour/22-service-adoption.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:site-generate",
+      "target": "file:docs/tour/23-json-ops.buzz",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,

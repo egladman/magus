@@ -1,28 +1,28 @@
 ---
-title: cosign spell
-description: "Cosign spell: sign, attest, verify, verify-attestation, and the blob pair for artifacts and images."
-tags: [cosign, spell, sigstore, signing, supply-chain, tools]
+title: sigstore spell
+description: "Sigstore spell: cosign sign, attest, verify, verify-attestation, and the blob pair for artifacts and images."
+tags: [sigstore, spell, cosign, signing, supply-chain, tools]
 ---
 
-# cosign
+# sigstore
 
-The `cosign` spell forks the Sigstore `cosign` CLI to sign, attest, and verify artifacts - registry images and plain files (the blob pair) alike. Signing and attestation pass `--yes` for non-interactive (CI) use. Credentials ride the environment, and the sandbox scrubs it: pass `COSIGN_*` (and, for keyless OIDC in GitHub Actions, `ACTIONS_ID_TOKEN_REQUEST_URL`/`ACTIONS_ID_TOKEN_REQUEST_TOKEN`) through `sandbox.env.passthrough` in magus.yaml, or signing fails with an auth error that never names the scrub.
+The `sigstore` spell forks the Sigstore `cosign` CLI to sign, attest, and verify artifacts - registry images and plain files (the blob pair) alike. Signing and attestation pass `--yes` for non-interactive (CI) use. Credentials ride the environment, and the sandbox scrubs it: pass `COSIGN_*` (and, for keyless OIDC in GitHub Actions, `ACTIONS_ID_TOKEN_REQUEST_URL`/`ACTIONS_ID_TOKEN_REQUEST_TOKEN`) through `sandbox.env.passthrough` in magus.yaml, or signing fails with an auth error that never names the scrub.
 
-**Runtime name:** `cosign` (source `spells/cosign/`)
+**Runtime name:** `sigstore` (source `spells/sigstore/`)
 
 **Version probe:** `cosign version`
 
 ## Passing arguments to ops
 
-Every op is invoked as `cosign["<op>"](ctx, opts?)`. The first argument is the target's context, which is what carries the execution environment; the optional options map shapes the command itself:
+Every op is invoked as `sigstore["<op>"](ctx, opts?)`. The first argument is the target's context, which is what carries the execution environment; the optional options map shapes the command itself:
 
 | Key | Type | Description | Source |
 |-----|------|-------------|--------|
-| `args` | `[str]` | Extra arguments appended to the resolved command. Omit it and a bare `cosign["<op>"]()` forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L187) |
-| `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L191) |
+| `args` | `[str]` | Extra arguments appended to the resolved command. Omit it and a bare `sigstore["<op>"]()` forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L233) |
+| `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L237) |
 
 
-Working directory and environment are NOT options: they ride the context, as `cosign["<op>"](ctx.withCwd("sub"))` and `cosign["<op>"](ctx.withEnv({"CGO_ENABLED": "0"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise - passing either as an option is an error.
+Working directory and environment are NOT options: they ride the context, as `sigstore["<op>"](ctx.withCwd("sub"))` and `sigstore["<op>"](ctx.withEnv({"CGO_ENABLED": "0"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise - passing either as an option is an error.
 
 Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).
 

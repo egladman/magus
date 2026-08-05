@@ -62,6 +62,14 @@ fun hadolint(target: Target) > Command {
 fun trivy(target: Target) > Command { return Command{bin = "trivy", args = ["image"]}; }
 fun dockerScout(target: Target) > Command { return Command{bin = "docker", args = ["scout", "cves"]}; }
 
+
+// The spell's own account of itself, read by the docs generator. It lives here
+// rather than in a table keyed by spell name inside that generator, so a rename
+// carries the prose with it instead of stranding it under a name that is gone.
+export fun mgs_getDocDescription() > str { return "OCI image spell: docker build, build-check, buildx, hadolint linting, and trivy/scout image scanning."; }
+export fun mgs_getDocIntro() > str { return "The `oci` spell forks the `docker` CLI (and `hadolint`) to build container images and lint Dockerfiles. `docker-build-check` runs the builder's `--check` preflight without producing an image, and `trivy-image`/`docker-scout-cves` scan a built image for the `security` target. It is named for the domain it adapts rather than for `docker`, which is one of the three binaries it drives."; }
+export fun mgs_listDocTags() > [str] { return ["docker", "container", "image", "hadolint"]; }
+
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"docker-build": dockerBuild, "docker-buildx-build": dockerBuildx, "docker-build-check": dockerBuildCheck,
             "docker-push": dockerPush, "docker-tag": dockerTag,

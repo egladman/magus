@@ -81,6 +81,18 @@ fun bats(target: Target) > Command {
     return Command{bin = "bats", args = [<str>]};
 }
 
+
+// The spell's own account of itself, read by the docs generator. It lives here
+// rather than in a table keyed by spell name inside that generator, so a rename
+// carries the prose with it instead of stranding it under a name that is gone.
+// The source language this spell adapts. It tags the spell node, so a `language:`
+// query groups the adapter with that language's files and symbols.
+export fun mgs_getLanguage() > str { return "bash"; }
+
+export fun mgs_getDocDescription() > str { return "Bash spell: shellcheck linting, shfmt formatting, and bats tests for shell scripts."; }
+export fun mgs_getDocIntro() > str { return "The `bash` spell covers the shell lifecycle: `shellcheck` lints every `.sh`/`.bash` file, `shfmt` formats them (diff by default, rewrite under `rw`), and `bats` runs a test suite. Extensionless shebang scripts are a known limit - list them explicitly via op args."; }
+export fun mgs_listDocTags() > [str] { return ["bash", "shell", "shellcheck", "lint"]; }
+
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"shellcheck": shellcheck, "shfmt": shfmt, "bats": bats};
 }

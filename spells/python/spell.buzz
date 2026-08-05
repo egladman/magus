@@ -124,6 +124,14 @@ fun scip(target: Target) > Command {
     return Command{bin = "sh", args = ["-c", "scip-python index . --output \"$MAGUS_SYMBOL_INDEX\""]};
 }
 
+
+// The spell's own account of itself, read by the docs generator. It lives here
+// rather than in a table keyed by spell name inside that generator, so a rename
+// carries the prose with it instead of stranding it under a name that is gone.
+export fun mgs_getDocDescription() > str { return "Python toolchain spell: pytest, ruff check/format, mypy, pyright, black, pip-audit, and uv build/sync as magus ops."; }
+export fun mgs_getDocIntro() > str { return "The `python` spell wires a Python project's tooling into a magusfile through `uv`. Tests, linting (ruff), type-checking (mypy or pyright), and formatting (ruff-format or black) run as `uv run` subcommands so they resolve from the project's locked environment; uv-sync installs that environment for a preflight target."; }
+export fun mgs_listDocTags() > [str] { return ["python", "uv", "pytest", "ruff"]; }
+
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"uv-build": uvBuild, "uv-sync": uvSync, "uv-publish": uvPublish,
             "pytest": pytest, "pip-audit": pipAudit, "mypy": mypy, "pyright": pyright,

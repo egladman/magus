@@ -48,20 +48,26 @@ func Decode(src Obj) (spells.Descriptor, error) {
 		return spells.Descriptor{}, fmt.Errorf("spell: name is required")
 	}
 	language, _ := src.Str("language")
+	docDescription, _ := src.Str("doc_description")
+	docIntro, _ := src.Str("doc_intro")
 	pmBin, _ := src.Str("package_manager_bin")
 	m := spells.Descriptor{
-		Name:              name,
-		Claims:            src.Strs("claims"),
-		IgnoreDirs:        src.Strs("ignore_dirs"),
-		Manifests:         src.Strs("manifests"),
-		VersionCmd:        src.Strs("version_cmd"),
-		VersionCmds:       decodeVersionCmds(src),
-		UnprobedBins:      decodeStrMap(src, "unprobed_bins"),
-		NamingDeviations:  decodeStrMap(src, "naming_deviations"),
-		InstallHints:      decodeStrMap(src, "install_hints"),
-		Language:          language,
-		PackageManagerBin: pmBin,
-		Opaque:            src.Bool("opaque"),
+		Name:                name,
+		Claims:              src.Strs("claims"),
+		IgnoreDirs:          src.Strs("ignore_dirs"),
+		Manifests:           src.Strs("manifests"),
+		VersionCmd:          src.Strs("version_cmd"),
+		VersionCmds:         decodeVersionCmds(src),
+		UnprobedBins:        decodeStrMap(src, "unprobed_bins"),
+		NamingDeviations:    decodeStrMap(src, "naming_deviations"),
+		JSONCharmExceptions: decodeStrMap(src, "json_charm_exceptions"),
+		InstallHints:        decodeStrMap(src, "install_hints"),
+		DocDescription:      docDescription,
+		DocIntro:            docIntro,
+		DocTags:             src.Strs("doc_tags"),
+		Language:            language,
+		PackageManagerBin:   pmBin,
+		Opaque:              src.Bool("opaque"),
 	}
 
 	needs, err := src.CallStrs("needs")
@@ -112,6 +118,9 @@ func Decode(src Obj) (spells.Descriptor, error) {
 			authored[canonical] = op
 			op = canonical
 			t := spells.Op{Capture: spec.Bool("capture")}
+			if spec.Bool("returns_json") {
+				t.ReturnsJSON, t.Capture = true, true
+			}
 			if doc, ok := spec.Str("doc"); ok {
 				t.Doc = doc
 			}
@@ -186,6 +195,11 @@ func Decode(src Obj) (spells.Descriptor, error) {
 // run/ready/stop commands, so every command shape decodes identically.
 func decodeCommand(spellName, opName string, o Obj) (spells.Command, error) {
 	c := spells.Command{Args: o.Strs("args"), Capture: o.Bool("capture")}
+	// returns_json implies capture: there is nothing to decode from output that was
+	// never captured, and requiring the author to write both would be a footgun.
+	if o.Bool("returns_json") {
+		c.ReturnsJSON, c.Capture = true, true
+	}
 	if bin, ok := o.Str("bin"); ok {
 		c.Bin = bin
 	}

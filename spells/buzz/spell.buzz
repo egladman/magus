@@ -73,6 +73,18 @@ fun magusBuzz(target: Target) > Command {
         "find . \\( -name node_modules -o -path './.claude/worktrees' \\) -prune -o -name '*.buzz' -print0 | xargs -0 -r -n1 \"$MAGUS\" buzz"]};
 }
 
+
+// The spell's own account of itself, read by the docs generator. It lives here
+// rather than in a table keyed by spell name inside that generator, so a rename
+// carries the prose with it instead of stranding it under a name that is gone.
+// The source language this spell adapts. It tags the spell node, so a `language:`
+// query groups the adapter with that language's files and symbols.
+export fun mgs_getLanguage() > str { return "buzz"; }
+
+export fun mgs_getDocDescription() > str { return "Buzz spell: check and test .buzz sources, plus run them through the magus interpreter."; }
+export fun mgs_getDocIntro() > str { return "The `buzz` spell checks and tests Buzz sources. Each op finds every `.buzz` file and runs `buzz --check`, `buzz --test`, or the magus interpreter over it."; }
+export fun mgs_listDocTags() > [str] { return ["buzz", "gopherbuzz", "check", "test"]; }
+
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {
         "buzz-check": buzzCheck,

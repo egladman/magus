@@ -107,6 +107,7 @@ const (
 	UnprobedSpellBin          DiagnosticCode = "MGS1022"
 	MagusfileLoadFailed       DiagnosticCode = "MGS1023"
 	SpellOpMisnamed           DiagnosticCode = "MGS1024"
+	JSONOpCharmRewrite        DiagnosticCode = "MGS1025"
 	PathReadDenied            DiagnosticCode = "MGS2001"
 	PathWriteDenied           DiagnosticCode = "MGS2002"
 	EnvStripped               DiagnosticCode = "MGS2003"
@@ -155,7 +156,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	CrossOutputOwnerUnknown, CrossOutputCycle, CrossOutputGlobEscapes, CrossOutputNotProduced,
 	CrossDepOwnerUnknown, GoModReplaceDrift, MagusfileIsNotASpell, DeadOutputGlob,
 	SelfStalingOutput, OutputOwnedByTwoTargets, UnprobedSpellBin, MagusfileLoadFailed,
-	SpellOpMisnamed,
+	SpellOpMisnamed, JSONOpCharmRewrite,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,

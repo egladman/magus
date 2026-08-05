@@ -1,30 +1,30 @@
 ---
-title: docker spell
-description: "Docker spell: image build, build-check, buildx, hadolint linting, and trivy/scout image scanning."
-tags: [docker, spell, container, image, hadolint, tools]
+title: oci spell
+description: "OCI image spell: docker build, build-check, buildx, hadolint linting, and trivy/scout image scanning."
+tags: [oci, spell, docker, container, image, hadolint, tools]
 ---
 
-# docker
+# oci
 
-The `docker` spell forks the `docker` CLI (and `hadolint`) to build images and lint Dockerfiles. `docker-build-check` runs the builder's `--check` preflight without producing an image, and `trivy`/`docker-scout` scan a built image for the `security` target.
+The `oci` spell forks the `docker` CLI (and `hadolint`) to build container images and lint Dockerfiles. `docker-build-check` runs the builder's `--check` preflight without producing an image, and `trivy-image`/`docker-scout-cves` scan a built image for the `security` target. It is named for the domain it adapts rather than for `docker`, which is one of the three binaries it drives.
 
-**Runtime name:** `docker` (source `spells/docker/`)
+**Runtime name:** `oci` (source `spells/oci/`)
 
 **Version probe:** `docker --version`
 
-**Named probes:** `docker-scout` (`docker scout version`), `hadolint` (`hadolint --version`), `trivy` (`trivy --version`) - each records UNPROBED when the tool is absent, and moves the cache key when installed.
+**Named probes:** `docker-scout-cves` (`docker scout version`), `hadolint` (`hadolint --version`), `trivy-image` (`trivy --version`) - each records UNPROBED when the tool is absent, and moves the cache key when installed.
 
 ## Passing arguments to ops
 
-Every op is invoked as `docker["<op>"](ctx, opts?)`. The first argument is the target's context, which is what carries the execution environment; the optional options map shapes the command itself:
+Every op is invoked as `oci["<op>"](ctx, opts?)`. The first argument is the target's context, which is what carries the execution environment; the optional options map shapes the command itself:
 
 | Key | Type | Description | Source |
 |-----|------|-------------|--------|
-| `args` | `[str]` | Extra arguments appended to the resolved command. Omit it and a bare `docker["<op>"]()` forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L187) |
-| `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L191) |
+| `args` | `[str]` | Extra arguments appended to the resolved command. Omit it and a bare `oci["<op>"]()` forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L233) |
+| `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L237) |
 
 
-Working directory and environment are NOT options: they ride the context, as `docker["<op>"](ctx.withCwd("sub"))` and `docker["<op>"](ctx.withEnv({"CGO_ENABLED": "0"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise - passing either as an option is an error.
+Working directory and environment are NOT options: they ride the context, as `oci["<op>"](ctx.withCwd("sub"))` and `oci["<op>"](ctx.withEnv({"CGO_ENABLED": "0"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise - passing either as an option is an error.
 
 Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).
 
@@ -68,7 +68,7 @@ export fun image_check(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
-## docker-buildx
+## docker-buildx-build
 
 **Command:** `docker buildx build`
 
@@ -94,7 +94,7 @@ push and tag are building blocks, not a deploy pipeline: op args only append, so
 
 **Command:** `docker push`
 
-## docker-scout
+## docker-scout-cves
 
 **Command:** `docker scout cves`
 
@@ -143,7 +143,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
-## trivy
+## trivy-image
 
 trivy and docker-scout scan an image for known vulnerabilities - two mainstream tools, the magusfile picks one to compose into the canonical `security` target. Both take the image reference from the caller ({"args": ["myimage:tag"]}); neither bakes one in. Advisory verdicts track the scanner's database, not the tree, so pair the target with skip_cache (this repo's image-scan policy is the worked example).
 

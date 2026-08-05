@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"strings"
 
+	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -92,10 +95,52 @@ func bindBuzzCommandMethod(h vm.Value, target string, tgt spells.Op, pmBin strin
 			return vm.Null, err
 		}
 		if tgt.Capture {
-			return execRecordToBuzz(res.BuzzObject()), nil
+			rec := execRecordToBuzz(res.BuzzObject())
+			if tgt.ReturnsJSON {
+				if err := attachDecodedJSON(rec, target, res); err != nil {
+					return vm.Null, err
+				}
+			}
+			return rec, nil
 		}
 		return vm.Null, nil
 	}))
+}
+
+// attachDecodedJSON sets the exec record's `json` member for an op that declared
+// ReturnsJSON, holding the same Boxed a magusfile gets from serialize\jsonDecode -
+// one decoder and one accessor surface, rather than a second JSON shape magus
+// invented for itself.
+//
+// The ORDER here is the whole design. A tool that fails writes an error, not a
+// document, so a naive decode would report a parse failure where the real event is
+// "the tool exited non-zero". So:
+//
+//	non-zero exit -> leave `json` unset; the caller reads code/stderr as it always has
+//	exit 0, parses -> the Boxed value
+//	exit 0, does not parse -> an error naming the op, because an op that DECLARED
+//	                          JSON and emitted something else is a spell-authoring
+//	                          bug, not something the caller can act on
+func attachDecodedJSON(rec vm.Value, opName string, res run.ExecResult) error {
+	if res.Code != 0 {
+		return nil
+	}
+	var decoded any
+	if err := json.Unmarshal([]byte(res.Stdout), &decoded); err != nil {
+		return fmt.Errorf("%s: op declares returns_json but its stdout is not JSON: %w (first bytes: %q)",
+			opName, err, headOf(res.Stdout, 120))
+	}
+	rec.MapSet("json", std.MakeBoxed(bindinggen.AnyVal(decoded)))
+	return nil
+}
+
+// headOf returns at most n bytes of s, for quoting the start of output in an error
+// without pasting a whole build log into the terminal.
+func headOf(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }
 
 // execRecordToBuzz converts the shared {stdout, stderr, code, ok} exec object to

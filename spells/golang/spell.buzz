@@ -132,8 +132,12 @@ fun goModEdit(target: Target) > Command {
 // Captures Go's structured module view for the spell's higher-level Buzz helper.
 // This is deliberately a separate read-only op: `-json` and `-print` are distinct
 // Go modes, while go-mod-edit remains the one command that applies derived edits.
+//
+// returns_json declares that stdout is one JSON document, so the caller gets a
+// decoded `json` member (a serialize Boxed) alongside the raw `stdout` instead of
+// parsing it itself. It implies capture.
 fun goModJSON(target: Target) > Command {
-    return Command{bin = "go", args = ["mod", "edit", "-json"], capture = true};
+    return Command{bin = "go", args = ["mod", "edit", "-json"], returns_json = true};
 }
 fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", "./..."]}; }
 // Invoked directly rather than through `go tool`, for the same reason as golangCILint above:
@@ -153,6 +157,14 @@ fun goVulncheck(target: Target) > Command { return Command{bin = "govulncheck", 
 fun scipGo(target: Target) > Command {
     return Command{bin = "sh", args = ["-c", "scip-go --output \"$MAGUS_SYMBOL_INDEX\""]};
 }
+
+
+// The spell's own account of itself, read by the docs generator. It lives here
+// rather than in a table keyed by spell name inside that generator, so a rename
+// carries the prose with it instead of stranding it under a name that is gone.
+export fun mgs_getDocDescription() > str { return "Go toolchain spell: build, test, vet, fmt, gofumpt, mod-tidy, golangci-lint, and govulncheck as magus ops."; }
+export fun mgs_getDocIntro() > str { return "The `golang` spell wires the Go toolchain into a magusfile: each op forks a `go` (or `gofmt`/`gofumpt`) subcommand directly, with no shell. golangci-lint and govulncheck run from PATH - pinned by whatever the workspace uses (mise, asdf, a system package) - and the spell's named version probes record which, so a linter upgrade moves the cache key."; }
+export fun mgs_listDocTags() > [str] { return ["go", "golang", "build", "test", "lint"]; }
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {

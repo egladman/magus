@@ -120,6 +120,14 @@ fun scip(target: Target) > Command {
     return Command{bin = "sh", args = ["-c", "rust-analyzer scip . --output \"$MAGUS_SYMBOL_INDEX\""]};
 }
 
+
+// The spell's own account of itself, read by the docs generator. It lives here
+// rather than in a table keyed by spell name inside that generator, so a rename
+// carries the prose with it instead of stranding it under a name that is gone.
+export fun mgs_getDocDescription() > str { return "Rust toolchain spell: cargo build, check, test, clippy, fmt, run, doc, bench, audit, and deny as magus ops."; }
+export fun mgs_getDocIntro() > str { return "The `rust` spell wires Cargo into a magusfile. Each op forks a `cargo` subcommand directly with no baked-in flags: the build profile (`--release`) and lint policy (`-- -D warnings`) are the magusfile's to append through the op's args option."; }
+export fun mgs_listDocTags() > [str] { return ["rust", "cargo", "build", "test"]; }
+
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"cargo-build": cargoBuild, "cargo-check": cargoCheck, "cargo-clean": cargoClean, "cargo-clippy": cargoClippy,
             "cargo-fmt": cargoFmt, "cargo-test": cargoTest, "cargo-run": cargoRun, "cargo-doc": cargoDoc,

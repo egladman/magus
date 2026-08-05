@@ -13,7 +13,7 @@ The `rust` spell wires Cargo into a magusfile. Each op forks a `cargo` subcomman
 
 **Version probe:** `rustc --version`
 
-**Named probes:** `cargo-audit` (`cargo-audit --version`), `cargo-deny` (`cargo-deny --version`) - each records UNPROBED when the tool is absent, and moves the cache key when installed.
+**Named probes:** `cargo-audit` (`cargo-audit --version`), `cargo-deny-check` (`cargo-deny --version`) - each records UNPROBED when the tool is absent, and moves the cache key when installed.
 
 ## Passing arguments to ops
 
@@ -21,8 +21,8 @@ Every op is invoked as `rust["<op>"](ctx, opts?)`. The first argument is the tar
 
 | Key | Type | Description | Source |
 |-----|------|-------------|--------|
-| `args` | `[str]` | Extra arguments appended to the resolved command. Omit it and a bare `rust["<op>"]()` forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L187) |
-| `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L191) |
+| `args` | `[str]` | Extra arguments appended to the resolved command. Omit it and a bare `rust["<op>"]()` forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L233) |
+| `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L237) |
 
 
 Working directory and environment are NOT options: they ride the context, as `rust["<op>"](ctx.withCwd("sub"))` and `rust["<op>"](ctx.withEnv({"CGO_ENABLED": "0"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise - passing either as an option is an error.
@@ -215,7 +215,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
-## cargo-deny
+## cargo-deny-check
 
 **Command:** `cargo deny check`
 

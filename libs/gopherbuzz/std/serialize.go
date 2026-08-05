@@ -31,7 +31,7 @@ func boxedInit(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 1 {
 		return vm.Null, fmt.Errorf("Boxed.init: requires 1 argument")
 	}
-	return makeBoxed(args[0]), nil
+	return MakeBoxed(args[0]), nil
 }
 
 // boxedRawKey is the private map key under which makeBoxed stores the
@@ -39,8 +39,13 @@ func boxedInit(_ context.Context, args []vm.Value) (vm.Value, error) {
 // the native Go method values that also live in the map.
 const boxedRawKey = "\x00boxed"
 
-// makeBoxed wraps a buzz Value in a Boxed map with typed accessor methods.
-func makeBoxed(v vm.Value) vm.Value {
+// MakeBoxed wraps a buzz Value in a Boxed map with typed accessor methods. It is
+// exported so a HOST binding can hand back the same Boxed a magusfile gets from
+// serialize\jsonDecode - magus's JSON-returning spell ops need to construct one,
+// and reimplementing it there would fork the accessor surface from upstream's.
+// Exporting a Go constructor changes no Buzz semantics, so upstream conformance
+// is untouched.
+func MakeBoxed(v vm.Value) vm.Value {
 	m := mod()
 	m.MapSet(boxedRawKey, v)
 
@@ -58,21 +63,21 @@ func makeBoxed(v vm.Value) vm.Value {
 			case cur.IsMap() && seg.IsStr():
 				got, ok := cur.MapGet(seg.AsString())
 				if !ok {
-					return makeBoxed(vm.Null), nil
+					return MakeBoxed(vm.Null), nil
 				}
 				cur = got
 			case cur.IsList() && seg.IsInt():
 				items := cur.ListItems()
 				idx := int(seg.AsInt())
 				if idx < 0 || idx >= len(items) {
-					return makeBoxed(vm.Null), nil
+					return MakeBoxed(vm.Null), nil
 				}
 				cur = items[idx]
 			default:
-				return makeBoxed(vm.Null), nil
+				return MakeBoxed(vm.Null), nil
 			}
 		}
-		return makeBoxed(cur), nil
+		return MakeBoxed(cur), nil
 	}))
 	m.MapSet("string", fn("Boxed.string", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		if v.IsStr() {
@@ -108,7 +113,7 @@ func makeBoxed(v vm.Value) vm.Value {
 		out := vm.NewMap()
 		for _, k := range v.MapKeys() {
 			kv, _ := v.MapGet(k)
-			out.MapSet(k, makeBoxed(kv))
+			out.MapSet(k, MakeBoxed(kv))
 		}
 		return out, nil
 	}))
@@ -119,7 +124,7 @@ func makeBoxed(v vm.Value) vm.Value {
 		items := v.ListItems()
 		out := make([]vm.Value, len(items))
 		for i, it := range items {
-			out[i] = makeBoxed(it)
+			out[i] = MakeBoxed(it)
 		}
 		return vm.ListValue(out), nil
 	}))
@@ -156,7 +161,7 @@ func makeBoxed(v vm.Value) vm.Value {
 		out := vm.NewMap()
 		for _, k := range v.MapKeys() {
 			kv, _ := v.MapGet(k)
-			out.MapSet(k, makeBoxed(kv))
+			out.MapSet(k, MakeBoxed(kv))
 		}
 		return out, nil
 	}))
@@ -167,7 +172,7 @@ func makeBoxed(v vm.Value) vm.Value {
 		items := v.ListItems()
 		out := make([]vm.Value, len(items))
 		for i, it := range items {
-			out[i] = makeBoxed(it)
+			out[i] = MakeBoxed(it)
 		}
 		return vm.ListValue(out), nil
 	}))
@@ -266,7 +271,7 @@ func serializeJSONDecode(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if err := json.Unmarshal([]byte(args[0].AsString()), &raw); err != nil {
 		return vm.Null, fmt.Errorf("serialize.jsonDecode: %w", err)
 	}
-	return makeBoxed(goToBoxedBuzz(raw)), nil
+	return MakeBoxed(goToBoxedBuzz(raw)), nil
 }
 
 // buzzToGo converts a Buzz value to a Go-native value suitable for JSON marshaling.

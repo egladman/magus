@@ -2,8 +2,8 @@
 title: magus-run
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 9020
-skill_simple_bytes: 5249
+skill_full_bytes: 9024
+skill_simple_bytes: 5253
 ---
 
 # magus-run
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `24` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `dda9599a90ae` |
+| `skill-content` | `8e738be59721` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.

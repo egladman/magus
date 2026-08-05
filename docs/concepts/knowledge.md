@@ -107,9 +107,10 @@ tool:go   tool
 tool: go
 13 nodes reach this
 
-used by (10)  op:go:go-build, op:go:go-clean, op:go:go-generate,
-              op:go:go-mod-edit, op:go:go-mod-json, op:go:go-mod-tidy,
-              op:go:go-run, op:go:go-test, op:go:go-vet, spell:go
+used by (10)  op:golang:go-build, op:golang:go-clean, op:golang:go-generate,
+              op:golang:go-mod-edit, op:golang:go-mod-edit-json,
+              op:golang:go-mod-tidy, op:golang:go-run, op:golang:go-test,
+              op:golang:go-vet, spell:golang
 
 View in Graph Explorer: http://127.0.0.1:7391/console/graph/#view=blast&node=tool%3Ago&token=q2lYk8MY_plBI1553QrP9_LU07Z8kem-6N-iYYUmQME
 (start the magus daemon if the graph does not load)
@@ -127,7 +128,7 @@ source: .
 engine: buzz
 1 node reaches this
 
-uses (2)    op:go:go-test, spell:go
+uses (2)    op:golang:go-test, spell:golang
 depends on  target:.:format
 part of     project:.
 
@@ -144,7 +145,7 @@ $ magus path target:.:test tool:go
 target:.:test -> tool:go  (2 steps)
 
 target:.:test
-  uses  op:go:go-test
+  uses  op:golang:go-test
   uses  tool:go
 ```
 <!-- /example -->

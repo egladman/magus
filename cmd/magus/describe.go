@@ -381,6 +381,13 @@ func printSpellOps(t types.Spell) {
 		if !ok {
 			continue
 		}
+		// An op's return type is part of its contract, so it belongs in the same
+		// view as its argv. The op NAME is not a signal - `go-mod-edit-json` could
+		// return text and an op called `metadata` could return JSON - so this line
+		// is where a reader finds out.
+		if op.ReturnsJSON {
+			fmt.Printf("        returns: json (the exec record carries a decoded `json` member)\n")
+		}
 		charmNames := make([]string, 0, len(op.Charms))
 		for cn := range op.Charms {
 			charmNames = append(charmNames, cn)

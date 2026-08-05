@@ -30,7 +30,7 @@ There are **two kinds**, and picking the right one first saves rewriting the fil
 | Declares | `mgs_listTargets` returning named [operations](../concepts/operations.md) | handler ops returning data |
 | Bound by | listing it in `magus\project({"spells": [...]})` | `magus\cache.remote()`, `magus\ci.provider()`, `magus\secret.provider()` |
 | Runs | as part of a target, cached | when the subsystem asks, never cached |
-| Examples | [`go`](../concepts/spells/go.md), [`docker`](../concepts/spells/docker.md) | `spells/github/actions`, `spells/onepassword` |
+| Examples | [`golang`](../concepts/spells/golang.md), [`oci`](../concepts/spells/oci.md) | `spells/github/actions`, `spells/onepassword` |
 
 A spell can be both, but rarely wants to be. A provider contributes no operation a target
 could compose, which is why the provider spells in this repo declare no `mgs_listTargets`

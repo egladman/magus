@@ -23,8 +23,8 @@ Every op is invoked as `typescript["<op>"](ctx, opts?)`. The first argument is t
 
 | Key | Type | Description | Source |
 |-----|------|-------------|--------|
-| `args` | `[str]` | Extra arguments appended to the resolved command. Omit it and a bare `typescript["<op>"]()` forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L187) |
-| `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L191) |
+| `args` | `[str]` | Extra arguments appended to the resolved command. Omit it and a bare `typescript["<op>"]()` forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L233) |
+| `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L237) |
 
 
 Working directory and environment are NOT options: they ride the context, as `typescript["<op>"](ctx.withCwd("sub"))` and `typescript["<op>"](ctx.withEnv({"CGO_ENABLED": "0"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise - passing either as an option is an error.
@@ -431,7 +431,7 @@ export fun clean(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
-## vitest
+## vitest-run
 
 gha keeps the default reporter alongside the annotations one: vitest REPLACES its default when --reporter is given, so annotations-only would strip the human-readable run summary from the CI log. cover mirrors go-test's coverage charm (vitest's --coverage needs the @vitest/coverage-v8 dev dependency).
 

@@ -107,6 +107,14 @@ type Descriptor struct {
 	// the same reason UnprobedBins requires one: an undeclared deviation is
 	// indistinguishable from an op nobody thought about.
 	NamingDeviations map[string]string `json:"naming_deviations,omitempty"`
+	// JSONCharmExceptions are the returns_json ops whose charms deliberately do more
+	// than append, op name to a one-line reason (declared by
+	// mgs_listJSONCharmExceptions). MGS1025 is a HEURISTIC, not a proof: magus cannot
+	// tell which argument selects a tool's output format, so a replace that rewrites
+	// an unrelated flag - or swaps one JSON mode for another - is perfectly correct
+	// and the check cannot know it. The reason is the value, mirroring UnprobedBins:
+	// the author asserts they checked, and `magus doctor` can audit the assertions.
+	JSONCharmExceptions map[string]string `json:"json_charm_exceptions,omitempty"`
 	// InstallHints map an op bin to a one-line install command (declared by
 	// mgs_listInstallHints, e.g. "mise use -g shellcheck # or: brew install
 	// shellcheck"). When forking an op fails because the bin is absent from PATH,
@@ -123,6 +131,19 @@ type Descriptor struct {
 	// each handler to a static {cmd,args} record - which is why the swap lives in
 	// the engine rather than the spell.
 	PackageManagerBin string `json:"package_manager_bin,omitempty"`
+	// DocDescription / DocIntro / DocTags are the spell's own account of itself: the
+	// one-sentence frontmatter description, the one-paragraph page intro, and the
+	// extra frontmatter tags its docs page carries. Declared by
+	// mgs_getDocDescription / mgs_getDocIntro / mgs_listDocTags.
+	//
+	// They live HERE, on the spell, rather than in a table inside the docs generator
+	// keyed by spell name. That table was the drift: renaming a spell left its prose
+	// behind under a name that no longer existed, and its intros went on describing
+	// "the `go` spell" and "the `docker` spell" long after both were renamed. A
+	// spell's description of itself is a property of the spell, so it moves with it.
+	DocDescription string   `json:"doc_description,omitempty"`
+	DocIntro       string   `json:"doc_intro,omitempty"`
+	DocTags        []string `json:"doc_tags,omitempty"`
 	// Language is the canonical source language this spell adapts (e.g. "go",
 	// "typescript"), declared by mgs_getLanguage. It tags the spell node so a
 	// `language:` query groups the adapter with the files and symbols of that language;

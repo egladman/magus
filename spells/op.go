@@ -41,6 +41,17 @@ type Command struct {
 	// belongs on Command because it is declared by a Command-returning handler;
 	// Op carries the resolved copy that dispatch reads.
 	Capture bool `json:"capture,omitempty"`
+	// ReturnsJSON declares that this command writes one JSON document to stdout, so
+	// the exec record gains a `json` member holding the decoded value (the same
+	// Boxed serialize\jsonDecode returns). DECLARED, never detected: sniffing stdout
+	// would make the return type depend on run-time data, so a tool that failed and
+	// printed an error would silently change what the op returns. It also has
+	// nothing to do with the op's NAME - a name is not a contract, and an op called
+	// `metadata` may return JSON while one called `foo-json` may not.
+	//
+	// Implies Capture: there is nothing to decode from a command whose output was
+	// never captured.
+	ReturnsJSON bool `json:"returns_json,omitempty" buzz:"returns_json"`
 }
 
 // Op kinds. A kind lives on the op, not the spell: one spell freely mixes command

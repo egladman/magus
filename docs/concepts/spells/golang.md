@@ -1,30 +1,30 @@
 ---
-title: go spell
+title: golang spell
 description: "Go toolchain spell: build, test, vet, fmt, gofumpt, mod-tidy, golangci-lint, and govulncheck as magus ops."
-tags: [go, spell, golang, build, test, lint, tools]
+tags: [golang, spell, go, build, test, lint, tools]
 ---
 
-# go
+# golang
 
-The `go` spell wires the Go toolchain into a magusfile: each op forks a `go` (or `gofmt`/`gofumpt`) subcommand directly, with no shell. golangci-lint and govulncheck run from PATH - pinned by whatever the workspace uses (mise, asdf, a system package) - and the spell's named version probes record which, so a linter upgrade moves the cache key.
+The `golang` spell wires the Go toolchain into a magusfile: each op forks a `go` (or `gofmt`/`gofumpt`) subcommand directly, with no shell. golangci-lint and govulncheck run from PATH - pinned by whatever the workspace uses (mise, asdf, a system package) - and the spell's named version probes record which, so a linter upgrade moves the cache key.
 
-**Runtime name:** `go` (source `spells/golang/`)
+**Runtime name:** `golang` (source `spells/golang/`)
 
 **Version probe:** `go version`
 
-**Named probes:** `gofumpt` (`gofumpt --version`), `golangci-lint` (`golangci-lint --version`), `govulncheck` (`govulncheck -version`) - each records UNPROBED when the tool is absent, and moves the cache key when installed.
+**Named probes:** `gofumpt` (`gofumpt --version`), `golangci-lint-run` (`golangci-lint --version`), `govulncheck` (`govulncheck -version`) - each records UNPROBED when the tool is absent, and moves the cache key when installed.
 
 ## Passing arguments to ops
 
-Every op is invoked as `go["<op>"](ctx, opts?)`. The first argument is the target's context, which is what carries the execution environment; the optional options map shapes the command itself:
+Every op is invoked as `golang["<op>"](ctx, opts?)`. The first argument is the target's context, which is what carries the execution environment; the optional options map shapes the command itself:
 
 | Key | Type | Description | Source |
 |-----|------|-------------|--------|
-| `args` | `[str]` | Extra arguments appended to the resolved command. Omit it and a bare `go["<op>"]()` forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L187) |
-| `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L191) |
+| `args` | `[str]` | Extra arguments appended to the resolved command. Omit it and a bare `golang["<op>"]()` forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L233) |
+| `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L237) |
 
 
-Working directory and environment are NOT options: they ride the context, as `go["<op>"](ctx.withCwd("sub"))` and `go["<op>"](ctx.withEnv({"CGO_ENABLED": "0"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise - passing either as an option is an error.
+Working directory and environment are NOT options: they ride the context, as `golang["<op>"](ctx.withCwd("sub"))` and `golang["<op>"](ctx.withEnv({"CGO_ENABLED": "0"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise - passing either as an option is an error.
 
 Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).
 
@@ -63,45 +63,6 @@ magus\project({ "spells": [golang] });
 
 export fun clean(ctx: magus\Context, args: [str]) > void {
     golang["go-clean"](ctx);
-}
-```
-
-## go-fmt
-
-**Command:** `gofmt -l .`
-
-### rw
-
-Replaces `-l` with `-w`.
-
-<details class="charm-patch">
-<summary>JSON Patch</summary>
-
-```json
-[
-  {
-    "op": "replace",
-    "path": "/0",
-    "value": "-w"
-  }
-]
-```
-
-</details>
-
-### Example
-
-<!-- magus-run-recorder -->
-```buzz
-// go-fmt lists misformatted files; the rw charm rewrites them in place.
-// `magus run format` checks, `magus run format:rw` applies gofmt.
-import "magus";
-import "magus/spell/golang";
-
-magus\project({ "spells": [golang] });
-
-export fun format(ctx: magus\Context, args: [str]) > void {
-    golang["gofmt"](ctx);
 }
 ```
 
@@ -147,9 +108,9 @@ Drops `-print`.
 
 </details>
 
-## go-mod-json
+## go-mod-edit-json
 
-Captures Go's structured module view for the spell's higher-level Buzz helper. This is deliberately a separate read-only op: `-json` and `-print` are distinct Go modes, while go-mod-edit remains the one command that applies derived edits.
+Captures Go's structured module view for the spell's higher-level Buzz helper. This is deliberately a separate read-only op: `-json` and `-print` are distinct Go modes, while go-mod-edit remains the one command that applies derived edits. returns_json declares that stdout is one JSON document, so the caller gets a decoded `json` member (a serialize Boxed) alongside the raw `stdout` instead of parsing it itself. It implies capture.
 
 **Command:** `go mod edit -json`
 
@@ -300,6 +261,45 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
+## gofmt
+
+**Command:** `gofmt -l .`
+
+### rw
+
+Replaces `-l` with `-w`.
+
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+
+```json
+[
+  {
+    "op": "replace",
+    "path": "/0",
+    "value": "-w"
+  }
+]
+```
+
+</details>
+
+### Example
+
+<!-- magus-run-recorder -->
+```buzz
+// go-fmt lists misformatted files; the rw charm rewrites them in place.
+// `magus run format` checks, `magus run format:rw` applies gofmt.
+import "magus";
+import "magus/spell/golang";
+
+magus\project({ "spells": [golang] });
+
+export fun format(ctx: magus\Context, args: [str]) > void {
+    golang["gofmt"](ctx);
+}
+```
+
 ## gofumpt
 
 gofumpt is the one mainstream gofmt alternative (a stricter superset); the magusfile picks which composes into format, per the eslint-vs-biome pattern. PATH-installed and independently versioned, so it carries a named probe below.
@@ -325,7 +325,7 @@ Replaces `-l` with `-w`.
 
 </details>
 
-## golangci-lint
+## golangci-lint-run
 
 Invoked directly rather than through `go tool`: golangci-lint generates no code, so it has none of the generator/runtime lockstep that keeps protoc-gen-go pinned in go.mod. `go tool golangci-lint` also required the binary in the module's tool block, and a workspace that had not put it there got "no such tool" - the op could not run at all. On PATH it is pinned by whatever the workspace uses (mise, asdf, a system package), and the spell's version probe records which.
 

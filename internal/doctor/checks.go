@@ -1070,6 +1070,76 @@ func isRunnerVerb(s string) bool {
 	return false
 }
 
+// checkJSONOpCharms is MGS1025: it warns where a returns_json op's charm COULD
+// unselect the format. The op promises stdout is one JSON document while a charm
+// rewrites that same argv at run time, and the failure surfaces under a charm the
+// op's author never ran - which is the worst way to find out.
+//
+// This is a HEURISTIC and says so. magus cannot tell which argument selects a
+// tool's output format, so it cannot prove a given patch is wrong: a replace that
+// rewrites an unrelated flag is fine, and a replace swapping one JSON mode for
+// another (--format-version 1 -> 2) is still JSON. What it CAN say is that an
+// append is the only shape that cannot possibly unselect a format, so anything else
+// deserves a second look.
+//
+// Hence an opt-out with a reason (mgs_listJSONCharmExceptions) rather than a
+// prohibition - the nolint model this repo already uses for UnprobedBins and
+// Service.Distinct. The author asserts they checked; doctor can audit the
+// assertions later.
+//
+// Built-ins only, same boundary as the sibling spell rails above.
+func (*runner) checkJSONOpCharms([]*types.Project) Check {
+	const name = "json op charms"
+	var details []string
+	for _, spec := range spellruntime.Builtins() {
+		for _, opName := range spec.OpNames() {
+			op := spec.Ops[opName]
+			if !op.ReturnsJSON {
+				continue
+			}
+			if _, declared := spec.JSONCharmExceptions[opName]; declared {
+				continue
+			}
+			for _, charmName := range sortedCharmNames(op.Charms) {
+				for _, patch := range op.Charms[charmName].Ops {
+					if patch.Op == spells.OpAdd {
+						continue
+					}
+					details = append(details, fmt.Sprintf(
+						"spell %s op %s: charm %q applies %q to an op that declares returns_json; "+
+							"only an append (%q) cannot unselect the format. If it rewrites an unrelated "+
+							"argument, or swaps one JSON mode for another, declare it in "+
+							"mgs_listJSONCharmExceptions with a reason",
+						spec.Name, opName, charmName, patch.Op, spells.OpAdd))
+				}
+			}
+		}
+	}
+	if len(details) == 0 {
+		return Check{Name: name, Status: StatusOK, Message: "every returns_json op either appends only, or declares why its charm does more"}
+	}
+	slices.Sort(details)
+	return Check{
+		Name:   name,
+		Status: StatusFail,
+		Message: fmt.Sprintf(
+			"%d charm patch(es) COULD rewrite the argument that selects JSON on an op promising it; confirm each, then append or declare it (see %s)",
+			len(details), types.CodeURL(types.JSONOpCharmRewrite)),
+		Details: details,
+	}
+}
+
+// sortedCharmNames returns a charm map's keys in sorted order, so a finding list is
+// stable run to run.
+func sortedCharmNames(charms map[string]spells.Charm) []string {
+	names := make([]string, 0, len(charms))
+	for n := range charms {
+		names = append(names, n)
+	}
+	slices.Sort(names)
+	return names
+}
+
 // checkUnreachedFootprintDecls is MGS1004: a ctx.readsFiles/writesFiles call the static
 // extractor can't reach from a target body - one in an unreferenced or
 // indirectly-dispatched helper, or the identifier used as a value. Such a declaration

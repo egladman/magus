@@ -10,4 +10,5 @@ export object Command {
     args: [str] = [],
     charms: {str: Charm} = {},
     capture: bool = false,
+    returns_json: bool = false,
 }

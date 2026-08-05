@@ -165,6 +165,9 @@ export fun tourSteps() > [TourStep] {
     steps.append(TourStep{ file = "18-typed-boundaries.buzz", title = "Typed boundaries: keep the data inside",
         desc = "A target returns void, so structured data belongs in the magusfile - declare the table once, export a verb per action, and let CI supply only the secrets.",
         docLabel = "Tips and tricks", docSlug = "guides/tips" });
+    steps.append(TourStep{ file = "23-json-ops.buzz", title = "JSON ops: read output as data",
+        desc = "An op declares its output is one JSON document, so the caller gets a decoded value beside the raw string - declared in the spell, never guessed from stdout or from the op name.",
+        docLabel = "Operations", docSlug = "concepts/operations" });
     return steps;
 }
 

@@ -206,6 +206,7 @@ func applyWithEvanphx(argv []string, ops []spells.PatchOp) ([]string, error) {
 var goldenBuiltins = map[string]spells.Descriptor{
 	"bash": {
 		Name:       "bash",
+		Language:   "bash",
 		Needs:      []string{"**/*.sh", "**/*.bash", ".shellcheckrc"},
 		IgnoreDirs: []string{"node_modules", ".claude/worktrees"},
 		// shellcheck/shfmt/bats are PATH-pinned verdict deciders.
@@ -232,6 +233,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 	},
 	"protobuf": {
 		Name:       "protobuf",
+		Language:   "protobuf",
 		Needs:      []string{"**/*.proto", "buf.yaml", "buf.gen.yaml", "buf.work.yaml", "buf.lock"},
 		Provides:   []string{"gen/**"},
 		VersionCmd: []string{"buf", "--version"},
@@ -253,6 +255,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 	},
 	"buzz": {
 		Name:       "buzz",
+		Language:   "buzz",
 		Needs:      []string{"**/*.buzz"},
 		IgnoreDirs: []string{"node_modules", ".claude/worktrees"},
 		// Upstream buzz is a named probe: UNPROBED when absent, key-moving when installed.
@@ -337,7 +340,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"go-mod-edit": {Command: spells.Command{Bin: "go", Args: []string{"mod", "edit", "-print"}, Capture: true, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
 			}}, Capture: true},
-			"go-mod-edit-json": {Command: spells.Command{Bin: "go", Args: []string{"mod", "edit", "-json"}, Capture: true}, Capture: true},
+			"go-mod-edit-json": {Command: spells.Command{Bin: "go", Args: []string{"mod", "edit", "-json"}, Capture: true, ReturnsJSON: true}, Capture: true},
 			"go-run":           {Command: spells.Command{Bin: "go", Args: []string{"run"}}},
 			"gofmt": {Command: spells.Command{Bin: "gofmt", Args: []string{"-l", "."}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
@@ -365,13 +368,14 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"go-mod-tidy": {Command: spells.Command{Bin: "go", Args: []string{"mod", "tidy", "--diff"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
 			}}},
-			"go-vet":         {Command: spells.Command{Bin: "go", Args: []string{"vet", "./..."}}},
+			"go-vet":      {Command: spells.Command{Bin: "go", Args: []string{"vet", "./..."}}},
 			"govulncheck": {Command: spells.Command{Bin: "govulncheck", Args: []string{"./..."}}},
 			"scip":        {Command: spells.Command{Bin: "sh", Args: []string{"-c", "scip-go --output \"$MAGUS_SYMBOL_INDEX\""}}},
 		},
 	},
 	"markdown": {
-		Name: "markdown",
+		Name:     "markdown",
+		Language: "markdown",
 		Needs: []string{"**/*.md", "**/*.MD", "**/*.markdown", "**/*.mdx",
 			".markdownlint.json", ".markdownlint.yaml", ".markdownlint.yml", ".markdownlint.jsonc", ".markdownlintrc",
 			".prettierrc", ".prettierrc.*", ".prettierignore", "_typos.toml"},
@@ -568,6 +572,11 @@ func TestBuiltinsMatchGolden(t *testing.T) {
 		// identity — and the Doc is not even stable across compiler versions (whether
 		// bytecode serializes doc comments varies). Clear both before comparing the
 		// semantic fields (bin/args/charms).
+		// The doc prose (description/intro/tags) is what a spell says about ITSELF for
+		// the docs site, not part of its semantic identity - and pinning marketing copy
+		// in a Go golden is the drift this migration removed, not something to recreate
+		// here. cmd/magus-spelldocs enforces that every spell declares a description.
+		g.DocDescription, g.DocIntro, g.DocTags = "", "", nil
 		g.DocOps = nil
 		for opName, op := range g.Ops {
 			op.Doc = ""

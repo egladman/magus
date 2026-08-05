@@ -234,6 +234,14 @@ fun scip(target: Target) > Command {
 
 // mgs_listTargets is typed `any` (not {str: fun(Target) Command}) because
 // dev-server mixes in a Service-returning op alongside the Command-returning ones.
+
+// The spell's own account of itself, read by the docs generator. It lives here
+// rather than in a table keyed by spell name inside that generator, so a rename
+// carries the prose with it instead of stranding it under a name that is gone.
+export fun mgs_getDocDescription() > str { return "TypeScript toolchain spell: tsc, eslint, prettier, vitest, jest, install, and audit run through the project package manager."; }
+export fun mgs_getDocIntro() > str { return "The `typescript` spell wires a TypeScript project's tooling into a magusfile, forking each tool through the project package manager. Its ops record `pnpm`, and the engine substitutes each project's detected manager (npm, yarn, or bun) at fork time: the project's `package_manager` option first, then `package.json`'s `packageManager` field, then the lockfile, then pnpm. It is an opaque spell: `preflight` composes the individual checks into one target."; }
+export fun mgs_listDocTags() > [str] { return ["typescript", "node", "eslint", "vitest"]; }
+
 export fun mgs_listTargets() > any {
     return {"audit": audit, "biome-check": biomeCheck, "biome-format": biomeFormat,
             "eslint": eslint, "install": install, "run-script": runScript,
