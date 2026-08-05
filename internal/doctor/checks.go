@@ -577,6 +577,16 @@ func checkVCSBaseRef(root string, opts types.VCSOptions) Check {
 	return Check{Name: "vcs base ref", Status: StatusOK, Message: fmt.Sprintf("%s %q resolves", res.Name, res.Base)}
 }
 
+// runtimeEnvVars are the MAGUS_* variables magus reads without them being config
+// fields; see checkEnvVars for why each one cannot be migrated onto the config
+// struct the way that function's doc otherwise requires.
+var runtimeEnvVars = map[string]struct{}{
+	"MAGUS_LEVEL":             {},
+	"MAGUS_SHARD":             {},
+	"MAGUS_N_SHARDS":          {},
+	"MAGUS_CACHE_SIGNING_KEY": {},
+}
+
 func (*runner) checkEnvVars() Check {
 	var unknown []string
 	for _, kv := range os.Environ() {
@@ -591,11 +601,19 @@ func (*runner) checkEnvVars() Check {
 		if _, ok := KnownEnvVars[key]; ok {
 			continue
 		}
-		// MAGUS_LEVEL is injected into every subprocess (the recursion
-		// depth, like GNU Make's MAKELEVEL; see internal/proc/run SelfVars). It's a
-		// runtime signal, not a config field, so it won't be in KnownEnvVars - a
-		// nested magus legitimately sees it.
-		if key == "MAGUS_LEVEL" {
+		// Vars magus itself reads that are deliberately NOT config fields, so they
+		// will never appear in KnownEnvVars. Each is a runtime or secret input, and
+		// flagging them told users their own documented setup was a typo:
+		//   MAGUS_LEVEL              subprocess recursion depth, like GNU Make's
+		//                            MAKELEVEL (internal/proc/run SelfVars); a nested
+		//                            magus legitimately sees it.
+		//   MAGUS_SHARD              CI matrix inputs, read as the --shard/--n-shards
+		//   MAGUS_N_SHARDS           flag defaults (cmd/magus/run.go) and exported by
+		//                            magus's own GitHub action.
+		//   MAGUS_CACHE_SIGNING_KEY  the remote-cache signing seed. It must stay
+		//                            env-only: a signing secret that could be set in a
+		//                            committed magus.yaml is not a secret.
+		if _, ok := runtimeEnvVars[key]; ok {
 			continue
 		}
 		// MAGUS_VCS_<NAME>_BASE_REF is a dynamic per-VCS pattern, not a
