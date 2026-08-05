@@ -229,6 +229,35 @@ export fun compose(current: str, name: str, title: str, body: str) > str {
     return assembled + footnotes(assembled);
 }
 
+// silences reports whether these labels mute an advisor. `magus:silence` mutes every
+// one; `magus:silence:<name>` mutes exactly one. Pure over the label list so the matching
+// rule is testable.
+//
+// A LABEL rather than a config file, because silencing is usually about this change
+// rather than about the repository: you looked, you decided the finding does not apply
+// here, and you want it to stop without committing that opinion to everyone forever. The
+// label is visible on the pull request, so the next reader can see what was muted, and
+// removing it brings the finding back.
+export fun silences(labels: [str], name: str) > bool {
+    foreach (label in labels) {
+        if (label == "magus:silence") { return true; }
+        if (label == "magus:silence:" + name) { return true; }
+    }
+    return false;
+}
+
+// silenced asks GitHub for this pull request's labels and applies the rule above.
+export fun silenced(repo: str, pr: str, name: str) > bool {
+    final res = os\exec("gh", args: ["api", "repos/" + repo + "/issues/" + pr + "/labels"],
+        dir: ".", opts: {"quiet": true, "allow_failure": true});
+    if (!res.ok) { return false; }
+    var labels = mut [];
+    foreach (l in serialize\jsonDecode(res.stdout).listValue()) {
+        labels.append(l.q("name").stringValue());
+    }
+    return silences(labels, name: name);
+}
+
 // find returns the id of our comment on this PR, or "" when we have not commented yet.
 // Read through `gh api` and decoded here rather than filtered with a jq expression: the
 // marker is an HTML comment, and quoting it through a jq -r filter inside YAML inside
@@ -366,4 +395,18 @@ test "every comment says how to turn it off, last" {
 test "the footer survives a comment with nothing cited" {
     final body = compose("", name: "x", title: "X", body: "nothing worth citing here");
     std\assert(body.indexOf("How to turn these off") != null, message: "still says how to stop it");
+}
+
+test "silences mutes one advisor by name" {
+    std\assert(silences(["magus:silence:unclaimed"], name: "unclaimed"), message: "the named one");
+    std\assert(!silences(["magus:silence:unclaimed"], name: "doctor"), message: "and only that one");
+}
+
+test "silences mutes everything with the bare label" {
+    std\assert(silences(["magus:silence"], name: "doctor"), message: "blanket silence");
+}
+
+test "silences ignores unrelated labels" {
+    std\assert(!silences(["bug", "magus:autofix"], name: "doctor"), message: "not a silence label");
+    std\assert(!silences([], name: "doctor"), message: "no labels at all");
 }

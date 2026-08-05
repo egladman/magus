@@ -50,6 +50,13 @@ fun main() > void {
         std\print("first-contribution: no PR context; nothing to advise");
         return;
     }
+    if (advice\silenced(repo, pr: pr, name: section)) {
+        // Retract rather than leave the last finding frozen on the page.
+        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        std\print("first-contribution: silenced by label");
+        return;
+    }
+
     if (!isFirst(repo, author: author)) {
         // Retract: once they have merged something they are not new, and a welcome that
         // outlives its welcome is just noise.

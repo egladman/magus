@@ -54,6 +54,13 @@ fun main() > void {
         throw "unclaimed: PR_NUMBER, PR_BASE, and PR_HEAD_SHA must be set together";
     }
 
+    if (advice\silenced(repo, pr: pr, name: section)) {
+        // Retract rather than leave the last finding frozen on the page.
+        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        std\print("unclaimed: silenced by label");
+        return;
+    }
+
     final paths = changed(base, head: head);
     if (paths.len() == 0) {
         advice\publish(repo, pr: pr, name: section, title: "Files no project claims", body: "");

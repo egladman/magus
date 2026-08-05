@@ -36,6 +36,26 @@ if: github.event_name == 'pull_request' && vars.MAGUS_PR_COMMENTS != 'false'
 Set `MAGUS_PR_COMMENTS` to `false` under Settings, Variables, and the job stops
 running without a commit.
 
+## Silencing one finding on one pull request
+
+Turning an input off is a decision about the repository. Silencing is usually a decision
+about the change in front of you: you looked, it does not apply here, and you want it to
+stop without committing that opinion to everyone forever.
+
+Label the pull request:
+
+| label | effect |
+| --- | --- |
+| `magus:silence` | mutes every advisor on this pull request |
+| `magus:silence:unclaimed` | mutes one, by its input name |
+
+A silenced advisor retracts its section rather than freezing the last thing it said, so
+the comment never shows a finding nobody is still checking. Remove the label and it comes
+back on the next push.
+
+The label is visible on the pull request, which is the point: the next reader can see
+what was muted and by whom.
+
 ## What each advisor says
 
 | input | it comments when |

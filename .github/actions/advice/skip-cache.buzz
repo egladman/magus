@@ -51,6 +51,13 @@ fun main() > void {
         throw "skip-cache: PR_NUMBER, PR_BASE, and PR_HEAD_SHA must be set together";
     }
 
+    if (advice\silenced(repo, pr: pr, name: section)) {
+        // Retract rather than leave the last finding frozen on the page.
+        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        std\print("skip-cache: silenced by label");
+        return;
+    }
+
     os\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
     final diff = os\exec("git", args: ["diff", "origin/" + base + "..." + head, "--", "*.buzz"],
         dir: ".", opts: {"allow_failure": true}).stdout;

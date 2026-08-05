@@ -131,6 +131,13 @@ fun main() > void {
     if (pr == "" or base == "" or head == "") {
         throw "blast-radius: PR_NUMBER, PR_BASE, and PR_HEAD_SHA must be set together";
     }
+    if (advice\silenced(repo, pr: pr, name: section)) {
+        // Retract rather than leave the last finding frozen on the page.
+        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        std\print("blast-radius: silenced by label");
+        return;
+    }
+
     var share = 0.5;
     final configured = advice\env("FANOUT_SHARE");
     if (configured != "") { share = std\parseFloat(configured) ?? 0.5; }

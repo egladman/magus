@@ -100,7 +100,11 @@ fun main() > void {
 
     // Regenerate through the targets, never by hand: the rw charm is what lets generate
     // write instead of gating on drift.
-    os\exec("magus", args: ["affected", "generate:rw"], dir: ".", opts: {"allow_failure": true});
+    //
+    // magus\cmd, not os\exec on the magus binary: same process family, no PATH lookup, no
+    // version skew between the magus advising and the magus regenerating - and magus warns
+    // about the os\exec form for exactly those reasons.
+    magus\cmd("affected", args: ["generate:rw"], opts: {"allow_failure": true});
     final files = dirty();
     if (files.len() == 0) {
         advice\publish(repo, pr: pr, name: section, title: "Generated drift", body: "");
@@ -112,7 +116,7 @@ fun main() > void {
     git(["config", "user.name", autofix_name], tolerate: false);
     // magus vcs add, not git add -A: it stages what the workspace DECLARES and reports
     // anything undeclared instead of sweeping build residue into the commit.
-    os\exec("magus", args: ["vcs", "add"], dir: ".", opts: {});
+    magus\cmd("vcs", args: ["add"]);
     os\exec("git", args: ["commit", "-m", "regenerate drifted output"], dir: ".", opts: {});
     os\exec("git", args: ["push", "origin", "HEAD:" + headRef], dir: ".", opts: {});
 
