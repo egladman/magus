@@ -550,7 +550,9 @@ func TestCopyFileMissingSource(t *testing.T) {
 // filesystems (btrfs, XFS reflink=1, APFS) the reflink path is O(1);
 // on others it falls through to hard-link then io.Copy.
 //
-// Run: go test -bench=BenchmarkReplayBlob -benchtime=5s ./magus/cache/
+// Run:
+//
+//	go test -bench=BenchmarkReplayBlob -benchtime=5s ./magus/cache/
 func BenchmarkReplayBlob(b *testing.B) {
 	const size = 64 << 20 // 64 MiB
 	b.SetBytes(size)

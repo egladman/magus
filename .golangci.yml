@@ -53,6 +53,13 @@ linters:
     # package clause, which Go silently reads as a SECOND package doc. Both mislead a
     # reader who has every reason to trust the comment.
     - godoclint       # godoc practice: doc starts with its symbol, one package doc
+    # Doc comments are the ones that get RENDERED - pkg.go.dev, editor hovers - as
+    # prose, so one trailing off unpunctuated reads as truncated. Left at the default
+    # `declarations` scope on purpose: that covers exactly the rendered comments and
+    # leaves inline commentary alone, which is where a period rule would just be
+    # noise. Do NOT set `scope: all` - godot v1.5.6 PANICS on this tree (index out of
+    # range in checkPeriod, package codec), and the crash is swallowed as "0 findings".
+    - godot           # doc comments end in a period
     - revive          # idiomatic naming, exported comments, error-string casing
     - misspell        # common English spelling mistakes in comments and strings
     - nolintlint      # enforce that //nolint directives include a reason

@@ -10,7 +10,9 @@ import (
 // largest realistic input (every target the project ships). Extract runs once
 // per `magus describe graph` / `magus run generate` invocation, so this benchmark
 // exists to confirm it stays negligible against CLI-invocation cost, not because
-// it sits on a hot loop. Re-run: go test -bench=BenchmarkExtract -benchmem -count=10
+// it sits on a hot loop. Re-run:
+//
+//	go test -bench=BenchmarkExtract -benchmem -count=10
 func BenchmarkExtract(b *testing.B) {
 	src, err := os.ReadFile(filepath.Join("..", "..", "magusfile.buzz"))
 	if err != nil {

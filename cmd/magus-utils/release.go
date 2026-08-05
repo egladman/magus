@@ -249,7 +249,9 @@ func runCut(args []string) error {
 // version. It is a one-shot migration tool: run once, then delete the
 // parseChangelog function from render.buzz.
 //
-// Usage: magus-utils migrate -changelog ./CHANGELOG.md -out ./releases
+// Usage:
+//
+//	magus-utils migrate -changelog ./CHANGELOG.md -out ./releases
 func runMigrate(args []string) error {
 	var changelogPath, outDir string
 	for i := 0; i < len(args)-1; i++ {
@@ -373,7 +375,9 @@ func runReleaseIndex(args []string) error {
 // runGenerateChangelog regenerates CHANGELOG.md from releases/*.yaml, preserving
 // the [Unreleased] section verbatim. This is the drift-gate-safe inverse of migration.
 //
-// Usage: magus-utils generate-changelog -releases ./releases -changelog ./CHANGELOG.md
+// Usage:
+//
+//	magus-utils generate-changelog -releases ./releases -changelog ./CHANGELOG.md
 func runGenerateChangelog(args []string) error {
 	var releasesDir, changelogPath string
 	for i := 0; i < len(args)-1; i++ {
@@ -650,7 +654,7 @@ func isReleaseAsset(name string) bool {
 }
 
 // platformFromName infers the platform string from a tarball filename.
-// e.g. "magus_v0.2.0_linux_amd64.tar.gz" -> "linux/amd64"
+// For example, "magus_v0.2.0_linux_amd64.tar.gz" becomes "linux/amd64".
 func platformFromName(name, version string) string {
 	// Strip "magus_<version>_" prefix and ".tar.gz" suffix.
 	prefix := "magus_" + version + "_"

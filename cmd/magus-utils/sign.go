@@ -13,7 +13,9 @@ import (
 // The private key is read from MAGUS_SIGNING_KEY as a 128-character lowercase
 // hex string (64 raw bytes: 32-byte seed + 32-byte pub).
 //
-// Usage: magus-utils sign <file>
+// Usage:
+//
+//	magus-utils sign <file>
 func runSign(args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("usage: magus-utils sign <file>")

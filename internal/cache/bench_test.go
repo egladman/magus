@@ -116,7 +116,9 @@ func BenchmarkCacheHit(b *testing.B) {
 // concurrency levels. The cache is pre-populated so each iteration is pure
 // replay + goroutine scheduling — no build work touches the CPU.
 //
-// Run with: go test -bench=BenchmarkRunAll -benchtime=5s ./magus/cache/
+// Run with:
+//
+//	go test -bench=BenchmarkRunAll -benchtime=5s ./magus/cache/
 func BenchmarkRunAll(b *testing.B) {
 	const n = 8
 	for _, concurrency := range []int{1, 2, 4, 8} {
