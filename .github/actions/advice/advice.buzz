@@ -11,32 +11,12 @@
 // disappears on the next run, rather than lingering as a stale scold.
 import "os";
 import "fs";
+import "time";
 import "serialize";
 import "std";
 
 // The comment marker identifies OUR comment among everyone else's. Never rendered.
 final comment_marker = "<!-- magus:advice -->";
-
-// The preface. A reader landing on this comment in someone else's repository has no idea
-// what left it, and an unsigned bot comment is the kind people report as spam. It says
-// who is talking, that none of it blocks the merge, and where to complain.
-//
-// It also links THIS run's summary, which carries the insight report and the graphs the
-// comment deliberately leaves out: a comment should stay short enough to read, and the
-// run page is already the right home for everything a reader might want next.
-fun preface() > str {
-    var text = "### magus\n\n"
-        + "Notes from your workspace's own build graph. None of this blocks the merge - "
-        + "the checks below do that. "
-        + "[What leaves these comments?](https://github.com/egladman/magus/tree/main/.github/actions/advice)\n";
-    final repo = env("REPO");
-    final run = env("GITHUB_RUN_ID");
-    if (repo != "" and run != "") {
-        text = text + "\nHotspots, ownership, volatility and the dependency graph for this "
-            + "run: [run summary](https://github.com/" + repo + "/actions/runs/" + run + ").\n";
-    }
-    return text;
-}
 
 // env reads a variable, returning "" rather than null so callers can compare directly.
 export fun env(name: str) > str {
@@ -47,6 +27,30 @@ export fun env(name: str) > str {
 
 export fun beginMarker(name: str) > str { return "<!-- magus:advice:" + name + ":begin -->"; }
 export fun endMarker(name: str) > str { return "<!-- magus:advice:" + name + ":end -->"; }
+
+// The preface. A reader landing on this comment in someone else's repository has no idea
+// what left it, and an unsigned bot comment is the kind people report as spam. It says
+// who is talking, that none of it blocks the merge, and where to complain.
+//
+// It also links THIS run's summary, which carries the insight report and the graphs the
+// comment deliberately leaves out: a comment should stay short enough to read, and the
+// run page is already the right home for everything a reader might want next.
+fun preface() > str {
+    var text = "### magus\n\n"
+        + "magus compared this pull request against the workspace's build graph - what "
+        + "each project declares, what it generates, and what depends on it - and found "
+        + "the notes below. Each one is collapsed; open the ones that concern you.\n\n"
+        + "**None of this blocks the merge.** The checks do that. These are things the "
+        + "graph knows and a diff cannot show, offered in case they change what you would "
+        + "do next. If one does not apply here, label it away and it disappears.\n";
+    final repo = env("REPO");
+    final run = env("GITHUB_RUN_ID");
+    if (repo != "" and run != "") {
+        text = text + "\nHotspots, ownership, volatility and the dependency graph for this "
+            + "run: [run summary](https://github.com/" + repo + "/actions/runs/" + run + ").\n";
+    }
+    return text;
+}
 
 // The glossary. Terminology a reader may not share gets a deep link on FIRST mention,
 // the same courtesy the documentation site extends. Longest first, so "targets" wins over
@@ -67,12 +71,17 @@ final glossary_urls = {
     "affected set": "https://eli.gladman.cc/magus/guides/affected/",
 };
 
-// citeTerms cites the first mention of each glossary term as a footnote.
+// linkTerms deep-links the first mention of each glossary term.
+//
+// Inline links, NOT footnotes. GitHub does not resolve a `[^label]` reference that sits
+// inside an HTML block, and every section here lives inside <details> - the references
+// rendered as literal text. Hoisting the definitions out to the top level did not help,
+// because it is the REFERENCE that goes unparsed, not the definition.
 //
 // Code spans are left alone: `magus\targetGraph()` is an identifier, not the concept, and
 // rewriting inside backticks would produce something that no longer runs. Splitting on the
 // backtick makes every ODD segment code, which is the whole guard.
-export fun citeTerms(text: str) > str {
+export fun linkTerms(text: str) > str {
     final parts = text.split("`");
     var done = mut [];
     var i = 0;
@@ -94,7 +103,7 @@ export fun citeTerms(text: str) > str {
                 final before = piece.sub(0, len: at);
                 if (before.split("[").len() > before.split("]").len()) { continue; }
                 done.append(term);
-                piece = piece.sub(0, len: at) + term + "[^" + term + "]"
+                piece = piece.sub(0, len: at) + "[" + term + "](" + glossary_urls[term] + ")"
                     + piece.sub(at + term.len());
             }
         }
@@ -105,7 +114,8 @@ export fun citeTerms(text: str) > str {
     return joined;
 }
 
-// linkCodes turns a bare diagnostic code into a link to its page. A code is magus's
+// linkCodes turns a bare diagnostic code into a link to its page. Inline, for the same
+// reason linkTerms is: a footnote reference inside <details> never resolves. A code is magus's
 // stable, greppable identifier for one failure, and a reader who meets MGS1003 in a
 // comment should be one click from what it means - not left to search for it.
 //
@@ -123,7 +133,7 @@ export fun codeURL(code: str) > str {
     return "https://eli.gladman.cc/magus/reference/codes/" + area + "/" + code + "/";
 }
 
-export fun citeCodes(text: str) > str {
+export fun linkCodes(text: str) > str {
     var joined = "";
     var rest = text;
     while (true) {
@@ -135,7 +145,7 @@ export fun citeCodes(text: str) > str {
         final before = rest.sub(0, len: at);
         final linked = before.split("[").len() > before.split("]").len();
         if (code.len() == 7 and !linked and before.indexOf("codes/") == null) {
-            joined = joined + before + code + "[^" + code + "]";
+            joined = joined + before + "[" + code + "](" + codeURL(code) + ")";
         } else {
             joined = joined + rest.sub(0, len: at + 3);
             rest = rest.sub(at + 3);
@@ -146,44 +156,26 @@ export fun citeCodes(text: str) > str {
     return joined;
 }
 
-// footnotes rebuilds the definitions block from whatever the comment currently cites.
-//
-// Hoisted to the TOP LEVEL, after the last </details>: a footnote definition inside an
-// HTML block is not reliably parsed, and every section here lives inside one. Rebuilt
-// rather than appended, so a retracted section takes its citations with it.
-final footnotes_marker = "<!-- magus:advice:footnotes -->";
-
 // The way out, kept where an unsubscribe link belongs: last, small, and never in the way
 // of the content. Someone who does not want these should not have to read the source of a
 // composite action to find the switch.
-final footer = "<sub><i>Every one of these is an input you can set to <code>false</code>, "
-    + "and this whole comment is one step you can drop. "
-    + "<a href=\"https://eli.gladman.cc/magus/guides/integrations/pr-advice/\">"
-    + "How to turn these off</a>.</i></sub>\n";
+// Comments written before footnotes were abandoned still carry a definitions block.
+// Stripping it on the next push cleans them up rather than leaving literal
+// "[^target]:" lines at the bottom of an old comment forever.
+final footnotes_marker = "<!-- magus:advice:footnotes -->";
 
-export fun footnotes(comment: str) > str {
-    var labels = mut [];
-    var rest = comment;
-    while (true) {
-        final at = rest.indexOf("[^");
-        if (at == null) { break; }
-        rest = rest.sub(at + 2);
-        final close = rest.indexOf("]");
-        if (close == null) { break; }
-        final label = rest.sub(0, len: close);
-        // A definition line, not a citation: skip it, the rebuild supplies those.
-        var seen = false;
-        foreach (l in labels) { if (l == label) { seen = true; } }
-        if (!seen and label != "") { labels.append(label); }
-    }
-    if (labels.len() == 0) { return "\n" + footer; }
-    var text = footnotes_marker + "\n";
-    foreach (label in labels) {
-        var url = glossary_urls[label];
-        if (url == null) { url = codeURL(label); }
-        text = text + "[^" + label + "]: " + url + "\n";
-    }
-    return text + "\n" + footer;
+// The footer: when this was last written, and the way out.
+//
+// The timestamp because the comment is REWRITTEN in place on every push - GitHub shows an
+// "edited" badge but not when, so a reader cannot tell whether they are looking at
+// findings for the commit they are reviewing or for one from yesterday. Every other
+// comment on the page is immutable and dated; this one is not, so it dates itself.
+fun footer() > str {
+    return "<sub><i>Last updated " + time\nowIso() + ". "
+        + "Every one of these is an input you can set to <code>false</code>, and this "
+        + "whole comment is one step you can drop. "
+        + "<a href=\"https://eli.gladman.cc/magus/guides/integrations/pr-advice/\">"
+        + "How to turn these off</a>.</i></sub>\n";
 }
 
 // compose returns the comment body with section `name` set to `body` under `title`,
@@ -213,8 +205,7 @@ export fun compose(current: str, name: str, title: str, body: str) > str {
     final tailMarked = tail.indexOf(footnotes_marker);
     if (tailMarked != null) { tail = tail.sub(0, len: tailMarked); }
     if (body == "") {
-        final withoutSection = (head + tail).trim() + "\n";
-        return withoutSection + footnotes(withoutSection);
+        return (head + tail).trim() + "\n" + footer();
     }
     // Collapsed by default. Six findings expanded is a wall nobody reads to the end of;
     // six one-line summaries is a table of contents you scan in two seconds and open the
@@ -224,9 +215,8 @@ export fun compose(current: str, name: str, title: str, body: str) > str {
     // This is why a title carries its own count: with the body hidden, the summary line is
     // the whole signal a reader has for deciding whether to open it.
     final section = begin + "\n<details>\n<summary><b>" + title + "</b></summary>\n\n"
-        + citeCodes(citeTerms(body.trim())) + "\n\n</details>\n" + end;
-    final assembled = (head + section + tail).trim() + "\n";
-    return assembled + footnotes(assembled);
+        + linkCodes(linkTerms(body.trim())) + "\n\n</details>\n" + end;
+    return (head + section + tail).trim() + "\n\n" + footer();
 }
 
 // silences reports whether these labels mute an advisor. `magus:silence` mutes every
@@ -300,11 +290,14 @@ export fun publish(repo: str, pr: str, name: str, title: str, body: str) > void 
         "repos/" + repo + "/issues/comments/" + id, "--input", payload], dir: ".", opts: {});
 }
 
-test "compose introduces magus and links where to complain" {
+test "compose opens with what this is before any finding" {
     final body = compose("", name: "conflicts", title: "Merge conflicts", body: "hello");
     std\assert(body.indexOf("### magus") != null, message: "announces itself");
+    std\assert(body.indexOf("compared this pull request") != null, message: "says what it did");
     std\assert(body.indexOf("None of this blocks the merge") != null, message: "says it is not a gate");
-    std\assert(body.indexOf("actions/advice") != null, message: "links to what leaves the comment");
+    std\assert(body.indexOf("label it away") != null, message: "says how to dismiss one");
+    // The prologue comes before the first collapsed finding, not after it.
+    std\assert(body.indexOf("### magus") < body.indexOf("<details>"), message: "opens the comment");
 }
 
 test "compose folds each section away behind its title" {
@@ -339,26 +332,28 @@ test "the preface survives a section being replaced" {
     std\assert(body.split("### magus").len() == 2, message: "and only once");
 }
 
-test "citeTerms cites the first mention of a term" {
-    final got = citeTerms("A target with no outputs re-runs. Another target too.");
-    std\assert(got.indexOf("target[^target]") != null, message: "cites the concept");
-    std\assert(got.split("[^target]").len() == 2, message: "only the first mention");
+test "linkTerms deep-links the first mention of a term" {
+    final got = linkTerms("A target with no outputs re-runs. Another target too.");
+    std\assert(got.indexOf("[target](https://eli.gladman.cc/magus/concepts/targets/)") != null, message: "links the concept");
+    std\assert(got.split("concepts/targets/").len() == 2, message: "only the first mention");
+    std\assert(got.indexOf("[^") == null, message: "no footnote reference: GitHub will not resolve one in here");
 }
 
-test "citeTerms leaves code spans alone" {
-    final got = citeTerms("Run `magus run target` to build the target.");
+test "linkTerms leaves code spans alone" {
+    final got = linkTerms("Run `magus run target` to build the target.");
     std\assert(got.indexOf("`magus run target`") != null, message: "the command still runs");
-    std\assert(got.indexOf("target[^target]") != null, message: "the prose mention is cited");
+    std\assert(got.indexOf("[target](") != null, message: "the prose mention is linked");
 }
 
-test "citeTerms does not cite inside an existing link" {
-    final got = citeTerms("See [the cache guide](https://example.com) for more.");
+test "linkTerms does not nest a link inside a link" {
+    final got = linkTerms("See [the cache guide](https://example.com) for more.");
     std\assert(got.indexOf("[the cache guide](https://example.com)") != null, message: "left intact");
 }
 
-test "citeCodes cites a bare diagnostic code" {
-    final got = citeCodes("names MGS1003 in passing");
-    std\assert(got.indexOf("MGS1003[^MGS1003]") != null, message: "cites the code");
+test "linkCodes makes a bare diagnostic code clickable" {
+    final got = linkCodes("names MGS1003 in passing");
+    std\assert(got.indexOf("[MGS1003](https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1003/)") != null,
+        message: "links the code to its page");
 }
 
 test "linkCodes routes a code to its own area" {
@@ -366,30 +361,24 @@ test "linkCodes routes a code to its own area" {
     std\assert(codeURL("MGS2007").indexOf("/sandbox/") != null, message: "sandbox is the default band");
 }
 
-test "citeTerms leaves table rows alone" {
-    final got = citeTerms("| project | why |");
+test "linkTerms leaves table rows alone" {
+    final got = linkTerms("| project | why |");
     std\assert(got == "| project | why |", message: "a header cell is a label, not a mention");
 }
 
-test "footnotes defines every cited label once, at the end" {
+test "a rendered comment carries no footnote syntax" {
     final body = compose("", name: "doctor", title: "Workspace health", body: "a target failed (MGS1003)");
-    std\assert(body.indexOf("[^target]: https://eli.gladman.cc/magus/concepts/targets/") != null, message: "defines the term");
-    std\assert(body.indexOf("[^MGS1003]: https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1003/") != null, message: "defines the code");
-    // The definitions sit outside the collapsed section, where GitHub will parse them.
-    std\assert(body.indexOf("</details>") < body.indexOf("[^target]:"), message: "hoisted past the details block");
-}
-
-test "footnotes are rebuilt, so a retracted section takes its citations with it" {
-    var body = compose("", name: "doctor", title: "Workspace health", body: "a target failed");
-    body = compose(body, name: "doctor", title: "Workspace health", body: "");
-    std\assert(body.indexOf("[^target]:") == null, message: "the definition goes with the section");
+    std\assert(body.indexOf("[^") == null, message: "GitHub leaves a reference inside <details> as literal text");
+    std\assert(body.indexOf("concepts/targets/") != null, message: "the term is linked inline instead");
+    std\assert(body.indexOf("codes/magusfile/MGS1003/") != null, message: "and so is the code");
 }
 
 test "every comment says how to turn it off, last" {
     final body = compose("", name: "doctor", title: "Workspace health", body: "a target failed");
     std\assert(body.indexOf("How to turn these off") != null, message: "the way out is present");
     std\assert(body.indexOf("guides/integrations/pr-advice") != null, message: "and documented");
-    std\assert(body.indexOf("How to turn these off") > body.indexOf("[^target]:"), message: "after the citations");
+    std\assert(body.indexOf("How to turn these off") > body.indexOf("</details>"), message: "after the findings");
+    std\assert(body.indexOf("Last updated ") != null, message: "and says when it was written");
 }
 
 test "the footer survives a comment with nothing cited" {
