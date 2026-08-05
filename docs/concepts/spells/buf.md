@@ -10,7 +10,7 @@ The `buf` spell forks the `buf` CLI to build, lint, format, and generate from Pr
 
 **Runtime name:** `buf` (source `spells/buf/`)
 
-**Version probe:** `buf --version`
+**Version probe (buf):** `buf --version`
 
 **Provides:** `gen/**`
 
@@ -20,8 +20,8 @@ Every op is invoked as `buf["<op>"](ctx, opts?)`. The first argument is the targ
 
 | Key | Type | Description | Source |
 |-----|------|-------------|--------|
-| `args` | `[str]` | Extra arguments appended to the resolved command. Omit it and a bare `buf["<op>"]()` forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L170) |
-| `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L174) |
+| `args` | `[str]` | Extra arguments appended to the resolved command. Omit it and a bare `buf["<op>"]()` forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L169) |
+| `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L173) |
 
 
 Working directory and environment are NOT options: they ride the context, as `buf["<op>"](ctx.withCwd("sub"))` and `buf["<op>"](ctx.withEnv({"CGO_ENABLED": "0"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise - passing either as an option is an error.

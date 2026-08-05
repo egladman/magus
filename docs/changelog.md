@@ -17,6 +17,52 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Changed
 
+- **`cache.immutable` is now `cache.write.enabled`, inverted.** The old key named the
+  absence of a behaviour, so answering "can this run write?" meant parsing a double
+  negative, and the documented CI snippet read inverted from its own intent:
+  `MAGUS_CACHE_IMMUTABLE: ${{ github.event_name == 'pull_request' }}` becomes
+  `MAGUS_CACHE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}`. It gates the
+  local snapshot and the remote push alike; restoring is still ungated, so a pull
+  request replays the shared cache at full speed while publishing nothing to it.
+- **The host platform now keys the cache as separate `os:` and `arch:` lines**, each
+  controlled by `cache.include.os.enabled` and `cache.include.arch.enabled`. They vary
+  independently - a container image built on linux/amd64 differs from linux/arm64 by
+  arch alone, a shell suite differs between macOS and linux by OS alone - so one
+  combined switch made a workspace that cared about one pay for both. This replaces the
+  per-target `platform` policy.
+
+### Fixed
+
+- **A defined type over a basic kind crossed into Buzz as `null`.** Now guarded by a
+  test that crosses every runtime boundary type, with the list generated from the same
+  registry that emits the Buzz mirrors - so a new boundary type is covered when it is
+  declared rather than when someone remembers. A type switch matches
+  on type identity, not underlying type, so a field typed `types.DoctorCheckStatus` or
+  `types.TargetRunState` matched no case and arrived as null - `doctor().checks[0].status`
+  read null rather than `"ok"`, while the SDK guidance told callers to branch on exactly
+  that field instead of grepping console text. Handled reflectively now, so the next
+  defined type does not reintroduce it.
+
+### Added
+
+- **Tool readiness probes.** A spell can declare `mgs_getReadinessProbes`, keyed by tool,
+  and magus checks it before dispatching an op that runs that tool. `docker --version` is
+  client-only and succeeds with no daemon, so a stopped daemon used to surface as a build
+  failure on a project with nothing wrong with it; it now fails as MGS3004 before the op
+  forks. Readiness never enters a cache key - it is a precondition, not an input.
+
+### Changed
+
+- **`semver\compare` now orders instead of testing a relation.** It was
+  `compare(a, op, b) > bool`, answering whether a relation held. Every other library
+  spells `compare` as three-way ordering returning an integer - Go's `cmp.Compare` and
+  `strings.Compare`, `x/mod/semver.Compare`, Masterminds, node-semver - so the old
+  signature was a trap that compiled: an author expecting an ordering got a boolean.
+  It is now `compare(a, b) > int`, returning -1, 0, or 1. The relation form moves to the
+  new `semver\satisfies(v, constraint)`, which also accepts ranges the operator form
+  could not express, so `semver\compare(v, ">=", floor)` becomes
+  `semver\satisfies(v, ">= " + floor)`.
+
 - An output reference is now derived from the step's cache key, so the same inputs mint
   the same ref on every machine: an inspect line pasted from CI or a teammate's terminal
   resolves in your checkout. Ref equality becomes input equality, which is what makes the
