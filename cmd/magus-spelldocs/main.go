@@ -32,30 +32,29 @@ import (
 	"github.com/egladman/magus/spells"
 )
 
-// spellInfo is the authored, editorial metadata for a built-in spell (purpose,
-// intro, tags, source directory) that isn't derivable from the Descriptor. The
-// ops table and per-op detail are generated; this only supplies the prose.
-type spellInfo struct {
-	dir      string   // source directory under spells/ (e.g. "golang" for the "go" spell)
-	language string   // human language/toolchain label, or "" for language-agnostic tools
-	aliases  []string // old clean URLs that redirect here (the pre-rename spell names)
-}
-
-// spellMeta is what belongs to the docs SITE rather than to a spell: the clean URLs
-// a renamed spell used to live at. Everything a spell can say about ITSELF - its
-// description, intro, tags, language - is declared in spell.buzz (mgs_getDocDescription
-// and friends) and read off the Descriptor, so a rename carries the prose with it.
+// This generator carries NO per-spell metadata table, deliberately.
 //
-// This table used to hold that prose too, keyed by spell name, and that was the bug:
-// renaming docker to oci left its page describing "the `docker` spell" under a key
-// that no longer existed, and the generator hard-failed on the missing entry. A spell
-// with no entry here is now perfectly fine - it simply has no retired URLs.
-var spellMeta = map[string]spellInfo{
-	"rust":       {aliases: []string{"concepts/spells/rs"}},
-	"typescript": {aliases: []string{"concepts/spells/ts"}},
-	"python":     {aliases: []string{"concepts/spells/py"}},
-	"markdown":   {aliases: []string{"concepts/spells/md"}},
-}
+// It used to: a map keyed by spell name holding each page's description, intro,
+// tags, source directory, and the old URLs to redirect from. Every field was either
+// something the spell could say about itself (it now does - mgs_getDocDescription,
+// mgs_getDocIntro, mgs_listDocTags, mgs_getLanguage) or something derivable from the
+// tree (the source directory, read back out of mgs_getName). Keyed by NAME, it also
+// desynced on every rename: docker became oci and its page went on describing "the
+// docker spell" under a key that no longer existed, while the generator hard-failed
+// on the missing entry.
+//
+// The redirects are gone for a second reason, and it is the more important one: a
+// renamed page's old URL is not this generator's problem to solve. URLs churn, and
+// the docs site already owns that concern in one place - frontmatter `aliases:` for
+// a page that should still land somewhere, and docs/retired.urls.lock for one that
+// should honestly 404, both enforced by the abandoned-link gate. Teaching a spell
+// generator to also emit redirects put a second, partial answer next to the real
+// one, so a rename had to be remembered in two places. It is now remembered in the
+// place that gate reads.
+//
+// The rule this leaves: if a spell page needs to say something, the SPELL says it.
+// If a URL needs to keep resolving, the docs URL locks handle it. Nothing about
+// either belongs here.
 
 // repoRoot is the module root, resolved once so the args table's source links
 // resolve line numbers from the working tree. spellOptsSource is the file whose
@@ -152,14 +151,12 @@ func resolvedArgv(op spells.Op) string {
 }
 
 func renderSpell(d spells.Descriptor) string {
-	meta := spellMeta[d.Name]
 	var b strings.Builder
 
 	tags := append([]string{d.Name, "spell"}, d.DocTags...)
 	tags = append(tags, "tools")
 	docs.WriteFrontmatter(&b, docs.Frontmatter{
 		Title:       d.Name + " spell",
-		Aliases:     meta.aliases,
 		Description: d.DocDescription,
 		Tags:        dedupe(tags),
 	})
@@ -483,7 +480,7 @@ func sourceDir(name string) string {
 		if err != nil {
 			continue
 		}
-		if m := spellNameRe.FindSubmatch(src); m != nil && string(m[1]) == name {
+		if m := spellNameRe.FindSubmatch(src); len(m) > 1 && string(m[1]) == name {
 			return e.Name()
 		}
 	}

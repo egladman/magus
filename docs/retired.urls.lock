@@ -208,3 +208,20 @@ tags/vitest/
 # directory name, so the old slug has no page to alias to once the directory has moved.
 # The successor is development/libs-proto/.
 development/proto/
+
+# The eight pre-rename spell page URLs. Spells are named for the domain they adapt
+# (docs/concepts/spell-naming.md), which renamed ts->typescript, rs->rust, py->python,
+# md->markdown earlier, and docker->oci, buf->protobuf, cosign->sigstore, go->golang
+# with that rule. Retired rather than redirected: a spell page is DERIVED from the
+# spell, so the old slug has no page to alias to once the spell is gone - the same
+# reasoning as development/libs-diag above. The spell names themselves were hard
+# renames with no import aliases, so a redirect here would be the only place still
+# implying the old name resolves.
+concepts/spells/buf/
+concepts/spells/cosign/
+concepts/spells/docker/
+concepts/spells/go/
+concepts/spells/md/
+concepts/spells/py/
+concepts/spells/rs/
+concepts/spells/ts/

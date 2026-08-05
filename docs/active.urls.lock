@@ -104,12 +104,16 @@ concepts/spells/buzz/
 concepts/spells/cosign/
 concepts/spells/docker/
 concepts/spells/go/
+concepts/spells/golang/
 concepts/spells/markdown/
 concepts/spells/md/
+concepts/spells/oci/
+concepts/spells/protobuf/
 concepts/spells/py/
 concepts/spells/python/
 concepts/spells/rs/
 concepts/spells/rust/
+concepts/spells/sigstore/
 concepts/spells/ts/
 concepts/spells/typescript/
 concepts/targets/
@@ -317,6 +321,8 @@ reference/codes/magusfile/MGS1019/
 reference/codes/magusfile/MGS1020/
 reference/codes/magusfile/MGS1022/
 reference/codes/magusfile/MGS1023/
+reference/codes/magusfile/MGS1024/
+reference/codes/magusfile/MGS1025/
 reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
