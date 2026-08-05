@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -63,4 +64,24 @@ func TestReadinessProbeIsMemoized(t *testing.T) {
 	require.NoError(t, checkReady(context.Background(), readiness, op, dir))
 	assert.NoError(t, checkReady(context.Background(), readiness, op, dir),
 		"probe re-ran; a forked check must be memoized per (bin, dir)")
+}
+
+// The grace period is interactive-only, and this pins the half that would otherwise
+// go unnoticed: under CI or an agent (no TTY) a failing probe must return AT ONCE.
+// Waiting there burns the grace period per project to reach the same failure, and
+// nobody is going to start a daemon mid-run.
+func TestReadinessDoesNotWaitWhenNotInteractive(t *testing.T) {
+	readinessMemo.Clear()
+	readiness := map[string]spells.Command{
+		"faketool": {Bin: "sh", Args: []string{"-c", "exit 1"}},
+	}
+	op := spells.Op{Command: spells.Command{Bin: "faketool"}}
+
+	start := time.Now()
+	err := checkReady(context.Background(), readiness, op, t.TempDir())
+	elapsed := time.Since(start)
+
+	require.Error(t, err)
+	assert.Less(t, elapsed, readinessGrace/2,
+		"a non-interactive run waited %s; the grace period must not apply without a TTY", elapsed)
 }

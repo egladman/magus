@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/internal/interactive/tty"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interp"
@@ -268,15 +270,60 @@ func checkReady(ctx context.Context, readiness map[string]spells.Command, op spe
 		}
 		return cached.(error)
 	}
-	_, err := runCommand(ctx, spells.Op{Command: probe}, commandOpts{cwd: dir})
-	var out error
-	if err != nil {
-		out = types.DiagnosticErrorf(types.ToolNotReady,
-			"%s is installed but not ready: `%s` failed. The op %q needs it running",
-			op.Bin, strings.Join(append([]string{probe.Bin}, probe.Args...), " "), op.Bin)
-	}
+	out := probeUntilReady(ctx, probe, op.Bin, dir)
 	readinessMemo.Store(key, out)
 	return out
+}
+
+// readinessGrace is how long an INTERACTIVE run waits for a tool to become usable
+// before giving up. It is roughly what Docker Desktop takes to finish starting.
+const readinessGrace = 30 * time.Second
+
+// probeUntilReady runs the probe, and when a human is watching, keeps trying until the
+// tool comes up or the grace period expires.
+//
+// Waiting is deliberately interactive-only. In CI or under an agent nobody is going to
+// start a daemon mid-run, so a grace period there is minutes burned across projects to
+// reach the same failure - and it would make a deterministic failure depend on how fast
+// something else happened to start. At a terminal the trade inverts: the fix is one
+// command away, and waiting saves re-running everything.
+//
+// Failing fast stays cheap either way: the check runs before the op forks, so nothing
+// was consumed and a re-run replays from cache.
+func probeUntilReady(ctx context.Context, probe spells.Command, tool, dir string) error {
+	cmdline := strings.Join(append([]string{probe.Bin}, probe.Args...), " ")
+	notReady := func() error {
+		return types.DiagnosticErrorf(types.ToolNotReady,
+			"%s is installed but not ready: `%s` failed. The op %q needs it running",
+			tool, cmdline, tool)
+	}
+
+	if _, err := runCommand(ctx, spells.Op{Command: probe}, commandOpts{cwd: dir}); err == nil {
+		return nil
+	}
+	if !tty.StdinIsTerminal() {
+		return notReady()
+	}
+
+	slog.WarnContext(ctx, "waiting for tool to become ready",
+		slog.String("tool", tool), slog.String("probe", cmdline),
+		slog.Duration("grace", readinessGrace))
+
+	deadline := time.Now().Add(readinessGrace)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second):
+		}
+		if _, err := runCommand(ctx, spells.Op{Command: probe}, commandOpts{cwd: dir}); err == nil {
+			slog.InfoContext(ctx, "tool became ready", slog.String("tool", tool))
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return notReady()
+		}
+	}
 }
 
 func dispatchOp(ctx context.Context, ops map[string]spells.Op, readiness map[string]spells.Command, req spells.InvokeRequest) (any, error) {
