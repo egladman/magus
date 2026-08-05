@@ -1,0 +1,72 @@
+// Orient someone opening their first pull request against this repository.
+//
+// Fires once, ever, per person: the moment they have a merged pull request it retracts
+// itself and never returns. That is what keeps it a welcome rather than a banner - it
+// costs a regular contributor nothing, because they never see it.
+//
+// What it says is chosen for the mistakes a newcomer to a MAGUS workspace makes, not for
+// generic repository etiquette: generated files are regenerated rather than edited, and
+// the whole pipeline is one command they can run before pushing.
+//
+// Reads REPO, PR_NUMBER, PR_AUTHOR.
+import "os";
+import "advice";
+import "serialize";
+import "std";
+
+final section = "first-contribution";
+
+// isFirst reports whether this author has no merged pull request here yet. The search
+// API answers it in one call; counting commits would miss a contributor whose work was
+// squashed under a different address.
+fun isFirst(repo: str, author: str) > bool {
+    final query = "repo:" + repo + "+author:" + author + "+is:pr+is:merged";
+    final res = os\exec("gh", args: ["api", "search/issues?q=" + query],
+        dir: ".", opts: {"quiet": true, "allow_failure": true});
+    if (!res.ok) { return false; }
+    return serialize\jsonDecode(res.stdout).q("total_count").integerValue() == 0;
+}
+
+// welcome is the orientation text. Pure, so what a newcomer is told is reviewable and
+// testable rather than buried in a workflow.
+export fun welcome(author: str) > str {
+    return "Welcome, @" + author + " - this looks like your first pull request here.\n\n"
+        + "Two things specific to this repository, both of which CI checks:\n\n"
+        + "1. **Generated files are regenerated, never hand-edited.** `magus describe file "
+        + "<path>` tells you whether a path is generated and what produces it. If you need "
+        + "to change one, change its source and run `magus run generate:rw`.\n"
+        + "2. **One command runs what CI runs:** `magus affected ci`. It builds, tests, and "
+        + "lints every project your change reaches - including ones you did not edit.\n\n"
+        + "New to Buzz, the language the build files are written in? "
+        + "[Start here](https://eli.gladman.cc/magus/reference/buzz/). "
+        + "Nothing above is a gate on this pull request; the checks below are.\n";
+}
+
+fun main() > void {
+    final repo = advice\env("REPO");
+    final pr = advice\env("PR_NUMBER");
+    final author = advice\env("PR_AUTHOR");
+    if (repo == "" or pr == "" or author == "") {
+        std\print("first-contribution: no PR context; nothing to advise");
+        return;
+    }
+    if (!isFirst(repo, author: author)) {
+        // Retract: once they have merged something they are not new, and a welcome that
+        // outlives its welcome is just noise.
+        advice\publish(repo, pr: pr, name: section, body: "");
+        std\print("first-contribution: not a first contribution");
+        return;
+    }
+    advice\publish(repo, pr: pr, name: section, body: welcome(author));
+    std\print("first-contribution: welcomed " + author);
+}
+
+main();
+
+test "welcome names the author and both repository-specific rules" {
+    final body = welcome("octocat");
+    std\assert(body.indexOf("@octocat") != null, message: "addresses them");
+    std\assert(body.indexOf("magus describe file") != null, message: "how to tell what is generated");
+    std\assert(body.indexOf("magus affected ci") != null, message: "the one command that runs CI");
+    std\assert(body.indexOf("Nothing above is a gate") != null, message: "says it is not blocking");
+}

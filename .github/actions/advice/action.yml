@@ -49,6 +49,13 @@ inputs:
       has to act on before they can load the workspace at all.
     required: false
     default: 'true'
+  first-contribution:
+    description: >
+      Welcome someone opening their first pull request here, with the two repository
+      rules CI enforces. Retracts itself the moment they have a merged pull request, so
+      a regular contributor never sees it.
+    required: false
+    default: 'true'
   fix-generated-drift:
     description: >
       Regenerate drifted generated files and PUSH the result to the pull request branch.
@@ -152,6 +159,17 @@ runs:
         PR_BASE: ${{ inputs.base-ref }}
         PR_HEAD_SHA: ${{ inputs.head-sha }}
       run: magus buzz "$GITHUB_ACTION_PATH/version-floor.buzz"
+
+    - name: Welcome a first-time contributor
+      if: inputs.first-contribution == 'true'
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+      run: magus buzz "$GITHUB_ACTION_PATH/first-contribution.buzz"
 
     # Last, and deliberately after the read-only advisors: it can push, which moves the
     # head every earlier advisor just reported on.
