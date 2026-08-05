@@ -82,10 +82,14 @@ truncating it after the fact:
   bare identifiers one per line, `template=` to project exactly the fields you
   need and nothing else.{{end}}
 
-### Never pipe a magus command through a text filter
+### Never pipe OR redirect a magus command
 
 **Do NOT pipe magus output through `grep`, `head`, `tail`, `awk`, `sed`, `cut`,
-or `wc`.**{{if .Full}} Every magus command already has an output contract, so filtering its
+or `wc`, and do NOT redirect it with `> file`, `>> file`, or `2>&1`.** Both are
+denied by the guard. A pipe also REPLACES the exit status with the last stage's,
+so `magus affected ci | tail` reports tail's success and a failing gate reads as
+exit 0. You never need to capture the output: every run persists its full log,
+and a failure prints that path along with the output ref.{{if .Full}} Every magus command already has an output contract, so filtering its
 text after the fact is always the wrong tool. It is not a style preference; it
 actively breaks things:
 
@@ -116,7 +120,8 @@ instead: `-o template='{{"{{.Field}}"}}'` for a field, `-o name` for bare identi
 contract, not scraped text.{{end}}
 
 **Piping magus INTO magus is supported and encouraged.** The composition seam is
-`--stdin`, not a tee flag (there is no `--tee`).{{if .Full}} These are contracts on both
+`--stdin`. (`--tee <file>` exists but is not a composition seam: it mirrors
+STRUCTURED output only - `-o json|yaml|jsonl|template` - never console text.){{if .Full}} These are contracts on both
 ends, so they are the opposite of the antipattern above:{{end}}
 
 ```sh

@@ -806,6 +806,46 @@ func magusPipedToFilter(command string) bool {
 	return found
 }
 
+// magusRedirected reports a magus command whose stdout or stderr is being sent to
+// a file, to /dev/null, or folded together with 2>&1.
+//
+// Denied for the same reason as a pipe, and measured the same way: a redirect
+// discards the part you then have to guess at. `--silent > /dev/null 2>&1` is the
+// worst of them - silent mode's whole contract is that it stays quiet UNTIL
+// something fails, at which point it prints the likely diagnostics and the
+// full-log path, and the redirect throws away exactly that. Observed in one
+// session: three gate runs sent to /dev/null, each reporting only an exit code,
+// each requiring a re-run to learn the cause.
+//
+// `magus query output <ref>` is exempt with the pipe rule's reasoning: it emits a
+// raw captured tool log with no schema to project. Note that --tee is NOT the
+// console-output escape hatch a reader might assume - it mirrors STRUCTURED output
+// only (-o json|yaml|jsonl|template) - so the redirect message points at the log
+// magus already persisted rather than at a flag that would silently write nothing.
+func magusRedirected(command string) bool {
+	f, err := syntax.NewParser().Parse(strings.NewReader(command), "")
+	if err != nil {
+		return false
+	}
+	found := false
+	syntax.Walk(f, func(n syntax.Node) bool {
+		stmt, ok := n.(*syntax.Stmt)
+		if !ok || len(stmt.Redirs) == 0 || !trimmableMagus(stmtCommands(stmt)) {
+			return true
+		}
+		for _, r := range stmt.Redirs {
+			switch r.Op {
+			// Output redirects only. A HEREDOC or an input redirect feeds magus
+			// rather than hiding what it said, so neither is this rule's business.
+			case syntax.RdrOut, syntax.AppOut, syntax.DplOut, syntax.RdrAll, syntax.AppAll:
+				found = true
+			}
+		}
+		return true
+	})
+	return found
+}
+
 // lastOfPipeline and firstOfPipeline resolve the commands immediately either
 // side of one pipe, descending through a longer pipeline to reach them.
 func lastOfPipeline(s *syntax.Stmt) []guardCommand {
@@ -1127,12 +1167,10 @@ var (
 	// then has to guess at. jq is deliberately absent: it composes with -o json
 	// rather than fighting it.
 	//
-	// magus must be the COMMAND, not merely a substring: it is anchored to the
-	// start of a command segment (start of line, or after ; && || |) and allows a
-	// leading path or env assignments. Matching a bare \bmagus\b fired on
-	// `grep x cmd/magus/*_test.go | head`, where the word is only a path.
-	magusCmd          = `(^|[;&|]|&&|\|\|)\s*(\w+=\S+\s+)*(\S*/)?magus\s`
-	guardMagusRedirRe = regexp.MustCompile(magusCmd + `[^|;&]*2>&1`)
+	// The magus-is-the-COMMAND anchoring this block used to need lives in the
+	// parser now: magusPipedToFilter and magusRedirected resolve the actual
+	// command, which is why the old regexp - and the `grep x cmd/magus/... | head`
+	// false positive it was written to dodge - are both gone.
 )
 
 const (
@@ -1208,7 +1246,22 @@ const (
 	denyStageAll = "staging everything is denied because it sweeps unrelated sources, generated outputs, and residue into one commit. First classify the dirty tree: `magus describe file $(git diff --name-only)`. Then stage only the reviewed source files and the generated outputs they require: `git add -- <paths>`.\n" +
 		"Why this is not just style: a magus target writes its declared outputs as it runs, so a tree is routinely dirty with generated files you did not edit. `git add -A` commits them with no signal that it happened, and it also picks up build residue. Confirm the deliberate selection with `git diff --cached --stat` BEFORE committing. There is deliberately no `magus vcs` wrapper; load the magus-vcs skill if not already loaded."
 
-	outputGuardContext = "magus workspace: do not pipe or redirect magus output to trim it - magus already has output control, and a pipe discards the parts you then have to guess at. Use -s/--silent (progress suppressed; a failure prints only its likely diagnostics plus the full-log path), -o json / -o name / -o template=<go-template> for machine-readable output, and `magus query output <ref>` for a failing target's complete captured log. Exit status is the pass/fail signal; 2>&1 is never needed because magus already writes diagnostics where you are reading. The one command you MAY pipe into a filter is `magus query output <ref>`: that returns a target's raw captured tool log, which has no schema for magus to project, so searching it is a real need. Every other verb emits a structured record that -o already shapes exactly."
+	// Both messages LEAD with the replacement, per this file's rule: the agent
+	// reached for a filter because it wanted one specific thing, so the actionable
+	// correction is the flag that returns that thing, not the prohibition.
+	outputPipeDeny = "ASK MAGUS FOR THE FIELD INSTEAD OF FILTERING ITS OUTPUT. You piped into a text filter to pull out one value; magus already projects exactly that:\n" +
+		"  -o name                      just the ids/names, one per line - what grep/awk/cut were being used to recover\n" +
+		"  -o json                      the full structured record\n" +
+		"  -o template=<go-template>    one precise field, e.g. -o template='{{.Ref}}'\n" +
+		"A pipe is denied rather than advised because it also REPLACES the exit status with the last stage's: `magus affected ci | tail` reports tail's success, so a failing gate reads as exit 0 and the failure is silently lost. Combining a filter with -s/--silent is not the careful version - silent already bounds the output, so there is nothing left to trim.\n" +
+		outputGuardTail
+	outputRedirectDeny = "MAGUS ALREADY WROTE THE LOG - you do not need to capture it. Every run persists its full output, and a failure prints that path plus the ref:\n" +
+		"  magus query output <ref>     the failing target's complete captured log (this one MAY be redirected)\n" +
+		"  .magus/logs/<hash>.log       the full log path, named in the failure output itself\n" +
+		"  -o json --tee <file>         mirror STRUCTURED output to a file (--tee only writes -o json|yaml|jsonl|template, never console text)\n" +
+		"Redirecting is denied because it hides the one thing you need next. -s/--silent stays quiet UNTIL something fails, then prints the likely diagnostics plus that log path - so `-s > /dev/null 2>&1` throws away precisely what silent mode exists to print, leaving an exit code and a re-run. `2>&1` is never needed: magus already writes diagnostics where you are reading.\n" +
+		outputGuardTail
+	outputGuardTail = "The one command you MAY pipe or redirect is `magus query output <ref>`: it returns a target's raw captured tool log, which has no schema for magus to project, so searching it is a real need. Every other verb emits a structured record that -o already shapes exactly."
 )
 
 func denyWholeTree(op string) string {
@@ -1268,9 +1321,9 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 		match, _ := rawToolMatch(rawToolCmd)
 		return bashGuardVerdict{Deny: explainDeny(command, rawToolCmd, runGuardContextFor(match))}
 	case magusPipedToFilter(command):
-		return bashGuardVerdict{Deny: outputGuardContext}
-	case guardMagusRedirRe.MatchString(command):
-		return bashGuardVerdict{Context: outputGuardContext}
+		return bashGuardVerdict{Deny: outputPipeDeny}
+	case magusRedirected(command):
+		return bashGuardVerdict{Deny: outputRedirectDeny}
 	case guardCdMagusRe.MatchString(command):
 		return bashGuardVerdict{Context: cwdGuardContext}
 	case guardCodeSearchRe.MatchString(command):

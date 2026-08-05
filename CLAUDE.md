@@ -184,9 +184,16 @@ deliberately instead:
   otherwise GREEN as of 2026-08-02 - the "pre-existing lint findings" this file
   used to warn about are gone, so treat a lint failure as yours rather than
   assuming it is background noise.
-- The agent guard denies piping or redirecting magus output (`| head`,
-  `2>&1`, `> file`). Use `-s/--silent`, `-o json|name|template=`, or `--tee
-<file>` instead; `magus query output <ref>` is the one command you may pipe.
+- Need one value out of a magus command? ASK MAGUS FOR IT: `-o name` (ids, one
+  per line), `-o json` (the record), `-o template='{{.Field}}'` (one field).
+  Never reach for a filter - the guard denies piping AND redirecting magus
+  output (`| head`, `> file`, `>> file`, `2>&1`), because a pipe also replaces
+  the exit status with the last stage's, so a FAILING gate reads as exit 0. Use
+  `-s/--silent` to bound it (silent already trims, so filtering it is never the
+  careful version). You never need to capture console output: every run persists
+  its full log and a failure prints that path, and `--tee <file>` mirrors only
+  STRUCTURED output (`-o json|yaml|jsonl|template`), never console text. `magus query output <ref>` is the one command you may pipe or
+  redirect: a raw captured tool log has no schema to project.
 
 ## Rules
 

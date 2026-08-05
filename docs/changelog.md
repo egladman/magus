@@ -38,14 +38,14 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   name the exact source file, environment variable, or tool version that drifted. The
   verdict is key equality rather than the line list, and a mismatch exits non-zero so a
   script can gate on it; pass `--no-default-charms` when comparing against a CI ref, since
-  CI runs that way. Env values never reach the store or the terminal - a key line's value
+  CI runs that way. Env values never reach the store or the terminal - a key input's value
   is replaced by a short digest that still changes when the value does.
 - `magus query output <ref> --publish` uploads a failing run's output to the remote cache
   as a signed bundle, so a teammate can resolve the same ref. Failures are never cached and
   never pushed, which is backwards from what people actually want to share, so this is an
   explicit act. A bundle carries no manifest and no artifact blobs, so a published failure
   can never replay as someone's cache hit. Passing runs still travel automatically, and
-  their artifact now carries the run's descriptor and key lines as well.
+  their artifact now carries the run's descriptor and key inputs as well.
 
 ### Security
 
