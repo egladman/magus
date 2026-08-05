@@ -169,6 +169,20 @@ jobs:
           shard:    ${{ matrix.shard }}
           n-shards: ${{ needs.preflight.outputs.count }}
 
+      # magus truncates a failing target's captured output to "likely diagnostics"
+      # in the console, which drops thousands of lines - including, repeatedly, the
+      # assertion that actually failed. The full text is on disk in the run log, and
+      # an ephemeral runner takes it to the grave unless it is uploaded. Without this
+      # a red shard can only be diagnosed by guessing and re-running.
+      - name: Upload magus run logs on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: magus-logs-${{ matrix.shard }}
+          path: .magus/logs/
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Upload shard history
         if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
