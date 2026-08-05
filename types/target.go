@@ -89,6 +89,31 @@ func ValidateCharmName(name string) error {
 	return nil
 }
 
+// PlatformSensitivity is a claim about whether a target's result depends on the HOST
+// platform - the machine the tool ran on, not the platform an artifact is built FOR.
+// Those are different axes and only the first one is in question here: a cross-compile
+// names its target platform through GOOS/GOARCH, which the environment allowlist
+// already carries into the cache key.
+//
+// The default is dependent, and deliberately so. Being wrong in that direction costs
+// cache hits; being wrong in the other direction replays a darwin artifact on linux
+// out of a shared cache, which is a correctness bug. So independence is never inferred
+// - a spell or a target has to claim it.
+type PlatformSensitivity string
+
+const (
+	// PlatformInherit is the zero value: take the answer from the bound spells, which
+	// know their own toolchain's semantics better than any individual target does.
+	PlatformInherit PlatformSensitivity = ""
+	// PlatformDependent keys the host platform, so an artifact built on one platform
+	// never replays on another. The safe answer, and what an undeclared target gets.
+	PlatformDependent PlatformSensitivity = "dependent"
+	// PlatformIndependent drops the host platform from the key, letting a mac and a
+	// linux machine share one cache entry. Correct for a toolchain whose output does
+	// not vary by host (tsc, gofmt); wrong for anything emitting a native binary.
+	PlatformIndependent PlatformSensitivity = "independent"
+)
+
 // Target identifies one unit of work (project x target name).
 // An empty Path means all projects.
 //
@@ -137,6 +162,12 @@ type Target struct {
 	Slots           int    `json:"slots,omitempty"`                    // concurrency slots to hold while running (0 or 1 = one slot); throttles parallel work around a resource-heavy target. Clamped to the run's total slot budget.
 	FailOnDrift     bool   `json:"failOnDrift,omitempty" buzz:"-"`     // fail the run if the working tree is dirty after this target (drift gate)
 	RetryOnVolatile bool   `json:"retryOnVolatile,omitempty" buzz:"-"` // route through volatility detection + auto-retry
+	// Platform is this target's claim about whether its result depends on the host
+	// platform. Empty inherits the bound spells' default; see PlatformSensitivity.
+	// buzz:"-" alongside FailOnDrift and RetryOnVolatile because it is reachable only
+	// through the Go registration API today; it gains a Buzz name when the magusfile
+	// declaration path lands.
+	Platform PlatformSensitivity `json:"platform,omitempty" buzz:"-"`
 }
 
 // String returns the canonical "path:target" form.

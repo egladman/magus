@@ -371,3 +371,27 @@ func TestVerifyAcceptsLegacyEnvelopeAndReportsIt(t *testing.T) {
 	require.NoError(t, err, "a legacy artifact must still verify")
 	assert.True(t, legacy, "the caller must be told to drop the unauthenticated extras")
 }
+
+// TestHashStepPlatformOptOut: the host platform keys a step by default, and a step
+// claiming platform independence omits that line - so two platforms share one entry.
+// The opt-out must change the key, or the claim would be decorative.
+func TestHashStepPlatformOptOut(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	c := &Cache{mtimes: newMtimeStore(t.TempDir(), nil)}
+
+	dependent := &Step{ProjectPath: "pkg/x", Target: "build", WorkspaceRoot: root}
+	independent := &Step{ProjectPath: "pkg/x", Target: "build", WorkspaceRoot: root, PlatformIndependent: true}
+
+	var depLines, indLines []string
+	depKey, err := c.hashStepInputs(context.Background(), dependent, &depLines)
+	require.NoError(t, err)
+	indKey, err := c.hashStepInputs(context.Background(), independent, &indLines)
+	require.NoError(t, err)
+
+	assert.NotEqual(t, depKey, indKey, "opting out of platform keying must change the key")
+	assert.Contains(t, depLines, fmt.Sprintf("platform:%s/%s", runtime.GOOS, runtime.GOARCH))
+	for _, l := range indLines {
+		assert.NotContains(t, l, "platform:", "an independent step must carry no platform line")
+	}
+}

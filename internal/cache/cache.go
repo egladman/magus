@@ -126,11 +126,15 @@ type Step struct {
 	ExtraArgs       []string
 	SpellDefVersion string   // binary fingerprint; forces miss on magus upgrade
 	ToolVersions    []string // "spell:version" strings; forces miss on toolchain upgrade
-	NoCache         bool     // when true, always run fn; never replay or snapshot (long-running targets)
-	SkipReplay      bool     // when true, never replay a hit (always run fn), but still snapshot on success - a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
-	Exclusive       bool     // RunAll only: when true, runs alone; no other batch step runs concurrently (ignored by Run, which has no batch)
-	Slots           int      // RunAll only: concurrency slots held while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
-	Label           string   // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
+	// PlatformIndependent drops the host-platform line from the key, so one entry
+	// serves every platform. Resolved from the target's declaration or its spells';
+	// false (the default) keys the platform. See types.PlatformSensitivity.
+	PlatformIndependent bool
+	NoCache             bool   // when true, always run fn; never replay or snapshot (long-running targets)
+	SkipReplay          bool   // when true, never replay a hit (always run fn), but still snapshot on success - a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
+	Exclusive           bool   // RunAll only: when true, runs alone; no other batch step runs concurrently (ignored by Run, which has no batch)
+	Slots               int    // RunAll only: concurrency slots held while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
+	Label               string // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
 	// Revision and Dirty are the VCS state the run's inputs were read at, resolved ONCE
 	// per invocation by the caller (a per-target probe would spawn a VCS subprocess per
 	// step) and copied onto every step. Display-only provenance for the output

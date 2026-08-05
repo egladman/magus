@@ -81,16 +81,23 @@ func (c *Cache) hashStepInputsMemo(ctx context.Context, s *Step, lines *[]string
 		*lines = append(*lines, string(buf[:len(buf)-1]))
 	}
 
-	// The host platform keys every entry, and it has to be stated HERE rather than
-	// arrive through a spell. Several toolchains print their platform as part of their
-	// version (`go version go1.26.0 linux/amd64`), so before extraction magus was
-	// keying on the platform by accident, for the subset of projects that happened to
-	// bind such a spell. Extraction strips that noise deliberately - a tool's build
-	// host is not its version - which would leave a darwin/arm64 machine free to
-	// replay a linux/amd64 artifact from a shared cache. A platform-dependent artifact
-	// is the norm, not the exception, so the seed belongs in the key itself where it
-	// covers every step rather than in whichever spells happen to leak it.
-	writeLine("platform:", runtime.GOOS, "/", runtime.GOARCH)
+	// The host platform keys every entry by default, and it has to be stated HERE
+	// rather than arrive through a spell. Several toolchains print their platform as
+	// part of their version (`go version go1.26.0 linux/amd64`), so before extraction
+	// magus was keying on the platform by accident, for the subset of projects that
+	// happened to bind such a spell. Extraction strips that noise deliberately - a
+	// tool's build host is not its version - which would leave a darwin/arm64 machine
+	// free to replay a linux/amd64 artifact from a shared cache.
+	//
+	// Omitting the line is an opt-out a spell or target CLAIMS (types.PlatformSensitivity),
+	// never something magus infers: being wrong here costs correctness in one
+	// direction and only cache hits in the other, so the default is the safe one.
+	//
+	// This is the HOST platform. The platform an artifact is built FOR travels as
+	// GOOS/GOARCH through the environment allowlist, and keys via the env lines below.
+	if !s.PlatformIndependent {
+		writeLine("platform:", runtime.GOOS, "/", runtime.GOARCH)
+	}
 
 	writeLine("projectPath:", s.ProjectPath)
 	if s.Target != "" {
