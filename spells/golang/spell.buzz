@@ -1,7 +1,7 @@
 import "magus/spell";
 import "magus/charm";
 
-export fun mgs_getName() > str { return "go"; }
+export fun mgs_getName() > str { return "golang"; }
 
 // **/*.txtar is here because a testscript archive IS a Go test input: it is the
 // standard behavior-test format in this ecosystem (cmd/go's own tests, and anything
@@ -33,7 +33,7 @@ export fun mgs_getVersionCommand() > [str] { return ["go", "version"]; }
 // is not forced to install a linter or a vuln scanner.
 export fun mgs_getVersionCommands() > {str: [str]} {
     return {
-        "golangci-lint": ["golangci-lint", "--version"],
+        "golangci-lint-run": ["golangci-lint", "--version"],
         "govulncheck": ["govulncheck", "-version"],
         "gofumpt": ["gofumpt", "--version"],
     };
@@ -52,7 +52,7 @@ export fun mgs_listUnprobedBins() > {str: str} {
 // need no hint.
 export fun mgs_listInstallHints() > {str: str} {
     return {
-        "golangci-lint": "mise use -g golangci-lint # or: brew install golangci-lint",
+        "golangci-lint-run": "mise use -g golangci-lint # or: brew install golangci-lint",
         "govulncheck": "mise use -g govulncheck # or: go install golang.org/x/vuln/cmd/govulncheck@latest",
         "gofumpt": "mise use -g gofumpt # or: brew install gofumpt",
     };
@@ -160,13 +160,13 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
         "go-clean": goClean,
         "go-generate": goGenerate,
         "go-run": goRun,
-        "go-fmt": goFmt,
+        "gofmt": goFmt,
         "gofumpt": gofumpt,
-        "golangci-lint": golangCILint,
+        "golangci-lint-run": golangCILint,
         "go-test": goTest,
         "go-mod-tidy": goModTidy,
         "go-mod-edit": goModEdit,
-        "go-mod-json": goModJSON,
+        "go-mod-edit-json": goModJSON,
         "go-vet": goVet,
         "govulncheck": goVulncheck,
         "scip": scipGo,

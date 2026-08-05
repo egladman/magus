@@ -158,9 +158,3 @@ func (d Descriptor) ServiceOpNames() []string {
 	sort.Strings(names)
 	return names
 }
-
-// IsLanguageSpell reports whether this spell adapts a language whose canonical
-// name is also its toolchain binary - Go's name is Go and the command is `go`.
-// Such a spell is naming its domain, not a binary, so the naming ward exempts it
-// from the domain rule and its ops drop the redundant prefix instead.
-func (d Descriptor) IsLanguageSpell() bool { return d.Language != "" && d.Language == d.Name }

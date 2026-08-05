@@ -230,8 +230,8 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"bats": {Command: spells.Command{Bin: "bats"}},
 		},
 	},
-	"buf": {
-		Name:       "buf",
+	"protobuf": {
+		Name:       "protobuf",
 		Needs:      []string{"**/*.proto", "buf.yaml", "buf.gen.yaml", "buf.work.yaml", "buf.lock"},
 		Provides:   []string{"gen/**"},
 		VersionCmd: []string{"buf", "--version"},
@@ -263,8 +263,8 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"magus-buzz": {Command: spells.Command{Bin: "sh", Args: []string{"-c", "find . \\( -name node_modules -o -path './.claude/worktrees' \\) -prune -o -name '*.buzz' -print0 | xargs -0 -r -n1 \"$MAGUS\" buzz"}}},
 		},
 	},
-	"cosign": {
-		Name:       "cosign",
+	"sigstore": {
+		Name:       "sigstore",
 		VersionCmd: []string{"cosign", "version"},
 		Ops: map[string]spells.Op{
 			"cosign-sign":               {Command: spells.Command{Bin: "cosign", Args: []string{"sign", "--yes"}}},
@@ -275,37 +275,37 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"cosign-verify-blob":        {Command: spells.Command{Bin: "cosign", Args: []string{"verify-blob"}}},
 		},
 	},
-	"docker": {
-		Name:       "docker",
+	"oci": {
+		Name:       "oci",
 		Needs:      []string{"Dockerfile", ".dockerignore", "**/*"},
 		VersionCmd: []string{"docker", "--version"},
 		// hadolint/trivy/scout are second binaries the spell drives, pinned by no
 		// manifest, so each needs its own probe: upgrading one changes verdicts with
 		// nothing in any cache key to notice.
 		VersionCmds: map[string][]string{
-			"hadolint":     {"hadolint", "--version"},
-			"trivy":        {"trivy", "--version"},
-			"docker-scout": {"docker", "scout", "version"},
+			"hadolint":          {"hadolint", "--version"},
+			"trivy-image":       {"trivy", "--version"},
+			"docker-scout-cves": {"docker", "scout", "version"},
 		},
 		// docker itself is a platform install, so only the PATH scanners carry hints.
 		InstallHints: map[string]string{
-			"hadolint": "mise use -g hadolint # or: brew install hadolint",
-			"trivy":    "mise use -g trivy # or: brew install trivy",
+			"hadolint":    "mise use -g hadolint # or: brew install hadolint",
+			"trivy-image": "mise use -g trivy # or: brew install trivy",
 		},
 		Ops: map[string]spells.Op{
-			"docker-build":       {Command: spells.Command{Bin: "docker", Args: []string{"build"}}},
-			"docker-buildx":      {Command: spells.Command{Bin: "docker", Args: []string{"buildx", "build"}}},
-			"docker-build-check": {Command: spells.Command{Bin: "docker", Args: []string{"build", "--check"}}},
-			"docker-push":        {Command: spells.Command{Bin: "docker", Args: []string{"push"}}},
-			"docker-tag":         {Command: spells.Command{Bin: "docker", Args: []string{"tag"}}},
+			"docker-build":        {Command: spells.Command{Bin: "docker", Args: []string{"build"}}},
+			"docker-buildx-build": {Command: spells.Command{Bin: "docker", Args: []string{"buildx", "build"}}},
+			"docker-build-check":  {Command: spells.Command{Bin: "docker", Args: []string{"build", "--check"}}},
+			"docker-push":         {Command: spells.Command{Bin: "docker", Args: []string{"push"}}},
+			"docker-tag":          {Command: spells.Command{Bin: "docker", Args: []string{"tag"}}},
 			"hadolint": {Command: spells.Command{Bin: "sh", Args: []string{"-c",
 				"find . \\( -name node_modules -o -path './.claude/worktrees' \\) -prune -o \\( -name 'Dockerfile' -o -name 'Dockerfile.*' -o -name '*.dockerfile' \\) -print0 | xargs -0 -r hadolint"}}},
-			"trivy":        {Command: spells.Command{Bin: "trivy", Args: []string{"image"}}},
-			"docker-scout": {Command: spells.Command{Bin: "docker", Args: []string{"scout", "cves"}}},
+			"trivy-image":       {Command: spells.Command{Bin: "trivy", Args: []string{"image"}}},
+			"docker-scout-cves": {Command: spells.Command{Bin: "docker", Args: []string{"scout", "cves"}}},
 		},
 	},
-	"go": {
-		Name: "go",
+	"golang": {
+		Name: "golang",
 		Needs: []string{"**/*.go", "**/*.txtar", "go.mod", "go.sum", "go.work", "go.work.sum",
 			".golangci.yml", ".golangci.yaml", ".golangci.toml", ".golangci.json",
 			"**/*.c", "**/*.h", "**/*.s", "**/*.S", "**/*.cc", "**/*.cpp", "**/*.m", "**/*.syso"},
@@ -313,9 +313,9 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		// golangci-lint runs from PATH rather than `go tool`, so it is pinned outside
 		// the module graph and `go version` no longer implies it.
 		VersionCmds: map[string][]string{
-			"golangci-lint": {"golangci-lint", "--version"},
-			"govulncheck":   {"govulncheck", "-version"},
-			"gofumpt":       {"gofumpt", "--version"},
+			"golangci-lint-run": {"golangci-lint", "--version"},
+			"govulncheck":       {"govulncheck", "-version"},
+			"gofumpt":           {"gofumpt", "--version"},
 		},
 		// gofmt ships version-locked with the toolchain; the declared opt-out is
 		// what keeps doctor's probe-coverage check quiet about it.
@@ -323,9 +323,9 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"gofmt": "ships with the go toolchain; `go version` covers it",
 		},
 		InstallHints: map[string]string{
-			"golangci-lint": "mise use -g golangci-lint # or: brew install golangci-lint",
-			"govulncheck":   "mise use -g govulncheck # or: go install golang.org/x/vuln/cmd/govulncheck@latest",
-			"gofumpt":       "mise use -g gofumpt # or: brew install gofumpt",
+			"golangci-lint-run": "mise use -g golangci-lint # or: brew install golangci-lint",
+			"govulncheck":       "mise use -g govulncheck # or: go install golang.org/x/vuln/cmd/govulncheck@latest",
+			"gofumpt":           "mise use -g gofumpt # or: brew install gofumpt",
 		},
 		Language:   "go",
 		IgnoreDirs: []string{"vendor"},
@@ -337,9 +337,9 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"go-mod-edit": {Command: spells.Command{Bin: "go", Args: []string{"mod", "edit", "-print"}, Capture: true, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
 			}}, Capture: true},
-			"go-mod-json": {Command: spells.Command{Bin: "go", Args: []string{"mod", "edit", "-json"}, Capture: true}, Capture: true},
-			"go-run":      {Command: spells.Command{Bin: "go", Args: []string{"run"}}},
-			"go-fmt": {Command: spells.Command{Bin: "gofmt", Args: []string{"-l", "."}, Charms: map[string]spells.Charm{
+			"go-mod-edit-json": {Command: spells.Command{Bin: "go", Args: []string{"mod", "edit", "-json"}, Capture: true}, Capture: true},
+			"go-run":           {Command: spells.Command{Bin: "go", Args: []string{"run"}}},
+			"gofmt": {Command: spells.Command{Bin: "gofmt", Args: []string{"-l", "."}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
 			}}},
 			"gofumpt": {Command: spells.Command{Bin: "gofumpt", Args: []string{"-l", "."}, Charms: map[string]spells.Charm{
@@ -348,7 +348,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			// Runs from PATH, not `go tool`: the module tool block never carried it, so
 			// `go tool golangci-lint` reported "no such tool" and the op could not run.
 			// Dropping the two-element prefix moves rw's insertion point from /3 to /1.
-			"golangci-lint": {Command: spells.Command{Bin: "golangci-lint", Args: []string{"run", "./..."}, Charms: map[string]spells.Charm{
+			"golangci-lint-run": {Command: spells.Command{Bin: "golangci-lint", Args: []string{"run", "./..."}, Charms: map[string]spells.Charm{
 				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 				"rw":    {Ops: []spells.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
 			}}},
@@ -365,7 +365,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"go-mod-tidy": {Command: spells.Command{Bin: "go", Args: []string{"mod", "tidy", "--diff"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
 			}}},
-			"go-vet":      {Command: spells.Command{Bin: "go", Args: []string{"vet", "./..."}}},
+			"go-vet":         {Command: spells.Command{Bin: "go", Args: []string{"vet", "./..."}}},
 			"govulncheck": {Command: spells.Command{Bin: "govulncheck", Args: []string{"./..."}}},
 			"scip":        {Command: spells.Command{Bin: "sh", Args: []string{"-c", "scip-go --output \"$MAGUS_SYMBOL_INDEX\""}}},
 		},
@@ -444,8 +444,8 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		// rustfmt/clippy are toolchain-locked (rustc covers them); the cargo-installed
 		// scanners are independently versioned and carry their own probes.
 		VersionCmds: map[string][]string{
-			"cargo-audit": {"cargo-audit", "--version"},
-			"cargo-deny":  {"cargo-deny", "--version"},
+			"cargo-audit":      {"cargo-audit", "--version"},
+			"cargo-deny-check": {"cargo-deny", "--version"},
 		},
 		// cargo is rustup-locked to the toolchain; the declared opt-out is what
 		// keeps doctor's probe-coverage check quiet about it.
@@ -481,9 +481,9 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"cargo-test": {Command: spells.Command{Bin: "cargo", Args: []string{"test"}, Charms: map[string]spells.Charm{
 				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--verbose"}}},
 			}}},
-			"cargo-audit": {Command: spells.Command{Bin: "cargo", Args: []string{"audit"}}},
-			"cargo-deny":  {Command: spells.Command{Bin: "cargo", Args: []string{"deny", "check"}}},
-			"scip":        {Command: spells.Command{Bin: "sh", Args: []string{"-c", "rust-analyzer scip . --output \"$MAGUS_SYMBOL_INDEX\""}}},
+			"cargo-audit":      {Command: spells.Command{Bin: "cargo", Args: []string{"audit"}}},
+			"cargo-deny-check": {Command: spells.Command{Bin: "cargo", Args: []string{"deny", "check"}}},
+			"scip":             {Command: spells.Command{Bin: "sh", Args: []string{"-c", "rust-analyzer scip . --output \"$MAGUS_SYMBOL_INDEX\""}}},
 		},
 	},
 	"typescript": {
@@ -502,6 +502,13 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		// pnpm is the PATH-pinned launcher; the tools it runs are lockfile-pinned.
 		VersionCmds: map[string][]string{"pnpm": {"pnpm", "--version"}},
 		Language:    "typescript",
+		// The ops the naming formula cannot decide, each argued rather than silently
+		// taken (see mgs_listNamingDeviations and MGS1024).
+		NamingDeviations: map[string]string{
+			"dev-server": "the formula yields `dev`, the script name; the op names the capability it starts",
+			"node-test":  "the formula yields `node`, which names the runtime rather than the action it takes",
+			"run-script": "the formula yields `run`, which says nothing; the op runs a package.json script by name",
+		},
 		// The recorded default the engine substitutes with each project's
 		// detected package manager (see mgs_getPackageManagerBin).
 		PackageManagerBin: "pnpm",
@@ -533,7 +540,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"tsc":       {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc", "--noEmit"}}},
 			"tsc-build": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc", "--build"}}},
 			"tsc-clean": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc", "--build", "--clean"}}},
-			"vitest": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "vitest", "run"}, Charms: map[string]spells.Charm{
+			"vitest-run": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "vitest", "run"}, Charms: map[string]spells.Charm{
 				"gha": {Ops: []spells.PatchOp{
 					{Op: "add", Path: "/-", Value: "--reporter=default"},
 					{Op: "add", Path: "/-", Value: "--reporter=github-actions"},

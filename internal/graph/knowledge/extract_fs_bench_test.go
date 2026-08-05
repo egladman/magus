@@ -23,7 +23,7 @@ func writeBenchTree(b *testing.B, nBuzz, nDocs int) string {
 		}
 		next := (i + 1) % max(nBuzz, 1)
 		src := fmt.Sprintf(`import "pkg%04d/mod";
-import "magus/spell/go";
+import "magus/spell/golang";
 // package-level doc
 export fun build(ctx: magus\Context, args: [str]) > void {
     // NOTE: build note %d explains the tricky bit

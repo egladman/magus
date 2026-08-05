@@ -235,7 +235,7 @@ magus\project({ "spells": [rust], "targets": {
 } });
 
 export fun security(ctx: magus\Context, args: [str]) > void {
-    rust["cargo-deny"](ctx);
+    rust["cargo-deny-check"](ctx);
 }
 ```
 

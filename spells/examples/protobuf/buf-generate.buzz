@@ -1,0 +1,9 @@
+// Wire buf-generate into a generate target: magus run generate forks buf generate.
+import "magus";
+import "magus/spell/protobuf";
+
+magus\project({ "spells": [protobuf] });
+
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    protobuf["buf-generate"](ctx);
+}

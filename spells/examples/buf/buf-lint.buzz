@@ -1,9 +1,0 @@
-// buf-lint checks Protobuf style. The gha charm annotates findings in GitHub Actions.
-import "magus";
-import "magus/spell/buf";
-
-magus\project({ "spells": [buf] });
-
-export fun lint(ctx: magus\Context, args: [str]) > void {
-    buf["buf-lint"](ctx);
-}

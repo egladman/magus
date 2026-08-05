@@ -11,7 +11,7 @@ import (
 func TestAssembleBuzz(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "a.buzz", `import "b";
-import "magus/spell/go";
+import "magus/spell/golang";
 export fun build(ctx: magus\Context, args: [str]) > void {
     // NOTE: build is tricky
     helper();
@@ -45,7 +45,7 @@ fun helper() > void {}
 	e, ok := findEdge(out, "file:a.buzz", "file:b.buzz", types.RelationImports)
 	require.True(t, ok, "resolved import edge")
 	assert.Equal(t, types.ConfidenceExtracted, e.Confidence)
-	e, ok = findEdge(out, "file:a.buzz", "import:magus/spell/go", types.RelationImports)
+	e, ok = findEdge(out, "file:a.buzz", "import:magus/spell/golang", types.RelationImports)
 	require.True(t, ok, "unresolved import edge")
 	assert.Equal(t, types.ConfidenceInferred, e.Confidence)
 

@@ -23,17 +23,17 @@ var testInfo = BuildInfo{
 // cheaper than a cross-package test dependency.
 const sampleMagusfile = `
 import "magus";
-import "magus/spell/go";
+import "magus/spell/golang";
 
 magus.project({
-    "spells": [go],
+    "spells": [golang],
     "outputs": ["bin/**"],
     "targets": {"regen-pgo": {"skip_cache": "test policy"}, "lint": {"slots": 4}},
 });
 
-export fun format(ctx: magus\Context, args: [str]) > void { go["go-fmt"](); }
-export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-vet"](); }
-export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-build"](); }
+export fun format(ctx: magus\Context, args: [str]) > void { golang["gofmt"](); }
+export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); golang["go-vet"](); }
+export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); golang["go-build"](); }
 export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(lint, build); }
 `
 
@@ -106,7 +106,7 @@ func TestConsole_run(t *testing.T) {
 	out := joinHTML(exec(s, "run ci").Lines)
 	// deps appear before ci in the order line, and ops are shown as would-run.
 	assert.Contains(t, out, "order:", "run ci output:\n%s", out)
-	assert.Contains(t, out, "go-fmt", "run ci output:\n%s", out)
+	assert.Contains(t, out, "gofmt", "run ci output:\n%s", out)
 	assert.Contains(t, out, "go-vet", "run ci output:\n%s", out)
 	assert.Contains(t, out, "would run", "run ci should mark ops as would-run in the dry-run plan")
 }

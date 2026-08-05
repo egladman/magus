@@ -79,7 +79,7 @@ naming a destination, not writing new instructions.
 - `magus-run`: run work through top-level targets (`build`, `test`, `lint`,
   `format`, `generate`) rather than raw language tools; `ci` as the anchor;
   `magus affected ci` as the final gate before handing work back; spell-op
-  granularity (`go::go-test`) when one op is genuinely needed; fetching a
+  granularity (`golang::go-test`) when one op is genuinely needed; fetching a
   failure's captured output by ref.
 - `magus-vcs`: triage changed files against declared target outputs -
   generated files are regenerated, never hand-edited, never worth reading a
@@ -374,7 +374,7 @@ blocked, and why an earlier attempt to deny it had to be reverted.
     Their commands are not matched today.
   - raw language tools (`go test`, `pytest`, `cargo build`, `eslint`, `ruff`,
     `gofmt -w`, ...). The reason names the escalation ladder: a top-level target,
-    then a single spell op (`magus run go::go-test <project>`), which still runs
+    then a single spell op (`magus run golang::go-test <project>`), which still runs
     through magus. Exempt: `go build -o <path>` and `gofmt -l|-d`, which bypass
     nothing.
   - staging everything (`git add -A`, `git add .`, `git add -u`). A magus target

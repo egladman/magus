@@ -297,9 +297,9 @@ export fun release(ctx: magus\Context, args: [str]) > void { magus.run(["image-b
 func TestRun_spellListTargets(t *testing.T) {
 	const src = `
 import "magus";
-import "magus/spell/go";
-magus.project({"spells": [go]});
-export fun show(ctx: magus\Context, args: [str]) > void { go.listTargets(); }
+import "magus/spell/golang";
+magus.project({"spells": [golang]});
+export fun show(ctx: magus\Context, args: [str]) > void { golang.listTargets(); }
 `
 	r := Run(context.Background(), src, "show", nil)
 	require.True(t, r.OK, "dry-run failed: %+v", r.Diag)
@@ -311,9 +311,9 @@ export fun show(ctx: magus\Context, args: [str]) > void { go.listTargets(); }
 func TestRun_spellArgsDetailNoArgsKey(t *testing.T) {
 	const src = `
 import "magus";
-import "magus/spell/go";
-magus.project({"spells": [go]});
-export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"]({"env": {"CGO_ENABLED": "0"}}); }
+import "magus/spell/golang";
+magus.project({"spells": [golang]});
+export fun build(ctx: magus\Context, args: [str]) > void { golang["go-build"]({"env": {"CGO_ENABLED": "0"}}); }
 `
 	r := Run(context.Background(), src, "build", nil)
 	require.True(t, r.OK, "dry-run failed: %+v", r.Diag)
@@ -428,11 +428,11 @@ export fun mgs_listTargets() > any { return {"svc": svc}; }
 func TestRun_charmBranchViaCtx(t *testing.T) {
 	const src = `
 import "magus";
-import "magus/spell/docker";
-magus.project({"spells": [docker]});
+import "magus/spell/oci";
+magus.project({"spells": [oci]});
 export fun image_build(ctx: magus\Context, args: [str]) > void {
-    if (ctx.has_charm("cd")) { docker["docker-build"]({"args": ["--push"]}); }
-    else { docker["docker-build"]({"args": ["--load"]}); }
+    if (ctx.has_charm("cd")) { oci["docker-build"]({"args": ["--push"]}); }
+    else { oci["docker-build"]({"args": ["--load"]}); }
 }
 `
 	off := Run(context.Background(), src, "image-build", nil)

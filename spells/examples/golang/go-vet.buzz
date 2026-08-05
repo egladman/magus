@@ -1,0 +1,11 @@
+// go-vet is static analysis, so it composes into the canonical `lint` target
+// (alongside golangci-lint) rather than a bespoke `vet` target. `magus run lint`
+// forks `go vet ./...`.
+import "magus";
+import "magus/spell/golang";
+
+magus\project({ "spells": [golang] });
+
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    golang["go-vet"](ctx);
+}

@@ -1,0 +1,45 @@
+// Each op forks `cosign` on PATH — no shell. sign/attest pass --yes so they run
+// unattended: keyless OIDC in CI (with id-token permission) or a configured key
+// locally. The caller appends the image reference (by digest) and any flags via
+// the op's args.
+//
+// Use it from a magusfile to sign right after a push — locally or in CI — instead
+// of wiring a cosign-specific CI action:
+//
+//   import "magus/spell/sigstore" as cosign
+//   sigstore["cosign-sign"](ctx, {"args": ["ghcr.io/egladman/magus@" + digest]})
+//
+// It claims no source globs: cosign acts on a registry reference, not the working
+// tree, so it is imported and invoked explicitly rather than auto-bound to a
+// project's files.
+
+import "magus/spell";
+
+export fun mgs_getName() > str { return "sigstore"; }
+
+export fun mgs_getVersionCommand() > [str] { return ["cosign", "version"]; }
+
+// --yes skips the interactive transparency-log confirmation so signing/attesting
+// runs unattended; the caller appends the target reference and flags.
+fun sign(target: Target) > Command { return Command{bin = "cosign", args = ["sign", "--yes"]}; }
+fun verify(target: Target) > Command { return Command{bin = "cosign", args = ["verify"]}; }
+fun attest(target: Target) > Command { return Command{bin = "cosign", args = ["attest", "--yes"]}; }
+// verify-attestation is attest's gate: without it a pipeline can produce
+// attestations but never require them, which halves the supply-chain story.
+// The caller appends --type and the identity/key flags along with the ref.
+fun verifyAttestation(target: Target) > Command { return Command{bin = "cosign", args = ["verify-attestation"]}; }
+// The blob pair signs and verifies plain files - exactly what a build tool
+// produces (archives, binaries, manifests) - not just registry artifacts.
+fun signBlob(target: Target) > Command { return Command{bin = "cosign", args = ["sign-blob", "--yes"]}; }
+fun verifyBlob(target: Target) > Command { return Command{bin = "cosign", args = ["verify-blob"]}; }
+
+export fun mgs_listTargets() > {str: fun(Target) Command} {
+    return {
+        "cosign-sign": sign,
+        "cosign-verify": verify,
+        "cosign-attest": attest,
+        "cosign-verify-attestation": verifyAttestation,
+        "cosign-sign-blob": signBlob,
+        "cosign-verify-blob": verifyBlob,
+    };
+}

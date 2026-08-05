@@ -1,0 +1,10 @@
+// cosign-attest attaches a signed attestation; pass the predicate file, its type,
+// and the image reference.
+import "magus";
+import "magus/spell/sigstore";
+
+magus\project({ "spells": [sigstore] });
+
+export fun attest(ctx: magus\Context, args: [str]) > void {
+    sigstore["cosign-attest"](ctx, { "args": ["--predicate", "sbom.json", "--type", "cyclonedx", "app:latest"] });
+}

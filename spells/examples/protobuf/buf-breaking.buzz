@@ -1,0 +1,16 @@
+// buf-breaking gates backward-incompatible schema changes, so it composes into the
+// read-only `lint` target alongside buf-lint. The magusfile names the baseline:
+// --against is required, and a branch ref like `.git#branch=main` assumes a full
+// clone (a shallow CI checkout with fetch-depth: 1 cannot resolve it - fetch the
+// baseline ref, or compare against a BSR image instead). A wire- or JSON-
+// incompatible .proto edit then fails lint the same way go-vet fails a
+// static-analysis violation.
+import "magus";
+import "magus/spell/protobuf";
+
+magus\project({ "spells": [protobuf] });
+
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    protobuf["buf-lint"](ctx);
+    protobuf["buf-breaking"](ctx, {"args": ["--against", ".git#branch=main"]});
+}

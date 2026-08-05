@@ -378,7 +378,7 @@ func exposeDataAPI() {
 	}))
 	// evalBuzzWithRecorder is the spell-docs Run path: it dry-runs a magusfile
 	// example under the tracing host and returns the host-op trace its targets
-	// would perform, so `import "magus/spell/go"; go["go-build"]()` reports a
+	// would perform, so `import "magus/spell/golang"; golang["go-build"]()` reports a
 	// `go build` op instead of failing on a module the bare evalBuzz can't
 	// resolve. Trace entries marshal as plain objects the client renders as
 	// "[target] name detail  kind · would run" lines.

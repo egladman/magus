@@ -25,7 +25,7 @@ export fun mgs_getVersionCommand() > [str] { return ["rustc", "--version"]; }
 export fun mgs_getVersionCommands() > {str: [str]} {
     return {
         "cargo-audit": ["cargo-audit", "--version"],
-        "cargo-deny": ["cargo-deny", "--version"],
+        "cargo-deny-check": ["cargo-deny", "--version"],
     };
 }
 
@@ -124,5 +124,5 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"cargo-build": cargoBuild, "cargo-check": cargoCheck, "cargo-clean": cargoClean, "cargo-clippy": cargoClippy,
             "cargo-fmt": cargoFmt, "cargo-test": cargoTest, "cargo-run": cargoRun, "cargo-doc": cargoDoc,
             "cargo-bench": cargoBench, "cargo-fetch": cargoFetch,
-            "cargo-audit": cargoAudit, "cargo-deny": cargoDeny, "scip": scip};
+            "cargo-audit": cargoAudit, "cargo-deny-check": cargoDeny, "scip": scip};
 }

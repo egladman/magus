@@ -57,7 +57,7 @@ So there are two shapes, and you do not get to choose - the imports choose for y
 | --- | --- | --- |
 | Imports | `magus/spell` only (pure types) | anything, including host modules |
 | Ships | compiled into the binary | as source in your repo |
-| Imported as | `import "magus/spell/go"` | `import "spells/onepassword"` (a path) |
+| Imported as | `import "magus/spell/golang"` | `import "spells/onepassword"` (a path) |
 | Examples | `go`, `docker`, `cosign`, `markdown` | `github-actions`, `onepassword` |
 
 Almost every provider is workspace-local, because reaching a backend means `os\exec` or

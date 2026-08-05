@@ -247,7 +247,7 @@ export fun rewriteMirrorHref(h: str, oldDir: str, newDir: str) > str {
 
 // rewriteMirrorLinksInProse applies rewriteMirrorHref to every "](target)" in one fence-free
 // segment, masking inline code first: single-backtick spans carry call sites like
-// `go["go-build"](ctx)` whose "](ctx)" is not a link. Same toggle idiom as the fence skip.
+// `golang["go-build"](ctx)` whose "](ctx)" is not a link. Same toggle idiom as the fence skip.
 fun rewriteMirrorLinksInProse(text: str, oldDir: str, newDir: str) > str {
     var buf = "";
     var code = false;

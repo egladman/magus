@@ -129,8 +129,8 @@ func runBuzzCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.E
 
 // ctxOverridesFromBuzz reads execution overrides off a leading magus.Context and
 // reports how many arguments it consumed, so the caller can parse opts from the next
-// one. An op invoked as go["go-test"](ctx, {args: [...]}) gets its cwd/env from the
-// context; go["go-test"]({args: [...]}) (no context) is the transitional form and
+// one. An op invoked as golang["go-test"](ctx, {args: [...]}) gets its cwd/env from the
+// context; golang["go-test"]({args: [...]}) (no context) is the transitional form and
 // consumes nothing.
 //
 // Charms are deliberately NOT readable here. They are run-level - what makes "what did
@@ -138,8 +138,8 @@ func runBuzzCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.E
 // that reasoning from global to local.
 // ctxOverridesFromBuzz reads execution overrides off a leading magus.Context and
 // reports how many arguments it consumed, so the caller can parse opts from the next
-// one. An op invoked as go["go-test"](ctx, {args: [...]}) gets its cwd/env from the
-// context; go["go-test"]({args: [...]}) (no context) is the transitional form and
+// one. An op invoked as golang["go-test"](ctx, {args: [...]}) gets its cwd/env from the
+// context; golang["go-test"]({args: [...]}) (no context) is the transitional form and
 // consumes nothing.
 //
 // Charms are deliberately NOT readable here. They are run-level - what makes "what did

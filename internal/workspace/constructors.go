@@ -122,7 +122,7 @@ func WithRegisteredSpell(name string, opts ...BindingOption) ProjectOption {
 			}
 		}
 		// Internal plumbing never claims the primary slot; see types.Project.AttachSpell.
-		// This is the path a magusfile's explicit `"spells": [magusfile, go, ...]` list
+		// This is the path a magusfile's explicit `"spells": [magusfile, golang, ...]` list
 		// takes, and magusfile is conventionally written first, so it won here too.
 		if p.Spell == "" && !l.Internal() {
 			p.Spell = name

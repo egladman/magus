@@ -1,0 +1,69 @@
+import "magus/spell";
+
+export fun mgs_getName() > str { return "oci"; }
+
+export fun mgs_listRequiredGlobs() > [Path] {
+    return [Path{value = "Dockerfile"}, Path{value = ".dockerignore"}, Path{value = "**/*"}];
+}
+
+export fun mgs_getVersionCommand() > [str] { return ["docker", "--version"]; }
+
+// hadolint is a SECOND binary this spell drives, and unlike docker it is pinned by
+// no manifest - it is whatever is on PATH. A tool pinned by a manifest needs no
+// probe (go.mod is already a source of the go spell, so bumping a `go tool` pin
+// invalidates on its own), but hadolint has nothing to key on: upgrading it
+// changes which Dockerfiles lint clean while every cache entry replays the old
+// verdict.
+export fun mgs_getVersionCommands() > {str: [str]} {
+    return {
+        "hadolint": ["hadolint", "--version"],
+        // Both scanners are verdict deciders pinned by no manifest, same as
+        // hadolint. trivy is a standalone binary; scout is a docker CLI plugin.
+        "trivy-image": ["trivy", "--version"],
+        "docker-scout-cves": ["docker", "scout", "version"],
+    };
+}
+
+// One-line install commands for the PATH scanners this spell drives, appended
+// to the error when an op's bin is absent. docker itself is a platform install
+// (Docker Desktop / a distro package), not a one-liner, so it carries no hint.
+export fun mgs_listInstallHints() > {str: str} {
+    return {
+        "hadolint": "mise use -g hadolint # or: brew install hadolint",
+        "trivy-image": "mise use -g trivy # or: brew install trivy",
+    };
+}
+
+fun dockerBuild(target: Target) > Command { return Command{bin = "docker", args = ["build"]}; }
+fun dockerBuildx(target: Target) > Command { return Command{bin = "docker", args = ["buildx", "build"]}; }
+fun dockerBuildCheck(target: Target) > Command { return Command{bin = "docker", args = ["build", "--check"]}; }
+// push and tag are building blocks, not a deploy pipeline: op args only append,
+// so a verb this spell does not declare is a verb no magusfile can reach. What
+// to tag and where to push stay entirely the caller's args.
+fun dockerPush(target: Target) > Command { return Command{bin = "docker", args = ["push"]}; }
+fun dockerTag(target: Target) > Command { return Command{bin = "docker", args = ["tag"]}; }
+// Find-fed rather than a hardcoded `Dockerfile` argument: a project with
+// Dockerfile.prod or api.dockerfile variants lints ALL of them, and a bare
+// `Dockerfile` that does not exist no longer fails the op. Op args append, so
+// the old hardcoded form could never be pointed elsewhere from a magusfile.
+// The prunes mirror the bash spell's find: vendored trees and stale agent
+// worktrees are not this project's Dockerfiles to lint.
+fun hadolint(target: Target) > Command {
+    return Command{bin = "sh", args = ["-c",
+        "find . \\( -name node_modules -o -path './.claude/worktrees' \\) -prune -o \\( -name 'Dockerfile' -o -name 'Dockerfile.*' -o -name '*.dockerfile' \\) -print0 | xargs -0 -r hadolint"]};
+}
+
+// trivy and docker-scout scan an image for known vulnerabilities - two
+// mainstream tools, the magusfile picks one to compose into the canonical
+// `security` target. Both take the image reference from the caller
+// ({"args": ["myimage:tag"]}); neither bakes one in. Advisory verdicts track
+// the scanner's database, not the tree, so pair the target with skip_cache
+// (this repo's image-scan policy is the worked example).
+fun trivy(target: Target) > Command { return Command{bin = "trivy", args = ["image"]}; }
+fun dockerScout(target: Target) > Command { return Command{bin = "docker", args = ["scout", "cves"]}; }
+
+export fun mgs_listTargets() > {str: fun(Target) Command} {
+    return {"docker-build": dockerBuild, "docker-buildx-build": dockerBuildx, "docker-build-check": dockerBuildCheck,
+            "docker-push": dockerPush, "docker-tag": dockerTag,
+            "hadolint": hadolint, "trivy-image": trivy, "docker-scout-cves": dockerScout};
+}

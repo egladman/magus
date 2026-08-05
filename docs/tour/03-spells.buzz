@@ -6,17 +6,17 @@
 // executing anything.
 
 import "magus";
-import "magus/spell/go";     // the Go toolchain: go-build, go-test, go-vet, ...
+import "magus/spell/golang";     // the Go toolchain: go-build, go-test, go-vet, ...
 
-magus\project({ "spells": [go] });
+magus\project({ "spells": [golang] });
 
 export fun build(ctx: magus\Context, args: [str]) > void {
-    go["go-build"](ctx);
+    golang["go-build"](ctx);
 }
 
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(build);
-    go["go-test"](ctx);
+    golang["go-test"](ctx);
 }
 
 export fun ci(ctx: magus\Context, args: [str]) > void {

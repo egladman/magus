@@ -922,7 +922,7 @@ func probeCoverageFindings(spec spells.Descriptor) []string {
 // The formula (docs/concepts/spell-naming.md) derives an op's name from its own
 // argv, so a name that drifts from what it runs is decidable rather than a matter
 // of taste - which is the point, because the failure it prevents is one taste
-// cannot see. `docker["docker-push"]` reads as "docker docker push" and nobody
+// cannot see. `oci["docker-push"]` reads as "docker docker push" and nobody
 // notices while writing it; the stutter only becomes expensive once callers exist.
 //
 // Same built-ins-only boundary as checkSpellProbeCoverage above, and for the same
@@ -971,18 +971,17 @@ func namingFindings(spec spells.Descriptor) []string {
 	// it. Reported once, against the spell, and the per-op findings are suppressed -
 	// they are consequences, and renaming the spell settles them all.
 	//
-	// The exception is a language whose canonical name IS its toolchain binary: Go's
-	// name is Go and the command is `go`. A spell that declares that language (
-	// mgs_getLanguage) is naming its domain, not its binary, so it takes the B == D
-	// branch instead of this finding.
-	if !spec.IsLanguageSpell() {
-		for _, opName := range spec.OpNames() {
-			if bin := spec.Ops[opName].Bin; bin != "" && bin == spec.Name {
-				return []string{fmt.Sprintf(
-					"spell %s: the spell is named after %q, a binary it forks (op %s), so every op under it either stutters or hides its tool; "+
-						"name the spell for the domain it adapts instead (see the domain rule)",
-					spec.Name, bin, opName)}
-			}
+	// No exception, not even for a language whose command shares its name: the go
+	// spell is `golang` precisely so this rule needs no carve-out. A domain name is
+	// always available, and reaching for one is cheaper than the ambiguity a binary
+	// name creates - `go["build"]` collided with the canonical `build` TARGET, so
+	// `magus explain build` stopped resolving to the target at all.
+	for _, opName := range spec.OpNames() {
+		if bin := spec.Ops[opName].Bin; bin != "" && bin == spec.Name {
+			return []string{fmt.Sprintf(
+				"spell %s: the spell is named after %q, a binary it forks (op %s), so every op under it either stutters or hides its tool; "+
+					"name the spell for the domain it adapts instead (see the domain rule)",
+				spec.Name, bin, opName)}
 		}
 	}
 
@@ -1054,9 +1053,6 @@ func canonicalOpName(spec spells.Descriptor, bin string, args []string) string {
 	// A substitutable package manager is swapped per project, so naming it would be
 	// false under any other one: the subcommand alone is the honest name.
 	if spec.PackageManagerBin != "" && bin == spec.PackageManagerBin {
-		return strings.Join(sub, "-")
-	}
-	if bin == spec.Name {
 		return strings.Join(sub, "-")
 	}
 	return strings.Join(append([]string{bin}, sub...), "-")

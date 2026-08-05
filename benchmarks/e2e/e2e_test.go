@@ -192,11 +192,11 @@ export fun hit(ctx: magus\Context, args: [str]) > void {}
 
 // TestBuiltinSpellVersionProbeIsDataDriven proves the version probe is wired
 // from each spell's Teal-declared version_cmd (via spells.json), not a Go table:
-// "go" declares version_cmd and gets a probe; "json" declares none and gets no
+// "golang" declares version_cmd and gets a probe; "json" declares none and gets no
 // probe (so it never touches the cache key).
 func TestBuiltinSpellVersionProbeIsDataDriven(t *testing.T) {
-	goSpell, ok := project.DefaultSpellRegistry().Lookup("go")
-	require.True(t, ok, "go spell not registered")
+	goSpell, ok := project.DefaultSpellRegistry().Lookup("golang")
+	require.True(t, ok, "golang spell not registered")
 	assert.True(t, goSpell.HasVersionProbe(), "go spell has no version probe; meta.version_cmd is not wired")
 
 	jsonSpell, ok := project.DefaultSpellRegistry().Lookup("json")

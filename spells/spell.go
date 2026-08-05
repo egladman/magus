@@ -452,7 +452,7 @@ func NewSpell(name string, opts ...Option) *Spell {
 const ModulePrefix = "magus/spell/"
 
 // ModulePath is the literal a magusfile writes to bind this spell's handle:
-// ModulePath("go") is "magus/spell/go", for `import "magus/spell/go"`.
+// ModulePath("go") is "magus/spell/go", for `import "magus/spell/golang"`.
 //
 // Reported as a STRING on the spell descriptor record rather than resolved to a handle.
 // A handle can only come from a literal import, because internal/describe reads

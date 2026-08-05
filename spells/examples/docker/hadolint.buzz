@@ -1,9 +1,0 @@
-// hadolint lints the Dockerfile for common mistakes.
-import "magus";
-import "magus/spell/docker";
-
-magus\project({ "spells": [docker] });
-
-export fun lint(ctx: magus\Context, args: [str]) > void {
-    docker["hadolint"](ctx);
-}

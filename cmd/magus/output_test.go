@@ -411,7 +411,7 @@ func TestParseTarget(t *testing.T) {
 	assertTarget("build", "", "build")
 	assertTarget("lint", "", "lint")
 	assertTarget("typescript::lint", "typescript", "lint")
-	assertTarget("go::test", "go", "test")
+	assertTarget("golang::go-test", "golang", "go-test")
 	assertTarget("rust::build", "rust", "build")
 	assertTarget("::lint", "", "lint") // empty spell — treated as no filter
 }

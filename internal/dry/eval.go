@@ -171,7 +171,7 @@ func WithCatalog(c SpellCatalog) EvalOption {
 // With WithTracer (or WithSpells), it instead runs src as a magusfile dry run:
 // the tracing magus/spell host is layered on, every target is probed once, and
 // the ordered host-op Trace those targets would perform is returned - so a spell
-// example like `import "magus/spell/go"; go["go-build"]()` reports a `go build` op
+// example like `import "magus/spell/golang"; golang["go-build"]()` reports a `go build` op
 // instead of forking anything. A parse/compile failure returns a Diag; a target
 // that panics mid-probe still yields the ops traced up to the panic.
 func Eval(ctx context.Context, src string, opts ...EvalOption) EvalResult {

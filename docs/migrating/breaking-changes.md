@@ -31,13 +31,13 @@ standard CI baseline:
 
 ```buzz title="spells/examples/buf/buf-breaking.buzz"
 import "magus";
-import "magus/spell/buf";
+import "magus/spell/protobuf";
 
-magus\project({ "spells": [buf] });
+magus\project({ "spells": [protobuf] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
-    buf["buf-lint"](ctx);
-    buf["buf-breaking"](ctx);
+    protobuf["buf-lint"](ctx);
+    protobuf["buf-breaking"](ctx);
 }
 ```
 

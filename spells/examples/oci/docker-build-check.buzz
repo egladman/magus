@@ -1,0 +1,10 @@
+// docker-build-check runs the builder `--check` preflight over a context without
+// producing an image; pass the build context (`.`).
+import "magus";
+import "magus/spell/oci";
+
+magus\project({ "spells": [oci] });
+
+export fun image_check(ctx: magus\Context, args: [str]) > void {
+    oci["docker-build-check"](ctx, { "args": ["."] });
+}

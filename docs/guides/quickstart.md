@@ -77,7 +77,7 @@ whole workspace from the root. Do not assume the root. Scope explicitly:
 
 ```sh
 magus run test web          # name the project (positional, after the target)
-magus run go::go-test web   # one spell op, when a whole target is too broad
+magus run golang::go-test web   # one spell op, when a whole target is too broad
 magus run test -- -run TestX  # args after -- are forwarded to the tool
 magus where web             # resolve a fuzzy project name to its path
 ```

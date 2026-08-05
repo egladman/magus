@@ -1,9 +1,0 @@
-// Wire buf-build into a build target: magus run build forks buf build.
-import "magus";
-import "magus/spell/buf";
-
-magus\project({ "spells": [buf] });
-
-export fun build(ctx: magus\Context, args: [str]) > void {
-    buf["buf-build"](ctx);
-}

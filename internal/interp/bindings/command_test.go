@@ -35,7 +35,7 @@ func serviceOp() spells.Op {
 // TestRunCommandResolvesCwdAgainstContext proves a command op with no explicit cwd
 // runs in the context working directory (the project dir the magusfile runner sets via
 // std.WithCwd), not the process cwd. This is what lets a spell op invoked from a
-// subproject target - go["go-run"] from docs/ - resolve its relative paths correctly.
+// subproject target - golang["go-run"] from docs/ - resolve its relative paths correctly.
 func TestRunCommandResolvesCwdAgainstContext(t *testing.T) {
 	dir := t.TempDir()
 	ctx := std.WithCwd(context.Background(), dir)

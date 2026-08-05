@@ -32,17 +32,17 @@ func TestEval_errorPosition(t *testing.T) {
 
 const sampleMagusfile = `
 import "magus";
-import "magus/spell/go";
+import "magus/spell/golang";
 
 magus.project({
-    "spells": [go],
+    "spells": [golang],
     "outputs": ["bin/**"],
     "targets": {"regen-pgo": {"skip_cache": "test policy"}, "lint": {"slots": 4}},
 });
 
-export fun format(ctx: magus\Context, args: [str]) > void { go["go-fmt"](); }
-export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-vet"](); }
-export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-build"](); }
+export fun format(ctx: magus\Context, args: [str]) > void { golang["gofmt"](); }
+export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); golang["go-vet"](); }
+export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); golang["go-build"](); }
 export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(lint, build); }
 `
 
@@ -53,7 +53,7 @@ func TestLoadMagusfile_graph(t *testing.T) {
 	assert.Equal(t, ".", g.Projects[0].Path)
 	assert.Equal(t, []string{"regen-pgo"}, g.Projects[0].NoCache)
 	assert.Equal(t, []string{"lint=4"}, g.Projects[0].Slots)
-	assert.Equal(t, []string{"go"}, g.Projects[0].Spells)
+	assert.Equal(t, []string{"golang"}, g.Projects[0].Spells)
 
 	gotTargets := map[string]bool{}
 	for _, tg := range g.Targets {
@@ -105,7 +105,7 @@ func TestRun_orderAndTrace(t *testing.T) {
 	for _, op := range r.Trace {
 		ops[op.Name] = true
 	}
-	for _, want := range []string{"go-fmt", "go-vet", "go-build"} {
+	for _, want := range []string{"gofmt", "go-vet", "go-build"} {
 		assert.True(t, ops[want], "trace missing op %q (got %v)", want, ops)
 	}
 }
@@ -113,11 +113,11 @@ func TestRun_orderAndTrace(t *testing.T) {
 func TestRun_charmBranch(t *testing.T) {
 	const src = `
 import "magus";
-import "magus/spell/docker";
-magus.project({"spells": [docker]});
+import "magus/spell/oci";
+magus.project({"spells": [oci]});
 export fun image_build(ctx: magus\Context, args: [str]) > void {
-    if (ctx.has_charm("cd")) { docker["docker-build"]({"args": ["--push"]}); }
-    else { docker["docker-build"]({"args": ["--load"]}); }
+    if (ctx.has_charm("cd")) { oci["docker-build"]({"args": ["--push"]}); }
+    else { oci["docker-build"]({"args": ["--load"]}); }
 }
 `
 	detail := func(r Result) string {
@@ -239,11 +239,11 @@ func TestEval_HostModules(t *testing.T) {
 func TestEval_tracerSpellOp(t *testing.T) {
 	const src = `
 import "magus";
-import "magus/spell/go";
+import "magus/spell/golang";
 
-magus.project({ "spells": [go] });
+magus.project({ "spells": [golang] });
 
-export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }
+export fun build(ctx: magus\Context, args: [str]) > void { golang["go-build"](); }
 `
 	r := Eval(context.Background(), src, WithTracer())
 	require.True(t, r.OK, "eval failed: %+v", r.Diag)
@@ -258,12 +258,12 @@ export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }
 func TestEval_tracerMultiTarget(t *testing.T) {
 	const src = `
 import "magus";
-import "magus/spell/go";
+import "magus/spell/golang";
 
-magus.project({ "spells": [go] });
+magus.project({ "spells": [golang] });
 
-export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }
-export fun test(ctx: magus\Context, args: [str]) > void { go["go-test"](); }
+export fun build(ctx: magus\Context, args: [str]) > void { golang["go-build"](); }
+export fun test(ctx: magus\Context, args: [str]) > void { golang["go-test"](); }
 `
 	r := Eval(context.Background(), src, WithTracer())
 	require.True(t, r.OK, "eval failed: %+v", r.Diag)
@@ -350,5 +350,5 @@ func TestEvalAnnouncesUnrunTestBlocks(t *testing.T) {
 	plain := "import \"strings\";\nimport \"std\";\nstd\\print(strings\\kebabCase(\"go_build\"));"
 	out := Eval(context.Background(), plain).Output
 	assert.NotContains(t, out, "not run here")
-	assert.Contains(t, out, "go-build", "and still shows the real output")
+	assert.Contains(t, out, "build", "and still shows the real output")
 }

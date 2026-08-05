@@ -6,18 +6,18 @@
 // the flag change from -l (list) to -w (write).
 
 import "magus";
-import "magus/spell/go";
+import "magus/spell/golang";
 
-magus\project({ "spells": [go] });
+magus\project({ "spells": [golang] });
 
 // Read the active charm set with has_charm, then branch. (Most real spell ops do
 // this flip internally, so you usually get rw for free; here it is spelled out so
 // the plan shows the difference.)
 export fun format(ctx: magus\Context, args: [str]) > void {
     if (ctx.has_charm("rw")) {
-        go["go-fmt"](ctx, {"args": ["-w"]});   // rewrite files in place
+        golang["gofmt"](ctx, {"args": ["-w"]});   // rewrite files in place
     } else {
-        go["go-fmt"](ctx, {"args": ["-l"]});   // just list what would change
+        golang["gofmt"](ctx, {"args": ["-l"]});   // just list what would change
     }
 }
 

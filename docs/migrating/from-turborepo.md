@@ -186,7 +186,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
     typescript["tsc-build"](ctx);
 }
 
-export fun test(ctx: magus\Context, args: [str]) > void { typescript["vitest"](ctx); }
+export fun test(ctx: magus\Context, args: [str]) > void { typescript["vitest-run"](ctx); }
 
 // tsc composes into lint alongside eslint - not a bespoke `typecheck` task
 // with its own name to remember.

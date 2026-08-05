@@ -12,7 +12,7 @@ and what each op inside it is called. Both are public API. A magusfile writes
 `typescript["eslint"](ctx)`, so a rename breaks every workspace that composed it.
 
 The rule below is a formula rather than taste, because the failure it prevents is
-one taste cannot see. `docker["docker-push"]` reads as "docker docker push" and
+one taste cannot see. `oci["docker-push"]` reads as "docker docker push" and
 nobody notices while writing it; the stutter only becomes obvious once fifty of
 them exist and none can be changed cheaply.
 
@@ -26,7 +26,6 @@ spell name = D                     D is a domain, never a binary
 
 op name    = kebab(C)              if B is substitutable per project
            = kebab(capability)     if B varies by ecosystem
-           = kebab(C)              if B == D
            = kebab(B + C)          otherwise
 ```
 
@@ -38,12 +37,9 @@ flowchart TD
     B -->|yes| C["Name the subcommand only<br/><code>install</code>, <code>audit</code>, <code>run-script</code>"]
     B -->|no| D{Does each ecosystem use a<br/>different binary for this one capability?}
     D -->|yes| E["Name the capability<br/><code>scip</code>"]
-    D -->|no| F{Is the binary name the<br/>same as the spell name?}
-    F -->|yes| G["Drop it, name the subcommand<br/><code>go: build</code>, <code>buzz: check</code>"]
-    F -->|no| H["Name binary plus subcommand<br/><code>cargo-build</code>, <code>docker-push</code>, <code>trivy-image</code>"]
+    D -->|no| H["Name binary plus subcommand<br/><code>cargo-build</code>, <code>docker-push</code>, <code>trivy-image</code>"]
     C --> I{Does that name already exist<br/>in this spell?}
     E --> I
-    G --> I
     H --> I
     I -->|yes| J["Append the flag that distinguishes them<br/><code>tsc</code> / <code>tsc-build</code>"]
     I -->|no| K[Done]
@@ -60,6 +56,7 @@ second binary joins it, and a second binary always joins:
 
 | domain | binaries it already drives |
 | --- | --- |
+| `golang` | `go`, `gofmt`, `gofumpt`, `golangci-lint`, `govulncheck`, `scip-go` |
 | `rust` | `cargo`, `rust-analyzer` |
 | `python` | `uv`, `ruff`, `mypy`, `pyright`, `black`, `pip-audit`, `scip-python` |
 | `typescript` | the project's package manager, `tsc`, `eslint`, `biome`, `vitest`, `jest`, `node` |
@@ -70,11 +67,13 @@ second binary joins it, and a second binary always joins:
 `cargo`. The spells that stuttered were exactly the ones named after their own
 binary, and the fix is to name the domain, not to mangle the ops.
 
-There is one exception, and it is narrow: **a language whose canonical name is
-also its toolchain binary.** Go's name is Go, and the command is `go`. Buzz is
-the same. Naming those spells anything else would invent a term to dodge a
-collision, which is worse than the collision. They take the `B == D` branch
-instead.
+There is no exception, not even for a language whose command shares its name. The
+Go spell is `golang`, not `go`, and that is the rule earning its keep rather than
+bending: when the spell was `go`, the formula dropped the redundant prefix and
+produced ops called `build`, `test`, `clean`, `generate` and `run` - five of the
+eight canonical TARGET names. `magus explain build` then resolved to the op and
+stopped finding the target at all. A domain name is always available, and
+reaching for one is cheaper than the ambiguity a binary name creates.
 
 ## The op name is the command
 
@@ -111,7 +110,7 @@ ops differ only by a flag that selects a mode. Append the distinguishing flag:
 | commands | names |
 | --- | --- |
 | `docker build`, `docker build --check` | `docker-build`, `docker-build-check` |
-| `go mod edit -print`, `go mod edit -json` | `mod-edit`, `mod-edit-json` |
+| `go mod edit -print`, `go mod edit -json` | `go-mod-edit`, `go-mod-json` |
 | `tsc`, `tsc --build`, `tsc --build --clean` | `tsc`, `tsc-build`, `tsc-build-clean` |
 
 A flag only enters a name to break a tie. `prettier --check` is still `prettier`,
@@ -144,7 +143,7 @@ and package-manager substitution - the same thing a caller runs.
 
 It checks three things:
 
-1. The spell name is not the name of any binary the spell forks.
+1. The spell name is not the name of any binary the spell forks, with no exception.
 2. Each op name is what the formula yields from its own argv, or carries a
    `// naming:` reason.
 3. No two ops in a spell resolve to the same canonical name without a

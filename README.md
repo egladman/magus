@@ -120,25 +120,25 @@ bind:[^playground]
 
 ```buzz
 import "magus";
-import "magus/spell/go";
+import "magus/spell/golang";
 
-magus\project({ "spells": [go] });
+magus\project({ "spells": [golang] });
 
 // Every exported function is a runnable target. It receives a magus\Context,
 // the handle it uses to declare what it needs and hands to every op it runs.
 // magus caches each target's result and runs it only when a change reaches
 // this project.
-export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx); }
-export fun test(ctx: magus\Context, args: [str])  > void { go["go-test"](ctx); }
-export fun lint(ctx: magus\Context, args: [str])  > void { go["golangci-lint"](ctx); }
+export fun build(ctx: magus\Context, args: [str]) > void { golang["go-build"](ctx); }
+export fun test(ctx: magus\Context, args: [str])  > void { golang["go-test"](ctx); }
+export fun lint(ctx: magus\Context, args: [str])  > void { golang["golangci-lint-run"](ctx); }
 
 // format is read-only by default: go-fmt reports files that need formatting, and
 // go-mod-tidy runs with --diff so it fails if go.mod/go.sum have drifted. The `rw`
 // (read-write) charm flips both to apply: `magus run format:rw` formats the code
 // and tidies the modules in place.
 export fun format(ctx: magus\Context, args: [str]) > void {
-    go["go-fmt"](ctx);
-    go["go-mod-tidy"](ctx);
+    golang["gofmt"](ctx);
+    golang["go-mod-tidy"](ctx);
 }
 
 // 'ci' is the anchor `magus affected ci` keys off: it composes the pipeline

@@ -12,7 +12,7 @@
           "doc": "Compiles the version-stamped magus binary.",
           "spells": [
             {
-              "spell": "go",
+              "spell": "golang",
               "ops": [
                 "go-build"
               ]
@@ -33,7 +33,7 @@
           "doc": "Compiles magus-dev, the binary THIS worktree points its own git tooling at.",
           "spells": [
             {
-              "spell": "go",
+              "spell": "golang",
               "ops": [
                 "go-build"
               ]
@@ -62,13 +62,13 @@
           ],
           "spells": [
             {
-              "spell": "docker",
+              "spell": "oci",
               "ops": [
-                "docker-buildx"
+                "docker-buildx-build"
               ]
             },
             {
-              "spell": "cosign",
+              "spell": "sigstore",
               "ops": [
                 "cosign-sign"
               ]
@@ -280,9 +280,9 @@
           ],
           "spells": [
             {
-              "spell": "go",
+              "spell": "golang",
               "ops": [
-                "go-mod-json",
+                "go-mod-edit-json",
                 "go-mod-edit"
               ]
             },
@@ -354,7 +354,7 @@
           ],
           "spells": [
             {
-              "spell": "go",
+              "spell": "golang",
               "ops": [
                 "go-build"
               ]
@@ -387,7 +387,7 @@
           "doc": "Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.",
           "spells": [
             {
-              "spell": "go",
+              "spell": "golang",
               "ops": [
                 "go-build"
               ]
@@ -414,7 +414,7 @@
           ],
           "spells": [
             {
-              "spell": "go",
+              "spell": "golang",
               "ops": [
                 "go-test"
               ]
@@ -453,9 +453,9 @@
           ],
           "spells": [
             {
-              "spell": "go",
+              "spell": "golang",
               "ops": [
-                "golangci-lint",
+                "golangci-lint-run",
                 "go-vet"
               ]
             },
@@ -478,7 +478,7 @@
           "doc": "govulncheck consults the live Go vulndb - a new CVE flips its verdict with no tree change - so it is the canonical `security` target, not a lint step, and its target policy above declares skip_cache for the same reason image-scan does.",
           "spells": [
             {
-              "spell": "go",
+              "spell": "golang",
               "ops": [
                 "govulncheck"
               ]
@@ -496,9 +496,9 @@
           ],
           "spells": [
             {
-              "spell": "go",
+              "spell": "golang",
               "ops": [
-                "go-fmt",
+                "gofmt",
                 "go-mod-tidy"
               ]
             }
@@ -643,7 +643,7 @@
           "doc": "content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph).",
           "spells": [
             {
-              "spell": "go",
+              "spell": "golang",
               "ops": [
                 "go-run"
               ]
@@ -1110,9 +1110,9 @@
           ],
           "spells": [
             {
-              "spell": "go",
+              "spell": "golang",
               "ops": [
-                "go-mod-json",
+                "go-mod-edit-json",
                 "go-mod-edit"
               ]
             }
@@ -1131,9 +1131,9 @@
           ],
           "spells": [
             {
-              "spell": "go",
+              "spell": "golang",
               "ops": [
-                "go-fmt",
+                "gofmt",
                 "go-mod-tidy"
               ]
             }
@@ -1146,7 +1146,7 @@
           ],
           "spells": [
             {
-              "spell": "go",
+              "spell": "golang",
               "ops": [
                 "go-vet"
               ]
@@ -1160,7 +1160,7 @@
           ],
           "spells": [
             {
-              "spell": "go",
+              "spell": "golang",
               "ops": [
                 "go-build"
               ]
@@ -1174,7 +1174,7 @@
           ],
           "spells": [
             {
-              "spell": "go",
+              "spell": "golang",
               "ops": [
                 "go-test"
               ]
@@ -1225,9 +1225,9 @@
           ],
           "spells": [
             {
-              "spell": "go",
+              "spell": "golang",
               "ops": [
-                "go-mod-json",
+                "go-mod-edit-json",
                 "go-mod-edit"
               ]
             }
@@ -1246,9 +1246,9 @@
           ],
           "spells": [
             {
-              "spell": "go",
+              "spell": "golang",
               "ops": [
-                "go-fmt",
+                "gofmt",
                 "go-mod-tidy"
               ]
             }
@@ -1261,7 +1261,7 @@
           ],
           "spells": [
             {
-              "spell": "go",
+              "spell": "golang",
               "ops": [
                 "go-vet"
               ]
@@ -1275,7 +1275,7 @@
           ],
           "spells": [
             {
-              "spell": "go",
+              "spell": "golang",
               "ops": [
                 "go-build"
               ]
@@ -1289,7 +1289,7 @@
           ],
           "spells": [
             {
-              "spell": "go",
+              "spell": "golang",
               "ops": [
                 "go-test"
               ]
@@ -1305,7 +1305,7 @@
           ],
           "spells": [
             {
-              "spell": "go",
+              "spell": "golang",
               "ops": [
                 "go-build"
               ]
@@ -1340,7 +1340,7 @@
           "doc": "Self-contained project targets, so `magus affected ci` gates the contract when the proto changes - no other project reaches in.",
           "spells": [
             {
-              "spell": "buf",
+              "spell": "protobuf",
               "ops": [
                 "buf-generate",
                 "buf-build"
@@ -1358,7 +1358,7 @@
           "name": "lint",
           "spells": [
             {
-              "spell": "buf",
+              "spell": "protobuf",
               "ops": [
                 "buf-lint"
               ]

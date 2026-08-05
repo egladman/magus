@@ -84,7 +84,7 @@ BOTH raw Go entry points are DENIED by the agent guard:
   wrapper, an env prefix, or `bash -c` all reach the same verdict.
 
 Producing a binary is a write, and writes go through magus - the toolchain verb
-is what has to change, not the destination. `magus run go::go-build .` is the
+is what has to change, not the destination. `magus run golang::go-build .` is the
 one-op form when you only want the compile checked, but note it does NOT write
 `./magus` and reports `[pass]` while leaving a stale one in place, which reads as
 a successful rebuild. Use `magus run go_build .` when you intend to run the result.
@@ -97,7 +97,7 @@ two differently-fingerprinted builds of the same package in one cache. The
 comment is the long version.
 
 Flag placement matters when forwarding: magus flags go BEFORE `--`.
-`magus run go::go-test . --silent -- ./internal/foo/` works; putting `--silent`
+`magus run golang::go-test . --silent -- ./internal/foo/` works; putting `--silent`
 after `--` forwards it to the test binary, which rejects it.
 
 CI runs `setup-magus` two different ways, on purpose:

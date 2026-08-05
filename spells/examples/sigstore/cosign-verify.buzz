@@ -1,0 +1,10 @@
+// cosign-verify checks an image's signature; pass the image reference (add
+// --certificate-identity / --certificate-oidc-issuer for keyless verification).
+import "magus";
+import "magus/spell/sigstore";
+
+magus\project({ "spells": [sigstore] });
+
+export fun verify(ctx: magus\Context, args: [str]) > void {
+    sigstore["cosign-verify"](ctx, { "args": ["app:latest"] });
+}

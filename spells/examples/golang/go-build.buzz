@@ -1,0 +1,9 @@
+// Wire go-build into a `build` target. `magus run build` forks `go build`.
+import "magus";
+import "magus/spell/golang";
+
+magus\project({ "spells": [golang] });
+
+export fun build(ctx: magus\Context, args: [str]) > void {
+    golang["go-build"](ctx);
+}

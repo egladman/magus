@@ -381,7 +381,7 @@ through the environment, and the Dockerfile mounts it at a path that never enter
 ```buzz
 export fun build(ctx: magus\Context, args: [str]) > void {
     final token = magus\secret.read("Private/Registry/token");
-    docker["docker-buildx"](ctx.withEnv({"BK_TOKEN": token}), {"args": [
+    oci["docker-buildx-build"](ctx.withEnv({"BK_TOKEN": token}), {"args": [
         "--secret", "id=registry_token,env=BK_TOKEN",
         "-t", "demo:latest", ".",
     ]});

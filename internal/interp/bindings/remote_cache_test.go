@@ -439,7 +439,7 @@ func TestNewCommandRenderer(t *testing.T) {
 			"write": {Ops: []spells.PatchOp{{Op: "add", Path: "/3", Value: "--fix"}}},
 			"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 		}}},
-		"build": {Command: spells.Command{Bin: "go", Args: []string{"build"}}},
+		"go-build": {Command: spells.Command{Bin: "go", Args: []string{"build"}}},
 		"noop":  {}, // empty cmd
 	}
 	render := newCommandRenderer(targets)
@@ -459,7 +459,7 @@ func TestNewCommandRenderer(t *testing.T) {
 		assert.Equal(t, []string{"tool", "golangci-lint", "run", "--fix", "./...", "-v"}, args)
 	})
 	t.Run("charmless target", func(t *testing.T) {
-		cmd, args, ok, err := render("build", []string{"write"})
+		cmd, args, ok, err := render("go-build", []string{"write"})
 		assert.NoError(t, err)
 		assert.True(t, ok)
 		assert.Equal(t, "go", cmd)

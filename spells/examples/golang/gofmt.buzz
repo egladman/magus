@@ -1,0 +1,10 @@
+// go-fmt lists misformatted files; the rw charm rewrites them in place.
+// `magus run format` checks, `magus run format:rw` applies gofmt.
+import "magus";
+import "magus/spell/golang";
+
+magus\project({ "spells": [golang] });
+
+export fun format(ctx: magus\Context, args: [str]) > void {
+    golang["gofmt"](ctx);
+}

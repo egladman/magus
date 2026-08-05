@@ -447,7 +447,7 @@ func buildTargetContext(obs buzz.DirectObserver, targets map[string]vm.Callable,
 	c.MapSet(ctxMarker, vm.BoolValue(true))
 	// ctx.withEnv({...}) / ctx.withCwd(".."): a magus\Exec, the EXECUTION-only context,
 	// carrying overrides for the op calls made with it -
-	// go["go-test"](ctx.withEnv({"CGO_ENABLED": "0"})).
+	// golang["go-test"](ctx.withEnv({"CGO_ENABLED": "0"})).
 	//
 	// Named for WHAT DIFFERS, not for the act of making it, following context.WithValue /
 	// WithCancel / WithTimeout: at a call site you want to read the change. (Go's docs

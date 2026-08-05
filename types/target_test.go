@@ -75,7 +75,7 @@ func TestParseTarget_Errors(t *testing.T) {
 		"lint:",           // empty charm
 		"lint:read,",      // empty charm in list
 		"web/studio:test", // '/' not allowed in target
-		"go::lint",        // '::' not a target char (spell filter stripped earlier)
+		"golang::lint",    // '::' not a target char (spell filter stripped earlier)
 		"",                // empty string
 	}
 	for _, in := range invalid {
@@ -107,7 +107,7 @@ func TestValidateTargetName(t *testing.T) {
 	for _, n := range []string{"build", "test", "lint-fix", "gen_2", "ABC123", "a"} {
 		assert.NoErrorf(t, ValidateTargetName(n), "ValidateTargetName(%q)", n)
 	}
-	for _, n := range []string{"", "lint:read", "go::lint", "foo@bar", "web/studio", "build prod", "test.unit"} {
+	for _, n := range []string{"", "lint:read", "golang::lint", "foo@bar", "web/studio", "build prod", "test.unit"} {
 		assert.Errorf(t, ValidateTargetName(n), "ValidateTargetName(%q) should error", n)
 	}
 }

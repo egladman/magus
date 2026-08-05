@@ -19,7 +19,7 @@
 //      the compiler is an input - and it is why a mise bump rebuilds the world.
 //
 //   4. A TARGET AND THE OP IT WRAPS DO NOT SHARE AN ENTRY. `run test` and
-//      `run go::go-test` hash differently even when the target is a one-line wrapper,
+//      `run golang::go-test` hash differently even when the target is a one-line wrapper,
 //      because the target name is part of the key. Running one does not warm the other.
 //
 //   5. A SPELL CONTRIBUTES ITS GLOBS TO EVERY TARGET ON THE PROJECT. That is why an

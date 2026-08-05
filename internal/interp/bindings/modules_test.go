@@ -494,7 +494,7 @@ export fun db_migrate(ctx: magus\Context, args: [str]) > void {}
 // (Teal) / "undefined variable" (Buzz) because local-spell lookup was cwd-relative.
 func TestParseLocalSpellFromOtherDir(t *testing.T) {
 	spell := `export fun mgs_getName() > str { return "hello"; }
-export fun mgs_listTargets() > any { return {"build": {"bin": "echo", "args": ["hi"]}}; }`
+export fun mgs_listTargets() > any { return {"go-build": {"bin": "echo", "args": ["hi"]}}; }`
 	magusfile := `import "magus";
 import "spells/hello";
 export fun go(ctx: magus\Context, _a: [str]) > void { hello.build(); }`

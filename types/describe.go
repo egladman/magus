@@ -40,7 +40,7 @@ type SpellToolchain struct {
 type Spell struct {
 	Name string `json:"name"              yaml:"name"`
 	// BuzzImport is the module path a magusfile writes to bind this spell's handle:
-	// "magus/spell/go", for `import "magus/spell/go"`. See spells.ModulePath.
+	// "magus/spell/go", for `import "magus/spell/golang"`. See spells.ModulePath.
 	//
 	// Named for Buzz because Language below already means something else on this
 	// record - the language the spell ADAPTS (go, typescript). This one is the
@@ -173,7 +173,7 @@ type TargetGraphNode struct {
 	Dependencies []string `json:"dependencies,omitempty" yaml:"dependencies,omitempty"`
 	Charms       []string `json:"charms,omitempty"       yaml:"charms,omitempty"`
 	// Spells are the spell ops the target's body invokes, captured statically from
-	// the bracket (`go["go-test"]()`) and dotted (`md.markdownlint()`) call forms,
+	// the bracket (`golang["go-test"]()`) and dotted (`md.markdownlint()`) call forms,
 	// grouped by spell in first-appearance order. It shows which toolchain a
 	// composite target drives - the part `deps` (sibling targets) omits.
 	Spells []TargetSpellUse `json:"spells,omitempty" yaml:"spells,omitempty"`

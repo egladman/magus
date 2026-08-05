@@ -1,0 +1,10 @@
+// docker-build's base command is just `docker build`, so pass the image tag and
+// build context: `magus run image` forks `docker build -t app:latest .`.
+import "magus";
+import "magus/spell/oci";
+
+magus\project({ "spells": [oci] });
+
+export fun image(ctx: magus\Context, args: [str]) > void {
+    oci["docker-build"](ctx, { "args": ["-t", "app:latest", "."] });
+}

@@ -13,30 +13,30 @@
 // is a CLI action, not magusfile syntax, so it is described here, not run.
 
 import "magus";
-import "magus/spell/go";
+import "magus/spell/golang";
 
 // The shared library project. Nothing depends on the app, so a lib change is what
 // ripples outward through the graph.
 magus\project("lib", {
-    "spells": [go],
+    "spells": [golang],
     "outputs": ["lib/**"],
 });
 
 // The app project depends on lib: magus orders lib's work first, and a change to
 // lib marks the app affected too.
 magus\project("app", {
-    "spells": [go],
+    "spells": [golang],
     "outputs": ["bin/**"],
     "depends_on": ["lib"],
 });
 
 export fun build(ctx: magus\Context, args: [str]) > void {
-    go["go-build"](ctx);
+    golang["go-build"](ctx);
 }
 
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(build);
-    go["go-test"](ctx);
+    golang["go-test"](ctx);
 }
 
 export fun ci(ctx: magus\Context, args: [str]) > void {

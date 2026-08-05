@@ -1,0 +1,9 @@
+// Wire buf-build into a build target: magus run build forks buf build.
+import "magus";
+import "magus/spell/protobuf";
+
+magus\project({ "spells": [protobuf] });
+
+export fun build(ctx: magus\Context, args: [str]) > void {
+    protobuf["buf-build"](ctx);
+}

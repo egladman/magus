@@ -24,7 +24,7 @@ a magusfile declares a target and when you reference one, whether on the CLI,
 in a `magus\needs` literal, or in a per-target policy key. `go_build`,
 `goBuild`, and `go-build` all normalize to the same registered target, so any
 spelling reaches it - there is exactly one target, not a table of aliases.
-This does not apply to a spell op after `::` (`go::golangci-lint` matches
+This does not apply to a spell op after `::` (`golang::golangci-lint-run` matches
 verbatim) or to a Buzz map subscript like `typescript["tsc"]`. See
 [targets.md](../concepts/targets.md#name-normalization-casing--delimiters).
 
@@ -70,7 +70,7 @@ magus warns. Make the two charms edit different arguments, or drop one. See
 
 ## Can I run a single spell operation directly, bypassing targets?
 
-Yes, with the `::` hatch: `magus run go::go-vet api` runs the `go` spell's `go-vet`
+Yes, with the `::` hatch: `magus run golang::go-vet api` runs the `go` spell's `go-vet`
 op in project `api`. It is an escape hatch for one-off invocation, not the everyday
 surface; a target is the normal way in. See [operations.md](../concepts/operations.md).
 

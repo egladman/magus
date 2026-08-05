@@ -1,0 +1,9 @@
+// hadolint lints the Dockerfile for common mistakes.
+import "magus";
+import "magus/spell/oci";
+
+magus\project({ "spells": [oci] });
+
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    oci["hadolint"](ctx);
+}

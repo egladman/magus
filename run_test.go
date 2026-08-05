@@ -310,7 +310,7 @@ func TestComputedExecOverrideLoadsForALibraryCaller(t *testing.T) {
 	root := t.TempDir()
 	const mf = `export fun build(ctx: magus\Context, args: [str]) > void {
     final env = mut {"GOOS": "linux"};
-    go["go-build"](ctx.withEnv(env), {});
+    golang["go-build"](ctx.withEnv(env), {});
 }
 `
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))

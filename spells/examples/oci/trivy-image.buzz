@@ -1,0 +1,14 @@
+// trivy scans a built image for known vulnerabilities, so it composes into the
+// canonical `security` target. The image reference comes from the magusfile -
+// the op bakes none in. The verdict tracks trivy's vulnerability database,
+// which changes daily, so declare skip_cache on the target.
+import "magus";
+import "magus/spell/oci";
+
+magus\project({ "spells": [oci], "targets": {
+    "security": {"skip_cache": "reads trivy's vulnerability database, which changes independently of this tree"},
+} });
+
+export fun security(ctx: magus\Context, args: [str]) > void {
+    oci["trivy-image"](ctx, {"args": ["myapp:latest"]});
+}

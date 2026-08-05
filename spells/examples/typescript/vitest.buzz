@@ -1,9 +1,0 @@
-// vitest runs the test suite; the gha charm annotates failures in GitHub Actions.
-import "magus";
-import "magus/spell/typescript";
-
-magus\project({ "spells": [typescript] });
-
-export fun test(ctx: magus\Context, args: [str]) > void {
-    typescript["vitest"](ctx);
-}

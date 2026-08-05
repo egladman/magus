@@ -50,15 +50,15 @@ These are the two core nouns in magus, on orthogonal axes. Confusing them is the
 The relationship is **compositional**: a target's body calls spell ops.
 
 ```buzz
-import "magus/spell/go";
-magus\project.register(fun(p, cb) > bool { cb({ "spells": [go] }); return true; });   // bind the spell (runs nothing)
+import "magus/spell/golang";
+magus\project.register(fun(p, cb) > bool { cb({ "spells": [golang] }); return true; });   // bind the spell (runs nothing)
 
 // targets are the runnable verbs; their bodies call the spell's ops. Op keys are
 // the CLI command, so kebab names are reached by subscript (see Naming operations),
 // and every op call takes the target's ctx as its first argument.
-export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx, { "cwd": "." }); }
-export fun lint(ctx: magus\Context, args: [str])  > void { go["golangci-lint"](ctx, { "cwd": "." }); }
-export fun test(ctx: magus\Context, args: [str])  > void { go["go-test"](ctx, { "cwd": "." }); }
+export fun build(ctx: magus\Context, args: [str]) > void { golang["go-build"](ctx, { "cwd": "." }); }
+export fun lint(ctx: magus\Context, args: [str])  > void { golang["golangci-lint-run"](ctx, { "cwd": "." }); }
+export fun test(ctx: magus\Context, args: [str])  > void { golang["go-test"](ctx, { "cwd": "." }); }
 ```
 
 ```sh
@@ -70,7 +70,7 @@ magus run lint .         # runs your `lint` target, which calls go's golangci-li
 - **Reach for a target** when you want a _runnable verb_: the thing a teammate or CI types (`magus run test api`). Targets are your **public surface**; declare one per lifecycle step you want runnable. Until you export a target for an operation, `magus run <op>` is a graceful no-op.
 - **Reach for a spell** when you want to _package a toolchain's operations_ and _tell the cache which files matter_. Bind a built-in or load a spell file. Call its ops from inside target bodies.
 - **Skip the spell entirely** for a one-off step with arbitrary logic: write the target body directly with the host modules (e.g. `os\exec(...)`). A spell earns its keep when an operation recurs and has cache inputs worth declaring.
-- **Use the `::` escape hatch** (`magus run go::go-vet api`) only for ad-hoc runs or introspection. The everyday surface is your composed targets.
+- **Use the `::` escape hatch** (`magus run golang::go-vet api`) only for ad-hoc runs or introspection. The everyday surface is your composed targets.
 
 magus deliberately does **not** decide what "lint" or "format" means. A spell supplies tool-native operations in the tool's own words; your magusfile decides which op backs each lifecycle target. Toolchain knowledge lives in the spell (reusable, cacheable); policy lives in the magusfile (yours to compose).
 
@@ -136,8 +136,8 @@ A spell only takes effect when its **handle** is passed to `magus\project.regist
 Built-in spells are compiled into the magus binary.
 
 ```buzz
-import "magus/spell/go";
-magus\project.register(fun(p, cb) > bool { cb({ "spells": [go] }); return true; });
+import "magus/spell/golang";
+magus\project.register(fun(p, cb) > bool { cb({ "spells": [golang] }); return true; });
 ```
 
 Available built-ins: `go`, `typescript`, `python`, `rust`, `bash`, `buf`, `buzz`, `docker`, `cosign`, `markdown`.
@@ -158,12 +158,12 @@ magus\project.register("gems/", fun(p, cb) > bool { cb({ "spells": [rb] }); retu
 Spells do **not** import one another. There is no spell-to-spell `import`, and a built-in spell may import only the pure-types `magus/spell` module (enforced by `SelfContainedBuiltinSource`). Composition happens one level up, at the **project**: bind several spells to the same project and let your targets call across them.
 
 ```buzz
-import "magus/spell/go";
-import "magus/spell/docker";
-magus\project.register(fun(p, cb) > bool { cb({ "spells": [go, docker] }); return true; });   // co-bound
+import "magus/spell/golang";
+import "magus/spell/oci";
+magus\project.register(fun(p, cb) > bool { cb({ "spells": [golang, oci] }); return true; });   // co-bound
 
 export fun build(ctx: magus\Context, args: [str]) > void {
-    go["go-build"](ctx, { "cwd": "." });
+    golang["go-build"](ctx, { "cwd": "." });
     docker.build(ctx, { "cwd": "." });   // one target, ops from two spells
 }
 ```
@@ -198,7 +198,7 @@ Naming the op `golangci-lint` (not `lint`) and `go-fmt` (not `fmt`) says exactly
 
 **Not every op is a CLI command.** A no-op marker (typescript's `preflight`) or a cache-backend verb (github/s3 `get-entry`) is not a tool invocation, so keep a descriptive name.
 
-**Op keys are matched verbatim** (no kebab/case normalization, unlike target names), so a kebab key is reached by subscript in a magusfile: `go["go-build"](ctx)`, not `go.build(ctx)`. An op whose key is a valid identifier (`pytest`, `eslint`) can use dot: `py.pytest(ctx)`. Either way the first argument is the target's context - the `ctx` the target function received - and any options follow it: `go["go-build"](ctx, { "cwd": "." })`.
+**Op keys are matched verbatim** (no kebab/case normalization, unlike target names), so a kebab key is reached by subscript in a magusfile: `golang["go-build"](ctx)`, not `go.build(ctx)`. An op whose key is a valid identifier (`pytest`, `eslint`) can use dot: `py.pytest(ctx)`. Either way the first argument is the target's context - the `ctx` the target function received - and any options follow it: `golang["go-build"](ctx, { "cwd": "." })`.
 
 This is the one place magus has two name spaces with different rules, so it is worth stating side by side:
 
@@ -206,18 +206,18 @@ This is the one place magus has two name spaces with different rules, so it is w
 | ---------------- | ---------------------------------------------- | ----------------------------- |
 | Matching         | normalized both sides ([how](targets.md#name-normalization-casing--delimiters)) | verbatim                      |
 | `goBuild` finds  | `go-build`                                     | nothing                       |
-| Magusfile call   | `magus run go-build`                           | `go["go-build"]()`            |
+| Magusfile call   | `magus run go-build`                           | `golang["go-build"]()`            |
 | Dot access       | n/a                                            | only if the key is an identifier |
 
 The practical consequence: a hyphen in a target name costs you nothing, while a hyphen in an op key is what forces subscript notation. That is accepted deliberately (see below) rather than overlooked, because the op key is the tool's own name and magus does not invent a second spelling for it.
 
-### Explicitness over magic (why `go::go-fmt` stutters)
+### Explicitness over magic (why `golang::gofmt` stutters)
 
-The full-command convention is enforced even for streamlined toolchains like Go, where `go-build`/`go-test`/`go-fmt` all start with `go`. The result reads with a stutter on the CLI (`magus run go::go-fmt`), and that is **by design**:
+The full-command convention is enforced even for streamlined toolchains like Go, where `go-build`/`go-test`/`go-fmt` all start with `go`. The result reads with a stutter on the CLI (`magus run golang::gofmt`), and that is **by design**:
 
 - **Consistency across a polyglot repo.** Most languages split work across separate binaries (typescript: `tsc`/`eslint`/`prettier`/`vitest`; rust: `cargo`/`clippy`/`rustfmt`). A rule that says "name the op after the binary, always" is one rule for every spell, instead of a special abbreviation for the few single-binary toolchains.
 - **No invented vocabulary.** `go-fmt` is `gofmt`; `golangci-lint` is `golangci-lint`. There is no magus-specific `lint`/`fmt` alias a reader has to learn or a magusfile has to map. The op name _is_ the command.
-- **The stutter shows up only in the escape hatch.** You type `go::go-fmt` for an ad-hoc op-direct run (see [targets.md](targets.md#cli-extension-spell-qualified-targets)). In normal use you compose `go["go-fmt"](ctx)` into a `format` target and run `magus run format`. magus favors explicitness over magic: the spell says exactly what it runs, and policy (which op is your "format") lives in your magusfile.
+- **The stutter shows up only in the escape hatch.** You type `golang::gofmt` for an ad-hoc op-direct run (see [targets.md](targets.md#cli-extension-spell-qualified-targets)). In normal use you compose `golang["gofmt"](ctx)` into a `format` target and run `magus run format`. magus favors explicitness over magic: the spell says exactly what it runs, and policy (which op is your "format") lives in your magusfile.
 
 ## Authoring a custom spell
 
@@ -359,7 +359,7 @@ Key invariant: **binding is not running.** A bound spell with no target wired is
 | Term               | Definition                                                                                                                                                                                                                                                    |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Spell**          | A library of tool-native operations for one toolchain, plus its cache/affected metadata. Bound to a project; runs nothing on its own.                                                                                                                         |
-| **Op (operation)** | One tool-native action a spell exposes, named after its CLI command (`go-vet`, `golangci-lint`). Reached by subscript on the handle (`go["go-vet"](ctx)`) or via `spell::op` on the CLI. See [Naming operations](#naming-operations).                         |
+| **Op (operation)** | One tool-native action a spell exposes, named after its CLI command (`go-vet`, `golangci-lint`). Reached by subscript on the handle (`golang["go-vet"](ctx)`) or via `spell::op` on the CLI. See [Naming operations](#naming-operations).                         |
 | **Handle**         | The value bound by importing a spell (`import "magus/spell/<name>"` for a built-in, `import "spells/<name>"` for a workspace-local one). Inert until passed to `magus\project.register`.                                                                      |
 | **`needs`**        | Input globs (`mgs_listRequiredGlobs`). Hashed into the cache key; also seed the affected set.                                                                                                                                                                 |
 | **`provides`**     | Output globs (`mgs_listProvidedGlobs`). What the cache snapshots and replays on a hit.                                                                                                                                                                        |

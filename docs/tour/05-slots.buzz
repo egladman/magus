@@ -9,7 +9,7 @@
 // for the plan.
 
 import "magus";
-import "magus/spell/go";
+import "magus/spell/golang";
 import "magus/spell/typescript";
 
 // Size the heavy job once, then feed the SAME number to both levers: the slots
@@ -19,7 +19,7 @@ import "magus/spell/typescript";
 final LINT_SLOTS: int = 4;
 
 magus\project({
-    "spells": [go, typescript],
+    "spells": [golang, typescript],
     "targets": {
         // js-lint reserves LINT_SLOTS; while it holds them, the cheap checks wait
         // rather than pile on. release runs alone - the degenerate case, "I need
@@ -31,7 +31,7 @@ magus\project({
 
 // A cheap check. It stays at the default of one slot; several like it run at once.
 export fun go_lint(ctx: magus\Context, args: [str]) > void {
-    go["go-vet"](ctx);
+    golang["go-vet"](ctx);
 }
 
 // The greedy one: reserve 4 slots AND tell eslint to actually use 4 threads.

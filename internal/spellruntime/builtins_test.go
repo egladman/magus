@@ -21,10 +21,15 @@ func TestBuiltins_NonEmpty(t *testing.T) {
 
 func TestBuiltins_KeyedByName(t *testing.T) {
 	m := Builtins()
-	// The golang spell renames itself to "go": it must be reachable by name…
-	assert.Contains(t, m, "go", `Builtins()["go"] not found`)
-	// …and not by its source directory.
-	assert.NotContains(t, m, "golang", `Builtins()["golang"] present — registry is keyed by name, not source dir`)
+	// Every built-in is reachable under the name it declares (mgs_getName), which is
+	// what a magusfile imports. This used to be proved by the golang spell, which
+	// registered itself as "go" while living in spells/golang; the naming rule now
+	// makes every directory match its spell name, so no built-in exercises the
+	// divergence and the invariant is asserted over the whole registry instead.
+	for key, spec := range m {
+		assert.Equalf(t, key, spec.Name, "registry key %q does not match the spell's declared name %q", key, spec.Name)
+	}
+	assert.Contains(t, m, "golang", `Builtins()["golang"] not found`)
 }
 
 func TestBuiltinsHash_Format(t *testing.T) {
@@ -44,9 +49,9 @@ func TestBuiltinsHash_Stable(t *testing.T) {
 }
 
 func TestGoSpell_TidyTarget(t *testing.T) {
-	goSpell := Builtins()["go"]
+	goSpell := Builtins()["golang"]
 	tidy, ok := goSpell.Ops["go-mod-tidy"]
-	require.Truef(t, ok, "go spell has no go-mod-tidy target; targets: %v", goSpell.OpNames())
+	require.Truef(t, ok, "golang spell has no mod-tidy target; targets: %v", goSpell.OpNames())
 	// Default (no write charm): check mode via --diff (non-zero exit if changes
 	// are needed — safe for CI gating).
 	assert.Equal(t, "go", tidy.Bin)
@@ -81,17 +86,17 @@ func TestBuiltinCharmsUnchanged(t *testing.T) {
 		want             []spells.PatchOp
 	}{
 		// go
-		{"go", "go-fmt", "rw", []spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
-		{"go", "golangci-lint", "debug", []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
+		{"golang", "gofmt", "rw", []spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
+		{"golang", "golangci-lint-run", "debug", []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 		// /1, not /3: golangci-lint runs from PATH now, so the argv lost the leading
 		// "tool", "golangci-lint" prefix and --fix inserts right after "run".
-		{"go", "golangci-lint", "rw", []spells.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
+		{"golang", "golangci-lint-run", "rw", []spells.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
 		// "cover", not "cd": the reserved cd charm means continuous-delivery.
-		{"go", "go-test", "cover", []spells.PatchOp{
+		{"golang", "go-test", "cover", []spells.PatchOp{
 			{Op: "add", Path: "/-", Value: "-covermode=atomic"},
 			{Op: "add", Path: "/-", Value: "-coverprofile=coverage.out"},
 		}},
-		{"go", "go-mod-tidy", "rw", []spells.PatchOp{{Op: "remove", Path: "/2"}}},
+		{"golang", "go-mod-tidy", "rw", []spells.PatchOp{{Op: "remove", Path: "/2"}}},
 		// py
 		{"python", "pytest", "debug", []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 		{"python", "ruff-check", "rw", []spells.PatchOp{{Op: "add", Path: "/3", Value: "--fix"}}},
@@ -101,7 +106,7 @@ func TestBuiltinCharmsUnchanged(t *testing.T) {
 		{"typescript", "prettier", "rw", []spells.PatchOp{{Op: "replace", Path: "/2", Value: "--write"}}},
 		// default reporter kept alongside the annotations one: vitest replaces its
 		// default when --reporter is given, and CI logs still need the run summary.
-		{"typescript", "vitest", "gha", []spells.PatchOp{
+		{"typescript", "vitest-run", "gha", []spells.PatchOp{
 			{Op: "add", Path: "/-", Value: "--reporter=default"},
 			{Op: "add", Path: "/-", Value: "--reporter=github-actions"},
 		}},
@@ -113,10 +118,10 @@ func TestBuiltinCharmsUnchanged(t *testing.T) {
 		// md
 		{"markdown", "prettier", "rw", []spells.PatchOp{{Op: "replace", Path: "/0", Value: "--write"}}},
 		// buf
-		{"buf", "buf-lint", "gha", []spells.PatchOp{{Op: "add", Path: "/-", Value: "--error-format=github-actions"}}},
+		{"protobuf", "buf-lint", "gha", []spells.PatchOp{{Op: "add", Path: "/-", Value: "--error-format=github-actions"}}},
 		// compound: -w replaces --exit-code (the higher index) before -d is dropped,
 		// so the concatenated ops apply without an index shifting underneath.
-		{"buf", "buf-format", "rw", []spells.PatchOp{{Op: "replace", Path: "/2", Value: "-w"}, {Op: "remove", Path: "/1"}}},
+		{"protobuf", "buf-format", "rw", []spells.PatchOp{{Op: "replace", Path: "/2", Value: "-w"}, {Op: "remove", Path: "/1"}}},
 		// rs — compound charm (two drops): the constructor concat must still yield
 		// remove /2 then remove /1, in that order.
 		{"rust", "cargo-fmt", "rw", []spells.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}},

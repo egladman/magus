@@ -10,10 +10,10 @@
 // no-cache set; `outputs` declares what this project produces.
 
 import "magus";
-import "magus/spell/go";
+import "magus/spell/golang";
 
 magus\project({
-    "spells": [go],
+    "spells": [golang],
     "outputs": ["bin/**", "gen/**"],
     "targets": {
         // Always re-run: the value is the check on every run, not a stored output.
@@ -22,22 +22,22 @@ magus\project({
 });
 
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    go["go-generate"](ctx);
+    golang["go-generate"](ctx);
 }
 
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(generate);
-    go["go-build"](ctx, {"args": ["-o", "bin/app", "./cmd/app"]});
+    golang["go-build"](ctx, {"args": ["-o", "bin/app", "./cmd/app"]});
 }
 
 // Both of these need build. In the plan it appears once, not twice.
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(build);
-    go["go-test"](ctx);
+    golang["go-test"](ctx);
 }
 export fun bundle(ctx: magus\Context, args: [str]) > void {
     ctx.needs(build);
-    go["go-build"](ctx, {"args": ["-o", "bin/app-release", "./cmd/app"]});
+    golang["go-build"](ctx, {"args": ["-o", "bin/app-release", "./cmd/app"]});
 }
 
 export fun ci(ctx: magus\Context, args: [str]) > void {

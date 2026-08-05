@@ -11,7 +11,9 @@ stdout 'neighborhood:'
 # explain shows one node's relationships in natural language, plus blast radius.
 # "build" resolves by name; build needs lint (rendered "depends on") and the charm
 # rw references it (rendered "referenced by").
-exec magus explain build
+# `build` alone is ambiguous now that the go spell has a build op, so the target is
+# named by its node id.
+exec magus explain target:.:build
 stdout 'target:\.:build   target'
 stdout 'depends on'
 stdout 'target:\.:lint'

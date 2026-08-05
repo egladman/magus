@@ -66,7 +66,7 @@ Charms attach to a target name after `:`, comma-separated:
 ```sh
 magus run format:rw                 # the `rw` charm on `format`
 magus run lint:rw,debug api         # two charms, on `lint`, in project api
-magus run go::go-test:debug         # spell-qualified op + a charm
+magus run golang::go-test:debug         # spell-qualified op + a charm
 ```
 
 The project is a **positional** argument, not part of the token. See the full grammar in [targets.md#cli-grammar](targets.md#cli-grammar).
@@ -148,7 +148,7 @@ debug : add "-v"   at /-       → ... -v
 ```
 
 ```sh
-magus run go::golangci-lint:rw,debug    # → golangci-lint run --fix ./... -v
+magus run golang::golangci-lint-run:rw,debug    # → golangci-lint run --fix ./... -v
 ```
 
 ## Previewing the rendered command
@@ -397,7 +397,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 
 **Workspace spell**: author a `spells/<name>.buzz` spell (imported by path) with an `ops` entry and wire per-project charms there. The spell owns the _command_; charms tune its _args_.
 
-**`::` hatch**: `magus run go::go-vet api` reaches a single spell op directly. It is an escape hatch, not the everyday surface.
+**`::` hatch**: `magus run golang::go-vet api` reaches a single spell op directly. It is an escape hatch, not the everyday surface.
 
 ## Dynamic values: no interpolation, use the language
 
@@ -476,7 +476,7 @@ Names are normalized the same way target names are (`types.Normalize`, kebab-cas
 - **A different command.** Charms rewrite args, never `cmd`; see [the boundary](#charm-vs-target-the-command-boundary).
 - **A whole-argv rewrite.** The root pointer is rejected; express the change as individual `replace`/`remove`/`add` ops.
 - **Project selection** (`api`, `/`): positional arguments, not charms.
-- **Spell qualifier** (`go::`): a `RunOption` (`WithSpellFilter`), stripped by the CLI before charms are parsed.
+- **Spell qualifier** (`golang::`): a `RunOption` (`WithSpellFilter`), stripped by the CLI before charms are parsed.
 - **One-off tool flags**: pass these after `--` (`magus run test -- -run TestX`).
 
 ## Reference: the patch model

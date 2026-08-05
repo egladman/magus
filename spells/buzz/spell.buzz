@@ -1,5 +1,5 @@
 // magus authors its own config and spells in Buzz, so this spell lets the project
-// dogfood - `magus run buzz::buzz-check` type-checks Buzz the way `go::go-vet`
+// dogfood - `magus run buzz::buzz-check` type-checks Buzz the way `golang::go-vet`
 // checks Go.
 //
 // It supports two interpreters, and a magusfile picks per op (the names don't

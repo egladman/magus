@@ -12,9 +12,9 @@ import "io";
 import "std";
 import "semver";
 
-import "magus/spell/go";
-import "magus/spell/docker";
-import "magus/spell/cosign";
+import "magus/spell/golang";
+import "magus/spell/oci";
+import "magus/spell/sigstore";
 import "magus/spell/buzz";
 import "magus/spell/markdown";
 import "magus/spell/bash";
@@ -54,7 +54,7 @@ magus\project({
     // every generated index naming it - which is why regenerating MAGUS.md from
     // a worktree produced spurious diffs.
     "name": "magus",
-    "spells": [go, buzz, markdown, bash],
+    "spells": [golang, buzz, markdown, bash],
     "targets": {
         "watch": {"skip_cache": "blocks on a filesystem watch loop and never returns"},
         // serve blocks (a long-running dev-loop server), so it must never cache.
@@ -141,7 +141,7 @@ fun ld_flags() > str {
 // Compiles the version-stamped magus binary.
 export fun go_build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(gopherbuzz\build);
-    go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
+    golang["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
         "args": ["-trimpath",
             "-ldflags", ld_flags(),
             "-o", "magus",
@@ -169,7 +169,7 @@ export fun go_build(ctx: magus\Context, args: [str]) > void {
 // marks a path that can never be tracked and so can never conflict.
 export fun dogfood(ctx: magus\Context, args: [str]) > void {
     ctx.needs(gopherbuzz\build);
-    go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
+    golang["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
         "args": ["-trimpath",
             "-ldflags", ld_flags(),
             "-o", "magus-dev",
@@ -283,12 +283,12 @@ fun publish_variant(ctx: magus\Context, dockerfile: str, platforms: str, registr
     args.append("--metadata-file"); args.append(meta);
     args.append("--push");
     args.append(".");
-    docker["docker-buildx"](ctx.withCwd("."), {"args": args});
+    oci["docker-buildx-build"](ctx.withCwd("."), {"args": args});
 
     final digest = serialize\jsonDecode(fs\readFile(meta)).q("containerimage.digest").stringValue();
     var pushed = mut [<str>];
     foreach (reg in registries) {
-        cosign["cosign-sign"](ctx, {"args": [reg.repository + "@" + digest]});
+        sigstore["cosign-sign"](ctx, {"args": [reg.repository + "@" + digest]});
         foreach (t in tags) { pushed.append(reg.repository + ":" + t); }
     }
     return pushed;
@@ -355,7 +355,7 @@ fun load_variant(ctx: magus\Context, dockerfile: str) > void {
     args.append("--platform"); args.append(load_platform(ctx));
     args.append("--load");
     args.append(".");
-    docker["docker-buildx"](ctx.withCwd("."), {"args": args});
+    oci["docker-buildx-build"](ctx.withCwd("."), {"args": args});
 }
 
 // Three PUBLISH modes and one local mode, and which you get is a charm because the
@@ -715,7 +715,7 @@ fun workspace_go_mods(ctx: magus\Context) > [any] {
     var modules: [any] = mut [<any>];
     foreach (project in projects.projects) {
         if (fs\exists(project.dir + "/go.mod")) {
-            final result = go["go-mod-json"](ctx.withCwd(project.dir));
+            final result = golang["go-mod-edit-json"](ctx.withCwd(project.dir));
             modules.append({"dir": project.dir, "json": result.stdout});
         }
     }
@@ -731,9 +731,9 @@ export fun mod_sync(ctx: magus\Context, args: [str]) > void {
     // pre-release go.mod straight over the version bump `release` had just written - the
     // two-owners hazard MGS1020 reports. As a modification it still hashes into the key.
     ctx.modifiesExistingFiles("go.mod");
-    final flags = gomod\replaceArgs(go["go-mod-json"](ctx).stdout, modules: workspace_go_mods(ctx));
+    final flags = gomod\replaceArgs(golang["go-mod-edit-json"](ctx).stdout, modules: workspace_go_mods(ctx));
     if (flags.len() == 0) { return; }
-    final edited = go["go-mod-edit"](ctx, {"args": flags});
+    final edited = golang["go-mod-edit"](ctx, {"args": flags});
     if (ctx.has_charm("rw")) { return; }
     if (edited.stdout != fs\readFile("go.mod")) {
         throw "MGS1016: go.mod has workspace-local replace drift; run `magus run mod-sync:rw` to apply the derived replacements";
@@ -859,7 +859,7 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     build_args.append("-ldflags"); build_args.append(ld_flags());
     build_args.append("-o"); build_args.append(fs\join(stage, binary));
     build_args.append("./cmd/magus");
-    go["go-build"](ctx.withEnv(env), {"args": build_args});
+    golang["go-build"](ctx.withEnv(env), {"args": build_args});
 
     final asset = fs\join("dist", "magus_" + v + "_" + goos + "_" + goarch + suffix + ".tar.gz");
     archive\compress(stage, asset, {});
@@ -1128,7 +1128,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("assets/coverage.svg");
     final clean_before = vcs\isDirty([fs\join("assets", "coverage.svg")]) == false;
     ctx.needs(format);
-    go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out"]});
+    golang["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out"]});
     // Measure hand-written code only. Generated files (protobuf accessors, mocks,
     // the Buzz mirrors) are hundreds of functions no test will ever call, so
     // leaving them in makes the figure a statement about the code generators and
@@ -1191,8 +1191,8 @@ export fun build(ctx: magus\Context, args: [str])  > void {
 // `magus affected ci` when it's affected - the root does not reach into it.
 export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
-    go["golangci-lint"](ctx);
-    go["go-vet"](ctx);
+    golang["golangci-lint-run"](ctx);
+    golang["go-vet"](ctx);
     markdown.markdownlint(ctx);
     // NOT markdown.typos here, deliberately. The op walks the whole project directory,
     // and this project is the Go tree - 487 of its hits are code comments using British
@@ -1205,13 +1205,13 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 // tree change - so it is the canonical `security` target, not a lint step, and
 // its target policy above declares skip_cache for the same reason image-scan does.
 export fun security(ctx: magus\Context, args: [str]) > void {
-    go["govulncheck"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}));
+    golang["govulncheck"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}));
 }
 // Regenerates, then formats Go and tidies `go.mod`. Markdown is linted (not formatted):
 // markdownlint runs in lint; there is no markdown FORMATTER any more - biome (used for all
 // TypeScript/CSS) has no markdown support, and prettier was dropped rather than kept solely
 // to format markdown.
-export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); go["go-fmt"](ctx); go["go-mod-tidy"](ctx); }
+export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); golang["gofmt"](ctx); golang["go-mod-tidy"](ctx); }
 
 // Runs the CI gates through their declared dependencies.
 export fun ci(ctx: magus\Context, args: [str]) > void {

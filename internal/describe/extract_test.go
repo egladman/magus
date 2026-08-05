@@ -35,7 +35,7 @@ export fun gen_all(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ctx.glob("*-gen"));
 }
 
-export fun a_gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun a_gen(ctx: magus\Context, args: [str]) > void { golang["x"](); }
 `
 	g := Extract(src)
 
@@ -60,10 +60,10 @@ func TestCharms(t *testing.T) {
     else { ctx.needs(go_build); }
 }
 export fun fmt(ctx: magus\Context, args: [str]) > void {
-    if (ctx.has_charm("rw")) { go["go-fmt"](); }
+    if (ctx.has_charm("rw")) { golang["gofmt"](); }
     // ctx.has_charm("ignored") in a comment must not count
 }
-export fun plain(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun plain(ctx: magus\Context, args: [str]) > void { golang["x"](); }
 `)
 	build, _ := nodeByName(g, "build")
 	assert.Equal(t, []string{"container"}, build.Charms)
@@ -182,8 +182,8 @@ func TestExecOverrideDynamic(t *testing.T) {
 	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
     final env = mut {"GOOS": "linux"};
     final dir = "sub";
-    go["go-build"](ctx.withEnv(env), {});
-    go["go-test"](ctx.withCwd(dir), {});
+    golang["go-build"](ctx.withEnv(env), {});
+    golang["go-test"](ctx.withCwd(dir), {});
 }
 `)
 	build, _ := nodeByName(g, "build")
@@ -199,7 +199,7 @@ func TestExecOverrideDynamic(t *testing.T) {
 func TestExecOverrideAliasedIsDynamicExec(t *testing.T) {
 	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
     final e = ctx.withEnv({"K": "V"});
-    go["go-build"](e.withCwd("sub"), {});
+    golang["go-build"](e.withCwd("sub"), {});
 }
 `)
 	build, _ := nodeByName(g, "build")
@@ -246,24 +246,24 @@ func TestRemovedContextMethods(t *testing.T) {
 	}, removed)
 }
 
-// TestSpellOps pins the per-target spell extraction: bracket (`go["go-test"]`) and
+// TestSpellOps pins the per-target spell extraction: bracket (`golang["go-test"]`) and
 // dotted (`markdown.prettier(`) op calls are captured and grouped by spell, in call
 // order, but only for handles a spell import brought into scope — a host call
 // (os.exec) or a call on a non-spell identifier is dropped.
 func TestSpellOps(t *testing.T) {
-	g := Extract(`import "magus/spell/go";
+	g := Extract(`import "magus/spell/golang";
 import "magus/spell/markdown";
 import "os";
-export fun format(ctx: magus\Context, args: [str]) > void { go["go-fmt"](); }
+export fun format(ctx: magus\Context, args: [str]) > void { golang["gofmt"](); }
 export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
-    go["golangci-lint"](); go["go-vet"](); go["golangci-lint"](); markdown.markdownlint();
+    golang["golangci-lint-run"](); golang["go-vet"](); golang["golangci-lint-run"](); markdown.markdownlint();
 }
 export fun scan(ctx: magus\Context, args: [str]) > void { os.exec("trivy", []); other["x"](); }
 `)
 	lint, _ := nodeByName(g, "lint")
 	want := []types.TargetSpellUse{
-		{Spell: "go", Ops: []string{"golangci-lint", "go-vet"}}, // grouped, deduped, call order
+		{Spell: "golang", Ops: []string{"golangci-lint-run", "go-vet"}}, // grouped, deduped, call order
 		{Spell: "markdown", Ops: []string{"markdownlint"}},
 	}
 	assert.Equal(t, want, lint.Spells)
@@ -281,12 +281,12 @@ export fun scan(ctx: magus\Context, args: [str]) > void { os.exec("trivy", []); 
 // helper must not loop (cycle guard), and a helper's own spell ops only attribute
 // to callers, never leak between sibling targets.
 func TestSpellOpsThroughHelper(t *testing.T) {
-	g := Extract(`import "magus/spell/docker";
-import "magus/spell/cosign";
+	g := Extract(`import "magus/spell/oci";
+import "magus/spell/sigstore";
 
 fun build_variant(tag: str) > void {
-    if (ctx.has_charm("sign")) { cosign["cosign-sign"](); }
-    docker["docker-buildx"]();
+    if (ctx.has_charm("sign")) { sigstore["cosign-sign"](); }
+    oci["docker-buildx-build"]();
     self_loop();
 }
 fun self_loop() > void { self_loop(); }
@@ -295,13 +295,13 @@ export fun image_build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     build_variant("latest");
 }
-export fun preflight(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun preflight(ctx: magus\Context, args: [str]) > void { golang["x"](); }
 `)
 	img, ok := nodeByName(g, "image-build")
 	require.True(t, ok, "missing image-build; got %v", g)
 	wantSpells := []types.TargetSpellUse{
-		{Spell: "cosign", Ops: []string{"cosign-sign"}},
-		{Spell: "docker", Ops: []string{"docker-buildx"}},
+		{Spell: "sigstore", Ops: []string{"cosign-sign"}},
+		{Spell: "oci", Ops: []string{"docker-buildx-build"}},
 	}
 	assert.Equal(t, wantSpells, img.Spells, "ops through helper")
 	assert.Equal(t, []string{"sign"}, img.Charms, "charm through helper")
@@ -315,16 +315,16 @@ export fun preflight(ctx: magus\Context, args: [str]) > void { go["x"](); }
 // text inside a string literal — an echo/help/error message — does not register a
 // phantom spell op. Only the op string of a real bracket call is read.
 func TestSpellOpsIgnoresStringLiterals(t *testing.T) {
-	g := Extract(`import "magus/spell/go";
+	g := Extract(`import "magus/spell/golang";
 export fun help(ctx: magus\Context, args: [str]) > void {
     os.exec("echo", ["run go.fmt() then go[\"go-test\"]() yourself"]);
-    go["go-build"]();
+    golang["go-build"]();
 }
 `)
 	help, _ := nodeByName(g, "help")
-	// The only real call is go["go-build"](); the go.fmt()/go["go-test"] mentions
+	// The only real call is golang["go-build"](); the go.fmt()/golang["go-test"] mentions
 	// live inside the echo string and must be ignored.
-	want := []types.TargetSpellUse{{Spell: "go", Ops: []string{"go-build"}}}
+	want := []types.TargetSpellUse{{Spell: "golang", Ops: []string{"go-build"}}}
 	assert.Equal(t, want, help.Spells, "string-literal mentions must not count")
 }
 
@@ -333,7 +333,7 @@ export fun help(ctx: magus\Context, args: [str]) > void {
 // registers targets (kebab-case), so a camelCase function and a hyphenated
 // node reconcile.
 func TestNameNormalization(t *testing.T) {
-	g := Extract(`export fun goBuild(ctx: magus\Context, args: [str]) > void { go["x"](); }
+	g := Extract(`export fun goBuild(ctx: magus\Context, args: [str]) > void { golang["x"](); }
 export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(goBuild); }
 `)
 	_, ok := nodeByName(g, "go-build")
@@ -349,7 +349,7 @@ func TestBraceInString(t *testing.T) {
     os.exec("sh", ["-c", "echo }"]);
     ctx.needs(fmt);
 }
-export fun fmt(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun fmt(ctx: magus\Context, args: [str]) > void { golang["x"](); }
 `)
 	build, _ := nodeByName(g, "build")
 	assert.Equal(t, []string{"fmt"}, build.Dependencies, "brace in string must not truncate body")
@@ -361,7 +361,7 @@ func TestTrailingComment(t *testing.T) {
 	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(real); // ctx.needs(fake)
 }
-export fun real(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun real(ctx: magus\Context, args: [str]) > void { golang["x"](); }
 `)
 	build, _ := nodeByName(g, "build")
 	assert.Equal(t, []string{"real"}, build.Dependencies, "trailing comment ignored")
@@ -378,8 +378,8 @@ func TestNeedsGlobMultiPattern(t *testing.T) {
 	g := Extract(`export fun all(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ctx.glob("*-gen", "check-*"));
 }
-export fun docs_gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
-export fun check_lint(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun docs_gen(ctx: magus\Context, args: [str]) > void { golang["x"](); }
+export fun check_lint(ctx: magus\Context, args: [str]) > void { golang["x"](); }
 `)
 	all, _ := nodeByName(g, "all")
 	want := []string{"check-lint", "docs-gen"}
@@ -393,8 +393,8 @@ func TestNeedsGlobNegation(t *testing.T) {
 	g := Extract(`export fun all(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ctx.glob("*-gen", "!skip-gen"));
 }
-export fun docs_gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
-export fun skip_gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun docs_gen(ctx: magus\Context, args: [str]) > void { golang["x"](); }
+export fun skip_gen(ctx: magus\Context, args: [str]) > void { golang["x"](); }
 `)
 	all, _ := nodeByName(g, "all")
 	assert.Equal(t, []string{"docs-gen"}, all.Dependencies, "negated target is not an edge")
@@ -405,9 +405,9 @@ export fun skip_gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
 // target names (a starless pattern is suffix shorthand), a multi-pattern glob
 // yields every match, and a handle in a trailing comment is prose, not an edge.
 func TestNeedsHandles(t *testing.T) {
-	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void { go["x"](); }
-export fun a_gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
-export fun b_gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
+	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void { golang["x"](); }
+export fun a_gen(ctx: magus\Context, args: [str]) > void { golang["x"](); }
+export fun b_gen(ctx: magus\Context, args: [str]) > void { golang["x"](); }
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(build);
     ctx.needs(ctx.glob("*-gen", "b-*"));
@@ -427,7 +427,7 @@ export fun build_playground(ctx: magus\Context, args: [str]) > void {
     ctx.needs(gopherbuzz.build);
     // gopherbuzz.ignored in a comment must not count
 }
-export fun preflight(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun preflight(ctx: magus\Context, args: [str]) > void { golang["x"](); }
 `)
 	bp, ok := nodeByName(g, "build-playground")
 	require.True(t, ok, "missing build-playground; got %v", g)
@@ -445,9 +445,9 @@ func TestDependencyTokensInStringLiterals(t *testing.T) {
 	g := Extract(`import "project/../api" as api;
 export fun build(ctx: magus\Context, args: [str]) > void {
     magus.info("run ctx.needs(setup) and api.compile first");
-    go["go-build"]();
+    golang["go-build"]();
 }
-export fun setup(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun setup(ctx: magus\Context, args: [str]) > void { golang["x"](); }
 `)
 	b, ok := nodeByName(g, "build")
 	require.True(t, ok, "missing build; got %v", g)
@@ -464,7 +464,7 @@ func TestCrossFileInputs(t *testing.T) {
 	g := Extract(`import "project/../lib" as lib;
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(lib.file("go.mod"), "src/**/*.go");
-    go["go-build"]();
+    golang["go-build"]();
 }
 `)
 	b, ok := nodeByName(g, "build")
@@ -483,7 +483,7 @@ func TestCrossFileInputsDynamic(t *testing.T) {
 	g := Extract(`import "project/../lib" as lib;
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(lib.file(args[0]));
-    go["go-build"]();
+    golang["go-build"]();
 }
 `)
 	b, ok := nodeByName(g, "build")
@@ -495,7 +495,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 func TestCycle(t *testing.T) {
 	acyclic := Extract(`export fun a(ctx: magus\Context, args: [str]) > void { ctx.needs(b); }
 export fun b(ctx: magus\Context, args: [str]) > void { ctx.needs(c); }
-export fun c(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun c(ctx: magus\Context, args: [str]) > void { golang["x"](); }
 `)
 	assert.Nil(t, Cycle(acyclic), "acyclic graph reported cycle")
 

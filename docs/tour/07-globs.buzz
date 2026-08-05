@@ -7,15 +7,15 @@
 // shows the family and its edges.
 
 import "magus";
-import "magus/spell/go";
-import "magus/spell/buf";
+import "magus/spell/golang";
+import "magus/spell/protobuf";
 
-magus\project({ "spells": [go, buf] });
+magus\project({ "spells": [golang, protobuf] });
 
 // One target per generator, all sharing the -generate suffix.
-export fun proto_generate(ctx: magus\Context, args: [str]) > void { buf["buf-generate"](ctx); }
-export fun mock_generate(ctx: magus\Context, args: [str])  > void { go["go-generate"](ctx); }
-export fun sql_generate(ctx: magus\Context, args: [str])   > void { go["go-generate"](ctx); }
+export fun proto_generate(ctx: magus\Context, args: [str]) > void { protobuf["buf-generate"](ctx); }
+export fun mock_generate(ctx: magus\Context, args: [str])  > void { golang["go-generate"](ctx); }
+export fun sql_generate(ctx: magus\Context, args: [str])   > void { golang["go-generate"](ctx); }
 
 // The umbrella: magus.glob collects every current AND future *-generate target as
 // handles, and magus.needs depends on them. glob("name") with no wildcard is
@@ -33,7 +33,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 // running it from the umbrella would make `run generate` fail on a laptop with
 // nothing listening. A leading "!" subtracts it.
 export fun snapshot_generate(ctx: magus\Context, args: [str]) > void {
-    go["go-generate"](ctx);
+    golang["go-generate"](ctx);
 }
 
 // "*-generate" gathers the family; "!snapshot-generate" removes one member. Order
@@ -75,7 +75,7 @@ export fun generate_fast(ctx: magus\Context, args: [str]) > void {
 // (its generate and its lint), and nothing else - the handles say exactly which.
 // Either way needs only ever takes handles: a function, or the handles glob
 // resolves a pattern to.
-export fun proto_lint(ctx: magus\Context, args: [str]) > void { buf["buf-lint"](ctx); }
+export fun proto_lint(ctx: magus\Context, args: [str]) > void { protobuf["buf-lint"](ctx); }
 export fun proto_all(ctx: magus\Context, args: [str]) > void {
     ctx.needs(proto_generate, proto_lint);
 }

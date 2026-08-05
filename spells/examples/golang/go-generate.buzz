@@ -1,0 +1,10 @@
+// Wire go-generate into a `generate` target: `magus run generate` forks
+// `go generate ./...`.
+import "magus";
+import "magus/spell/golang";
+
+magus\project({ "spells": [golang] });
+
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    golang["go-generate"](ctx);
+}

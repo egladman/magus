@@ -88,6 +88,18 @@ export fun mgs_getVersionCommands() > {str: [str]} {
 // engine rewrites that one verb when bun is resolved.
 export fun mgs_getPackageManagerBin() > str { return "pnpm"; }
 
+// mgs_listNamingDeviations declares the ops the naming formula cannot decide. Each
+// entry is argued rather than silently taken - an undeclared deviation is
+// indistinguishable from an op nobody thought about. See MGS1024.
+export fun mgs_listNamingDeviations() > {str: str} {
+    return {
+        "node-test": "the formula yields `node`, which names the runtime rather than the action it takes",
+        "run-script": "the formula yields `run`, which says nothing; the op runs a package.json script by name",
+        "dev-server": "the formula yields `dev`, the script name; the op names the capability it starts",
+    };
+}
+
+
 // mgs_getLanguage names the source language this spell adapts, canonical and lowercase
 // so it matches the language attr on the TypeScript files and symbols SCIP ingests. It
 // lets `magus query language:typescript` reach this adapter alongside the code it builds.
@@ -227,6 +239,6 @@ export fun mgs_listTargets() > any {
             "eslint": eslint, "install": install, "run-script": runScript,
             "preflight": preflight, "prettier": prettier, "tsc": tsc,
             "tsc-build": tscBuild, "tsc-clean": tscClean,
-            "vitest": vitest, "jest": jest, "node-test": nodeTest,
+            "vitest-run": vitest, "jest": jest, "node-test": nodeTest,
             "dev-server": devServer, "scip": scip};
 }

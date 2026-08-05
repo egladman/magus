@@ -13,8 +13,8 @@ import "os";
 // its basename. Pass an explicit path — configure("sub", {...}) — to configure a
 // different project (one magusfile declaring several):
 //
-//   import "magus/spell/go";
-//   magus.project({ "spells": [go], "outputs": ["bin/*"], "depends_on": ["../api"] });
+//   import "magus/spell/golang";
+//   magus.project({ "spells": [golang], "outputs": ["bin/*"], "depends_on": ["../api"] });
 
 // Each exported function is a runnable target. Compose a stage by calling a bound
 // spell's tool-native op from its body, or run a command with os.exec

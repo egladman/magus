@@ -86,7 +86,7 @@ to _one_ target, declare it in that target's body with `ctx.readsFiles(...)` /
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles("schema/**", "codegen.config.json");
     ctx.writesFiles("dist/**");
-    go["go-build"](ctx);
+    golang["go-build"](ctx);
 }
 ```
 

@@ -9,10 +9,10 @@
 // generated outputs (gen/**) itself, so a .proto edit reruns codegen and invalidates
 // everything downstream that consumes the generated code.
 
-import "magus/spell/buf";
+import "magus/spell/protobuf";
 
 magus\project({
-    "spells": [buf],
+    "spells": [protobuf],
     "outputs": ["gen/**"],
 });
 
@@ -54,10 +54,10 @@ magus\project({
 // It lands in gen/, already declared as this project's output, so it needs no new declaration.
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles("go.mod");
-    buf["buf-generate"](ctx);
-    buf["buf-build"](ctx, {"args": ["-o", "gen/descriptor.binpb"]});
+    protobuf["buf-generate"](ctx);
+    protobuf["buf-build"](ctx, {"args": ["-o", "gen/descriptor.binpb"]});
 }
-export fun lint(ctx: magus\Context, args: [str]) > void { buf["buf-lint"](ctx); }
+export fun lint(ctx: magus\Context, args: [str]) > void { protobuf["buf-lint"](ctx); }
 export fun ci(ctx: magus\Context, args: [str]) > void {
     ctx.needs(generate, lint);
 }

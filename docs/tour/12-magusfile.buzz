@@ -10,10 +10,10 @@
 // is runnable here. See the docs on projects/workspaces for the multi-file setup.
 
 import "magus";                 // project registration, targets, dependency edges
-import "magus/spell/buf";       // protobuf toolchain: buf-generate, buf-lint, buf-format
-import "magus/spell/go";        // Go toolchain: go-build, go-test, go-vet, go-fmt, ...
+import "magus/spell/protobuf";       // protobuf toolchain: buf-generate, buf-lint, buf-format
+import "magus/spell/golang";        // Go toolchain: go-build, go-test, go-vet, go-fmt, ...
 import "magus/spell/typescript";        // TypeScript toolchain: tsc, eslint, prettier, vitest
-import "magus/spell/docker";    // container image: docker-build, hadolint
+import "magus/spell/oci";    // container image: docker-build, hadolint
 
 final VERSION: str = "1.4.0";
 final IMAGE: str = "ghcr.io/example/api";
@@ -35,7 +35,7 @@ final LINT_SLOTS: int = 4;
 // declared inputs and replays outputs when they are unchanged), which is the whole
 // point, so we do NOT opt targets out of it here.
 magus\project({
-    "spells": [buf, go, typescript, docker],
+    "spells": [protobuf, golang, typescript, oci],
     "outputs": ["gen/**", "bin/**"],
     "targets": {
         "js-lint": {"slots": LINT_SLOTS},
@@ -77,8 +77,8 @@ export fun preflight(ctx: magus\Context, args: [str]) > void {}
 // when those inputs change. (Contrast with a drift-gate target that verifies
 // committed output is current on every run; that one would set skip_cache because
 // its point is the check, not a cacheable artifact.)
-export fun proto_generate(ctx: magus\Context, args: [str]) > void { buf["buf-generate"](ctx); }
-export fun mock_generate(ctx: magus\Context, args: [str])  > void { go["go-generate"](ctx); }
+export fun proto_generate(ctx: magus\Context, args: [str]) > void { protobuf["buf-generate"](ctx); }
+export fun mock_generate(ctx: magus\Context, args: [str])  > void { golang["go-generate"](ctx); }
 
 // The umbrella `generate` target pulls in every `*-generate` target with ONE
 // pattern instead of listing each by hand: ctx.glob("*-generate") resolves to
@@ -98,8 +98,8 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 // needed here. (Try `run format` then `run format:rw` in the console to compare.)
 export fun format(ctx: magus\Context, args: [str]) > void {
     ctx.needs(generate);
-    buf["buf-format"](ctx);
-    go["go-fmt"](ctx);
+    protobuf["buf-format"](ctx);
+    golang["gofmt"](ctx);
     typescript["prettier"](ctx);
 }
 
@@ -111,12 +111,12 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 // auto-fixable findings where a tool supports it (e.g. golangci-lint --fix).
 export fun proto_lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
-    buf["buf-lint"](ctx);
+    protobuf["buf-lint"](ctx);
 }
 export fun go_lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
-    go["go-vet"](ctx);
-    go["golangci-lint"](ctx);
+    golang["go-vet"](ctx);
+    golang["golangci-lint-run"](ctx);
 }
 export fun js_lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
@@ -131,15 +131,15 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 // Compile the version-stamped server binary and type-check the client.
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
-    go["go-build"](ctx, {"args": ["-ldflags", ldflags(VERSION), "-o", "bin/api", "./cmd/api"]});
+    golang["go-build"](ctx, {"args": ["-ldflags", ldflags(VERSION), "-o", "bin/api", "./cmd/api"]});
     typescript["tsc"](ctx);
 }
 
 // Run both suites.
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
-    go["go-test"](ctx);
-    typescript["vitest"](ctx);
+    golang["go-test"](ctx);
+    typescript["vitest-run"](ctx);
 }
 
 // The conventional anchor `magus affected ci` keys off. It declares no work of
@@ -157,9 +157,9 @@ export fun image_build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(build);
     final tag = IMAGE + ":" + VERSION;
     if (ctx.has_charm("cd")) {
-        docker["docker-build"](ctx, {"args": ["--platform", "linux/amd64,linux/arm64", "--push", "-t", tag, "."]});
+        oci["docker-build"](ctx, {"args": ["--platform", "linux/amd64,linux/arm64", "--push", "-t", tag, "."]});
     } else {
-        docker["docker-build"](ctx, {"args": ["--load", "-t", tag, "."]});
+        oci["docker-build"](ctx, {"args": ["--load", "-t", tag, "."]});
     }
 }
 

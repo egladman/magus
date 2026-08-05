@@ -245,7 +245,7 @@ func TestTargetUsage(t *testing.T) {
 
 	assert.Equal(t, flag.ErrHelp, usageErr)
 	out := string(content)
-	assert.Contains(t, out, `export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx); }`,
+	assert.Contains(t, out, `export fun build(ctx: magus\Context, args: [str]) > void { golang["go-build"](ctx); }`,
 		"the worked example must be real Buzz, matching the README")
 	assert.NotContains(t, out, "global function build",
 		"the stale non-Buzz example must be gone")

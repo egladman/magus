@@ -1,0 +1,14 @@
+// cargo-deny is the broader policy gate: advisories plus licenses, bans, and
+// sources, per the project's deny.toml. A workspace picks cargo-audit,
+// cargo-deny, or both for its `security` target; the advisory half tracks the
+// database, not the tree, so skip_cache applies the same way.
+import "magus";
+import "magus/spell/rust";
+
+magus\project({ "spells": [rust], "targets": {
+    "security": {"skip_cache": "reads the RustSec advisory database, which changes independently of this tree"},
+} });
+
+export fun security(ctx: magus\Context, args: [str]) > void {
+    rust["cargo-deny-check"](ctx);
+}

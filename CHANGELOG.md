@@ -269,7 +269,7 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   edge. `DescribeProjects` and `DescribeEvaluatedProjects` keep a struct, because both
   carry a real `Workspace` field. `host.ModulesOutput` is now `host.Modules`.
 - `magus describe spell` reports how to reach a spell and what it adapts: an `import`
-  line you can paste (`import "magus/spell/go";`) and the source language it adapts.
+  line you can paste (`import "magus/spell/golang";`) and the source language it adapts.
   `SpellEntry` carries the import path as `buzz_import` in `-o json`. It is a path, not
   a handle: spell imports are read statically to build the target graph, so a spell
   reached any other way would lose its edge without failing.

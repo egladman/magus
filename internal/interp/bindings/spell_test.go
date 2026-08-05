@@ -142,18 +142,18 @@ magus.project(".", {"spells": [widget]});`)
 
 // TestBuzzSpellImport verifies that a built-in spell is importable via
 // `import "magus/spell/<name>"` in a Buzz magusfile, binding the spell handle
-// under its basename (go, docker, etc.) with the expected name and callable ops.
+// under its basename (go, oci, etc.) with the expected name and callable ops.
 func TestBuzzSpellImport(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
-import "magus/spell/go";
-import "magus/spell/docker";
+import "magus/spell/golang";
+import "magus/spell/oci";
 
 export fun check(ctx: magus\Context, args: [str]) > void {
-    if (go.name != "go") { error("go.name mismatch: " + go.name); }
-    if (docker.name != "docker") { error("docker.name mismatch: " + docker.name); }
+    if (golang.name != "golang") { error("golang.name mismatch: " + golang.name); }
+    if (oci.name != "oci") { error("oci.name mismatch: " + oci.name); }
 }
 `)
 
@@ -413,8 +413,8 @@ func TestSuggestSpellName(t *testing.T) {
 		{"cargo", "rust"},
 		{"python3", "python"},
 		{"JavaScript", "typescript"}, // alias lookup is case-insensitive
-		{"dcoker", "docker"},         // edit distance
-		{"cosgin", "cosign"},         // edit distance
+		{"oic", "oci"},               // edit distance
+		{"sigstoer", "sigstore"},     // edit distance
 		{"zzzzzzzzzz", ""},           // nothing within threshold
 	}
 	for _, c := range cases {
@@ -426,7 +426,7 @@ func TestSuggestSpellName(t *testing.T) {
 // and an unknown handle yields a did-you-mean naming the right one.
 func TestCheckSpellImports(t *testing.T) {
 	require.NoError(t, checkSpellImports(nil))
-	require.NoError(t, checkSpellImports([]string{"go", "typescript", "markdown"}),
+	require.NoError(t, checkSpellImports([]string{"golang", "typescript", "markdown"}),
 		"built-in and host-registered handles must pass")
 
 	// magusfile IS registered - dispatch needs it - so the generic registered-handle
@@ -441,7 +441,7 @@ func TestCheckSpellImports(t *testing.T) {
 	// javascript is a real SYNONYM for the typescript spell, not an abbreviation of
 	// it - the abbreviation aliases went away when spells took the names users
 	// already reach for.
-	err = checkSpellImports([]string{"go", "javascript"})
+	err = checkSpellImports([]string{"golang", "javascript"})
 	require.Error(t, err)
 	msg := err.Error()
 	assert.Contains(t, msg, `"javascript"`)
@@ -493,9 +493,9 @@ func TestSpellImportValidOnParse(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
-import "magus/spell/go";
-magus.project({"spells": [go]});
-export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }`)
+import "magus/spell/golang";
+magus.project({"spells": [golang]});
+export fun build(ctx: magus\Context, args: [str]) > void { golang["go-build"](); }`)
 
 	require.NoError(t, parseMagusfile(t, dir))
 }
@@ -551,10 +551,10 @@ func TestSpellImportIgnoresComments(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
-import "magus/spell/go";
+import "magus/spell/golang";
 // for a TS project you would instead: import "magus/spell/typescript";
-magus.project({"spells": [go]});
-export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }`)
+magus.project({"spells": [golang]});
+export fun build(ctx: magus\Context, args: [str]) > void { golang["go-build"](); }`)
 
 	require.NoError(t, parseMagusfile(t, dir), "a bad handle in a comment must not be flagged")
 }
@@ -573,11 +573,11 @@ func TestSpellModuleForkTarget(t *testing.T) {
 	dir := t.TempDir()
 	writeSpellMagusfile(t, dir, `
 import "magus";
-import "magus/spell/go";
+import "magus/spell/golang";
 
 export fun check(ctx: magus\Context, _args: [str]) > void {
-    if (go.name != "go") { throw "spell not found"; }
-    if (go["go-vet"] == null) { throw "fork go-vet must be a function (overlay)"; }
+    if (golang.name != "golang") { throw "spell not found"; }
+    if (golang["go-vet"] == null) { throw "fork go-vet must be a function (overlay)"; }
 }
 `)
 	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
@@ -585,17 +585,17 @@ export fun check(ctx: magus\Context, _args: [str]) > void {
 }
 
 // TestSpellModuleRequireBuiltin verifies a built-in spell can be imported as a
-// typed module: import "magus/spell/docker" binds the handle under its basename
+// typed module: import "magus/spell/oci" binds the handle under its basename
 // (docker), and the resolved value is the live spell handle (docker-build is callable).
 func TestSpellModuleRequireBuiltin(t *testing.T) {
 	dir := t.TempDir()
 	writeSpellMagusfile(t, dir, `
 import "magus";
-import "magus/spell/docker";
+import "magus/spell/oci";
 
 export fun check(ctx: magus\Context, _args: [str]) > void {
-    if (docker.name != "docker") { error("name mismatch: " + docker.name); }
-    if (docker["docker-build"] == null) { throw "docker-build op must be callable as a method"; }
+    if (oci.name != "oci") { error("name mismatch: " + oci.name); }
+    if (oci["docker-build"] == null) { throw "docker-build op must be callable as a method"; }
 }
 `)
 	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
@@ -625,7 +625,7 @@ func TestSpellModuleRequireLocal(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "spells", "locreq.buzz"), []byte(`
 export fun mgs_getName() > str { return "locreq"; }
 export fun mgs_listTargets() > any {
-    return {"build": {"bin": "true"}};
+    return {"go-build": {"bin": "true"}};
 }
 `), 0o644))
 	writeSpellMagusfile(t, dir, `
@@ -647,12 +647,12 @@ func TestSpellMultipleFields(t *testing.T) {
 	dir := t.TempDir()
 	writeSpellMagusfile(t, dir, `
 import "magus";
-import "magus/spell/go";
+import "magus/spell/golang";
 
 export fun check(ctx: magus\Context, args: [str]) > void {
-    if (go.name != "go") { error("name mismatch: " + go.name); }
-    if (go["go-build"] == null) { throw "go-build must be a function"; }
-    if (go["go-fmt"] == null) { throw "go-fmt must be a function"; }
+    if (golang.name != "golang") { error("name mismatch: " + golang.name); }
+    if (golang["go-build"] == null) { throw "go-build must be a function"; }
+    if (golang["gofmt"] == null) { throw "go-fmt must be a function"; }
 }
 `)
 	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)

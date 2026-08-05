@@ -519,7 +519,7 @@ func TestRawToolGuardFollowsSpellCatalog(t *testing.T) {
 func TestRawToolGuardNamesTheReplacementAndForwarding(t *testing.T) {
 	verdict := evaluateBashGuard("go test ./... -run TestFocused")
 	require.NotEmpty(t, verdict.Deny)
-	assert.Contains(t, verdict.Deny, "Run this instead: `magus run go::go-test`")
+	assert.Contains(t, verdict.Deny, "Run this instead: `magus run golang::go-test`")
 	assert.Contains(t, verdict.Deny, "Tool flags and overrides remain available")
 	assert.Contains(t, verdict.Deny, "-- <tool-args>")
 	assert.NotContains(t, verdict.Deny, "mise exec")

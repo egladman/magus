@@ -9,8 +9,8 @@ package main
 // To attach a spell to a project from a magusfile.buzz:
 //
 //	import "magus";
-//	import "magus/spell/go";
-//	magus.project({ "spells": [go] });
+//	import "magus/spell/golang";
+//	magus.project({ "spells": [golang] });
 //
 // Or from a Go magusfile using the magus package:
 //
@@ -18,7 +18,7 @@ package main
 //
 // To call a spell's targets directly from a Buzz target:
 //
-//	import "magus/spell/go";
+//	import "magus/spell/golang";
 //	go.build({ "cwd": "." });
 //
 // Built-in spells live under spells/<name>/; each is a spell.buzz source

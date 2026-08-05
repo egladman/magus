@@ -27,16 +27,16 @@ import (
 var fixtureFiles = map[string]string{
 	"magus.yaml": "concurrency: 4\n",
 	"magusfile.buzz": `import "magus";
-import "magus/spell/go";
-magus.project({ "spells": [go] });
+import "magus/spell/golang";
+magus.project({ "spells": [golang] });
 
 // Format the Go sources.
-export fun format(ctx: magus\Context, args: [str]) > void { go["go-fmt"](); }
+export fun format(ctx: magus\Context, args: [str]) > void { golang["gofmt"](); }
 
 // Run the Go test suite; formats first.
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
-    go["go-test"]();
+    golang["go-test"]();
 }
 `,
 }

@@ -6,12 +6,12 @@
 // watch one target drive another.
 
 import "magus";
-import "magus/spell/go";
+import "magus/spell/golang";
 
-magus\project({ "spells": [go] });
+magus\project({ "spells": [golang] });
 
 export fun build(ctx: magus\Context, args: [str]) > void {
-    go["go-build"](ctx);
+    golang["go-build"](ctx);
 }
 
 // The conventional anchor, wired with magus.needs like always.

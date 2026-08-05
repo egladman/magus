@@ -34,7 +34,7 @@ The REPL accepts Buzz expressions and evaluates them against the magusfile runti
 // example session
 > os\execSh("git rev-parse --short HEAD").stdout
 abc1234
-> go.name
+> golang.name
 go
 > os\exec("go", ["build", "./..."])
 ```

@@ -42,7 +42,7 @@ import "magus/spell/typescript";
 // go is imported for its go-run op only (content-generate/changelog-generate drive
 // repo-root Go tools through it), NOT added to the project spells list below: docs is
 // not a Go project, so it must not inherit go's **/*.go required-globs or language tag.
-import "magus/spell/go";
+import "magus/spell/golang";
 // Imported for its typos op only, NOT added to the project spells list below: binding
 // markdown here would also claim this tree's **/*.md for markdownlint, which the root
 // project already lints. The prose check is the part docs was missing.
@@ -195,13 +195,13 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void {
     // magus-examples replace in place and hard-error on if the markers are missing.
     // Declared as outputs they were deletable, and excluded from the source hash.
     ctx.modifiesExistingFiles("concepts/spells.md", "concepts/knowledge.md");
-    go["go-run"](ctx, {"args": ["../cmd/magus-docs", "-out", "./reference/buzz"]});
-    go["go-run"](ctx, {"args": ["../cmd/magus-configdocs", "-out", "./reference/config.md"]});
-    go["go-run"](ctx, {"args": ["../cmd/magus-spelldocs", "-out", "./concepts/spells", "-spells", "../spells"]});
-    go["go-run"](ctx, {"args": ["../cmd/magus-manpage", "-format", "md", "-out", "./reference/manpage"]});
-    go["go-run"](ctx, {"args": ["../cmd/magus-examples", "-docs", "./concepts/knowledge.md"]});
-    go["go-run"](ctx, {"args": ["../cmd/magus-skilldocs", "-out", "./reference/skills", "-src", "../cmd/magus"]});
-    go["go-run"](ctx, {"args": ["../cmd/magus-protodocs", "-descriptor", "../libs/proto/gen/descriptor.binpb", "-out", "./reference/api"]});
+    golang["go-run"](ctx, {"args": ["../cmd/magus-docs", "-out", "./reference/buzz"]});
+    golang["go-run"](ctx, {"args": ["../cmd/magus-configdocs", "-out", "./reference/config.md"]});
+    golang["go-run"](ctx, {"args": ["../cmd/magus-spelldocs", "-out", "./concepts/spells", "-spells", "../spells"]});
+    golang["go-run"](ctx, {"args": ["../cmd/magus-manpage", "-format", "md", "-out", "./reference/manpage"]});
+    golang["go-run"](ctx, {"args": ["../cmd/magus-examples", "-docs", "./concepts/knowledge.md"]});
+    golang["go-run"](ctx, {"args": ["../cmd/magus-skilldocs", "-out", "./reference/skills", "-src", "../cmd/magus"]});
+    golang["go-run"](ctx, {"args": ["../cmd/magus-protodocs", "-descriptor", "../libs/proto/gen/descriptor.binpb", "-out", "./reference/api"]});
 
     // The changelog as a docs page. CHANGELOG.md is generated at the repo ROOT (magus-utils,
     // from releases/*.yaml) and sits outside this project's walk, so a reader upgrading has

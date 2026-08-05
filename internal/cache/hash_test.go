@@ -267,7 +267,7 @@ func TestShortHash(t *testing.T) {
 
 // TestDerivedOverridesChangeTheKey is the correctness property behind ctx.derive: a
 // per-op execution override changes what the tool does, so two otherwise identical
-// steps must not share a cache entry. Without it, go["go-test"](ctx.derive({env:
+// steps must not share a cache entry. Without it, golang["go-test"](ctx.derive({env:
 // {"CGO_ENABLED": "0"}})) would replay a result computed with CGO enabled.
 //
 // Two Steps differing ONLY in Derived, so the assertion cannot pass for an unrelated

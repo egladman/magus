@@ -491,7 +491,7 @@ import "magus/spell/typescript";
 magus\project({ "spells": [typescript] });
 
 export fun test(ctx: magus\Context, args: [str]) > void {
-    typescript["vitest"](ctx);
+    typescript["vitest-run"](ctx);
 }
 ```
 

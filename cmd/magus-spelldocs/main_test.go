@@ -14,11 +14,11 @@ func TestReadExampleHonorsSpellsDir(t *testing.T) {
 	t.Cleanup(func() { spellsDir = orig })
 	spellsDir = "../../spells" // spells/ relative to cmd/magus-spelldocs/
 
-	ex := readExample("go", "go-build")
+	ex := readExample("golang", "go-build")
 	if ex == "" {
-		t.Fatal("readExample found no go/go-build example with -spells set; the path is not honored")
+		t.Fatal("readExample found no golang/go-build example with -spells set; the path is not honored")
 	}
-	if !strings.Contains(ex, "go-build") {
+	if !strings.Contains(ex, "go build") {
 		t.Errorf("example does not reference the op it documents: %q", ex)
 	}
 }

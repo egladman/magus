@@ -97,7 +97,7 @@ nearest known one.
 
 `no_language` takes prose, never `true`. A project with no toolchain spell is
 legal and common, so doctor cannot tell an intentional one (a polyglot harness no
-single pack describes) from a forgotten `import "magus/spell/go"` without being
+single pack describes) from a forgotten `import "magus/spell/golang"` without being
 told which it is. Requiring a reason keeps the exemption a decision the next
 reader can evaluate rather than a switch someone flipped to get a green check:
 
@@ -128,7 +128,7 @@ The `targets` sub-map keys a target name to a policy table:
 
 ```buzz
 magus\project({
-    "spells": [go],
+    "spells": [golang],
     "depends_on": ["../shared"],
     "outputs": ["dist/**"],
     "watch_ignore": { "glob": ["**/*.snap"] },
@@ -170,7 +170,7 @@ repo/                 # workspace root (magus.yaml, go.mod)
 `magus\project` also accepts an explicit path as its first argument. This is the rarer **central form**: one magusfile declares options for a discovered project at another workspace path.
 
 ```buzz
-magus\project({ "spells": [go] });          // configures THIS project (path from context)
+magus\project({ "spells": [golang] });          // configures THIS project (path from context)
 magus\project("api", { "depends_on": ["shared"] });  // configures the discovered "api" project
 ```
 

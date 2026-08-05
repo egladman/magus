@@ -45,7 +45,7 @@ Examples:
 | `magus run test api`        | `api`      | `test`         | -             | -     |
 | `magus run format:rw api`   | `api`      | `format`       | `rw`          | -     |
 | `magus run lint:rw,debug /` | all        | `lint`         | `rw`, `debug` | -     |
-| `magus run go::go-test`     | all        | `go-test` (op) | -             | `go`  |
+| `magus run golang::go-test`     | all        | `go-test` (op) | -             | `go`  |
 
 Invalid forms:
 
@@ -297,7 +297,7 @@ or `snake_case` op, it now works instead of silently never running.
 - **Lookups by literal key.** Normalization canonicalizes what gets _stored_, not
   how a literal subscript is spelled. `typescript["tsc"]` is an ordinary map-key
   lookup into the value `import "magus/spell/typescript"` binds, so it must name the canonical
-  (kebab) key. Likewise `go::lint` is still a graceful no-op - the go spell's
+  (kebab) key. Likewise `golang::lint` is still a graceful no-op - the go spell's
   linter op is `golangci-lint`, and that is a different word, not a different
   casing. See [spell-qualified targets](#cli-extension-spell-qualified-targets).
 - **Project paths.** `Path` is never normalized; `api` and `Api` are different
@@ -308,7 +308,7 @@ or `snake_case` op, it now works instead of silently never running.
 Given a magusfile declaring:
 
 ```buzz
-export fun go_build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx); }
+export fun go_build(ctx: magus\Context, args: [str]) > void { golang["go-build"](ctx); }
 ```
 
 all four of these resolve to the **one** registered target `go-build`, and thus
@@ -329,14 +329,14 @@ On the command line only, a double-colon prefix invokes one spell's op **directl
 
 ```sh
 magus run typescript::eslint api    # the eslint op of the typescript spell, in api/
-magus run go::go-vet                # the go-vet op of the go spell, all projects
-magus run go::golangci-lint         # the golangci-lint op of the go spell
+magus run golang::go-vet                # the go-vet op of the go spell, all projects
+magus run golang::golangci-lint-run         # the golangci-lint op of the go spell
 ```
 
 This is an **escape hatch** for ad-hoc runs and introspection, not the everyday surface (compose ops into [targets](spells.md#spells-vs-targets) instead). Because it is op-direct, the name after `::` is matched against the spell's op keys verbatim (no kebab/case normalization, unlike target names; see [Naming operations](spells.md#naming-operations)):
 
-- `go::golangci-lint` runs that op.
-- `go::lint` is a graceful **no-op**: the go spell has no op named `lint` (its linter op is `golangci-lint`), so nothing runs.
+- `golang::golangci-lint-run` runs that op.
+- `golang::lint` is a graceful **no-op**: the go spell has no op named `lint` (its linter op is `golangci-lint`), so nothing runs.
 
 The prefix is **not** stored in `Target`. The CLI strips it via `parseTarget` and passes it as a `WithSpellFilter` `RunOption`. The `ci` target does not support spell-qualified syntax.
 

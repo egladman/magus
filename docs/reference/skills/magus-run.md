@@ -177,7 +177,7 @@ genuinely need one op - a single formatter, one linter - address one directly
 with the spell-qualified form:
 
 ```sh
-magus run go::go-test             # one op from the go spell
+magus run golang::go-test             # one op from the go spell
 magus run buf::buf-lint
 ```
 
@@ -315,7 +315,7 @@ Every top-level target composes spell ops (tool-native operations). address one 
 with the spell-qualified form:
 
 ```sh
-magus run go::go-test             # one op from the go spell
+magus run golang::go-test             # one op from the go spell
 magus run buf::buf-lint
 ```
 

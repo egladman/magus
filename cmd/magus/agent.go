@@ -1208,7 +1208,7 @@ const (
 	// a spell op still runs through magus, so the cache, the sandbox, and
 	// affected tracking all survive.
 	//
-	// Rung 2 DOES forward args: `magus run go::go-test <p> -- -run TestX` runs
+	// Rung 2 DOES forward args: `magus run golang::go-test <p> -- -run TestX` runs
 	// `go test ./... -run TestX`. That looked broken until the cache keyed extra
 	// args - the run replayed a cached success, so the arg never executed and the
 	// feature appeared missing.
@@ -1221,9 +1221,9 @@ const (
 	// link-time fingerprint mismatch that took a full `go clean -cache` to clear.
 	runGuardContext = "this has an exact equivalent in magus, so it is DENIED rather than explained - not because it is dangerous, but because the replacement does strictly more (cache, sandbox, affected tracking) and costs you nothing. If the command WRITES into the working tree (generate, a formatter with -w/--write/--fix, go mod tidy, build output on a tracked path) the rule is firm and has no exceptions: a raw write leaves the owning target reporting drift it did not cause, and the workspace's account of itself wrong. Escalate only as far as you actually need:\n" +
 		"  1. TOP-LEVEL TARGET (use this almost always):  magus run test|build|lint|format|generate [<project>]  - `magus describe targets` lists every target, `-o name` for just the names\n" +
-		"  2. ONE SPELL OP, still through magus, when a whole target is too broad:  magus run <spell>::<op> [<project>]  (e.g. magus run go::go-test libs/foo). `magus describe spell <name>` lists a spell's ops.\n" +
-		"To see the exact command a target or op would run, WITHOUT running it, add --dry-run: `magus run go::go-test libs/foo --dry-run` prints `$ go test ./...`. Use that to learn what magus does under the hood instead of guessing and reaching for the raw tool.\n" +
-		"Args after `--` are forwarded, so a specific flag is NOT a reason to reach for the raw tool: `magus run go::go-test libs/foo -- -run TestX` runs `go test ./... -run TestX`, and a magusfile target receives them as its `args: [str]` parameter. The operation already supplies its own default arguments: forward only the extra flags or overrides you need. Narrow by PROJECT too - `magus run test libs/foo` runs less. Load the magus-run skill if not already loaded.\n" +
+		"  2. ONE SPELL OP, still through magus, when a whole target is too broad:  magus run <spell>::<op> [<project>]  (e.g. magus run golang::go-test libs/foo). `magus describe spell <name>` lists a spell's ops.\n" +
+		"To see the exact command a target or op would run, WITHOUT running it, add --dry-run: `magus run golang::go-test libs/foo --dry-run` prints `$ go test ./...`. Use that to learn what magus does under the hood instead of guessing and reaching for the raw tool.\n" +
+		"Args after `--` are forwarded, so a specific flag is NOT a reason to reach for the raw tool: `magus run golang::go-test libs/foo -- -run TestX` runs `go test ./... -run TestX`, and a magusfile target receives them as its `args: [str]` parameter. The operation already supplies its own default arguments: forward only the extra flags or overrides you need. Narrow by PROJECT too - `magus run test libs/foo` runs less. Load the magus-run skill if not already loaded.\n" +
 		"Do NOT retry this behind a wrapper. The guard reads the command being RUN, not the one being typed, so a launcher, `env -u GOROOT ...`, a `VAR=value` prefix, and `bash -c '...'` all reach the same verdict. Run the named magus command directly."
 	// Reverting regenerated output is the wrong default. An agent that did not
 	// hand-edit a gen/ file concludes it is not "its" change and discards it -

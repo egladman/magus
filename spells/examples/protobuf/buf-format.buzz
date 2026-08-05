@@ -1,0 +1,9 @@
+// buf-format checks formatting; the rw charm (magus run format:rw) rewrites in place.
+import "magus";
+import "magus/spell/protobuf";
+
+magus\project({ "spells": [protobuf] });
+
+export fun format(ctx: magus\Context, args: [str]) > void {
+    protobuf["buf-format"](ctx);
+}

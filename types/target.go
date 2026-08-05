@@ -67,7 +67,7 @@ const TargetCI = "ci"
 // targetNameRe constrains target names to alphanumerics plus '-' and '_'.
 // Everything else (notably ':' and '@') is reserved for target-reference
 // grammar such as "spell::target" and possible future modal forms like
-// "go::lint:<mode>".
+// "golang::lint:<mode>".
 var targetNameRe = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 // ValidateTargetName reports whether name is a well-formed target name.
