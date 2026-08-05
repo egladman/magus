@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2408,
-  "edge_count": 5438,
+  "node_count": 2409,
+  "edge_count": 5439,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -19555,6 +19555,15 @@
       "doc": "Run `magus insight <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like os.exec); opts.quiet captures the output without echoing it to the console.",
       "attrs": {
         "buzz": "magus\\insight(args, [opts]) → ExecResult"
+      }
+    },
+    {
+      "id": "method:magus.insight_report",
+      "kind": "method",
+      "label": "magus.insight_report",
+      "doc": "Every VCS-history lens plus the knowledge-graph axis, as one typed report: {hotspots, affinity, ownership, trend, volatility, graphStats}. Annotate the result `> InsightReport` for compile-checked field access - `r.ownership.projects` gives each project's primary author and bus-factor flag, `r.hotspots.files` the churn-by-complexity ranking, `r.volatility` the targets that flapped. This is the same data `magus insight report` renders as Markdown, handed over as values instead of a document to scrape. Runs a",
+      "attrs": {
+        "buzz": "magus\\insightReport(args, [opts]) → InsightReport"
       }
     },
     {
@@ -60028,6 +60037,13 @@
     {
       "source": "module:magus",
       "target": "method:magus.insight",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:magus",
+      "target": "method:magus.insight_report",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1

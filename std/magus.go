@@ -129,6 +129,16 @@ var Magus = Module{
 			Impl:    MagusInsight,
 		},
 		{
+			Name: "insight_report",
+			Doc:  "Every VCS-history lens plus the knowledge-graph axis, as one typed report: {hotspots, affinity, ownership, trend, volatility, graphStats}. Annotate the result `> InsightReport` for compile-checked field access - `r.ownership.projects` gives each project's primary author and bus-factor flag, `r.hotspots.files` the churn-by-complexity ranking, `r.volatility` the targets that flapped. This is the same data `magus insight report` renders as Markdown, handed over as values instead of a document to scrape. Runs a nested magus, so it works from a `magus buzz` script with no workspace on the context.",
+			Args: []Arg{
+				{Name: "args", Type: TypeStringSlice},
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "InsightReport"}},
+			Impl:    MagusInsightReport,
+		},
+		{
 			Name: "describe_file",
 			Doc:  "Classify paths against the workspace's declared globs: for each, the owning project and whether it is a declared `output` (generated - regenerate it, never hand-edit), a declared `source` (it feeds cache keys and the affected set), or `unclaimed`. Returns a typed DoctorReport-style envelope {definition, count, files}, not text to re-parse: this is the question \"can I disregard this changed file\", and a caller branches on `role` rather than grepping. Runs a nested magus, so it needs no workspace on the context and works from a `magus buzz` script.",
 			Args: []Arg{
@@ -336,6 +346,13 @@ func MagusInsight(ctx context.Context, args []string, opts map[string]any) (type
 // rather than as console text a caller has to parse back out of a string.
 func MagusDoctor(ctx context.Context, args []string, opts map[string]any) (types.DoctorReport, error) {
 	return runMagusJSON[types.DoctorReport](ctx, "doctor", args, opts)
+}
+
+// MagusInsightReport returns every insight lens as one typed report. `magus insight`
+// itself stays the escape hatch for a single lens, the same split describe keeps: the
+// noun that has a domain type gets a typed method, the rest stays free-form.
+func MagusInsightReport(ctx context.Context, args []string, opts map[string]any) (types.InsightReport, error) {
+	return runMagusJSON[types.InsightReport](ctx, "insight", append([]string{"report"}, args...), opts)
 }
 
 // MagusDescribeFile classifies paths as generated output, declared source, or

@@ -218,3 +218,72 @@ var DoctorSummarySource string
 //go:generate go run ../../cmd/magus-utils types -type DoctorReport -out gen/types/doctorreport.buzz
 //go:embed gen/types/doctorreport.buzz
 var DoctorReportSource string
+
+// The magus.insightReport bundle, declared leaf-first: every lens (hotspots, affinity,
+// ownership, trend, volatility) plus the knowledge-graph axis, as typed values rather
+// than a Markdown report to scrape. Order matters - a struct-valued field mirrors as its
+// Buzz name and that name must already be declared.
+
+//go:generate go run ../../cmd/magus-utils types -type Node -out gen/types/node.buzz
+//go:embed gen/types/node.buzz
+var NodeSource string
+
+//go:generate go run ../../cmd/magus-utils types -type FileHotspot -out gen/types/filehotspot.buzz
+//go:embed gen/types/filehotspot.buzz
+var FileHotspotSource string
+
+//go:generate go run ../../cmd/magus-utils types -type Hotspots -out gen/types/hotspots.buzz
+//go:embed gen/types/hotspots.buzz
+var HotspotsSource string
+
+//go:generate go run ../../cmd/magus-utils types -type CoChange -out gen/types/cochange.buzz
+//go:embed gen/types/cochange.buzz
+var CoChangeSource string
+
+//go:generate go run ../../cmd/magus-utils types -type Affinity -out gen/types/affinity.buzz
+//go:embed gen/types/affinity.buzz
+var AffinitySource string
+
+//go:generate go run ../../cmd/magus-utils types -type OwnershipEntry -out gen/types/ownershipentry.buzz
+//go:embed gen/types/ownershipentry.buzz
+var OwnershipEntrySource string
+
+//go:generate go run ../../cmd/magus-utils types -type Ownership -out gen/types/ownership.buzz
+//go:embed gen/types/ownership.buzz
+var OwnershipSource string
+
+//go:generate go run ../../cmd/magus-utils types -type TrendEntry -out gen/types/trendentry.buzz
+//go:embed gen/types/trendentry.buzz
+var TrendEntrySource string
+
+//go:generate go run ../../cmd/magus-utils types -type Trend -out gen/types/trend.buzz
+//go:embed gen/types/trend.buzz
+var TrendSource string
+
+//go:generate go run ../../cmd/magus-utils types -type VolatilityTarget -out gen/types/volatilitytarget.buzz
+//go:embed gen/types/volatilitytarget.buzz
+var VolatilityTargetSource string
+
+//go:generate go run ../../cmd/magus-utils types -type Volatility -out gen/types/volatility.buzz
+//go:embed gen/types/volatility.buzz
+var VolatilitySource string
+
+//go:generate go run ../../cmd/magus-utils types -type KnowledgeGodNode -out gen/types/knowledgegodnode.buzz
+//go:embed gen/types/knowledgegodnode.buzz
+var KnowledgeGodNodeSource string
+
+//go:generate go run ../../cmd/magus-utils types -type KnowledgeOrphan -out gen/types/knowledgeorphan.buzz
+//go:embed gen/types/knowledgeorphan.buzz
+var KnowledgeOrphanSource string
+
+//go:generate go run ../../cmd/magus-utils types -type KnowledgeDocCoverage -out gen/types/knowledgedoccoverage.buzz
+//go:embed gen/types/knowledgedoccoverage.buzz
+var KnowledgeDocCoverageSource string
+
+//go:generate go run ../../cmd/magus-utils types -type KnowledgeStats -out gen/types/knowledgestats.buzz
+//go:embed gen/types/knowledgestats.buzz
+var KnowledgeStatsSource string
+
+//go:generate go run ../../cmd/magus-utils types -type InsightReport -out gen/types/insightreport.buzz
+//go:embed gen/types/insightreport.buzz
+var InsightReportSource string

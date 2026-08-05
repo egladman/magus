@@ -586,6 +586,21 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value string, t reflect.Type, 
 		fmt.Fprintf(w, "%s\t%s.MapSet(%s, %s)\n", indent, out, key, converted)
 		fmt.Fprintf(w, "%s}\n", indent)
 		return out, nil
+	case reflect.Pointer:
+		// An optional field: nil crosses the boundary as Buzz null, matching the `T?`
+		// the mirror declares. A nil-checked temporary rather than an inline
+		// expression, because the element may need statements of its own (a time
+		// needs formatting, a struct its own conversion function).
+		out := e.name("opt")
+		fmt.Fprintf(w, "%s%s := vm.Null\n", indent, out)
+		fmt.Fprintf(w, "%sif %s != nil {\n", indent, value)
+		elem, err := e.value(w, "(*"+value+")", t.Elem(), indent+"\t")
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintf(w, "%s\t%s = %s\n", indent, out, elem)
+		fmt.Fprintf(w, "%s}\n", indent)
+		return out, nil
 	default:
 		return "", fmt.Errorf("unsupported field type %s", t)
 	}

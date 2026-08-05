@@ -151,7 +151,19 @@ func (r *buzzObjectRenderer) value(value string, t reflect.Type) (string, error)
 	case reflect.Struct:
 		return value + ".BuzzObject()", nil
 	case reflect.Pointer:
-		return "", fmt.Errorf("pointer fields need an explicit Buzz boundary representation")
+		// An optional field: nil crosses as null, which is what the mirror already
+		// declares it as (`Volatility?`). Emitted as a nil-checked temporary rather
+		// than an inline expression because the element may itself need statements
+		// (a time needs formatting, a struct needs its BuzzObject call).
+		out := r.name("opt")
+		fmt.Fprintf(r.b, "\tvar %s any\n", out)
+		fmt.Fprintf(r.b, "\tif %s != nil {\n", value)
+		expr, err := r.value("(*"+value+")", t.Elem())
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintf(r.b, "\t\t%s = %s\n\t}\n", out, expr)
+		return out, nil
 	default:
 		return value, nil
 	}
