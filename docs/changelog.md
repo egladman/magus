@@ -84,7 +84,7 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 - [MGS1020](reference/codes/magusfile/MGS1020.md) reports a generated file claimed as
   an output by more than one target, and documents the one-owner rule for generated files.
 - `magus doctor` findings come at two levels, and the split is a correction. `[fail]` is a
-  workspace that is wrong however you like to work: a dependency cycle, an unparseable
+  workspace that is wrong however you like to work: a dependency cycle, an unparsable
   magusfile, two targets claiming one output. `[advice]` is a convention magus recommends -
   target naming, language coverage, spell doc comments - which is reported and exits zero,
   because `ci` is the one target magus reserves and the rest of the layout belongs to

@@ -24,7 +24,7 @@ func doctorCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "base-ref reachability.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Findings come at two levels. [fail] is a workspace that is wrong -")
-			fmt.Fprintln(os.Stderr, "a dependency cycle, an unparseable magusfile, two targets claiming")
+			fmt.Fprintln(os.Stderr, "a dependency cycle, an unparsable magusfile, two targets claiming")
 			fmt.Fprintln(os.Stderr, "one output - and exits non-zero. [advice] is a convention magus")
 			fmt.Fprintln(os.Stderr, "recommends, reported and not fatal, because how your workspace is")
 			fmt.Fprintln(os.Stderr, "laid out is your call.")

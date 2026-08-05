@@ -457,7 +457,7 @@ results. Checks include:
   - VCS base-ref reachability
 
 Findings come at two levels. [fail] is a workspace that is wrong regardless
-of how you like to work - a dependency graph cycle, an unparseable magusfile,
+of how you like to work - a dependency graph cycle, an unparsable magusfile,
 two targets claiming one output - and exits non-zero. [advice] is a
 convention magus recommends, such as target naming or language coverage; it
 is reported and exits zero, because ci is the one target name magus reserves
