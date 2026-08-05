@@ -170,8 +170,12 @@ final footnotes_marker = "<!-- magus:advice:footnotes -->";
 // "edited" badge but not when, so a reader cannot tell whether they are looking at
 // findings for the commit they are reviewing or for one from yesterday. Every other
 // comment on the page is immutable and dated; this one is not, so it dates itself.
+// Marked so compose can strip the PREVIOUS one. Without a marker each advisor appended
+// another copy and a comment ended a run wearing eight footers, one per advisor.
+final footer_marker = "<!-- magus:advice:footer -->";
+
 fun footer() > str {
-    return "<sub><i>Last updated " + time\nowIso() + ". "
+    return footer_marker + "\n<sub><i>Last updated " + time\nowIso() + ". "
         + "Every one of these is an input you can set to <code>false</code>, and this "
         + "whole comment is one step you can drop. "
         + "<a href=\"https://eli.gladman.cc/magus/guides/integrations/pr-advice/\">"
@@ -200,10 +204,15 @@ export fun compose(current: str, name: str, title: str, body: str) > str {
     if (head.indexOf(comment_marker) == null) { head = comment_marker + "\n" + preface(); }
     // The definitions block is rebuilt from the finished comment, so strip whatever is
     // there before composing.
-    final marked = head.indexOf(footnotes_marker);
-    if (marked != null) { head = head.sub(0, len: marked); }
-    final tailMarked = tail.indexOf(footnotes_marker);
-    if (tailMarked != null) { tail = tail.sub(0, len: tailMarked); }
+    // Both trailers are rebuilt every time, so cut whatever a previous run left. The
+    // footnotes marker is legacy - comments written before footnotes were abandoned still
+    // carry one - and the footer marker is how this stays a single footer.
+    foreach (marker in [footnotes_marker, footer_marker]) {
+        final inHead = head.indexOf(marker);
+        if (inHead != null) { head = head.sub(0, len: inHead); }
+        final inTail = tail.indexOf(marker);
+        if (inTail != null) { tail = tail.sub(0, len: inTail); }
+    }
     if (body == "") {
         return (head + tail).trim() + "\n" + footer();
     }
@@ -398,4 +407,12 @@ test "silences mutes everything with the bare label" {
 test "silences ignores unrelated labels" {
     std\assert(!silences(["bug", "magus:autofix"], name: "doctor"), message: "not a silence label");
     std\assert(!silences([], name: "doctor"), message: "no labels at all");
+}
+
+test "a comment carries exactly one footer however many advisors write to it" {
+    var body = compose("", name: "a", title: "A", body: "one");
+    body = compose(body, name: "b", title: "B", body: "two");
+    body = compose(body, name: "c", title: "C", body: "three");
+    std\assert(body.split("How to turn these off").len() == 2, message: "one footer, not three");
+    std\assert(body.split("Last updated").len() == 2, message: "and one timestamp");
 }

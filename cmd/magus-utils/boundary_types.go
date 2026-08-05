@@ -74,6 +74,12 @@ var boundaryTypes = []boundaryType{
 	{Name: "KnowledgeDocCoverage", Type: reflect.TypeFor[types.KnowledgeDocCoverage](), RuntimeObject: true},
 	{Name: "KnowledgeStats", Type: reflect.TypeFor[types.KnowledgeStats](), RuntimeObject: true},
 	{Name: "InsightReport", Type: reflect.TypeFor[types.InsightReport](), RuntimeObject: true},
+	// magus.affectedImpact's report, leaf-first.
+	{Name: "ImpactCoverage", Type: reflect.TypeFor[types.ImpactCoverage](), RuntimeObject: true},
+	{Name: "ImpactSymbol", Type: reflect.TypeFor[types.ImpactSymbol](), RuntimeObject: true},
+	{Name: "ImpactFileCoverage", Type: reflect.TypeFor[types.ImpactFileCoverage](), RuntimeObject: true},
+	{Name: "ImpactProject", Type: reflect.TypeFor[types.ImpactProject](), RuntimeObject: true},
+	{Name: "Impact", Type: reflect.TypeFor[types.ImpactResult](), RuntimeObject: true},
 	{Name: "TargetRun", Type: reflect.TypeFor[types.StatusTargetRun](), RuntimeObject: true},
 	{Name: "Run", Type: reflect.TypeFor[types.StatusRun](), RuntimeObject: true},
 }

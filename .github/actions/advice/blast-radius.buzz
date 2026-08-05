@@ -12,17 +12,16 @@
 // actually help, and NOT where the coupling is upstream of the diff - telling someone to
 // split a change whose fan-out is structural is advice that cannot be followed.
 //
-// The chain per project is the ANSWER - a reader here is asking "why is docs in my
-// build", and `magus affected --explain` answers exactly that. The diagram follows it,
-// folded away, for the reader who wants to see the shape rather than read the rows.
-// GitHub renders mermaid in a comment, so it costs nothing to include and nothing to
-// look at until someone opens it.
+// Why each project is in the set is the ANSWER - a reader here is asking "why is docs in
+// my build". magus\affectedImpact carries it: whether the project was edited directly (a
+// seed) and, when it was not, the files that pulled it in. One typed call for the whole
+// set, where this used to run `magus affected --explain` once per project and parse the
+// output. The diagram follows, for the reader who wants the shape rather than the rows.
 //
 // Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA, FANOUT_SHARE.
 import "os";
 import "advice";
 import "magus";
-import "serialize";
 import "std";
 
 final section = "blast-radius";
@@ -48,41 +47,7 @@ export fun trips(reached: int, total: int, share: float) > bool {
     return reached >= total * share;
 }
 
-// chain pulls the dependency path out of `magus affected --explain <project>` output,
-// whose shape is "  via a -> b:" followed by the files. Empty when the project was
-// edited directly, which is its own answer.
-export fun chain(explain: str) > str {
-    foreach (line in explain.split("\n")) {
-        final trimmed = line.trim();
-        if (!trimmed.startsWith("via ")) { continue; }
-        final rest = trimmed.sub("via ".len());
-        final colon = rest.indexOf(":");
-        if (colon == null) { return rest.trim(); }
-        return rest.sub(0, colon).trim();
-    }
-    return "";
-}
-
-// hub returns the project that most of the reach passes through, or "" when no single one
-// dominates. It is the most useful sentence in the comment: naming one edge explains a
-// dozen rows at once.
-export fun hub(chains: [str]) > str {
-    var best = "";
-    var bestCount = 0;
-    foreach (c in chains) {
-        if (c == "") { continue; }
-        final head = c.split(" ")[0];
-        var count = 0;
-        foreach (other in chains) {
-            if (other.startsWith(head)) { count = count + 1; }
-        }
-        if (count > bestCount) { best = head; bestCount = count; }
-    }
-    if (bestCount < 2) { return ""; }
-    return best;
-}
-
-fun body(projects: [str], chains: [str], total: int, share: float, diagram: str) > str {
+fun body(projects: [str], reasons: [str], total: int, diagram: str) > str {
     var text = "**This change reaches " + "{projects.len()}" + " of " + "{total}"
         + " projects.**\n\n"
         + "The reach comes from how this workspace is wired: a project is here because "
@@ -90,28 +55,17 @@ fun body(projects: [str], chains: [str], total: int, share: float, diagram: str)
         + "rebuild and retest.\n\n"
         + "| project | why it is in the set |\n| --- | --- |\n";
     for (var i = 0; i < projects.len(); i = i + 1) {
-        var why = "edited directly";
-        if (chains[i] != "") { why = "via `" + chains[i] + "`"; }
-        text = text + "| `" + projects[i] + "` | " + why + " |\n";
+        text = text + "| `" + projects[i] + "` | " + reasons[i] + " |\n";
     }
-    final through = hub(chains);
-    if (through != "") {
-        text = text + "\nMost of that reach passes through `" + through + "`.\n";
+    if (diagram != "") {
+        text = text + "\n```mermaid\n" + diagram.trim() + "\n```\n";
     }
-    // Only where splitting could actually help. Past a very high share the coupling is
-    // upstream of the diff, and splitting just makes two changes that each rebuild
-    // everything.
     if (projects.len() < total) {
         text = text + "\nIf this is more than the change needs to touch, splitting it "
             + "makes each piece cheaper to review and to revert.\n";
     } else {
         text = text + "\nEverything is downstream of what you edited, so splitting the "
             + "change would not shrink any piece - the coupling is upstream of this diff.\n";
-    }
-    // No nested <details>: the whole section is already folded away, so a second fold
-    // just makes the diagram two clicks deep.
-    if (diagram != "") {
-        text = text + "\n```mermaid\n" + diagram.trim() + "\n```\n";
     }
     return text
         + "\nIf that matches what you expected, there is nothing to do here. If it "
@@ -146,17 +100,17 @@ fun main() > void {
     // functions could never catch, because only main() reads the input.
     if (configured != "") { share = std\parseDouble(configured) ?? 0.5; }
 
-    // The projects this PR reaches, from the workspace's own affected calculation rather
-    // than from the paths: affected walks dependents, which is the whole point.
-    //
-    // --impact is the FORENSIC mode: it reports the set without running a target. Reading
-    // it any other way runs one - `magus affected list` dispatches a `list` target across
-    // every affected project, which on a large workspace is a build, not a question.
-    final res = magus\cmd("affected", args: ["--impact", "--base", "origin/" + base, "-o", "json"],
-        opts: {"quiet": true});
+    // One typed call for the whole set. --impact is the FORENSIC mode: it reports the
+    // set without running a target, unlike `magus affected list`, which dispatches one
+    // across every affected project to answer the same question.
+    final impact = magus\affectedImpact("origin/" + base);
     var reached = mut [];
-    foreach (p in serialize\jsonDecode(res.stdout).q("affected_projects").listValue()) {
-        reached.append(p.q("path").stringValue());
+    var why = mut [];
+    foreach (p in impact.affectedProjects) {
+        reached.append(p.path);
+        if (p.seed) { why.append("edited here"); }
+        else { if (p.files.len() == 0) { why.append("depends on a project you edited"); }
+               else { why.append("depends on a project you edited, via `" + p.files[0] + "`"); } }
     }
 
     var total = 0;
@@ -165,13 +119,6 @@ fun main() > void {
         advice\publish(repo, pr: pr, name: section, title: "How far this change reaches", body: "");
         std\print("blast-radius: {reached.len()} of {total} projects; below the threshold");
         return;
-    }
-
-    var chains = mut [];
-    foreach (p in reached) {
-        final explained = magus\cmd("affected", args: ["--explain", p, "--base", "origin/" + base],
-            opts: {"quiet": true, "allow_failure": true});
-        chains.append(chain(explained.stdout));
     }
 
     // Only the reached projects, so the picture is this change's reach and not the whole
@@ -186,7 +133,7 @@ fun main() > void {
 
     advice\publish(repo, pr: pr, name: section,
         title: "How far this change reaches ({reached.len()} of {total} projects)",
-        body: body(reached, chains: chains, total: total, share: share, diagram: diagram));
+        body: body(reached, reasons: why, total: total, diagram: diagram));
     std\print("blast-radius: advised on {reached.len()} of {total}");
 }
 
@@ -206,19 +153,16 @@ test "trips needs at least two projects however small the workspace" {
     std\assert(!trips(1, total: 1, share: 0.5), message: "a single-project workspace always reaches everything");
 }
 
-test "chain reads the dependency path out of an explain block" {
-    std\assert(chain("docs\n  via . -> docs:\n    magusfile.buzz\n") == ". -> docs", message: "the chain");
+test "body names every project and why it is in the set" {
+    final text = body(["docs", "."], reasons: ["depends on a project you edited", "edited here"],
+        total: 9, diagram: "");
+    std\assert(text.indexOf("2 of 9 projects") != null, message: "counts the reach");
+    std\assert(text.indexOf("| `docs` | depends on a project you edited |") != null, message: "a pulled-in row");
+    std\assert(text.indexOf("| `.` | edited here |") != null, message: "a seed row");
+    std\assert(text.indexOf("splitting it") != null, message: "offers the option while it still helps");
 }
 
-test "chain is empty for a project that was edited directly" {
-    std\assert(chain("docs\n    docs/index.md\n") == "", message: "no via line");
-}
-
-test "hub names the project most of the reach passes through" {
-    std\assert(hub([". -> docs", ". -> console", "libs/x -> y"]) == ".", message: "the dominant edge");
-}
-
-test "hub stays quiet when nothing dominates" {
-    std\assert(hub(["a -> b"]) == "", message: "one chain is not a pattern");
-    std\assert(hub([]) == "", message: "nothing at all");
+test "body says splitting will not help when everything is downstream" {
+    final text = body(["a", "b"], reasons: ["edited here", "x"], total: 2, diagram: "");
+    std\assert(text.indexOf("coupling is upstream") != null, message: "does not ask for a split that cannot help");
 }

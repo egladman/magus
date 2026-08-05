@@ -199,6 +199,11 @@ var magusOwnedTypeSource = strings.Join([]string{
 	spellruntime.KnowledgeDocCoverageSource,
 	spellruntime.KnowledgeStatsSource,
 	spellruntime.InsightReportSource,
+	spellruntime.ImpactCoverageSource,
+	spellruntime.ImpactSymbolSource,
+	spellruntime.ImpactFileCoverageSource,
+	spellruntime.ImpactProjectSource,
+	spellruntime.ImpactSource,
 	spellruntime.FileEntrySource, // precedes FileReport: its files are a list of it
 	spellruntime.FileReportSource,
 	spellruntime.DoctorCheckSource, // precedes DoctorReport, as does DoctorSummary

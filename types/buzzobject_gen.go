@@ -572,39 +572,104 @@ func (v InsightReport) BuzzObject() BuzzObject {
 	}
 }
 
-func (v StatusTargetRun) BuzzObject() BuzzObject {
-	formatted60 := ""
-	if !v.StartedAt.IsZero() {
-		formatted60 = v.StartedAt.Format(time.RFC3339)
+func (v ImpactCoverage) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"ratio":   v.Ratio,
+		"covered": v.Covered,
+		"total":   v.Total,
 	}
-	formatted61 := ""
+}
+
+func (v ImpactSymbol) BuzzObject() BuzzObject {
+	var opt60 any
+	if v.Coverage != nil {
+		opt60 = (*v.Coverage).BuzzObject()
+	}
+	return BuzzObject{
+		"file":      v.File,
+		"symbol":    v.Symbol,
+		"label":     v.Label,
+		"refCount":  v.RefCount,
+		"fileCount": v.FileCount,
+		"coverage":  opt60,
+	}
+}
+
+func (v ImpactFileCoverage) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"file":     v.File,
+		"coverage": v.Coverage.BuzzObject(),
+	}
+}
+
+func (v ImpactProject) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"path":    v.Path,
+		"seed":    v.Seed,
+		"files":   v.Files,
+		"spells":  v.Spells,
+		"targets": v.Targets,
+	}
+}
+
+func (v ImpactResult) BuzzObject() BuzzObject {
+	items61 := make([]any, len(v.AffectedProjects))
+	for index62 := range v.AffectedProjects {
+		items61[index62] = v.AffectedProjects[index62].BuzzObject()
+	}
+	items63 := make([]any, len(v.ChangedSymbols))
+	for index64 := range v.ChangedSymbols {
+		items63[index64] = v.ChangedSymbols[index64].BuzzObject()
+	}
+	items65 := make([]any, len(v.ChangedFileCoverage))
+	for index66 := range v.ChangedFileCoverage {
+		items65[index66] = v.ChangedFileCoverage[index66].BuzzObject()
+	}
+	return BuzzObject{
+		"base":                v.Base,
+		"changedFileCount":    v.ChangedFileCount,
+		"changedFiles":        v.ChangedFiles,
+		"seedProjects":        v.SeedProjects,
+		"affectedProjects":    items61,
+		"changedSymbols":      items63,
+		"changedFileCoverage": items65,
+		"notes":               v.Notes,
+	}
+}
+
+func (v StatusTargetRun) BuzzObject() BuzzObject {
+	formatted67 := ""
+	if !v.StartedAt.IsZero() {
+		formatted67 = v.StartedAt.Format(time.RFC3339)
+	}
+	formatted68 := ""
 	if !v.EndedAt.IsZero() {
-		formatted61 = v.EndedAt.Format(time.RFC3339)
+		formatted68 = v.EndedAt.Format(time.RFC3339)
 	}
 	return BuzzObject{
 		"project":    v.Project,
 		"target":     v.Target,
 		"state":      v.State,
-		"startedAt":  formatted60,
-		"endedAt":    formatted61,
+		"startedAt":  formatted67,
+		"endedAt":    formatted68,
 		"outputRef":  v.OutputRef,
 		"durationMs": v.DurationMs,
 	}
 }
 
 func (v StatusRun) BuzzObject() BuzzObject {
-	formatted62 := ""
+	formatted69 := ""
 	if !v.StartedAt.IsZero() {
-		formatted62 = v.StartedAt.Format(time.RFC3339)
+		formatted69 = v.StartedAt.Format(time.RFC3339)
 	}
-	items63 := make([]any, len(v.Targets))
-	for index64 := range v.Targets {
-		items63[index64] = v.Targets[index64].BuzzObject()
+	items70 := make([]any, len(v.Targets))
+	for index71 := range v.Targets {
+		items70[index71] = v.Targets[index71].BuzzObject()
 	}
 	return BuzzObject{
 		"inv":       v.Inv,
 		"trigger":   v.Trigger,
-		"startedAt": formatted62,
-		"targets":   items63,
+		"startedAt": formatted69,
+		"targets":   items70,
 	}
 }

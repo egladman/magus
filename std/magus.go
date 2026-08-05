@@ -139,6 +139,16 @@ var Magus = Module{
 			Impl:    MagusInsightReport,
 		},
 		{
+			Name: "affected_impact",
+			Doc:  "The VCS-affected set and WHY each project is in it: {base, changedFileCount, changedFiles, seedProjects, affectedProjects, notes}, each affected project carrying whether it was a seed and the files that pulled it in. Annotate the result `> Impact`. This is `magus affected --impact`, a forensic mode that reports the set without running a target - unlike `magus affected list`, which dispatches a target across every affected project to answer the same question. Runs a nested magus, so it works from a `magus buzz` script with no workspace on the context.",
+			Args: []Arg{
+				{Name: "base", Type: TypeString, Optional: true},
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Impact"}},
+			Impl:    MagusAffectedImpact,
+		},
+		{
 			Name: "target_graph",
 			Doc:  "The TARGET dependency graph of every project as a typed value: {projects}, each with its nodes and each node's declared footprint (readsFiles / writesFiles / modifiesExistingFiles). Annotate the result `> TargetGraph`. This is what magus.targets() serves in-process, reached by a nested magus instead, so it works from a `magus buzz` script with no workspace on the context - the case that matters for CI advisories reasoning about a pull request.",
 			Args: []Arg{
@@ -355,6 +365,17 @@ func MagusInsight(ctx context.Context, args []string, opts map[string]any) (type
 // rather than as console text a caller has to parse back out of a string.
 func MagusDoctor(ctx context.Context, args []string, opts map[string]any) (types.DoctorReport, error) {
 	return runMagusJSON[types.DoctorReport](ctx, "doctor", args, opts)
+}
+
+// MagusAffectedImpact reports the affected set through a nested magus. It is the forking
+// counterpart to MagusAffected, and answers the richer question: not just which projects,
+// but which files seeded them.
+func MagusAffectedImpact(ctx context.Context, base string, opts map[string]any) (types.ImpactResult, error) {
+	args := []string{"--impact"}
+	if base != "" {
+		args = append(args, "--base", base)
+	}
+	return runMagusJSON[types.ImpactResult](ctx, "affected", args, opts)
 }
 
 // MagusTargetGraph returns every project's target graph through a nested magus, the

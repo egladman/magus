@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2412,
-  "edge_count": 5450,
+  "node_count": 2413,
+  "edge_count": 5451,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -19507,6 +19507,15 @@
       "doc": "Compute the VCS-affected project set against base (empty uses the configured base ref): {base, changed, seed, filesBySeed, affected}. Served in-process from the workspace on the context - no subprocess. Raises when the diff cannot be computed, rather than reporting an empty set, since an empty set and an uncomputable one mean opposite things to a caller deciding what to build.",
       "attrs": {
         "buzz": "magus\\affected([base]) → Affected"
+      }
+    },
+    {
+      "id": "method:magus.affected_impact",
+      "kind": "method",
+      "label": "magus.affected_impact",
+      "doc": "The VCS-affected set and WHY each project is in it: {base, changedFileCount, changedFiles, seedProjects, affectedProjects, notes}, each affected project carrying whether it was a seed and the files that pulled it in. Annotate the result `> Impact`. This is `magus affected --impact`, a forensic mode that reports the set without running a target - unlike `magus affected list`, which dispatches a target across every affected project to answer the same question. Runs a nested magus, so it works from a `magus bu",
+      "attrs": {
+        "buzz": "magus\\affectedImpact([base], [opts]) → Impact"
       }
     },
     {
@@ -60094,6 +60103,13 @@
     {
       "source": "module:magus",
       "target": "method:magus.affected",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:magus",
+      "target": "method:magus.affected_impact",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1

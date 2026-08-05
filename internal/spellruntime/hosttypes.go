@@ -287,3 +287,26 @@ var KnowledgeStatsSource string
 //go:generate go run ../../cmd/magus-utils types -type InsightReport -out gen/types/insightreport.buzz
 //go:embed gen/types/insightreport.buzz
 var InsightReportSource string
+
+// magus.affectedImpact's report: the affected set and why each project is in it, declared
+// leaf-first.
+
+//go:generate go run ../../cmd/magus-utils types -type ImpactCoverage -out gen/types/impactcoverage.buzz
+//go:embed gen/types/impactcoverage.buzz
+var ImpactCoverageSource string
+
+//go:generate go run ../../cmd/magus-utils types -type ImpactSymbol -out gen/types/impactsymbol.buzz
+//go:embed gen/types/impactsymbol.buzz
+var ImpactSymbolSource string
+
+//go:generate go run ../../cmd/magus-utils types -type ImpactFileCoverage -out gen/types/impactfilecoverage.buzz
+//go:embed gen/types/impactfilecoverage.buzz
+var ImpactFileCoverageSource string
+
+//go:generate go run ../../cmd/magus-utils types -type ImpactProject -out gen/types/impactproject.buzz
+//go:embed gen/types/impactproject.buzz
+var ImpactProjectSource string
+
+//go:generate go run ../../cmd/magus-utils types -type Impact -out gen/types/impact.buzz
+//go:embed gen/types/impact.buzz
+var ImpactSource string

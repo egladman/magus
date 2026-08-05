@@ -345,25 +345,16 @@ func objectName(goType reflect.Type) string {
 	return ""
 }
 
-// buzzObjectName is the public Buzz object name for t. The generated mirror is
-// authoritative: a Go type sometimes keeps a descriptive suffix while the Buzz
-// surface exposes the concise domain name.
+// buzzObjectName is the public Buzz object name for t, resolved through the boundary
+// registry. A Go type sometimes keeps a descriptive suffix while the Buzz surface exposes
+// the concise domain name - ProjectsOutput is Projects, ImpactResult is Impact.
+//
+// This USED to be a hand-written switch listing each rename, which made the registry and
+// the switch two sources of one truth: adding a renamed type compiled fine and then failed
+// at generate time with "declares Object X but its Impl returns Y", naming neither the
+// switch nor the fix. The registry already carries the mapping, so read it there.
 func buzzObjectName(t reflect.Type) string {
-	switch t {
-	case reflect.TypeFor[types.VCSTag]():
-		return "Tag"
-	case reflect.TypeFor[types.HTTPResponse]():
-		return "HttpResponse"
-	case reflect.TypeFor[types.ProjectsOutput]():
-		return "Projects"
-	case reflect.TypeFor[types.AffectedResult]():
-		return "Affected"
-	case reflect.TypeFor[types.GraphView]():
-		return "Graph"
-	case reflect.TypeFor[types.TargetGraphOutput]():
-		return "TargetGraph"
-	}
-	return t.Name()
+	return buzzNameFor(t)
 }
 
 // checkObjectDecls verifies every method's declared Ret.Object against the Impl's
