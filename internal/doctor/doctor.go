@@ -191,6 +191,7 @@ func (r *runner) run(wsErr error) Report {
 		r.checkSelfStalingOutputs(projects),
 		r.checkCharmTargetCollision(projects),
 		r.checkHasCharmTypos(projects),
+		r.checkReadinessProbes(projects),
 		r.checkStaleShadowAcks(),
 		r.checkVCSBaseRef(),
 		r.checkWorkspaceRegistration(),

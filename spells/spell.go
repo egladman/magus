@@ -265,6 +265,20 @@ func (s *Spell) ReadinessProbe(tool string) (Command, bool) {
 	return c, ok
 }
 
+// ReadinessProbeTools returns the tools this spell gates, sorted, so a caller
+// iterates them deterministically.
+func (s *Spell) ReadinessProbeTools() []string {
+	if len(s.readinessProbes) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(s.readinessProbes))
+	for name := range s.readinessProbes {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
 // WithReadinessProbe registers a readiness command for one tool.
 func WithReadinessProbe(tool string, cmd Command) Option {
 	return func(s *Spell) {

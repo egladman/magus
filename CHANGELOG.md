@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 See the unreleased changes at
 https://github.com/egladman/magus/compare/v0.2.1...main
 
+### Fixed
+
+- **A defined type over a basic kind crossed into Buzz as `null`.** A type switch matches
+  on type identity, not underlying type, so a field typed `types.DoctorCheckStatus` or
+  `types.TargetRunState` matched no case and arrived as null - `doctor().checks[0].status`
+  read null rather than `"ok"`, while the SDK guidance told callers to branch on exactly
+  that field instead of grepping console text. Handled reflectively now, so the next
+  defined type does not reintroduce it.
+
+### Added
+
+- **Tool readiness probes.** A spell can declare `mgs_getReadinessProbes`, keyed by tool,
+  and magus checks it before dispatching an op that runs that tool. `docker --version` is
+  client-only and succeeds with no daemon, so a stopped daemon used to surface as a build
+  failure on a project with nothing wrong with it; it now fails as MGS3004 before the op
+  forks. Readiness never enters a cache key - it is a precondition, not an input.
+
 ### Changed
 
 - **`semver\compare` now orders instead of testing a relation.** It was

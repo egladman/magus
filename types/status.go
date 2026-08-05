@@ -157,14 +157,28 @@ type StatusConfig struct {
 // StatusService is one long-running shared service the daemon is hosting, surfaced on
 // the status wire so a dashboard can show what is running and how many targets depend
 // on it. It mirrors service.ServiceStatus (the registry's introspection view).
+// ServiceState is where a supervised service sits in its lifecycle. Deliberately NOT
+// TargetRunState: the two share only "running" and "failed", and describe different
+// things - a service is idle when nothing needs it, a target run is cached when its
+// result was replayed. One union type would make half the values invalid for each
+// user, which is the opposite of what naming them buys.
+type ServiceState string
+
+const (
+	ServiceStarting ServiceState = "starting"
+	ServiceRunning  ServiceState = "running"
+	ServiceIdle     ServiceState = "idle"
+	ServiceFailed   ServiceState = "failed"
+)
+
 type StatusService struct {
-	ID         string    `json:"id" yaml:"id"`
-	Label      string    `json:"label,omitempty" yaml:"label,omitempty"`
-	Command    string    `json:"command,omitempty" yaml:"command,omitempty"`
-	Ports      []string  `json:"ports,omitempty" yaml:"ports,omitempty"`
-	State      string    `json:"state,omitempty" yaml:"state,omitempty"` // starting | running | idle | failed
-	Dependents int       `json:"dependents,omitempty" yaml:"dependents,omitempty"`
-	StartedAt  time.Time `json:"started_at,omitempty" yaml:"started_at,omitempty"`
+	ID         string       `json:"id" yaml:"id"`
+	Label      string       `json:"label,omitempty" yaml:"label,omitempty"`
+	Command    string       `json:"command,omitempty" yaml:"command,omitempty"`
+	Ports      []string     `json:"ports,omitempty" yaml:"ports,omitempty"`
+	State      ServiceState `json:"state,omitempty" yaml:"state,omitempty"`
+	Dependents int          `json:"dependents,omitempty" yaml:"dependents,omitempty"`
+	StartedAt  time.Time    `json:"started_at,omitempty" yaml:"started_at,omitempty"`
 }
 
 // StatusLock is one held per-project workspace lock and the process holding it.

@@ -79,6 +79,31 @@ func (v EventSeverity) String() string {
 	return string(v)
 }
 
+// Values lists the ServiceState values a caller may choose, excluding the zero value.
+func (v ServiceState) Values() []string { return []string{"starting", "running", "idle", "failed"} }
+
+// Valid reports whether v is a declared ServiceState. The zero value is valid: it means the
+// field was not set, which callers distinguish from a wrong value.
+//
+// A switch rather than a scan over Values: Values allocates a fresh slice per call so
+// its result can never be mutated by a caller, which is the right trade for a helper
+// that builds an error message and the wrong one for a predicate.
+func (v ServiceState) Valid() bool {
+	switch v {
+	case "", "starting", "running", "idle", "failed":
+		return true
+	}
+	return false
+}
+
+// String renders v for an error message: the value, or "unset" when empty.
+func (v ServiceState) String() string {
+	if v == "" {
+		return "unset"
+	}
+	return string(v)
+}
+
 // Values lists the PatternType values a caller may choose, excluding the zero value.
 func (v PatternType) Values() []string { return []string{"glob", "regex", "literal"} }
 

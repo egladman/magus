@@ -120,6 +120,12 @@ var boundaryEnums = []boundaryEnum{
 			{"critical", "critical"}},
 	},
 	{
+		Name: "ServiceState",
+		Type: reflect.TypeFor[types.ServiceState](),
+		Cases: []enumCase{{"none", ""}, {"starting", "starting"}, {"running", "running"},
+			{"idle", "idle"}, {"failed", "failed"}},
+	},
+	{
 		Name:  "PatternType",
 		Type:  reflect.TypeFor[types.PatternType](),
 		Cases: []enumCase{{"none", ""}, {"glob", "glob"}, {"regex", "regex"}, {"literal", "literal"}},
