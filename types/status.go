@@ -100,10 +100,36 @@ type ReadinessReport struct {
 // identifying detail lives behind the bearer-guarded StatusService. Never the sole
 // signal - a client should key off Status.
 type ReadinessComponent struct {
-	Name   string `json:"name"`   // "workspaces" | "symbol_index" | "services" | "knowledge_graph"
-	Status string `json:"status"` // "ok" | "degraded" | "down" | "idle" | "disabled"
-	Detail string `json:"detail"`
+	Name   ReadinessName   `json:"name"`
+	Status ReadinessStatus `json:"status"`
+	Detail string          `json:"detail"`
 }
+
+// ReadinessName identifies which subsystem a readiness component reports on, and
+// ReadinessStatus is its verdict. Both were bare strings whose vocabulary lived in a
+// trailing comment - which a compiler cannot check and a reader has to trust. A probe
+// endpoint is read by a kubelet, so a value drifting from what the reader expects is
+// the kind of break nothing surfaces until a rollout stalls.
+type ReadinessName string
+
+const (
+	ReadinessWorkspaces     ReadinessName = "workspaces"
+	ReadinessSymbolIndex    ReadinessName = "symbol_index"
+	ReadinessServices       ReadinessName = "services"
+	ReadinessKnowledgeGraph ReadinessName = "knowledge_graph"
+)
+
+// ReadinessStatus is one component's verdict. Idle and disabled are deliberately
+// distinct from ok: a subsystem nobody asked for is not the same as one that ran.
+type ReadinessStatus string
+
+const (
+	ReadinessOK       ReadinessStatus = "ok"
+	ReadinessDegraded ReadinessStatus = "degraded"
+	ReadinessDown     ReadinessStatus = "down"
+	ReadinessIdle     ReadinessStatus = "idle"
+	ReadinessDisabled ReadinessStatus = "disabled"
+)
 
 // MCPEndpointStatus is the runtime health of the MCP HTTP endpoint agent hosts connect
 // to. State is one of: serving (listening and a workspace is loaded), not-ready

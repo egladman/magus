@@ -319,13 +319,24 @@ type KnowledgeQueryOutput struct {
 // KnowledgeEdgeRef is one edge seen from a focus node: the relation, the node on
 // the other end (with kind + label for readability), the direction relative to
 // the focus, and the edge's provenance.
+// EdgeDirection says which end of an edge the focus node sits on. Distinct from
+// types.Direction, the iota used for graph RENDERING order: this one is serialized,
+// so it is string-backed and its values are what a reader sees.
+type EdgeDirection string
+
+const (
+	// EdgeOut is the focus node as the edge's source; EdgeIn as its target.
+	EdgeOut EdgeDirection = "out"
+	EdgeIn  EdgeDirection = "in"
+)
+
 type KnowledgeEdgeRef struct {
-	Relation   string `json:"relation"             yaml:"relation"`
-	Direction  string `json:"direction"            yaml:"direction"` // "out" (focus is source) | "in" (focus is target)
-	Other      string `json:"other"                yaml:"other"`
-	OtherKind  string `json:"other_kind"           yaml:"other_kind"`
-	OtherLabel string `json:"other_label"          yaml:"other_label"`
-	Provenance string `json:"provenance,omitempty" yaml:"provenance,omitempty"`
+	Relation   string        `json:"relation"             yaml:"relation"`
+	Direction  EdgeDirection `json:"direction"            yaml:"direction"`
+	Other      string        `json:"other"                yaml:"other"`
+	OtherKind  string        `json:"other_kind"           yaml:"other_kind"`
+	OtherLabel string        `json:"other_label"          yaml:"other_label"`
+	Provenance string        `json:"provenance,omitempty" yaml:"provenance,omitempty"`
 }
 
 // KnowledgeExplainOutput is a single node's context card: its data, grouped

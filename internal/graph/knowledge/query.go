@@ -437,10 +437,10 @@ func (g *Graph) Explain(ref string) (types.KnowledgeExplainOutput, bool) {
 		BlastRadius:   g.blastRadius(id),
 	}
 	for _, e := range g.out[id] {
-		out.Out = append(out.Out, g.edgeRef(e, "out", e.Target))
+		out.Out = append(out.Out, g.edgeRef(e, types.EdgeOut, e.Target))
 	}
 	for _, e := range g.in[id] {
-		out.In = append(out.In, g.edgeRef(e, "in", e.Source))
+		out.In = append(out.In, g.edgeRef(e, types.EdgeIn, e.Source))
 	}
 	return out, true
 }
@@ -649,7 +649,7 @@ func (g *Graph) shortestPath(from, to string) ([]types.KnowledgePathStep, bool) 
 	return rev, true
 }
 
-func (g *Graph) edgeRef(e types.KnowledgeEdge, dir, other string) types.KnowledgeEdgeRef {
+func (g *Graph) edgeRef(e types.KnowledgeEdge, dir types.EdgeDirection, other string) types.KnowledgeEdgeRef {
 	n, _ := g.node(other)
 	return types.KnowledgeEdgeRef{
 		Relation:   e.Relation,
