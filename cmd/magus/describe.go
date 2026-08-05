@@ -916,6 +916,12 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 			}
 			for targetName, pol := range p.TargetPolicies {
 				fmt.Printf("  policy: %s", targetName)
+				if pol.IncludeOS != nil {
+					fmt.Printf("  include_os=%t", *pol.IncludeOS)
+				}
+				if pol.IncludeArch != nil {
+					fmt.Printf("  include_arch=%t", *pol.IncludeArch)
+				}
 				if pol.FailOnDrift {
 					fmt.Printf("  fail_on_drift")
 				}
@@ -1110,6 +1116,12 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 		}
 		if e.Policy != nil {
 			fmt.Printf("  policy:")
+			if e.Policy.IncludeOS != nil {
+				fmt.Printf("  include_os=%t", *e.Policy.IncludeOS)
+			}
+			if e.Policy.IncludeArch != nil {
+				fmt.Printf("  include_arch=%t", *e.Policy.IncludeArch)
+			}
 			if e.Policy.FailOnDrift {
 				fmt.Printf("  fail_on_drift")
 			}

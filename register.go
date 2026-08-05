@@ -115,6 +115,11 @@ func FailOnDrift() TargetOption { return workspace.FailOnDrift() }
 // Exclusive runs the target alone — no other target runs concurrently while it does.
 func Exclusive() TargetOption { return workspace.Exclusive() }
 
+// IncludeOS and IncludeArch override cache.include.*.enabled for one target, for a
+// target whose artifact varies along one axis but not the other.
+func IncludeOS(v bool) TargetOption   { return workspace.IncludeOS(v) }
+func IncludeArch(v bool) TargetOption { return workspace.IncludeArch(v) }
+
 // platform, overriding what its spells would answer. Pass types.PlatformIndependent
 // to let one cache entry serve every platform; types.PlatformDependent to force the
 // opposite when a spell claims independence the target cannot honour.

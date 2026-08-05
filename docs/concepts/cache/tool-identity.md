@@ -98,6 +98,19 @@ cache:
 Both default to enabled, and deliberately: being wrong that way costs cache hits,
 while being wrong the other way replays a foreign artifact out of a shared cache.
 
+A single target can override the workspace answer, using the same nesting so one
+decision reads the same way wherever it is written:
+
+```buzz
+magus\project({"targets": {
+    "image": {"cache": {"include": {"arch": {"enabled": false}}}},
+}});
+```
+
+An axis the target does not mention inherits. A misspelled nesting level is a load
+error rather than a silent inherit - the two are indistinguishable at run time, and
+one of them is a cache that quietly does the wrong thing.
+
 This is the **host** platform. The platform an artifact is built *for* travels as
 `GOOS`/`GOARCH` through the environment allowlist and keys through the env lines.
 

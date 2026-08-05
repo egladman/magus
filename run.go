@@ -363,8 +363,18 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// Which host facts key this step. Workspace-wide today: a per-target override is a
 	// narrower claim, and there is no evidence yet that anyone needs one axis on for
 	// one target and off for another within the same workspace.
+	// Workspace answer, then the target's override when it made one. A target that
+	// says nothing inherits, which is what every target did before overrides existed.
 	step.IncludeOS = m.cfg.Cache.IncludeOS()
 	step.IncludeArch = m.cfg.Cache.IncludeArch()
+	if pol, ok := p.TargetPolicies[target]; ok {
+		if pol.IncludeOS != nil {
+			step.IncludeOS = *pol.IncludeOS
+		}
+		if pol.IncludeArch != nil {
+			step.IncludeArch = *pol.IncludeArch
+		}
+	}
 	// Per-target inputs declared via ctx.readsFiles define the cache footprint whenever
 	// present. Each InputRef carries its owning project; joinGlob follows the same
 	// ownership rule as outputs below.

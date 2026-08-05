@@ -53,7 +53,7 @@ var knownProjectOptionKeys = []string{
 
 // knownTargetPolicyKeys are the recognized per-target policy keys inside
 // magus.project's "targets" map.
-var knownTargetPolicyKeys = []string{"skip_cache", "exclusive", "slots"}
+var knownTargetPolicyKeys = []string{"skip_cache", "exclusive", "slots", "cache"}
 
 // rejectUnknownKeys errors on the first key in m absent from known, so a typo
 // like "skip_cache" or "depend_on" is a loud load error instead of a silently
@@ -285,6 +285,38 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			}
 			if ev, ok := pv.MapGet("exclusive"); ok && ev.Bool() {
 				opts = append(opts, workspace.WithTarget(name, workspace.Exclusive()))
+			}
+			// Nested to mirror magus.yaml's cache.include.*.enabled exactly, so the
+			// same decision reads the same way wherever it is written:
+			//
+			//	"image": { "cache": { "include": { "arch": { "enabled": false } } } }
+			//
+			// An unrecognized shape is a load error rather than a silent skip: a
+			// misspelled nesting level would leave the target inheriting the
+			// workspace answer, which looks identical to a cache that works.
+			if cv, ok := pv.MapGet("cache"); ok {
+				inc, ok := cv.MapGet("include")
+				if !ok {
+					return nil, fmt.Errorf(
+						"magus.project: targets[%q].cache has no `include`; the only cache key a target may set is cache.include.os/arch.enabled", name)
+				}
+				for _, axis := range []string{"os", "arch"} {
+					av, ok := inc.MapGet(axis)
+					if !ok {
+						continue
+					}
+					ev, ok := av.MapGet("enabled")
+					if !ok {
+						return nil, fmt.Errorf(
+							"magus.project: targets[%q].cache.include.%s needs an `enabled` bool", name, axis)
+					}
+					on := ev.Bool()
+					if axis == "os" {
+						opts = append(opts, workspace.WithTarget(name, workspace.IncludeOS(on)))
+					} else {
+						opts = append(opts, workspace.WithTarget(name, workspace.IncludeArch(on)))
+					}
+				}
 			}
 			// A present-but-malformed slots value (non-int, or < 1) is a load
 			// error, not a silent skip: AsInt reinterprets a float's bits as an

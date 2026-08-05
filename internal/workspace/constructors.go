@@ -201,3 +201,13 @@ func Exclusive() TargetOption {
 func Slots(n int) TargetOption {
 	return func(t *types.Target) { t.Slots = n }
 }
+
+// IncludeOS overrides whether the host OS keys this target's cache entry.
+func IncludeOS(v bool) TargetOption {
+	return func(t *types.Target) { t.IncludeOS = &v }
+}
+
+// IncludeArch overrides whether the host architecture keys this target's entry.
+func IncludeArch(v bool) TargetOption {
+	return func(t *types.Target) { t.IncludeArch = &v }
+}
