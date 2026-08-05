@@ -153,6 +153,14 @@ export fun citeCodes(text: str) > str {
 // rather than appended, so a retracted section takes its citations with it.
 final footnotes_marker = "<!-- magus:advice:footnotes -->";
 
+// The way out, kept where an unsubscribe link belongs: last, small, and never in the way
+// of the content. Someone who does not want these should not have to read the source of a
+// composite action to find the switch.
+final footer = "<sub><i>Every one of these is an input you can set to <code>false</code>, "
+    + "and this whole comment is one step you can drop. "
+    + "<a href=\"https://eli.gladman.cc/magus/guides/integrations/pr-advice/\">"
+    + "How to turn these off</a>.</i></sub>\n";
+
 export fun footnotes(comment: str) > str {
     var labels = mut [];
     var rest = comment;
@@ -168,14 +176,14 @@ export fun footnotes(comment: str) > str {
         foreach (l in labels) { if (l == label) { seen = true; } }
         if (!seen and label != "") { labels.append(label); }
     }
-    if (labels.len() == 0) { return ""; }
+    if (labels.len() == 0) { return "\n" + footer; }
     var text = footnotes_marker + "\n";
     foreach (label in labels) {
         var url = glossary_urls[label];
         if (url == null) { url = codeURL(label); }
         text = text + "[^" + label + "]: " + url + "\n";
     }
-    return text;
+    return text + "\n" + footer;
 }
 
 // compose returns the comment body with section `name` set to `body` under `title`,
@@ -346,4 +354,16 @@ test "footnotes are rebuilt, so a retracted section takes its citations with it"
     var body = compose("", name: "doctor", title: "Workspace health", body: "a target failed");
     body = compose(body, name: "doctor", title: "Workspace health", body: "");
     std\assert(body.indexOf("[^target]:") == null, message: "the definition goes with the section");
+}
+
+test "every comment says how to turn it off, last" {
+    final body = compose("", name: "doctor", title: "Workspace health", body: "a target failed");
+    std\assert(body.indexOf("How to turn these off") != null, message: "the way out is present");
+    std\assert(body.indexOf("guides/integrations/pr-advice") != null, message: "and documented");
+    std\assert(body.indexOf("How to turn these off") > body.indexOf("[^target]:"), message: "after the citations");
+}
+
+test "the footer survives a comment with nothing cited" {
+    final body = compose("", name: "x", title: "X", body: "nothing worth citing here");
+    std\assert(body.indexOf("How to turn these off") != null, message: "still says how to stop it");
 }

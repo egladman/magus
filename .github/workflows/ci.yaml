@@ -25,6 +25,7 @@ env:
 
 jobs:
   preflight:
+    name: magus preflight
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -81,7 +82,7 @@ jobs:
         run: magus affected ci --plan | magus run ci-shard:gha --no-default-charms
 
   ci:
-    name: shard ${{ matrix.shard }}
+    name: magus shard ${{ matrix.shard }}
     needs: preflight
     if: fromJSON(needs.preflight.outputs.count) > 0
     runs-on: ubuntu-latest
@@ -150,7 +151,7 @@ jobs:
           retention-days: 7
 
   compat:
-    name: compatibility (${{ needs.preflight.outputs.magus_version }})
+    name: magus compatibility (${{ needs.preflight.outputs.magus_version }})
     # Second pass: can the magus users already have still drive this workspace? The
     # shards answer "does this change work"; this answers a different question.
     # Non-blocking - a failure means cut a release, not fix the PR.
@@ -201,7 +202,7 @@ jobs:
     # something to say. Named for doctor's [advice] level so the CI surface and the tool
     # share one word for "worth knowing, never a gate". Opt out with the repository
     # variable MAGUS_PR_COMMENTS=false.
-    name: advice
+    name: magus advisor
     if: github.event_name == 'pull_request' && vars.MAGUS_PR_COMMENTS != 'false'
     needs: [preflight]
     runs-on: ubuntu-latest
@@ -226,7 +227,7 @@ jobs:
       - uses: ./.github/actions/advice
 
   deploy-build:
-    name: deploy build
+    name: magus deploy build
     needs: [preflight]
     # Separate from `magus affected ci` on purpose: affected ci shards per-project
     # correctness, and the deploy is a workspace-level composition no single project owns.
@@ -279,7 +280,7 @@ jobs:
         run: magus run deploy-generate .
 
   image-snapshot:
-    name: publish snapshot container image
+    name: magus image snapshot
     needs: [preflight, ci]
     # Merges to main only, and only once `ci` has actually passed - not `always()`.
     # A pull request must never reach this job: a fork PR would otherwise push an
@@ -337,32 +338,12 @@ jobs:
       # from the references it actually pushed. A step that re-derived them would be
       # parsing magus's own output back out of a file magus wrote.
 
-  merge-history:
-    name: merge run history
-    needs: [preflight, ci]
-    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.preflight.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-        with:
-          fetch-depth: 0
-          filter: blob:none
-
-      - uses: ./.github/actions/setup-workspace
-        with:
-          installation-strategy: source
-          source-path: .
-          mise: 'false'
-
-      - uses: ./.github/actions/magus
-        with:
-          merge-history: 'true'
-
-  postflight:
-    name: insight report
+  report:
+    # One job for everything that runs AFTER the shards: the run summary always, and the
+    # history merge only where there is a history to keep. They shared a checkout, a magus
+    # install, and a trigger condition; two jobs meant two of each and two rows in the
+    # checks list for one idea.
+    name: magus report
     needs: [preflight, ci]
     if: always() && needs.preflight.result == 'success'
     runs-on: ubuntu-latest
@@ -380,9 +361,17 @@ jobs:
           installation-strategy: source
           source-path: .
           mise: 'false'
+
       # One step, one script, and the outcome wording is unit-tested - it used to be a
       # shell case statement no test could reach.
       - uses: ./.github/actions/summary
         with:
           ci-result: ${{ needs.ci.result }}
           shard-count: ${{ needs.preflight.outputs.count }}
+
+      # Only on main: a pull request's shard histories describe a branch that is about to
+      # disappear, and folding them into the kept history would skew it.
+      - uses: ./.github/actions/magus
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          merge-history: 'true'
