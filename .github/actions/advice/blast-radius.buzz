@@ -22,6 +22,7 @@
 import "os";
 import "advice";
 import "magus";
+import "serialize";
 import "std";
 
 final section = "blast-radius";
@@ -140,15 +141,22 @@ fun main() > void {
 
     var share = 0.5;
     final configured = advice\env("FANOUT_SHARE");
-    if (configured != "") { share = std\parseFloat(configured) ?? 0.5; }
+    // parseDouble, not parseFloat: Buzz's floating type is `double` and there is no
+    // parseFloat, so the guessed name was null at run time - which a test over the pure
+    // functions could never catch, because only main() reads the input.
+    if (configured != "") { share = std\parseDouble(configured) ?? 0.5; }
 
     // The projects this PR reaches, from the workspace's own affected calculation rather
     // than from the paths: affected walks dependents, which is the whole point.
-    final res = magus\cmd("affected", args: ["--base", "origin/" + base, "-o", "name"],
-        opts: {"quiet": true, "allow_failure": true});
+    //
+    // --impact is the FORENSIC mode: it reports the set without running a target. Reading
+    // it any other way runs one - `magus affected list` dispatches a `list` target across
+    // every affected project, which on a large workspace is a build, not a question.
+    final res = magus\cmd("affected", args: ["--impact", "--base", "origin/" + base, "-o", "json"],
+        opts: {"quiet": true});
     var reached = mut [];
-    foreach (line in res.stdout.split("\n")) {
-        if (line != "") { reached.append(line); }
+    foreach (p in serialize\jsonDecode(res.stdout).q("affected_projects").listValue()) {
+        reached.append(p.q("path").stringValue());
     }
 
     var total = 0;
