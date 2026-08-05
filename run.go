@@ -425,6 +425,24 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 // works-on-my-machine diff: `describe target --cache` compares these lines against
 // the set stored behind a ref. Returns types.ErrNoCache on an Inspect workspace.
 func (m *Magus) ComputeTargetKey(ctx context.Context, projectPath, target string, charms []string) (key string, lines []string, err error) {
+	return m.computeTargetKey(ctx, projectPath, target, charms, nil, nil)
+}
+
+// computeTargetKey is ComputeTargetKey with two sweep-scoped reuses threaded in:
+// an optional cache.SourceMemo (passed to cache.StepKeyMemo) and an optional
+// pre-resolved tool-version map keyed by project path. ComputeTargetKey passes nil
+// for both, so its public behavior is unchanged; IdentifyRef is the one caller that
+// supplies them, since its sweep keys every candidate target under every charm
+// variant against the SAME workspace tree - see cache.SourceMemo's doc for why that
+// is safe here and nowhere a target actually runs.
+//
+// The tool-version map matters more than it looks: toolVersionsByProject memoizes
+// only WITHIN one call, and each probe SPAWNS A SUBPROCESS (`go version`, `pnpm
+// --version`, ...). Resolving per target made the sweep re-probe every spell of
+// every project once per target, which was the sweep's dominant cost - wall clock
+// far exceeding CPU because the process was waiting on child processes, not
+// computing.
+func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string, charms []string, memo *cache.SourceMemo, toolVersions map[string][]string) (key string, lines []string, err error) {
 	if m.cache == nil {
 		return "", nil, types.ErrNoCache
 	}
@@ -432,9 +450,12 @@ func (m *Magus) ComputeTargetKey(ctx context.Context, projectPath, target string
 	if p == nil {
 		return "", nil, fmt.Errorf("magus: compute target key: unknown project %q", projectPath)
 	}
+	if toolVersions == nil {
+		toolVersions = m.toolVersionsByProject(ctx, []*types.Project{p})
+	}
 	step := m.buildStep(p, target)
-	applyRunKeying(&step, m.toolVersionsByProject(ctx, []*types.Project{p})[p.Path], charms)
-	return m.cache.StepKey(ctx, &step)
+	applyRunKeying(&step, toolVersions[p.Path], charms)
+	return m.cache.StepKeyMemo(ctx, &step, memo)
 }
 
 // applyRunKeying stamps the key-relevant fields the RUN SCHEDULER adds on top of

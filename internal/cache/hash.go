@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/egladman/magus/project"
 	"golang.org/x/sync/errgroup"
@@ -25,7 +26,7 @@ const KeyVersion = 3
 // hashStep computes the cache key for a Step (version, path, target, sources,
 // env, deps, spell version, tool versions). Sources use an mtime fast-path.
 func (c *Cache) hashStep(ctx context.Context, s *Step) (string, error) {
-	return c.hashStepInputs(ctx, s, nil)
+	return c.hashStepInputsMemo(ctx, s, nil, nil)
 }
 
 // hashStepInputs is hashStep with an optional collector: when lines is non-nil, every
@@ -35,6 +36,15 @@ func (c *Cache) hashStep(ctx context.Context, s *Step) (string, error) {
 // byte-identical to what the hash consumed; collecting inside the same writeLine keeps
 // that true by construction. The nil path adds no allocations to the hot path.
 func (c *Cache) hashStepInputs(ctx context.Context, s *Step, lines *[]string) (string, error) {
+	return c.hashStepInputsMemo(ctx, s, lines, nil)
+}
+
+// hashStepInputsMemo is hashStepInputs with an optional SourceMemo covering the
+// expandSources+hashFiles portion of the key. See SourceMemo's doc for why memo must
+// stay nil on every path that executes a target (hashStep, hashStepInputs, and the
+// post-run key-inputs recompute in Run all pass nil); only a read-only prediction
+// sweep (ComputeTargetKey via IdentifyRef) constructs and threads a real one.
+func (c *Cache) hashStepInputsMemo(ctx context.Context, s *Step, lines *[]string, memo *SourceMemo) (string, error) {
 	h := sha256.New()
 
 	// Build each key input in a reused scratch buffer and write it straight to the
@@ -85,13 +95,7 @@ func (c *Cache) hashStepInputs(ctx context.Context, s *Step, lines *[]string) (s
 		writeLine("arg:", a)
 	}
 
-	files, err := expandSources(s.Sources, s.WorkspaceRoot, s.Outputs, s.IgnoreDirs)
-	if err != nil {
-		return "", err
-	}
-
-	// Parallel file hashing with mtime fast-path.
-	hashes, modes, err := c.hashFiles(ctx, files)
+	files, hashes, modes, err := c.expandAndHashSources(ctx, s, memo)
 	if err != nil {
 		return "", err
 	}
@@ -151,8 +155,117 @@ func (c *Cache) hashStepInputs(ctx context.Context, s *Step, lines *[]string) (s
 // key is what portable refs truncate, so callers can also predict the ref a run of
 // this step would print.
 func (c *Cache) StepKey(ctx context.Context, s *Step) (key string, lines []string, err error) {
-	key, err = c.hashStepInputs(ctx, s, &lines)
+	return c.StepKeyMemo(ctx, s, nil)
+}
+
+// StepKeyMemo is StepKey with an optional SourceMemo. It exists for a caller that
+// keys MANY steps sharing one WorkspaceRoot in one pass - IdentifyRef's sweep, via
+// ComputeTargetKey - so distinct targets whose buildStep gives them the SAME
+// Sources baseline expand and hash that source set once instead of once per
+// target/charm combination. Pass nil for ordinary StepKey behavior; see
+// SourceMemo's doc for the safety condition on passing a real one.
+func (c *Cache) StepKeyMemo(ctx context.Context, s *Step, memo *SourceMemo) (key string, lines []string, err error) {
+	key, err = c.hashStepInputsMemo(ctx, s, &lines, memo)
 	return key, lines, err
+}
+
+// SourceMemo memoizes the expandSources+hashFiles result for one sweep of steps that
+// share a WorkspaceRoot, keyed by the exact (Sources, Outputs, IgnoreDirs) tuple that
+// determines it. It exists ONLY for prediction: profiling IdentifyRef's full sweep
+// (every candidate target under every charm variant, none executed) showed
+// expandSources' WalkDir re-walking the whole workspace root as the dominant cost -
+// 57% of a 355ms sweep in the benchmark fixture, and dozens of those walks were
+// over an IDENTICAL Sources set, because buildStep gives most targets in a project
+// the same baseline absent a per-target TargetInputs override (run.go's buildStep
+// doc). A memo scoped to one sweep collapses those into one walk per distinct
+// source set.
+//
+// It must NEVER reach a path that executes a target: the memo assumes nothing on
+// disk changes between calls, which holds for a read-only sweep and nothing else. A
+// real Run/RunAll handed one could replay a source hash observed before that very
+// step's build wrote to its own inputs. Callers own that invariant - construct one
+// per sweep with NewSourceMemo, thread it explicitly, and let it fall out of scope
+// when the sweep ends. Nothing here makes it long-lived, global, or safe to share
+// with an executing Cache.
+type SourceMemo struct {
+	mu      sync.Mutex
+	entries map[string]sourceMemoEntry
+}
+
+type sourceMemoEntry struct {
+	files  []relAbs
+	hashes []string
+	modes  []os.FileMode
+}
+
+// NewSourceMemo returns an empty memo. See SourceMemo's doc for its one intended
+// caller shape: created and discarded around a single prediction sweep.
+func NewSourceMemo() *SourceMemo {
+	return &SourceMemo{entries: make(map[string]sourceMemoEntry)}
+}
+
+// sourceMemoKey canonicalizes the inputs expandSources depends on. Sorting each
+// list is safe even though hashStepInputs preserves s.Sources' declared order for
+// the KEY LINES it writes elsewhere: expandSources' result is a membership test per
+// file, so two glob lists differing only in order always expand to the same file
+// set, and this key is used only to detect that repetition, never written to the
+// hash itself.
+func sourceMemoKey(root string, sources, outputs, ignoreDirs []string) string {
+	var b strings.Builder
+	write := func(ss []string) {
+		sorted := append([]string(nil), ss...)
+		slices.Sort(sorted)
+		for _, s := range sorted {
+			b.WriteString(s)
+			b.WriteByte(0)
+		}
+		b.WriteByte(0)
+	}
+	b.WriteString(root)
+	b.WriteByte(0)
+	write(sources)
+	write(outputs)
+	write(ignoreDirs)
+	return b.String()
+}
+
+// expandAndHashSources expands s.Sources into files and hashes them, consulting memo
+// first when non-nil and populating it on a miss. The nil path is byte-for-byte the
+// prior inline behavior in hashStepInputs.
+func (c *Cache) expandAndHashSources(ctx context.Context, s *Step, memo *SourceMemo) ([]relAbs, []string, []os.FileMode, error) {
+	if memo == nil {
+		files, err := expandSources(s.Sources, s.WorkspaceRoot, s.Outputs, s.IgnoreDirs)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		hashes, modes, err := c.hashFiles(ctx, files)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		return files, hashes, modes, nil
+	}
+
+	key := sourceMemoKey(s.WorkspaceRoot, s.Sources, s.Outputs, s.IgnoreDirs)
+	memo.mu.Lock()
+	if e, ok := memo.entries[key]; ok {
+		memo.mu.Unlock()
+		return e.files, e.hashes, e.modes, nil
+	}
+	memo.mu.Unlock()
+
+	files, err := expandSources(s.Sources, s.WorkspaceRoot, s.Outputs, s.IgnoreDirs)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	hashes, modes, err := c.hashFiles(ctx, files)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	memo.mu.Lock()
+	memo.entries[key] = sourceMemoEntry{files: files, hashes: hashes, modes: modes}
+	memo.mu.Unlock()
+	return files, hashes, modes, nil
 }
 
 // hashFiles returns one sha256 per file: mtime fast-path → io_uring (Linux) → goroutine pool.

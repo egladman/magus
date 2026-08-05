@@ -79,11 +79,25 @@ func (m *Magus) IdentifyRef(ctx context.Context, ref string, defaultCharms []str
 		variants = append(variants, nil)
 	}
 
+	// Sweep-scoped only: buildStep gives most targets in a project the SAME
+	// Sources baseline (see run.go's buildStep doc), so without this memo every
+	// target/charm combination re-walks and re-hashes an identical file set. Safe
+	// here because IdentifyRef only predicts - it executes nothing between calls -
+	// and the memo is discarded the moment this sweep returns. See
+	// cache.SourceMemo's doc for the full safety argument.
+	memo := cache.NewSourceMemo()
+
+	// Resolved ONCE for the whole workspace, for the same reason: every probe spawns
+	// a subprocess, and computeTargetKey's own memo lives only as long as one call.
+	// Probing per target dominated the sweep - see computeTargetKey's doc.
+	projects := m.All()
+	toolVersions := m.toolVersionsByProject(ctx, projects)
+
 	matches := []RefMatch{}
-	for _, p := range m.All() {
+	for _, p := range projects {
 		for _, target := range projectTargets(p) {
 			for _, charms := range variants {
-				key, _, err := m.ComputeTargetKey(ctx, p.Path, target, charms)
+				key, _, err := m.computeTargetKey(ctx, p.Path, target, charms, memo, toolVersions)
 				if err != nil {
 					if errors.Is(err, types.ErrNoCache) {
 						return nil, err
