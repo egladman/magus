@@ -155,7 +155,7 @@ func ptr(i int) string { return "/" + strconv.Itoa(i) }
 func addOps(start int, vals []string) map[string]any {
 	ops := make([]map[string]any, len(vals))
 	for k, v := range vals {
-		ops[k] = map[string]any{"op": spells.OpAdd, "path": ptr(start + k), "value": v}
+		ops[k] = map[string]any{"op": string(spells.OpAdd), "path": ptr(start + k), "value": v}
 	}
 	return charmResult(ops...)
 }
@@ -197,7 +197,7 @@ func anchorIndexFunc(ctx context.Context, argv []string, fn Callback) (int, erro
 func CharmAppend(_ context.Context, vals []string) (map[string]any, error) {
 	ops := make([]map[string]any, len(vals))
 	for i, v := range vals {
-		ops[i] = map[string]any{"op": spells.OpAdd, "path": "/-", "value": v}
+		ops[i] = map[string]any{"op": string(spells.OpAdd), "path": "/-", "value": v}
 	}
 	return charmResult(ops...), nil
 }
@@ -231,7 +231,7 @@ func CharmSet(_ context.Context, argv []string, anchor, val string) (map[string]
 	if err != nil {
 		return nil, err
 	}
-	return charmResult(map[string]any{"op": spells.OpReplace, "path": ptr(i), "value": val}), nil
+	return charmResult(map[string]any{"op": string(spells.OpReplace), "path": ptr(i), "value": val}), nil
 }
 
 // CharmDrop implements charm.drop.
@@ -240,7 +240,7 @@ func CharmDrop(_ context.Context, argv []string, anchor string) (map[string]any,
 	if err != nil {
 		return nil, err
 	}
-	return charmResult(map[string]any{"op": spells.OpRemove, "path": ptr(i)}), nil
+	return charmResult(map[string]any{"op": string(spells.OpRemove), "path": ptr(i)}), nil
 }
 
 // CharmAfterFunc implements charm.after_func.
@@ -267,7 +267,7 @@ func CharmSetFunc(ctx context.Context, argv []string, fn Callback, val string) (
 	if err != nil {
 		return nil, err
 	}
-	return charmResult(map[string]any{"op": spells.OpReplace, "path": ptr(i), "value": val}), nil
+	return charmResult(map[string]any{"op": string(spells.OpReplace), "path": ptr(i), "value": val}), nil
 }
 
 // CharmDropFunc implements charm.drop_func.
@@ -276,7 +276,7 @@ func CharmDropFunc(ctx context.Context, argv []string, fn Callback) (map[string]
 	if err != nil {
 		return nil, err
 	}
-	return charmResult(map[string]any{"op": spells.OpRemove, "path": ptr(i)}), nil
+	return charmResult(map[string]any{"op": string(spells.OpRemove), "path": ptr(i)}), nil
 }
 
 // CharmPath implements charm.path: the JSON Pointer of the anchor element.
@@ -315,7 +315,7 @@ func CharmMove(_ context.Context, argv []string, anchor, to string) (map[string]
 	if err := destPointer(to); err != nil {
 		return nil, err
 	}
-	return charmResult(map[string]any{"op": spells.OpMove, "from": ptr(i), "path": to}), nil
+	return charmResult(map[string]any{"op": string(spells.OpMove), "from": ptr(i), "path": to}), nil
 }
 
 // CharmMoveFunc implements charm.move_func.
@@ -327,7 +327,7 @@ func CharmMoveFunc(ctx context.Context, argv []string, fn Callback, to string) (
 	if err := destPointer(to); err != nil {
 		return nil, err
 	}
-	return charmResult(map[string]any{"op": spells.OpMove, "from": ptr(i), "path": to}), nil
+	return charmResult(map[string]any{"op": string(spells.OpMove), "from": ptr(i), "path": to}), nil
 }
 
 // CharmCopy implements charm.copy.
@@ -339,7 +339,7 @@ func CharmCopy(_ context.Context, argv []string, anchor, to string) (map[string]
 	if err := destPointer(to); err != nil {
 		return nil, err
 	}
-	return charmResult(map[string]any{"op": spells.OpCopy, "from": ptr(i), "path": to}), nil
+	return charmResult(map[string]any{"op": string(spells.OpCopy), "from": ptr(i), "path": to}), nil
 }
 
 // CharmCopyFunc implements charm.copy_func.
@@ -351,7 +351,7 @@ func CharmCopyFunc(ctx context.Context, argv []string, fn Callback, to string) (
 	if err := destPointer(to); err != nil {
 		return nil, err
 	}
-	return charmResult(map[string]any{"op": spells.OpCopy, "from": ptr(i), "path": to}), nil
+	return charmResult(map[string]any{"op": string(spells.OpCopy), "from": ptr(i), "path": to}), nil
 }
 
 // CharmTest implements charm.test: a guard asserting the anchor is still present
@@ -361,7 +361,7 @@ func CharmTest(_ context.Context, argv []string, anchor string) (map[string]any,
 	if err != nil {
 		return nil, err
 	}
-	return charmResult(map[string]any{"op": spells.OpTest, "path": ptr(i), "value": anchor}), nil
+	return charmResult(map[string]any{"op": string(spells.OpTest), "path": ptr(i), "value": anchor}), nil
 }
 
 // CharmTestFunc implements charm.test_func.
@@ -370,7 +370,7 @@ func CharmTestFunc(ctx context.Context, argv []string, fn Callback) (map[string]
 	if err != nil {
 		return nil, err
 	}
-	return charmResult(map[string]any{"op": spells.OpTest, "path": ptr(i), "value": argv[i]}), nil
+	return charmResult(map[string]any{"op": string(spells.OpTest), "path": ptr(i), "value": argv[i]}), nil
 }
 
 // callPredicate invokes a VM predicate on s and reports its truthiness.

@@ -29,7 +29,7 @@ fun _charmAnchorIndex(argv: [str], anchor: str) > int {
 fun _charmAddOps(start: int, vals: [str]) > Charm {
     var ops = mut [<PatchOp>];
     for (var k = 0; k < vals.len(); k = k + 1) {
-        ops.append(PatchOp{ op = "add", path = "/{start + k}", value = vals[k] });
+        ops.append(PatchOp{ op = PatchOpKind.add, path = "/{start + k}", value = vals[k] });
     }
     return Charm{ ops = ops };
 }
@@ -37,7 +37,7 @@ fun _charmAddOps(start: int, vals: [str]) > Charm {
 // append adds vals to the end of the argv.
 export fun append(vals: [str]) > Charm {
     var ops = mut [<PatchOp>];
-    foreach (v in vals) { ops.append(PatchOp{ op = "add", path = "/-", value = v }); }
+    foreach (v in vals) { ops.append(PatchOp{ op = PatchOpKind.add, path = "/-", value = v }); }
     return Charm{ ops = ops };
 }
 
@@ -58,12 +58,12 @@ export fun before(argv: [str], anchor: str, vals: [str]) > Charm {
 
 // set replaces the first argv element equal to anchor with val.
 export fun set(argv: [str], anchor: str, val: str) > Charm {
-    return Charm{ ops = [PatchOp{ op = "replace", path = "/{_charmAnchorIndex(argv, anchor)}", value = val }] };
+    return Charm{ ops = [PatchOp{ op = PatchOpKind.replace, path = "/{_charmAnchorIndex(argv, anchor)}", value = val }] };
 }
 
 // drop removes the first argv element equal to anchor. Named drop, not remove,
 // to match the host charm.drop (where "remove" collides with the map method) so
 // the two modules expose one name.
 export fun drop(argv: [str], anchor: str) > Charm {
-    return Charm{ ops = [PatchOp{ op = "remove", path = "/{_charmAnchorIndex(argv, anchor)}" }] };
+    return Charm{ ops = [PatchOp{ op = PatchOpKind.remove, path = "/{_charmAnchorIndex(argv, anchor)}" }] };
 }

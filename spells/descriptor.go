@@ -5,15 +5,25 @@ import (
 	"sort"
 )
 
-// JSON Patch (RFC 6902) operation names. A charm is an ordered patch applied
-// over the target's base argv, treated as a JSON array of strings.
+// PatchOpKind is one JSON Patch (RFC 6902) operation name. A charm is an ordered
+// patch applied over the target's base argv, treated as a JSON array of strings.
+//
+// It is a defined type rather than a bare string so the Buzz mirror can declare it as
+// an enum: charm.buzz used to write `op = "add"` by hand at every constructor, where a
+// typo produced a patch that failed validation at load with a message naming the value
+// rather than the line. `PatchOpKind.add` is checked when the spell compiles.
+type PatchOpKind string
+
 const (
-	OpAdd     = "add"
-	OpRemove  = "remove"
-	OpReplace = "replace"
-	OpMove    = "move"
-	OpCopy    = "copy"
-	OpTest    = "test"
+	// OpNone is the zero value. It is not a valid operation - ValidatePatch rejects
+	// it - and exists so the mirror's enum has a default case to name.
+	OpNone    PatchOpKind = ""
+	OpAdd     PatchOpKind = "add"
+	OpRemove  PatchOpKind = "remove"
+	OpReplace PatchOpKind = "replace"
+	OpMove    PatchOpKind = "move"
+	OpCopy    PatchOpKind = "copy"
+	OpTest    PatchOpKind = "test"
 )
 
 // The spell value types - PatchOp, Charm, Command, Service, and the resolved Op -

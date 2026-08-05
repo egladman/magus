@@ -208,7 +208,11 @@ func decodeCommand(spellName, opName string, o Obj) (spells.Command, error) {
 		var ch spells.Charm
 		for _, opObj := range ce.Objs("ops") {
 			po := spells.PatchOp{}
-			po.Op, _ = opObj.Str("op")
+			// Str unwraps a PatchOpKind enum case to its backing string, so both the
+			// enum spelling charm.buzz uses and a bare "add" from a hand-written record
+			// decode the same way.
+			opName, _ := opObj.Str("op")
+			po.Op = spells.PatchOpKind(opName)
 			po.Path, _ = opObj.Str("path")
 			if v, ok := opObj.Str("value"); ok {
 				po.Value = v

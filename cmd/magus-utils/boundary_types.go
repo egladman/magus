@@ -97,6 +97,12 @@ var boundaryTypes = []boundaryType{
 // so a zero-valued case belongs first.
 var boundaryEnums = []boundaryEnum{
 	{
+		Name: "PatchOpKind",
+		Type: reflect.TypeFor[spells.PatchOpKind](),
+		Cases: []enumCase{{"none", ""}, {"add", "add"}, {"remove", "remove"},
+			{"replace", "replace"}, {"move", "move"}, {"copy", "copy"}, {"test", "test"}},
+	},
+	{
 		Name:  "PlatformSensitivity",
 		Type:  reflect.TypeFor[types.PlatformSensitivity](),
 		Cases: []enumCase{{"inherit", ""}, {"dependent", "dependent"}, {"independent", "independent"}},

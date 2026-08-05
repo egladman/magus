@@ -244,6 +244,13 @@ func AnyVal(v any) vm.Value {
 
 // valToAny converts a Buzz Value to a plain Go value for host consumption.
 func valToAny(v vm.Value) any {
+	// An enum case converts to its backing value, so a host reading a Buzz record
+	// sees "add" where the author wrote PatchOpKind.add. Ahead of the type switch
+	// because an enum case matches none of the scalar predicates: without this it
+	// falls through to the default and the field silently arrives empty.
+	if ev, ok := v.EnumValue(); ok {
+		v = ev
+	}
 	switch {
 	case v.IsBool():
 		return v.AsBool()

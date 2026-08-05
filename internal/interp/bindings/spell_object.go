@@ -209,7 +209,7 @@ func patchOpsToBuzzList(ops []spells.PatchOp) vm.Value {
 	items := make([]vm.Value, len(ops))
 	for i, po := range ops {
 		m := vm.NewMap()
-		m.MapSet("op", vm.StrValue(po.Op))
+		m.MapSet("op", vm.StrValue(string(po.Op)))
 		m.MapSet("path", vm.StrValue(po.Path))
 		if po.Value != "" {
 			m.MapSet("value", vm.StrValue(po.Value))
