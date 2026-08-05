@@ -165,7 +165,18 @@ func (s *Store) Sync(ctx context.Context, shards []Shard, fps, inputFPs map[stri
 	// file is still current (input fingerprint matches). Reuse it - load it into the graph
 	// and keep its manifest entry - instead of rebuilding or, worse, pruning it. This is
 	// what lets the git scan be skipped without a bespoke cache file.
-	for name, m := range old.shards() {
+	// Sorted for the same first-writer-wins reason Load and MergeSymbolShards sort:
+	// this loop MERGES retained shards, so ranging the manifest map directly decided
+	// node provenance by Go's randomized map order. The freshly-built shards above are
+	// merged from a slice and were always fine, which is what made this the harder half
+	// to see - the ordering hazard only rides in on the shards Sync reuses from disk.
+	retained := make([]string, 0, len(old.shards()))
+	for name := range old.shards() {
+		retained = append(retained, name)
+	}
+	slices.Sort(retained)
+	for _, name := range retained {
+		m := old.shards()[name]
 		if present[name] || m.InputFingerprint == "" || inputFPs[name] != m.InputFingerprint || !s.shardExists(name) {
 			continue
 		}
@@ -238,12 +249,25 @@ func (s *Store) Load(ctx context.Context) (*Graph, error) {
 		return nil, ErrNoStore
 	}
 	g := NewGraph()
+	// Sorted, for the same reason MergeSymbolShards sorts and the Sync path merges a
+	// slice: AddNode and AddEdge are both FIRST-WRITER-WINS, so which shard supplies a
+	// node's Source (or which of two equally-confident edges survives) is decided by
+	// merge order. Ranging man.Shards directly took Go's randomized map order, which
+	// made the merged graph differ run to run - invisibly, because the output is sorted
+	// by ID afterward, so only the provenance fields moved and the node and edge counts
+	// never budged. That is what broke `magus run generate`'s drift gate: the committed
+	// gen/*.json and a freshly built one disagreed on "source" lines alone.
+	names := make([]string, 0, len(man.Shards))
 	for name := range man.Shards {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
 		if IsSymbolsShard(name) || IsCoverageShard(name) {
 			continue // lazily loaded via MergeSymbolShards, not part of the default graph
+		}
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	for _, name := range names {
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
 		if err := s.readMergeShard(ctx, g, man, name); err != nil {
 			return nil, err

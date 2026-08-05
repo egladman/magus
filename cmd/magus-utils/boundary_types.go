@@ -43,12 +43,65 @@ var boundaryTypes = []boundaryType{
 	{Name: "TargetGraphNode", Type: reflect.TypeFor[types.TargetGraphNode](), RuntimeObject: true},
 	{Name: "TargetGraphProject", Type: reflect.TypeFor[types.TargetGraphProject](), RuntimeObject: true},
 	{Name: "TargetGraph", Type: reflect.TypeFor[types.TargetGraphOutput](), RuntimeObject: true},
+	// A run and the targets in it, as magus already models them for `magus status`:
+	// per-target state (queued/running/passed/failed/cached), duration, and the output
+	// ref each one minted. Mirrored so a caller can ITERATE a run - `t.state == "failed"`
+	// then `t.outputRef` - instead of parsing magus's own console output back out of a
+	// string. TargetRun precedes Run: Run.targets is a list of it.
+	// Leaf-first: an envelope's list field mirrors as its element's Buzz name, which
+	// must already be declared.
+	{Name: "FileEntry", Type: reflect.TypeFor[types.FileEntry](), RuntimeObject: true},
+	{Name: "FileReport", Type: reflect.TypeFor[types.FileReport](), RuntimeObject: true},
+	{Name: "DoctorCheck", Type: reflect.TypeFor[types.DoctorCheck](), RuntimeObject: true},
+	{Name: "DoctorSummary", Type: reflect.TypeFor[types.DoctorSummary](), RuntimeObject: true},
+	{Name: "DoctorReport", Type: reflect.TypeFor[types.DoctorReport](), RuntimeObject: true},
+	// magus.insightReport's bundle, leaf-first. A bundle takes the short plural name
+	// and its element the *Entry suffix, the shape Projects/ProjectEntry already set,
+	// which is also what keeps Go's Ownership and OwnershipOutput from colliding here.
+	{Name: "Node", Type: reflect.TypeFor[types.Node](), RuntimeObject: true},
+	{Name: "FileHotspot", Type: reflect.TypeFor[types.FileHotspot](), RuntimeObject: true},
+	{Name: "Hotspots", Type: reflect.TypeFor[types.HotspotOutput](), RuntimeObject: true},
+	{Name: "CoChange", Type: reflect.TypeFor[types.CoChange](), RuntimeObject: true},
+	{Name: "Affinity", Type: reflect.TypeFor[types.AffinityOutput](), RuntimeObject: true},
+	{Name: "OwnershipEntry", Type: reflect.TypeFor[types.Ownership](), RuntimeObject: true},
+	{Name: "Ownership", Type: reflect.TypeFor[types.OwnershipOutput](), RuntimeObject: true},
+	{Name: "TrendEntry", Type: reflect.TypeFor[types.Trend](), RuntimeObject: true},
+	{Name: "Trend", Type: reflect.TypeFor[types.TrendOutput](), RuntimeObject: true},
+	{Name: "VolatilityTarget", Type: reflect.TypeFor[types.VolatilityTarget](), RuntimeObject: true},
+	{Name: "Volatility", Type: reflect.TypeFor[types.VolatilityReport](), RuntimeObject: true},
+	{Name: "KnowledgeGodNode", Type: reflect.TypeFor[types.KnowledgeGodNode](), RuntimeObject: true},
+	{Name: "KnowledgeOrphan", Type: reflect.TypeFor[types.KnowledgeOrphan](), RuntimeObject: true},
+	{Name: "KnowledgeDocCoverage", Type: reflect.TypeFor[types.KnowledgeDocCoverage](), RuntimeObject: true},
+	{Name: "KnowledgeStats", Type: reflect.TypeFor[types.KnowledgeStats](), RuntimeObject: true},
+	{Name: "InsightReport", Type: reflect.TypeFor[types.InsightReport](), RuntimeObject: true},
+	// magus.affectedImpact's report, leaf-first.
+	{Name: "ImpactCoverage", Type: reflect.TypeFor[types.ImpactCoverage](), RuntimeObject: true},
+	{Name: "ImpactSymbol", Type: reflect.TypeFor[types.ImpactSymbol](), RuntimeObject: true},
+	{Name: "ImpactFileCoverage", Type: reflect.TypeFor[types.ImpactFileCoverage](), RuntimeObject: true},
+	{Name: "ImpactProject", Type: reflect.TypeFor[types.ImpactProject](), RuntimeObject: true},
+	{Name: "Impact", Type: reflect.TypeFor[types.ImpactResult](), RuntimeObject: true},
+	{Name: "TargetRun", Type: reflect.TypeFor[types.StatusTargetRun](), RuntimeObject: true},
+	{Name: "Run", Type: reflect.TypeFor[types.StatusRun](), RuntimeObject: true},
 }
 
 type boundaryType struct {
 	Name          string
 	Type          reflect.Type
 	RuntimeObject bool
+}
+
+// buzzNameFor returns the BUZZ name a Go type mirrors as, which is the registry key
+// and not always the Go type's own name: types.ProjectsOutput is `Projects`,
+// types.StatusTargetRun is `TargetRun`. A struct-valued field must reference the Buzz
+// name, so the registry is what resolves it - falling back to the Go name only for a
+// type no entry claims, which the caller then reports as undeclared.
+func buzzNameFor(rt reflect.Type) string {
+	for _, entry := range boundaryTypes {
+		if entry.Type == rt {
+			return entry.Name
+		}
+	}
+	return rt.Name()
 }
 
 func boundaryTypeNamed(name string) (boundaryType, bool) {

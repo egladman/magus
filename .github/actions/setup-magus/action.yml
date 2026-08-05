@@ -53,6 +53,27 @@ inputs:
     required: false
     default: ''
 
+outputs:
+  version:
+    description: >
+      The version of the magus this action installed, read back from the binary
+      itself (`magus version -o name`). Derived, not assumed: it is correct for a
+      prebuilt release, a source build, and automatic's fallback between them, so a
+      caller reports the magus it actually got rather than the one it asked for.
+    value: ${{ steps.installed.outputs.version }}
+  install-source:
+    description: >
+      How magus got here: `prebuilt` (a signed release artifact) or `source` (compiled
+      here). Worth reading because `automatic` falls back from one to the other
+      SILENTLY - today the only trace is a log notice - and a caller that means to test
+      against a real release is otherwise testing source against source without knowing.
+    value: ${{ steps.strategy.outputs.resolved }}
+  commit:
+    description: >
+      The commit the installed binary was built from, as it reports itself. Pins what
+      actually ran when `version` is a tag shared by rebuilds, or a describe string.
+    value: ${{ steps.installed.outputs.commit }}
+
 runs:
   using: composite
   steps:
@@ -95,8 +116,16 @@ runs:
         fi
         sh ./docs/gen/install
 
+    # `automatic` picks at runtime, so resolve it ONCE here and let every step below ask
+    # this instead of re-deriving it from the prebuilt step's outcome. A skipped prebuilt
+    # step is not a success, so the explicit `source` strategy lands here too.
+    - name: Resolve the install strategy
+      id: strategy
+      shell: bash
+      run: echo "resolved=${{ steps.prebuilt.outcome == 'success' && 'prebuilt' || 'source' }}" >> "$GITHUB_OUTPUT"
+
     - name: Fail if prebuilt required but unavailable
-      if: inputs.installation-strategy == 'prebuilt' && steps.prebuilt.outcome == 'failure'
+      if: inputs.installation-strategy == 'prebuilt' && steps.strategy.outputs.resolved == 'source'
       shell: bash
       run: |
         echo "::error::magus: no signed release artifact for git-ref '${{ inputs.git-ref }}' on $(uname -s)/$(uname -m); installation-strategy is prebuilt, so no source fallback was attempted. Use automatic to fall back to a source build, or source to build git-ref directly." >&2
@@ -106,7 +135,7 @@ runs:
     # without this, the only sign a source build even happened is the absence
     # of the "installed prebuilt" log line above.
     - name: Note fallback to source build
-      if: inputs.installation-strategy == 'automatic' && steps.prebuilt.outcome == 'failure'
+      if: inputs.installation-strategy == 'automatic' && steps.strategy.outputs.resolved == 'source'
       shell: bash
       run: |
         echo "::notice::magus: no signed release artifact for git-ref '${{ inputs.git-ref }}' on $(uname -s)/$(uname -m); compiling from source instead, this step will take noticeably longer than a prebuilt install" >&2
@@ -130,7 +159,7 @@ runs:
     # answer. The checkout materializes git-ref's own blobs, which is what the
     # source build compiles.
     - name: Clone magus source code
-      if: (inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure') && inputs.source-path == ''
+      if: steps.strategy.outputs.resolved == 'source' && inputs.source-path == ''
       uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       with:
         repository: egladman/magus
@@ -143,7 +172,7 @@ runs:
     # first: on an automatic fallback the caller's checkout can be a different
     # revision, and .setup-magus-src does not exist until the preceding step.
     - name: Setup Go
-      if: inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure'
+      if: steps.strategy.outputs.resolved == 'source'
       uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
       with:
         go-version-file: ${{ inputs.source-path != '' && inputs.source-path || '.setup-magus-src' }}/go.mod
@@ -166,7 +195,7 @@ runs:
     # Gates git-ref only. source-path skips this by construction: the caller
     # checked that tree out under its own workflow and is already executing it.
     - name: Verify source commit is reachable from main
-      if: (inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure') && inputs.source-path == ''
+      if: steps.strategy.outputs.resolved == 'source' && inputs.source-path == ''
       shell: bash
       working-directory: .setup-magus-src
       run: |
@@ -190,7 +219,7 @@ runs:
         exit 1
 
     - name: Build magus from source
-      if: inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure'
+      if: steps.strategy.outputs.resolved == 'source'
       shell: bash
       working-directory: ${{ inputs.source-path != '' && inputs.source-path || '.setup-magus-src' }}
       # CGO_ENABLED=0: the bootstrap magus only orchestrates builds (it never needs
@@ -214,7 +243,7 @@ runs:
     # Never runs on the source-path route: that directory belongs to the caller
     # and nothing was cloned to clean up.
     - name: Remove magus source checkout
-      if: always() && (inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure') && inputs.source-path == ''
+      if: always() && steps.strategy.outputs.resolved == 'source' && inputs.source-path == ''
       shell: bash
       run: rm -rf .setup-magus-src
 
@@ -240,7 +269,7 @@ runs:
       shell: bash
       run: |
         {
-          if [ "${{ steps.prebuilt.outcome }}" = "success" ]; then
+          if [ "${{ steps.strategy.outputs.resolved }}" = "prebuilt" ]; then
             echo "magus: installed prebuilt release, git-ref \`${{ inputs.git-ref }}\` (signature verified)"
           elif [ -n "${{ inputs.source-path }}" ]; then
             echo "magus: built from source, source-path \`${{ inputs.source-path }}\` (the caller's own checkout)"
@@ -252,3 +281,9 @@ runs:
           magus version
           echo '```'
         } >> "$GITHUB_STEP_SUMMARY"
+
+    # magus emits the key=value lines itself.
+    - name: Report the installed version
+      id: installed
+      shell: bash
+      run: magus version -o 'template=version={{.version}}{{"\n"}}commit={{.commit}}{{"\n"}}' >> "$GITHUB_OUTPUT"

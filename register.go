@@ -44,6 +44,14 @@ func WithProvider(p observability.Provider) Option {
 	return workspace.WithProvider(p)
 }
 
+// WithVersion supplies the running build's version so Open and Inspect can check it
+// against the workspace's magus.yaml required_version floor (MGS1021). cmd/magus
+// passes its linker-stamped version; a library caller that omits it gets no floor
+// check, since a caller with no version has no version to be too old.
+func WithVersion(v string) Option {
+	return workspace.WithVersion(v)
+}
+
 // WorkspaceRegistry holds project-option overrides and target policies for a single Open.
 type WorkspaceRegistry = workspace.WorkspaceRegistry
 

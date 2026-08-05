@@ -1,6 +1,6 @@
 module buzzbench
 
-go 1.25.10
+go 1.26
 
 require (
 	github.com/d5/tengo/v2 v2.17.0

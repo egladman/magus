@@ -26,8 +26,12 @@ results. Checks include:
   - Consistent target naming convention (any casing, but pick one)
   - VCS base-ref reachability
 
-Every check is pass or fail; there are no warnings. Exits non-zero if any
-check fails.
+Findings come at two levels. [fail] is a workspace that is wrong regardless
+of how you like to work - a dependency graph cycle, an unparseable magusfile,
+two targets claiming one output - and exits non-zero. [advice] is a
+convention magus recommends, such as target naming or language coverage; it
+is reported and exits zero, because ci is the one target name magus reserves
+and the rest of the layout is yours. No flag promotes advice to failure.
 
 ## Examples
 

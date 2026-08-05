@@ -380,6 +380,123 @@ func benchStore(b *testing.B, nProjects int) (*Store, int64) {
 	return NewStore(cacheDir, false, 0, nil, nil), onDisk
 }
 
+// Load must merge shards in a stable order. AddNode and AddEdge are both
+// first-writer-wins, so when two shards describe the same node with a different
+// Source, the winner is decided purely by merge order - and Load used to take Go's
+// randomized map order over the manifest.
+//
+// The failure this guards against is nasty precisely because it is quiet: the export
+// sorts nodes and edges by ID afterward, so counts never move and the diff is a
+// handful of "source" lines. That is exactly how it presented - `magus run generate`
+// regenerated gen/*.json, the drift gate saw a changed file, and the change was
+// provenance only.
+//
+// Many shards and many iterations because map order is random per range: two shards
+// would coin-flip and could pass a short run by luck.
+func TestLoadMergesShardsInStableOrder(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), ".magus")
+	store := NewStore(cacheDir, false, 0, nil, nil)
+	ctx := context.Background()
+
+	// Every shard claims the same node and the same edge, each with its own Source.
+	// Whichever merges first supplies both, so the merged result names the winner.
+	const shardCount = 12
+	shards := make([]Shard, 0, shardCount)
+	fps := map[string]string{}
+	for i := range shardCount {
+		name := fmt.Sprintf("@s%02d", i)
+		sh := Shard{
+			Name: name,
+			Nodes: []types.KnowledgeNode{
+				{ID: "file:shared.go", Kind: types.KindFile, Source: fmt.Sprintf("shard-%02d.go", i)},
+				{ID: fmt.Sprintf("file:own%02d.go", i), Kind: types.KindFile, Source: "own.go"},
+			},
+			Edges: []types.KnowledgeEdge{{
+				Source:     "file:shared.go",
+				Target:     fmt.Sprintf("file:own%02d.go", i),
+				Relation:   types.RelationReferences,
+				Confidence: types.ConfidenceExtracted,
+				Provenance: fmt.Sprintf("shard-%02d.go", i),
+			}},
+		}
+		shards = append(shards, sh)
+		fps[name] = fingerprintShardContent(sh)
+	}
+	_, err := store.Sync(ctx, shards, fps, nil, false)
+	require.NoError(t, err)
+
+	// Load repeatedly from the SAME on-disk store; every read must agree.
+	var want string
+	for i := range 25 {
+		g, err := NewStore(cacheDir, false, 0, nil, nil).Load(ctx)
+		require.NoError(t, err)
+		n, ok := g.node("file:shared.go")
+		require.True(t, ok, "shared node missing on iteration %d", i)
+		if i == 0 {
+			want = n.Source
+			continue
+		}
+		assert.Equal(t, want, n.Source,
+			"iteration %d disagreed on provenance: shard merge order is not stable", i)
+		if t.Failed() {
+			break
+		}
+	}
+
+	// The sorted order is the contract, not merely "some fixed order": the first
+	// shard by name wins, which is what makes the result predictable to a reader
+	// rather than an artifact of whatever the map happened to yield.
+	assert.Equal(t, "shard-00.go", want, "the lowest-named shard should win a first-writer-wins merge")
+}
+
+// The same hazard on the Sync path, which is the one a cold CI runner takes. Sync
+// merges freshly-built shards from a SLICE (always ordered), but it also RETAINS
+// input-fingerprinted shards the caller skipped, reading them back from disk - and
+// that second loop ranged the manifest map. A shard reused from disk is the normal
+// case for anything expensive to rebuild, so this path is not exotic.
+func TestSyncMergesRetainedShardsInStableOrder(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), ".magus")
+	ctx := context.Background()
+
+	const shardCount = 12
+	all := make([]Shard, 0, shardCount)
+	fps := map[string]string{}
+	inputFPs := map[string]string{}
+	for i := range shardCount {
+		name := fmt.Sprintf("@r%02d", i)
+		sh := Shard{Name: name, Nodes: []types.KnowledgeNode{
+			{ID: "file:shared.go", Kind: types.KindFile, Source: fmt.Sprintf("retained-%02d.go", i)},
+		}}
+		all = append(all, sh)
+		fps[name] = fingerprintShardContent(sh)
+		inputFPs[name] = "input-head" // unchanged input => reused from disk next time
+	}
+
+	// Build once so every shard is persisted with its input fingerprint.
+	_, err := NewStore(cacheDir, false, 0, nil, nil).Sync(ctx, all, fps, inputFPs, false)
+	require.NoError(t, err)
+
+	// Now Sync with NO shards supplied but the same input fingerprints: every shard is
+	// retained and re-merged from disk, which is the loop under test.
+	var want string
+	for i := range 25 {
+		g, err := NewStore(cacheDir, false, 0, nil, nil).Sync(ctx, nil, nil, inputFPs, false)
+		require.NoError(t, err)
+		n, ok := g.node("file:shared.go")
+		require.True(t, ok, "retained node missing on iteration %d", i)
+		if i == 0 {
+			want = n.Source
+			continue
+		}
+		assert.Equal(t, want, n.Source,
+			"iteration %d disagreed: retained-shard merge order is not stable", i)
+		if t.Failed() {
+			break
+		}
+	}
+	assert.Equal(t, "retained-00.go", want, "the lowest-named retained shard should win")
+}
+
 // BenchmarkStoreLoad measures a warm read of an already-built graph.
 //
 // Its absence is why a superlinear cost stayed invisible: Load allocates a Go map

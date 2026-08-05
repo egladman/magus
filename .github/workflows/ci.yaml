@@ -25,6 +25,7 @@ env:
 
 jobs:
   preflight:
+    name: magus preflight
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -38,20 +39,13 @@ jobs:
       - name: Set history path
         run: echo "MAGUS_HISTORY_PATH=$RUNNER_TEMP/magus-history.json" >> "$GITHUB_ENV"
 
+      # The newest published release: the compat job runs against it, and its job name
+      # shows the version so a reader sees WHICH magus was checked. Before setup so the
+      # tag is an output even if the install later fails.
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          # Commit graph in full, history's file contents left on the server: affected
-          # needs a merge base, never an old blob. See docs/guides/integrations/ci.md.
           fetch-depth: 0
           filter: blob:none
-
-      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
-        with:
-          version: '2026.4.8'
-          install: false
-
-      - name: Install pinned toolchain
-        run: mise install
 
       - name: Resolve magus release
         id: resolve_magus
@@ -61,6 +55,15 @@ jobs:
           set -euo pipefail
           TAG="$(gh release view --repo egladman/magus --json tagName -q .tagName)"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      # install stays ON (the default). With install: false the action adds the shims
+      # directory to PATH and computes the exported PATH BEFORE any tool exists, so a
+      # later `mise install` step put pnpm and node somewhere no subsequent step could
+      # see - `os.exec pnpm: exit -1`, the child never launching. Letting the action do
+      # the install also re-enables its cache: it only saves when it installed.
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: '2026.4.8'
 
       # Builds the magus this very commit defines, from the checkout above, so a
       # change that magusfile.buzz needs is exercised by the run that introduces
@@ -72,10 +75,8 @@ jobs:
           installation-strategy: source
           source-path: .
 
-      # setup-magus builds its bootstrap binary with actions/setup-go, which reads go.mod's
-      # `go` directive and PREPENDS that toolchain to PATH. It outranks mise's pinned Go for
-      # every later step, so without this the workspace is built, tested, and linted on a
-      # different Go than mise.toml pins. GITHUB_PATH prepends, so re-adding mise's wins.
+      # setup-magus's source build provisions its own Go via actions/setup-go, which
+      # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
@@ -95,7 +96,7 @@ jobs:
         run: magus affected ci --plan | magus run ci-shard:gha --no-default-charms
 
   ci:
-    name: shard ${{ matrix.shard }}
+    name: magus shard ${{ matrix.shard }}
     needs: preflight
     if: fromJSON(needs.preflight.outputs.count) > 0
     runs-on: ubuntu-latest
@@ -109,23 +110,22 @@ jobs:
       max-parallel: ${{ fromJSON(needs.preflight.outputs.max_parallel) }}
       matrix: ${{ fromJSON(needs.preflight.outputs.matrix) }}
     steps:
-      - name: Set history path
-        run: echo "MAGUS_HISTORY_PATH=$RUNNER_TEMP/magus-history.json" >> "$GITHUB_ENV"
-
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          # Commit graph in full, history's file contents left on the server: affected
-          # needs a merge base, never an old blob. See docs/guides/integrations/ci.md.
           fetch-depth: 0
           filter: blob:none
 
+      - name: Set history path
+        run: echo "MAGUS_HISTORY_PATH=$RUNNER_TEMP/magus-history.json" >> "$GITHUB_ENV"
+
+      # install stays ON (the default). With install: false the action adds the shims
+      # directory to PATH and computes the exported PATH BEFORE any tool exists, so a
+      # later `mise install` step put pnpm and node somewhere no subsequent step could
+      # see - `os.exec pnpm: exit -1`, the child never launching. Letting the action do
+      # the install also re-enables its cache: it only saves when it installed.
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
         with:
           version: '2026.4.8'
-          install: false
-
-      - name: Install pinned toolchain
-        run: mise install
 
       # Builds the magus this very commit defines, from the checkout above, so a
       # change that magusfile.buzz needs is exercised by the run that introduces
@@ -137,7 +137,8 @@ jobs:
           installation-strategy: source
           source-path: .
 
-      # See the preflight job: setup-magus's bootstrap toolchain outranks mise's on PATH.
+      # setup-magus's source build provisions its own Go via actions/setup-go, which
+      # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
@@ -177,53 +178,114 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  completions:
-    name: shell completions
-    needs: [preflight]
-    # Not folded into the ci target: it needs a docker daemon, and a gate that
-    # silently skips when one is missing is how a broken completion recipe ships.
-    # Path-gated because the pwsh image is ~1GB - pulling it for a change that
-    # cannot affect a completion script buys nothing.
-    if: needs.preflight.result == 'success'
+  compat:
+    name: magus compatibility (${{ needs.preflight.outputs.magus_version }})
+    # Second pass: can the magus users already have still drive this workspace? The
+    # shards answer "does this change work"; this answers a different question.
+    # Non-blocking - a failure means cut a release, not fix the PR.
+    # Serial (needs: ci) to avoid paying for it when the source pass already failed.
+    needs: [preflight, ci]
+    if: always() && needs.ci.result == 'success'
+    continue-on-error: true
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          # The path gate below diffs against the base commit, which a shallow
-          # checkout would not have; without this it always fails open and gates nothing.
-          # --name-only compares tree entries, so the blobs it skips are never missed.
           fetch-depth: 0
           filter: blob:none
-      - name: Did the shipped shell change?
-        id: changed
-        run: |
-          set -euo pipefail
-          base='${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}'
-          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-            echo 'run=true' >> "$GITHUB_OUTPUT"   # no usable base: do not silently skip
-            exit 0
-          fi
-          if git diff --name-only "$base" HEAD |
-              grep -qE '^(cmd/magus/completions/|hack/completion-checks/)'; then
-            echo 'run=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'run=false' >> "$GITHUB_OUTPUT"
-          fi
+
+      # install stays ON (the default). With install: false the action adds the shims
+      # directory to PATH and computes the exported PATH BEFORE any tool exists, so a
+      # later `mise install` step put pnpm and node somewhere no subsequent step could
+      # see - `os.exec pnpm: exit -1`, the child never launching. Letting the action do
+      # the install also re-enables its cache: it only saves when it installed.
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: '2026.4.8'
+
+      - name: Install codec build dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
 
       - uses: ./.github/actions/setup-magus
-        if: steps.changed.outputs.run == 'true'
+        id: magus
         with:
+          installation-strategy: prebuilt
           git-ref: ${{ needs.preflight.outputs.magus_version }}
 
-      - name: Exercise each completion script in its shell's official image
-        if: steps.changed.outputs.run == 'true'
-        run: magus run completion-test .
+      # setup-magus's source build provisions its own Go via actions/setup-go, which
+      # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
+
+      # prebuilt, not automatic: a silent fallback to a source build would make this job
+      # compare source against source and report compatibility it never checked.
+      - name: Confirm a real release was installed
+        shell: bash
+        env:
+          VERSION: ${{ steps.magus.outputs.version }}
+          INSTALL_SOURCE: ${{ steps.magus.outputs.install-source }}
+          COMMIT: ${{ steps.magus.outputs.commit }}
+        run: |
+          echo "magus $VERSION ($INSTALL_SOURCE, $COMMIT)" >> "$GITHUB_STEP_SUMMARY"
+          [[ "$INSTALL_SOURCE" == "prebuilt" ]]
+
+      # ls, not doctor: this asks only "can the release evaluate every magusfile", and ls
+      # answers it by listing each project's targets. doctor is opinionated - it would
+      # fail on workspace conventions that have nothing to do with the binary's version.
+      - name: Load the workspace with magus ${{ needs.preflight.outputs.magus_version }}
+        run: magus ls
+
+      - name: Run ci with magus ${{ needs.preflight.outputs.magus_version }}
+        run: magus affected ci --no-default-charms
+
+  advice:
+    # Non-blocking nudges about THIS PR - one step per check, each silent unless it has
+    # something to say. Named for doctor's [advice] level so the CI surface and the tool
+    # share one word for "worth knowing, never a gate". Opt out with the repository
+    # variable MAGUS_PR_COMMENTS=false.
+    name: magus advisor
+    if: github.event_name == 'pull_request' && vars.MAGUS_PR_COMMENTS != 'false'
+    needs: [preflight]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      # install stays ON (the default). With install: false the action adds the shims
+      # directory to PATH and computes the exported PATH BEFORE any tool exists, so a
+      # later `mise install` step put pnpm and node somewhere no subsequent step could
+      # see - `os.exec pnpm: exit -1`, the child never launching. Letting the action do
+      # the install also re-enables its cache: it only saves when it installed.
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: '2026.4.8'
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      # setup-magus's source build provisions its own Go via actions/setup-go, which
+      # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
+
+      # Every advisor, each silent unless it has something to say. They live in the
+      # action so other workspaces get them with one `uses:` line; turn one off by name
+      # (merge-conflicts: 'false') rather than by editing this step.
+      - uses: ./.github/actions/advice
 
   deploy-build:
-    name: deploy build
+    name: magus deploy build
     needs: [preflight]
     # Separate from `magus affected ci` on purpose: affected ci shards per-project
     # correctness, and the deploy is a workspace-level composition no single project owns.
@@ -242,26 +304,43 @@ jobs:
     permissions:
       contents: read
     steps:
-      # Matches the publish workflow: page footers read `git log`, so a shallow clone would
-      # exercise a different render than the one that ships.
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           fetch-depth: 0
           filter: blob:none
 
+      # install stays ON (the default). With install: false the action adds the shims
+      # directory to PATH and computes the exported PATH BEFORE any tool exists, so a
+      # later `mise install` step put pnpm and node somewhere no subsequent step could
+      # see - `os.exec pnpm: exit -1`, the child never launching. Letting the action do
+      # the install also re-enables its cache: it only saves when it installed.
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
         with:
           version: '2026.4.8'
-          install: false
 
-      - name: Install pinned toolchain
-        run: mise install
+      # The docs render drives its generators through `go run`, which compiles
+      # internal/codec with cgo and needs liblzma/libzstd.
+      - name: Install codec build dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
 
-      # The released binary, matching the publish workflow; a source build would test a
-      # magus the deploy never runs.
+      # Matches the publish workflow: page footers read `git log`, so a shallow clone would
+      # exercise a different render than the one that ships.
+      # A source build, matching publish-site.yaml. This mirrored the publish workflow on
+      # the released binary so a source build could not test a magus the deploy never
+      # runs - but that pairing breaks for the whole window between a breaking magusfile
+      # change and the release carrying it. The built-in spells were renamed (md ->
+      # markdown, ...) and the magusfile updated to match, so the newest release cannot
+      # load this workspace at all. publish-site.yaml made the same move; the two stay
+      # matched, just on source rather than on the release.
       - uses: ./.github/actions/setup-magus
         with:
-          git-ref: ${{ needs.preflight.outputs.magus_version }}
+          installation-strategy: source
+          source-path: .
+
+      # setup-magus's source build provisions its own Go via actions/setup-go, which
+      # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
       # deploy-generate throws when either tree lacks its index.html, so it is the
       # assertion. Nothing is uploaded: this proves the build, it does not publish.
@@ -275,7 +354,7 @@ jobs:
         run: magus run deploy-generate .
 
   image-snapshot:
-    name: publish snapshot container image
+    name: magus image snapshot
     needs: [preflight, ci]
     # Merges to main only, and only once `ci` has actually passed - not `always()`.
     # A pull request must never reach this job: a fork PR would otherwise push an
@@ -289,30 +368,34 @@ jobs:
       packages: write # push to GHCR
       id-token: write # cosign keyless (OIDC) signing
     steps:
-      # Full history + tags: the image bakes version()/commit()/build_date() in via
-      # ldflags, and git describe has to be able to reach the nearest tag.
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           fetch-depth: 0
           filter: blob:none
 
+      # install stays ON (the default). With install: false the action adds the shims
+      # directory to PATH and computes the exported PATH BEFORE any tool exists, so a
+      # later `mise install` step put pnpm and node somewhere no subsequent step could
+      # see - `os.exec pnpm: exit -1`, the child never launching. Letting the action do
+      # the install also re-enables its cache: it only saves when it installed.
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
         with:
           version: '2026.4.8'
-          install: false
 
-      - name: Install pinned toolchain
-        run: mise install # cosign, for the signing step inside image-build
-
-      # Built from source, NOT the pinned release: the image-* targets below call
-      # magus\secret.read, which no published release has yet. On a release binary that
-      # namespace is missing, resolvable()'s try/catch swallows the failure, and the job
-      # reports "no usable credentials" while the tokens are sitting right there in env.
-      # Move this back to git-ref once a release carries the secret provider.
+      # Full history + tags: the image bakes version()/commit()/build_date() in via
+      # ldflags, and git describe has to be able to reach the nearest tag.
+      # Full history + tags (the composite's default): the image bakes
+      # version()/commit()/build_date() in via ldflags, and git describe must reach the
+      # nearest tag. mise brings cosign for the signing step inside image-build.
       - uses: ./.github/actions/setup-magus
         with:
           installation-strategy: source
           source-path: .
+
+      # setup-magus's source build provisions its own Go via actions/setup-go, which
+      # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
@@ -343,26 +426,12 @@ jobs:
       # from the references it actually pushed. A step that re-derived them would be
       # parsing magus's own output back out of a file magus wrote.
 
-  merge-history:
-    name: merge run history
-    needs: [preflight, ci]
-    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.preflight.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      - uses: ./.github/actions/setup-magus
-        with:
-          git-ref: ${{ needs.preflight.outputs.magus_version }}
-
-      - uses: ./.github/actions/magus
-        with:
-          merge-history: 'true'
-
-  postflight:
-    name: insight report
+  report:
+    # One job for everything that runs AFTER the shards: the run summary always, and the
+    # history merge only where there is a history to keep. They shared a checkout, a magus
+    # install, and a trigger condition; two jobs meant two of each and two rows in the
+    # checks list for one idea.
+    name: magus report
     needs: [preflight, ci]
     if: always() && needs.preflight.result == 'success'
     runs-on: ubuntu-latest
@@ -372,40 +441,20 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          # Commit graph in full, history's file contents left on the server: affected
-          # needs a merge base, never an old blob. See docs/guides/integrations/ci.md.
           fetch-depth: 0
           filter: blob:none
+
       - uses: ./.github/actions/setup-magus
         with:
-          git-ref: ${{ needs.preflight.outputs.magus_version }}
-      - name: Summarize CI outcome
-        env:
-          CI_RESULT: ${{ needs.ci.result }}
-          SHARD_COUNT: ${{ needs.preflight.outputs.count }}
-        run: |
-          {
-            echo '## CI outcome'
-            case "$CI_RESULT" in
-              success)
-                echo "Passed across ${SHARD_COUNT} affected shard(s)."
-                ;;
-              skipped)
-                echo 'No affected projects required a CI shard.'
-                ;;
-              failure|cancelled)
-                echo "**${CI_RESULT}:** open the failed shard job above, then fetch its Magus output reference before retrying."
-                echo
-                echo 'Local triage: `magus affected ci` · [Affected CI guide](https://eli.gladman.cc/magus/guides/affected/) · [CI target guide](https://eli.gladman.cc/magus/concepts/targets/ci/)'
-                ;;
-              *)
-                echo "CI reported an unexpected result: \`$CI_RESULT\`. Open the workflow jobs above for the failing step."
-                ;;
-            esac
-          } >> "$GITHUB_STEP_SUMMARY"
-      - name: Insight report to step summary
-        run: |
-          {
-            echo "## Insight report"
-            magus insight report --workspace -o markdown
-          } >> "$GITHUB_STEP_SUMMARY"
+          installation-strategy: source
+          source-path: .
+
+      # One step for the whole job. merge-history only on main: a pull request's shard
+      # histories describe a branch that is about to disappear, and folding them into the
+      # kept history would skew it.
+      - uses: ./.github/actions/magus
+        with:
+          report: 'true'
+          ci-result: ${{ needs.ci.result }}
+          shard-count: ${{ needs.preflight.outputs.count }}
+          merge-history: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}

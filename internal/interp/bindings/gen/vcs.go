@@ -77,6 +77,14 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return BoolVal(ret0), nil
 	}))
+	m.MapSet("dirtyFiles", vm.DirectValue("vcs.dirtyFiles", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		paths := StrSlice(bzArgs, 0)
+		ret0, err := std.VcsDirtyFiles(ctx, paths)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrSliceVal(ret0), nil
+	}))
 	m.MapSet("diagnoseDrift", vm.DirectValue("vcs.diagnoseDrift", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		outputs := StrSlice(bzArgs, 0)
 		inputs := StrSlice(bzArgs, 1)

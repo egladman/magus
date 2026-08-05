@@ -74,8 +74,17 @@ var Vcs = Module{
 			Impl:    VcsIsDirty,
 		},
 		{
+			Name: "dirty_files",
+			Doc:  "The changed entries in the working tree as the backend's own status lines (git porcelain, hg status, jj diff --name-only), or an empty list when clean. Pass paths to scope it, exactly like is_dirty. This is is_dirty with the detail: a gate that has to say WHICH generated files moved asks this instead of shelling out to the VCS and parsing it by hand.",
+			Args: []Arg{
+				{Name: "paths", Type: TypeStringSlice, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeStringSlice}},
+			Impl:    VcsDirtyFiles,
+		},
+		{
 			Name: "diagnose_drift",
-			Doc:  "Diagnose why a generate gate's outputs drifted and RETURN the verdict {drifted, code, message, url} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility bug); drifted is false with empty fields when the outputs are clean. Composes is_dirty; does not replace it.",
+			Doc:  "Diagnose why a generate gate's outputs drifted and RETURN the verdict {drifted, code, message, url, files} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility bug); files lists the drifted outputs as the backend's status lines, so a gate reports WHICH files moved without shelling out to the VCS. drifted is false with empty fields when the outputs are clean. Composes is_dirty; does not replace it.",
 			Args: []Arg{
 				{Name: "outputs", Type: TypeStringSlice},
 				{Name: "inputs", Type: TypeStringSlice, Optional: true},
@@ -288,14 +297,18 @@ func VcsCommitDate(ctx context.Context) (string, error) {
 // owns the response - fail on a clean-tree drift, warn on a mid-edit dirty tree (the
 // plan's local-warn / CI-fail split). The record is a plain map:
 //
-//	{ drifted: bool, code: str, message: str, url: str }
+//	{ drifted: bool, code: str, message: str, url: str, files: []str }
 //
-// drifted is false (and code/message/url empty) when the outputs are not actually dirty.
+// drifted is false (and code/message/url empty, files empty) when the outputs are not
+// actually dirty. files carries the backend's status lines for the drifted outputs, so a
+// gate can say WHICH files moved without shelling out to the VCS itself.
 // It composes vcs.isDirty (called on outputs and inputs) rather than replacing it:
 // isDirty stays the general "is this path dirty" primitive; diagnoseDrift is the
 // drift-specific reading on top of it plus the version signal.
 func VcsDiagnoseDrift(ctx context.Context, outputs, inputs []string) (map[string]any, error) {
-	clean := map[string]any{"drifted": false, "code": "", "message": "", "url": ""}
+	// Same keys as the drifted verdict, so a caller can read .files unconditionally
+	// rather than discovering the key is absent only on the clean path.
+	clean := map[string]any{"drifted": false, "code": "", "message": "", "url": "", "files": []string{}}
 	v, _ := resolveVCS(ctx)
 	if v == nil {
 		return clean, nil
@@ -304,14 +317,19 @@ func VcsDiagnoseDrift(ctx context.Context, outputs, inputs []string) (map[string
 	if err != nil {
 		dir = ""
 	}
-	outDirty, err := v.Dirty(ctx, dir, outputs)
+	// DirtyFiles, not Dirty: the verdict carries WHICH outputs drifted, and Dirty is
+	// defined in terms of this anyway, so naming them costs nothing extra. A gate that
+	// reports only "something drifted" sends its reader to reproduce the run just to
+	// learn what a status call already knew - and a gate fires precisely when the
+	// reader is looking at a CI log rather than the tree.
+	dirtyFiles, err := v.DirtyFiles(ctx, dir, outputs)
 	if err != nil {
 		// Split from the !outDirty case below on purpose: they were one branch, so a
 		// failed probe returned the same "clean" verdict as a genuinely clean tree. A
 		// drift diagnosis that cannot read the tree has no verdict to give.
 		return nil, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s status", v.Name())
 	}
-	if !outDirty {
+	if len(dirtyFiles) == 0 {
 		return clean, nil
 	}
 	inDirty := false
@@ -341,7 +359,29 @@ func VcsDiagnoseDrift(ctx context.Context, outputs, inputs []string) (map[string
 		"code":    string(code),
 		"message": msg,
 		"url":     types.CodeURL(code),
+		"files":   dirtyFiles,
 	}, nil
+}
+
+// VcsDirtyFiles returns the changed entries as the backend's status lines, the detail
+// half of VcsIsDirty. Both resolve paths against the project's working directory and
+// both RAISE on a failed probe rather than reporting "clean": a gate that cannot read
+// the tree has no answer, and silently returning an empty list would let it pass having
+// checked nothing - the one outcome a gate must never produce quietly.
+func VcsDirtyFiles(ctx context.Context, paths []string) ([]string, error) {
+	v, _ := resolveVCS(ctx)
+	if v == nil {
+		return nil, nil
+	}
+	dir, err := EffectiveCwd(ctx)
+	if err != nil {
+		dir = ""
+	}
+	files, err := v.DirtyFiles(ctx, dir, paths)
+	if err != nil {
+		return nil, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s status", v.Name())
+	}
+	return files, nil
 }
 
 // VcsIsDirty reports whether the working tree has uncommitted changes.

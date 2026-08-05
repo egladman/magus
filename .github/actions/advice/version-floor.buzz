@@ -1,0 +1,81 @@
+// Comment when a pull request RAISES the workspace's magus version floor.
+//
+// `required_version` in magus.yaml is checked before the magusfile is evaluated, so a
+// contributor whose local magus predates it cannot load the workspace at all - and the
+// failure names the floor, not the fix. Raising it is therefore a change every
+// contributor has to act on, and the pull request that raises it is the only place they
+// will all see it.
+//
+// Silent unless this PR changes that line, which is almost never.
+//
+// Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA.
+import "os";
+import "advice";
+import "std";
+
+final section = "version-floor";
+
+// raised returns the new floor when the diff sets required_version, or "" when it does
+// not. Pure over the diff text so the parse is testable.
+export fun raised(diff: str) > str {
+    foreach (line in diff.split("\n")) {
+        if (!line.startsWith("+required_version:")) { continue; }
+        final value = line.sub("+required_version:".len()).trim();
+        // Buzz's replace swaps only the FIRST match, so each quote style is stripped
+        // from both ends explicitly rather than by a single global replace.
+        return value.replace("\"", with: "").replace("\"", with: "").replace("'", with: "").replace("'", with: "");
+    }
+    return "";
+}
+
+fun body(floor: str) > str {
+    return "**This pull request raises the magus version floor to `" + floor + "`.**\n\n"
+        + "magus checks `required_version` before it evaluates the magusfile, so once "
+        + "this merges an older magus cannot load this workspace at all - not just the "
+        + "changed targets, every command. Upgrade first:\n\n"
+        + "```sh\nmagus self update\n```\n";
+}
+
+fun main() > void {
+    final repo = advice\env("REPO");
+    final pr = advice\env("PR_NUMBER");
+    final base = advice\env("PR_BASE");
+    final head = advice\env("PR_HEAD_SHA");
+    if (pr == "" and base == "" and head == "") {
+        std\print("version-floor: no PR context; nothing to advise");
+        return;
+    }
+    if (pr == "" or base == "" or head == "") {
+        throw "version-floor: PR_NUMBER, PR_BASE, and PR_HEAD_SHA must be set together";
+    }
+
+    if (advice\silenced(repo, pr: pr, name: section)) {
+        // Retract rather than leave the last finding frozen on the page.
+        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        std\print("version-floor: silenced by label");
+        return;
+    }
+
+    os\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
+    final diff = os\exec("git", args: ["diff", "origin/" + base + "..." + head, "--", "magus.yaml"],
+        dir: ".", opts: {"allow_failure": true}).stdout;
+    final floor = raised(diff);
+    if (floor == "") {
+        // Retract: a floor raise that was reverted must not leave the note behind.
+        advice\publish(repo, pr: pr, name: section, title: "The magus version floor moved", body: "");
+        std\print("version-floor: unchanged");
+        return;
+    }
+    advice\publish(repo, pr: pr, name: section, title: "The magus version floor moved", body: body(floor));
+    std\print("version-floor: advised on " + floor);
+}
+
+main();
+
+test "raised reads a newly set floor" {
+    std\assert(raised("+required_version: \">= 0.4.0\"\n") == ">= 0.4.0", message: "unquoted value");
+}
+
+test "raised ignores an unrelated magus.yaml change" {
+    std\assert(raised("+concurrency: 4\n-required_version: \">= 0.3.0\"\n") == "", message: "only additions of the key");
+}

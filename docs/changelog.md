@@ -83,9 +83,46 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   check to be switched off wholesale. A bare `true` is rejected: the reason is the point.
 - [MGS1020](reference/codes/magusfile/MGS1020.md) reports a generated file claimed as
   an output by more than one target, and documents the one-owner rule for generated files.
+- `magus doctor` findings come at two levels, and the split is a correction. `[fail]` is a
+  workspace that is wrong however you like to work: a dependency cycle, an unparseable
+  magusfile, two targets claiming one output. `[advice]` is a convention magus recommends -
+  target naming, language coverage, spell doc comments - which is reported and exits zero,
+  because `ci` is the one target magus reserves and the rest of the layout belongs to
+  whoever wrote it. Previously a convention check could only fail or not exist, so each one
+  grew its own escape hatch (`no_language`, and briefly `allow_bespoke_name`): the config
+  surface was accumulating one key per opinion, and taking magus's advice was mandatory
+  unless you wrote a paragraph explaining yourself. There is deliberately no flag that
+  promotes advice back to failure; that would be the same imposition with an opt-in label.
+
+- A workspace can declare the oldest magus that can run it. `required_version` in
+  `magus.yaml` takes a semver constraint, is checked before any magusfile is evaluated, and
+  reports [MGS1021](reference/codes/magusfile/MGS1021.md) naming both fixes (upgrade
+  the binary, or raise the pinned version in CI). It has to be declared rather than derived
+  because the binary that hits the problem is the OLD one: it cannot look up which release
+  added the module it is missing, having never heard of that release. Without it, a too-old
+  magus fails from wherever the magusfile first touched something it lacks -
+  `import "xml": module not found`, which reads like a typo. See
+  [docs/concepts/compatibility.md](concepts/compatibility.md), which states what magus
+  promises across versions and why there is no plan for a 2.0.
 
 ### Fixed
 
+- The console's service worker stops serving a stale bundle indefinitely. Its `BUILD_ID`
+  named the cache and was hand-written, though the comment beside it claimed the build
+  bumped it, so a rebuilt console produced a byte-identical `sw.js`, the browser found no
+  update, and every client stayed pinned to the shell it first cached. The refresh prompt
+  downstream was never reached because nothing upstream ever fired. `BUILD_ID` is now a
+  digest of the bytes it precaches, and a tab re-checks for a new worker on boot and every
+  15 minutes, so an unattended display is not left on a build from days ago.
+- A `magus doctor` finding names the file it found. Details rendered their path with
+  `filepath.Rel` against the runner's root and discarded the error, but the root is empty
+  on the path the daemon takes - so `Rel` failed and the detail printed an empty path,
+  reporting a target name as wrong without saying which magusfile declared it. It now falls
+  back to the workspace root, then to the absolute path.
+- `magus doctor` reports a bespoke phase-fragment target name ([MGS1003](reference/codes/magusfile/MGS1003.md))
+  once per project instead of once per name. Collapsing every project onto the first
+  magusfile scanned meant a workspace with three of them showed one, and fixing that one
+  surfaced the next - the check could not say how much work was left.
 - The container images build again. Both Dockerfiles copied only `go.mod` and `go.sum`
   before `go mod download`, but the root `go.mod` `replace`s two in-repo modules and the
   download reads each replacement's own `go.mod` to build the module graph. It failed with

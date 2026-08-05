@@ -38,7 +38,7 @@
 // when you want the exact bytes of one that already finished.
 //
 // (The body below uses os.exec, which runs a real command. magus.cmd is the escape
-// hatch for invoking magus ITSELF - `magus\cmd(["sh", ...])` would run `magus sh`.)
+// hatch for invoking magus ITSELF - `magus\cmd("sh", ...)` would run `magus sh`.)
 
 import "magus";
 import "os";

@@ -82,11 +82,21 @@ func (*runner) checkStaleServiceSuppressions(projects []*types.Project) Check {
 	}
 }
 
-// checkLanguageCoverage flags a project that binds no toolchain spell, which usually means
-// an import was forgotten and the project's real work is invisible to affected tracking and
-// the cache. Usually, not always: a polyglot harness no single pack describes is legitimate,
-// and a project says so with magus.project's "no_language" key. The opt-out carries a reason
-// rather than a bool so the exemption reads as a decision instead of a silenced check.
+// checkLanguageCoverage notes a project that binds no toolchain spell, which
+// usually means an import was forgotten and the project's real work is invisible
+// to affected tracking and the cache. A project says otherwise with
+// magus.project's "no_language" key, which carries a reason rather than a bool so
+// the exemption reads as a decision.
+//
+// It does NOT sniff the project's files to guess a language. Discovery retired
+// exactly that (a stray go.mod or package.json no longer registers anything), and
+// the reason applies here too: a guess that is right most of the time still means
+// magus deciding something about your repository that you did not tell it, and
+// being wrong in the remaining cases with no obvious way to argue. A declaration
+// is the whole point - explicit over clever.
+//
+// ADVICE, not failure. A project with no language pack is a legitimate shape, so
+// this is worth saying once and never worth blocking on.
 func (*runner) checkLanguageCoverage(projects []*types.Project) Check {
 	var noLang []string
 	exempt := 0
@@ -109,9 +119,10 @@ func (*runner) checkLanguageCoverage(projects []*types.Project) Check {
 	}
 	slices.Sort(noLang)
 	return Check{
-		Name:    "language coverage",
-		Status:  StatusFail,
-		Message: fmt.Sprintf("%d project(s) without a language pack", len(noLang)),
+		Name:   "language coverage",
+		Status: StatusAdvice,
+		Message: fmt.Sprintf("%d project(s) without a language pack; binding one puts the project's work "+
+			"under affected tracking and the cache", len(noLang)),
 		Details: noLang,
 	}
 }
@@ -173,8 +184,8 @@ func (*runner) checkSpellDocs(spells []*spells.Spell) Check {
 	slices.Sort(undocumented)
 	return Check{
 		Name:    name,
-		Status:  StatusFail,
-		Message: fmt.Sprintf("%d local spell target(s) missing a doc comment", len(undocumented)),
+		Status:  StatusAdvice,
+		Message: fmt.Sprintf("%d local spell target(s) missing a doc comment; the doc is what `magus describe` shows a caller", len(undocumented)),
 		Details: undocumented,
 	}
 }
@@ -642,9 +653,9 @@ func (r *runner) checkTargetNameConventions(projects []*types.Project) Check {
 	slices.Sort(details)
 	return Check{
 		Name:   "target name conventions",
-		Status: StatusFail,
+		Status: StatusAdvice,
 		Message: fmt.Sprintf("target names mix %d naming conventions; magus normalizes any casing so they "+
-			"all resolve, but the workspace must pick one convention for consistent, greppable invocations", len(conventions)),
+			"all resolve, and picking one keeps invocations consistent and greppable", len(conventions)),
 		Details: details,
 	}
 }
@@ -676,13 +687,23 @@ var bespokePhaseFragmentNames = map[string]bool{
 }
 
 // checkBespokePhaseFragmentTargets is MGS1003: a target whose normalized name
-// names a static-analysis or formatting subset rather than a phase of its own
-// should be composed into lint (or format) instead, so `magus affected ci`
-// covers it without a bespoke target the pipeline can silently forget to run.
-// A warning, not a load error: the escape hatch of keeping the name stays.
+// names a static-analysis or formatting subset rather than a phase of its own is
+// usually better composed into lint (or format), so `magus affected ci` covers it
+// without a bespoke target the pipeline can silently forget to run.
+//
+// ADVICE, not failure. This is magus's convention, and a workspace is entitled to
+// a different one - a slow audit split out from fast lint is a real reason, and so
+// is simply preferring the name. Failing here would make magus's taste a
+// requirement of using magus, which it is not: `ci` is the one reserved target and
+// the rest of the layout belongs to whoever wrote it. `--strict` promotes this for
+// a workspace that wants the convention enforced.
+//
+// Reported per project rather than once per name. Two projects that both name a
+// target "security" are two separate decisions, and collapsing them hid the
+// second one behind whichever magusfile happened to be scanned first.
 func (r *runner) checkBespokePhaseFragmentTargets(projects []*types.Project) Check {
 	const name = "bespoke phase-fragment target names"
-	seen := map[string]string{} // normalized name -> "name (file)" example
+	var found []string
 	for _, p := range projects {
 		for _, f := range magusfileSourcesInDir(p.Dir) {
 			for _, raw := range declaredTargetNames(f) {
@@ -690,31 +711,42 @@ func (r *runner) checkBespokePhaseFragmentTargets(projects []*types.Project) Che
 				if !bespokePhaseFragmentNames[norm] {
 					continue
 				}
-				if _, ok := seen[norm]; ok {
-					continue
-				}
-				rel, _ := filepath.Rel(r.root, f)
-				seen[norm] = fmt.Sprintf("%q in %s", raw, filepath.ToSlash(rel))
+				found = append(found, fmt.Sprintf("%s: %q in %s", norm, raw, r.displayPath(f)))
 			}
 		}
 	}
-	if len(seen) == 0 {
+	if len(found) == 0 {
 		return Check{Name: name, Status: StatusOK, Message: "no bespoke phase-fragment target names"}
 	}
-	details := make([]string, 0, len(seen))
-	for norm, ex := range seen {
-		details = append(details, fmt.Sprintf("%s: %s", norm, ex))
-	}
-	slices.Sort(details)
+	slices.Sort(found)
 	return Check{
 		Name:   name,
-		Status: StatusFail,
+		Status: StatusAdvice,
 		Message: fmt.Sprintf(
-			"%d target name(s) name static analysis or formatting rather than a phase of their own; "+
-				"compose the op into lint (or format) so `magus affected ci` covers it (docs/targets.md#the-target-name, see %s)",
-			len(seen), types.CodeURL(types.BespokePhaseFragmentName)),
-		Details: details,
+			"%d target(s) name static analysis or formatting rather than a phase of their own; "+
+				"composing the op into lint (or format) lets `magus affected ci` cover it "+
+				"(docs/targets.md#the-target-name, see %s)",
+			len(found), types.CodeURL(types.BespokePhaseFragmentName)),
+		Details: found,
 	}
+}
+
+// displayPath renders an absolute path for a check detail, workspace-relative
+// where that is possible and absolute where it is not. r.root is empty on some
+// call paths (the daemon passes the workspace through r.ws instead), and
+// filepath.Rel against an empty root fails - which silently produced details
+// naming no file at all, the one thing a detail line exists to do.
+func (r *runner) displayPath(abs string) string {
+	root := r.root
+	if root == "" && r.ws != nil {
+		root = r.ws.Root()
+	}
+	if root != "" {
+		if rel, err := filepath.Rel(root, abs); err == nil {
+			return filepath.ToSlash(rel)
+		}
+	}
+	return filepath.ToSlash(abs)
 }
 
 // checkUnreachedFootprintDecls is MGS1004: a ctx.readsFiles/writesFiles call the static

@@ -124,7 +124,7 @@ func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) 
 			return
 		}
 		stop := t.phase("magus.open")
-		opts := []magus.Option{magus.WithLoadedConfig(globalCfg)}
+		opts := []magus.Option{magus.WithLoadedConfig(globalCfg), magus.WithVersion(version)}
 		if lim := bootstrapLimiterFrom(ctx); lim != nil {
 			opts = append(opts, workspace.WithLimiter(lim))
 		}
@@ -155,7 +155,8 @@ func inspectWorkspace(ctx context.Context, rootOverride string) (types.Workspace
 			return
 		}
 		stop := t.phase("workspace.inspect")
-		inspectValue, inspectErr = magus.Inspect(ctx, root, magus.WithLoadedConfig(globalCfg))
+		inspectValue, inspectErr = magus.Inspect(ctx, root,
+			magus.WithLoadedConfig(globalCfg), magus.WithVersion(version))
 		stop()
 	})
 	if rootOverride != inspectRootOverride {

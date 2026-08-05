@@ -128,11 +128,21 @@ fun build_date() > str {
     }
 }
 
+// built_by is the CI workflow that produced the binary, empty for a local build so
+// nothing claims a pedigree it does not have. It should match the job_workflow_ref a
+// keyless signature carries, which is what lets the claim be checked against proof.
+fun built_by() > str {
+    final ref = os\env("GITHUB_WORKFLOW_REF");
+    if (ref == null) { return ""; }
+    return "" + ref;
+}
+
 fun ld_flags() > str {
     return "-w -s"
         + " -X main.version=" + version()
         + " -X main.commit=" + commit()
-        + " -X main.buildDate=" + build_date();
+        + " -X main.buildDate=" + build_date()
+        + " -X main.builtBy=" + built_by();
 }
 
 // Compiles the version-stamped magus binary.
@@ -653,10 +663,10 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void {
 // verify` still checks that section's stamp.
 export fun skills_generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles(".claude/skills/**", ".agents/skills/**", ".opencode/skills/**");
-    magus\cmd(["agent", "install", ".claude/skills", "--force"], {"quiet": true});
-    magus\cmd(["agent", "install", ".agents/skills", "--force"], {"quiet": true});
-    magus\cmd(["agent", "install", ".opencode/skills", "--force"], {"quiet": true});
-    magus\cmd(["agent", "install-agents-md"], {"quiet": true});
+    magus\cmd("agent", args: ["install", ".claude/skills", "--force"], opts: {"quiet": true});
+    magus\cmd("agent", args: ["install", ".agents/skills", "--force"], opts: {"quiet": true});
+    magus\cmd("agent", args: ["install", ".opencode/skills", "--force"], opts: {"quiet": true});
+    magus\cmd("agent", args: ["install-agents-md"], opts: {"quiet": true});
 }
 
 // Regenerates the CLI config-flag plumbing from internal/config/config.go. One
@@ -696,7 +706,7 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void {
     fs\mkdirall("gen");
     // The knowledge graph (nodes/links). No dedicated binding for `graph export`, so
     // magus.cmd is the documented escape hatch.
-    final knowledge = magus\cmd(["graph", "export", "--static", "-o", "json"], {"quiet": true}).stdout;
+    final knowledge = magus\cmd("graph", args: ["export", "--static", "-o", "json"], opts: {"quiet": true}).stdout;
     fs\writeFile(fs\join("gen", "knowledge-graph.json"), knowledge);
     // The target graph ({definition, projects}), the same bytes as
     // `magus describe graph -o json`, which is what the explorer's target adapter reads.
@@ -775,8 +785,18 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     if (ctx.has_charm("rw")) { return; }
 
     if (clean_before and vcs\isDirty()) {
+        // dirtyFiles, not a shell-out and not vcs.diff: magus already knows which files
+        // moved, and the gate fires exactly when its reader has a CI log instead of the
+        // tree. Not diagnoseDrift either - that classifies against a target's DECLARED
+        // outputs and inputs, and this gate is whole-tree by design (it composes every
+        // *-generate target), so with no inputs to compare it would always land on the
+        // dev-build verdict and tell an author their own uncommitted output was "not
+        // your change".
+        final changed = vcs\dirtyFiles();
+        var detail = "";
+        if (changed.len() > 0) { detail = ": " + changed.join(", "); }
         throw "generate: regeneration changed generated files; re-run "
-            + "`magus run generate:rw` and commit";
+            + "`magus run generate:rw` and commit" + detail;
     }
 }
 
@@ -1111,8 +1131,30 @@ fun total_coverage(func_out: str) > str {
     return cell;
 }
 
+// Runs the PR advisors' `test "..." {}` blocks.
+//
+// They are the only .buzz sources in this tree that parse standalone: everything else
+// imports magus/magus\spell and uses embedding-only constructs, which is why the old
+// standalone-Buzz test targets were deleted rather than repointed. The advisors run
+// under a plain `magus buzz` in CI, so upstream-strict is exactly the parse they need
+// checked, and `-t` is the runner.
+//
+// Run from each script's own directory, not the project root, because they do
+// `import "advice"` for the shared comment plumbing and Buzz resolves a bare import
+// against the CWD. In CI the action supplies the same thing as BUZZ_INCLUDE_PATH.
+//
+export fun advice_test(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles(".github/actions/advice/*.buzz", ".github/actions/magus/*.buzz");
+    foreach (dir in [".github/actions/advice", ".github/actions/magus"]) {
+        foreach (script in fs\glob(dir + "/*.buzz")) {
+            magus\cmd("buzz", args: ["-t", fs\basename(script)], opts: {"dir": dir});
+        }
+    }
+}
+
 // Tests with race detection, coverage, and a drift-gated coverage badge.
 export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(advice_test);
     // Declared because this target WRITES the badge below and gates on its drift.
     // Undeclared, a declaration-based staging review would skip it as unclaimed while ci still failed on
     // it being stale - the workspace's account of itself disagreeing with what a
@@ -1157,8 +1199,11 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 // doctor's magusfile-syntax check. Reviving them means first having standalone Buzz and
 // pinning `buzz` in mise.toml, which is not the case today.
 
-// Gates the build on workspace health by running `magus doctor`.
-export fun preflight(ctx: magus\Context, args: [str]) > void { magus\doctor([]); }
+// No gate of its own: doctor USED to run here and fail the build on a finding, which
+// made workspace conventions a blocker for everyone downstream. The advice action now
+// reports the same findings on the pull request, non-blocking - and unlike a preflight
+// gate, that works for a consumer who never wired doctor into their own pipeline.
+export fun preflight(ctx: magus\Context, args: [str]) > void {}
 
 // Compiles one artifact: the host binary, or the container image under the `container` charm.
 export fun build(ctx: magus\Context, args: [str])  > void {
@@ -1200,13 +1245,15 @@ export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate);
 
 // Runs the CI gates through their declared dependencies.
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(lint, build, test);
+    ctx.needs(lint, build, test, completion_test);
 }
 
 // Exercises the completion scripts magus SHIPS, each inside the official image for its
-// shell. Not part of ci: it needs a docker daemon, and a gate that silently skips when a
-// tool is missing is how the zsh recipe stayed broken - it told users to append a script
-// to ~/.zshrc that registers nothing, and nothing ever ran it to find out.
+// shell. Part of ci, and it REQUIRES a docker daemon rather than skipping without one:
+// a gate that silently skips when a tool is missing is how the zsh recipe stayed broken
+// - it told users to append a script to ~/.zshrc that registers nothing, and nothing
+// ever ran it to find out. Its declared footprint keeps the cost off every run: affected
+// only reaches it when the completion scripts or their checks change.
 //
 // One image per shell, pinned to a major-version tag, and nothing is installed into any
 // of them: each image already carries its shell. There is no magus binary inside, so the
@@ -1219,6 +1266,9 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 // TODO: fish is uncovered for the same reason; upstream declined to publish an official
 // image in fish-shell/fish-shell#3440.
 export fun completion_test(ctx: magus\Context, args: [str]) > void {
+    // Declared so `magus affected` knows when this matters. Without it CI had to
+    // re-derive the same answer with a git-diff grep in the workflow.
+    ctx.readsFiles("hack/completion-checks/*", "cmd/magus/completions/*");
     try {
         os\which("docker");
     } catch (e) {
@@ -1230,8 +1280,11 @@ export fun completion_test(ctx: magus\Context, args: [str]) > void {
         "bash:5": "bash hack/completion-checks/bash.sh",
         "mcr.microsoft.com/dotnet/sdk:8.0": "pwsh -NoProfile -File hack/completion-checks/pwsh.ps1",
     };
+    final root = vcs\root();
     foreach (image, cmd in checks) {
-        os\execSh("docker run --rm -v \"$PWD\":/w -w /w " + image + " " + cmd);
+        var argv = mut ["-v", root + ":/w", "-w", "/w", image];
+        foreach (part in cmd.split(" ")) { argv.append(part); }
+        docker["docker-run"](ctx, {"args": argv});
     }
 }
 

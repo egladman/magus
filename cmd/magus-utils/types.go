@@ -163,10 +163,14 @@ func buzzType(t reflect.Type) (typeName, zero string, err error) {
 		if t == reflect.TypeOf(time.Time{}) {
 			return "str", `""`, nil
 		}
-		// A struct field maps to the Buzz object of the same name (e.g. ExecResult),
-		// which must be generated and ordered before this type in the module source.
-		// Its zero value is an empty object literal.
-		return t.Name(), t.Name() + "{}", nil
+		// A struct field maps to the Buzz object the registry declares for it, which is
+		// NOT always the Go type's own name (types.StatusTargetRun mirrors as TargetRun).
+		// Resolving through the registry is what keeps a renamed mirror referenceable;
+		// using t.Name() emitted a type nothing declared. It must be generated and
+		// ordered before this type in the module source. Its zero value is an empty
+		// object literal.
+		name := buzzNameFor(t)
+		return name, name + "{}", nil
 	case reflect.Map:
 		// A map field maps to a Buzz `{key: val}` type; the zero value is the empty
 		// map literal `{}`. Used by HttpResponse.headers ({str: str}).

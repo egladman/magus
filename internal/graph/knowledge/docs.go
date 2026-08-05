@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"context"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -260,11 +261,25 @@ func resolveDocLink(fromRel, link string, scanned map[string]bool) (string, bool
 }
 
 // findDocFiles returns every authored markdown path (rel to root), sorted, by walking
-// the whole workspace. Skipped: the dot-dirs and build/dependency dirs project.IsIgnoreDir
-// already excludes (.git, .claude, node_modules, gen, vendor, target), plus dist/ (a build
-// output), plus MAGUS.md at any level. Generated markdown is NOT skipped here - a generated
-// page is ingested and self-labeled by its producing target's `produces` edge (see
+// the whole workspace. Skipped: the build and dependency dirs skipDocWalkDir names,
+// any secondary checkout, MAGUS.md at any level, and anything the VCS ignores.
+// Generated markdown is NOT skipped wholesale - a generated page under a tracked path
+// is ingested and self-labeled by its producing target's `produces` edge (see
 // assembleIO); only true build-output dirs and the fixpoint file below are dropped.
+//
+// The ignore filter is what keeps this reproducible, and it was missing. The walk
+// descends into hidden dirs on purpose (.claude/skills holds SKILL.md agent files,
+// .github holds templates), which also swept up the INSTALLED agent skills that
+// `magus agent install` writes into .agents/, .opencode/, and .claude/ - untracked
+// renderings of cmd/magus/skills/. The committed graph then carried whichever
+// provider trees the last person to regenerate it happened to have installed, so the
+// drift gate failed for everyone else and a clean CI checkout could never reproduce
+// it. .gitignore already declared all three as generated; nothing consulted it.
+//
+// Ignored, not untracked, and the distinction is load-bearing: a doc being written
+// but not yet committed is untracked too, and dropping it would make the graph go
+// blind to new work. The ignore rules are the written-down statement of which is
+// which. A backend with no ignore support filters nothing and behaves as before.
 //
 // MAGUS.md is the one exclusion by name. It is a generated catalog (rendered by
 // `magus describe graph -o markdown`) whose body carries live node/edge counts, so its
@@ -298,7 +313,45 @@ func findDocFiles(root string) []string {
 		return nil
 	})
 	slices.Sort(out)
-	return out
+	return dropVCSIgnored(root, out)
+}
+
+// dropVCSIgnored removes the paths the workspace's VCS ignores. One batched query
+// after the walk rather than a check per directory: the answer is identical, and a
+// subprocess per directory would cost more than the walk it is pruning.
+//
+// Every failure mode returns files unchanged. A workspace with no VCS, a backend
+// without ignore support, or a git invocation that errors all mean "no answer", and
+// the safe reading of no answer is to index what was found - the previous behavior.
+// Silently dropping docs because git was unavailable would be far worse than
+// carrying a few extra nodes.
+func dropVCSIgnored(root string, files []string) []string {
+	if len(files) == 0 {
+		return files
+	}
+	res, err := vcs.Resolve(context.Background(), root, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return files
+	}
+	reporter, ok := res.VCS.(types.IgnoredFileReporter)
+	if !ok {
+		return files
+	}
+	ignored, err := reporter.IgnoredFiles(context.Background(), root, files)
+	if err != nil || len(ignored) == 0 {
+		return files
+	}
+	drop := make(map[string]struct{}, len(ignored))
+	for _, p := range ignored {
+		drop[filepath.ToSlash(p)] = struct{}{}
+	}
+	kept := files[:0:0]
+	for _, f := range files {
+		if _, skip := drop[f]; !skip {
+			kept = append(kept, f)
+		}
+	}
+	return kept
 }
 
 // skipDocWalkDir reports whether the doc walk should not descend into dir. Unlike

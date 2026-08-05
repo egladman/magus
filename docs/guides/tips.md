@@ -261,7 +261,7 @@ Two things to keep straight while you do:
 
 Two entry points into an interactive Buzz REPL, sharing one evaluator:
 
-- **`magus buzz --workspace`** - standalone shell with magusfile bindings preloaded.
+- **`magus buzz`** - standalone shell with the magusfile loaded.
 - **`magus\pry()`** - `binding.pry`-style breakpoint that opens the same REPL mid-target with frame context (`.where`, `.locals`, `.up`/`.down`, `.step`, ...).
 
 ```buzz
@@ -281,7 +281,7 @@ Full reference (meta-commands, pry stack navigation, `--step` keymap, multiline 
 Targets can call `magus` recursively. Child invocations forward work to the parent process over a local socket; concurrency limits are shared, so nested calls draw from the same budget instead of each grabbing their own slots.
 
 ```buzz
-magus\cmd(["run", "build", "api"]);
+magus\cmd("run", args: ["build", "api"]);
 ```
 
 `magus\cmd` is the in-magusfile entry point for invoking magus recursively. When a [daemon](daemon.md) is running, the call rides the existing socket connection instead of spawning a new process.
