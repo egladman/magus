@@ -627,16 +627,18 @@ export fun bindings_generate(ctx: magus\Context, args: [str]) > void {
     os\exec("go", ["generate", "./std/..."]);
 }
 
-// Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen)
-// and the Buzz value-type mirrors (internal/spellruntime/gen/types), both driven
-// by the go:generate directives in internal/spellruntime.
+// Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen),
+// the Buzz value-type mirrors (internal/spellruntime/gen/types) and the per-module
+// host declarations (internal/spellruntime/gen/decls), all driven by the
+// go:generate directives in internal/spellruntime.
 //
 // Both trees are declared: undeclared, magus classified them as ordinary source,
 // so `magus describe file` told a reader a generated file was safe to hand-edit
 // and the agent guard's generated-file advisory stayed silent on every one of them.
 export fun spells_generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(types_generate);
-    ctx.writesFiles("internal/spellruntime/gen/*.bo", "internal/spellruntime/gen/types/*.buzz");
+    ctx.writesFiles("internal/spellruntime/gen/*.bo", "internal/spellruntime/gen/types/*.buzz",
+                    "internal/spellruntime/gen/decls/*.buzz");
     os\exec("go", ["generate", "./internal/spellruntime/..."]);
 }
 

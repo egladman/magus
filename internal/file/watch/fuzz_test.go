@@ -9,7 +9,7 @@ import (
 
 // FuzzParsePattern probes the buildx-style ignore-entry parser. The
 // invariant is "no panic": every input either returns a typed error
-// or a well-formed IgnorePattern that ValidatePattern accepts.
+// or a well-formed types.IgnorePattern that ValidatePattern accepts.
 func FuzzParsePattern(f *testing.F) {
 	for _, seed := range []string{
 		"",

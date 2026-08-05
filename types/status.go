@@ -16,9 +16,9 @@ type StatusBase struct {
 // BuildInfo is the running binary's linker-stamped identity (version, commit, date).
 // Distinct from BuildStatus, which reports cache/build activity.
 type BuildInfo struct {
-	Version string
-	Commit  string
-	Date    string
+	Version string `json:"version" yaml:"version"`
+	Commit  string `json:"commit" yaml:"commit"`
+	Date    string `json:"date" yaml:"date"`
 }
 
 // Fingerprint is the full human identity, matching what `magus --version` prints.

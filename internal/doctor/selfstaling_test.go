@@ -129,7 +129,7 @@ func TestSelfStalingSkipsWithoutTrackedReporter(t *testing.T) {
 	// A non-git tree resolves no VCS, which is the same degrade path.
 	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
 	got := r.checkSelfStalingOutputs(nil)
-	assert.Equal(t, StatusOK, got.Status)
+	assert.Equal(t, types.DoctorOK, got.Status)
 	assert.True(t,
 		strings.Contains(got.Message, "skipped") ||
 			strings.Contains(got.Message, "no VCS") ||

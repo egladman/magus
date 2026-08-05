@@ -130,17 +130,17 @@ func WithRegisteredSpell(name string, opts ...BindingOption) ProjectOption {
 
 // IgnoreGlob constructs a doublestar-glob ignore pattern.
 func IgnoreGlob(pattern string) types.IgnorePattern {
-	return types.IgnorePattern{Type: watch.PatternGlob, Pattern: pattern}
+	return types.IgnorePattern{Type: types.PatternGlob, Pattern: pattern}
 }
 
 // IgnoreRegex constructs a Go-regexp ignore pattern.
 func IgnoreRegex(pattern string) types.IgnorePattern {
-	return types.IgnorePattern{Type: watch.PatternRegex, Pattern: pattern}
+	return types.IgnorePattern{Type: types.PatternRegex, Pattern: pattern}
 }
 
 // IgnoreLiteral constructs a literal ignore pattern.
 func IgnoreLiteral(pattern string) types.IgnorePattern {
-	return types.IgnorePattern{Type: watch.PatternLiteral, Pattern: pattern}
+	return types.IgnorePattern{Type: types.PatternLiteral, Pattern: pattern}
 }
 
 // WithClaim extends the spell's declared claims with additional globs.

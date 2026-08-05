@@ -2364,7 +2364,7 @@ func (p *parser) parsePrimary() (ast.Node, error) {
 // and a zdef declaration block is full of Zig braces. Upstream never interpolates
 // either (its zdefStatement reads the raw token), so the lenient reading keeps both
 // working while a genuine `{expr}` still evaluates. A double-quoted string keeps
-// reporting the error, since nothing there has a reason to hold unparseable braces.
+// reporting the error, since nothing there has a reason to hold unparsable braces.
 func (p *parser) buildInterp(t token.Token) (ast.Node, error) {
 	expr := &ast.InterpExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}}
 	// Only lexRawString sets Val on an interpolated token (to the verbatim source), so

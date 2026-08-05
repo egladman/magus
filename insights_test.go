@@ -60,7 +60,7 @@ func TestInsightsUseHistoryAndProjectLabels(t *testing.T) {
 	assert.Equal(t, types.OwnershipOutput{
 		Definition: types.OwnershipDefinition,
 		Commits:    10,
-		Projects: []types.Ownership{
+		Projects: []types.OwnershipEntry{
 			{Path: ".", Name: rootName, Commits: 1, Authors: 1, Primary: "Ada", PrimaryShare: 100, BusFactor1: true, Stale: true, LastCommit: insightTime(1)},
 			{Path: "api", Name: "api", Commits: 3, Authors: 2, Primary: "Ada", PrimaryShare: 66, LastCommit: insightTime(3)},
 			{Path: "docs", Name: "docs", Commits: 2, Authors: 2, Primary: "Ada", PrimaryShare: 50, LastCommit: insightTime(4)},
@@ -72,7 +72,7 @@ func TestInsightsUseHistoryAndProjectLabels(t *testing.T) {
 	assert.Equal(t, types.TrendOutput{
 		Definition: types.TrendDefinition,
 		Commits:    10,
-		Projects: []types.Trend{
+		Projects: []types.TrendEntry{
 			{Path: "docs", Name: "docs", Recent: 1, Earlier: 1, Delta: 0},
 			{Path: ".", Name: rootName, Earlier: 1, Delta: -1},
 			{Path: "api", Name: "api", Recent: 1, Earlier: 2, Delta: -1},

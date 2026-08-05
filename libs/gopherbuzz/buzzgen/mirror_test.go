@@ -1,4 +1,4 @@
-package main
+package buzzgen
 
 import (
 	"bytes"
@@ -10,11 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestBuzzType_Kinds pins every Go kind the mirror generator accepts, and the
+// TestFieldType_Kinds pins every Go kind the mirror generator accepts, and the
 // zero-value default it pairs with. The defaults matter as much as the type
 // names: a Buzz object literal is written from them, so a wrong default ships a
 // mirror whose fields start life as the wrong value.
-func TestBuzzType_Kinds(t *testing.T) {
+func TestFieldType_Kinds(t *testing.T) {
 	t.Parallel()
 
 	type inner struct{ A string }
@@ -58,7 +58,7 @@ func TestBuzzType_Kinds(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			gotType, gotZero, err := buzzType(tc.in)
+			gotType, gotZero, err := FieldType(tc.in, DefaultOptions())
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantType, gotType, "type name")
 			assert.Equal(t, tc.wantZero, gotZero, "zero value")
@@ -69,10 +69,10 @@ func TestBuzzType_Kinds(t *testing.T) {
 // TestBuzzType_Unsupported keeps the generator failing loudly on a type it cannot
 // represent. Silently emitting something plausible is the failure mode worth
 // preventing: the mirror would typecheck and then disagree with the runtime value.
-func TestBuzzType_Unsupported(t *testing.T) {
+func TestFieldType_Unsupported(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := buzzType(reflect.TypeOf(func() {}))
+	_, _, err := FieldType(reflect.TypeOf(func() {}), DefaultOptions())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported Go type")
 }
@@ -95,7 +95,7 @@ func TestRenderFields_InlinesEmbedded(t *testing.T) {
 	}
 
 	var b bytes.Buffer
-	require.NoError(t, renderFields(&b, reflect.TypeOf(Outer{})))
+	require.NoError(t, renderFields(&b, reflect.TypeOf(Outer{}), DefaultOptions()))
 
 	got := b.String()
 	assert.Contains(t, got, "alpha: str", "embedded field must be promoted, not nested")
@@ -116,7 +116,7 @@ func TestRenderFields_NamedEmbeddedNests(t *testing.T) {
 	}
 
 	var b bytes.Buffer
-	require.NoError(t, renderFields(&b, reflect.TypeOf(Outer{})))
+	require.NoError(t, renderFields(&b, reflect.TypeOf(Outer{}), DefaultOptions()))
 
 	got := b.String()
 	assert.Contains(t, got, "inner: Embedded", "a tagged embedded field nests under its tag")
@@ -135,7 +135,7 @@ func TestRenderFields_SkipsUnexportedAndOptedOut(t *testing.T) {
 	}
 
 	var b bytes.Buffer
-	require.NoError(t, renderFields(&b, reflect.TypeOf(Outer{})))
+	require.NoError(t, renderFields(&b, reflect.TypeOf(Outer{}), DefaultOptions()))
 
 	got := b.String()
 	assert.Contains(t, got, "kept: str")

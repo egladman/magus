@@ -48,7 +48,7 @@ func TestAffinity(t *testing.T) {
 
 func TestOwnership(t *testing.T) {
 	out := Ownership(scanFixture(), day(4))
-	byPath := map[string]types.Ownership{}
+	byPath := map[string]types.OwnershipEntry{}
 	for _, o := range out {
 		byPath[o.Path] = o
 	}
@@ -63,7 +63,7 @@ func TestOwnership(t *testing.T) {
 func TestTrend(t *testing.T) {
 	// Span is day1..day5, midpoint day3; api is earlier-weighted, web/studio rising.
 	out := Trend(scanFixture())
-	byPath := map[string]types.Trend{}
+	byPath := map[string]types.TrendEntry{}
 	for _, tr := range out {
 		byPath[tr.Path] = tr
 	}

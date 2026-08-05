@@ -20,9 +20,9 @@ func TestLanguageCoverageRespectsNoLanguage(t *testing.T) {
 			{Path: "evals", NoLanguage: "polyglot harness; no single pack describes it"},
 			{Path: "api", Spell: "go"},
 		})
-		assert.Equal(t, Check{
+		assert.Equal(t, types.DoctorCheck{
 			Name:    "language coverage",
-			Status:  StatusOK,
+			Status:  types.DoctorOK,
 			Message: "every project matched a spell or declared no_language (1 exempt)",
 		}, got)
 	})
@@ -32,7 +32,7 @@ func TestLanguageCoverageRespectsNoLanguage(t *testing.T) {
 			{Path: "evals", NoLanguage: "polyglot harness; no single pack describes it"},
 			{Path: "forgot-the-import"},
 		})
-		assert.Equal(t, StatusAdvice, got.Status)
+		assert.Equal(t, types.DoctorAdvice, got.Status)
 		assert.Equal(t, []string{"forgot-the-import"}, got.Details)
 	})
 }

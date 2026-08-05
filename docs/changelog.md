@@ -17,6 +17,14 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Added
 
+- Host module calls are typechecked. Every method a host module declares now ships a Buzz
+  `extern` signature alongside its implementation, so `magus\affectedImpact(base)` types as
+  `Impact` at the call site instead of as an unknown, and reading a field the return does not
+  carry is a load-time error rather than a runtime surprise. The declarations are generated
+  from the same `std.Module` descriptors the runtime binds, so a signature cannot drift from
+  what executes. Two methods stay untyped and say so in the generated output: `fs\join` and
+  `fmt\sprintf` are variadic, and Buzz has no variadic parameter to declare.
+
 - A magusfile can read a credential through a declared provider.
   `magus\secret.provider("<spell>")` selects the backend and `magus\secret.read("<ref>")`
   reads one reference. Where a secret comes from is a spell's problem, so 1Password, Vault,
@@ -41,7 +49,7 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 - [MGS1020](reference/codes/magusfile/MGS1020.md) reports a generated file claimed as
   an output by more than one target, and documents the one-owner rule for generated files.
 - `magus doctor` findings come at two levels, and the split is a correction. `[fail]` is a
-  workspace that is wrong however you like to work: a dependency cycle, an unparseable
+  workspace that is wrong however you like to work: a dependency cycle, an unparsable
   magusfile, two targets claiming one output. `[advice]` is a convention magus recommends -
   target naming, language coverage, spell doc comments - which is reported and exits zero,
   because `ci` is the one target magus reserves and the rest of the layout belongs to
@@ -112,6 +120,19 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   it already had the equivalent guard.
 
 ### Changed
+
+- `magus status -o json` spells the `build_info` keys in lowercase (`version`, `commit`,
+  `date`) rather than capitalized. The struct carried no tags, so it was the one object in
+  an otherwise snake_case payload that echoed Go field names. A script reading
+  `.build_info.Version` must read `.build_info.version`. YAML output is unchanged, and the
+  console reads this over protobuf rather than JSON, so it is unaffected.
+- `magus affected --impact -o json` always emits `coverage` on a changed symbol, and
+  `magus insight report -o json` always emits `volatility`. Both were pointers that
+  disappeared when absent; they are values now, so a magusfile reads `sym.coverage.ratio`
+  and `report.volatility.targets` without a nil guard and the Buzz mirror can declare them
+  non-optional. A consumer testing for key presence should test the counts instead:
+  `total_stmts` of 0 means no coverage was observed, an empty `targets` means no
+  run-outcome history.
 
 - Breaking: `vcs.shortHash`, `vcs.hash`, `vcs.branch`, `vcs.commitDate` and `vcs.commit`
   now RAISE when no VCS is resolved or its metadata cannot be read. They used to swallow

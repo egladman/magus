@@ -11,5 +11,5 @@ export object ImpactSymbol {
     label: str = "",
     refCount: int = 0,
     fileCount: int = 0,
-    coverage: ImpactCoverage? = null,
+    coverage: ImpactCoverage = ImpactCoverage{},
 }

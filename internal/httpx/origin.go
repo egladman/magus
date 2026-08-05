@@ -7,7 +7,7 @@ import (
 )
 
 // ParseOrigin extracts the scheme://host[:port] origin from a page's base URL, for the
-// loopback server's CORS Allow-Origin. An unparseable or non-absolute base is a user
+// loopback server's CORS Allow-Origin. An unparsable or non-absolute base is a user
 // error worth surfacing rather than defaulting to a permissive value.
 func ParseOrigin(base string) (string, error) {
 	u, err := url.Parse(base)

@@ -320,8 +320,8 @@ func writeGitHubMermaid(w io.Writer, graph renderGraph) error {
 // writeVolatilitySection renders the run-outcome axis (`magus insight volatility`) into the
 // combined report: each (project, target) pair's Wilson-scored flakiness against the threshold.
 // Empty when no history was read or it held no targets (the report is best-effort here).
-func writeVolatilitySection(b *md.Builder, v *types.VolatilityReport) {
-	if v == nil || len(v.Targets) == 0 {
+func writeVolatilitySection(b *md.Builder, v types.VolatilityReport) {
+	if len(v.Targets) == 0 {
 		return
 	}
 	b.Heading(2, "Volatility")
@@ -406,7 +406,7 @@ func checkbox(b bool) string {
 
 func mdAuthor(a string) string {
 	if a == "" {
-		return "—"
+		return "-"
 	}
 	return a
 }

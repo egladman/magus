@@ -153,18 +153,18 @@ func buzzValueVcsCommit(v types.Commit) vm.Value {
 	out.MapSet("id", vm.StrValue(v.ID))
 	out.MapSet("short", vm.StrValue(v.Short))
 	out.MapSet("author", buzzValueVcsPerson(v.Author))
-	formatted1 := ""
+	formattedDate := ""
 	if !v.Date.IsZero() {
-		formatted1 = v.Date.Format(time.RFC3339)
+		formattedDate = v.Date.Format(time.RFC3339)
 	}
-	out.MapSet("date", vm.StrValue(formatted1))
+	out.MapSet("date", vm.StrValue(formattedDate))
 	out.MapSet("subject", vm.StrValue(v.Subject))
 	out.MapSet("body", vm.StrValue(v.Body))
-	items2 := make([]vm.Value, len(v.Parents))
-	for index3 := range v.Parents {
-		items2[index3] = vm.StrValue(v.Parents[index3])
+	itemsParents := make([]vm.Value, len(v.Parents))
+	for indexParents := range v.Parents {
+		itemsParents[indexParents] = vm.StrValue(v.Parents[indexParents])
 	}
-	out.MapSet("parents", vm.ListValue(items2))
+	out.MapSet("parents", vm.ListValue(itemsParents))
 	return out
 }
 
@@ -192,11 +192,11 @@ func buzzValueVcsVCSTag(v types.VCSTag) vm.Value {
 	out.MapSet("name", vm.StrValue(v.Name))
 	out.MapSet("prefix", vm.StrValue(v.Prefix))
 	out.MapSet("version", buzzValueVcsSemverVersion(v.Version))
-	formatted4 := ""
+	formattedDate := ""
 	if !v.Date.IsZero() {
-		formatted4 = v.Date.Format(time.RFC3339)
+		formattedDate = v.Date.Format(time.RFC3339)
 	}
-	out.MapSet("date", vm.StrValue(formatted4))
+	out.MapSet("date", vm.StrValue(formattedDate))
 	out.MapSet("id", vm.StrValue(v.ID))
 	return out
 }

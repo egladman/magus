@@ -46,7 +46,7 @@ func File(path string, data []byte) error {
 
 // Go gofmts data before writing it.
 //
-// The format step is the guard that matters: a template that emits unparseable Go
+// The format step is the guard that matters: a template that emits unparsable Go
 // fails HERE, naming the file, rather than at the next build with an error pointing
 // into generated output nobody wrote by hand.
 func Go(path string, data []byte) error {

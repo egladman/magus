@@ -320,7 +320,7 @@ func backoff(cfg options, attempt int) time.Duration {
 }
 
 // retryAfterDelay returns the delay from a Retry-After header, falling back to
-// the computed exponential delay when the header is absent or unparseable.
+// the computed exponential delay when the header is absent or unparsable.
 func retryAfterDelay(resp *http.Response, fallback time.Duration) time.Duration {
 	if v := resp.Header.Get("Retry-After"); v != "" {
 		if secs, err := strconv.Atoi(v); err == nil && secs >= 0 {

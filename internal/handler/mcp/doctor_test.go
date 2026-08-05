@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/doctor"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,8 +33,8 @@ func TestDoctorToolAgainstFixture(t *testing.T) {
 
 	resp, err := tool.Invoke(context.Background(), spells.InvokeRequest{})
 	require.NoError(t, err)
-	rep, ok := resp.Data.(doctor.Report)
-	require.True(t, ok, "doctor tool should return a doctor.Report")
+	rep, ok := resp.Data.(types.DoctorReport)
+	require.True(t, ok, "doctor tool should return a types.DoctorReport")
 	assert.NotEmpty(t, rep.Checks, "doctor produced no checks")
 }
 

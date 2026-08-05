@@ -66,10 +66,10 @@ func buzzValueHttpHTTPResponse(v types.HTTPResponse) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("status", vm.IntValue(int64(v.Status)))
 	out.MapSet("body", vm.StrValue(v.Body))
-	mapped1 := vm.NewMap()
-	for key2, item3 := range v.Headers {
-		mapped1.MapSet(key2, vm.StrValue(item3))
+	mappedHeaders := vm.NewMap()
+	for keyHeaders, itemHeaders := range v.Headers {
+		mappedHeaders.MapSet(keyHeaders, vm.StrValue(itemHeaders))
 	}
-	out.MapSet("headers", mapped1)
+	out.MapSet("headers", mappedHeaders)
 	return out
 }

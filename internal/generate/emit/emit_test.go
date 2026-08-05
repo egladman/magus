@@ -48,9 +48,9 @@ func TestFileCreatesMissingFile(t *testing.T) {
 	assert.Equal(t, FileMode, info.Mode().Perm())
 }
 
-// TestGoRejectsUnparseable is the guard's point: a template emitting
+// TestGoRejectsUnparsable is the guard's point: a template emitting
 // broken Go must fail naming the file, not at the next build inside generated output.
-func TestGoRejectsUnparseable(t *testing.T) {
+func TestGoRejectsUnparsable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "broken.go")
 	err := Go(path, []byte("package p\nfunc ("))
 	require.Error(t, err)

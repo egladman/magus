@@ -21,6 +21,7 @@ import (
 var scribes = map[string]func(args []string) error{
 	"types":              runTypes,
 	"buzzobjects":        runBuzzObjects,
+	"moduledecls":        runModuleDecls,
 	"bindings":           runBindings,
 	"completions":        runCompletions,
 	"config":             runConfig,
@@ -53,5 +54,5 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: magus-utils <types|buzzobjects|bindings|config|spells|sign|api|verify|cut|migrate|release-index|generate-changelog> [flags]")
+	fmt.Fprintln(os.Stderr, "usage: magus-utils <types|buzzobjects|moduledecls|bindings|config|spells|sign|api|verify|cut|migrate|release-index|generate-changelog> [flags]")
 }

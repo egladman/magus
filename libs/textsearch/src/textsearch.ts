@@ -396,7 +396,7 @@ export interface QueryPart {
 
 // describeQuery walks the parsed AST and returns the interpreted parts in order, so a UI can
 // show a user how their typed query was understood (field scoping, exclusions, phrases,
-// wildcards). Returns [] for an empty/unparseable query. Reached through the createTextSearch
+// wildcards). Returns [] for an empty/unparsable query. Reached through the createTextSearch
 // factory (describeQuery method), not imported directly by any consumer.
 function describeQuery(raw: string): QueryPart[] {
   const parts: QueryPart[] = [];

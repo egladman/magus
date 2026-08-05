@@ -93,7 +93,7 @@ func TestStalledTargetsCountsFailuresAsExecutions(t *testing.T) {
 
 // Journals are append-only and a killed run leaves a truncated final line. One bad line
 // must not discard the rest of the file.
-func TestStalledTargetsSkipsUnparseableLines(t *testing.T) {
+func TestStalledTargetsSkipsUnparsableLines(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	recs := append([]string{`{"kind":"result","project":"docs","tar`},

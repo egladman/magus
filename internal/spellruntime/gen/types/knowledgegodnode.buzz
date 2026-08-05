@@ -10,6 +10,6 @@ export object KnowledgeGodNode {
     kind: str = "",
     label: str = "",
     degree: int = 0,
-    in: int = 0,
+    @"in": int = 0,
     @"out": int = 0,
 }

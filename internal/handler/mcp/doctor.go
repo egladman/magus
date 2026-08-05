@@ -13,10 +13,10 @@ type doctorTool struct {
 
 func (t *doctorTool) Name() string { return "magus_doctor" }
 
-func (t *doctorTool) Invoke(_ context.Context, _ spells.InvokeRequest) (spells.InvokeResponse, error) {
+func (t *doctorTool) Invoke(ctx context.Context, _ spells.InvokeRequest) (spells.InvokeResponse, error) {
 	ws := t.opts.Magus
 	out := doctor.Run(
-		ws.Root(), ws, nil,
+		ctx, ws.Root(), ws, nil,
 		doctor.WithConfig(t.opts.Config),
 	)
 	return spells.InvokeResponse{Data: out}, nil

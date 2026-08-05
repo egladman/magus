@@ -131,7 +131,7 @@ func StalledTargets(cacheDir string, only map[string]bool) []Stalled {
 }
 
 // scanJournal feeds each result record in one journal to fn. Journals are append-only
-// and a run killed mid-write leaves a partial final line, so an unparseable line is
+// and a run killed mid-write leaves a partial final line, so an unparsable line is
 // skipped rather than treated as a corrupt file.
 func scanJournal(path string, only map[string]bool, fn func(project, target, status string, durMs int64)) error {
 	f, err := os.Open(path)

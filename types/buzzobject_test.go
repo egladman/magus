@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFileInfoBuzzObject(t *testing.T) {
@@ -82,4 +83,33 @@ func TestURLBuzzObject(t *testing.T) {
 		"query":    "x=1",
 		"fragment": "top",
 	}, u.BuzzObject())
+}
+
+// TestBuzzObject_NamedStringsCrossAsPlainStrings guards a failure with no symptom.
+// BuzzObject is a map[string]any, and the encoder that turns one into a Buzz value type
+// -switches on IDENTITY: a named string type (DoctorCheckStatus, TargetRunState) matches
+// neither `case string` nor `case []string`, so the field silently arrived as null and a
+// magusfile branching on `check.status == "fail"` compared against nothing. A named MAP
+// type sprang this same trap once before, which is why host.AnyVal carries an explicit
+// BuzzObject case.
+//
+// Asserted here rather than at the encoder because this is the generator's contract: the
+// value it puts in the map must already be a plain string.
+func TestBuzzObject_NamedStringsCrossAsPlainStrings(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		obj   BuzzObject
+		field string
+		want  string
+	}{
+		{"DoctorCheck.status", DoctorCheck{Status: DoctorFail}.BuzzObject(), "status", "fail"},
+		{"StatusTargetRun.state", StatusTargetRun{State: TargetRunPassed}.BuzzObject(), "state", "passed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := tc.obj[tc.field]
+			require.True(t, ok, "field must be present")
+			assert.IsType(t, "", got, "must be a plain string, not the named type, or it crosses as null")
+			assert.Equal(t, tc.want, got)
+		})
+	}
 }

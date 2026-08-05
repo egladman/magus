@@ -128,7 +128,7 @@ func coChangeToProto(c types.CoChange) *insightv1.CoChange {
 	}
 }
 
-func ownershipToProto(o types.Ownership) *insightv1.Ownership {
+func ownershipToProto(o types.OwnershipEntry) *insightv1.Ownership {
 	return &insightv1.Ownership{
 		Path:         o.Path,
 		Name:         o.Name,
@@ -142,7 +142,7 @@ func ownershipToProto(o types.Ownership) *insightv1.Ownership {
 	}
 }
 
-func trendToProto(t types.Trend) *insightv1.Trend {
+func trendToProto(t types.TrendEntry) *insightv1.Trend {
 	return &insightv1.Trend{
 		Path:    t.Path,
 		Name:    t.Name,

@@ -321,7 +321,7 @@ export function mountSharePanel(): SharePanel {
 }
 
 // formatExpiry turns an RFC 3339 expiry into a short local-time line, or "" when the
-// timestamp is missing or unparseable (the disclosure already states it expires).
+// timestamp is missing or unparsable (the disclosure already states it expires).
 function formatExpiry(iso: string): string {
   if (!iso) return "";
   const t = Date.parse(iso);

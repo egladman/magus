@@ -51,7 +51,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | tool | 15 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
 | charm | 9 | `magus query kind:charm` | `rw`, `cd`, `snapshot` |
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `magus` |
-| method | 164 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
+| method | 165 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 56 | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS4001` |
 | doc | 265 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 134 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |

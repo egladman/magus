@@ -85,6 +85,7 @@ concepts/cache/output-refs/
 concepts/cache/remote/
 concepts/charms/
 concepts/ci-providers/
+concepts/compatibility/
 concepts/concurrency/
 concepts/dependencies/
 concepts/engines/
@@ -182,7 +183,9 @@ guides/integrations/agents/
 guides/integrations/ci/
 guides/integrations/daemon/
 guides/integrations/editor/
+guides/integrations/github-actions/
 guides/integrations/mcp/
+guides/integrations/pr-advice/
 guides/mcp/
 guides/quickstart/
 guides/testing/
@@ -312,6 +315,8 @@ reference/codes/magusfile/MGS1017/
 reference/codes/magusfile/MGS1018/
 reference/codes/magusfile/MGS1019/
 reference/codes/magusfile/MGS1020/
+reference/codes/magusfile/MGS1021/
+reference/codes/magusfile/MGS1022/
 reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
@@ -400,6 +405,7 @@ tags/affected/
 tags/agents/
 tags/allowlist/
 tags/analysis/
+tags/annotations/
 tags/api/
 tags/argv/
 tags/auth/
@@ -420,6 +426,7 @@ tags/ci/
 tags/claude/
 tags/cli/
 tags/codex/
+tags/compatibility/
 tags/completion/
 tags/concurrency/
 tags/config/
@@ -467,6 +474,7 @@ tags/generated/
 tags/getting-started/
 tags/git/
 tags/github-actions/
+tags/github/
 tags/gitlab/
 tags/globs/
 tags/go/
@@ -549,6 +557,7 @@ tags/sandbox/
 tags/secrets/
 tags/security/
 tags/self-update/
+tags/semver/
 tags/service-op/
 tags/services/
 tags/setup/
@@ -581,6 +590,7 @@ tags/uv/
 tags/vcs/
 tags/verify/
 tags/version/
+tags/versioning/
 tags/vitest/
 tags/volatility/
 tags/ward/

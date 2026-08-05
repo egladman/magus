@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/file/watch"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,11 +21,11 @@ func mkfile(t *testing.T, root, rel string) {
 	require.NoError(t, os.WriteFile(abs, nil, 0o644))
 }
 
-func ignorePatternFn(t *testing.T, root string, typ watch.PatternType, pattern string) func(string) bool {
+func ignorePatternFn(t *testing.T, root string, typ types.PatternType, pattern string) func(string) bool {
 	t.Helper()
-	p := watch.IgnorePattern{Type: typ, Pattern: pattern}
+	p := types.IgnorePattern{Type: typ, Pattern: pattern}
 	require.NoError(t, watch.ValidatePattern(p), "invalid pattern")
-	return watch.IgnorePatterns(root, []watch.IgnorePattern{p})
+	return watch.IgnorePatterns(root, []types.IgnorePattern{p})
 }
 
 func TestSearchFilesBasic(t *testing.T) {
@@ -128,7 +129,7 @@ func TestSearchFilesPatternGlob(t *testing.T) {
 	mkfile(t, root, "api/config.yaml")
 	mkfile(t, root, "web/users.go")
 
-	matchFn := ignorePatternFn(t, root, watch.PatternGlob, "**/*.go")
+	matchFn := ignorePatternFn(t, root, types.PatternGlob, "**/*.go")
 
 	// With filter token: only .go files under api.
 	got, err := SearchFiles(context.Background(), root, []string{"api"}, matchFn)
@@ -150,7 +151,7 @@ func TestSearchFilesPatternRegex(t *testing.T) {
 	mkfile(t, root, "api/users_test.go")
 	mkfile(t, root, "web/handler_test.go")
 
-	matchFn := ignorePatternFn(t, root, watch.PatternRegex, `_test\.go$`)
+	matchFn := ignorePatternFn(t, root, types.PatternRegex, `_test\.go$`)
 	got, err := SearchFiles(context.Background(), root, []string{}, matchFn)
 	require.NoError(t, err)
 	require.Len(t, got, 2)
@@ -165,7 +166,7 @@ func TestSearchFilesPatternLiteral(t *testing.T) {
 	mkfile(t, root, "web/Dockerfile")
 	mkfile(t, root, "api/main.go")
 
-	matchFn := ignorePatternFn(t, root, watch.PatternLiteral, "Dockerfile")
+	matchFn := ignorePatternFn(t, root, types.PatternLiteral, "Dockerfile")
 	got, err := SearchFiles(context.Background(), root, []string{}, matchFn)
 	require.NoError(t, err)
 	require.Len(t, got, 2)

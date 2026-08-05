@@ -43,3 +43,23 @@ func keySet(m vm.Value) map[string]bool {
 	}
 	return s
 }
+
+// TestPlaygroundChecksHostCallTypes is the point of registering the magus
+// declarations beside the stub module: a dry run must reject a snippet the real
+// runtime would reject. Before them this host was untyped, so a probe could return
+// the wrong type from a host call and the playground reported success - a Run button
+// that validates less than the language does teaches worse than none.
+func TestPlaygroundChecksHostCallTypes(t *testing.T) {
+	run := func(body string) Result {
+		src := "import \"magus\";\n" + body + "\nexport fun work(ctx: magus\\Context, args: [str]) > void {}\n"
+		return Run(context.Background(), src, "work", nil)
+	}
+
+	bad := run(`fun probe() > int { return magus\where("x"); }`)
+	require.False(t, bad.OK, "a host call returning str must not satisfy a fun declared > int")
+	require.NotNil(t, bad.Diag)
+	assert.Contains(t, bad.Diag.Msg, "return type mismatch")
+
+	good := run(`fun probe() > str { return magus\where("x"); }`)
+	assert.True(t, good.OK, "the correctly typed call must still compile: %+v", good.Diag)
+}

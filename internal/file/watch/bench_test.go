@@ -3,6 +3,8 @@ package watch
 import (
 	"fmt"
 	"testing"
+
+	"github.com/egladman/magus/types"
 )
 
 var builtinPaths = []string{
@@ -33,11 +35,11 @@ func BenchmarkBuiltinIgnore(b *testing.B) {
 // production: BuiltinIgnore + a set of glob patterns, composed via Compose.
 func BenchmarkComposedIgnore(b *testing.B) {
 	const wsRoot = "/repo"
-	patterns := []IgnorePattern{
-		{Type: PatternGlob, Pattern: "**/scratch/**"},
-		{Type: PatternGlob, Pattern: "**/testdata/**"},
-		{Type: PatternRegex, Pattern: `\.tmp$`},
-		{Type: PatternLiteral, Pattern: "vendor"},
+	patterns := []types.IgnorePattern{
+		{Type: types.PatternGlob, Pattern: "**/scratch/**"},
+		{Type: types.PatternGlob, Pattern: "**/testdata/**"},
+		{Type: types.PatternRegex, Pattern: `\.tmp$`},
+		{Type: types.PatternLiteral, Pattern: "vendor"},
 	}
 	ignore := Compose(
 		BuiltinIgnore,

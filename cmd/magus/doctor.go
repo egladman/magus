@@ -24,7 +24,7 @@ func doctorCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "base-ref reachability.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Findings come at two levels. [fail] is a workspace that is wrong -")
-			fmt.Fprintln(os.Stderr, "a dependency cycle, an unparseable magusfile, two targets claiming")
+			fmt.Fprintln(os.Stderr, "a dependency cycle, an unparsable magusfile, two targets claiming")
 			fmt.Fprintln(os.Stderr, "one output - and exits non-zero. [advice] is a convention magus")
 			fmt.Fprintln(os.Stderr, "recommends, reported and not fatal, because how your workspace is")
 			fmt.Fprintln(os.Stderr, "laid out is your call.")
@@ -45,10 +45,10 @@ func doctorCmd(ctx context.Context, root string, args []string) error {
 	ws, wsErr := inspectWorkspace(ctx, root)
 
 	// Query daemon status for the daemon-related checks. Non-fatal on failure.
-	daemonInfo := buildDaemonInfo(ctx, ws)
+	daemonInfo := buildDaemonInfo(ctx)
 
 	out := doctor.Run(
-		root, ws, wsErr,
+		ctx, root, ws, wsErr,
 		doctor.WithConfig(globalCfg),
 		doctor.WithDaemonInfo(daemonInfo),
 	)
@@ -62,13 +62,13 @@ func doctorCmd(ctx context.Context, root string, args []string) error {
 	return nil
 }
 
-func emitDoctor(opts OutputOptions, out doctor.Report) error {
+func emitDoctor(opts OutputOptions, out types.DoctorReport) error {
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, out)
 	case outputName:
 		for _, c := range out.Checks {
-			if c.Status != "ok" {
+			if c.Status != types.DoctorOK {
 				fmt.Println(c.Name)
 			}
 		}
@@ -106,14 +106,14 @@ func emitDoctor(opts OutputOptions, out doctor.Report) error {
 // statusGlyph renders a doctor check's status with the shared [pass]/[fail] glyphs,
 // coloured (green/red) when color is true. Mirrors the cache handler's glyphs so a
 // failed check and a failed build look identical across the tool.
-func statusGlyph(status doctor.CheckStatus, color bool) string {
+func statusGlyph(status types.DoctorCheckStatus, color bool) string {
 	label, code := "[?]", "0"
 	switch status {
-	case doctor.StatusOK:
+	case types.DoctorOK:
 		label, code = "[pass]", "32" // green
-	case doctor.StatusFail:
+	case types.DoctorFail:
 		label, code = "[fail]", "31" // red
-	case doctor.StatusAdvice:
+	case types.DoctorAdvice:
 		// Yellow, not red: it did not fail, and colouring it like a failure would
 		// undo the whole point of the level.
 		label, code = "[advice]", "33"
@@ -127,7 +127,7 @@ func statusGlyph(status doctor.CheckStatus, color bool) string {
 // buildDaemonInfo queries the running daemon (if any) and returns a
 // DaemonInfo for the doctor checks. If no daemon is reachable, returns an
 // empty DaemonInfo so checks render a sensible "no daemon" message.
-func buildDaemonInfo(ctx context.Context, _ types.WorkspaceRepository) doctor.DaemonInfo {
+func buildDaemonInfo(ctx context.Context) doctor.DaemonInfo {
 	sockDir := proc.SockDir()
 	di := doctor.DaemonInfo{SockDir: sockDir}
 

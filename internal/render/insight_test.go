@@ -81,8 +81,8 @@ func TestWriteInsightMarkdown(t *testing.T) {
 			Files:   []types.FileHotspot{{Path: "api/a.go", Commits: 3, Complexity: 40, Score: 120, Authors: 1}},
 		},
 		Affinity:  types.AffinityOutput{Pairs: []types.CoChange{{A: "api", B: "web", Count: 2, Hidden: true}}},
-		Ownership: types.OwnershipOutput{Projects: []types.Ownership{{Path: "api", PrimaryShare: 100, Authors: 1, Primary: "ada", BusFactor1: true}}},
-		Trend:     types.TrendOutput{Projects: []types.Trend{{Path: "api", Recent: 2, Earlier: 1, Delta: 1}}},
+		Ownership: types.OwnershipOutput{Projects: []types.OwnershipEntry{{Path: "api", PrimaryShare: 100, Authors: 1, Primary: "ada", BusFactor1: true}}},
+		Trend:     types.TrendOutput{Projects: []types.TrendEntry{{Path: "api", Recent: 2, Earlier: 1, Delta: 1}}},
 	}
 
 	var b strings.Builder
