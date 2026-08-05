@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	semver "github.com/Masterminds/semver/v3"
+	"golang.org/x/mod/semver"
 )
 
 // A version probe's raw stdout is not a version. Every tool magus ships a probe for
@@ -25,8 +25,8 @@ import (
 // running the identical tool version therefore compute different keys and share no
 // cache, and a distro rebuild moves the key with no version change at all.
 //
-// So a probe result is EXTRACTED before it is used, and then BUCKETED by what the
-// spell author says may bust the cache.
+// So a probe result is EXTRACTED before it is used, and then narrowed to the component
+// the spell says matters.
 
 // versionPattern finds the first semver-shaped token in a probe's output.
 //
@@ -42,10 +42,15 @@ import (
 var versionPattern = regexp.MustCompile(`v?(\d+)\.(\d+)(?:\.(\d+))?(?:-([0-9A-Za-z][0-9A-Za-z.-]*))?`)
 
 // ExtractVersion pulls the first semver-shaped token out of a probe's output and
-// returns it in canonical `X.Y.Z` form. ok is false when the output carries nothing
-// version-shaped, which is the caller's signal to fall back rather than an error:
-// a tool is allowed to print something magus cannot parse, and refusing to run
-// because of it would be a worse failure than a coarse cache key.
+// returns it in canonical `vX.Y.Z` form. ok is false when the output carries nothing
+// version-shaped, which is the caller's signal to fall back rather than an error: a
+// tool is allowed to print something magus cannot parse, and refusing to run because
+// of it would be a worse failure than a coarse cache key.
+//
+// The `v` prefix is not decoration. golang.org/x/mod/semver - whose Major/MajorMinor
+// ARE the narrowing this file needs - requires it and returns "" without it, so
+// emitting canonical form here is what lets those functions be used directly instead
+// of wrapped.
 func ExtractVersion(output string) (string, bool) {
 	m := versionPattern.FindStringSubmatch(output)
 	if m == nil {
@@ -55,89 +60,110 @@ func ExtractVersion(output string) (string, bool) {
 	if patch == "" {
 		patch = "0"
 	}
-	v := m[1] + "." + m[2] + "." + patch
+	v := "v" + m[1] + "." + m[2] + "." + patch
 	if m[4] != "" {
 		v += "-" + m[4]
+	}
+	if !semver.IsValid(v) {
+		return "", false
 	}
 	return v, true
 }
 
-// Precision names how much of a probed version a derived bucket keeps.
-type Precision string
+// VersionComponent names how much of a probed version reaches the cache key.
+//
+// The values are the SemVer spec's own component names, and the same strings
+// node-semver's inc() accepts and diff() returns - nothing here is magus vocabulary a
+// reader has to learn. It is a defined type rather than a bare string so a Go SDK
+// caller cannot typo one silently; a magusfile spelling is checked at decode.
+type VersionComponent string
 
 const (
-	// PrecisionMajor buckets 2.5.0 as ">=2.0.0 <3.0.0": any 2.x replays 2.x's cache.
-	PrecisionMajor Precision = "major"
-	// PrecisionMinor buckets 2.5.0 as ">=2.5.0 <2.6.0": patch upgrades replay.
-	PrecisionMinor Precision = "minor"
-	// PrecisionPatch buckets 2.5.0 as ">=2.5.0 <2.5.1": only prerelease/build noise
-	// replays. This is the narrowest bucket that still discards build identity, and
-	// it is what a spell wants when it means "the version, and nothing else about
-	// how this binary was built".
-	PrecisionPatch Precision = "patch"
+	// VersionExact is the zero value: the whole version keys the cache, prerelease
+	// included, so any change at all moves the key. The conservative default.
+	VersionExact VersionComponent = ""
+	// VersionMajor keys on the major alone, so every 2.x shares one entry.
+	VersionMajor VersionComponent = "major"
+	// VersionMinor keys on major.minor, so patch releases share one entry.
+	VersionMinor VersionComponent = "minor"
+	// VersionPatch keys on major.minor.patch, discarding the prerelease. That
+	// discard is the only thing separating it from VersionExact, and choosing it IS
+	// the claim that an -rc build is not worth a separate cache entry.
+	VersionPatch VersionComponent = "patch"
 )
 
-// VersionBucket is one entry in a policy: either an explicit semver constraint, or a
-// precision that DERIVES a constraint from whatever was probed.
-//
-// Both forms resolve to a constraint, which is what makes precision sugar rather than
-// a second mechanism - `major` is not a special key in the cache, it is a shorthand for
-// the range covering the probed version's major. Exactly one field is set.
-type VersionBucket struct {
-	// Constraint is an explicit semver range, e.g. ">= 1.0.0, < 2.0.0". Masterminds
-	// constraint syntax, the same dialect magus.yaml's required_version already uses.
-	Constraint string `json:"constraint,omitempty"`
-	// Precision derives the constraint from the probed version. A precision bucket
-	// always matches, so it is only ever useful last, as the catch-all.
-	Precision Precision `json:"precision,omitempty"`
+// Valid reports whether c is one of the defined components. The zero value is valid:
+// declaring nothing is how a spell asks for the exact version.
+func (c VersionComponent) Valid() bool {
+	switch c {
+	case VersionExact, VersionMajor, VersionMinor, VersionPatch:
+		return true
+	}
+	return false
 }
 
-// VersionPolicy declares what may bust the cache for one probed tool.
+// KeyFunc returns the narrowing this component names, as the same func(string) string
+// shape golang.org/x/mod/semver already exports - so a Go SDK caller can pass
+// semver.Major directly instead of going through a VersionComponent at all.
 //
-// The zero value is today's behavior and stays the default: probe, and let any change
-// in the extracted version move the key. A policy narrows that, and narrowing is a
-// CLAIM - "this tool's output does not change across this range" - so widening a
-// bucket trades cache hits for the risk of replaying an artifact a different tool
-// version would not have produced. That is the author's call to make and the reason
-// the default stays exact.
-type VersionPolicy struct {
-	// Literal is an author-supplied constant used as the version token verbatim, for a
-	// tool that cannot report its own version at all. No process is spawned; the author
-	// bumps the string by hand to bust the cache. When set, every other field is ignored.
-	Literal string `json:"literal,omitempty"`
-	// Buckets are evaluated in declaration order and the FIRST match wins, so explicit
-	// constraints belong before a precision catch-all. Empty means exact.
-	Buckets []VersionBucket `json:"buckets,omitempty"`
-}
-
-// IsZero reports whether the policy asks for anything beyond the exact version.
-func (p VersionPolicy) IsZero() bool { return p.Literal == "" && len(p.Buckets) == 0 }
-
-// derive builds the constraint a precision bucket stands for, given the probed version.
-func derive(p Precision, v *semver.Version) (string, error) {
-	switch p {
-	case PrecisionMajor:
-		return fmt.Sprintf(">= %d.0.0, < %d.0.0", v.Major(), v.Major()+1), nil
-	case PrecisionMinor:
-		return fmt.Sprintf(">= %d.%d.0, < %d.%d.0", v.Major(), v.Minor(), v.Major(), v.Minor()+1), nil
-	case PrecisionPatch:
-		return fmt.Sprintf(">= %d.%d.%d, < %d.%d.%d", v.Major(), v.Minor(), v.Patch(), v.Major(), v.Minor(), v.Patch()+1), nil
+// It errors rather than falling back, because an unknown component reaching here is a
+// declaration bug: the callers that accept authored input validate first.
+func (c VersionComponent) KeyFunc() (VersionKeyFunc, error) {
+	switch c {
+	case VersionExact:
+		return semver.Canonical, nil
+	case VersionMajor:
+		return semver.Major, nil
+	case VersionMinor:
+		return semver.MajorMinor, nil
+	case VersionPatch:
+		// Canonical already drops build metadata; trimming the prerelease off it
+		// leaves exactly vX.Y.Z, composed from x/mod rather than re-parsed here.
+		return func(v string) string {
+			return strings.TrimSuffix(semver.Canonical(v), semver.Prerelease(v))
+		}, nil
 	default:
-		return "", fmt.Errorf("unknown precision %q (want major, minor, or patch)", p)
+		return nil, fmt.Errorf("unknown version component %q (want %q, %q, or %q)",
+			string(c), VersionMajor, VersionMinor, VersionPatch)
 	}
 }
+
+// VersionKeyFunc narrows an extracted version to the string that enters the cache key.
+//
+// It is a func type rather than a single-method interface because that is where Go
+// landed: slices.SortFunc over sort.Interface, http.HandlerFunc over a Handler you
+// must declare a type for. golang.org/x/mod/semver's Major, MajorMinor, and Canonical
+// all satisfy it as written.
+type VersionKeyFunc func(version string) string
+
+// VersionKey declares what a probed tool contributes to the cache key.
+//
+// The zero value keeps the whole version, so any change moves the key. Narrowing is a
+// CLAIM - "this tool's output does not change across the component I dropped" - that
+// trades cache hits for the risk of replaying an artifact a different tool version
+// would not have produced. That is the author's call, which is why the default is the
+// conservative one.
+type VersionKey struct {
+	// Const is an author-supplied constant used as the token verbatim, for a tool that
+	// cannot report its own version at all. No process is spawned; the author edits the
+	// string by hand to invalidate. When set, UpTo is ignored.
+	Const string `json:"const,omitempty"`
+	// UpTo narrows the probed version to the component that matters.
+	UpTo VersionComponent `json:"upTo,omitempty"`
+}
+
+// IsZero reports whether the key asks for anything beyond the exact version.
+func (k VersionKey) IsZero() bool { return k.Const == "" && k.UpTo == VersionExact }
 
 // VersionToken reduces a probe's raw output to the string that enters the cache key,
 // and returns a note when it had to degrade.
 //
-// The note is never an error. Every degradation here - unparseable output, a version
-// outside every declared bucket - is a case where magus can still produce a CORRECT
-// key by being more conservative than the author asked for, and failing the run
-// instead would break a build for a cache-key reason. A tool upgrade that lands
-// outside the declared ranges should cost a cache miss, not a red pipeline.
-func VersionToken(output string, policy VersionPolicy) (token string, note string) {
-	if policy.Literal != "" {
-		return policy.Literal, ""
+// The note is never an error. Every degradation here is a case where magus can still
+// produce a CORRECT key by being more conservative than the author asked for, and
+// failing the run instead would break a build for a cache-key reason.
+func VersionToken(output string, key VersionKey) (token string, note string) {
+	if key.Const != "" {
+		return key.Const, ""
 	}
 
 	raw := strings.TrimSpace(output)
@@ -147,35 +173,13 @@ func VersionToken(output string, policy VersionPolicy) (token string, note strin
 		// magus did for every tool before extraction existed - correct, just coarse.
 		return raw, "no semver-shaped token in probe output; keying on the whole output"
 	}
-	if len(policy.Buckets) == 0 {
-		return probed, ""
-	}
-
-	v, err := semver.NewVersion(probed)
+	fn, err := key.UpTo.KeyFunc()
 	if err != nil {
-		return probed, fmt.Sprintf("extracted %q is not a usable semver (%v); keying on it exactly", probed, err)
+		return probed, fmt.Sprintf("%v; keying on %s exactly", err, probed)
 	}
-
-	for i, b := range policy.Buckets {
-		constraint := b.Constraint
-		if b.Precision != "" {
-			derived, err := derive(b.Precision, v)
-			if err != nil {
-				return probed, fmt.Sprintf("bucket %d: %v; keying on %s exactly", i, err, probed)
-			}
-			// A derived bucket is built FROM the probed version, so it always contains
-			// it. Skipping the match check keeps the prerelease case honest: semver
-			// constraints exclude prereleases from a plain range, which would push
-			// 2.5.0-rc1 out of its own major bucket.
-			return derived, ""
-		}
-		c, err := semver.NewConstraint(constraint)
-		if err != nil {
-			return probed, fmt.Sprintf("bucket %d: unparseable constraint %q (%v); keying on %s exactly", i, constraint, err, probed)
-		}
-		if c.Check(v) {
-			return constraint, ""
-		}
+	narrowed := fn(probed)
+	if narrowed == "" {
+		return probed, fmt.Sprintf("could not narrow %s to %s; keying on it exactly", probed, key.UpTo)
 	}
-	return probed, fmt.Sprintf("%s matches none of the %d declared version buckets; keying on it exactly", probed, len(policy.Buckets))
+	return narrowed, ""
 }

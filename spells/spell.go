@@ -64,11 +64,11 @@ type Spell struct {
 	// it in as a named entry would rewrite every key in every workspace and
 	// invalidate every cache entry for a change that alters no behaviour.
 	versionProbes map[string]func(ctx context.Context, dir string) (string, error)
-	// versionPolicy and versionPolicies declare WHICH changes in a probed version may
+	// versionKey and versionKeys declare WHICH changes in a probed version may
 	// bust the cache, mirroring the probe fields above (primary, then per-tool). Zero
 	// values keep the historical behavior: the exact extracted version keys the cache.
-	versionPolicy   VersionPolicy
-	versionPolicies map[string]VersionPolicy
+	versionKey  VersionKey
+	versionKeys map[string]VersionKey
 	// platformIndependent is the spell's claim that its toolchain's output does not
 	// vary by host platform. False by default: independence is claimed, never inferred.
 	platformIndependent bool
@@ -255,18 +255,18 @@ func (s *Spell) ProbeVersionOf(ctx context.Context, name, dir string) (string, e
 // cases the toolchain cannot see from here.
 func (s *Spell) PlatformIndependent() bool { return s.platformIndependent }
 
-// VersionPolicy returns the primary probe's declared cache policy. The zero value
+// VersionKey returns the primary probe's declared cache key. The zero value
 // means exact: any change in the extracted version moves the key.
 //
 // The policy is returned rather than applied inside ProbeVersion so the caller keeps
 // both halves - the raw output it probed and the token it keyed on. VersionToken's
 // degradations are notes, not errors, and a caller that only received the token could
 // not say WHY a key went coarse.
-func (s *Spell) VersionPolicy() VersionPolicy { return s.versionPolicy }
+func (s *Spell) VersionKey() VersionKey { return s.versionKey }
 
-// VersionPolicyOf returns the named probe's declared cache policy, zero when the
+// VersionKeyOf returns the named probe's declared cache key, zero when the
 // tool declares none.
-func (s *Spell) VersionPolicyOf(name string) VersionPolicy { return s.versionPolicies[name] }
+func (s *Spell) VersionKeyOf(name string) VersionKey { return s.versionKeys[name] }
 
 // Option configures NewSpell.
 type Option func(*Spell)
@@ -384,19 +384,19 @@ func WithPlatformIndependent() Option {
 	return func(s *Spell) { s.platformIndependent = true }
 }
 
-// WithVersionPolicy sets the primary probe's cache policy; the zero value keys exactly.
-func WithVersionPolicy(p VersionPolicy) Option {
-	return func(s *Spell) { s.versionPolicy = p }
+// WithVersionKey sets the primary probe's cache key; the zero value keys exactly.
+func WithVersionKey(p VersionKey) Option {
+	return func(s *Spell) { s.versionKey = p }
 }
 
-// WithVersionPolicyNamed sets a named probe's cache policy. Registering a policy for a
+// WithVersionKeyNamed sets a named probe's cache key. Registering a key for a
 // tool with no probe is harmless and does nothing - the probe is what produces a token.
-func WithVersionPolicyNamed(name string, p VersionPolicy) Option {
+func WithVersionKeyNamed(name string, p VersionKey) Option {
 	return func(s *Spell) {
-		if s.versionPolicies == nil {
-			s.versionPolicies = map[string]VersionPolicy{}
+		if s.versionKeys == nil {
+			s.versionKeys = map[string]VersionKey{}
 		}
-		s.versionPolicies[name] = p
+		s.versionKeys[name] = p
 	}
 }
 

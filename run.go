@@ -636,7 +636,7 @@ func (m *Magus) toolVersionsByProject(ctx context.Context, projects []*types.Pro
 						slog.String("spell", s.Name()), slog.String("dir", dir), slog.String("err", err.Error()))
 					probed = "UNPROBED"
 				} else {
-					token, note := spells.VersionToken(probed, s.VersionPolicy())
+					token, note := spells.VersionToken(probed, s.VersionKey())
 					if note != "" {
 						slog.WarnContext(ctx, "magus: tool-version policy degraded; cache key is coarser than declared",
 							slog.String("spell", s.Name()), slog.String("dir", dir), slog.String("note", note))
@@ -665,7 +665,7 @@ func (m *Magus) toolVersionsByProject(ctx context.Context, projects []*types.Pro
 							slog.String("dir", dir), slog.String("err", err.Error()))
 						probed = "UNPROBED"
 					} else {
-						token, note := spells.VersionToken(probed, s.VersionPolicyOf(tool))
+						token, note := spells.VersionToken(probed, s.VersionKeyOf(tool))
 						if note != "" {
 							slog.WarnContext(ctx, "magus: tool-version policy degraded; cache key is coarser than declared",
 								slog.String("spell", s.Name()), slog.String("tool", tool),

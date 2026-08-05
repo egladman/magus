@@ -164,10 +164,10 @@ type Target struct {
 	RetryOnVolatile bool   `json:"retryOnVolatile,omitempty" buzz:"-"` // route through volatility detection + auto-retry
 	// Platform is this target's claim about whether its result depends on the host
 	// platform. Empty inherits the bound spells' default; see PlatformSensitivity.
-	// buzz:"-" alongside FailOnDrift and RetryOnVolatile because it is reachable only
-	// through the Go registration API today; it gains a Buzz name when the magusfile
-	// declaration path lands.
-	Platform PlatformSensitivity `json:"platform,omitempty" buzz:"-"`
+	// Unlike FailOnDrift and RetryOnVolatile it carries a Buzz name: those are CI-only
+	// hooks set through the Go registration API, while this is a claim the magusfile
+	// author makes about their own target.
+	Platform PlatformSensitivity `json:"platform,omitempty" buzz:"platform"`
 }
 
 // String returns the canonical "path:target" form.
