@@ -37,12 +37,12 @@ export fun endMarker(name: str) > str { return "<!-- magus:advice:" + name + ":e
 // run page is already the right home for everything a reader might want next.
 fun preface() > str {
     var text = "### magus\n\n"
-        + "magus compared this pull request against the workspace's build graph - what "
-        + "each project declares, what it generates, and what depends on it - and found "
-        + "the notes below. Each one is collapsed; open the ones that concern you.\n\n"
-        + "**None of this blocks the merge.** The checks do that. These are things the "
-        + "graph knows and a diff cannot show, offered in case they change what you would "
-        + "do next. If one does not apply here, label it away and it disappears.\n";
+        + "magus read this pull request against the workspace's build graph: what each "
+        + "project declares, and what depends on it. The notes below are what that turned "
+        + "up. Each is collapsed; open the ones that concern you.\n\n"
+        + "**None of this blocks the merge.** The checks do that. Each note is something "
+        + "the graph knows and a diff cannot show. If one does not apply here, label it "
+        + "away and it disappears.\n";
     final repo = env("REPO");
     final run = env("GITHUB_RUN_ID");
     if (repo != "" and run != "") {
@@ -293,7 +293,7 @@ export fun publish(repo: str, pr: str, name: str, title: str, body: str) > void 
 test "compose opens with what this is before any finding" {
     final body = compose("", name: "conflicts", title: "Merge conflicts", body: "hello");
     std\assert(body.indexOf("### magus") != null, message: "announces itself");
-    std\assert(body.indexOf("compared this pull request") != null, message: "says what it did");
+    std\assert(body.indexOf("read this pull request") != null, message: "says what it did");
     std\assert(body.indexOf("None of this blocks the merge") != null, message: "says it is not a gate");
     std\assert(body.indexOf("label it away") != null, message: "says how to dismiss one");
     // The prologue comes before the first collapsed finding, not after it.
