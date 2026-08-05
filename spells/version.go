@@ -94,16 +94,6 @@ const (
 	VersionPatch VersionComponent = "patch"
 )
 
-// Valid reports whether c is one of the defined components. The zero value is valid:
-// declaring nothing is how a spell asks for the exact version.
-func (c VersionComponent) Valid() bool {
-	switch c {
-	case VersionNone, VersionMajor, VersionMinor, VersionPatch:
-		return true
-	}
-	return false
-}
-
 // KeyFunc returns the narrowing this component names, as the same func(string) string
 // shape golang.org/x/mod/semver already exports - so a Go SDK caller can pass
 // semver.Major directly instead of going through a VersionComponent at all.
@@ -123,8 +113,8 @@ func (c VersionComponent) KeyFunc() (VersionKeyFunc, error) {
 			return strings.TrimSuffix(semver.Canonical(v), semver.Prerelease(v))
 		}, nil
 	default:
-		return nil, fmt.Errorf("unknown version component %q (want %q, %q, or %q)",
-			string(c), VersionMajor, VersionMinor, VersionPatch)
+		return nil, fmt.Errorf("unknown version component %s; want one of %s",
+			c, strings.Join(c.Values(), ", "))
 	}
 }
 

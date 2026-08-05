@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/spells"
@@ -317,13 +318,16 @@ func decodeVersionKeys(src Obj) map[string]spells.VersionKey {
 // It is separate from decoding so the error can name the spell, and so a caller that
 // only reads a descriptor (docs, graph extraction) is not forced to handle it.
 func validateVersionKeys(m spells.Descriptor) error {
-	if !m.VersionKey.UpTo.Valid() {
-		return fmt.Errorf("spell %q: version_key.upTo %q is not major, minor, or patch", m.Name, m.VersionKey.UpTo)
+	if c := m.VersionKey.UpTo; !c.Valid() {
+		// The candidate list comes from the same registry that generates the enum, so
+		// adding a component cannot leave this message stale.
+		return fmt.Errorf("spell %q: version_key.upTo is %s; want one of %s",
+			m.Name, c, strings.Join(c.Values(), ", "))
 	}
 	for _, tool := range slices.Sorted(maps.Keys(m.VersionKeys)) {
-		if !m.VersionKeys[tool].UpTo.Valid() {
-			return fmt.Errorf("spell %q: version_keys[%q].upTo %q is not major, minor, or patch",
-				m.Name, tool, m.VersionKeys[tool].UpTo)
+		if c := m.VersionKeys[tool].UpTo; !c.Valid() {
+			return fmt.Errorf("spell %q: version_keys[%q].upTo is %s; want one of %s",
+				m.Name, tool, c, strings.Join(c.Values(), ", "))
 		}
 	}
 	return nil
