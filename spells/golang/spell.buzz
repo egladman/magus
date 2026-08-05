@@ -14,13 +14,13 @@ export fun mgs_listRequiredGlobs() > [Path] {
 }
 
 
-
-
-
 // `go version` prints the host platform (`go1.26.0 linux/amd64`) and golangci-lint pads
 // its line with the commit it was built from, the timestamp, and the Go version it was
 // compiled with. Asking for `patch` extracts the version and sheds all of that, so two
 // machines running the same tool agree on a key. It narrows nothing anyone reasons about.
+// Shedding `go version`'s GOOS/GOARCH suffix is only safe because the cache manifest
+// carries its own platform field (see internal/cache/manifest.go) and refuses to replay
+// across platforms; that suffix was otherwise the ONLY thing putting platform into the key.
 //
 // govulncheck declares NO key on purpose. Its verdict comes from the Go vulnerability
 // DATABASE, and `-version` reports that database's last-modified date alongside the Go
