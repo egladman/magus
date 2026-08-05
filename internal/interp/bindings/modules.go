@@ -183,6 +183,11 @@ var magusOwnedTypeSource = strings.Join([]string{
 	spellruntime.TargetGraphNodeSource,
 	spellruntime.TargetGraphProjectSource,
 	spellruntime.TargetGraphSource,
+	spellruntime.FileEntrySource, // precedes FileReport: its files are a list of it
+	spellruntime.FileReportSource,
+	spellruntime.DoctorCheckSource, // precedes DoctorReport, as does DoctorSummary
+	spellruntime.DoctorSummarySource,
+	spellruntime.DoctorReportSource,
 	spellruntime.TargetRunSource, // precedes Run: Run.targets is a list of it
 	spellruntime.RunSource,
 	spellruntime.ModuleFieldEntrySource,

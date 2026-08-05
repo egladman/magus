@@ -192,3 +192,29 @@ var TargetRunSource string
 //go:generate go run ../../cmd/magus-utils types -type Run -out gen/types/run.buzz
 //go:embed gen/types/run.buzz
 var RunSource string
+
+// FileEntrySource / FileReportSource mirror magus.describeFile's result: one entry per
+// path with its role (output | source | unclaimed) and the projects claiming it.
+//
+//go:generate go run ../../cmd/magus-utils types -type FileEntry -out gen/types/fileentry.buzz
+//go:embed gen/types/fileentry.buzz
+var FileEntrySource string
+
+//go:generate go run ../../cmd/magus-utils types -type FileReport -out gen/types/filereport.buzz
+//go:embed gen/types/filereport.buzz
+var FileReportSource string
+
+// DoctorCheckSource / DoctorSummarySource / DoctorReportSource mirror magus.doctor's
+// result. Leaf-first: DoctorReport carries a list of DoctorCheck and one DoctorSummary.
+//
+//go:generate go run ../../cmd/magus-utils types -type DoctorCheck -out gen/types/doctorcheck.buzz
+//go:embed gen/types/doctorcheck.buzz
+var DoctorCheckSource string
+
+//go:generate go run ../../cmd/magus-utils types -type DoctorSummary -out gen/types/doctorsummary.buzz
+//go:embed gen/types/doctorsummary.buzz
+var DoctorSummarySource string
+
+//go:generate go run ../../cmd/magus-utils types -type DoctorReport -out gen/types/doctorreport.buzz
+//go:embed gen/types/doctorreport.buzz
+var DoctorReportSource string

@@ -11,9 +11,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// CheckStatus is the outcome of a single doctor check.
-type CheckStatus string
-
 // The CheckStatus constants enumerate the possible doctor-check outcomes.
 //
 // StatusFail and StatusAdvice are a deliberate split, and which one a check
@@ -45,32 +42,22 @@ type CheckStatus string
 // target, with its own tools, on its own terms. magus reports what it noticed and
 // gets out of the way.
 const (
-	StatusOK     CheckStatus = "ok"
-	StatusFail   CheckStatus = "fail"
-	StatusAdvice CheckStatus = "advice"
+	StatusOK     = types.DoctorOK
+	StatusFail   = types.DoctorFail
+	StatusAdvice = types.DoctorAdvice
 )
 
-// Check is one doctor check result.
-type Check struct {
-	Name    string      `json:"name" yaml:"name"`
-	Status  CheckStatus `json:"status" yaml:"status"`
-	Message string      `json:"message,omitempty" yaml:"message,omitempty"`
-	Details []string    `json:"details,omitempty" yaml:"details,omitempty"`
-}
-
-// Summary counts check outcomes.
-type Summary struct {
-	OK     int `json:"ok" yaml:"ok"`
-	Fail   int `json:"fail" yaml:"fail"`
-	Advice int `json:"advice" yaml:"advice"`
-}
-
-// Report is the full doctor output.
-type Report struct {
-	Workspace string  `json:"workspace" yaml:"workspace"`
-	Checks    []Check `json:"checks" yaml:"checks"`
-	Summary   Summary `json:"summary" yaml:"summary"`
-}
+// The report shape is a DOMAIN type (types.DoctorReport and friends): magus.doctor
+// returns it to a magusfile, so a caller iterates checks and branches on status
+// instead of grepping console text. Aliased rather than moved outright so every
+// check in this package keeps saying Check, Status, Report - the local vocabulary
+// is the one its authors read.
+type (
+	CheckStatus = types.DoctorCheckStatus
+	Check       = types.DoctorCheck
+	Summary     = types.DoctorSummary
+	Report      = types.DoctorReport
+)
 
 // DaemonInfo carries live daemon state for the daemon-related doctor checks.
 // A nil daemon field means no daemon was found or queried.

@@ -10,7 +10,6 @@
 import "os";
 import "advice";
 import "magus";
-import "serialize";
 import "std";
 
 final section = "merge-conflicts";
@@ -53,19 +52,16 @@ fun conflictPaths(text: str) > [str] {
 }
 
 // generated keeps the paths the workspace declares as build output (role: output).
-// magus\describe runs the subcommand in-process rather than through os\exec: it is the
-// magus already running, so there is no PATH lookup, no skew between the magus that
-// advises and the magus that resolves, and no argv quoting to get wrong.
+//
+// magus\describeFile returns the report as a TYPED value, so `f.role` and `f.path` are
+// checked when this file compiles. The earlier form asked for `-o json` and walked the
+// result with q("files").listValue() / q("role").stringValue(), where a mistyped key is
+// a null at run time on a CI job nobody is watching.
 fun generated(paths: [str]) > [str] {
     var found = mut [];
     if (paths.len() == 0) { return found; }
-    var argv = mut ["file"];
-    foreach (p in paths) { argv.append(p); }
-    argv.append("-o");
-    argv.append("json");
-    final report = magus\describe(argv, opts: {"quiet": true}).stdout;
-    foreach (f in serialize\jsonDecode(report).q("files").listValue()) {
-        if (f.q("role").stringValue() == "output") { found.append(f.q("path").stringValue()); }
+    foreach (f in magus\describeFile(paths).files) {
+        if (f.role == "output") { found.append(f.path); }
     }
     return found;
 }

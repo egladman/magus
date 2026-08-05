@@ -97,6 +97,15 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return buzzValueMagusExecResult(ret0), nil
 	}))
+	m.MapSet("describeFile", vm.DirectValue("magus.describeFile", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		paths := StrSlice(bzArgs, 0)
+		opts := AnyMap(bzArgs, 1)
+		ret0, err := std.MagusDescribeFile(ctx, paths, opts)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return buzzValueMagusFileReport(ret0), nil
+	}))
 	m.MapSet("doctor", vm.DirectValue("magus.doctor", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		args := StrSlice(bzArgs, 0)
 		opts := AnyMap(bzArgs, 1)
@@ -104,7 +113,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueMagusExecResult(ret0), nil
+		return buzzValueMagusDoctorReport(ret0), nil
 	}))
 	m.MapSet("bustCache", vm.DirectValue("magus.bustCache", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		project_path := Str(bzArgs, 0)
@@ -355,5 +364,69 @@ func buzzValueMagusGraphView(v types.GraphView) vm.Value {
 		mapped59.MapSet(key60, vm.IntValue(int64(item61)))
 	}
 	out.MapSet("blastRadius", mapped59)
+	return out
+}
+
+func buzzValueMagusFileEntry(v types.FileEntry) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("project", vm.StrValue(v.Project))
+	out.MapSet("role", vm.StrValue(v.Role))
+	items64 := make([]vm.Value, len(v.OutputOf))
+	for index65 := range v.OutputOf {
+		items64[index65] = vm.StrValue(v.OutputOf[index65])
+	}
+	out.MapSet("outputOf", vm.ListValue(items64))
+	items66 := make([]vm.Value, len(v.SourceOf))
+	for index67 := range v.SourceOf {
+		items66[index67] = vm.StrValue(v.SourceOf[index67])
+	}
+	out.MapSet("sourceOf", vm.ListValue(items66))
+	out.MapSet("hint", vm.StrValue(v.Hint))
+	return out
+}
+
+func buzzValueMagusFileReport(v types.FileReport) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("definition", vm.StrValue(v.Definition))
+	out.MapSet("count", vm.IntValue(int64(v.Count)))
+	items62 := make([]vm.Value, len(v.Files))
+	for index63 := range v.Files {
+		items62[index63] = buzzValueMagusFileEntry(v.Files[index63])
+	}
+	out.MapSet("files", vm.ListValue(items62))
+	return out
+}
+
+func buzzValueMagusDoctorCheck(v types.DoctorCheck) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("status", vm.StrValue(string(v.Status)))
+	out.MapSet("message", vm.StrValue(v.Message))
+	items70 := make([]vm.Value, len(v.Details))
+	for index71 := range v.Details {
+		items70[index71] = vm.StrValue(v.Details[index71])
+	}
+	out.MapSet("details", vm.ListValue(items70))
+	return out
+}
+
+func buzzValueMagusDoctorSummary(v types.DoctorSummary) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("ok", vm.IntValue(int64(v.OK)))
+	out.MapSet("fail", vm.IntValue(int64(v.Fail)))
+	out.MapSet("advice", vm.IntValue(int64(v.Advice)))
+	return out
+}
+
+func buzzValueMagusDoctorReport(v types.DoctorReport) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("workspace", vm.StrValue(v.Workspace))
+	items68 := make([]vm.Value, len(v.Checks))
+	for index69 := range v.Checks {
+		items68[index69] = buzzValueMagusDoctorCheck(v.Checks[index69])
+	}
+	out.MapSet("checks", vm.ListValue(items68))
+	out.MapSet("summary", buzzValueMagusDoctorSummary(v.Summary))
 	return out
 }

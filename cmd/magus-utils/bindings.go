@@ -540,6 +540,13 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value string, t reflect.Type, 
 
 	switch t.Kind() {
 	case reflect.String:
+		// A NAMED string (types.DoctorCheckStatus, types.TargetRunState) is a distinct
+		// Go type, so it needs the conversion every numeric case already makes. Plain
+		// string is emitted bare rather than as string(s), which is redundant and what
+		// the unconvert linter exists to catch.
+		if t != reflect.TypeOf("") {
+			return "vm.StrValue(string(" + value + "))", nil
+		}
 		return "vm.StrValue(" + value + ")", nil
 	case reflect.Bool:
 		return "vm.BoolValue(" + value + ")", nil

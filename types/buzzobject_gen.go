@@ -285,39 +285,91 @@ func (v TargetGraphOutput) BuzzObject() BuzzObject {
 	}
 }
 
-func (v StatusTargetRun) BuzzObject() BuzzObject {
-	formatted32 := ""
-	if !v.StartedAt.IsZero() {
-		formatted32 = v.StartedAt.Format(time.RFC3339)
+func (v FileEntry) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"path":     v.Path,
+		"project":  v.Project,
+		"role":     v.Role,
+		"outputOf": v.OutputOf,
+		"sourceOf": v.SourceOf,
+		"hint":     v.Hint,
 	}
-	formatted33 := ""
+}
+
+func (v FileReport) BuzzObject() BuzzObject {
+	items32 := make([]any, len(v.Files))
+	for index33 := range v.Files {
+		items32[index33] = v.Files[index33].BuzzObject()
+	}
+	return BuzzObject{
+		"definition": v.Definition,
+		"count":      v.Count,
+		"files":      items32,
+	}
+}
+
+func (v DoctorCheck) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"name":    v.Name,
+		"status":  v.Status,
+		"message": v.Message,
+		"details": v.Details,
+	}
+}
+
+func (v DoctorSummary) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"ok":     v.OK,
+		"fail":   v.Fail,
+		"advice": v.Advice,
+	}
+}
+
+func (v DoctorReport) BuzzObject() BuzzObject {
+	items34 := make([]any, len(v.Checks))
+	for index35 := range v.Checks {
+		items34[index35] = v.Checks[index35].BuzzObject()
+	}
+	return BuzzObject{
+		"workspace": v.Workspace,
+		"checks":    items34,
+		"summary":   v.Summary.BuzzObject(),
+	}
+}
+
+func (v StatusTargetRun) BuzzObject() BuzzObject {
+	formatted36 := ""
+	if !v.StartedAt.IsZero() {
+		formatted36 = v.StartedAt.Format(time.RFC3339)
+	}
+	formatted37 := ""
 	if !v.EndedAt.IsZero() {
-		formatted33 = v.EndedAt.Format(time.RFC3339)
+		formatted37 = v.EndedAt.Format(time.RFC3339)
 	}
 	return BuzzObject{
 		"project":    v.Project,
 		"target":     v.Target,
 		"state":      v.State,
-		"startedAt":  formatted32,
-		"endedAt":    formatted33,
+		"startedAt":  formatted36,
+		"endedAt":    formatted37,
 		"outputRef":  v.OutputRef,
 		"durationMs": v.DurationMs,
 	}
 }
 
 func (v StatusRun) BuzzObject() BuzzObject {
-	formatted34 := ""
+	formatted38 := ""
 	if !v.StartedAt.IsZero() {
-		formatted34 = v.StartedAt.Format(time.RFC3339)
+		formatted38 = v.StartedAt.Format(time.RFC3339)
 	}
-	items35 := make([]any, len(v.Targets))
-	for index36 := range v.Targets {
-		items35[index36] = v.Targets[index36].BuzzObject()
+	items39 := make([]any, len(v.Targets))
+	for index40 := range v.Targets {
+		items39[index40] = v.Targets[index40].BuzzObject()
 	}
 	return BuzzObject{
 		"inv":       v.Inv,
 		"trigger":   v.Trigger,
-		"startedAt": formatted34,
-		"targets":   items35,
+		"startedAt": formatted38,
+		"targets":   items39,
 	}
 }

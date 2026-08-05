@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/types"
@@ -128,13 +129,23 @@ var Magus = Module{
 			Impl:    MagusInsight,
 		},
 		{
+			Name: "describe_file",
+			Doc:  "Classify paths against the workspace's declared globs: for each, the owning project and whether it is a declared `output` (generated - regenerate it, never hand-edit), a declared `source` (it feeds cache keys and the affected set), or `unclaimed`. Returns a typed DoctorReport-style envelope {definition, count, files}, not text to re-parse: this is the question \"can I disregard this changed file\", and a caller branches on `role` rather than grepping. Runs a nested magus, so it needs no workspace on the context and works from a `magus buzz` script.",
+			Args: []Arg{
+				{Name: "paths", Type: TypeStringSlice},
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "FileReport"}},
+			Impl:    MagusDescribeFile,
+		},
+		{
 			Name: "doctor",
-			Doc:  "Run `magus doctor <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like os.exec); opts.quiet captures the output without echoing it to the console.",
+			Doc:  "Validate the workspace and return what every check found: {workspace, checks, summary}, each check {name, status, message, details} with status `ok`, `fail`, or `advice` (advice is worth knowing and never a gate). Annotate the result `> DoctorReport` for compile-checked field access. A caller branches on a check's status rather than grepping console text for the word fail. It does NOT raise when a check fails: doctor exits non-zero precisely when it has something to report, and raising would discard the report. Gate on `summary.fail` instead, which says more than an exit code does. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like os.exec).",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "DoctorReport"}},
 			Impl:    MagusDoctor,
 		},
 		{
@@ -318,9 +329,52 @@ func MagusInsight(ctx context.Context, args []string, opts map[string]any) (type
 	return runMagusSub(ctx, "insight", args, opts)
 }
 
-// MagusDoctor runs `magus doctor <args>`; see runMagus.
-func MagusDoctor(ctx context.Context, args []string, opts map[string]any) (types.ExecResult, error) {
-	return runMagusSub(ctx, "doctor", args, opts)
+// MagusDoctor validates the workspace and returns the typed report.
+//
+// It is the shape every method here should have and most do not yet: the child already
+// knows how to say this in JSON, so the answer crosses the boundary as the domain type
+// rather than as console text a caller has to parse back out of a string.
+func MagusDoctor(ctx context.Context, args []string, opts map[string]any) (types.DoctorReport, error) {
+	return runMagusJSON[types.DoctorReport](ctx, "doctor", args, opts)
+}
+
+// MagusDescribeFile classifies paths as generated output, declared source, or
+// unclaimed. See runMagusJSON for why it forks rather than reading the workspace on
+// the context: this answer is wanted precisely where there is no workspace loaded -
+// a `magus buzz` script deciding whether a changed file is worth a human's attention.
+func MagusDescribeFile(ctx context.Context, paths []string, opts map[string]any) (types.FileReport, error) {
+	return runMagusJSON[types.FileReport](ctx, "describe", append([]string{"file"}, paths...), opts)
+}
+
+// runMagusJSON runs a nested magus subcommand and decodes its report into T.
+//
+// It forces `-o json` and quiet: the caller is consuming the value, not watching the
+// output, and letting a caller pass its own -o would hand back a shape T cannot decode.
+// The alternative - returning ExecResult and making every caller run the bytes through
+// jsonDecode - loses the type at the boundary, and annotating a decoded value back to a
+// mirror does NOT restore it: that compiles and silently reads null for every field.
+func runMagusJSON[T any](ctx context.Context, sub string, args []string, opts map[string]any) (T, error) {
+	var out T
+	quiet := map[string]any{"quiet": true}
+	for k, v := range opts {
+		if k == "quiet" {
+			continue
+		}
+		quiet[k] = v
+	}
+	res, runErr := runMagusSub(ctx, sub, append(append([]string(nil), args...), "-o", "json"), quiet)
+	// DECODE FIRST, exit status second. A report command exits non-zero precisely when
+	// it has something to report - doctor exits 1 because a check failed - and raising
+	// there would throw away the very payload the caller asked for. A report that parsed
+	// IS the answer; the caller branches on it (summary.fail), which is strictly more
+	// than an exit code carries. Only an unparseable answer is a failure to answer.
+	if derr := json.Unmarshal([]byte(res.Stdout), &out); derr == nil {
+		return out, nil
+	}
+	if runErr != nil {
+		return out, runErr
+	}
+	return out, fmt.Errorf("magus.%s: decode report: %s", sub, res.Stderr)
 }
 
 // runMagusSub runs a nested magus invocation for subcommand sub: it prepends sub
@@ -415,7 +469,13 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 			cmdErr = fmt.Errorf("magus.%s: %s: %w", label, strings.Join(full, " "), err)
 		case res.Code != 0:
 			cmdErr = fmt.Errorf("magus.%s: %s exited with code %d", label, strings.Join(full, " "), res.Code)
-		default:
+		}
+		if res.Started {
+			// Recorded even on a non-zero exit. A child that RAN said something, and
+			// that output is the answer for a command whose failure IS its report -
+			// doctor exits 1 because a check failed, and dropping stdout there left
+			// nothing to decode. The error is still returned alongside, so a caller
+			// that only wants the happy path is unaffected.
 			rec = types.ExecResult{
 				Stdout: strings.TrimSpace(res.Stdout),
 				Stderr: strings.TrimSpace(res.Stderr),

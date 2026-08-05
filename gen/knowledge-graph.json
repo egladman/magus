@@ -3,7 +3,7 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2407,
+  "node_count": 2408,
   "edge_count": 5438,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
@@ -19513,12 +19513,21 @@
       }
     },
     {
+      "id": "method:magus.describe_file",
+      "kind": "method",
+      "label": "magus.describe_file",
+      "doc": "Classify paths against the workspace's declared globs: for each, the owning project and whether it is a declared `output` (generated - regenerate it, never hand-edit), a declared `source` (it feeds cache keys and the affected set), or `unclaimed`. Returns a typed DoctorReport-style envelope {definition, count, files}, not text to re-parse: this is the question \"can I disregard this changed file\", and a caller branches on `role` rather than grepping. Runs a nested magus, so it needs no workspace on the conte",
+      "attrs": {
+        "buzz": "magus\\describeFile(paths, [opts]) → FileReport"
+      }
+    },
+    {
       "id": "method:magus.doctor",
       "kind": "method",
       "label": "magus.doctor",
-      "doc": "Run `magus doctor <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like os.exec); opts.quiet captures the output without echoing it to the console.",
+      "doc": "Validate the workspace and return what every check found: {workspace, checks, summary}, each check {name, status, message, details} with status `ok`, `fail`, or `advice` (advice is worth knowing and never a gate). Annotate the result `> DoctorReport` for compile-checked field access. A caller branches on a check's status rather than grepping console text for the word fail. It does NOT raise when a check fails: doctor exits non-zero precisely when it has something to report, and raising would discard the rep",
       "attrs": {
-        "buzz": "magus\\doctor(args, [opts]) → ExecResult"
+        "buzz": "magus\\doctor(args, [opts]) → DoctorReport"
       }
     },
     {
@@ -32105,14 +32114,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/buzz/json.md"
-    },
-    {
-      "source": "doc:docs/reference/buzz/magus.md",
-      "target": "diagnostic:MGS1016",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/reference/buzz/magus.md"
     },
     {
       "source": "doc:docs/reference/buzz/magus.md",
@@ -59992,6 +59993,13 @@
     {
       "source": "module:magus",
       "target": "method:magus.describe",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:magus",
+      "target": "method:magus.describe_file",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1

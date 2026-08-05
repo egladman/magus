@@ -48,6 +48,13 @@ var boundaryTypes = []boundaryType{
 	// ref each one minted. Mirrored so a caller can ITERATE a run - `t.state == "failed"`
 	// then `t.outputRef` - instead of parsing magus's own console output back out of a
 	// string. TargetRun precedes Run: Run.targets is a list of it.
+	// Leaf-first: an envelope's list field mirrors as its element's Buzz name, which
+	// must already be declared.
+	{Name: "FileEntry", Type: reflect.TypeFor[types.FileEntry](), RuntimeObject: true},
+	{Name: "FileReport", Type: reflect.TypeFor[types.FileReport](), RuntimeObject: true},
+	{Name: "DoctorCheck", Type: reflect.TypeFor[types.DoctorCheck](), RuntimeObject: true},
+	{Name: "DoctorSummary", Type: reflect.TypeFor[types.DoctorSummary](), RuntimeObject: true},
+	{Name: "DoctorReport", Type: reflect.TypeFor[types.DoctorReport](), RuntimeObject: true},
 	{Name: "TargetRun", Type: reflect.TypeFor[types.StatusTargetRun](), RuntimeObject: true},
 	{Name: "Run", Type: reflect.TypeFor[types.StatusRun](), RuntimeObject: true},
 }
