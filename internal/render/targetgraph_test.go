@@ -134,7 +134,6 @@ func TestWriteTargetGraphMarkdownRouting(t *testing.T) {
 	got := b.String()
 	for _, want := range []string{
 		"## Query first",
-		"42 nodes",
 		"magus explain <node>",
 		"magus query kind:spell",
 		"`go`, `buf`", // anchors as inline code
@@ -142,6 +141,11 @@ func TestWriteTargetGraphMarkdownRouting(t *testing.T) {
 	} {
 		assert.Contains(t, got, want, "routing section missing %q", want)
 	}
+	// The node and edge TOTALS are deliberately absent: they move on nearly every
+	// commit, and this file is committed and drift-gated. `magus graph stats` is the
+	// live answer, and the block above points at it.
+	assert.NotContains(t, got, "42 nodes", "routing section must not carry churning totals")
+	assert.NotContains(t, got, "99 edges", "routing section must not carry churning totals")
 }
 
 // TestFirstDocLine pins the target-list cell helper: it keeps only the first
