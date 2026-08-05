@@ -1,16 +1,20 @@
 name: magus advice
 description: >
   Post non-blocking review nudges on a pull request. Each advisor is silent unless it
-  has something to say, and each is one input you can turn off by name; every one is on
-  by default, so a new advisor arrives without a workflow edit.
+  has something to say, and each is one input you can turn off by name; the read-only
+  ones are on by default, so a new advisor arrives without a workflow edit.
 
   Named for doctor's [advice] level, so the CI surface and the tool share one word for
   "worth knowing, never a gate".
 
+  All advisors write into ONE comment, each owning a section it replaces on every run
+  and RETRACTS when it has nothing to say - so the comment is a current statement of
+  what magus knows, not an accumulating thread.
+
   Requires magus on PATH - run egladman/magus/.github/actions/setup-magus first. Each
   advisor runs against the caller's checkout, so check out before this step. The
-  advisors never mutate the checkout: the conflict advisor merges in memory with
-  `git merge-tree`, so there is no merge to abort and no half-merge to strand.
+  read-only advisors never mutate the checkout: the conflict advisor merges in memory
+  with `git merge-tree`, so there is no merge to abort and no half-merge to strand.
 
 inputs:
   merge-conflicts:
@@ -21,6 +25,22 @@ inputs:
       command that settles them.
     required: false
     default: 'true'
+  fix-generated-drift:
+    description: >
+      Regenerate drifted generated files and PUSH the result to the pull request branch.
+
+      OFF by default, because it is the one advisor that writes. Turning it on here is
+      only half the consent: the pull request must ALSO carry the label named by
+      `fix-label`, so the repository allows the capability and a human asks for it per
+      change. Needs `contents: write` on the job, and cannot work on a fork PR (the
+      token has no write access to the fork) - it says so in the comment rather than
+      failing.
+    required: false
+    default: 'false'
+  fix-label:
+    description: The label that consents to fix-generated-drift on a given pull request.
+    required: false
+    default: 'magus:autofix'
   pr-number:
     description: The pull request to comment on.
     required: false
@@ -38,21 +58,43 @@ inputs:
     default: ${{ github.event.pull_request.head.sha }}
   token:
     description: >
-      Token used to post the comment. Needs `pull-requests: write`, which the default
-      GITHUB_TOKEN does NOT have on a pull request from a fork - the comment step fails
-      there, by design of the platform rather than of this action.
+      Token used to read and post the comment, and to push when fix-generated-drift is
+      on. Needs `pull-requests: write`, which the default GITHUB_TOKEN does NOT have on a
+      pull request from a fork - the comment step fails there, by design of the platform
+      rather than of this action.
     required: false
     default: ${{ github.token }}
 
 runs:
   using: composite
   steps:
+    # BUZZ_INCLUDE_PATH is how each advisor finds advice.buzz beside it: the scripts run
+    # from the CALLER's checkout, so the action's own directory is not on the search path
+    # unless it is named here.
     - name: Advise on generated-file conflicts
       if: inputs.merge-conflicts == 'true'
       shell: bash
       env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
         GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
         PR_NUMBER: ${{ inputs.pr-number }}
         PR_BASE: ${{ inputs.base-ref }}
         PR_HEAD_SHA: ${{ inputs.head-sha }}
       run: magus buzz "$GITHUB_ACTION_PATH/merge-conflict.buzz"
+
+    # Last, and deliberately after the read-only advisors: it can push, which moves the
+    # head every earlier advisor just reported on.
+    - name: Fix generated drift
+      if: inputs.fix-generated-drift == 'true'
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        FIX_DRIFT: ${{ inputs.fix-generated-drift }}
+        FIX_LABEL: ${{ inputs.fix-label }}
+      run: magus buzz "$GITHUB_ACTION_PATH/fix-generated-drift.buzz"

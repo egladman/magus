@@ -1,0 +1,132 @@
+// Regenerate a PR's drifted generated files and push the result back to its branch.
+//
+// The only advisor that WRITES. Everything else here comments; this one commits, so it
+// is off unless TWO independent parties say yes:
+//
+//   1. the workflow author, via the action's `fix-generated-drift: 'true'` input - the
+//      capability itself, in a file only someone with write access can change;
+//   2. a human on the pull request, via a label - consent for THIS change, revocable by
+//      removing the label.
+//
+// Neither alone is enough. The input without the label means the repo allows it and
+// nobody asked for it; the label without the input means someone asked for something the
+// repo never enabled.
+import "os";
+import "advice";
+import "std";
+
+final section = "generated-drift";
+
+// The identity autofix commits under. It is also the LOOP GUARD: if HEAD is already an
+// autofix commit, regenerating produced different bytes twice in a row, which means the
+// generator is not deterministic. Pushing again would loop forever, so it stops and says
+// so instead. This is not hypothetical - a workspace index that embeds its own graph's
+// node count can oscillate between two values.
+final autofix_email = "magus-autofix@users.noreply.github.com";
+final autofix_name = "magus autofix";
+
+fun git(argv: [str], tolerate: bool) > str {
+    return os\exec("git", args: argv, dir: ".", opts: {"allow_failure": tolerate}).stdout;
+}
+
+// labelled reports whether the PR carries the consent label.
+fun labelled(repo: str, pr: str, want: str) > bool {
+    final listed = os\exec("gh", args: ["api", "repos/" + repo + "/issues/" + pr + "/labels"],
+        dir: ".", opts: {"quiet": true, "allow_failure": true});
+    if (!listed.ok) { return false; }
+    return listed.stdout.indexOf("\"name\": \"" + want + "\"") != null;
+}
+
+// dirty lists the paths regeneration changed, tracked files only.
+fun dirty() > [str] {
+    var paths = mut [];
+    foreach (line in git(["diff", "--name-only"], tolerate: false).split("\n")) {
+        if (line != "") { paths.append(line); }
+    }
+    return paths;
+}
+
+// fixedBody is the section text for a successful push. Pure, so the wording is testable.
+export fun fixedBody(files: [str], sha: str) > str {
+    var body = "**Regenerated the files magus generates** and pushed `" + sha + "` to this branch:\n\n";
+    foreach (f in files) { body = body + "- `" + f + "`\n"; }
+    return body
+        + "\nThe drift gate compares regenerated output against what is committed, so this "
+        + "settles it. Pull before you push again, or your next push will conflict with the "
+        + "commit above.\n\nRemove the label to stop magus from doing this.\n";
+}
+
+fun main() > void {
+    // The capability, from the action's input. Absent or anything but "true" means the
+    // workflow never enabled it, and an advisor that is off says nothing at all.
+    if (advice\env("FIX_DRIFT") != "true") { return; }
+
+    final repo = advice\env("REPO");
+    final pr = advice\env("PR_NUMBER");
+    final headRef = advice\env("PR_HEAD_REF");
+    final headRepo = advice\env("PR_HEAD_REPO");
+    final label = advice\env("FIX_LABEL");
+    if (repo == "" or pr == "") {
+        std\print("fix-generated-drift: no PR context; nothing to fix");
+        return;
+    }
+
+    if (!labelled(repo, pr: pr, want: label)) {
+        // No consent for this change. Retract any section left by an earlier push, so the
+        // comment never claims a fix that is no longer on offer.
+        advice\publish(repo, pr: pr, name: section, body: "");
+        std\print("fix-generated-drift: label " + label + " absent; nothing to do");
+        return;
+    }
+
+    // A fork's head lives in another repository, and the token this job holds cannot
+    // write there. Say that plainly rather than failing on a push nobody can grant.
+    if (headRepo != "" and headRepo != repo) {
+        advice\publish(repo, pr: pr, name: section,
+            body: "This pull request comes from a fork, so magus cannot push the "
+                + "regenerated files to it - the CI token has no write access to `"
+                + headRepo + "`. Run `magus run generate:rw` locally and commit the result.");
+        return;
+    }
+
+    if (git(["log", "-1", "--format=%ae"], tolerate: false).trim() == autofix_email) {
+        advice\publish(repo, pr: pr, name: section,
+            body: "Regeneration changed the output again on top of magus's own autofix "
+                + "commit, which means a generator here is not deterministic. Stopping "
+                + "rather than pushing in a loop - this needs a human, and the generator "
+                + "is the thing to look at.");
+        return;
+    }
+
+    // Regenerate through the targets, never by hand: the rw charm is what lets generate
+    // write instead of gating on drift.
+    os\exec("magus", args: ["affected", "generate:rw"], dir: ".", opts: {"allow_failure": true});
+    final files = dirty();
+    if (files.len() == 0) {
+        advice\publish(repo, pr: pr, name: section, body: "");
+        std\print("fix-generated-drift: nothing drifted");
+        return;
+    }
+
+    git(["config", "user.email", autofix_email], tolerate: false);
+    git(["config", "user.name", autofix_name], tolerate: false);
+    // magus vcs add, not git add -A: it stages what the workspace DECLARES and reports
+    // anything undeclared instead of sweeping build residue into the commit.
+    os\exec("magus", args: ["vcs", "add"], dir: ".", opts: {});
+    os\exec("git", args: ["commit", "-m", "regenerate drifted output"], dir: ".", opts: {});
+    os\exec("git", args: ["push", "origin", "HEAD:" + headRef], dir: ".", opts: {});
+
+    advice\publish(repo, pr: pr, name: section,
+        body: fixedBody(files, sha: git(["rev-parse", "--short", "HEAD"], tolerate: false).trim()));
+    std\print("fix-generated-drift: pushed " + files.join(", "));
+}
+
+main();
+
+test "fixedBody names every file and how to stop it" {
+    final body = fixedBody(["MAGUS.md", "gen/target-graph.json"], sha: "abc1234");
+    std\assert(body.indexOf("- `MAGUS.md`") != null, message: "names the first file");
+    std\assert(body.indexOf("- `gen/target-graph.json`") != null, message: "names the second");
+    std\assert(body.indexOf("abc1234") != null, message: "names the commit it pushed");
+    std\assert(body.indexOf("Remove the label") != null, message: "says how to turn it off");
+}

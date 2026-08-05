@@ -1139,13 +1139,19 @@ fun total_coverage(func_out: str) > str {
 // under a plain `magus buzz` in CI, so upstream-strict is exactly the parse they need
 // checked, and `-t` is the runner.
 //
-// Through magus\cmd rather than os\exec("magus", ...): same process family, no PATH
-// lookup, no version skew between the magus running the target and the one running the
-// script - and os\exec on the magus binary warns for precisely that reason.
+// Run from the advisors' own directory, not the project root, because each one does
+// `import "advice"` for the shared comment plumbing and Buzz resolves a bare import
+// against the CWD. In CI the action supplies the same thing as BUZZ_INCLUDE_PATH.
+//
+// os\exec rather than magus\cmd, and magus warns about that: magus\cmd always runs in
+// the contextual project directory and takes no dir of its own, so it cannot express
+// "run the nested magus over there". That is the one case the typed method does not
+// cover yet.
 export fun advice_test(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(".github/actions/advice/*.buzz");
     foreach (advisor in fs\glob(".github/actions/advice/*.buzz")) {
-        magus\cmd(["buzz", "-t", advisor]);
+        os\exec(os\executable(), args: ["buzz", "-t", fs\basename(advisor)],
+            dir: ".github/actions/advice", opts: {});
     }
 }
 

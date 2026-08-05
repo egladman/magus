@@ -5,22 +5,15 @@
 // regenerating produces, which is what `magus vcs resolve` does. Silent unless generated
 // files actually conflict - an ordinary source conflict is the author's business.
 //
-// Reads PR_NUMBER, PR_BASE, and PR_HEAD_SHA from the environment; shells out to `gh` to
-// comment.
+// Reads REPO, PR_NUMBER, PR_BASE, and PR_HEAD_SHA from the environment, and writes its
+// section of the pull request's one magus comment through advice\publish.
 import "os";
-import "fs";
+import "advice";
 import "magus";
 import "serialize";
 import "std";
 
-final bodyFile = "/tmp/merge-conflict-advice.md";
-final marker = "<!-- magus:merge-conflict-advice -->";
-
-fun env(name: str) > str {
-    final v = os\env(name);
-    if (v == null) { return ""; }
-    return "" + v;
-}
+final section = "merge-conflicts";
 
 // conflicted reports which paths collide when head is merged into base, WITHOUT
 // performing a merge: `git merge-tree --write-tree` does the three-way merge in memory
@@ -77,8 +70,9 @@ fun generated(paths: [str]) > [str] {
     return found;
 }
 
-fun advice(base: str, files: [str]) > str {
-    var body = marker + "\nThis branch conflicts with `" + base + "` in files magus generates:\n\n";
+// conflictBody is the section text. Pure, so the wording is testable.
+export fun conflictBody(base: str, files: [str]) > str {
+    var body = "This branch conflicts with `" + base + "` in files magus generates:\n\n";
     foreach (f in files) { body = body + "- `" + f + "`\n"; }
     return body
         + "\nThese are build output, so the correct merge is whatever regenerating produces:\n\n"
@@ -88,9 +82,10 @@ fun advice(base: str, files: [str]) > str {
 }
 
 fun main() > void {
-    final pr = env("PR_NUMBER");
-    final base = env("PR_BASE");
-    final head = env("PR_HEAD_SHA");
+    final repo = advice\env("REPO");
+    final pr = advice\env("PR_NUMBER");
+    final base = advice\env("PR_BASE");
+    final head = advice\env("PR_HEAD_SHA");
     if (pr == "" and base == "" and head == "") {
         // No PR context at all: not a pull request, or the file was loaded to run its
         // test blocks. Either way there is nothing to advise on, and refusing to start
@@ -104,14 +99,14 @@ fun main() > void {
 
     final files = generated(conflicted(base, head: head));
     if (files.len() == 0) {
+        // Retract: conflicts that have been resolved must not leave a section behind
+        // claiming they are still there.
+        advice\publish(repo, pr: pr, name: section, body: "");
         std\print("no generated files conflict with " + base);
         return;
     }
 
-    fs\writeFile(bodyFile, content: advice(base, files: files));
-    // --edit-last --create-if-none is the upsert: post once, rewrite in place after that.
-    os\exec("gh", args: ["pr", "comment", pr, "--body-file", bodyFile, "--edit-last", "--create-if-none"],
-        dir: ".", opts: {});
+    advice\publish(repo, pr: pr, name: section, body: conflictBody(base, files: files));
     std\print("advised on PR " + pr + ": " + files.join(", "));
 }
 
@@ -128,9 +123,8 @@ test "conflictPaths on a clean merge yields nothing" {
     std\assert(conflictPaths("38d2ff24\n").len() == 0, message: "no paths");
 }
 
-test "advice names the marker, every file, and the command that settles them" {
-    final body = advice("main", files: ["MAGUS.md", "gen/target-graph.json"]);
-    std\assert(body.startsWith(marker), message: "starts with the upsert marker");
+test "conflictBody names every file and the command that settles them" {
+    final body = conflictBody("main", files: ["MAGUS.md", "gen/target-graph.json"]);
     std\assert(body.indexOf("- `MAGUS.md`") != null, message: "names the first file");
     std\assert(body.indexOf("- `gen/target-graph.json`") != null, message: "names the second");
     std\assert(body.indexOf("magus vcs resolve") != null, message: "names the command");

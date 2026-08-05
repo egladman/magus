@@ -1,0 +1,114 @@
+// Shared plumbing for the PR advisors: environment reads, and the one comment they all
+// write into.
+//
+// ONE comment per pull request, not one per advisor. Each advisor owns a SECTION of it,
+// delimited by its own begin/end markers, and replaces only that section - so a reader
+// gets a single place to look and a single notification, while the advisors stay
+// separate scripts with separate steps.
+//
+// A section is RETRACTED when its advisor has nothing to say. That is what makes the
+// comment trustworthy across pushes: fix the conflicts and the conflict section
+// disappears on the next run, rather than lingering as a stale scold.
+import "os";
+import "fs";
+import "serialize";
+import "std";
+
+// The comment marker identifies OUR comment among everyone else's. Never rendered.
+final comment_marker = "<!-- magus:advice -->";
+
+// env reads a variable, returning "" rather than null so callers can compare directly.
+export fun env(name: str) > str {
+    final v = os\env(name);
+    if (v == null) { return ""; }
+    return "" + v;
+}
+
+export fun beginMarker(name: str) > str { return "<!-- magus:advice:" + name + ":begin -->"; }
+export fun endMarker(name: str) > str { return "<!-- magus:advice:" + name + ":end -->"; }
+
+// compose returns the comment body with section `name` set to `body`, replacing an
+// existing section of that name, appending when there is none, and REMOVING it when body
+// is empty. Pure, so the composition rules are testable without a pull request.
+export fun compose(current: str, name: str, body: str) > str {
+    final begin = beginMarker(name);
+    final end = endMarker(name);
+    var head = current;
+    var tail = "";
+    final at = current.indexOf(begin);
+    if (at != null) {
+        head = current.sub(0, at);
+        final closes = current.indexOf(end);
+        if (closes != null) { tail = current.sub(closes + end.len()); }
+    }
+    if (head == "") { head = comment_marker + "\n"; }
+    if (body == "") { return (head + tail).trim() + "\n"; }
+    return (head + begin + "\n" + body.trim() + "\n" + end + tail).trim() + "\n";
+}
+
+// find returns the id of our comment on this PR, or "" when we have not commented yet.
+// Read through `gh api` and decoded here rather than filtered with a jq expression: the
+// marker is an HTML comment, and quoting it through a jq -r filter inside YAML inside
+// bash is three layers of escaping to get wrong.
+fun find(repo: str, pr: str) > str {
+    final listed = os\exec("gh", args: ["api", "--paginate",
+        "repos/" + repo + "/issues/" + pr + "/comments"], dir: ".", opts: {"quiet": true});
+    foreach (c in serialize\jsonDecode(listed.stdout).listValue()) {
+        if (c.q("body").stringValue().indexOf(comment_marker) != null) {
+            return "" + c.q("id").integerValue();
+        }
+    }
+    return "";
+}
+
+// publish upserts one advisor's section into the PR's magus comment. An empty body
+// retracts the section, and a comment left with no sections at all is emptied to the
+// bare marker rather than deleted - deleting would lose the thread's history.
+export fun publish(repo: str, pr: str, name: str, body: str) > void {
+    final id = find(repo, pr: pr);
+    var current = "";
+    if (id != "") {
+        final got = os\exec("gh", args: ["api", "repos/" + repo + "/issues/comments/" + id],
+            dir: ".", opts: {"quiet": true});
+        current = serialize\jsonDecode(got.stdout).q("body").stringValue();
+    }
+    final composed = compose(current, name: name, body: body);
+    if (composed.trim() == current.trim()) { return; }
+
+    // The body goes through a JSON file, never an -f flag: it is markdown with newlines,
+    // backticks, and quotes, and every one of those is a shell-quoting hazard.
+    final payload = "/tmp/magus-advice-payload.json";
+    fs\writeFile(payload, content: serialize\jsonEncode({"body": composed}));
+    if (id == "") {
+        os\exec("gh", args: ["api", "--method", "POST",
+            "repos/" + repo + "/issues/" + pr + "/comments", "--input", payload], dir: ".", opts: {});
+        return;
+    }
+    os\exec("gh", args: ["api", "--method", "PATCH",
+        "repos/" + repo + "/issues/comments/" + id, "--input", payload], dir: ".", opts: {});
+}
+
+test "compose appends a section to an empty comment" {
+    final body = compose("", name: "conflicts", body: "hello");
+    std\assert(body.indexOf(comment_marker) != null, message: "carries the comment marker");
+    std\assert(body.indexOf("<!-- magus:advice:conflicts:begin -->") != null, message: "opens the section");
+    std\assert(body.indexOf("hello") != null, message: "carries the body");
+}
+
+test "compose replaces only its own section" {
+    var body = compose("", name: "conflicts", body: "old conflicts");
+    body = compose(body, name: "drift", body: "drift text");
+    body = compose(body, name: "conflicts", body: "new conflicts");
+    std\assert(body.indexOf("old conflicts") == null, message: "the old text is gone");
+    std\assert(body.indexOf("new conflicts") != null, message: "the new text is there");
+    std\assert(body.indexOf("drift text") != null, message: "the other section survives");
+}
+
+test "an empty body retracts the section" {
+    var body = compose("", name: "conflicts", body: "there is a conflict");
+    body = compose(body, name: "drift", body: "drift text");
+    body = compose(body, name: "conflicts", body: "");
+    std\assert(body.indexOf("there is a conflict") == null, message: "the text is withdrawn");
+    std\assert(body.indexOf("magus:advice:conflicts") == null, message: "the section markers go too");
+    std\assert(body.indexOf("drift text") != null, message: "the other section survives");
+}
