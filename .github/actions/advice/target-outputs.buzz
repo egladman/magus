@@ -98,7 +98,7 @@ fun main() > void {
         std\print("target-outputs: nothing to advise");
         return;
     }
-    advice\publish(repo, pr: pr, name: section, title: "New targets without declared outputs", body: body(bare));
+    advice\publish(repo, pr: pr, name: section, title: "New targets without declared outputs ({bare.len()})", body: body(bare));
     std\print("target-outputs: advised on " + bare.join(", "));
 }
 

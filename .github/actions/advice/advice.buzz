@@ -79,8 +79,10 @@ export fun linkTerms(text: str) > str {
     var joined = "";
     foreach (part in parts) {
         var piece = part;
-        // Odd segments sit between backticks. Leave them exactly as written.
-        if (i % 2 == 0) {
+        // Odd segments sit between backticks. Leave them exactly as written. A table row
+        // is skipped too: linking a header cell turns `| project |` into a link nobody
+        // asked for, and the cell is a label rather than a mention.
+        if (i % 2 == 0 and !part.trim().startsWith("|")) {
             foreach (term in glossary_terms) {
                 var seen = false;
                 foreach (d in done) { if (d == term) { seen = true; } }
@@ -165,7 +167,15 @@ export fun compose(current: str, name: str, title: str, body: str) > str {
     }
     if (head.indexOf(comment_marker) == null) { head = comment_marker + "\n" + preface(); }
     if (body == "") { return (head + tail).trim() + "\n"; }
-    final section = begin + "\n\n---\n\n#### " + title + "\n\n" + linkCodes(linkTerms(body.trim())) + "\n\n" + end;
+    // Collapsed by default. Six findings expanded is a wall nobody reads to the end of;
+    // six one-line summaries is a table of contents you scan in two seconds and open the
+    // one that concerns you. GitHub renders markdown inside <details> as long as a blank
+    // line follows the summary, which is why the body is padded.
+    //
+    // This is why a title carries its own count: with the body hidden, the summary line is
+    // the whole signal a reader has for deciding whether to open it.
+    final section = begin + "\n<details>\n<summary><b>" + title + "</b></summary>\n\n"
+        + linkCodes(linkTerms(body.trim())) + "\n\n</details>\n" + end;
     return (head + section + tail).trim() + "\n";
 }
 
@@ -218,10 +228,10 @@ test "compose introduces magus and links where to complain" {
     std\assert(body.indexOf("actions/advice") != null, message: "links to what leaves the comment");
 }
 
-test "compose gives each section a heading and a rule" {
-    final body = compose("", name: "conflicts", title: "Merge conflicts", body: "hello");
-    std\assert(body.indexOf("#### Merge conflicts") != null, message: "titles the section");
-    std\assert(body.indexOf("---") != null, message: "separates it from what came before");
+test "compose folds each section away behind its title" {
+    final body = compose("", name: "conflicts", title: "Merge conflicts (2)", body: "hello");
+    std\assert(body.indexOf("<summary><b>Merge conflicts (2)</b></summary>") != null, message: "the title is the summary line");
+    std\assert(body.indexOf("<details>") != null, message: "collapsed by default");
     std\assert(body.indexOf("hello") != null, message: "carries the body");
 }
 
@@ -239,7 +249,7 @@ test "an empty body retracts the section and its heading" {
     body = compose(body, name: "drift", title: "Generated drift", body: "drift text");
     body = compose(body, name: "conflicts", title: "Merge conflicts", body: "");
     std\assert(body.indexOf("there is a conflict") == null, message: "the text is withdrawn");
-    std\assert(body.indexOf("Merge conflicts") == null, message: "the heading goes too");
+    std\assert(body.indexOf("Merge conflicts") == null, message: "the summary line goes too");
     std\assert(body.indexOf("drift text") != null, message: "the other section survives");
 }
 
@@ -276,4 +286,9 @@ test "linkCodes makes a bare diagnostic code clickable" {
 test "linkCodes routes a code to its own area" {
     std\assert(codeURL("MGS4002").indexOf("/race/") != null, message: "race codes");
     std\assert(codeURL("MGS2007").indexOf("/sandbox/") != null, message: "sandbox is the default band");
+}
+
+test "linkTerms leaves table rows alone" {
+    final got = linkTerms("| project | why |");
+    std\assert(got == "| project | why |", message: "a header cell is a label, not a mention");
 }

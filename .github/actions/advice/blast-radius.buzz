@@ -107,9 +107,10 @@ fun body(projects: [str], chains: [str], total: int, share: float, diagram: str)
         text = text + "\nEverything is downstream of what you edited, so splitting the "
             + "change would not shrink any piece - the coupling is upstream of this diff.\n";
     }
+    // No nested <details>: the whole section is already folded away, so a second fold
+    // just makes the diagram two clicks deep.
     if (diagram != "") {
-        text = text + "\n<details><summary>The graph behind that reach</summary>\n\n"
-            + "```mermaid\n" + diagram.trim() + "\n```\n\n</details>\n";
+        text = text + "\n```mermaid\n" + diagram.trim() + "\n```\n";
     }
     return text
         + "\nIf that matches what you expected, there is nothing to do here. If it "
@@ -168,7 +169,8 @@ fun main() > void {
     var diagram = "";
     if (drawn.ok) { diagram = drawn.stdout; }
 
-    advice\publish(repo, pr: pr, name: section, title: "How far this change reaches",
+    advice\publish(repo, pr: pr, name: section,
+        title: "How far this change reaches ({reached.len()} of {total} projects)",
         body: body(reached, chains: chains, total: total, share: share, diagram: diagram));
     std\print("blast-radius: advised on {reached.len()} of {total}");
 }

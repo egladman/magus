@@ -48,7 +48,8 @@ fun main() > void {
         if (c.status == "advice") { advisories.append(line); }
     }
     final body = summarize(fails, advisories: advisories);
-    advice\publish(repo, pr: pr, name: section, title: "Workspace health", body: body);
+    advice\publish(repo, pr: pr, name: section,
+        title: "Workspace health ({fails.len()} failing, {advisories.len()} advisory)", body: body);
     if (body == "") { std\print("doctor: workspace is clean"); return; }
     std\print("doctor: advised on {fails.len()} failure(s), {advisories.len()} advisory");
 }

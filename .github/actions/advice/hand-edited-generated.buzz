@@ -95,7 +95,7 @@ fun main() > void {
         std\print("hand-edited-generated: nothing to advise");
         return;
     }
-    advice\publish(repo, pr: pr, name: section, title: "Generated files changed on their own", body: body(files));
+    advice\publish(repo, pr: pr, name: section, title: "Generated files changed on their own ({files.len()})", body: body(files));
     std\print("hand-edited-generated: advised on " + files.join(", "));
 }
 

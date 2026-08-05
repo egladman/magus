@@ -102,7 +102,8 @@ fun main() > void {
         return;
     }
 
-    advice\publish(repo, pr: pr, name: section, title: "Merge conflicts in generated files", body: conflictBody(base, files: files));
+    advice\publish(repo, pr: pr, name: section, title: "Merge conflicts in generated files ({files.len()})",
+        body: conflictBody(base, files: files));
     std\print("advised on PR " + pr + ": " + files.join(", "));
 }
 
