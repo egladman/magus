@@ -136,6 +136,117 @@ its contents being shown.
 For the LATEST log of a project or target (rather than a specific past execution),
 [`magus tail`](../../guides/debugging.md) is a convenience, with `-f` to follow a running build.
 
+### What the ref does not depend on
+
+The key is a pure function of [the hashed `Step` fields](../cache.md#the-cache-key):
+`keyVersion`, `projectPath`, `target`, `charm`, `arg`, `src`, `env`, `exec`, `dep`,
+`spellDefVersion`, `tool`. Nothing else reaches the hash. Four omissions account for
+most of the questions people ask.
+
+- **No commit, no branch.** A target's key is the content of its declared sources,
+  not the commit they sit on. Check the same bytes out at two commits and they hash
+  the same. `--base` (see [choosing the diff
+  base](../workspace/affected.md#choosing-the-diff-base)) picks which projects a
+  `magus affected` run touches. It scopes the diff. It has no bearing on what any
+  one target hashes to.
+- **No wall-clock time.** A ref printed two years ago still names today's run when
+  the inputs agree.
+- **No absolute paths.** `src:` lines record the workspace-relative path
+  (`internal/cache/hash.go`), never the machine-specific one. Your checkout and
+  CI's disagree on everything above the workspace root and agree below it, which is
+  what carries a ref across machines.
+- **No machine identity.** Hostname, OS, user, runner id: none of it is an input. A
+  tool's *version* is, through the `tool:` lines. Where it ran is not.
+
+`Step.Label` is also excluded, so renaming what a log line calls a project (root
+prints as `magus`, not `.`) cannot change a ref.
+
+Ref equality is therefore input equality. When two refs differ, one of the lines
+above differs, and `--against` will name which.
+
+## A known leak: a multi-line tool probe lands whole in the key
+
+[Tool-version probing](../cache.md#the-opposite-failure-tools-outside-the-key-entirely)
+assumes a probe prints one version string. `govulncheck -version` does not:
+
+```text
+Go: go1.26.5
+Scanner: govulncheck@v1.3.0
+DB: https://vuln.go.dev
+DB updated: 2026-07-27 20:14:16 +0000 UTC
+```
+
+The probe runner trims surrounding whitespace and keeps the rest, so that whole
+block becomes the version string and folds into one `tool:` line with its newlines
+intact. The key hashes those bytes as written. A vulnerability database's update
+timestamp is now part of your cache key.
+
+Every target in a project that binds the `go` spell carries the line, including
+targets that never call govulncheck. Tool-version resolution probes each tool a
+spell drives, whatever target is being keyed. Here it is in a stored key in this
+workspace, under `go-build:rw`:
+
+```text
+tool:go:govulncheck:Go: go1.26.5
+Scanner: govulncheck@v1.3.0
+DB: https://vuln.go.dev
+DB updated: 2026-07-27 20:14:16 +0000 UTC
+```
+
+That costs you twice. The database refreshes, `DB updated:` moves, and every target
+in every `go`-bound project takes a new key for no reason you can see. And two
+machines that probed on different days compute different `tool:` bytes from
+identical sources, so they mint different refs. For those targets the guarantee
+this page makes does not hold.
+
+Storage adds a display bug on top. Persisting key lines joins them with `\n`,
+redacts secrets across the joined text, then splits on `\n` again. The govulncheck
+line already contains newlines, so one logical `tool:` line lands as four, three of
+them with no class prefix. Class digests cut at the first colon, so those three
+surface as classes named `Scanner`, `DB`, and `DB updated`:
+
+```text
+$ magus query output out0931f826468f --meta
+...
+  tool             8944986013e2  3 lines
+  Scanner          aed443a297a2  1 line
+  DB               928087de7d59  1 line
+  DB updated       64a5ee1dd77f  1 line
+```
+
+`describe target <t> --cache` reads the lines before that round-trip and shows them
+intact, so the two views disagree. Only the display disagrees. The timestamp is in
+the hash either way.
+
+Fixing it means deciding what a probe's version string is: the first line, some
+trimmed join, or a parsed subset. Every answer changes cache keys for any workspace
+whose spell has a multi-line probe, so it wants a
+[`KeyVersion`](../cache.md#the-cache-key) bump to force the rebuild in the open.
+Read this as a limit of tool-version probing rather than a govulncheck quirk. Any
+probe that prints more than a version does the same thing.
+
+## What computing a key costs
+
+Two costs dominate, and they behave differently.
+
+**Source hashing** walks the workspace once per step, matches the declared globs,
+and content-hashes what matched, in parallel. An mtime and size check comes first,
+so an unchanged tree re-keys without re-reading a byte. Keying one target with 1802
+`src:` lines in this workspace takes about a second, probes included.
+
+**Tool-version probes spawn a subprocess each.** Resolving a project's versions runs
+`go version`, `golangci-lint --version`, `govulncheck -version`, one per tool a
+version-probed spell drives. Results memoize by `(spell, dir)` for the length of a
+single call and no longer. Call it twice for the same project and you probe twice.
+
+That distinction decides how a caller should be written. `magus run`'s scheduler
+resolves versions once per batch, over the batch's unique projects, before it builds
+any step, so a run over many targets in one project pays each probe once. A caller
+that instead keys targets one at a time, through the single-target entry point, pays
+every probe again on every target. Anything that keys the whole workspace has to
+hoist version resolution above its loop the way the scheduler does. Skipping that
+step is the difference between seconds and half a minute.
+
 ## Sharing a ref across machines
 
 A ref is portable arithmetic, but the OUTPUT behind it still has to exist where you
@@ -239,6 +350,11 @@ collides with a ref id.
 - The ref is the step's cache key, truncated: same inputs, same key, same ref,
   on any machine. Each execution additionally gets a nonce-derived **attempt id**,
   so repeated runs of one step never overwrite each other.
+- The truncation is 12 hex digits (48 bits), chosen so a workspace with a million
+  distinct step keys collides at roughly 1-in-1000 odds - acceptable for a
+  per-workspace namespace. A colliding prefix is never silently resolved to one
+  answer: it lists every matching candidate, git-style, and any longer prefix (up
+  to the full 64 hex digits) still resolves.
 - Output is persisted verbatim as a per-attempt blob under the cache directory
   (`outputs/<key>/`), alongside a small descriptor sidecar (ref, project, target,
   status, timestamp, duration, key, attempt, magus version), on success and on

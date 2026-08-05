@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2417,
-  "edge_count": 5461,
+  "edge_count": 5464,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -28072,6 +28072,14 @@
     },
     {
       "source": "doc:docs/concepts/cache.md",
+      "target": "doc:docs/concepts/cache/output-refs.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/cache.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache.md",
       "target": "doc:docs/concepts/cache/remote.md",
       "relation": "references",
       "confidence": "extracted",
@@ -28240,6 +28248,14 @@
     },
     {
       "source": "doc:docs/concepts/cache/output-refs.md",
+      "target": "doc:docs/concepts/workspace/affected.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/cache/output-refs.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache/output-refs.md",
       "target": "doc:docs/guides/debugging.md",
       "relation": "references",
       "confidence": "extracted",
@@ -28292,6 +28308,14 @@
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
+      "provenance": "docs/concepts/cache/output-refs.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache/output-refs.md",
+      "target": "spell:go",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
       "provenance": "docs/concepts/cache/output-refs.md"
     },
     {

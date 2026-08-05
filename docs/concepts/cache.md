@@ -155,6 +155,11 @@ the `Step`. magus writes these lines, in this order, into one hash:
   charm-variant run (`lint:rw`) hashes differently from the bare run, because the
   charm changes behavior. Empty charms add nothing, so charm-less runs are
   unaffected.
+- **`arg:` lines** - one per argument after `--` (`magus run test -- -run
+  TestFoo`), in the order given. Unlike charms and env these are never sorted,
+  since `-run X` is not `X -run`; a run with different trailing args must not
+  replay another run's result. Empty when no args are forwarded, so an ordinary
+  run hashes unaffected.
 - **`src:` lines** - for every file matched by `needs`, its workspace-relative path,
   its content SHA-256, and its executable bit. Files are discovered by a single
   walk, sorted by path, and hashed in parallel. Only the executable bit of the mode
@@ -164,6 +169,10 @@ the `Step`. magus writes these lines, in this order, into one hash:
 - **`env:` lines** - each allow-listed environment variable name and its value,
   sorted, distinguishing unset from set-to-empty. A variable's value contributes to
   the key only if the spell opted it in.
+- **`exec:` lines** - per-op `ctx.withEnv`/`ctx.withCwd` execution overrides,
+  sorted. Unlike `env:` lines, which read a variable's live process value at hash
+  time, an override's value is fixed in the magusfile source itself, so it hashes
+  directly - two runs differing only by a derived override must not share an entry.
 - **`dep:` lines** - the resolved cache keys of upstream dependencies, sorted. This
   is how a change ripples: a dependency's new key becomes an input line here, so a
   dependent misses transitively.
@@ -714,4 +723,7 @@ on.
 - [operations.md](operations.md): the run hierarchy and the `target.result` event that fires on a hit.
 - [targets.md](targets.md): what a Target is - the unit a cache key is computed and replayed for.
 - [charms.md](charms.md): the execution modifiers that key into the cache as `charm:` lines.
+- [cache/output-refs.md](cache/output-refs.md): how the key's hex digest becomes a
+  portable reference id, what is deliberately excluded from it, and a known leak
+  that puts a tool's database timestamp in the key.
 - [remote-cache.md](cache/remote.md): sharing these artifacts across machines under a signed trust model.

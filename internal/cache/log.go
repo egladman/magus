@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/ci/annotate"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/secret"
@@ -64,10 +63,6 @@ type PrettyHandler struct {
 	recordCtx context.Context
 	region    *tty.Region // sticky error region; disabled when the writer is not a TTY
 	status    statusLine  // live counters painted into the region's first row
-	// onCI suppresses hints whose command cannot work where it is printed.
-	// Resolved once at construction: the environment does not change
-	// mid-run, and this is consulted per failure.
-	onCI bool
 }
 
 // statusLine accumulates what the sticky region's top row shows: pool
@@ -159,7 +154,6 @@ func newPrettyHandler(w io.Writer, level slog.Level, p tty.Probe) *PrettyHandler
 		probe:  p,
 		level:  level,
 		region: tty.NewRegion(w, stickyRegionRows, p),
-		onCI:   annotate.OnCI(),
 	}
 }
 
@@ -526,21 +520,21 @@ func (h *PrettyHandler) printFailure(colorize bool, label, project, target strin
 	}
 	if ref != "" {
 		h.printf("  output: %s\n", ref)
-		// The inspect hint is suppressed on CI. An output ref addresses a
-		// blob in the local cache of the machine that produced it, so on an
-		// ephemeral runner the command is guaranteed not to work for the
-		// person reading the log - and the runner has already dumped the
-		// failing output inline above it, which is what they wanted anyway.
-		// Printing an un-runnable command next to the answer is worse than
-		// printing nothing. The ref itself stays: it correlates this failure
-		// with the run's journal and with the console.
-		if !h.onCI {
-			full := clihint.QueryOutput.With(ref)
-			if colorize {
-				h.printf("  \x1b[2minspect: %s\x1b[0m\n", full)
-			} else {
-				h.printf("  inspect: %s\n", full)
-			}
+		// The inspect hint prints EVERYWHERE, CI included. It used to be
+		// suppressed on CI on the grounds that a ref addressed a blob in the
+		// local cache of the machine that minted it, so pasting the command
+		// from an ephemeral runner's log could only fail. Portable refs
+		// retired that premise: the ref is a truncation of the cache key, so
+		// the same inputs mint the same ref anywhere, and a reader who cannot
+		// resolve it locally now gets the target that would produce it
+		// (Magus.IdentifyRef behind MGS8001) or a `--publish` route to the
+		// exact bytes. The command is actionable off the runner, which was
+		// the only bar it ever had to clear.
+		full := clihint.QueryOutput.With(ref)
+		if colorize {
+			h.printf("  \x1b[2minspect: %s\x1b[0m\n", full)
+		} else {
+			h.printf("  inspect: %s\n", full)
 		}
 	} else {
 		h.printf("  output: unavailable (no output was captured)\n")
