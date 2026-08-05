@@ -67,12 +67,12 @@ final glossary_urls = {
     "affected set": "https://eli.gladman.cc/magus/guides/affected/",
 };
 
-// linkTerms deep-links the first mention of each glossary term.
+// citeTerms cites the first mention of each glossary term as a footnote.
 //
 // Code spans are left alone: `magus\targetGraph()` is an identifier, not the concept, and
 // rewriting inside backticks would produce something that no longer runs. Splitting on the
 // backtick makes every ODD segment code, which is the whole guard.
-export fun linkTerms(text: str) > str {
+export fun citeTerms(text: str) > str {
     final parts = text.split("`");
     var done = mut [];
     var i = 0;
@@ -94,7 +94,7 @@ export fun linkTerms(text: str) > str {
                 final before = piece.sub(0, len: at);
                 if (before.split("[").len() > before.split("]").len()) { continue; }
                 done.append(term);
-                piece = piece.sub(0, len: at) + "[" + term + "](" + glossary_urls[term] + ")"
+                piece = piece.sub(0, len: at) + term + "[^" + term + "]"
                     + piece.sub(at + term.len());
             }
         }
@@ -123,7 +123,7 @@ export fun codeURL(code: str) > str {
     return "https://eli.gladman.cc/magus/reference/codes/" + area + "/" + code + "/";
 }
 
-export fun linkCodes(text: str) > str {
+export fun citeCodes(text: str) > str {
     var joined = "";
     var rest = text;
     while (true) {
@@ -135,7 +135,7 @@ export fun linkCodes(text: str) > str {
         final before = rest.sub(0, len: at);
         final linked = before.split("[").len() > before.split("]").len();
         if (code.len() == 7 and !linked and before.indexOf("codes/") == null) {
-            joined = joined + before + "[" + code + "](" + codeURL(code) + ")";
+            joined = joined + before + code + "[^" + code + "]";
         } else {
             joined = joined + rest.sub(0, len: at + 3);
             rest = rest.sub(at + 3);
@@ -144,6 +144,38 @@ export fun linkCodes(text: str) > str {
         rest = rest.sub(at + 7);
     }
     return joined;
+}
+
+// footnotes rebuilds the definitions block from whatever the comment currently cites.
+//
+// Hoisted to the TOP LEVEL, after the last </details>: a footnote definition inside an
+// HTML block is not reliably parsed, and every section here lives inside one. Rebuilt
+// rather than appended, so a retracted section takes its citations with it.
+final footnotes_marker = "<!-- magus:advice:footnotes -->";
+
+export fun footnotes(comment: str) > str {
+    var labels = mut [];
+    var rest = comment;
+    while (true) {
+        final at = rest.indexOf("[^");
+        if (at == null) { break; }
+        rest = rest.sub(at + 2);
+        final close = rest.indexOf("]");
+        if (close == null) { break; }
+        final label = rest.sub(0, len: close);
+        // A definition line, not a citation: skip it, the rebuild supplies those.
+        var seen = false;
+        foreach (l in labels) { if (l == label) { seen = true; } }
+        if (!seen and label != "") { labels.append(label); }
+    }
+    if (labels.len() == 0) { return ""; }
+    var text = footnotes_marker + "\n";
+    foreach (label in labels) {
+        var url = glossary_urls[label];
+        if (url == null) { url = codeURL(label); }
+        text = text + "[^" + label + "]: " + url + "\n";
+    }
+    return text;
 }
 
 // compose returns the comment body with section `name` set to `body` under `title`,
@@ -166,7 +198,16 @@ export fun compose(current: str, name: str, title: str, body: str) > str {
         if (closes != null) { tail = current.sub(closes + end.len()); }
     }
     if (head.indexOf(comment_marker) == null) { head = comment_marker + "\n" + preface(); }
-    if (body == "") { return (head + tail).trim() + "\n"; }
+    // The definitions block is rebuilt from the finished comment, so strip whatever is
+    // there before composing.
+    final marked = head.indexOf(footnotes_marker);
+    if (marked != null) { head = head.sub(0, len: marked); }
+    final tailMarked = tail.indexOf(footnotes_marker);
+    if (tailMarked != null) { tail = tail.sub(0, len: tailMarked); }
+    if (body == "") {
+        final withoutSection = (head + tail).trim() + "\n";
+        return withoutSection + footnotes(withoutSection);
+    }
     // Collapsed by default. Six findings expanded is a wall nobody reads to the end of;
     // six one-line summaries is a table of contents you scan in two seconds and open the
     // one that concerns you. GitHub renders markdown inside <details> as long as a blank
@@ -175,8 +216,9 @@ export fun compose(current: str, name: str, title: str, body: str) > str {
     // This is why a title carries its own count: with the body hidden, the summary line is
     // the whole signal a reader has for deciding whether to open it.
     final section = begin + "\n<details>\n<summary><b>" + title + "</b></summary>\n\n"
-        + linkCodes(linkTerms(body.trim())) + "\n\n</details>\n" + end;
-    return (head + section + tail).trim() + "\n";
+        + citeCodes(citeTerms(body.trim())) + "\n\n</details>\n" + end;
+    final assembled = (head + section + tail).trim() + "\n";
+    return assembled + footnotes(assembled);
 }
 
 // find returns the id of our comment on this PR, or "" when we have not commented yet.
@@ -260,27 +302,26 @@ test "the preface survives a section being replaced" {
     std\assert(body.split("### magus").len() == 2, message: "and only once");
 }
 
-test "linkTerms deep-links the first mention of a term" {
-    final got = linkTerms("A target with no outputs re-runs. Another target too.");
-    std\assert(got.indexOf("[target](https://eli.gladman.cc/magus/concepts/targets/)") != null, message: "links the concept");
-    std\assert(got.split("concepts/targets/").len() == 2, message: "only the first mention");
+test "citeTerms cites the first mention of a term" {
+    final got = citeTerms("A target with no outputs re-runs. Another target too.");
+    std\assert(got.indexOf("target[^target]") != null, message: "cites the concept");
+    std\assert(got.split("[^target]").len() == 2, message: "only the first mention");
 }
 
-test "linkTerms leaves code spans alone" {
-    final got = linkTerms("Run `magus run target` to build the target.");
+test "citeTerms leaves code spans alone" {
+    final got = citeTerms("Run `magus run target` to build the target.");
     std\assert(got.indexOf("`magus run target`") != null, message: "the command still runs");
-    std\assert(got.indexOf("[target]") != null, message: "the prose mention is still linked");
+    std\assert(got.indexOf("target[^target]") != null, message: "the prose mention is cited");
 }
 
-test "linkTerms does not nest a link inside a link" {
-    final got = linkTerms("See [the cache guide](https://example.com) for more.");
+test "citeTerms does not cite inside an existing link" {
+    final got = citeTerms("See [the cache guide](https://example.com) for more.");
     std\assert(got.indexOf("[the cache guide](https://example.com)") != null, message: "left intact");
 }
 
-test "linkCodes makes a bare diagnostic code clickable" {
-    final got = linkCodes("names MGS1003 in passing");
-    std\assert(got.indexOf("[MGS1003](https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1003/)") != null,
-        message: "links the code to its page");
+test "citeCodes cites a bare diagnostic code" {
+    final got = citeCodes("names MGS1003 in passing");
+    std\assert(got.indexOf("MGS1003[^MGS1003]") != null, message: "cites the code");
 }
 
 test "linkCodes routes a code to its own area" {
@@ -288,7 +329,21 @@ test "linkCodes routes a code to its own area" {
     std\assert(codeURL("MGS2007").indexOf("/sandbox/") != null, message: "sandbox is the default band");
 }
 
-test "linkTerms leaves table rows alone" {
-    final got = linkTerms("| project | why |");
+test "citeTerms leaves table rows alone" {
+    final got = citeTerms("| project | why |");
     std\assert(got == "| project | why |", message: "a header cell is a label, not a mention");
+}
+
+test "footnotes defines every cited label once, at the end" {
+    final body = compose("", name: "doctor", title: "Workspace health", body: "a target failed (MGS1003)");
+    std\assert(body.indexOf("[^target]: https://eli.gladman.cc/magus/concepts/targets/") != null, message: "defines the term");
+    std\assert(body.indexOf("[^MGS1003]: https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1003/") != null, message: "defines the code");
+    // The definitions sit outside the collapsed section, where GitHub will parse them.
+    std\assert(body.indexOf("</details>") < body.indexOf("[^target]:"), message: "hoisted past the details block");
+}
+
+test "footnotes are rebuilt, so a retracted section takes its citations with it" {
+    var body = compose("", name: "doctor", title: "Workspace health", body: "a target failed");
+    body = compose(body, name: "doctor", title: "Workspace health", body: "");
+    std\assert(body.indexOf("[^target]:") == null, message: "the definition goes with the section");
 }
