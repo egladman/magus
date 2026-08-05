@@ -12,6 +12,14 @@ linters:
     - nilnil          # catch functions returning (nil, nil) — callers can't distinguish
     - wastedassign    # assignments whose result is never used
     - unused          # unused vars, consts, types, funcs (catches dead code package-wide)
+    # A malformed compiler directive is not a syntax error - it is a COMMENT, so the
+    # compiler ignores it silently and the constraint you thought you wrote never
+    # applies. `// go:build linux` (one stray space) compiles a linux-only file on
+    # every platform. This tree carries ~52 build-tagged files (io_uring, the stat and
+    # topology variants, the unix/windows daemon detach pair), so that failure would be
+    # both easy to introduce and slow to attribute. Zero findings when adopted: it is a
+    # ratchet, not a cleanup.
+    - gocheckcompilerdirectives # //go: directives are well-formed and actually apply
 
     # --- HTTP safety ---
     - bodyclose       # HTTP response bodies must be closed (OTLP exporter)
