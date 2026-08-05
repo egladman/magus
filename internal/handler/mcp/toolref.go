@@ -29,7 +29,6 @@ const (
 	ToolAffectedPlan    ToolName = "magus_affected_plan"
 	ToolConfigGet       ToolName = "magus_config_get"
 	ToolTailLog         ToolName = "magus_tail_log"
-	ToolScratchpad      ToolName = "magus_scratchpad"
 	ToolMemory          ToolName = "magus_memory"
 	ToolQuery           ToolName = "magus_query"
 	ToolOutput          ToolName = "magus_output"
@@ -44,6 +43,6 @@ const (
 var allToolNames = []ToolName{
 	ToolDescribe, ToolDescribeFile, ToolWhere, ToolAffectedExplain, ToolInsight,
 	ToolRunTarget, ToolRunAffected, ToolDoctor, ToolStatus,
-	ToolAffectedPlan, ToolConfigGet, ToolTailLog, ToolScratchpad, ToolMemory,
+	ToolAffectedPlan, ToolConfigGet, ToolTailLog, ToolMemory,
 	ToolQuery, ToolOutput, ToolExplain, ToolRefs, ToolPath, ToolStats,
 }

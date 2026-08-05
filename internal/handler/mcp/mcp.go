@@ -156,7 +156,6 @@ func allMCPTools(opts Options) []spells.Driver {
 		&affectedPlanTool{opts: opts},
 		&configGetTool{cfg: opts.Config},
 		&tailLogTool{opts: opts},
-		&scratchpadTool{opts: opts},
 		&memoryTool{opts: opts},
 		&queryTool{graph: opts.Magus},
 		&outputTool{reader: opts.Magus},

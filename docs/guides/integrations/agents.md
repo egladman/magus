@@ -257,7 +257,7 @@ your user-level Codex configuration as well.
 The CLI works without a daemon. It still reads the workspace, runs targets,
 uses the cache, and answers graph queries. What it lacks is MCP tool discovery,
 the daemon's warm graph and background indexes, structured output retrieval,
-and MCP-only capabilities such as scratchpad and memory. An agent must not turn
+and MCP-only capabilities such as the handoff journal. An agent must not turn
 that into a blocker: at task start, or after an MCP error, it should run
 `magus status --probe=mcp`; if unavailable, tell the user once to run
 `magus server start`, then use the CLI fallback. The next task picks up the
@@ -1270,7 +1270,7 @@ and fails when it is older than your working tree.
 ## The MCP daemon
 
 `magus server start` brings up the daemon, and the MCP server with it. Agents
-connected over MCP get the same verbs as the CLI plus run/log/scratchpad tools;
+connected over MCP get the same verbs as the CLI plus run and log tools;
 `magus describe mcp-tools` lists all of them with parameters. See
 [MCP](mcp.md) for transport and token setup, and
 [Knowledge graph](../../concepts/knowledge.md) for the graph the query tools read.
@@ -1278,12 +1278,11 @@ connected over MCP get the same verbs as the CLI plus run/log/scratchpad tools;
 Skills prefer the MCP tools and fall back to the CLI, so they work in both
 connected and daemon-less sessions.
 
-Two tools deserve a callout because they carry state across sessions:
-`magus_scratchpad` (a disposable per-workspace working file) and `magus_memory`
-(a deliberate, user-owned handoff journal of per-repository records, each
-pointing into the codebase, kept in the user state directory outside the repo,
-and shared across branches and worktrees). Both are pull-based: nothing is
-injected into an agent's context. The journal is also available through `magus
+One tool deserves a callout because it carries state across sessions:
+`magus_memory` (a deliberate, user-owned handoff journal of per-repository
+records, each pointing into the codebase, kept in the user state directory
+outside the repo, and shared across branches and worktrees). It is pull-based:
+nothing is injected into an agent's context. The journal is also available through `magus
 memory ls|get|put|delete|verify`; use `verify` to surface stale, malformed,
 or broken linked entries. Captured build output is addressed by
 [output references](../../concepts/cache/output-refs.md).
