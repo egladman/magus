@@ -663,10 +663,10 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void {
 // verify` still checks that section's stamp.
 export fun skills_generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles(".claude/skills/**", ".agents/skills/**", ".opencode/skills/**");
-    magus\cmd(["agent", "install", ".claude/skills", "--force"], {"quiet": true});
-    magus\cmd(["agent", "install", ".agents/skills", "--force"], {"quiet": true});
-    magus\cmd(["agent", "install", ".opencode/skills", "--force"], {"quiet": true});
-    magus\cmd(["agent", "install-agents-md"], {"quiet": true});
+    magus\cmd("agent", args: ["install", ".claude/skills", "--force"], opts: {"quiet": true});
+    magus\cmd("agent", args: ["install", ".agents/skills", "--force"], opts: {"quiet": true});
+    magus\cmd("agent", args: ["install", ".opencode/skills", "--force"], opts: {"quiet": true});
+    magus\cmd("agent", args: ["install-agents-md"], opts: {"quiet": true});
 }
 
 // Regenerates the CLI config-flag plumbing from internal/config/config.go. One
@@ -706,7 +706,7 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void {
     fs\mkdirall("gen");
     // The knowledge graph (nodes/links). No dedicated binding for `graph export`, so
     // magus.cmd is the documented escape hatch.
-    final knowledge = magus\cmd(["graph", "export", "--static", "-o", "json"], {"quiet": true}).stdout;
+    final knowledge = magus\cmd("graph", args: ["export", "--static", "-o", "json"], opts: {"quiet": true}).stdout;
     fs\writeFile(fs\join("gen", "knowledge-graph.json"), knowledge);
     // The target graph ({definition, projects}), the same bytes as
     // `magus describe graph -o json`, which is what the explorer's target adapter reads.
@@ -1143,15 +1143,11 @@ fun total_coverage(func_out: str) > str {
 // `import "advice"` for the shared comment plumbing and Buzz resolves a bare import
 // against the CWD. In CI the action supplies the same thing as BUZZ_INCLUDE_PATH.
 //
-// os\exec rather than magus\cmd, and magus warns about that: magus\cmd always runs in
-// the contextual project directory and takes no dir of its own, so it cannot express
-// "run the nested magus over there". That is the one case the typed method does not
-// cover yet.
 export fun advice_test(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(".github/actions/advice/*.buzz");
     foreach (advisor in fs\glob(".github/actions/advice/*.buzz")) {
-        os\exec(os\executable(), args: ["buzz", "-t", fs\basename(advisor)],
-            dir: ".github/actions/advice", opts: {});
+        magus\cmd("buzz", args: ["-t", fs\basename(advisor)],
+            opts: {"dir": ".github/actions/advice"});
     }
 }
 

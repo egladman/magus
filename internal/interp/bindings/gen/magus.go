@@ -24,9 +24,10 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = sess
 	m := vm.NewMap()
 	m.MapSet("cmd", vm.DirectValue("magus.cmd", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		args := StrSlice(bzArgs, 0)
-		opts := AnyMap(bzArgs, 1)
-		ret0, err := std.MagusCmd(ctx, args, opts)
+		sub := Str(bzArgs, 0)
+		args := StrSlice(bzArgs, 1)
+		opts := AnyMap(bzArgs, 2)
+		ret0, err := std.MagusCmd(ctx, sub, args, opts)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}

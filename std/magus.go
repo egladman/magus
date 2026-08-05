@@ -52,8 +52,9 @@ var Magus = Module{
 	Methods: []Method{
 		{
 			Name: "cmd",
-			Doc:  "Escape hatch: run `magus <args>` for any subcommand, in the target's project directory. Prefer the dedicated methods (run, describe, insight, doctor) when one exists - magus.cmd warns when args name a subcommand that has one. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
+			Doc:  "Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method (status, affected, agent, graph, ...). Its signature is the typed methods' signature with the subcommand pushed in front: magus.cmd(sub, args, [opts]) beside magus.run(args, [opts]), same argv, same opts, same ExecResult. The SUBCOMMAND is a typed argument rather than args[0] because it is the part of the invocation magus can reason about - it stays readable in the signature and greppable in the source, while the remaining argv stays free-form. Prefer the dedicated methods (run, describe, insight, doctor) when one exists - magus.cmd warns when sub names one that has. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like os.exec); opts.quiet captures the output without echoing it to the console.",
 			Args: []Arg{
+				{Name: "sub", Type: TypeString},
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
@@ -112,7 +113,7 @@ var Magus = Module{
 		},
 		{
 			Name: "run",
-			Doc:  "Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
+			Doc:  "Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like os.exec); opts.quiet captures the output without echoing it to the console.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -122,7 +123,7 @@ var Magus = Module{
 		},
 		{
 			Name: "describe",
-			Doc:  "Run `magus describe <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.",
+			Doc:  "Run `magus describe <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like os.exec); opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -132,7 +133,7 @@ var Magus = Module{
 		},
 		{
 			Name: "insight",
-			Doc:  "Run `magus insight <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
+			Doc:  "Run `magus insight <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like os.exec); opts.quiet captures the output without echoing it to the console.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -142,7 +143,7 @@ var Magus = Module{
 		},
 		{
 			Name: "doctor",
-			Doc:  "Run `magus doctor <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
+			Doc:  "Run `magus doctor <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like os.exec); opts.quiet captures the output without echoing it to the console.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -481,23 +482,25 @@ func MagusGraph(ctx context.Context) (types.GraphView, error) {
 	return g.View(), nil
 }
 
-// MagusCmd is the escape hatch: it runs `magus <args>` for any subcommand. It
-// serves subcommands without a dedicated wrapper (status, affected, ...) but
-// warns when args[0] names one that has, nudging toward the typed method. Like
-// the typed methods it runs in the contextual project dir; see runMagus.
-func MagusCmd(ctx context.Context, args []string, opts map[string]any) (types.ExecResult, error) {
-	warnIfTypedSubcommand(ctx, args)
-	return runMagus(ctx, "cmd", args, opts)
+// MagusCmd is the escape hatch: it runs `magus <sub> <args>` for a subcommand with no
+// dedicated wrapper (status, affected, agent, ...). The subcommand is a parameter of its
+// own rather than args[0], which is what lets the warning below be exact instead of a
+// guess at a list's first element, and what keeps the invocation readable to anything
+// reading the source. Like the typed methods it runs in the contextual project dir
+// unless opts.dir says otherwise; see runMagus.
+func MagusCmd(ctx context.Context, sub string, args []string, opts map[string]any) (types.ExecResult, error) {
+	warnIfTypedSubcommand(ctx, sub)
+	return runMagusSub(ctx, sub, args, opts)
 }
 
-// warnIfTypedSubcommand warns when args[0] names a subcommand with a dedicated
+// warnIfTypedSubcommand warns when sub names a subcommand with a dedicated
 // magus.<name>(...) method, nudging authors off the escape hatch. It is the pure
 // decision half of MagusCmd, split out so it can be tested without the nested exec.
-func warnIfTypedSubcommand(ctx context.Context, args []string) {
-	if len(args) > 0 && typedMagusSubcommands[args[0]] {
+func warnIfTypedSubcommand(ctx context.Context, sub string) {
+	if typedMagusSubcommands[sub] {
 		slog.WarnContext(ctx, "magus.cmd called for a subcommand with a dedicated method; prefer it for clarity and a stable signature",
-			"subcommand", args[0],
-			"hint", fmt.Sprintf("use magus.%s([...]) instead of magus.cmd([%q, ...])", args[0], args[0]))
+			"subcommand", sub,
+			"hint", fmt.Sprintf("use magus.%s([...]) instead of magus.cmd(%q, [...])", sub, sub))
 	}
 }
 
@@ -526,6 +529,22 @@ func MagusDoctor(ctx context.Context, args []string, opts map[string]any) (types
 // hands off to runMagus.
 func runMagusSub(ctx context.Context, sub string, args []string, opts map[string]any) (types.ExecResult, error) {
 	return runMagus(ctx, sub, append([]string{sub}, args...), opts)
+}
+
+// resolveRunDir picks the directory a nested magus runs in: the contextual project dir,
+// or opts.dir resolved RELATIVE to it - exactly as os.exec's dir is, so the two spell the
+// same idea the same way. An absolute opts.dir wins outright, and with no contextual dir
+// there is nothing to resolve against, so it is used as given.
+func resolveRunDir(ctx context.Context, opts map[string]any) string {
+	dir, _ := CwdFromContext(ctx)
+	sub, ok := opts["dir"].(string)
+	if !ok || sub == "" {
+		return dir
+	}
+	if filepath.IsAbs(sub) || dir == "" {
+		return sub
+	}
+	return filepath.Join(dir, sub)
 }
 
 // runMagus runs a nested magus invocation with the full arg vector, yielding the
@@ -571,8 +590,12 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 	}
 
 	// Run in the contextual project dir; "" inherits the process cwd (the
-	// behavior for magusfile targets that run under a process chdir).
-	dir, _ := CwdFromContext(ctx)
+	// behavior for magusfile targets that run under a process chdir). opts.dir
+	// redirects it, resolved RELATIVE to that contextual dir exactly as os.exec's
+	// dir is - a nested magus that must run somewhere else (a sibling project, a
+	// directory of scripts) has no other way to say so, and reaching for
+	// os.exec("magus", ...) to get it is the thing magus warns about.
+	dir := resolveRunDir(ctx, opts)
 
 	// opts.quiet captures the output without echoing it to the console, for a
 	// command whose stdout is consumed (e.g. written to a file), not displayed.

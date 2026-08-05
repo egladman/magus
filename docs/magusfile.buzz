@@ -298,7 +298,7 @@ export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); 
 // --embedded mode so render's markdown/encoding imports resolve. magus.cmd raises
 // on a non-zero exit, so a failing assertion fails this target.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void {
-    magus\cmd(["buzz", "-t", "--embedded", "render.buzz"]);
+    magus\cmd("buzz", args: ["-t", "--embedded", "render.buzz"]);
 }
 
 export fun test(ctx: magus\Context, args: [str]) > void {
