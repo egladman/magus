@@ -89,6 +89,15 @@ type Descriptor struct {
 	// Keyed by tool name rather than positional so the cache entry reads
 	// spell:tool:version and reordering a declaration invalidates nothing.
 	VersionCmds map[string][]string `json:"version_cmds,omitempty"`
+	// VersionKey narrows what the PRIMARY probe's output contributes to the cache key,
+	// and VersionKeys does the same per named tool. Both are optional: the zero value
+	// keys on the whole extracted version, which is the conservative default.
+	//
+	// Keyed by tool name to match VersionCmds above, so a spell's probe and its key
+	// declaration are read with the same lookup and a tool named in one but not the
+	// other is visible as exactly that.
+	VersionKey  VersionKey            `json:"version_key,omitempty"`
+	VersionKeys map[string]VersionKey `json:"version_keys,omitempty"`
 	// Language is the canonical source language this spell adapts (e.g. "go",
 	// "typescript"), declared by mgs_getLanguage. It tags the spell node so a
 	// `language:` query groups the adapter with the files and symbols of that language;

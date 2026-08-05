@@ -103,10 +103,10 @@ func TestVersionTokenUnparseableFallsBackToRawOutput(t *testing.T) {
 // is the whole claim: each case pairs a version with another that must share its token.
 func TestVersionTokenKeyOn(t *testing.T) {
 	for _, tc := range []struct {
-		upTo  VersionComponent
-		out   string
-		want  string
-		same  string
+		upTo VersionComponent
+		out  string
+		want string
+		same string
 	}{
 		{VersionMajor, "golangci-lint has version 2.5.0 built with go1.25.1", "v2", "golangci-lint has version 2.9.4 built with go1.24.0"},
 		{VersionMinor, "go version go1.26.0 linux/amd64", "v1.26", "go version go1.26.7 darwin/arm64"},

@@ -31,6 +31,8 @@ var OptionalContract = []ContractEntry{
 	{Name: "mgs_listManifests", Field: "manifests"},
 	{Name: "mgs_getVersionCommand", Field: "version_cmd"},
 	{Name: "mgs_getVersionCommands", Field: "version_cmds"},
+	{Name: "mgs_getVersionKey", Field: "version_key"},
+	{Name: "mgs_getVersionKeys", Field: "version_keys"},
 	{Name: "mgs_getLanguage", Field: "language"},
 	{Name: "mgs_isOpaque", Field: "opaque"},
 	{Name: "mgs_listTargets", Field: "ops"},

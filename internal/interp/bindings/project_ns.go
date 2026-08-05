@@ -53,7 +53,7 @@ var knownProjectOptionKeys = []string{
 
 // knownTargetPolicyKeys are the recognized per-target policy keys inside
 // magus.project's "targets" map.
-var knownTargetPolicyKeys = []string{"skip_cache", "exclusive", "slots"}
+var knownTargetPolicyKeys = []string{"skip_cache", "exclusive", "slots", "platform"}
 
 // rejectUnknownKeys errors on the first key in m absent from known, so a typo
 // like "skip_cache" or "depend_on" is a loud load error instead of a silently
@@ -285,6 +285,26 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			}
 			if ev, ok := pv.MapGet("exclusive"); ok && ev.Bool() {
 				opts = append(opts, workspace.WithTarget(name, workspace.Exclusive()))
+			}
+			// A claim about the HOST platform, so it is spelled out rather than a
+			// bool: "independent" says a darwin machine may replay a linux entry,
+			// "dependent" says it may not, and absent inherits the bound spells'
+			// answer. A typo is a load error for the same reason skip_cache demands
+			// prose - being wrong here replays an artifact built somewhere else, and
+			// a silently ignored value would look exactly like a cache that works.
+			if pvv, ok := pv.MapGet("platform"); ok {
+				var v string
+				if pvv.IsStr() {
+					v = strings.TrimSpace(pvv.AsString())
+				}
+				sens := types.PlatformSensitivity(v)
+				if sens != types.PlatformDependent && sens != types.PlatformIndependent {
+					return nil, fmt.Errorf(
+						"magus.project: targets[%q].platform must be %q or %q, got %q. "+
+							"Omit it to inherit the answer from the project's spells",
+						name, types.PlatformDependent, types.PlatformIndependent, v)
+				}
+				opts = append(opts, workspace.WithTarget(name, workspace.Platform(sens)))
 			}
 			// A present-but-malformed slots value (non-int, or < 1) is a load
 			// error, not a silent skip: AsInt reinterprets a float's bits as an

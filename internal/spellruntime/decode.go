@@ -2,6 +2,7 @@ package spellruntime
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/egladman/magus/internal/ward"
@@ -55,6 +56,8 @@ func Decode(src Obj) (spells.Descriptor, error) {
 		Manifests:   src.Strs("manifests"),
 		VersionCmd:  src.Strs("version_cmd"),
 		VersionCmds: decodeVersionCmds(src),
+		VersionKey:  decodeVersionKey(src, "version_key"),
+		VersionKeys: decodeVersionKeys(src),
 		Language:    language,
 		Opaque:      src.Bool("opaque"),
 	}
@@ -173,6 +176,12 @@ func Decode(src Obj) (spells.Descriptor, error) {
 			m.DocOps = docOps
 		}
 	}
+	// Checked here rather than at probe time: an unusable component is a declaration
+	// bug knowable without running anything, and discovering it from a cache that
+	// silently never narrows is the failure this prevents.
+	if err := validateVersionKeys(m); err != nil {
+		return spells.Descriptor{}, err
+	}
 	return m, nil
 }
 
@@ -252,4 +261,66 @@ func decodeVersionCmds(src Obj) map[string][]string {
 		out[tool] = argv
 	}
 	return out
+}
+
+// decodeVersionKey reads one cache-key declaration: what a probed tool's version
+// contributes to the key. Absent yields the zero value, which keys on the whole
+// version - so a spell that says nothing keeps the conservative default.
+//
+// An unrecognized `upTo` is NOT silently dropped. A spell claiming "major" and
+// getting exact keying would just look like a cache that never hits, with nothing
+// naming the typo; validation happens in Decode's caller so the error carries the
+// spell name.
+func decodeVersionKey(src Obj, key string) spells.VersionKey {
+	rec, ok := src.Obj(key)
+	if !ok {
+		return spells.VersionKey{}
+	}
+	out := spells.VersionKey{}
+	if c, ok := rec.Str("const"); ok {
+		out.Const = c
+	}
+	if u, ok := rec.Str("upTo"); ok {
+		out.UpTo = spells.VersionComponent(u)
+	}
+	return out
+}
+
+// decodeVersionKeys reads the per-tool cache-key declarations, tool name to key.
+// Uses only Obj/Keys, so a second authoring backend implementing Obj gets the field
+// for free. A zero-valued entry is dropped: it asks for the default, and carrying it
+// would imply the spell said something about that tool when it did not.
+func decodeVersionKeys(src Obj) map[string]spells.VersionKey {
+	rec, ok := src.Obj("version_keys")
+	if !ok {
+		return nil
+	}
+	var out map[string]spells.VersionKey
+	for _, tool := range rec.Keys() {
+		k := decodeVersionKey(rec, tool)
+		if k.IsZero() {
+			continue
+		}
+		if out == nil {
+			out = map[string]spells.VersionKey{}
+		}
+		out[tool] = k
+	}
+	return out
+}
+
+// validateVersionKeys reports the first unusable component in a decoded descriptor.
+// It is separate from decoding so the error can name the spell, and so a caller that
+// only reads a descriptor (docs, graph extraction) is not forced to handle it.
+func validateVersionKeys(m spells.Descriptor) error {
+	if !m.VersionKey.UpTo.Valid() {
+		return fmt.Errorf("spell %q: version_key.upTo %q is not major, minor, or patch", m.Name, m.VersionKey.UpTo)
+	}
+	for _, tool := range slices.Sorted(maps.Keys(m.VersionKeys)) {
+		if !m.VersionKeys[tool].UpTo.Valid() {
+			return fmt.Errorf("spell %q: version_keys[%q].upTo %q is not major, minor, or patch",
+				m.Name, tool, m.VersionKeys[tool].UpTo)
+		}
+	}
+	return nil
 }

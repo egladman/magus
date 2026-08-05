@@ -76,6 +76,12 @@ func loadBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells
 	for tool, argv := range spec.VersionCmds {
 		extra = append(extra, spells.WithVersionProbeNamed(tool, newVersionProbe(argv)))
 	}
+	if !spec.VersionKey.IsZero() {
+		extra = append(extra, spells.WithVersionKey(spec.VersionKey))
+	}
+	for tool, key := range spec.VersionKeys {
+		extra = append(extra, spells.WithVersionKeyNamed(tool, key))
+	}
 	if spec.Language != "" {
 		extra = append(extra, spells.WithLanguage(spec.Language))
 	}
