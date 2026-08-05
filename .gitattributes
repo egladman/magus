@@ -31,6 +31,7 @@ internal/config/gen/*.go merge=magus linguist-generated
 internal/interp/bindings/gen/*.go merge=magus linguist-generated
 internal/manpage/testdata/api.lock merge=magus linguist-generated
 internal/spellruntime/gen/*.bo merge=magus linguist-generated
+internal/spellruntime/gen/decls/*.buzz merge=magus linguist-generated
 internal/spellruntime/gen/types/*.buzz merge=magus linguist-generated
 libs/diagnostics/MAGUS.md merge=magus linguist-generated
 libs/gopherbuzz/MAGUS.md merge=magus linguist-generated

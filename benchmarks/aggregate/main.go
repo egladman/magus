@@ -112,7 +112,7 @@ func loadResult(path string) (*benchResult, error) {
 	r := out.Results[0]
 	key, ok := parseFilename(filepath.Base(path))
 	if !ok {
-		return nil, fmt.Errorf("unparseable filename: %s", filepath.Base(path))
+		return nil, fmt.Errorf("unparsable filename: %s", filepath.Base(path))
 	}
 	return &benchResult{
 		key:      key,

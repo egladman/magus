@@ -219,7 +219,7 @@ export fun work(ctx: magus\Context, args: [str]) > void {
     magus.warn("w");
     magus.error("e");
     magus.debug("d");
-    magus.cmd(["ls"]);
+    magus.cmd("ls", []);
     magus.describe(["x"]);
     magus.insight(["y"]);
     magus.doctor(["z"]);
@@ -228,6 +228,10 @@ export fun work(ctx: magus\Context, args: [str]) > void {
     magus.hint("h");
     magus.pry();
     magus.bustCache();
+    magus.affectedImpact("main");
+    magus.targetGraph();
+    magus.describeFile(["magusfile.buzz"]);
+    magus.insightReport([]);
 }
 `
 	r := Run(context.Background(), src, "work", nil)
@@ -442,4 +446,28 @@ export fun image_build(ctx: magus\Context, args: [str]) > void {
 	on := Run(context.Background(), src, "image-build", []string{"cd"})
 	require.True(t, on.OK, "cd: %+v", on.Diag)
 	assert.Contains(t, traceDetail(on), "--push")
+}
+
+// TestRun_insightReportLensesAreShaped guards a failure that reports success. Field
+// access on a Buzz null returns null, and the member call after it aborts the target
+// body - but the dry run still comes back OK with a truncated trace, so a stub that
+// hands back null for a lens the mirror declares non-optional silently swallows every
+// op after the first read of it. The trailing marker is the assertion: it is only
+// traced if the body survived the whole chain.
+func TestRun_insightReportLensesAreShaped(t *testing.T) {
+	for _, lens := range []string{"hotspots.nodes", "affinity.pairs", "ownership.projects", "trend.projects", "volatility.targets"} {
+		t.Run(lens, func(t *testing.T) {
+			src := `
+import "magus";
+export fun work(ctx: magus\Context, args: [str]) > void {
+    magus.info("{magus.insightReport([]).` + lens + `.len()}");
+    magus.info("reached-the-end");
+}
+`
+			r := Run(context.Background(), src, "work", nil)
+			require.True(t, r.OK, "dry-run failed: %+v", r.Diag)
+			assert.Contains(t, traceDetail(r), "reached-the-end",
+				"the body aborted partway through %s; the lens stub is probably null", lens)
+		})
+	}
 }

@@ -435,7 +435,6 @@ type buzzValueEmitter struct {
 	module    string
 	usesTypes bool
 	usesTime  bool
-	n         int
 }
 
 func newBuzzValueEmitter(module string) *buzzValueEmitter {
@@ -482,7 +481,7 @@ func (e *buzzValueEmitter) emitStruct(t reflect.Type) error {
 		if !f.IsExported() || f.Tag.Get("buzz") == "-" {
 			continue
 		}
-		value, err := e.value(&body, "v."+f.Name, f.Type, "\t")
+		value, err := e.value(&body, "v."+f.Name, f.Name, f.Type, "\t")
 		if err != nil {
 			return fmt.Errorf("%s.%s: %w", t.Name(), f.Name, err)
 		}
@@ -518,10 +517,13 @@ func (e *buzzValueEmitter) emitSlice(t reflect.Type) error {
 	return nil
 }
 
-func (e *buzzValueEmitter) value(w *bytes.Buffer, value string, t reflect.Type, indent string) (string, error) {
+// value renders the conversion for one field, emitting any temporaries it needs first.
+// path names the field being rendered ("Targets", and "TargetsItem" one level into its
+// element) and is what every temporary is named after. See name.
+func (e *buzzValueEmitter) value(w *bytes.Buffer, value, path string, t reflect.Type, indent string) (string, error) {
 	if t == reflect.TypeFor[time.Time]() {
 		e.usesTime = true
-		formatted := e.name("formatted")
+		formatted := e.name("formatted", path)
 		fmt.Fprintf(w, "%s%s := \"\"\n", indent, formatted)
 		fmt.Fprintf(w, "%sif !%s.IsZero() {\n", indent, value)
 		fmt.Fprintf(w, "%s\t%s = %s.Format(time.RFC3339)\n", indent, formatted, value)
@@ -553,10 +555,10 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value string, t reflect.Type, 
 		}
 		return e.funcName(t) + "(" + value + ")", nil
 	case reflect.Slice, reflect.Array:
-		out, index := e.name("items"), e.name("index")
+		out, index := e.name("items", path), e.name("index", path)
 		fmt.Fprintf(w, "%s%s := make([]vm.Value, len(%s))\n", indent, out, value)
 		fmt.Fprintf(w, "%sfor %s := range %s {\n", indent, index, value)
-		item, err := e.value(w, value+"["+index+"]", t.Elem(), indent+"\t")
+		item, err := e.value(w, value+"["+index+"]", path+"Item", t.Elem(), indent+"\t")
 		if err != nil {
 			return "", err
 		}
@@ -567,10 +569,10 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value string, t reflect.Type, 
 		if t.Key().Kind() != reflect.String {
 			return "", fmt.Errorf("map key %s is not a string", t.Key())
 		}
-		out, key, item := e.name("mapped"), e.name("key"), e.name("item")
+		out, key, item := e.name("mapped", path), e.name("key", path), e.name("item", path)
 		fmt.Fprintf(w, "%s%s := vm.NewMap()\n", indent, out)
 		fmt.Fprintf(w, "%sfor %s, %s := range %s {\n", indent, key, item, value)
-		converted, err := e.value(w, item, t.Elem(), indent+"\t")
+		converted, err := e.value(w, item, path+"Value", t.Elem(), indent+"\t")
 		if err != nil {
 			return "", err
 		}
@@ -582,10 +584,10 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value string, t reflect.Type, 
 		// the mirror declares. A nil-checked temporary rather than an inline
 		// expression, because the element may need statements of its own (a time
 		// needs formatting, a struct its own conversion function).
-		out := e.name("opt")
+		out := e.name("opt", path)
 		fmt.Fprintf(w, "%s%s := vm.Null\n", indent, out)
 		fmt.Fprintf(w, "%sif %s != nil {\n", indent, value)
-		elem, err := e.value(w, "(*"+value+")", t.Elem(), indent+"\t")
+		elem, err := e.value(w, "(*"+value+")", path, t.Elem(), indent+"\t")
 		if err != nil {
 			return "", err
 		}
@@ -603,9 +605,15 @@ func (e *buzzValueEmitter) funcName(t reflect.Type) string {
 
 func (e *buzzValueEmitter) sliceFuncName(t reflect.Type) string { return e.funcName(t) + "Slice" }
 
-func (e *buzzValueEmitter) name(prefix string) string {
-	e.n++
-	return fmt.Sprintf("%s%d", prefix, e.n)
+// name builds a temporary's identifier from the field path rather than a running
+// counter. A counter makes every temporary after an inserted field shift by one, so
+// adding a single field rewrites the rest of the file and the real change is lost in
+// the renumbering. Naming after the path keeps a temporary stable under edits
+// elsewhere and says what it holds: itemsTargets, not items78. Field names are unique
+// within a struct, and each nesting level extends the path, so the result is unique
+// within the function.
+func (e *buzzValueEmitter) name(prefix, path string) string {
+	return prefix + path
 }
 
 func buzzVMFieldName(f reflect.StructField) string {

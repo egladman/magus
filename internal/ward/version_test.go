@@ -32,7 +32,7 @@ func TestRequiredVersion(t *testing.T) {
 	t.Run("no running version supplied", func(t *testing.T) {
 		assert.Nil(t, RequiredVersion(">= 99.0.0", ""), "a library caller has no version to be too old")
 	})
-	t.Run("an unparseable running version", func(t *testing.T) {
+	t.Run("an unparsable running version", func(t *testing.T) {
 		assert.Nil(t, RequiredVersion(">= 0.4.0", "some-fork-build"),
 			"a version this ward cannot read is not the workspace's fault; stranding the user is worse")
 	})

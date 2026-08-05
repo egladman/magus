@@ -23,10 +23,10 @@ type InsightOptions struct {
 // Per-lens descriptions, shown by each lens and reused in the combined report.
 const (
 	HotspotDefinition = "Hotspots are files (or projects) where edit frequency meets " +
-		"complexity — the prime refactoring targets: code both churned often and hard to understand."
+		"complexity - the prime refactoring targets: code both churned often and hard to understand."
 	AffinityDefinition = "Affinity is how often projects change in the same commit (temporal " +
 		"coupling). A hidden pair has affinity without either declaring a dependency on the other " +
-		"— a candidate architectural smell."
+		"- a candidate architectural smell."
 	OwnershipDefinition = "Ownership shows author concentration: who touches each project most, " +
 		"how many distinct authors it has (bus factor), and whether it has gone quiet (abandonment risk)."
 	TrendDefinition = "Trend compares the recent and earlier halves of the window: a positive " +
@@ -82,16 +82,16 @@ func (c CoChange) BLabel() string { return ProjectDisplayName(c.B, c.BName, "") 
 
 // OwnershipOutput reports author concentration per project — the knowledge-risk view.
 type OwnershipOutput struct {
-	Definition string      `json:"definition" yaml:"definition"`
-	Commits    int         `json:"commits"    yaml:"commits"`
-	Since      string      `json:"since,omitempty" yaml:"since,omitempty"`
-	Projects   []Ownership `json:"projects"   yaml:"projects"`
+	Definition string           `json:"definition" yaml:"definition"`
+	Commits    int              `json:"commits"    yaml:"commits"`
+	Since      string           `json:"since,omitempty" yaml:"since,omitempty"`
+	Projects   []OwnershipEntry `json:"projects"   yaml:"projects"`
 }
 
-// Ownership is one project's authorship: how many distinct authors touched it, who
+// OwnershipEntry is one project's authorship: how many distinct authors touched it, who
 // touched it most (and their share), whether it is bus-factor-1 (a single author),
 // and whether it has gone quiet in the recent half of the window (abandonment risk).
-type Ownership struct {
+type OwnershipEntry struct {
 	Path         string    `json:"path"                   yaml:"path"`
 	Name         string    `json:"name"                   yaml:"name"`
 	Commits      int       `json:"commits"                yaml:"commits"`
@@ -103,19 +103,19 @@ type Ownership struct {
 	LastCommit   time.Time `json:"last_commit,omitempty"  yaml:"last_commit,omitempty"`
 }
 
-func (o Ownership) Label() string { return ProjectDisplayName(o.Path, o.Name, "") }
+func (o OwnershipEntry) Label() string { return ProjectDisplayName(o.Path, o.Name, "") }
 
 // TrendOutput ranks projects by whether their activity is rising or cooling — the
 // window is split at its midpoint and the two halves compared.
 type TrendOutput struct {
-	Definition string  `json:"definition" yaml:"definition"`
-	Commits    int     `json:"commits"    yaml:"commits"`
-	Since      string  `json:"since,omitempty" yaml:"since,omitempty"`
-	Projects   []Trend `json:"projects"   yaml:"projects"`
+	Definition string       `json:"definition" yaml:"definition"`
+	Commits    int          `json:"commits"    yaml:"commits"`
+	Since      string       `json:"since,omitempty" yaml:"since,omitempty"`
+	Projects   []TrendEntry `json:"projects"   yaml:"projects"`
 }
 
-// Trend is one project's churn split across the window's two halves; Delta>0 is rising.
-type Trend struct {
+// TrendEntry is one project's churn split across the window's two halves; Delta>0 is rising.
+type TrendEntry struct {
 	Path    string `json:"path"    yaml:"path"`
 	Name    string `json:"name"    yaml:"name"`
 	Recent  int    `json:"recent"  yaml:"recent"`
@@ -123,7 +123,7 @@ type Trend struct {
 	Delta   int    `json:"delta"   yaml:"delta"`
 }
 
-func (t Trend) Label() string { return ProjectDisplayName(t.Path, t.Name, "") }
+func (t TrendEntry) Label() string { return ProjectDisplayName(t.Path, t.Name, "") }
 
 // InsightView bundles the four VCS-history lenses plus the run-outcome volatility lens,
 // without the knowledge-graph axis. It is what the console serves at GET /api/v1/insight:
@@ -132,21 +132,35 @@ func (t Trend) Label() string { return ProjectDisplayName(t.Path, t.Name, "") }
 // folded into the same response, so the dashboard reads one endpoint for every lens.
 // GraphStats is omitted deliberately - the console read never touches the knowledge graph.
 type InsightView struct {
-	Hotspots   HotspotOutput     `json:"hotspots"   yaml:"hotspots"`
-	Affinity   AffinityOutput    `json:"affinity"   yaml:"affinity"`
-	Ownership  OwnershipOutput   `json:"ownership"  yaml:"ownership"`
-	Trend      TrendOutput       `json:"trend"      yaml:"trend"`
+	Hotspots  HotspotOutput   `json:"hotspots"   yaml:"hotspots"`
+	Affinity  AffinityOutput  `json:"affinity"   yaml:"affinity"`
+	Ownership OwnershipOutput `json:"ownership"  yaml:"ownership"`
+	Trend     TrendOutput     `json:"trend"      yaml:"trend"`
+	// Volatility stays a POINTER here while InsightReport's is a value, and the two
+	// are not carelessly out of step: this is the console's wire shape, where absent
+	// and empty say different things. docs/reference/api/insight.md commits to it -
+	// null renders "no runs recorded yet", an empty report renders "no volatile
+	// targets" - and volatilityToProto maps nil to a nil message to preserve it.
+	// InsightReport has no such reader: it crosses into Buzz, where the mirror
+	// declares the field non-optional so a magusfile reaches .volatility.targets
+	// without a nil guard.
 	Volatility *VolatilityReport `json:"volatility" yaml:"volatility"`
 }
 
 // InsightReport bundles every lens for the combined `magus insight report` (the
 // committable Markdown doc and its -o json form). GraphStats is the knowledge-
 // graph axis (`magus graph stats`), embedded so the report spans both axes.
+//
+// Volatility is a VALUE, not a pointer, so the Buzz mirror declares it non-optional and
+// a caller reads report.volatility.targets without a nil guard. An empty Targets list is
+// what "the run-outcome axis had nothing to say" means, which is the same test every
+// consumer already made. Deliberately unlike InsightView's pointer above - see the note
+// there for why the console shape keeps a distinction this one does not need.
 type InsightReport struct {
-	Hotspots   HotspotOutput     `json:"hotspots"             yaml:"hotspots"`
-	Affinity   AffinityOutput    `json:"affinity"             yaml:"affinity"`
-	Ownership  OwnershipOutput   `json:"ownership"            yaml:"ownership"`
-	Trend      TrendOutput       `json:"trend"                yaml:"trend"`
-	Volatility *VolatilityReport `json:"volatility,omitempty" yaml:"volatility,omitempty"`
-	GraphStats KnowledgeStats    `json:"graph_stats"          yaml:"graph_stats"`
+	Hotspots   HotspotOutput    `json:"hotspots"    yaml:"hotspots"`
+	Affinity   AffinityOutput   `json:"affinity"    yaml:"affinity"`
+	Ownership  OwnershipOutput  `json:"ownership"   yaml:"ownership"`
+	Trend      TrendOutput      `json:"trend"       yaml:"trend"`
+	Volatility VolatilityReport `json:"volatility"  yaml:"volatility"`
+	GraphStats KnowledgeStats   `json:"graph_stats" yaml:"graph_stats"`
 }

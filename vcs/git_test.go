@@ -207,7 +207,7 @@ func TestParseChangesByCommitEmpty(t *testing.T) {
 	got := parseChangesByCommit("\x00abc123\x00Ada\x00not-a-date\n\n")
 	require.Len(t, got, 1)
 	assert.Equal(t, "abc123", got[0].ID)
-	assert.True(t, got[0].Date.IsZero(), "unparseable date is zero, not an error")
+	assert.True(t, got[0].Date.IsZero(), "unparsable date is zero, not an error")
 	assert.Empty(t, got[0].Files)
 }
 

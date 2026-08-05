@@ -66,9 +66,9 @@ func TestDeadOutputGlobsIgnoresCommittedOutputs(t *testing.T) {
 
 	got := r.checkDeadOutputGlobs([]*types.Project{deadOutputProject(repo)})
 
-	assert.Equal(t, Check{
+	assert.Equal(t, types.DoctorCheck{
 		Name:    "dead output globs",
-		Status:  StatusOK,
+		Status:  types.DoctorOK,
 		Message: "no dead output globs",
 	}, got, "a committed generated tree is not evidence the project was built")
 }
@@ -84,7 +84,7 @@ func TestDeadOutputGlobsReportsOnceBuilt(t *testing.T) {
 
 	got := r.checkDeadOutputGlobs([]*types.Project{p})
 
-	assert.Equal(t, StatusFail, got.Status)
+	assert.Equal(t, types.DoctorFail, got.Status)
 	assert.Equal(t,
 		[]string{`console: output glob "dist/**" matched no files while the project's other outputs did`},
 		got.Details,
@@ -102,7 +102,7 @@ func TestDeadOutputGlobsWithoutTrackedReporter(t *testing.T) {
 
 	got := r.checkDeadOutputGlobs([]*types.Project{deadOutputProject(dir)})
 
-	assert.Equal(t, StatusFail, got.Status)
+	assert.Equal(t, types.DoctorFail, got.Status)
 	assert.Equal(t,
 		[]string{`console: output glob "gen/**" matched no files while the project's other outputs did`},
 		got.Details)
@@ -122,7 +122,7 @@ func TestOutputOwnedByTwoTargets(t *testing.T) {
 				"format":   {{Glob: "gen/**"}},
 			},
 		}})
-		assert.Equal(t, StatusFail, got.Status)
+		assert.Equal(t, types.DoctorFail, got.Status)
 		assert.Equal(t,
 			[]string{`docs: output glob "gen/**" is declared by format and generate`},
 			got.Details, "owners are sorted so the message is stable")
@@ -136,9 +136,9 @@ func TestOutputOwnedByTwoTargets(t *testing.T) {
 				"build-mermaid": {{Glob: "gen/assets/mermaid.js"}},
 			},
 		}})
-		assert.Equal(t, Check{
+		assert.Equal(t, types.DoctorCheck{
 			Name:    "output ownership",
-			Status:  StatusOK,
+			Status:  types.DoctorOK,
 			Message: "every declared output has one owning target",
 		}, got, "distinct globs are not an overlap, even nested ones")
 	})
@@ -150,6 +150,27 @@ func TestOutputOwnedByTwoTargets(t *testing.T) {
 				"generate": {{Glob: "gen/**"}, {Glob: "gen/**"}},
 			},
 		}})
-		assert.Equal(t, StatusOK, got.Status)
+		assert.Equal(t, types.DoctorOK, got.Status)
 	})
+}
+
+// TestGlobOutputs_CrossesDirectories pins the reason this uses doublestar. filepath.Glob's
+// `*` does not cross separators, so the previous `**` -> `*` rewrite silently matched
+// nothing two levels deep and reported a live output as a dead glob.
+func TestGlobOutputs_CrossesDirectories(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "gen", "a", "b"), 0o755))
+	deep := filepath.Join(dir, "gen", "a", "b", "c.js")
+	require.NoError(t, os.WriteFile(deep, []byte("x"), 0o644))
+	shallow := filepath.Join(dir, "gen", "top.js")
+	require.NoError(t, os.WriteFile(shallow, []byte("x"), 0o644))
+
+	hits, err := globOutputs(dir, "gen/**/*.js")
+	require.NoError(t, err)
+	assert.Contains(t, hits, deep, "a file two directories deep must match gen/**/*.js")
+
+	hits, err = globOutputs(dir, "gen/*.js")
+	require.NoError(t, err)
+	assert.Contains(t, hits, shallow)
+	assert.NotContains(t, hits, deep, "a single star must still not cross a separator")
 }

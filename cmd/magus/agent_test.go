@@ -470,9 +470,9 @@ func TestParseGuardCommands(t *testing.T) {
 	}
 }
 
-// TestParseGuardCommandsUnparseable pins the fail-open contract: a line the
+// TestParseGuardCommandsUnparsable pins the fail-open contract: a line the
 // parser cannot read skips the raw-tool rule rather than guessing at it.
-func TestParseGuardCommandsUnparseable(t *testing.T) {
+func TestParseGuardCommandsUnparsable(t *testing.T) {
 	_, ok := parseGuardCommands("go test ./... && (")
 	assert.False(t, ok)
 	_, denied := firstRawToolDenied("go test ./... && (")

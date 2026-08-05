@@ -55,17 +55,25 @@ var boundaryTypes = []boundaryType{
 	{Name: "DoctorCheck", Type: reflect.TypeFor[types.DoctorCheck](), RuntimeObject: true},
 	{Name: "DoctorSummary", Type: reflect.TypeFor[types.DoctorSummary](), RuntimeObject: true},
 	{Name: "DoctorReport", Type: reflect.TypeFor[types.DoctorReport](), RuntimeObject: true},
-	// magus.insightReport's bundle, leaf-first. A bundle takes the short plural name
-	// and its element the *Entry suffix, the shape Projects/ProjectEntry already set,
-	// which is also what keeps Go's Ownership and OwnershipOutput from colliding here.
+	// magus.insightReport's bundle, leaf-first. Every ELEMENT row below is an identity:
+	// the Go name and the Buzz name agree, so only the bundle rows rename across the
+	// boundary (Output -> the short plural name), the shape Projects/ProjectsOutput set.
+	//
+	// The element NAMES are deliberately not uniform, and this is the honest version of a
+	// comment that used to claim they were. OwnershipEntry and TrendEntry take the *Entry
+	// suffix because the bare noun is the bundle's name and the two would collide;
+	// FileHotspot and CoChange are domain nouns that say more than "entry" would, and
+	// nothing collides, so they keep their own names. Renaming either pair would change a
+	// PUBLIC Buzz object name that magusfiles annotate with, which is why the split
+	// stands rather than being tidied.
 	{Name: "Node", Type: reflect.TypeFor[types.Node](), RuntimeObject: true},
 	{Name: "FileHotspot", Type: reflect.TypeFor[types.FileHotspot](), RuntimeObject: true},
 	{Name: "Hotspots", Type: reflect.TypeFor[types.HotspotOutput](), RuntimeObject: true},
 	{Name: "CoChange", Type: reflect.TypeFor[types.CoChange](), RuntimeObject: true},
 	{Name: "Affinity", Type: reflect.TypeFor[types.AffinityOutput](), RuntimeObject: true},
-	{Name: "OwnershipEntry", Type: reflect.TypeFor[types.Ownership](), RuntimeObject: true},
+	{Name: "OwnershipEntry", Type: reflect.TypeFor[types.OwnershipEntry](), RuntimeObject: true},
 	{Name: "Ownership", Type: reflect.TypeFor[types.OwnershipOutput](), RuntimeObject: true},
-	{Name: "TrendEntry", Type: reflect.TypeFor[types.Trend](), RuntimeObject: true},
+	{Name: "TrendEntry", Type: reflect.TypeFor[types.TrendEntry](), RuntimeObject: true},
 	{Name: "Trend", Type: reflect.TypeFor[types.TrendOutput](), RuntimeObject: true},
 	{Name: "VolatilityTarget", Type: reflect.TypeFor[types.VolatilityTarget](), RuntimeObject: true},
 	{Name: "Volatility", Type: reflect.TypeFor[types.VolatilityReport](), RuntimeObject: true},

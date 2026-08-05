@@ -25,7 +25,7 @@ func TestPrintStatusCompact(t *testing.T) {
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	at := func(ago time.Duration) time.Time { return now.Add(-ago) }
 
-	assertCompact := func(name string, report statusReport, want string) {
+	assertCompact := func(name string, report types.StatusReport, want string) {
 		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer
 			printStatusCompact(&buf, report, now)
@@ -35,17 +35,17 @@ func TestPrintStatusCompact(t *testing.T) {
 	}
 
 	assertCompact("no parent",
-		statusReport{PoolError: "no running magus proc server found"},
+		types.StatusReport{PoolError: "no running magus proc server found"},
 		"daemon: off\n")
 
 	assertCompact("daemon idle",
-		statusReport{Pool: &types.StatusOutput{
+		types.StatusReport{Pool: &types.StatusOutput{
 			Mode: "daemon", Capacity: 8, Running: 0,
 		}},
 		"daemon · 0/8 idle\n")
 
 	assertCompact("proc-server label",
-		statusReport{Pool: &types.StatusOutput{
+		types.StatusReport{Pool: &types.StatusOutput{
 			Mode: "proc", Capacity: 8, Running: 1,
 			RunningTargets: []types.StatusRunningTarget{
 				{Args: []string{"test", "web"}, Workspace: "/w", StartedAt: at(400 * time.Millisecond)},
@@ -54,7 +54,7 @@ func TestPrintStatusCompact(t *testing.T) {
 		"pool · 1/8 running · web:test(0.4s)\n")
 
 	assertCompact("daemon running with targets, sorted oldest first",
-		statusReport{Pool: &types.StatusOutput{
+		types.StatusReport{Pool: &types.StatusOutput{
 			Mode: "daemon", Capacity: 8, Running: 3,
 			RunningTargets: []types.StatusRunningTarget{
 				{Args: []string{"test", "ui"}, Workspace: "/w", StartedAt: at(500 * time.Millisecond)},
@@ -66,7 +66,7 @@ func TestPrintStatusCompact(t *testing.T) {
 		"daemon · 3/8 running · api:build(2.1s) · ui:test(0.5s) · ledger:lint(0.3s) · 1 ws\n")
 
 	assertCompact("daemon queued and overflow running",
-		statusReport{Pool: &types.StatusOutput{
+		types.StatusReport{Pool: &types.StatusOutput{
 			Mode: "daemon", Capacity: 8, Running: 8, Queued: 2,
 			RunningTargets: []types.StatusRunningTarget{
 				{Args: []string{"build", "api"}, Workspace: "/w", StartedAt: at(15 * time.Second)},
@@ -83,7 +83,7 @@ func TestPrintStatusCompact(t *testing.T) {
 		"daemon · 8/8 running · +2 queued · api:build(15s) · ui:test(4.0s) · ledger:lint(2.0s) · +2 more · 2 ws\n")
 
 	assertCompact("multi-workspace running prefixes ws",
-		statusReport{Pool: &types.StatusOutput{
+		types.StatusReport{Pool: &types.StatusOutput{
 			Mode: "daemon", Capacity: 4, Running: 2,
 			RunningTargets: []types.StatusRunningTarget{
 				{Args: []string{"build", "api"}, Workspace: "/srv/alpha", StartedAt: at(1 * time.Second)},
@@ -93,7 +93,7 @@ func TestPrintStatusCompact(t *testing.T) {
 		"daemon · 2/4 running · alpha/api:build(1.0s) · beta/ui:test(0.5s)\n")
 
 	assertCompact("shared services report activity and dependents",
-		statusReport{
+		types.StatusReport{
 			Pool: &types.StatusOutput{Mode: "daemon", Capacity: 4},
 			Services: []types.StatusService{
 				{State: "running", Dependents: 2},
@@ -103,7 +103,7 @@ func TestPrintStatusCompact(t *testing.T) {
 		"daemon · 0/4 idle · services 1/2 active, 2 dependent(s)\n")
 
 	assertCompact("unparsable args fall back to ?:?",
-		statusReport{Pool: &types.StatusOutput{
+		types.StatusReport{Pool: &types.StatusOutput{
 			Mode: "daemon", Capacity: 4, Running: 1,
 			RunningTargets: []types.StatusRunningTarget{{Args: []string{}, Workspace: "/w", StartedAt: at(100 * time.Millisecond)}},
 		}},
@@ -120,7 +120,7 @@ func TestClampStatusWatch(t *testing.T) {
 func TestPrintStatusCompactTruncatesLongLabel(t *testing.T) {
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	long := strings.Repeat("x", 80)
-	r := statusReport{Pool: &types.StatusOutput{
+	r := types.StatusReport{Pool: &types.StatusOutput{
 		Mode: "daemon", Capacity: 4, Running: 1,
 		RunningTargets: []types.StatusRunningTarget{{
 			Args:      []string{"build", long},
@@ -581,7 +581,7 @@ func TestRenderProbeResults(t *testing.T) {
 func TestPrintStatusTextRendersMCPEndpoint(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "status-*")
 	require.NoError(t, err)
-	r := statusReport{
+	r := types.StatusReport{
 		MCPEndpoint: &types.MCPEndpointStatus{Enabled: true, URL: "http://127.0.0.1:7391/mcp", Reachable: true, State: "serving"},
 		Services:    []types.StatusService{{ID: "service-1", Label: "postgres", Command: "docker run postgres", Ports: []string{"5432"}, State: "running", Dependents: 2}},
 	}
@@ -601,9 +601,9 @@ func TestPrintStatusTextRendersMCPEndpoint(t *testing.T) {
 func TestPrintStatusTextFullReport(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "status-*")
 	require.NoError(t, err)
-	r := statusReport{
-		Telemetry: telemetryStatus{Note: "telemetry is disabled."},
-		Cache:     cacheStatus{Dir: "/cache", SizeMB: 10},
+	r := types.StatusReport{
+		Telemetry: types.TelemetryStatus{Note: "telemetry is disabled."},
+		Cache:     types.CacheStatus{Dir: "/cache", SizeMB: 10},
 		Pool: &types.StatusOutput{
 			ParentPID: 4242, Mode: "daemon", Capacity: 8, Running: 1,
 			RunningTargets: []types.StatusRunningTarget{{Args: []string{"run", "build", "web"}, Workspace: "/repo"}},
@@ -629,7 +629,7 @@ func TestPrintStatusTextFullReport(t *testing.T) {
 func TestPrintStatusTextDoesNotCallActiveLocalWorkIdle(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "status-*")
 	require.NoError(t, err)
-	printStatusText(f, statusReport{Pool: &types.StatusOutput{
+	printStatusText(f, types.StatusReport{Pool: &types.StatusOutput{
 		Mode: "proc", Capacity: 8, Running: 1,
 	}}, false, 0)
 	require.NoError(t, f.Close())
@@ -641,7 +641,7 @@ func TestPrintStatusTextDoesNotCallActiveLocalWorkIdle(t *testing.T) {
 
 func TestApplyStatusReplyCarriesSharedServices(t *testing.T) {
 	services := []types.StatusService{{ID: "service-1", State: "running", Dependents: 3}}
-	report := statusReport{}
+	report := types.StatusReport{}
 	applyStatusReply(&report, &proc.StatusReply{Services: services})
 	assert.Equal(t, services, report.Services)
 }

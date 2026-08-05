@@ -193,7 +193,7 @@ func workspaceRelative(p string) bool {
 // display label. The key is the package manager and name plus the descriptor path,
 // deliberately excluding the package VERSION so a dependency bump does not rename
 // every symbol - but including the manager so two ecosystems that share a package
-// name (npm foo vs gomod foo) do not collide. A local or unparseable moniker yields
+// name (npm foo vs gomod foo) do not collide. A local or unparsable moniker yields
 // ok=false (the caller skips it).
 func parseMoniker(moniker string) (key, label string, ok bool) {
 	sym, err := scip.ParseSymbol(moniker)

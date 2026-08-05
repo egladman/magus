@@ -2,6 +2,7 @@ package doctor
 
 import (
 	"fmt"
+	"github.com/egladman/magus/types"
 	"os"
 	"path/filepath"
 	"sort"
@@ -28,16 +29,16 @@ const worktreesDirRel = ".claude/worktrees"
 // worktree and removes on `git worktree remove`/`prune`. A pruned-but-not-deleted
 // directory therefore reads as stale without shelling out to git, which keeps the
 // check cheap enough to run every time and correct when git is unavailable.
-func checkStaleWorktrees(root string) Check {
+func checkStaleWorktrees(root string) types.DoctorCheck {
 	const name = "stale worktrees"
 	dir := filepath.Join(root, filepath.FromSlash(worktreesDirRel))
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return Check{Name: name, Status: StatusOK, Message: "no " + worktreesDirRel + " directory"}
+			return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no " + worktreesDirRel + " directory"}
 		}
-		return Check{Name: name, Status: StatusFail, Message: fmt.Sprintf("scan %s: %v", worktreesDirRel, err)}
+		return types.DoctorCheck{Name: name, Status: types.DoctorFail, Message: fmt.Sprintf("scan %s: %v", worktreesDirRel, err)}
 	}
 
 	var stale []string
@@ -59,7 +60,7 @@ func checkStaleWorktrees(root string) Check {
 		stale = append(stale, e.Name())
 	}
 	if len(stale) == 0 {
-		return Check{Name: name, Status: StatusOK, Message: fmt.Sprintf("%d live worktree(s); none orphaned", live)}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: fmt.Sprintf("%d live worktree(s); none orphaned", live)}
 	}
 	sort.Strings(stale)
 
@@ -68,9 +69,9 @@ func checkStaleWorktrees(root string) Check {
 		details = append(details, filepath.Join(worktreesDirRel, s))
 	}
 	details = append(details, "remove the directory, or restore it with `git worktree add` if the work is still wanted")
-	return Check{
+	return types.DoctorCheck{
 		Name:    name,
-		Status:  StatusFail,
+		Status:  types.DoctorFail,
 		Message: fmt.Sprintf("%d directory(ies) under %s are not live worktrees; they duplicate spell sources and can trip MGS1002 and fail tests", len(stale), worktreesDirRel),
 		Details: details,
 	}

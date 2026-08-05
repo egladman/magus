@@ -56,7 +56,7 @@ func parseCommit(raw string) types.Commit {
 // build that formats that way doesn't silently zero every Date.
 var commitWhenLayouts = []string{time.RFC3339, "2006-01-02T15:04:05Z0700"}
 
-// parseWhen parses a driver's record-date timestamp; an unparseable or empty
+// parseWhen parses a driver's record-date timestamp; an unparsable or empty
 // value yields the zero time.
 func parseWhen(s string) time.Time {
 	s = strings.TrimSpace(s)

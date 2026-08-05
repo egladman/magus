@@ -21,15 +21,15 @@ func (v CommitAuthor) BuzzObject() BuzzObject {
 }
 
 func (v CommitRecord) BuzzObject() BuzzObject {
-	formatted1 := ""
+	formattedDate := ""
 	if !v.Date.IsZero() {
-		formatted1 = v.Date.Format(time.RFC3339)
+		formattedDate = v.Date.Format(time.RFC3339)
 	}
 	return BuzzObject{
 		"id":      v.ID,
 		"short":   v.Short,
 		"author":  v.Author.BuzzObject(),
-		"date":    formatted1,
+		"date":    formattedDate,
 		"subject": v.Subject,
 		"body":    v.Body,
 		"parents": v.Parents,
@@ -84,46 +84,46 @@ func (v URL) BuzzObject() BuzzObject {
 }
 
 func (v VCSTag) BuzzObject() BuzzObject {
-	formatted2 := ""
+	formattedDate := ""
 	if !v.Date.IsZero() {
-		formatted2 = v.Date.Format(time.RFC3339)
+		formattedDate = v.Date.Format(time.RFC3339)
 	}
 	return BuzzObject{
 		"name":    v.Name,
 		"prefix":  v.Prefix,
 		"version": v.Version.BuzzObject(),
-		"date":    formatted2,
+		"date":    formattedDate,
 		"id":      v.ID,
 	}
 }
 
 func (v AffectedResult) BuzzObject() BuzzObject {
-	mapped3 := make(map[string]any, len(v.FilesBySeed))
-	for key4, item5 := range v.FilesBySeed {
-		mapped3[key4] = item5
+	mappedFilesBySeed := make(map[string]any, len(v.FilesBySeed))
+	for keyFilesBySeed, itemFilesBySeed := range v.FilesBySeed {
+		mappedFilesBySeed[keyFilesBySeed] = itemFilesBySeed
 	}
 	return BuzzObject{
 		"base":        v.Base,
 		"changed":     v.Changed,
 		"seed":        v.Seed,
-		"filesBySeed": mapped3,
+		"filesBySeed": mappedFilesBySeed,
 		"affected":    v.Affected,
 	}
 }
 
 func (v GraphView) BuzzObject() BuzzObject {
-	mapped6 := make(map[string]any, len(v.DependsOn))
-	for key7, item8 := range v.DependsOn {
-		mapped6[key7] = item8
+	mappedDependsOn := make(map[string]any, len(v.DependsOn))
+	for keyDependsOn, itemDependsOn := range v.DependsOn {
+		mappedDependsOn[keyDependsOn] = itemDependsOn
 	}
-	mapped9 := make(map[string]any, len(v.BlastRadius))
-	for key10, item11 := range v.BlastRadius {
-		mapped9[key10] = item11
+	mappedBlastRadius := make(map[string]any, len(v.BlastRadius))
+	for keyBlastRadius, itemBlastRadius := range v.BlastRadius {
+		mappedBlastRadius[keyBlastRadius] = itemBlastRadius
 	}
 	return BuzzObject{
 		"nodes":       v.Nodes,
-		"dependsOn":   mapped6,
-		"blastRadius": mapped9,
+		"dependsOn":   mappedDependsOn,
+		"blastRadius": mappedBlastRadius,
 	}
 }
 
@@ -145,19 +145,19 @@ func (v ModuleMethodEntry) BuzzObject() BuzzObject {
 }
 
 func (v ModuleEntry) BuzzObject() BuzzObject {
-	items12 := make([]any, len(v.Fields))
-	for index13 := range v.Fields {
-		items12[index13] = v.Fields[index13].BuzzObject()
+	itemsFields := make([]any, len(v.Fields))
+	for indexFields := range v.Fields {
+		itemsFields[indexFields] = v.Fields[indexFields].BuzzObject()
 	}
-	items14 := make([]any, len(v.Methods))
-	for index15 := range v.Methods {
-		items14[index15] = v.Methods[index15].BuzzObject()
+	itemsMethods := make([]any, len(v.Methods))
+	for indexMethods := range v.Methods {
+		itemsMethods[indexMethods] = v.Methods[indexMethods].BuzzObject()
 	}
 	return BuzzObject{
 		"name":    v.Name,
 		"doc":     v.Doc,
-		"fields":  items12,
-		"methods": items14,
+		"fields":  itemsFields,
+		"methods": itemsMethods,
 	}
 }
 
@@ -177,14 +177,14 @@ func (v ProjectEntry) BuzzObject() BuzzObject {
 }
 
 func (v ProjectsOutput) BuzzObject() BuzzObject {
-	items16 := make([]any, len(v.Projects))
-	for index17 := range v.Projects {
-		items16[index17] = v.Projects[index17].BuzzObject()
+	itemsProjects := make([]any, len(v.Projects))
+	for indexProjects := range v.Projects {
+		itemsProjects[indexProjects] = v.Projects[indexProjects].BuzzObject()
 	}
 	return BuzzObject{
 		"workspace": v.Workspace,
 		"count":     v.Count,
-		"projects":  items16,
+		"projects":  itemsProjects,
 	}
 }
 
@@ -224,25 +224,25 @@ func (v UpdateRef) BuzzObject() BuzzObject {
 }
 
 func (v TargetGraphNode) BuzzObject() BuzzObject {
-	items18 := make([]any, len(v.Spells))
-	for index19 := range v.Spells {
-		items18[index19] = v.Spells[index19].BuzzObject()
+	itemsSpells := make([]any, len(v.Spells))
+	for indexSpells := range v.Spells {
+		itemsSpells[indexSpells] = v.Spells[indexSpells].BuzzObject()
 	}
-	items20 := make([]any, len(v.CrossDependencies))
-	for index21 := range v.CrossDependencies {
-		items20[index21] = v.CrossDependencies[index21].BuzzObject()
+	itemsCrossDependencies := make([]any, len(v.CrossDependencies))
+	for indexCrossDependencies := range v.CrossDependencies {
+		itemsCrossDependencies[indexCrossDependencies] = v.CrossDependencies[indexCrossDependencies].BuzzObject()
 	}
-	items22 := make([]any, len(v.ReadsFiles))
-	for index23 := range v.ReadsFiles {
-		items22[index23] = v.ReadsFiles[index23].BuzzObject()
+	itemsReadsFiles := make([]any, len(v.ReadsFiles))
+	for indexReadsFiles := range v.ReadsFiles {
+		itemsReadsFiles[indexReadsFiles] = v.ReadsFiles[indexReadsFiles].BuzzObject()
 	}
-	items24 := make([]any, len(v.WritesFiles))
-	for index25 := range v.WritesFiles {
-		items24[index25] = v.WritesFiles[index25].BuzzObject()
+	itemsWritesFiles := make([]any, len(v.WritesFiles))
+	for indexWritesFiles := range v.WritesFiles {
+		itemsWritesFiles[indexWritesFiles] = v.WritesFiles[indexWritesFiles].BuzzObject()
 	}
-	items26 := make([]any, len(v.ModifiesExistingFiles))
-	for index27 := range v.ModifiesExistingFiles {
-		items26[index27] = v.ModifiesExistingFiles[index27].BuzzObject()
+	itemsModifiesExistingFiles := make([]any, len(v.ModifiesExistingFiles))
+	for indexModifiesExistingFiles := range v.ModifiesExistingFiles {
+		itemsModifiesExistingFiles[indexModifiesExistingFiles] = v.ModifiesExistingFiles[indexModifiesExistingFiles].BuzzObject()
 	}
 	return BuzzObject{
 		"name":                  v.Name,
@@ -250,38 +250,38 @@ func (v TargetGraphNode) BuzzObject() BuzzObject {
 		"doc":                   v.Doc,
 		"dependencies":          v.Dependencies,
 		"charms":                v.Charms,
-		"spells":                items18,
-		"crossDependencies":     items20,
-		"readsFiles":            items22,
-		"writesFiles":           items24,
-		"modifiesExistingFiles": items26,
+		"spells":                itemsSpells,
+		"crossDependencies":     itemsCrossDependencies,
+		"readsFiles":            itemsReadsFiles,
+		"writesFiles":           itemsWritesFiles,
+		"modifiesExistingFiles": itemsModifiesExistingFiles,
 		"execOverrides":         v.ExecOverrides,
 		"envAllow":              v.EnvAllow,
 	}
 }
 
 func (v TargetGraphProject) BuzzObject() BuzzObject {
-	items28 := make([]any, len(v.Nodes))
-	for index29 := range v.Nodes {
-		items28[index29] = v.Nodes[index29].BuzzObject()
+	itemsNodes := make([]any, len(v.Nodes))
+	for indexNodes := range v.Nodes {
+		itemsNodes[indexNodes] = v.Nodes[indexNodes].BuzzObject()
 	}
 	return BuzzObject{
 		"path":      v.Path,
 		"name":      v.Name,
 		"engine":    v.Engine,
-		"nodes":     items28,
+		"nodes":     itemsNodes,
 		"cycle":     v.Cycle,
 		"dependsOn": v.DependsOn,
 	}
 }
 
 func (v TargetGraphOutput) BuzzObject() BuzzObject {
-	items30 := make([]any, len(v.Projects))
-	for index31 := range v.Projects {
-		items30[index31] = v.Projects[index31].BuzzObject()
+	itemsProjects := make([]any, len(v.Projects))
+	for indexProjects := range v.Projects {
+		itemsProjects[indexProjects] = v.Projects[indexProjects].BuzzObject()
 	}
 	return BuzzObject{
-		"projects": items30,
+		"projects": itemsProjects,
 	}
 }
 
@@ -297,21 +297,21 @@ func (v FileEntry) BuzzObject() BuzzObject {
 }
 
 func (v FileReport) BuzzObject() BuzzObject {
-	items32 := make([]any, len(v.Files))
-	for index33 := range v.Files {
-		items32[index33] = v.Files[index33].BuzzObject()
+	itemsFiles := make([]any, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = v.Files[indexFiles].BuzzObject()
 	}
 	return BuzzObject{
 		"definition": v.Definition,
 		"count":      v.Count,
-		"files":      items32,
+		"files":      itemsFiles,
 	}
 }
 
 func (v DoctorCheck) BuzzObject() BuzzObject {
 	return BuzzObject{
 		"name":    v.Name,
-		"status":  v.Status,
+		"status":  string(v.Status),
 		"message": v.Message,
 		"details": v.Details,
 	}
@@ -326,25 +326,25 @@ func (v DoctorSummary) BuzzObject() BuzzObject {
 }
 
 func (v DoctorReport) BuzzObject() BuzzObject {
-	items34 := make([]any, len(v.Checks))
-	for index35 := range v.Checks {
-		items34[index35] = v.Checks[index35].BuzzObject()
+	itemsChecks := make([]any, len(v.Checks))
+	for indexChecks := range v.Checks {
+		itemsChecks[indexChecks] = v.Checks[indexChecks].BuzzObject()
 	}
 	return BuzzObject{
 		"workspace": v.Workspace,
-		"checks":    items34,
+		"checks":    itemsChecks,
 		"summary":   v.Summary.BuzzObject(),
 	}
 }
 
 func (v Node) BuzzObject() BuzzObject {
-	var opt36 any
+	var optLastCommit any
 	if v.LastCommit != nil {
-		formatted37 := ""
+		formattedLastCommit := ""
 		if !(*v.LastCommit).IsZero() {
-			formatted37 = (*v.LastCommit).Format(time.RFC3339)
+			formattedLastCommit = (*v.LastCommit).Format(time.RFC3339)
 		}
-		opt36 = formatted37
+		optLastCommit = formattedLastCommit
 	}
 	return BuzzObject{
 		"path":        v.Path,
@@ -357,14 +357,14 @@ func (v Node) BuzzObject() BuzzObject {
 		"durationMs":  v.DurationMs,
 		"churn":       v.Churn,
 		"authors":     v.Authors,
-		"lastCommit":  opt36,
+		"lastCommit":  optLastCommit,
 	}
 }
 
 func (v FileHotspot) BuzzObject() BuzzObject {
-	formatted38 := ""
+	formattedLastCommit := ""
 	if !v.LastCommit.IsZero() {
-		formatted38 = v.LastCommit.Format(time.RFC3339)
+		formattedLastCommit = v.LastCommit.Format(time.RFC3339)
 	}
 	return BuzzObject{
 		"path":       v.Path,
@@ -372,25 +372,25 @@ func (v FileHotspot) BuzzObject() BuzzObject {
 		"complexity": v.Complexity,
 		"score":      v.Score,
 		"authors":    v.Authors,
-		"lastCommit": formatted38,
+		"lastCommit": formattedLastCommit,
 	}
 }
 
 func (v HotspotOutput) BuzzObject() BuzzObject {
-	items39 := make([]any, len(v.Nodes))
-	for index40 := range v.Nodes {
-		items39[index40] = v.Nodes[index40].BuzzObject()
+	itemsNodes := make([]any, len(v.Nodes))
+	for indexNodes := range v.Nodes {
+		itemsNodes[indexNodes] = v.Nodes[indexNodes].BuzzObject()
 	}
-	items41 := make([]any, len(v.Files))
-	for index42 := range v.Files {
-		items41[index42] = v.Files[index42].BuzzObject()
+	itemsFiles := make([]any, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = v.Files[indexFiles].BuzzObject()
 	}
 	return BuzzObject{
 		"definition": v.Definition,
 		"commits":    v.Commits,
 		"since":      v.Since,
-		"nodes":      items39,
-		"files":      items41,
+		"nodes":      itemsNodes,
+		"files":      itemsFiles,
 	}
 }
 
@@ -406,22 +406,22 @@ func (v CoChange) BuzzObject() BuzzObject {
 }
 
 func (v AffinityOutput) BuzzObject() BuzzObject {
-	items43 := make([]any, len(v.Pairs))
-	for index44 := range v.Pairs {
-		items43[index44] = v.Pairs[index44].BuzzObject()
+	itemsPairs := make([]any, len(v.Pairs))
+	for indexPairs := range v.Pairs {
+		itemsPairs[indexPairs] = v.Pairs[indexPairs].BuzzObject()
 	}
 	return BuzzObject{
 		"definition": v.Definition,
 		"commits":    v.Commits,
 		"since":      v.Since,
-		"pairs":      items43,
+		"pairs":      itemsPairs,
 	}
 }
 
-func (v Ownership) BuzzObject() BuzzObject {
-	formatted45 := ""
+func (v OwnershipEntry) BuzzObject() BuzzObject {
+	formattedLastCommit := ""
 	if !v.LastCommit.IsZero() {
-		formatted45 = v.LastCommit.Format(time.RFC3339)
+		formattedLastCommit = v.LastCommit.Format(time.RFC3339)
 	}
 	return BuzzObject{
 		"path":         v.Path,
@@ -432,24 +432,24 @@ func (v Ownership) BuzzObject() BuzzObject {
 		"primaryShare": v.PrimaryShare,
 		"busFactor1":   v.BusFactor1,
 		"stale":        v.Stale,
-		"lastCommit":   formatted45,
+		"lastCommit":   formattedLastCommit,
 	}
 }
 
 func (v OwnershipOutput) BuzzObject() BuzzObject {
-	items46 := make([]any, len(v.Projects))
-	for index47 := range v.Projects {
-		items46[index47] = v.Projects[index47].BuzzObject()
+	itemsProjects := make([]any, len(v.Projects))
+	for indexProjects := range v.Projects {
+		itemsProjects[indexProjects] = v.Projects[indexProjects].BuzzObject()
 	}
 	return BuzzObject{
 		"definition": v.Definition,
 		"commits":    v.Commits,
 		"since":      v.Since,
-		"projects":   items46,
+		"projects":   itemsProjects,
 	}
 }
 
-func (v Trend) BuzzObject() BuzzObject {
+func (v TrendEntry) BuzzObject() BuzzObject {
 	return BuzzObject{
 		"path":    v.Path,
 		"name":    v.Name,
@@ -460,22 +460,22 @@ func (v Trend) BuzzObject() BuzzObject {
 }
 
 func (v TrendOutput) BuzzObject() BuzzObject {
-	items48 := make([]any, len(v.Projects))
-	for index49 := range v.Projects {
-		items48[index49] = v.Projects[index49].BuzzObject()
+	itemsProjects := make([]any, len(v.Projects))
+	for indexProjects := range v.Projects {
+		itemsProjects[indexProjects] = v.Projects[indexProjects].BuzzObject()
 	}
 	return BuzzObject{
 		"definition": v.Definition,
 		"commits":    v.Commits,
 		"since":      v.Since,
-		"projects":   items48,
+		"projects":   itemsProjects,
 	}
 }
 
 func (v VolatilityTarget) BuzzObject() BuzzObject {
-	formatted50 := ""
+	formattedLastPass := ""
 	if !v.LastPass.IsZero() {
-		formatted50 = v.LastPass.Format(time.RFC3339)
+		formattedLastPass = v.LastPass.Format(time.RFC3339)
 	}
 	return BuzzObject{
 		"project":       v.Project,
@@ -486,18 +486,18 @@ func (v VolatilityTarget) BuzzObject() BuzzObject {
 		"fail":          v.Fail,
 		"volatileCount": v.VolatileCount,
 		"samples":       v.Samples,
-		"lastPass":      formatted50,
+		"lastPass":      formattedLastPass,
 	}
 }
 
 func (v VolatilityReport) BuzzObject() BuzzObject {
-	items51 := make([]any, len(v.Targets))
-	for index52 := range v.Targets {
-		items51[index52] = v.Targets[index52].BuzzObject()
+	itemsTargets := make([]any, len(v.Targets))
+	for indexTargets := range v.Targets {
+		itemsTargets[indexTargets] = v.Targets[indexTargets].BuzzObject()
 	}
 	return BuzzObject{
 		"threshold": v.Threshold,
-		"targets":   items51,
+		"targets":   itemsTargets,
 	}
 }
 
@@ -532,25 +532,25 @@ func (v KnowledgeDocCoverage) BuzzObject() BuzzObject {
 }
 
 func (v KnowledgeStats) BuzzObject() BuzzObject {
-	items53 := make([]any, len(v.Gods))
-	for index54 := range v.Gods {
-		items53[index54] = v.Gods[index54].BuzzObject()
+	itemsGods := make([]any, len(v.Gods))
+	for indexGods := range v.Gods {
+		itemsGods[indexGods] = v.Gods[indexGods].BuzzObject()
 	}
-	items55 := make([]any, len(v.Orphans))
-	for index56 := range v.Orphans {
-		items55[index56] = v.Orphans[index56].BuzzObject()
+	itemsOrphans := make([]any, len(v.Orphans))
+	for indexOrphans := range v.Orphans {
+		itemsOrphans[indexOrphans] = v.Orphans[indexOrphans].BuzzObject()
 	}
-	items57 := make([]any, len(v.Coverage))
-	for index58 := range v.Coverage {
-		items57[index58] = v.Coverage[index58].BuzzObject()
+	itemsCoverage := make([]any, len(v.Coverage))
+	for indexCoverage := range v.Coverage {
+		itemsCoverage[indexCoverage] = v.Coverage[indexCoverage].BuzzObject()
 	}
 	return BuzzObject{
 		"definition":           v.Definition,
 		"nodeCount":            v.NodeCount,
 		"edgeCount":            v.EdgeCount,
-		"gods":                 items53,
-		"orphans":              items55,
-		"coverage":             items57,
+		"gods":                 itemsGods,
+		"orphans":              itemsOrphans,
+		"coverage":             itemsCoverage,
 		"isolatedCount":        v.IsolatedCount,
 		"componentCount":       v.ComponentCount,
 		"largestComponentSize": v.LargestComponentSize,
@@ -558,16 +558,12 @@ func (v KnowledgeStats) BuzzObject() BuzzObject {
 }
 
 func (v InsightReport) BuzzObject() BuzzObject {
-	var opt59 any
-	if v.Volatility != nil {
-		opt59 = (*v.Volatility).BuzzObject()
-	}
 	return BuzzObject{
 		"hotspots":   v.Hotspots.BuzzObject(),
 		"affinity":   v.Affinity.BuzzObject(),
 		"ownership":  v.Ownership.BuzzObject(),
 		"trend":      v.Trend.BuzzObject(),
-		"volatility": opt59,
+		"volatility": v.Volatility.BuzzObject(),
 		"graphStats": v.GraphStats.BuzzObject(),
 	}
 }
@@ -581,17 +577,13 @@ func (v ImpactCoverage) BuzzObject() BuzzObject {
 }
 
 func (v ImpactSymbol) BuzzObject() BuzzObject {
-	var opt60 any
-	if v.Coverage != nil {
-		opt60 = (*v.Coverage).BuzzObject()
-	}
 	return BuzzObject{
 		"file":      v.File,
 		"symbol":    v.Symbol,
 		"label":     v.Label,
 		"refCount":  v.RefCount,
 		"fileCount": v.FileCount,
-		"coverage":  opt60,
+		"coverage":  v.Coverage.BuzzObject(),
 	}
 }
 
@@ -613,63 +605,63 @@ func (v ImpactProject) BuzzObject() BuzzObject {
 }
 
 func (v ImpactResult) BuzzObject() BuzzObject {
-	items61 := make([]any, len(v.AffectedProjects))
-	for index62 := range v.AffectedProjects {
-		items61[index62] = v.AffectedProjects[index62].BuzzObject()
+	itemsAffectedProjects := make([]any, len(v.AffectedProjects))
+	for indexAffectedProjects := range v.AffectedProjects {
+		itemsAffectedProjects[indexAffectedProjects] = v.AffectedProjects[indexAffectedProjects].BuzzObject()
 	}
-	items63 := make([]any, len(v.ChangedSymbols))
-	for index64 := range v.ChangedSymbols {
-		items63[index64] = v.ChangedSymbols[index64].BuzzObject()
+	itemsChangedSymbols := make([]any, len(v.ChangedSymbols))
+	for indexChangedSymbols := range v.ChangedSymbols {
+		itemsChangedSymbols[indexChangedSymbols] = v.ChangedSymbols[indexChangedSymbols].BuzzObject()
 	}
-	items65 := make([]any, len(v.ChangedFileCoverage))
-	for index66 := range v.ChangedFileCoverage {
-		items65[index66] = v.ChangedFileCoverage[index66].BuzzObject()
+	itemsChangedFileCoverage := make([]any, len(v.ChangedFileCoverage))
+	for indexChangedFileCoverage := range v.ChangedFileCoverage {
+		itemsChangedFileCoverage[indexChangedFileCoverage] = v.ChangedFileCoverage[indexChangedFileCoverage].BuzzObject()
 	}
 	return BuzzObject{
 		"base":                v.Base,
 		"changedFileCount":    v.ChangedFileCount,
 		"changedFiles":        v.ChangedFiles,
 		"seedProjects":        v.SeedProjects,
-		"affectedProjects":    items61,
-		"changedSymbols":      items63,
-		"changedFileCoverage": items65,
+		"affectedProjects":    itemsAffectedProjects,
+		"changedSymbols":      itemsChangedSymbols,
+		"changedFileCoverage": itemsChangedFileCoverage,
 		"notes":               v.Notes,
 	}
 }
 
 func (v StatusTargetRun) BuzzObject() BuzzObject {
-	formatted67 := ""
+	formattedStartedAt := ""
 	if !v.StartedAt.IsZero() {
-		formatted67 = v.StartedAt.Format(time.RFC3339)
+		formattedStartedAt = v.StartedAt.Format(time.RFC3339)
 	}
-	formatted68 := ""
+	formattedEndedAt := ""
 	if !v.EndedAt.IsZero() {
-		formatted68 = v.EndedAt.Format(time.RFC3339)
+		formattedEndedAt = v.EndedAt.Format(time.RFC3339)
 	}
 	return BuzzObject{
 		"project":    v.Project,
 		"target":     v.Target,
-		"state":      v.State,
-		"startedAt":  formatted67,
-		"endedAt":    formatted68,
+		"state":      string(v.State),
+		"startedAt":  formattedStartedAt,
+		"endedAt":    formattedEndedAt,
 		"outputRef":  v.OutputRef,
 		"durationMs": v.DurationMs,
 	}
 }
 
 func (v StatusRun) BuzzObject() BuzzObject {
-	formatted69 := ""
+	formattedStartedAt := ""
 	if !v.StartedAt.IsZero() {
-		formatted69 = v.StartedAt.Format(time.RFC3339)
+		formattedStartedAt = v.StartedAt.Format(time.RFC3339)
 	}
-	items70 := make([]any, len(v.Targets))
-	for index71 := range v.Targets {
-		items70[index71] = v.Targets[index71].BuzzObject()
+	itemsTargets := make([]any, len(v.Targets))
+	for indexTargets := range v.Targets {
+		itemsTargets[indexTargets] = v.Targets[indexTargets].BuzzObject()
 	}
 	return BuzzObject{
 		"inv":       v.Inv,
 		"trigger":   v.Trigger,
-		"startedAt": formatted69,
-		"targets":   items70,
+		"startedAt": formattedStartedAt,
+		"targets":   itemsTargets,
 	}
 }

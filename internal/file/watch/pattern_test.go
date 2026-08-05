@@ -4,12 +4,13 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestParsePattern(t *testing.T) {
-	wantOK := func(t *testing.T, in string, want IgnorePattern) {
+	wantOK := func(t *testing.T, in string, want types.IgnorePattern) {
 		got, err := ParsePattern(in)
 		require.NoError(t, err, "ParsePattern(%q)", in)
 		assert.Equal(t, want, got)
@@ -24,17 +25,17 @@ func TestParsePattern(t *testing.T) {
 	t.Run("bare ext rejected", func(t *testing.T) { wantErr(t, "*.tmp") })
 
 	t.Run("glob", func(t *testing.T) {
-		wantOK(t, "type=glob,pattern=**/scratch/*", IgnorePattern{Type: PatternGlob, Pattern: "**/scratch/*"})
+		wantOK(t, "type=glob,pattern=**/scratch/*", types.IgnorePattern{Type: types.PatternGlob, Pattern: "**/scratch/*"})
 	})
 	t.Run("regex", func(t *testing.T) {
-		wantOK(t, `type=regex,pattern=\.tmp$`, IgnorePattern{Type: PatternRegex, Pattern: `\.tmp$`})
+		wantOK(t, `type=regex,pattern=\.tmp$`, types.IgnorePattern{Type: types.PatternRegex, Pattern: `\.tmp$`})
 	})
 	t.Run("literal", func(t *testing.T) {
-		wantOK(t, "type=literal,pattern=bazel-out/[k8-fastbuild]", IgnorePattern{Type: PatternLiteral, Pattern: "bazel-out/[k8-fastbuild]"})
+		wantOK(t, "type=literal,pattern=bazel-out/[k8-fastbuild]", types.IgnorePattern{Type: types.PatternLiteral, Pattern: "bazel-out/[k8-fastbuild]"})
 	})
 	t.Run("regex with escaped comma", func(t *testing.T) {
 		// Regex with quantifier: comma must be escaped.
-		wantOK(t, `type=regex,pattern=\.v\d{2\,4}\.bak$`, IgnorePattern{Type: PatternRegex, Pattern: `\.v\d{2,4}\.bak$`})
+		wantOK(t, `type=regex,pattern=\.v\d{2\,4}\.bak$`, types.IgnorePattern{Type: types.PatternRegex, Pattern: `\.v\d{2,4}\.bak$`})
 	})
 
 	// pattern= without type= is now an error.
@@ -48,9 +49,9 @@ func TestParsePattern(t *testing.T) {
 
 func TestIgnorePatterns_Glob(t *testing.T) {
 	root := t.TempDir()
-	pred := IgnorePatterns(root, []IgnorePattern{
-		{Type: PatternGlob, Pattern: "**/scratch/*"},
-		{Type: PatternGlob, Pattern: "*.tmp"},
+	pred := IgnorePatterns(root, []types.IgnorePattern{
+		{Type: types.PatternGlob, Pattern: "**/scratch/*"},
+		{Type: types.PatternGlob, Pattern: "*.tmp"},
 	})
 
 	assert.True(t, pred(filepath.Join(root, "scratch/a.txt")), "**/scratch/* should match scratch/a.txt")
@@ -61,8 +62,8 @@ func TestIgnorePatterns_Glob(t *testing.T) {
 
 func TestIgnorePatterns_Regex(t *testing.T) {
 	root := t.TempDir()
-	pred := IgnorePatterns(root, []IgnorePattern{
-		{Type: PatternRegex, Pattern: `\.generated\.go$`},
+	pred := IgnorePatterns(root, []types.IgnorePattern{
+		{Type: types.PatternRegex, Pattern: `\.generated\.go$`},
 	})
 
 	assert.True(t, pred(filepath.Join(root, "api/foo.generated.go")), "regex should match foo.generated.go")
@@ -71,8 +72,8 @@ func TestIgnorePatterns_Regex(t *testing.T) {
 
 func TestIgnorePatterns_Literal(t *testing.T) {
 	root := t.TempDir()
-	pred := IgnorePatterns(root, []IgnorePattern{
-		{Type: PatternLiteral, Pattern: "bazel-out/[k8-fastbuild]"},
+	pred := IgnorePatterns(root, []types.IgnorePattern{
+		{Type: types.PatternLiteral, Pattern: "bazel-out/[k8-fastbuild]"},
 	})
 
 	// Literal matches a path SEGMENT, not a substring. The literal
@@ -82,8 +83,8 @@ func TestIgnorePatterns_Literal(t *testing.T) {
 	assert.False(t, pred(filepath.Join(root, "bazel-out/[k8-fastbuild]/a.o")), "literal should match path segments, not concatenations with slashes")
 
 	// Re-test with a single-segment literal.
-	pred2 := IgnorePatterns(root, []IgnorePattern{
-		{Type: PatternLiteral, Pattern: "[k8-fastbuild]"},
+	pred2 := IgnorePatterns(root, []types.IgnorePattern{
+		{Type: types.PatternLiteral, Pattern: "[k8-fastbuild]"},
 	})
 	assert.True(t, pred2(filepath.Join(root, "bazel-out/[k8-fastbuild]/a.o")), "expected literal segment match for [k8-fastbuild]")
 	assert.False(t, pred2(filepath.Join(root, "bazel-out/k8-fastbuild/a.o")), "literal should not match without the brackets")
@@ -92,8 +93,8 @@ func TestIgnorePatterns_Literal(t *testing.T) {
 func TestIgnorePatterns_LiteralGitignoreSemantics(t *testing.T) {
 	// gitignore: bare name matches at any depth as a path segment.
 	root := t.TempDir()
-	pred := IgnorePatterns(root, []IgnorePattern{
-		{Type: PatternLiteral, Pattern: "node_modules"},
+	pred := IgnorePatterns(root, []types.IgnorePattern{
+		{Type: types.PatternLiteral, Pattern: "node_modules"},
 	})
 
 	cases := []struct {

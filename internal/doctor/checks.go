@@ -17,6 +17,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 
+	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/interactive"
@@ -33,8 +34,8 @@ import (
 
 // checkBridgeReachability probes the console endpoint (/api/v1/graph) by
 // issuing a real HTTP GET (a 401 proves the guarded route exists).
-func (r *runner) checkBridgeReachability() Check {
-	return probeBridgeReachability(r.opts.daemonInfo)
+func (r *runner) checkBridgeReachability() types.DoctorCheck {
+	return probeBridgeReachability(r.runCtx(), r.opts.daemonInfo)
 }
 
 // checkNearDuplicateServices is the static, whole-workspace half of MGS5001: it
@@ -43,17 +44,17 @@ func (r *runner) checkBridgeReachability() Check {
 // processes instead of one shared instance. Unlike the runtime warning (scoped to
 // a single run's graph) this audit is repo-wide, so it is "potential overlap":
 // some clusters may never co-occur in one run.
-func (*runner) checkNearDuplicateServices(projects []*types.Project) Check {
+func (*runner) checkNearDuplicateServices(projects []*types.Project) types.DoctorCheck {
 	const name = "service duplication"
 	clusters := serviceaudit.NearDuplicates(projects, nil)
 	if len(clusters) == 0 {
-		return Check{Name: name, Status: StatusOK, Message: "no near-duplicate services detected"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no near-duplicate services detected"}
 	}
 	details := strings.Split(identity.FormatWarning(clusters), "\n")
 	details = append(details, fmt.Sprintf("see %s: %s", types.NearDuplicateServices, types.CodeURL(types.NearDuplicateServices)))
-	return Check{
+	return types.DoctorCheck{
 		Name:    name,
-		Status:  StatusFail,
+		Status:  types.DoctorFail,
 		Message: fmt.Sprintf("%d near-duplicate service cluster(s); extract a shared target or mark them distinct", len(clusters)),
 		Details: details,
 	}
@@ -63,20 +64,20 @@ func (*runner) checkNearDuplicateServices(projects []*types.Project) Check {
 // suppression model: it flags services marked distinct (opted out of dedup with a
 // reason) whose near-duplicate no longer exists, so the reason is stale and should
 // be pruned to keep the opt-out meaningful.
-func (*runner) checkStaleServiceSuppressions(projects []*types.Project) Check {
+func (*runner) checkStaleServiceSuppressions(projects []*types.Project) types.DoctorCheck {
 	const name = "service suppressions"
 	unused := serviceaudit.UnusedDistinct(projects, nil)
 	if len(unused) == 0 {
-		return Check{Name: name, Status: StatusOK, Message: "no stale distinct-service suppressions"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no stale distinct-service suppressions"}
 	}
 	details := make([]string, 0, len(unused)+1)
 	for _, n := range unused {
 		details = append(details, fmt.Sprintf("%s is marked distinct but has no near-duplicate; remove the opt-out", n))
 	}
 	details = append(details, fmt.Sprintf("see %s: %s", types.NearDuplicateServices, types.CodeURL(types.NearDuplicateServices)))
-	return Check{
+	return types.DoctorCheck{
 		Name:    name,
-		Status:  StatusFail,
+		Status:  types.DoctorFail,
 		Message: fmt.Sprintf("%d stale distinct-service suppression(s)", len(unused)),
 		Details: details,
 	}
@@ -97,7 +98,7 @@ func (*runner) checkStaleServiceSuppressions(projects []*types.Project) Check {
 //
 // ADVICE, not failure. A project with no language pack is a legitimate shape, so
 // this is worth saying once and never worth blocking on.
-func (*runner) checkLanguageCoverage(projects []*types.Project) Check {
+func (*runner) checkLanguageCoverage(projects []*types.Project) types.DoctorCheck {
 	var noLang []string
 	exempt := 0
 	for _, p := range projects {
@@ -115,12 +116,12 @@ func (*runner) checkLanguageCoverage(projects []*types.Project) Check {
 		if exempt > 0 {
 			msg = fmt.Sprintf("every project matched a spell or declared no_language (%d exempt)", exempt)
 		}
-		return Check{Name: "language coverage", Status: StatusOK, Message: msg}
+		return types.DoctorCheck{Name: "language coverage", Status: types.DoctorOK, Message: msg}
 	}
 	slices.Sort(noLang)
-	return Check{
+	return types.DoctorCheck{
 		Name:   "language coverage",
-		Status: StatusAdvice,
+		Status: types.DoctorAdvice,
 		Message: fmt.Sprintf("%d project(s) without a language pack; binding one puts the project's work "+
 			"under affected tracking and the cache", len(noLang)),
 		Details: noLang,
@@ -134,10 +135,10 @@ func (*runner) checkLanguageCoverage(projects []*types.Project) Check {
 // this surfaces it as a health check so the gap is visible before CI runs.
 // Detection reuses the magusfile source scan (ci lives in the magusfile, never a
 // spell). Matching is case-insensitive because magus normalizes CI/Ci to ci.
-func (*runner) checkCITarget(projects []*types.Project) Check {
+func (*runner) checkCITarget(projects []*types.Project) types.DoctorCheck {
 	const name = "ci target"
 	if len(projects) == 0 {
-		return Check{Name: name, Status: StatusOK, Message: "no projects; skipped"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no projects; skipped"}
 	}
 	norm := types.Normalize
 	for _, p := range projects {
@@ -146,14 +147,14 @@ func (*runner) checkCITarget(projects []*types.Project) Check {
 				// Normalize the raw identifier as the runtime does (CI/Ci -> ci)
 				// so a ci target declared in any casing is recognized.
 				if norm(decl) == types.TargetCI {
-					return Check{Name: name, Status: StatusOK, Message: "ci target is defined"}
+					return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "ci target is defined"}
 				}
 			}
 		}
 	}
-	return Check{
+	return types.DoctorCheck{
 		Name:    name,
-		Status:  StatusFail,
+		Status:  types.DoctorFail,
 		Message: "no ci target defined in any project; `magus ci` / `magus affected ci` would gate nothing (silent no-op)",
 		Details: []string{
 			`define one in your magusfile, e.g.  export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(build, test, lint); }`,
@@ -168,7 +169,7 @@ func (*runner) checkCITarget(projects []*types.Project) Check {
 // built-ins and record-style {cmd,args} ops, whose handler comments aren't
 // captured, are skipped - so the check enforces the convention exactly where the
 // Buzz interpreter can verify it.
-func (*runner) checkSpellDocs(spells []*spells.Spell) Check {
+func (*runner) checkSpellDocs(spells []*spells.Spell) types.DoctorCheck {
 	const name = "spell target docs"
 	var undocumented []string
 	for _, s := range spells {
@@ -179,29 +180,29 @@ func (*runner) checkSpellDocs(spells []*spells.Spell) Check {
 		}
 	}
 	if len(undocumented) == 0 {
-		return Check{Name: name, Status: StatusOK, Message: "every local spell target has a doc comment"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "every local spell target has a doc comment"}
 	}
 	slices.Sort(undocumented)
-	return Check{
+	return types.DoctorCheck{
 		Name:    name,
-		Status:  StatusAdvice,
+		Status:  types.DoctorAdvice,
 		Message: fmt.Sprintf("%d local spell target(s) missing a doc comment; the doc is what `magus describe` shows a caller", len(undocumented)),
 		Details: undocumented,
 	}
 }
 
-func (r *runner) checkGraphCycles() Check {
+func (r *runner) checkGraphCycles() types.DoctorCheck {
 	if _, err := r.ws.Graph(); err != nil {
-		return Check{Name: "dependency graph", Status: StatusFail, Message: err.Error()}
+		return types.DoctorCheck{Name: "dependency graph", Status: types.DoctorFail, Message: err.Error()}
 	}
-	return Check{Name: "dependency graph", Status: StatusOK, Message: "no cycles detected"}
+	return types.DoctorCheck{Name: "dependency graph", Status: types.DoctorOK, Message: "no cycles detected"}
 }
 
-func (r *runner) checkSymlinks() Check {
+func (r *runner) checkSymlinks() types.DoctorCheck {
 	return checkSymlinks(r.ws.Root())
 }
 
-func (r *runner) checkGraphBounds() Check {
+func (r *runner) checkGraphBounds() types.DoctorCheck {
 	return checkGraphBounds(r.ws.Root())
 }
 
@@ -223,12 +224,12 @@ func (r *runner) checkGraphBounds() Check {
 //
 // Import nodes are exempt. Their ID is the specifier a source file literally wrote, so
 // "../../badge" records what the code says rather than a path magus resolved.
-func checkGraphBounds(root string) Check {
+func checkGraphBounds(root string) types.DoctorCheck {
 	const name = "graph bounds"
 	path := filepath.Join(root, "gen", "knowledge-graph.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return Check{Name: name, Status: StatusOK, Message: "no committed knowledge graph to check"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no committed knowledge graph to check"}
 	}
 	var g struct {
 		Nodes []struct {
@@ -239,7 +240,7 @@ func checkGraphBounds(root string) Check {
 		} `json:"nodes"`
 	}
 	if err := json.Unmarshal(data, &g); err != nil {
-		return Check{Name: name, Status: StatusFail, Message: fmt.Sprintf("could not read the committed knowledge graph: %v", err)}
+		return types.DoctorCheck{Name: name, Status: types.DoctorFail, Message: fmt.Sprintf("could not read the committed knowledge graph: %v", err)}
 	}
 	var escaping []string
 	for _, n := range g.Nodes {
@@ -251,12 +252,12 @@ func checkGraphBounds(root string) Check {
 		}
 	}
 	if len(escaping) == 0 {
-		return Check{Name: name, Status: StatusOK, Message: fmt.Sprintf("%d graph node(s); none name a path outside the workspace", len(g.Nodes))}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: fmt.Sprintf("%d graph node(s); none name a path outside the workspace", len(g.Nodes))}
 	}
 	slices.Sort(escaping)
-	return Check{
+	return types.DoctorCheck{
 		Name:    name,
-		Status:  StatusFail,
+		Status:  types.DoctorFail,
 		Message: fmt.Sprintf("%d graph node(s) name a location outside the workspace; the graph is committed and shared, so they leak a local machine's layout", len(escaping)),
 		Details: escaping,
 	}
@@ -271,7 +272,7 @@ func escapesRoot(s string) bool {
 // checkSymlinks fails on symlinks whose resolved target escapes root. They are
 // a sandbox-escape vector where landlock is unavailable. In-tree symlinks are
 // reported as context, since project discovery skips them.
-func checkSymlinks(root string) Check {
+func checkSymlinks(root string) types.DoctorCheck {
 	var escaping, inTree []string
 	walkErr := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -295,7 +296,7 @@ func checkSymlinks(root string) Check {
 		return nil
 	})
 	if walkErr != nil {
-		return Check{Name: "symlinks", Status: StatusFail, Message: fmt.Sprintf("could not scan for symlinks: %v", walkErr)}
+		return types.DoctorCheck{Name: "symlinks", Status: types.DoctorFail, Message: fmt.Sprintf("could not scan for symlinks: %v", walkErr)}
 	}
 	slices.Sort(escaping)
 	slices.Sort(inTree)
@@ -304,22 +305,22 @@ func checkSymlinks(root string) Check {
 		if len(inTree) > 0 {
 			details = append(details, fmt.Sprintf("%d in-tree symlink(s) ignored by project discovery", len(inTree)))
 		}
-		return Check{
+		return types.DoctorCheck{
 			Name:    "symlinks",
-			Status:  StatusFail,
+			Status:  types.DoctorFail,
 			Message: fmt.Sprintf("%d symlink(s) resolve outside the workspace root; they can escape the sandbox where landlock is unavailable", len(escaping)),
 			Details: details,
 		}
 	}
 	if len(inTree) > 0 {
-		return Check{
+		return types.DoctorCheck{
 			Name:    "symlinks",
-			Status:  StatusOK,
+			Status:  types.DoctorOK,
 			Message: fmt.Sprintf("%d in-tree symlink(s); none escape the workspace root (symlinked directories are skipped by project discovery)", len(inTree)),
 			Details: inTree,
 		}
 	}
-	return Check{Name: "symlinks", Status: StatusOK, Message: "no symlinks found under the workspace root"}
+	return types.DoctorCheck{Name: "symlinks", Status: types.DoctorOK, Message: "no symlinks found under the workspace root"}
 }
 
 // symlinkEscapes reports whether the symlink at link resolves outside root,
@@ -352,19 +353,19 @@ func toSlashRel(root, p string) string {
 	return filepath.ToSlash(rel)
 }
 
-func (*runner) checkJSONCodec() Check {
+func (*runner) checkJSONCodec() types.DoctorCheck {
 	v := json.Version()
 	msg := "encoding/json " + v
 	if v == "v2" {
 		msg += " (GOEXPERIMENT=jsonv2; faster marshaling)"
 	}
-	return Check{Name: "json codec", Status: StatusOK, Message: msg}
+	return types.DoctorCheck{Name: "json codec", Status: types.DoctorOK, Message: msg}
 }
 
-func (r *runner) checkConfigFile() Check {
+func (r *runner) checkConfigFile() types.DoctorCheck {
 	paths := configFilePaths(r.root)
 	if len(paths) == 0 {
-		return Check{Name: "config file", Status: StatusOK, Message: "no magus.yaml found; using defaults"}
+		return types.DoctorCheck{Name: "config file", Status: types.DoctorOK, Message: "no magus.yaml found; using defaults"}
 	}
 	var all []string
 	for _, p := range paths {
@@ -386,12 +387,12 @@ func (r *runner) checkConfigFile() Check {
 		if len(paths) > 1 {
 			msg = fmt.Sprintf("%d files checked", len(paths))
 		}
-		return Check{Name: "config file", Status: StatusOK, Message: msg + " (valid)"}
+		return types.DoctorCheck{Name: "config file", Status: types.DoctorOK, Message: msg + " (valid)"}
 	}
 	slices.Sort(all)
-	return Check{
+	return types.DoctorCheck{
 		Name:    "config file",
-		Status:  StatusFail,
+		Status:  types.DoctorFail,
 		Message: fmt.Sprintf("%d problem(s) in config file(s)", len(all)),
 		Details: all,
 	}
@@ -447,7 +448,7 @@ func (r *runner) cacheDir() string {
 // correct state is one people learn to ignore. The journal cannot tell the two apart on
 // its own: "ran, did not replay" looks identical whether the target was forbidden to
 // replay or merely failed to.
-func (r *runner) checkCacheYield(projects []*types.Project) Check {
+func (r *runner) checkCacheYield(projects []*types.Project) types.DoctorCheck {
 	const name = "cache yield"
 	stalled := cache.StalledTargets(r.cacheDir(), nil)
 
@@ -486,7 +487,7 @@ func (r *runner) checkCacheYield(projects []*types.Project) Check {
 		if exempt > 0 {
 			msg = fmt.Sprintf("no target is running uncached (%d declared skip_cache)", exempt)
 		}
-		return Check{Name: name, Status: StatusOK, Message: msg}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: msg}
 	}
 	details := make([]string, 0, len(reported)+1)
 	for _, s := range reported {
@@ -500,56 +501,56 @@ func (r *runner) checkCacheYield(projects []*types.Project) Check {
 	// is opaque and there is no VCS input primitive - so the reader is given both.
 	details = append(details,
 		"two causes look the same here: the target declares a footprint wider than it reads, so unrelated edits keep busting its key; or its key deliberately carries volatile state (a version stamp, a commit hash), which no footprint change will fix. Compare its declared inputs against what it actually reads before assuming the first")
-	return Check{
+	return types.DoctorCheck{
 		Name:   name,
-		Status: StatusFail,
+		Status: types.DoctorFail,
 		Message: fmt.Sprintf("[%s] %d target(s) executed repeatedly and never replayed from cache",
 			types.TargetNeverReplays, len(reported)),
 		Details: details,
 	}
 }
 
-func (r *runner) checkCacheWritable() Check {
+func (r *runner) checkCacheWritable() types.DoctorCheck {
 	cacheDir := r.cacheDir()
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
-		return Check{
+		return types.DoctorCheck{
 			Name:    "cache writable",
-			Status:  StatusFail,
+			Status:  types.DoctorFail,
 			Message: fmt.Sprintf("cannot create cache dir: %v", err),
 			Details: []string{cacheDir},
 		}
 	}
 	tmp, err := os.CreateTemp(cacheDir, ".magus-doctor-*")
 	if err != nil {
-		return Check{
+		return types.DoctorCheck{
 			Name:    "cache writable",
-			Status:  StatusFail,
+			Status:  types.DoctorFail,
 			Message: fmt.Sprintf("cache dir not writable: %v", err),
 			Details: []string{cacheDir},
 		}
 	}
 	_ = tmp.Close()
 	_ = os.Remove(tmp.Name())
-	return Check{Name: "cache writable", Status: StatusOK, Message: cacheDir}
+	return types.DoctorCheck{Name: "cache writable", Status: types.DoctorOK, Message: cacheDir}
 }
 
-func (r *runner) checkVCSBaseRef() Check {
-	return checkVCSBaseRef(r.root, r.ws.VCSOptions())
+func (r *runner) checkVCSBaseRef() types.DoctorCheck {
+	return checkVCSBaseRef(r.runCtx(), r.root, r.ws.VCSOptions())
 }
 
-func checkVCSBaseRef(root string, opts types.VCSOptions) Check {
-	res, err := vcs.Resolve(context.Background(), root, "", opts)
+func checkVCSBaseRef(ctx context.Context, root string, opts types.VCSOptions) types.DoctorCheck {
+	res, err := vcs.Resolve(ctx, root, "", opts)
 	if err != nil {
-		return Check{Name: "vcs base ref", Status: StatusFail, Message: err.Error()}
+		return types.DoctorCheck{Name: "vcs base ref", Status: types.DoctorFail, Message: err.Error()}
 	}
 	switch res.Source {
 	case types.VCSSourceDisabled:
-		return Check{Name: "vcs base ref", Status: StatusOK, Message: "vcs disabled; skipped"}
+		return types.DoctorCheck{Name: "vcs base ref", Status: types.DoctorOK, Message: "vcs disabled; skipped"}
 	default:
 		// explicit/auto/default sources: proceed to the live probe below
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 
 	var probeArgs []string
@@ -561,23 +562,23 @@ func checkVCSBaseRef(root string, opts types.VCSOptions) Check {
 	case "jj":
 		probeArgs = []string{"-R", root, "log", "-r", res.Base, "-n", "1", "--no-graph", "-T", "commit_id"}
 	default:
-		return Check{Name: "vcs base ref", Status: StatusOK, Message: fmt.Sprintf("%s: no probe available; skipped", res.Name)}
+		return types.DoctorCheck{Name: "vcs base ref", Status: types.DoctorOK, Message: fmt.Sprintf("%s: no probe available; skipped", res.Name)}
 	}
 
 	cmd := exec.CommandContext(ctx, res.Name, probeArgs...)
 	if err := cmd.Run(); err != nil {
-		return Check{
+		return types.DoctorCheck{
 			Name:    "vcs base ref",
-			Status:  StatusFail,
+			Status:  types.DoctorFail,
 			Message: fmt.Sprintf("base_ref %q not reachable (set MAGUS_VCS_BASE_REF to a reachable ref)", res.Base),
 			Details: []string{fmt.Sprintf("%s exited: %v", res.Name, err)},
 		}
 	}
 
-	return Check{Name: "vcs base ref", Status: StatusOK, Message: fmt.Sprintf("%s %q resolves", res.Name, res.Base)}
+	return types.DoctorCheck{Name: "vcs base ref", Status: types.DoctorOK, Message: fmt.Sprintf("%s %q resolves", res.Name, res.Base)}
 }
 
-func (*runner) checkEnvVars() Check {
+func (*runner) checkEnvVars() types.DoctorCheck {
 	var unknown []string
 	for _, kv := range os.Environ() {
 		eq := strings.IndexByte(kv, '=')
@@ -606,12 +607,12 @@ func (*runner) checkEnvVars() Check {
 		unknown = append(unknown, key)
 	}
 	if len(unknown) == 0 {
-		return Check{Name: "environment variables", Status: StatusOK, Message: "no unknown MAGUS_* variables"}
+		return types.DoctorCheck{Name: "environment variables", Status: types.DoctorOK, Message: "no unknown MAGUS_* variables"}
 	}
 	slices.Sort(unknown)
-	return Check{
+	return types.DoctorCheck{
 		Name:    "environment variables",
-		Status:  StatusFail,
+		Status:  types.DoctorFail,
 		Message: fmt.Sprintf("%d unknown MAGUS_* variable(s); typos?", len(unknown)),
 		Details: unknown,
 	}
@@ -623,7 +624,7 @@ func (*runner) checkEnvVars() Check {
 // use; it only requires the workspace to pick ONE convention and stay consistent,
 // which keeps invocations greppable. Single-word, all-lowercase names (build,
 // test) are convention-neutral and ignored.
-func (r *runner) checkTargetNameConventions(projects []*types.Project) Check {
+func (r *runner) checkTargetNameConventions(projects []*types.Project) types.DoctorCheck {
 	conventions := map[string]string{} // convention -> first "name (file)" example
 	for _, p := range projects {
 		for _, f := range magusfileSourcesInDir(p.Dir) {
@@ -640,9 +641,9 @@ func (r *runner) checkTargetNameConventions(projects []*types.Project) Check {
 		}
 	}
 	if len(conventions) <= 1 {
-		return Check{
+		return types.DoctorCheck{
 			Name:    "target name conventions",
-			Status:  StatusOK,
+			Status:  types.DoctorOK,
 			Message: "target names use a consistent convention",
 		}
 	}
@@ -651,9 +652,9 @@ func (r *runner) checkTargetNameConventions(projects []*types.Project) Check {
 		details = append(details, ex)
 	}
 	slices.Sort(details)
-	return Check{
+	return types.DoctorCheck{
 		Name:   "target name conventions",
-		Status: StatusAdvice,
+		Status: types.DoctorAdvice,
 		Message: fmt.Sprintf("target names mix %d naming conventions; magus normalizes any casing so they "+
 			"all resolve, and picking one keeps invocations consistent and greppable", len(conventions)),
 		Details: details,
@@ -701,7 +702,7 @@ var bespokePhaseFragmentNames = map[string]bool{
 // Reported per project rather than once per name. Two projects that both name a
 // target "security" are two separate decisions, and collapsing them hid the
 // second one behind whichever magusfile happened to be scanned first.
-func (r *runner) checkBespokePhaseFragmentTargets(projects []*types.Project) Check {
+func (r *runner) checkBespokePhaseFragmentTargets(projects []*types.Project) types.DoctorCheck {
 	const name = "bespoke phase-fragment target names"
 	var found []string
 	for _, p := range projects {
@@ -716,12 +717,12 @@ func (r *runner) checkBespokePhaseFragmentTargets(projects []*types.Project) Che
 		}
 	}
 	if len(found) == 0 {
-		return Check{Name: name, Status: StatusOK, Message: "no bespoke phase-fragment target names"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no bespoke phase-fragment target names"}
 	}
 	slices.Sort(found)
-	return Check{
+	return types.DoctorCheck{
 		Name:   name,
-		Status: StatusAdvice,
+		Status: types.DoctorAdvice,
 		Message: fmt.Sprintf(
 			"%d target(s) name static analysis or formatting rather than a phase of their own; "+
 				"composing the op into lint (or format) lets `magus affected ci` cover it "+
@@ -754,7 +755,7 @@ func (r *runner) displayPath(abs string) string {
 // indirectly-dispatched helper, or the identifier used as a value. Such a declaration
 // never enters a cache key, so the target silently under-declares its footprint (a
 // stale-hit risk). A warning, not a load error: an orphan may just be dead code.
-func (r *runner) checkUnreachedFootprintDecls(projects []*types.Project) Check {
+func (r *runner) checkUnreachedFootprintDecls(projects []*types.Project) types.DoctorCheck {
 	const name = "unreached footprint declarations"
 	var details []string
 	for _, p := range projects {
@@ -770,12 +771,12 @@ func (r *runner) checkUnreachedFootprintDecls(projects []*types.Project) Check {
 		}
 	}
 	if len(details) == 0 {
-		return Check{Name: name, Status: StatusOK, Message: "no unreached ctx.readsFiles/writesFiles declarations"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no unreached ctx.readsFiles/writesFiles declarations"}
 	}
 	slices.Sort(details)
-	return Check{
+	return types.DoctorCheck{
 		Name:   name,
-		Status: StatusFail,
+		Status: types.DoctorFail,
 		Message: fmt.Sprintf(
 			"%d ctx.readsFiles/writesFiles call(s) are not statically reachable from a target body, so they never enter a cache key; "+
 				"call them directly in the target body (see %s)",
@@ -787,7 +788,7 @@ func (r *runner) checkUnreachedFootprintDecls(projects []*types.Project) Check {
 // checkRedundantFootprintGlobs is MGS1005: a per-target output glob already
 // present project-wide. Explicit inputs intentionally do not participate because
 // they narrow a target's source footprint even when a glob is also project-wide.
-func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) Check {
+func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) types.DoctorCheck {
 	const name = "redundant footprint globs"
 	var details []string
 	for _, p := range projects {
@@ -805,12 +806,12 @@ func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) Check {
 		}
 	}
 	if len(details) == 0 {
-		return Check{Name: name, Status: StatusOK, Message: "no redundant per-target footprint globs"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no redundant per-target footprint globs"}
 	}
 	slices.Sort(details)
-	return Check{
+	return types.DoctorCheck{
 		Name:   name,
-		Status: StatusFail,
+		Status: types.DoctorFail,
 		Message: fmt.Sprintf(
 			"%d per-target ctx.writesFiles glob(s) duplicate a project-wide declaration; drop the duplicate (see %s)",
 			len(details), types.CodeURL(types.RedundantFootprintGlob)),
@@ -841,11 +842,11 @@ func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) Check {
 // through the back door: it fired on console's `gen/**` on every CI runner while passing on
 // every developer machine, where gen/ had been built. A backend that cannot answer "is this
 // tracked?" cannot tell those apart, so it degrades to plain presence rather than guess.
-func (r *runner) checkDeadOutputGlobs(projects []*types.Project) Check {
+func (r *runner) checkDeadOutputGlobs(projects []*types.Project) types.DoctorCheck {
 	const name = "dead output globs"
 
 	var tracked types.TrackedFileReporter
-	if res, err := vcs.Resolve(context.Background(), r.root, "", r.ws.VCSOptions()); err == nil && res.VCS != nil {
+	if res, err := vcs.Resolve(r.runCtx(), r.root, "", r.ws.VCSOptions()); err == nil && res.VCS != nil {
 		tracked, _ = res.VCS.(types.TrackedFileReporter)
 	}
 
@@ -854,12 +855,12 @@ func (r *runner) checkDeadOutputGlobs(projects []*types.Project) Check {
 		var dead []string
 		builtAny := false
 		for _, glob := range p.Outputs {
-			hits, err := filepath.Glob(filepath.Join(p.Dir, filepath.FromSlash(strings.ReplaceAll(glob, "**", "*"))))
+			hits, err := globOutputs(p.Dir, glob)
 			if err != nil {
 				continue
 			}
 			if len(hits) > 0 {
-				if provesBuilt(tracked, p.Dir, hits) {
+				if provesBuilt(r.runCtx(), tracked, p.Dir, hits) {
 					builtAny = true
 				}
 				continue
@@ -874,12 +875,12 @@ func (r *runner) checkDeadOutputGlobs(projects []*types.Project) Check {
 		}
 	}
 	if len(details) == 0 {
-		return Check{Name: name, Status: StatusOK, Message: "no dead output globs"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no dead output globs"}
 	}
 	slices.Sort(details)
-	return Check{
+	return types.DoctorCheck{
 		Name:   name,
-		Status: StatusFail,
+		Status: types.DoctorFail,
 		Message: fmt.Sprintf(
 			"%d declared output glob(s) never match; a target inheriting one fails its snapshot on a cold cache (see %s)",
 			len(details), types.CodeURL(types.DeadOutputGlob)),
@@ -902,7 +903,7 @@ func (r *runner) checkDeadOutputGlobs(projects []*types.Project) Check {
 // Only DECLARED writes are visible here. A formatter that reformats a tree without
 // declaring ctx.writesFiles is undetectable statically, which is why every formatter in
 // this workspace excludes generated trees by configuration as well.
-func (*runner) checkOutputOwnedByTwoTargets(projects []*types.Project) Check {
+func (*runner) checkOutputOwnedByTwoTargets(projects []*types.Project) types.DoctorCheck {
 	const name = "output ownership"
 	var details []string
 	for _, p := range projects {
@@ -924,17 +925,37 @@ func (*runner) checkOutputOwnedByTwoTargets(projects []*types.Project) Check {
 		}
 	}
 	if len(details) == 0 {
-		return Check{Name: name, Status: StatusOK, Message: "every declared output has one owning target"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "every declared output has one owning target"}
 	}
 	slices.Sort(details)
-	return Check{
+	return types.DoctorCheck{
 		Name:   name,
-		Status: StatusFail,
+		Status: types.DoctorFail,
 		Message: fmt.Sprintf(
 			"%d output glob(s) declared by more than one target; whichever runs last wins and the other's drift gate fails (see %s)",
 			len(details), types.CodeURL(types.OutputOwnedByTwoTargets)),
 		Details: details,
 	}
+}
+
+// globOutputs expands one declared output glob against the project directory, returning
+// absolute paths.
+//
+// doublestar, not filepath.Glob: filepath.Glob's `*` does not cross separators, so the
+// rewrite this replaced (`**` -> `*`) turned `gen/**/*.js` into `gen/*/*.js` and matched
+// nothing two directories deep. A project whose only real output lived at gen/a/b/c.js
+// therefore had that glob reported as dead (MGS1018) - a false positive in the check
+// whose entire design rationale is avoiding them.
+func globOutputs(dir, glob string) ([]string, error) {
+	rels, err := doublestar.Glob(os.DirFS(dir), glob)
+	if err != nil {
+		return nil, err
+	}
+	abs := make([]string, 0, len(rels))
+	for _, rel := range rels {
+		abs = append(abs, filepath.Join(dir, filepath.FromSlash(rel)))
+	}
+	return abs, nil
 }
 
 // provesBuilt reports whether a glob's matches are evidence that the project was actually
@@ -947,7 +968,7 @@ func (*runner) checkOutputOwnedByTwoTargets(projects []*types.Project) Check {
 // A hit set mixing tracked and untracked files reads as "not evidence", which under-reports
 // rather than over-reports - the right way to be wrong for a check whose failure mode is
 // training people to ignore it.
-func provesBuilt(reporter types.TrackedFileReporter, dir string, hits []string) bool {
+func provesBuilt(ctx context.Context, reporter types.TrackedFileReporter, dir string, hits []string) bool {
 	if reporter == nil {
 		return true
 	}
@@ -959,7 +980,7 @@ func provesBuilt(reporter types.TrackedFileReporter, dir string, hits []string) 
 		}
 		rels = append(rels, filepath.ToSlash(rel))
 	}
-	found, err := reporter.TrackedFiles(context.Background(), dir, rels)
+	found, err := reporter.TrackedFiles(ctx, dir, rels)
 	if err != nil {
 		return true
 	}
@@ -1012,7 +1033,7 @@ func declaredTargetNames(path string) []string {
 // Every magusfile is parsed before returning, so one run reports everything wrong
 // rather than stopping at the first failure - what makes it useful in the CI
 // preflight target: one `magus doctor` surfaces all magusfile problems at once.
-func (r *runner) checkMagusfileSyntax(projects []*types.Project) Check {
+func (r *runner) checkMagusfileSyntax(projects []*types.Project) types.DoctorCheck {
 	const name = "magusfile syntax"
 	var problems []string
 	var checked int
@@ -1030,16 +1051,16 @@ func (r *runner) checkMagusfileSyntax(projects []*types.Project) Check {
 		}
 	}
 	if len(problems) == 0 {
-		return Check{
+		return types.DoctorCheck{
 			Name:    name,
-			Status:  StatusOK,
+			Status:  types.DoctorOK,
 			Message: fmt.Sprintf("%d magusfile(s) parse cleanly", checked),
 		}
 	}
 	slices.Sort(problems)
-	return Check{
+	return types.DoctorCheck{
 		Name:    name,
-		Status:  StatusFail,
+		Status:  types.DoctorFail,
 		Message: fmt.Sprintf("%d magusfile(s) have syntax errors", len(problems)),
 		Details: problems,
 	}
@@ -1060,7 +1081,7 @@ func (r *runner) relPath(path string) string {
 // target) versus `magus run build:cd` (the charm). The charm set is magus's
 // reserved built-ins (write, cd) plus every charm a target body branches on via
 // has_charm; collisions are compared on the canonical name both sides normalize to.
-func (r *runner) checkCharmTargetCollision(projects []*types.Project) Check {
+func (r *runner) checkCharmTargetCollision(projects []*types.Project) types.DoctorCheck {
 	targets := map[string]string{} // normalized name -> first raw name seen
 	charms := map[string]string{}  // normalized name -> first raw name seen
 	for _, c := range types.ReservedCharms() {
@@ -1094,16 +1115,16 @@ func (r *runner) checkCharmTargetCollision(projects []*types.Project) Check {
 		}
 	}
 	if len(details) == 0 {
-		return Check{
+		return types.DoctorCheck{
 			Name:    "charm/target name collisions",
-			Status:  StatusOK,
+			Status:  types.DoctorOK,
 			Message: "no charm shares a target name",
 		}
 	}
 	slices.Sort(details)
-	return Check{
+	return types.DoctorCheck{
 		Name:   "charm/target name collisions",
-		Status: StatusFail,
+		Status: types.DoctorFail,
 		Message: fmt.Sprintf("%d charm name(s) also name a target; the `target:charm` suffix "+
 			"makes these ambiguous to read and debug; rename one side", len(details)),
 		Details: details,
@@ -1137,7 +1158,7 @@ func declaredCharmNames(path string) []string {
 // case-variants that collapse onto a real charm (has_charm("no_cache") for
 // "no-cache", has_charm("rw_") for "rw") are correctly treated as live reads, not
 // typos. What remains are genuine misspellings (has_charm("rww") for "rw").
-func (r *runner) checkHasCharmTypos(projects []*types.Project) Check {
+func (r *runner) checkHasCharmTypos(projects []*types.Project) types.DoctorCheck {
 	const name = "has_charm typos"
 
 	// The known-charm vocabulary: magus's reserved built-ins plus every charm any
@@ -1188,12 +1209,12 @@ func (r *runner) checkHasCharmTypos(projects []*types.Project) Check {
 		}
 	}
 	if len(details) == 0 {
-		return Check{Name: name, Status: StatusOK, Message: "no has_charm reads look like typos"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no has_charm reads look like typos"}
 	}
 	slices.Sort(details)
-	return Check{
+	return types.DoctorCheck{
 		Name:    name,
-		Status:  StatusFail,
+		Status:  types.DoctorFail,
 		Message: fmt.Sprintf("%d has_charm read(s) look like a misspelled charm; the guarded branch is dead as written", len(details)),
 		Details: details,
 	}
@@ -1203,19 +1224,19 @@ func (r *runner) checkHasCharmTypos(projects []*types.Project) Check {
 // exists: the deeper spell was moved or renamed, so the acknowledgment and its
 // reason are dead config. Mirrors the unused-distinct check for services, keeping
 // the acknowledged-suppression list honest.
-func (r *runner) checkStaleShadowAcks() Check {
+func (r *runner) checkStaleShadowAcks() types.DoctorCheck {
 	const name = "stale spell-shadow acknowledgments"
 	acks := r.opts.cfg.Spells.AllowShadow
 	if len(acks) == 0 {
-		return Check{Name: name, Status: StatusOK, Message: "no allow_shadow entries"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no allow_shadow entries"}
 	}
 	if r.ws == nil {
-		return Check{Name: name, Status: StatusOK, Message: "workspace not loaded"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "workspace not loaded"}
 	}
 	// r.ws.Root() is the resolved workspace root; r.root can be empty on this path.
 	conflicts, err := project.SpellShadows(r.ws.Root())
 	if err != nil {
-		return Check{Name: name, Status: StatusOK, Message: "spell layout not scanned: " + err.Error()}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "spell layout not scanned: " + err.Error()}
 	}
 	shadowed := make(map[string]struct{}, len(conflicts))
 	for _, c := range conflicts {
@@ -1228,12 +1249,12 @@ func (r *runner) checkStaleShadowAcks() Check {
 		}
 	}
 	if len(details) == 0 {
-		return Check{Name: name, Status: StatusOK, Message: fmt.Sprintf("%d allow_shadow entr(ies), all live", len(acks))}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: fmt.Sprintf("%d allow_shadow entr(ies), all live", len(acks))}
 	}
 	slices.Sort(details)
-	return Check{
+	return types.DoctorCheck{
 		Name:    name,
-		Status:  StatusFail,
+		Status:  types.DoctorFail,
 		Message: fmt.Sprintf("%d allow_shadow entr(ies) no longer match a real shadow; remove them", len(details)),
 		Details: details,
 	}
@@ -1243,10 +1264,10 @@ func (r *runner) checkStaleShadowAcks() Check {
 // loaded in the multi-workspace daemon and how many other workspaces are
 // present. Informational only - a workspace not yet loaded is normal (it
 // loads on first use).
-func (r *runner) checkWorkspaceRegistration() Check {
+func (r *runner) checkWorkspaceRegistration() types.DoctorCheck {
 	d := r.opts.daemonInfo
 	if d == nil || !d.Reachable || len(d.Workspaces) == 0 {
-		return Check{Name: "workspace registration", Status: StatusOK, Message: "no loaded workspaces in daemon"}
+		return types.DoctorCheck{Name: "workspace registration", Status: types.DoctorOK, Message: "no loaded workspaces in daemon"}
 	}
 	thisRoot := r.root
 	if r.ws != nil {
@@ -1265,16 +1286,16 @@ func (r *runner) checkWorkspaceRegistration() Check {
 		details = append(details, fmt.Sprintf("%s  (idle %s)", w.Root, age))
 	}
 	if registered {
-		return Check{
+		return types.DoctorCheck{
 			Name:    "workspace registration",
-			Status:  StatusOK,
+			Status:  types.DoctorOK,
 			Message: fmt.Sprintf("loaded in daemon  (%d workspace(s) total)", len(d.Workspaces)),
 			Details: details,
 		}
 	}
-	return Check{
+	return types.DoctorCheck{
 		Name:    "workspace registration",
-		Status:  StatusOK,
+		Status:  types.DoctorOK,
 		Message: fmt.Sprintf("not yet loaded in daemon  (%d other workspace(s) loaded)", len(d.Workspaces)),
 		Details: details,
 	}
@@ -1283,18 +1304,18 @@ func (r *runner) checkWorkspaceRegistration() Check {
 // checkStaleSockets scans the magus socket directory. Multiple live daemons
 // fail the check; leftover dead sockets are harmless and reported only as
 // context.
-func (r *runner) checkStaleSockets() Check {
+func (r *runner) checkStaleSockets() types.DoctorCheck {
 	sockDir := r.opts.daemonInfo.sockDirOrDefault()
 	if sockDir == "" {
-		return Check{Name: "sockets", Status: StatusOK, Message: "no socket directory"}
+		return types.DoctorCheck{Name: "sockets", Status: types.DoctorOK, Message: "no socket directory"}
 	}
 
 	entries, err := os.ReadDir(sockDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return Check{Name: "sockets", Status: StatusOK, Message: "no socket directory"}
+			return types.DoctorCheck{Name: "sockets", Status: types.DoctorOK, Message: "no socket directory"}
 		}
-		return Check{Name: "sockets", Status: StatusFail, Message: fmt.Sprintf("scan %s: %v", sockDir, err)}
+		return types.DoctorCheck{Name: "sockets", Status: types.DoctorFail, Message: fmt.Sprintf("scan %s: %v", sockDir, err)}
 	}
 
 	var stale, live []string
@@ -1303,7 +1324,7 @@ func (r *runner) checkStaleSockets() Check {
 			continue
 		}
 		p := filepath.Join(sockDir, e.Name())
-		if isSocketAlive(p) {
+		if isSocketAlive(r.runCtx(), p) {
 			live = append(live, p)
 		} else {
 			stale = append(stale, p)
@@ -1311,7 +1332,7 @@ func (r *runner) checkStaleSockets() Check {
 	}
 
 	if len(stale) == 0 && len(live) <= 1 {
-		return Check{Name: "sockets", Status: StatusOK, Message: fmt.Sprintf("%d live socket(s)", len(live))}
+		return types.DoctorCheck{Name: "sockets", Status: types.DoctorOK, Message: fmt.Sprintf("%d live socket(s)", len(live))}
 	}
 
 	var details []string
@@ -1327,16 +1348,16 @@ func (r *runner) checkStaleSockets() Check {
 	// Multiple live daemons is a real conflict; leftover dead sockets are
 	// harmless cruft, so stale-only no longer fails the check.
 	if len(live) > 1 {
-		return Check{
+		return types.DoctorCheck{
 			Name:    "sockets",
-			Status:  StatusFail,
+			Status:  types.DoctorFail,
 			Message: fmt.Sprintf("%d live daemon sockets - multiple daemons running", len(live)),
 			Details: details,
 		}
 	}
-	return Check{
+	return types.DoctorCheck{
 		Name:    "sockets",
-		Status:  StatusOK,
+		Status:  types.DoctorOK,
 		Message: fmt.Sprintf("%d stale socket(s)", len(stale)),
 		Details: details,
 	}
@@ -1352,8 +1373,8 @@ func (d *DaemonInfo) sockDirOrDefault() string {
 
 // isSocketAlive performs a lightweight dial to test whether a Unix-domain
 // socket is connected to a live process.
-func isSocketAlive(path string) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+func isSocketAlive(ctx context.Context, path string) bool {
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "unix", path)
@@ -1365,12 +1386,12 @@ func isSocketAlive(path string) bool {
 }
 
 // checkStaleWorktrees reports orphaned checkout directories under .claude/worktrees.
-func (r *runner) checkStaleWorktrees() Check {
+func (r *runner) checkStaleWorktrees() types.DoctorCheck {
 	return checkStaleWorktrees(r.ws.Root())
 }
 
 // checkSpellContract reports each registered spell's mgs_ contract coverage.
-func (r *runner) checkSpellContract() Check {
+func (r *runner) checkSpellContract() types.DoctorCheck {
 	return checkSpellContract(project.DefaultSpellRegistry().All())
 }
 
@@ -1392,17 +1413,17 @@ func (r *runner) checkSpellContract() Check {
 // The staleness test is deliberately coarse - binary mtime against the newest
 // tracked .go file - because it only has to catch "you edited the guard and did
 // not rebuild", which is the case that actually bites.
-func (r *runner) checkGuardBinary() Check {
+func (r *runner) checkGuardBinary() types.DoctorCheck {
 	const name = "guard binary"
 
 	bin := filepath.Join(r.ws.Root(), "magus")
 	if info, err := os.Stat(bin); err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
 		if found, lookErr := exec.LookPath("magus"); lookErr == nil {
-			return Check{Name: name, Status: StatusOK, Message: "hook would run " + found + " (from PATH; no ./magus built)"}
+			return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "hook would run " + found + " (from PATH; no ./magus built)"}
 		}
-		return Check{
+		return types.DoctorCheck{
 			Name:    name,
-			Status:  StatusFail,
+			Status:  types.DoctorFail,
 			Message: "no ./magus and no magus on PATH, so a guard hook is unenforced",
 			Details: []string{"build one: magus run build ."},
 		}
@@ -1410,13 +1431,13 @@ func (r *runner) checkGuardBinary() Check {
 
 	info, err := os.Stat(bin)
 	if err != nil {
-		return Check{Name: name, Status: StatusFail, Message: err.Error()}
+		return types.DoctorCheck{Name: name, Status: types.DoctorFail, Message: err.Error()}
 	}
 	newest, newestPath := newestGoSource(r.ws.Root())
 	if !newest.IsZero() && info.ModTime().Before(newest) {
-		return Check{
+		return types.DoctorCheck{
 			Name:    name,
-			Status:  StatusFail,
+			Status:  types.DoctorFail,
 			Message: "./magus is older than the working tree, so guard verdicts come from stale rules",
 			Details: []string{
 				"binary:  " + info.ModTime().Format(time.RFC3339),
@@ -1425,7 +1446,7 @@ func (r *runner) checkGuardBinary() Check {
 			},
 		}
 	}
-	return Check{Name: name, Status: StatusOK, Message: "hook would run ./magus, newer than every tracked Go source"}
+	return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "hook would run ./magus, newer than every tracked Go source"}
 }
 
 // newestGoSource returns the modification time of the most recently changed .go
@@ -1495,20 +1516,20 @@ const (
 // Matching HEAD's OWN hash is what keeps it precise. A lockfile pinning some other
 // repository's commit, a vendored dependency, a test fixture full of hashes: none of them
 // contain this repo's current HEAD, so none of them match.
-func (r *runner) checkSelfStalingOutputs(projects []*types.Project) Check {
+func (r *runner) checkSelfStalingOutputs(projects []*types.Project) types.DoctorCheck {
 	const name = "self-staling outputs"
 
-	res, err := vcs.Resolve(context.Background(), r.root, "", r.ws.VCSOptions())
+	res, err := vcs.Resolve(r.runCtx(), r.root, "", r.ws.VCSOptions())
 	if err != nil || res.VCS == nil {
-		return Check{Name: name, Status: StatusOK, Message: "no VCS resolved; nothing to check"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no VCS resolved; nothing to check"}
 	}
 	reporter, ok := res.VCS.(types.TrackedFileReporter)
 	if !ok {
-		return Check{Name: name, Status: StatusOK, Message: fmt.Sprintf("%s cannot report tracked paths; skipped", res.VCS.Name())}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: fmt.Sprintf("%s cannot report tracked paths; skipped", res.VCS.Name())}
 	}
-	meta, err := res.VCS.Metadata(context.Background(), r.root)
+	meta, err := res.VCS.Metadata(r.runCtx(), r.root)
 	if err != nil || meta.Hash == "" {
-		return Check{Name: name, Status: StatusOK, Message: "no commit yet; nothing to check"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no commit yet; nothing to check"}
 	}
 
 	var details []string
@@ -1518,7 +1539,7 @@ func (r *runner) checkSelfStalingOutputs(projects []*types.Project) Check {
 		if len(rels) == 0 {
 			continue
 		}
-		tracked, err := reporter.TrackedFiles(context.Background(), p.Dir, rels)
+		tracked, err := reporter.TrackedFiles(r.runCtx(), p.Dir, rels)
 		if err != nil {
 			continue
 		}
@@ -1535,16 +1556,16 @@ func (r *runner) checkSelfStalingOutputs(projects []*types.Project) Check {
 		}
 	}
 	if len(details) == 0 {
-		return Check{Name: name, Status: StatusOK, Message: "no committed output records the current commit"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no committed output records the current commit"}
 	}
 	slices.Sort(details)
 	total := len(details)
 	if len(details) > selfStalingMaxReported {
 		details = details[:selfStalingMaxReported]
 	}
-	return Check{
+	return types.DoctorCheck{
 		Name:   name,
-		Status: StatusFail,
+		Status: types.DoctorFail,
 		Message: fmt.Sprintf(
 			"%d committed output file(s) record the commit that produced them, so regenerating after a commit always drifts; untrack them or drop the VCS stamp (see %s)",
 			total, types.CodeURL(types.SelfStalingOutput)),
@@ -1559,7 +1580,7 @@ func (r *runner) checkSelfStalingOutputs(projects []*types.Project) Check {
 func declaredOutputFiles(p *types.Project) []string {
 	var rels []string
 	for _, glob := range p.AllOutputs() {
-		hits, err := filepath.Glob(filepath.Join(p.Dir, filepath.FromSlash(strings.ReplaceAll(glob, "**", "*"))))
+		hits, err := globOutputs(p.Dir, glob)
 		if err != nil {
 			continue
 		}

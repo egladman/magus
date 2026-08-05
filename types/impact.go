@@ -3,8 +3,8 @@ package types
 // The impact report, as a domain type rather than an internal one.
 //
 // magus.affectedImpact returns ImpactResult, so a caller reads the affected set and why
-// each project is in it as values. project/impact aliases these back, so the analysis
-// there keeps its own vocabulary.
+// each project is in it as values. project/impact computes the report and names these
+// types directly; there is no second spelling of them anywhere.
 
 // ImpactCoverage is a covered/total statement tally and its ratio (0..1), mirrored from the
 // knowledge graph's @coverage overlay so the impact report carries the raw counts.
@@ -18,13 +18,17 @@ type ImpactCoverage struct {
 // file that defines it, its identity, how many references and distinct referencing files
 // the symbol index recorded, and its covered-statement ratio if a coverage profile is
 // loaded.
+//
+// Coverage is a VALUE, not a pointer, so a caller reads sym.coverage.ratio without a nil
+// guard and the Buzz mirror declares it non-optional. Total == 0 is what "no coverage was
+// observed" means: a symbol the profile covers always has statements to count.
 type ImpactSymbol struct {
-	File      string          `json:"file"               yaml:"file"`
-	Symbol    string          `json:"symbol"             yaml:"symbol"`
-	Label     string          `json:"label,omitempty"    yaml:"label,omitempty"`
-	RefCount  int             `json:"ref_count"          yaml:"ref_count"`
-	FileCount int             `json:"file_count"         yaml:"file_count"`
-	Coverage  *ImpactCoverage `json:"coverage,omitempty" yaml:"coverage,omitempty"`
+	File      string         `json:"file"       yaml:"file"`
+	Symbol    string         `json:"symbol"     yaml:"symbol"`
+	Label     string         `json:"label,omitempty" yaml:"label,omitempty"`
+	RefCount  int            `json:"ref_count"  yaml:"ref_count"`
+	FileCount int            `json:"file_count" yaml:"file_count"`
+	Coverage  ImpactCoverage `json:"coverage"   yaml:"coverage"`
 }
 
 // ImpactFileCoverage is one changed file's observed file-level coverage.

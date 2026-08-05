@@ -303,7 +303,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   const draftPrefs = (): Settings => ({
     // A bare port in the daemon-host field expands to the literal loopback IP (8787 -> 127.0.0.1:8787),
     // so the committed/stored value is a canonical host resolveDaemonHost accepts. Empty stays empty
-    // (loopback default); an unparseable value is kept as-typed so the Test button can report on it.
+    // (loopback default); an unparsable value is kept as-typed so the Test button can report on it.
     poll: draftScalar.poll,
     host: normalizeDaemonHost(draftScalar.host) ?? draftScalar.host.trim(),
     theme: draftScalar.theme,

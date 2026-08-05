@@ -194,16 +194,16 @@ func Affinity(scan []ScannedCommit) []types.CoChange {
 // Ownership reports per-project author concentration, most-concentrated first.
 // staleBefore flags projects whose most recent commit predates it (abandonment risk);
 // pass the zero time to disable the flag.
-func Ownership(scan []ScannedCommit, staleBefore time.Time) []types.Ownership {
+func Ownership(scan []ScannedCommit, staleBefore time.Time) []types.OwnershipEntry {
 	counters := aggCounters(scan, false)
-	out := make([]types.Ownership, 0, len(counters))
+	out := make([]types.OwnershipEntry, 0, len(counters))
 	for p, c := range counters {
 		primary, n := c.primary()
 		share := 0
 		if c.commits > 0 {
 			share = n * 100 / c.commits
 		}
-		out = append(out, types.Ownership{
+		out = append(out, types.OwnershipEntry{
 			Path: p, Commits: c.commits, Authors: len(c.authors),
 			Primary: primary, PrimaryShare: share,
 			BusFactor1: len(c.authors) == 1,
@@ -211,7 +211,7 @@ func Ownership(scan []ScannedCommit, staleBefore time.Time) []types.Ownership {
 			LastCommit: c.last,
 		})
 	}
-	slices.SortFunc(out, func(a, b types.Ownership) int {
+	slices.SortFunc(out, func(a, b types.OwnershipEntry) int {
 		if d := cmp.Compare(b.PrimaryShare, a.PrimaryShare); d != 0 {
 			return d
 		}
@@ -225,7 +225,7 @@ func Ownership(scan []ScannedCommit, staleBefore time.Time) []types.Ownership {
 
 // Trend splits the window at its midpoint and ranks projects by the change in
 // activity between the two halves (rising first).
-func Trend(scan []ScannedCommit) []types.Trend {
+func Trend(scan []ScannedCommit) []types.TrendEntry {
 	mid := midpoint(scan)
 	type halves struct{ recent, earlier int }
 	m := map[string]*halves{}
@@ -243,11 +243,11 @@ func Trend(scan []ScannedCommit) []types.Trend {
 			}
 		}
 	}
-	out := make([]types.Trend, 0, len(m))
+	out := make([]types.TrendEntry, 0, len(m))
 	for p, h := range m {
-		out = append(out, types.Trend{Path: p, Recent: h.recent, Earlier: h.earlier, Delta: h.recent - h.earlier})
+		out = append(out, types.TrendEntry{Path: p, Recent: h.recent, Earlier: h.earlier, Delta: h.recent - h.earlier})
 	}
-	slices.SortFunc(out, func(a, b types.Trend) int {
+	slices.SortFunc(out, func(a, b types.TrendEntry) int {
 		if d := cmp.Compare(b.Delta, a.Delta); d != 0 {
 			return d
 		}

@@ -1079,7 +1079,7 @@ func isWholeTreePathspec(args []string) bool {
 // The guard patterns. [^&|;]* keeps a flag search inside one segment of a
 // compound command, so `git reset && tool --hard-mode` does not false-positive.
 //
-// These remain ONLY as the unparseable-line fallback: gitGuard above is the
+// These remain ONLY as the unparsable-line fallback: gitGuard above is the
 // primary path, and it reads an AST instead of the raw text.
 var (
 	guardStashRe     = regexp.MustCompile(`\bgit\s+stash\b`)

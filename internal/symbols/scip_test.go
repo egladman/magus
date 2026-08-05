@@ -78,7 +78,7 @@ func TestParseIndexTypedRange(t *testing.T) {
 	assert.Equal(t, "pkg/foo/foo.go:11", syms[0].Source, "typed range resolved to the 1-based line, not 0")
 }
 
-func TestParseIndexSkipsLocalAndUnparseable(t *testing.T) {
+func TestParseIndexSkipsLocalAndUnparsable(t *testing.T) {
 	idx := &scip.Index{Documents: []*scip.Document{{
 		RelativePath: "a.go",
 		Occurrences: []*scip.Occurrence{
@@ -89,7 +89,7 @@ func TestParseIndexSkipsLocalAndUnparseable(t *testing.T) {
 	}}}
 	syms, err := ParseIndex(t.Context(), marshalIndex(t, idx), "")
 	require.NoError(t, err)
-	assert.Empty(t, syms, "local, empty, and unparseable monikers all skipped")
+	assert.Empty(t, syms, "local, empty, and unparsable monikers all skipped")
 }
 
 func TestParseIndexRefLineCap(t *testing.T) {

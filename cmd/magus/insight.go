@@ -339,7 +339,7 @@ func insightReport(ctx context.Context, root string, args []string) error {
 	// The run-outcome axis: fold in the volatility lens (best-effort - a history
 	// read error just omits the section rather than failing the whole report).
 	if vr, verr := a.Volatility(ctx); verr == nil {
-		report.Volatility = &vr
+		report.Volatility = vr
 	}
 	// The report spans both axes: add graph stats (best-effort - a graph build
 	// failure just omits the section rather than failing the whole report).

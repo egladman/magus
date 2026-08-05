@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,21 +20,21 @@ func TestCheckLanguageCoverage(t *testing.T) {
 
 	t.Run("all have spell", func(t *testing.T) {
 		got := r.checkLanguageCoverage([]*types.Project{{Spell: "go"}, {Spell: "rust"}})
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 	// Advice, not failure: a project with no toolchain spell is a real and common
 	// shape, and magus does not get to decide it is wrong.
 	t.Run("some missing", func(t *testing.T) {
 		got := r.checkLanguageCoverage([]*types.Project{{Spell: ""}, {Spell: "go"}})
-		assert.Equal(t, StatusAdvice, got.Status, got.Message)
+		assert.Equal(t, types.DoctorAdvice, got.Status, got.Message)
 	})
 	t.Run("all missing", func(t *testing.T) {
 		got := r.checkLanguageCoverage([]*types.Project{{Spell: ""}, {Spell: ""}})
-		assert.Equal(t, StatusAdvice, got.Status, got.Message)
+		assert.Equal(t, types.DoctorAdvice, got.Status, got.Message)
 	})
 	t.Run("empty list", func(t *testing.T) {
 		got := r.checkLanguageCoverage([]*types.Project{})
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 }
 
@@ -51,38 +52,38 @@ func TestCheckCITarget(t *testing.T) {
 
 	t.Run("no projects skipped", func(t *testing.T) {
 		got := (&runner{}).checkCITarget(nil)
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 	t.Run("ci declared", func(t *testing.T) {
 		got := (&runner{}).checkCITarget([]*types.Project{
 			projectWith(map[string]string{"magusfile.buzz": "export fun ci(ctx: magus\\Context, _a: [str]) > void {}\n"}),
 		})
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 	t.Run("ci declared (buzz, any casing)", func(t *testing.T) {
 		got := (&runner{}).checkCITarget([]*types.Project{
 			projectWith(map[string]string{"magusfile.buzz": "export fun CI(ctx: magus\\Context, _a: [str]) > void {}\n"}),
 		})
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 	t.Run("ci declared in one of several projects", func(t *testing.T) {
 		got := (&runner{}).checkCITarget([]*types.Project{
 			projectWith(map[string]string{"magusfile.buzz": "export fun build(ctx: magus\\Context, _a: [str]) > void {}\n"}),
 			projectWith(map[string]string{"magusfile.buzz": "export fun ci(ctx: magus\\Context, _a: [str]) > void {}\n"}),
 		})
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 	t.Run("no ci anywhere fails", func(t *testing.T) {
 		got := (&runner{}).checkCITarget([]*types.Project{
 			projectWith(map[string]string{"magusfile.buzz": "export fun build(ctx: magus\\Context, _a: [str]) > void {}\n"}),
 		})
-		assert.Equal(t, StatusFail, got.Status, got.Message)
+		assert.Equal(t, types.DoctorFail, got.Status, got.Message)
 	})
 	t.Run("cipher is not ci", func(t *testing.T) {
 		got := (&runner{}).checkCITarget([]*types.Project{
 			projectWith(map[string]string{"magusfile.buzz": "export fun cipher(ctx: magus\\Context, _a: [str]) > void {}\n"}),
 		})
-		assert.Equal(t, StatusFail, got.Status, got.Message)
+		assert.Equal(t, types.DoctorFail, got.Status, got.Message)
 	})
 }
 
@@ -92,7 +93,7 @@ func TestCheckCITarget_FailDetails(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "magusfile.buzz"), "export fun build(ctx: magus\\Context, _a: [str]) > void {}\n")
 	got := (&runner{}).checkCITarget([]*types.Project{{Dir: dir}})
-	require.Equal(t, StatusFail, got.Status)
+	require.Equal(t, types.DoctorFail, got.Status)
 	joined := strings.Join(got.Details, "\n")
 	assert.Contains(t, joined, "ctx.needs", "details should show how to define ci")
 	assert.Contains(t, joined, string(types.NoCITarget), "details should reference the doc")
@@ -124,27 +125,27 @@ func TestCheckSpellDocs(t *testing.T) {
 
 	t.Run("no spells", func(t *testing.T) {
 		got := r.checkSpellDocs(nil)
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 	t.Run("exempt spell with no docs", func(t *testing.T) {
 		got := r.checkSpellDocs([]*spells.Spell{exempt})
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 	t.Run("local spell fully documented", func(t *testing.T) {
 		got := r.checkSpellDocs([]*spells.Spell{localComplete})
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 	t.Run("local spell missing a doc", func(t *testing.T) {
 		got := r.checkSpellDocs([]*spells.Spell{localMissing})
-		assert.Equal(t, StatusAdvice, got.Status, got.Message)
+		assert.Equal(t, types.DoctorAdvice, got.Status, got.Message)
 	})
 	t.Run("record-style target exempt", func(t *testing.T) {
 		got := r.checkSpellDocs([]*spells.Spell{recordStyle})
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 	t.Run("exempt does not rescue local", func(t *testing.T) {
 		got := r.checkSpellDocs([]*spells.Spell{exempt, localMissing})
-		assert.Equal(t, StatusAdvice, got.Status, got.Message)
+		assert.Equal(t, types.DoctorAdvice, got.Status, got.Message)
 	})
 }
 
@@ -157,13 +158,13 @@ func TestCheckSpellDocs_Details(t *testing.T) {
 		spells.WithDocRequiredTargets("build", "lint", "test"),
 	)
 	got := (&runner{}).checkSpellDocs([]*spells.Spell{s})
-	require.Equal(t, StatusAdvice, got.Status)
+	require.Equal(t, types.DoctorAdvice, got.Status)
 	assert.Equal(t, []string{"local:lint", "local:test"}, got.Details)
 }
 
 func TestCheckTargetNameConventions(t *testing.T) {
 	// run writes files into a fresh project dir and returns the check result.
-	run := func(files map[string]string) Check {
+	run := func(files map[string]string) types.DoctorCheck {
 		root := t.TempDir()
 		for name, body := range files {
 			path := filepath.Join(root, name)
@@ -176,28 +177,28 @@ func TestCheckTargetNameConventions(t *testing.T) {
 
 	t.Run("consistent snake_case", func(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun go_build(ctx: magus\\Context, _a: [str]) > void {}\nexport fun go_test(ctx: magus\\Context, _a: [str]) > void {}\n"})
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 	t.Run("neutral names only", func(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun build(ctx: magus\\Context, _a: [str]) > void {}\nexport fun test(ctx: magus\\Context, _a: [str]) > void {}\n"})
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 	t.Run("snake and camel mixed", func(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun go_build(ctx: magus\\Context, _a: [str]) > void {}\nexport fun goTest(ctx: magus\\Context, _a: [str]) > void {}\n"})
-		assert.Equal(t, StatusAdvice, got.Status, got.Message)
+		assert.Equal(t, types.DoctorAdvice, got.Status, got.Message)
 	})
 	t.Run("mixed across magusfiles dir", func(t *testing.T) {
 		got := run(map[string]string{
 			"magusfiles/a.buzz": "export fun go_build(ctx: magus\\Context, _a: [str]) > void {}\n",
 			"magusfiles/b.buzz": "export fun GoTest(ctx: magus\\Context, _a: [str]) > void {}\n",
 		})
-		assert.Equal(t, StatusAdvice, got.Status, got.Message)
+		assert.Equal(t, types.DoctorAdvice, got.Status, got.Message)
 	})
 }
 
 func TestCheckBespokePhaseFragmentTargets(t *testing.T) {
 	// run writes files into a fresh project dir and returns the check result.
-	run := func(files map[string]string) Check {
+	run := func(files map[string]string) types.DoctorCheck {
 		root := t.TempDir()
 		for name, body := range files {
 			path := filepath.Join(root, name)
@@ -210,16 +211,16 @@ func TestCheckBespokePhaseFragmentTargets(t *testing.T) {
 
 	t.Run("canonical names only", func(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun build(ctx: magus\\Context, _a: [str]) > void {}\nexport fun lint(ctx: magus\\Context, _a: [str]) > void {}\n"})
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 	t.Run("typecheck flagged", func(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun typecheck(ctx: magus\\Context, _a: [str]) > void {}\n"})
-		require.Equal(t, StatusAdvice, got.Status, got.Message)
+		require.Equal(t, types.DoctorAdvice, got.Status, got.Message)
 		assert.Contains(t, got.Details[0], "typecheck")
 	})
 	t.Run("camelCase typeCheck normalizes to type-check and is flagged", func(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun typeCheck(ctx: magus\\Context, _a: [str]) > void {}\n"})
-		require.Equal(t, StatusAdvice, got.Status, got.Message)
+		require.Equal(t, types.DoctorAdvice, got.Status, got.Message)
 	})
 	t.Run("vet audit security style prettify all flagged", func(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun vet(ctx: magus\\Context, _a: [str]) > void {}\n" +
@@ -227,7 +228,7 @@ func TestCheckBespokePhaseFragmentTargets(t *testing.T) {
 			"export fun security(ctx: magus\\Context, _a: [str]) > void {}\n" +
 			"export fun style(ctx: magus\\Context, _a: [str]) > void {}\n" +
 			"export fun prettify(ctx: magus\\Context, _a: [str]) > void {}\n"})
-		require.Equal(t, StatusAdvice, got.Status, got.Message)
+		require.Equal(t, types.DoctorAdvice, got.Status, got.Message)
 		assert.Len(t, got.Details, 5)
 	})
 
@@ -246,7 +247,7 @@ func TestCheckBespokePhaseFragmentTargets(t *testing.T) {
 			{Path: "web", Dir: filepath.Join(root, "web")},
 			{Path: "docs", Dir: filepath.Join(root, "docs")},
 		})
-		require.Equal(t, StatusAdvice, got.Status, got.Message)
+		require.Equal(t, types.DoctorAdvice, got.Status, got.Message)
 		require.Len(t, got.Details, 2)
 		assert.Contains(t, got.Details[0], "docs/magusfile.buzz")
 		assert.Contains(t, got.Details[1], "web/magusfile.buzz")
@@ -260,14 +261,14 @@ func TestCheckBespokePhaseFragmentTargets(t *testing.T) {
 			[]byte("export fun security(ctx: magus\\Context, _a: [str]) > void {}\n"), 0o644))
 		r := &runner{} // no root, no workspace
 		got := r.checkBespokePhaseFragmentTargets([]*types.Project{{Path: ".", Dir: root}})
-		require.Equal(t, StatusAdvice, got.Status, got.Message)
+		require.Equal(t, types.DoctorAdvice, got.Status, got.Message)
 		require.Len(t, got.Details, 1)
 		assert.Contains(t, got.Details[0], filepath.ToSlash(filepath.Join(root, "magusfile.buzz")))
 	})
 }
 
 func TestCheckUnreachedFootprintDecls(t *testing.T) {
-	run := func(magusfile string) Check {
+	run := func(magusfile string) types.DoctorCheck {
 		root := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
 		r := &runner{root: root}
@@ -276,11 +277,11 @@ func TestCheckUnreachedFootprintDecls(t *testing.T) {
 
 	t.Run("reachable declaration is clean", func(t *testing.T) {
 		got := run("export fun build(ctx: magus\\Context, _a: [str]) > void { ctx.readsFiles(\"src/**\"); }\n")
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 	t.Run("orphan in uncalled helper is flagged", func(t *testing.T) {
 		got := run("export fun build(ctx: magus\\Context, _a: [str]) > void {}\nfun dead() > void { ctx.writesFiles(\"dist/**\"); }\n")
-		require.Equal(t, StatusFail, got.Status, got.Message)
+		require.Equal(t, types.DoctorFail, got.Status, got.Message)
 		assert.Contains(t, got.Details[0], "ctx.writesFiles")
 	})
 }
@@ -291,13 +292,13 @@ func TestCheckRedundantFootprintGlobs(t *testing.T) {
 		p := &types.Project{Path: ".", Sources: []string{"**/*.go"},
 			TargetInputs: map[string][]types.InputRef{"build": {{Project: ".", Glob: "src/**"}}}}
 		got := r.checkRedundantFootprintGlobs([]*types.Project{p})
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 	t.Run("explicit input duplicating a project source is clean", func(t *testing.T) {
 		p := &types.Project{Path: ".", Sources: []string{"src/**"},
 			TargetInputs: map[string][]types.InputRef{"build": {{Project: ".", Glob: "src/**"}}}}
 		got := r.checkRedundantFootprintGlobs([]*types.Project{p})
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 	t.Run("cross-project input is never flagged redundant", func(t *testing.T) {
 		// A cross input's Rel is relative to the OTHER project, so it must not be
@@ -305,13 +306,13 @@ func TestCheckRedundantFootprintGlobs(t *testing.T) {
 		p := &types.Project{Path: "consumer", Sources: []string{"go.mod"},
 			TargetInputs: map[string][]types.InputRef{"build": {{Project: "lib", Glob: "go.mod"}}}}
 		got := r.checkRedundantFootprintGlobs([]*types.Project{p})
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 }
 
 func TestCheckMagusfileSyntax(t *testing.T) {
 	// run writes files into a fresh project dir and returns the check result.
-	run := func(files map[string]string) Check {
+	run := func(files map[string]string) types.DoctorCheck {
 		root := t.TempDir()
 		for name, body := range files {
 			path := filepath.Join(root, name)
@@ -324,19 +325,19 @@ func TestCheckMagusfileSyntax(t *testing.T) {
 
 	t.Run("clean magusfile", func(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun ci(ctx: magus\\Context, _a: [str]) > void {}\n"})
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 
 	t.Run("embedding constructs are allowed", func(t *testing.T) {
 		// Top-level host calls and statements are embedding-only constructs that
 		// upstream-strict parsing rejects; magusfiles parse in embedded mode.
 		got := run(map[string]string{"magusfile.buzz": "magus.info(\"hi\");\nexport fun ci(ctx: magus\\Context, _a: [str]) > void {}\n"})
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 
 	t.Run("syntax error fails", func(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun ci(ctx: magus\\Context, _a: [str]) > void {\n"})
-		assert.Equal(t, StatusFail, got.Status, got.Message)
+		assert.Equal(t, types.DoctorFail, got.Status, got.Message)
 		assert.NotEmpty(t, got.Details, "expected the offending file in details")
 	})
 
@@ -345,19 +346,19 @@ func TestCheckMagusfileSyntax(t *testing.T) {
 			"magusfiles/a.buzz": "export fun a(ctx: magus\\Context, _a: [str]) > void {\n", // broken
 			"magusfiles/b.buzz": "export fun b(ctx: magus\\Context, _a: [str]) > void {\n", // broken
 		})
-		require.Equal(t, StatusFail, got.Status, got.Message)
+		require.Equal(t, types.DoctorFail, got.Status, got.Message)
 		assert.Len(t, got.Details, 2, "both broken magusfiles should be reported in one pass")
 	})
 
 	t.Run("no projects ok", func(t *testing.T) {
 		got := (&runner{}).checkMagusfileSyntax(nil)
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 }
 
 func TestCheckCharmTargetCollision(t *testing.T) {
 	// run writes files into a fresh project dir and returns the check result.
-	run := func(files map[string]string) Check {
+	run := func(files map[string]string) types.DoctorCheck {
 		root := t.TempDir()
 		for name, body := range files {
 			require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(body), 0o644))
@@ -368,24 +369,24 @@ func TestCheckCharmTargetCollision(t *testing.T) {
 
 	t.Run("no charms, no collision", func(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun build(ctx: magus\\Context, _a: [str]) > void {}\n"})
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 	t.Run("charm distinct from every target", func(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun build(ctx: magus\\Context, _a: [str]) > void { ctx.has_charm(\"container\"); }\n"})
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 	t.Run("body charm shares a target name", func(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun container(ctx: magus\\Context, _a: [str]) > void {}\nexport fun build(ctx: magus\\Context, _a: [str]) > void { ctx.has_charm(\"container\"); }\n"})
-		assert.Equal(t, StatusFail, got.Status, got.Message)
+		assert.Equal(t, types.DoctorFail, got.Status, got.Message)
 	})
 	t.Run("target named like a reserved charm", func(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun cd(ctx: magus\\Context, _a: [str]) > void {}\n"})
-		assert.Equal(t, StatusFail, got.Status, got.Message)
+		assert.Equal(t, types.DoctorFail, got.Status, got.Message)
 	})
 }
 
 func TestCheckHasCharmTypos(t *testing.T) {
-	run := func(body string) Check {
+	run := func(body string) types.DoctorCheck {
 		root := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(body), 0o644))
 		r := &runner{root: root}
@@ -393,21 +394,21 @@ func TestCheckHasCharmTypos(t *testing.T) {
 	}
 
 	t.Run("no has_charm reads", func(t *testing.T) {
-		assert.Equal(t, StatusOK, run("export fun build(ctx: magus\\Context, _a: [str]) > void {}\n").Status)
+		assert.Equal(t, types.DoctorOK, run("export fun build(ctx: magus\\Context, _a: [str]) > void {}\n").Status)
 	})
 	t.Run("live read of a reserved charm", func(t *testing.T) {
-		assert.Equal(t, StatusOK, run("export fun b(ctx: magus\\Context, _a: [str]) > void { ctx.has_charm(\"rw\"); }\n").Status)
+		assert.Equal(t, types.DoctorOK, run("export fun b(ctx: magus\\Context, _a: [str]) > void { ctx.has_charm(\"rw\"); }\n").Status)
 	})
 	t.Run("separator variant of a real charm is live, not a typo", func(t *testing.T) {
 		// has_charm("rw_") normalizes to "rw", so the branch is live and must not flag.
-		assert.Equal(t, StatusOK, run("export fun b(ctx: magus\\Context, _a: [str]) > void { ctx.has_charm(\"rw_\"); }\n").Status)
+		assert.Equal(t, types.DoctorOK, run("export fun b(ctx: magus\\Context, _a: [str]) > void { ctx.has_charm(\"rw_\"); }\n").Status)
 	})
 	t.Run("novel undeclared charm has no near match, so no flag", func(t *testing.T) {
-		assert.Equal(t, StatusOK, run("export fun b(ctx: magus\\Context, _a: [str]) > void { ctx.has_charm(\"container\"); }\n").Status)
+		assert.Equal(t, types.DoctorOK, run("export fun b(ctx: magus\\Context, _a: [str]) > void { ctx.has_charm(\"container\"); }\n").Status)
 	})
 	t.Run("misspelling of a real charm is flagged", func(t *testing.T) {
 		got := run("export fun b(ctx: magus\\Context, _a: [str]) > void { ctx.has_charm(\"rww\"); }\n")
-		assert.Equal(t, StatusFail, got.Status, got.Message)
+		assert.Equal(t, types.DoctorFail, got.Status, got.Message)
 		require.Len(t, got.Details, 1)
 		assert.Contains(t, got.Details[0], "rww")
 		assert.Contains(t, got.Details[0], "rw")
@@ -424,14 +425,14 @@ func TestCheckEnvVars(t *testing.T) {
 		}
 		r := &runner{}
 		got := r.checkEnvVars()
-		assert.Equal(t, StatusOK, got.Status, got.Details)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Details)
 	})
 
 	t.Run("typo'd var", func(t *testing.T) {
 		t.Setenv("MAGUS_CACHE_MOD", "auto")
 		r := &runner{}
 		got := r.checkEnvVars()
-		assert.Equal(t, StatusFail, got.Status)
+		assert.Equal(t, types.DoctorFail, got.Status)
 		assert.Contains(t, got.Details, "MAGUS_CACHE_MOD")
 	})
 }
@@ -444,7 +445,7 @@ func TestCheckConfigFile(t *testing.T) {
 		root := t.TempDir()
 		r := &runner{root: root}
 		got := r.checkConfigFile()
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 		assert.Contains(t, got.Message, "defaults")
 	})
 
@@ -453,7 +454,7 @@ func TestCheckConfigFile(t *testing.T) {
 		writeFile(t, filepath.Join(root, "magus.yaml"), "log:\n  format: json\n")
 		r := &runner{root: root}
 		got := r.checkConfigFile()
-		assert.Equal(t, StatusOK, got.Status, got.Details)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Details)
 	})
 
 	t.Run("unknown key", func(t *testing.T) {
@@ -461,7 +462,7 @@ func TestCheckConfigFile(t *testing.T) {
 		writeFile(t, filepath.Join(root, "magus.yaml"), "chace:\n  size_mb: 100\n")
 		r := &runner{root: root}
 		got := r.checkConfigFile()
-		assert.Equal(t, StatusFail, got.Status)
+		assert.Equal(t, types.DoctorFail, got.Status)
 		assert.NotEmpty(t, got.Details, "expected at least one detail line")
 	})
 
@@ -470,7 +471,7 @@ func TestCheckConfigFile(t *testing.T) {
 		writeFile(t, filepath.Join(root, "magus.yaml"), "cache:\n  mode: turbo\n")
 		r := &runner{root: root}
 		got := r.checkConfigFile()
-		assert.Equal(t, StatusFail, got.Status)
+		assert.Equal(t, types.DoctorFail, got.Status)
 	})
 
 	t.Run("dotted filename", func(t *testing.T) {
@@ -478,7 +479,7 @@ func TestCheckConfigFile(t *testing.T) {
 		writeFile(t, filepath.Join(root, ".magus.yaml"), "log:\n  format: text\n")
 		r := &runner{root: root}
 		got := r.checkConfigFile()
-		assert.Equal(t, StatusOK, got.Status, got.Details)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Details)
 	})
 }
 
@@ -487,7 +488,7 @@ func TestCheckCacheWritable(t *testing.T) {
 		root := t.TempDir()
 		r := &runner{root: root, opts: options{cfg: config.Config{}}}
 		got := r.checkCacheWritable()
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 		assert.Contains(t, got.Message, root)
 		_, err := os.Stat(filepath.Join(root, ".magus"))
 		assert.NoError(t, err, "cache dir not created")
@@ -498,7 +499,7 @@ func TestCheckCacheWritable(t *testing.T) {
 		cacheDir := t.TempDir()
 		r := &runner{root: root, opts: options{cfg: config.Config{Cache: config.Cache{Dir: cacheDir}}}}
 		got := r.checkCacheWritable()
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 		assert.Contains(t, got.Message, cacheDir)
 	})
 
@@ -513,7 +514,7 @@ func TestCheckCacheWritable(t *testing.T) {
 		t.Cleanup(func() { _ = os.Chmod(cacheDir, 0o755) })
 		r := &runner{root: root, opts: options{cfg: config.Config{Cache: config.Cache{Dir: cacheDir}}}}
 		got := r.checkCacheWritable()
-		assert.Equal(t, StatusFail, got.Status, got.Message)
+		assert.Equal(t, types.DoctorFail, got.Status, got.Message)
 	})
 }
 
@@ -524,30 +525,30 @@ func TestCheckVCSBaseRef(t *testing.T) {
 
 	t.Run("disabled", func(t *testing.T) {
 		f := false
-		got := checkVCSBaseRef(t.TempDir(), types.VCSOptions{Enabled: &f})
-		assert.Equal(t, StatusOK, got.Status)
+		got := checkVCSBaseRef(context.Background(), t.TempDir(), types.VCSOptions{Enabled: &f})
+		assert.Equal(t, types.DoctorOK, got.Status)
 	})
 
 	t.Run("valid HEAD ref", func(t *testing.T) {
 		root := makeGitRepo(t)
 		t.Setenv("MAGUS_VCS_BASE_REF", "HEAD")
-		got := checkVCSBaseRef(root, types.VCSOptions{})
-		assert.Equal(t, StatusOK, got.Status, got.Details)
+		got := checkVCSBaseRef(context.Background(), root, types.VCSOptions{})
+		assert.Equal(t, types.DoctorOK, got.Status, got.Details)
 	})
 
 	t.Run("bogus ref fails", func(t *testing.T) {
 		root := makeGitRepo(t)
 		t.Setenv("MAGUS_VCS_BASE_REF", "refs/does/not/exist")
-		got := checkVCSBaseRef(root, types.VCSOptions{})
-		assert.Equal(t, StatusFail, got.Status)
+		got := checkVCSBaseRef(context.Background(), root, types.VCSOptions{})
+		assert.Equal(t, types.DoctorFail, got.Status)
 	})
 
 	t.Run("detached HEAD ok when base_ref resolves", func(t *testing.T) {
 		root := makeGitRepo(t)
 		runCmd(t, root, "git", "checkout", "--detach", "HEAD")
 		t.Setenv("MAGUS_VCS_BASE_REF", "HEAD")
-		got := checkVCSBaseRef(root, types.VCSOptions{})
-		assert.Equal(t, StatusOK, got.Status)
+		got := checkVCSBaseRef(context.Background(), root, types.VCSOptions{})
+		assert.Equal(t, types.DoctorOK, got.Status)
 	})
 }
 
@@ -583,7 +584,7 @@ func TestCheckSymlinks(t *testing.T) {
 		root := canonicalTempDir(t)
 		mustMkdir(t, filepath.Join(root, "api"))
 		got := checkSymlinks(root)
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 
 	t.Run("in-tree symlink is ok", func(t *testing.T) {
@@ -591,7 +592,7 @@ func TestCheckSymlinks(t *testing.T) {
 		mustMkdir(t, filepath.Join(root, "api"))
 		mustSymlink(t, "api", filepath.Join(root, "alias"))
 		got := checkSymlinks(root)
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 
 	t.Run("escaping symlink fails", func(t *testing.T) {
@@ -599,14 +600,14 @@ func TestCheckSymlinks(t *testing.T) {
 		outside := canonicalTempDir(t)
 		mustSymlink(t, outside, filepath.Join(root, "escape"))
 		got := checkSymlinks(root)
-		assert.Equal(t, StatusFail, got.Status, got.Message)
+		assert.Equal(t, types.DoctorFail, got.Status, got.Message)
 	})
 
 	t.Run("dangling symlink to outside fails", func(t *testing.T) {
 		root := canonicalTempDir(t)
 		mustSymlink(t, "../../nonexistent", filepath.Join(root, "escape"))
 		got := checkSymlinks(root)
-		assert.Equal(t, StatusFail, got.Status, got.Message)
+		assert.Equal(t, types.DoctorFail, got.Status, got.Message)
 	})
 
 	t.Run("symlinks inside ignore dirs are skipped", func(t *testing.T) {
@@ -616,7 +617,7 @@ func TestCheckSymlinks(t *testing.T) {
 		mustMkdir(t, gitDir)
 		mustSymlink(t, outside, filepath.Join(gitDir, "escape"))
 		got := checkSymlinks(root)
-		assert.Equal(t, StatusOK, got.Status, "ignore dir not scanned: "+got.Message)
+		assert.Equal(t, types.DoctorOK, got.Status, "ignore dir not scanned: "+got.Message)
 	})
 }
 
@@ -651,7 +652,7 @@ func TestCheckNearDuplicateServices(t *testing.T) {
 
 	t.Run("clean when no services", func(t *testing.T) {
 		got := (&runner{}).checkNearDuplicateServices(nil)
-		assert.Equal(t, StatusOK, got.Status)
+		assert.Equal(t, types.DoctorOK, got.Status)
 	})
 
 	t.Run("flags near-duplicates", func(t *testing.T) {
@@ -659,7 +660,7 @@ func TestCheckNearDuplicateServices(t *testing.T) {
 			dbProject("web", "-e", "POSTGRES_DB=api", "-p", "5432:5432", "postgres:15"),
 			dbProject("billing", "-e", "POSTGRES_DB=billing", "-p", "5432:5432", "postgres:15"),
 		})
-		assert.Equal(t, StatusFail, got.Status)
+		assert.Equal(t, types.DoctorFail, got.Status)
 		assert.Contains(t, strings.Join(got.Details, "\n"), "MGS5001")
 	})
 
@@ -668,7 +669,7 @@ func TestCheckNearDuplicateServices(t *testing.T) {
 			dbProject("a", "-p", "5432:5432", "postgres:15"),
 			dbProject("b", "-p", "5432:5432", "postgres:15"),
 		})
-		assert.Equal(t, StatusOK, got.Status)
+		assert.Equal(t, types.DoctorOK, got.Status)
 	})
 }
 
@@ -687,7 +688,7 @@ func TestCheckGraphBounds(t *testing.T) {
 
 	t.Run("no committed graph passes", func(t *testing.T) {
 		got := checkGraphBounds(t.TempDir())
-		assert.Equal(t, StatusOK, got.Status)
+		assert.Equal(t, types.DoctorOK, got.Status)
 	})
 
 	t.Run("in-workspace nodes pass", func(t *testing.T) {
@@ -695,14 +696,14 @@ func TestCheckGraphBounds(t *testing.T) {
 			{"id":"file:cmd/magus/vcs.go","kind":"file","label":"cmd/magus/vcs.go","source":"cmd/magus/vcs.go"},
 			{"id":"dir:cmd/magus","kind":"dir","label":"cmd/magus","source":"cmd/magus"}]}`)
 		got := checkGraphBounds(root)
-		assert.Equal(t, StatusOK, got.Status)
+		assert.Equal(t, types.DoctorOK, got.Status)
 	})
 
 	t.Run("escaping dir node fails", func(t *testing.T) {
 		root := write(t, `{"nodes":[
 			{"id":"dir:../../../../../Library/Caches/go-build/01","kind":"dir","label":"../../../../../Library/Caches/go-build/01","source":"../../../../../Library/Caches/go-build/01"}]}`)
 		got := checkGraphBounds(root)
-		assert.Equal(t, StatusFail, got.Status)
+		assert.Equal(t, types.DoctorFail, got.Status)
 		assert.Contains(t, got.Details, "dir:../../../../../Library/Caches/go-build/01")
 	})
 
@@ -711,7 +712,7 @@ func TestCheckGraphBounds(t *testing.T) {
 		// check reading Source alone would wave these through.
 		root := write(t, `{"nodes":[{"id":"file:../escape.go","kind":"file","label":"../escape.go"}]}`)
 		got := checkGraphBounds(root)
-		assert.Equal(t, StatusFail, got.Status)
+		assert.Equal(t, types.DoctorFail, got.Status)
 	})
 
 	t.Run("import specifiers are exempt", func(t *testing.T) {
@@ -719,11 +720,11 @@ func TestCheckGraphBounds(t *testing.T) {
 		// records what the code says rather than a path magus resolved.
 		root := write(t, `{"nodes":[{"id":"import:../../badge","kind":"import","label":"../../badge"}]}`)
 		got := checkGraphBounds(root)
-		assert.Equal(t, StatusOK, got.Status)
+		assert.Equal(t, types.DoctorOK, got.Status)
 	})
 
 	t.Run("unreadable graph fails loudly", func(t *testing.T) {
 		got := checkGraphBounds(write(t, "not json"))
-		assert.Equal(t, StatusFail, got.Status)
+		assert.Equal(t, types.DoctorFail, got.Status)
 	})
 }
