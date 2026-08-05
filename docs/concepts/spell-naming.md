@@ -21,7 +21,7 @@ them exist and none can be changed cheaply.
 For a spell adapting domain `D`, and an op that runs binary `B` with subcommand
 chain `C`:
 
-```
+```text
 spell name = D                     D is a domain, never a binary
 
 op name    = kebab(C)              if B is substitutable per project

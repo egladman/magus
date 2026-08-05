@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2581,
-  "edge_count": 5855,
+  "edge_count": 5856,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -37105,6 +37105,14 @@
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1024.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1024.md",
+      "target": "spell:golang",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
       "provenance": "docs/reference/codes/magusfile/MGS1024.md"
     },
     {

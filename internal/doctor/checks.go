@@ -937,8 +937,9 @@ func probeCoverageFindings(spec spells.Descriptor) []string {
 // A warning, not a load error: the workspace still runs.
 func (*runner) checkSpellOpNaming([]*types.Project) Check {
 	const name = "spell op naming"
-	var details []string
-	for _, spec := range spellruntime.Builtins() {
+	builtins := spellruntime.Builtins()
+	details := make([]string, 0, len(builtins))
+	for _, spec := range builtins {
 		details = append(details, namingFindings(spec)...)
 	}
 	if len(details) == 0 {
