@@ -416,11 +416,18 @@ func TestCheckHasCharmTypos(t *testing.T) {
 
 func TestCheckEnvVars(t *testing.T) {
 	t.Run("no unknown vars", func(t *testing.T) {
+		// UNSET, not set-to-empty: checkEnvVars scans os.Environ() by KEY, so
+		// t.Setenv(k, "") leaves the variable present and the isolation does
+		// nothing. This test read the ambient environment for real until CI
+		// exported three MAGUS_* vars and failed it. t.Setenv has no unset form,
+		// so restore by hand.
 		for _, kv := range os.Environ() {
-			if strings.HasPrefix(kv, "MAGUS_") {
-				k := strings.SplitN(kv, "=", 2)[0]
-				t.Setenv(k, "")
+			if !strings.HasPrefix(kv, "MAGUS_") {
+				continue
 			}
+			k, v, _ := strings.Cut(kv, "=")
+			require.NoError(t, os.Unsetenv(k))
+			t.Cleanup(func() { _ = os.Setenv(k, v) })
 		}
 		r := &runner{}
 		got := r.checkEnvVars()
