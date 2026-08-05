@@ -150,10 +150,25 @@ type VersionKey struct {
 	Const string `json:"const,omitempty"`
 	// UpTo narrows the probed version to the component that matters.
 	UpTo VersionComponent `json:"upTo,omitempty"`
+	// Verbatim keys on the WHOLE trimmed probe output, skipping extraction.
+	//
+	// For a tool whose version command reports more than its version, extraction is
+	// actively wrong: govulncheck prints the Go version first, the scanner version
+	// second, and the vulnerability database's last-modified date last. First-match
+	// extraction picks the Go version, and - far worse - discards the DB date, which
+	// is the field that decides whether a verdict still holds. A new CVE would then
+	// land in the database while magus replayed the cached pass.
+	//
+	// This is what magus did for every probe before extraction existed, and what it
+	// still falls back to when nothing version-shaped is found. Verbatim makes it a
+	// declaration rather than an accident. When set, UpTo is ignored.
+	Verbatim bool `json:"verbatim,omitempty"`
 }
 
 // IsZero reports whether the key asks for anything beyond the exact version.
-func (k VersionKey) IsZero() bool { return k.Const == "" && k.UpTo == VersionExact }
+func (k VersionKey) IsZero() bool {
+	return k.Const == "" && k.UpTo == VersionExact && !k.Verbatim
+}
 
 // VersionToken reduces a probe's raw output to the string that enters the cache key,
 // and returns a note when it had to degrade.
@@ -167,6 +182,9 @@ func VersionToken(output string, key VersionKey) (token string, note string) {
 	}
 
 	raw := strings.TrimSpace(output)
+	if key.Verbatim {
+		return raw, ""
+	}
 	probed, ok := ExtractVersion(raw)
 	if !ok {
 		// Nothing version-shaped. The whole output is the token, which is exactly what

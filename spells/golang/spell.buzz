@@ -30,6 +30,18 @@ export fun mgs_getVersionCommands() > {str: [str]} {
     };
 }
 
+// govulncheck's verdict does not depend on its binary alone: it reports findings from
+// the Go vulnerability DATABASE, and `govulncheck -version` prints that database's
+// last-modified date alongside the Go and scanner versions. Extracting a semver from
+// that output picks the GO version (it is printed first) and throws the database date
+// away, so a newly published CVE would leave every cached pass replaying unchanged.
+// Keying on the whole output is the only correct answer here.
+export fun mgs_getVersionKeys() > {str: VersionKey} {
+    return {
+        "govulncheck": VersionKey{verbatim = true},
+    };
+}
+
 export fun mgs_getLanguage() > str { return "go"; }
 
 export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "vendor", isDir = true}]; }
