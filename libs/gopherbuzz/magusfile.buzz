@@ -79,7 +79,10 @@ export fun mod_sync(ctx: magus\Context, args: [str]) > void {
     // linguist-generated in .gitattributes - none of which is true of a go.mod. Matches
     // the root magusfile's mod-sync; see MGS1020 for the two-owner form of this mistake.
     ctx.modifiesExistingFiles("go.mod");
-    final flags = gomod\replaceArgs(golang["go-mod-edit-json"](ctx).stdout, modules: workspace_go_mods(ctx));
+    // The op declares returns_json, so its `json` member is already decoded - read the
+    // module path straight off it instead of handing the helper a string to re-parse.
+    final current = golang["go-mod-edit-json"](ctx).json;
+    final flags = gomod\replaceArgs(current.q(["Module", "Path"]).stringValue(), modules: workspace_go_mods(ctx));
     if (flags.len() == 0) { return; }
     final edited = golang["go-mod-edit"](ctx, {"args": flags});
     if (ctx.has_charm("rw")) { return; }

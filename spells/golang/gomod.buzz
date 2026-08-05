@@ -38,8 +38,14 @@ fun sorted_keys(values: {str: any}) > [str] {
 // `go mod edit -json` result for a workspace module, captured by the go spell in the
 // caller's context. Only replacements whose old path names a workspace module are
 // touched; third-party replacements are deliberately preserved.
-export fun replaceArgs(currentJSON: str, modules: [any]) > [str] {
-	final currentName = serialize\jsonDecode(currentJSON).q(["Module", "Path"]).stringValue();
+// currentPath is THIS module's path, already read off the go-mod-edit-json op's
+// decoded `json` member by the caller. It used to be the raw JSON string, which this
+// function then decoded a second time - once here for the path, once below for the
+// requires - even though the op had already parsed it. Taking the path instead lets
+// the caller use the decode magus performed and leaves one decode in this function
+// rather than two.
+export fun replaceArgs(currentPath: str, modules: [any]) > [str] {
+	final currentName = currentPath;
     var current: any = null;
     var byPath: {str: any} = mut {};
     foreach (mod in modules) {

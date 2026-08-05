@@ -731,7 +731,10 @@ export fun mod_sync(ctx: magus\Context, args: [str]) > void {
     // pre-release go.mod straight over the version bump `release` had just written - the
     // two-owners hazard MGS1020 reports. As a modification it still hashes into the key.
     ctx.modifiesExistingFiles("go.mod");
-    final flags = gomod\replaceArgs(golang["go-mod-edit-json"](ctx).stdout, modules: workspace_go_mods(ctx));
+    // The op declares returns_json, so its `json` member is already decoded - read the
+    // module path straight off it instead of handing the helper a string to re-parse.
+    final current = golang["go-mod-edit-json"](ctx).json;
+    final flags = gomod\replaceArgs(current.q(["Module", "Path"]).stringValue(), modules: workspace_go_mods(ctx));
     if (flags.len() == 0) { return; }
     final edited = golang["go-mod-edit"](ctx, {"args": flags});
     if (ctx.has_charm("rw")) { return; }
