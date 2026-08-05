@@ -27,7 +27,10 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Fixed
 
-- **A defined type over a basic kind crossed into Buzz as `null`.** A type switch matches
+- **A defined type over a basic kind crossed into Buzz as `null`.** Now guarded by a
+  test that crosses every runtime boundary type, with the list generated from the same
+  registry that emits the Buzz mirrors - so a new boundary type is covered when it is
+  declared rather than when someone remembers. A type switch matches
   on type identity, not underlying type, so a field typed `types.DoctorCheckStatus` or
   `types.TargetRunState` matched no case and arrived as null - `doctor().checks[0].status`
   read null rather than `"ok"`, while the SDK guidance told callers to branch on exactly

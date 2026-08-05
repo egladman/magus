@@ -2,6 +2,7 @@ package main
 
 //go:generate go run . enums -package types -out ../../types/enum_gen.go
 //go:generate go run . enums -package spells -out ../../spells/enum_gen.go
+//go:generate go run . boundarylist -out ../../internal/interp/bindings/gen/boundary_list.go
 
 import (
 	"reflect"

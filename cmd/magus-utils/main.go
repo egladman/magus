@@ -22,6 +22,7 @@ import (
 var scribes = map[string]func(args []string) error{
 	"types":              runTypes,
 	"enums":              runEnums,
+	"boundarylist":       runBoundaryList,
 	"buzzobjects":        runBuzzObjects,
 	"bindings":           runBindings,
 	"completions":        runCompletions,
