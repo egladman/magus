@@ -43,12 +43,33 @@ var boundaryTypes = []boundaryType{
 	{Name: "TargetGraphNode", Type: reflect.TypeFor[types.TargetGraphNode](), RuntimeObject: true},
 	{Name: "TargetGraphProject", Type: reflect.TypeFor[types.TargetGraphProject](), RuntimeObject: true},
 	{Name: "TargetGraph", Type: reflect.TypeFor[types.TargetGraphOutput](), RuntimeObject: true},
+	// A run and the targets in it, as magus already models them for `magus status`:
+	// per-target state (queued/running/passed/failed/cached), duration, and the output
+	// ref each one minted. Mirrored so a caller can ITERATE a run - `t.state == "failed"`
+	// then `t.outputRef` - instead of parsing magus's own console output back out of a
+	// string. TargetRun precedes Run: Run.targets is a list of it.
+	{Name: "TargetRun", Type: reflect.TypeFor[types.StatusTargetRun](), RuntimeObject: true},
+	{Name: "Run", Type: reflect.TypeFor[types.StatusRun](), RuntimeObject: true},
 }
 
 type boundaryType struct {
 	Name          string
 	Type          reflect.Type
 	RuntimeObject bool
+}
+
+// buzzNameFor returns the BUZZ name a Go type mirrors as, which is the registry key
+// and not always the Go type's own name: types.ProjectsOutput is `Projects`,
+// types.StatusTargetRun is `TargetRun`. A struct-valued field must reference the Buzz
+// name, so the registry is what resolves it - falling back to the Go name only for a
+// type no entry claims, which the caller then reports as undeclared.
+func buzzNameFor(rt reflect.Type) string {
+	for _, entry := range boundaryTypes {
+		if entry.Type == rt {
+			return entry.Name
+		}
+	}
+	return rt.Name()
 }
 
 func boundaryTypeNamed(name string) (boundaryType, bool) {

@@ -284,3 +284,40 @@ func (v TargetGraphOutput) BuzzObject() BuzzObject {
 		"projects": items30,
 	}
 }
+
+func (v StatusTargetRun) BuzzObject() BuzzObject {
+	formatted32 := ""
+	if !v.StartedAt.IsZero() {
+		formatted32 = v.StartedAt.Format(time.RFC3339)
+	}
+	formatted33 := ""
+	if !v.EndedAt.IsZero() {
+		formatted33 = v.EndedAt.Format(time.RFC3339)
+	}
+	return BuzzObject{
+		"project":    v.Project,
+		"target":     v.Target,
+		"state":      v.State,
+		"startedAt":  formatted32,
+		"endedAt":    formatted33,
+		"outputRef":  v.OutputRef,
+		"durationMs": v.DurationMs,
+	}
+}
+
+func (v StatusRun) BuzzObject() BuzzObject {
+	formatted34 := ""
+	if !v.StartedAt.IsZero() {
+		formatted34 = v.StartedAt.Format(time.RFC3339)
+	}
+	items35 := make([]any, len(v.Targets))
+	for index36 := range v.Targets {
+		items35[index36] = v.Targets[index36].BuzzObject()
+	}
+	return BuzzObject{
+		"inv":       v.Inv,
+		"trigger":   v.Trigger,
+		"startedAt": formatted34,
+		"targets":   items35,
+	}
+}

@@ -175,3 +175,20 @@ var TargetGraphProjectSource string
 //go:generate go run ../../cmd/magus-utils types -type TargetGraph -out gen/types/targetgraph.buzz
 //go:embed gen/types/targetgraph.buzz
 var TargetGraphSource string
+
+// TargetRunSource / RunSource are the generated Buzz mirrors of one run and the
+// targets in it (types.StatusTargetRun and types.StatusRun), the same shape
+// `magus status` reports. They exist so a caller can ITERATE a run - each target's
+// state (queued/running/passed/failed/cached), how long it took, and the output ref
+// it minted - rather than parsing magus's own console output back out of a string.
+//
+// TargetRun precedes Run, because Run.targets is a list of it and a struct-valued
+// field mirrors as its bare type name, which must already be declared.
+//
+//go:generate go run ../../cmd/magus-utils types -type TargetRun -out gen/types/targetrun.buzz
+//go:embed gen/types/targetrun.buzz
+var TargetRunSource string
+
+//go:generate go run ../../cmd/magus-utils types -type Run -out gen/types/run.buzz
+//go:embed gen/types/run.buzz
+var RunSource string
