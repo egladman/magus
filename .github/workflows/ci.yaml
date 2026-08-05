@@ -56,13 +56,14 @@ jobs:
           TAG="$(gh release view --repo egladman/magus --json tagName -q .tagName)"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
+      # install stays ON (the default). With install: false the action adds the shims
+      # directory to PATH and computes the exported PATH BEFORE any tool exists, so a
+      # later `mise install` step put pnpm and node somewhere no subsequent step could
+      # see - `os.exec pnpm: exit -1`, the child never launching. Letting the action do
+      # the install also re-enables its cache: it only saves when it installed.
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
         with:
           version: '2026.4.8'
-          install: false
-
-      - name: Install the pinned toolchain
-        run: mise install
 
       # Builds the magus this very commit defines, from the checkout above, so a
       # change that magusfile.buzz needs is exercised by the run that introduces
@@ -117,13 +118,14 @@ jobs:
       - name: Set history path
         run: echo "MAGUS_HISTORY_PATH=$RUNNER_TEMP/magus-history.json" >> "$GITHUB_ENV"
 
+      # install stays ON (the default). With install: false the action adds the shims
+      # directory to PATH and computes the exported PATH BEFORE any tool exists, so a
+      # later `mise install` step put pnpm and node somewhere no subsequent step could
+      # see - `os.exec pnpm: exit -1`, the child never launching. Letting the action do
+      # the install also re-enables its cache: it only saves when it installed.
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
         with:
           version: '2026.4.8'
-          install: false
-
-      - name: Install the pinned toolchain
-        run: mise install
 
       # Builds the magus this very commit defines, from the checkout above, so a
       # change that magusfile.buzz needs is exercised by the run that introduces
@@ -195,13 +197,14 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
+      # install stays ON (the default). With install: false the action adds the shims
+      # directory to PATH and computes the exported PATH BEFORE any tool exists, so a
+      # later `mise install` step put pnpm and node somewhere no subsequent step could
+      # see - `os.exec pnpm: exit -1`, the child never launching. Letting the action do
+      # the install also re-enables its cache: it only saves when it installed.
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
         with:
           version: '2026.4.8'
-          install: false
-
-      - name: Install the pinned toolchain
-        run: mise install
 
       - name: Install codec build dependencies
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
@@ -257,13 +260,14 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
+      # install stays ON (the default). With install: false the action adds the shims
+      # directory to PATH and computes the exported PATH BEFORE any tool exists, so a
+      # later `mise install` step put pnpm and node somewhere no subsequent step could
+      # see - `os.exec pnpm: exit -1`, the child never launching. Letting the action do
+      # the install also re-enables its cache: it only saves when it installed.
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
         with:
           version: '2026.4.8'
-          install: false
-
-      - name: Install the pinned toolchain
-        run: mise install
 
       - uses: ./.github/actions/setup-magus
         with:
@@ -305,13 +309,14 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
+      # install stays ON (the default). With install: false the action adds the shims
+      # directory to PATH and computes the exported PATH BEFORE any tool exists, so a
+      # later `mise install` step put pnpm and node somewhere no subsequent step could
+      # see - `os.exec pnpm: exit -1`, the child never launching. Letting the action do
+      # the install also re-enables its cache: it only saves when it installed.
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
         with:
           version: '2026.4.8'
-          install: false
-
-      - name: Install the pinned toolchain
-        run: mise install
 
       # The docs render drives its generators through `go run`, which compiles
       # internal/codec with cgo and needs liblzma/libzstd.
@@ -368,13 +373,14 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
+      # install stays ON (the default). With install: false the action adds the shims
+      # directory to PATH and computes the exported PATH BEFORE any tool exists, so a
+      # later `mise install` step put pnpm and node somewhere no subsequent step could
+      # see - `os.exec pnpm: exit -1`, the child never launching. Letting the action do
+      # the install also re-enables its cache: it only saves when it installed.
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
         with:
           version: '2026.4.8'
-          install: false
-
-      - name: Install the pinned toolchain
-        run: mise install
 
       # Full history + tags: the image bakes version()/commit()/build_date() in via
       # ldflags, and git describe has to be able to reach the nearest tag.
