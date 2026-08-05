@@ -473,11 +473,11 @@ func printRefIdentitySuggestion(ctx context.Context, m *magus.Magus, ref string)
 		fmt.Fprintf(os.Stderr, "Once you know which target it should be: %s\n", clihint.DescribeTargets.With("<target>", "--cache", "--against", ref))
 	case 1:
 		fmt.Fprintln(os.Stderr, "Nothing has produced it here, but this workspace would print it for:")
-		fmt.Fprintf(os.Stderr, "  %s\n", clihint.RefMatchCommand(matches[0], globalCfg.DefaultCharms))
+		fmt.Fprintf(os.Stderr, "  %s\n", m.RefMatchCommand(matches[0]))
 	default:
 		fmt.Fprintln(os.Stderr, "Nothing has produced it here, but this workspace would print it for any of:")
 		for _, mt := range matches {
-			fmt.Fprintf(os.Stderr, "  %s\n", clihint.RefMatchCommand(mt, globalCfg.DefaultCharms))
+			fmt.Fprintf(os.Stderr, "  %s\n", m.RefMatchCommand(mt))
 		}
 	}
 	// Reachable from every branch, not just the zero-match one: even a matched target

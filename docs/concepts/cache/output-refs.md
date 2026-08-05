@@ -110,7 +110,7 @@ with identical file contents key identically. The recorded revision names
 whichever commit the FIRST run to mint this key happened to be on, which can
 differ from HEAD even on a cache hit whose bytes reproduce perfectly - checking
 out that commit is not the fix for a mismatch. Whether the key still matches is
-the question that matters, and
+the question that matters. This command answers it:
 
 ```sh
 magus describe target build . --cache --against out4ef30de6abcd

@@ -14,9 +14,10 @@ import (
 )
 
 // fakeOutputReader is a hand-built outputReader: it returns canned bytes and a
-// descriptor, or a chosen error, from OutputByRef, and canned matches, or a chosen
-// error, from IdentifyRef - so outputTool.Invoke is unit-testable without a real
-// workspace cache.
+// descriptor, or a chosen error, from OutputByRef, canned matches, or a chosen
+// error, from IdentifyRef, and a caller-supplied rendering from RefMatchCommand -
+// so outputTool.Invoke is unit-testable without a real workspace cache or
+// *magus.Magus.
 type fakeOutputReader struct {
 	data []byte
 	desc cache.OutputDescriptor
@@ -24,6 +25,11 @@ type fakeOutputReader struct {
 
 	identifyMatches []types.RefMatch
 	identifyErr     error
+
+	// refMatchCommand renders a RefMatch, mirroring *magus.Magus.RefMatchCommand's
+	// contract. Tests set it directly to the expected rendering rather than
+	// replicating IdentifyRef's key-computation logic in the fake.
+	refMatchCommand func(types.RefMatch) string
 }
 
 func (f fakeOutputReader) OutputByRef(string) ([]byte, cache.OutputDescriptor, error) {
@@ -32,6 +38,13 @@ func (f fakeOutputReader) OutputByRef(string) ([]byte, cache.OutputDescriptor, e
 
 func (f fakeOutputReader) IdentifyRef(context.Context, string) ([]types.RefMatch, error) {
 	return f.identifyMatches, f.identifyErr
+}
+
+func (f fakeOutputReader) RefMatchCommand(mt types.RefMatch) string {
+	if f.refMatchCommand != nil {
+		return f.refMatchCommand(mt)
+	}
+	return ""
 }
 
 // TestOutputToolRequiredParam covers the guard that returns before any store access.
@@ -108,16 +121,36 @@ func TestOutputToolInvokeNotExistNoMatch(t *testing.T) {
 }
 
 // TestOutputToolInvokeNotExistOneMatch covers the single-match branch: the message
-// names the exact `magus run` command that would produce the ref, rendered via
-// clihint.RefMatchCommand with the tool's configured defaultCharms.
+// names the exact `magus run` command the reader's RefMatchCommand renders for it.
 func TestOutputToolInvokeNotExistOneMatch(t *testing.T) {
 	reader := fakeOutputReader{
 		err:             fs.ErrNotExist,
 		identifyMatches: []types.RefMatch{{Project: ".", Target: "build"}},
+		refMatchCommand: func(types.RefMatch) string { return "magus run build" },
 	}
-	_, err := (&outputTool{reader: reader, defaultCharms: []string{"rw"}}).Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"ref": "out1a2b3c"}})
+	_, err := (&outputTool{reader: reader}).Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"ref": "out1a2b3c"}})
 	assert.ErrorContains(t, err, "no stored output for ref")
-	assert.ErrorContains(t, err, "magus run build --no-default-charms")
+	assert.ErrorContains(t, err, "magus run build")
+}
+
+// TestOutputToolInvokeNotExistOneMatchBareVariantUnreachable covers the case the
+// second review round flagged: when RefMatchCommand's rendering required
+// --no-default-charms (the match is the bare CI variant of a target in a
+// workspace with configured default_charms), the message must say plainly that
+// magus_run_target cannot reproduce this ref - there is no --no-default-charms
+// escape hatch over MCP (see run.go's effectiveCharms), so an MCP-only agent
+// following the command as literally printed would apply the workspace's
+// defaults anyway and mint a different ref.
+func TestOutputToolInvokeNotExistOneMatchBareVariantUnreachable(t *testing.T) {
+	reader := fakeOutputReader{
+		err:             fs.ErrNotExist,
+		identifyMatches: []types.RefMatch{{Project: ".", Target: "ci"}},
+		refMatchCommand: func(types.RefMatch) string { return "magus run ci --no-default-charms" },
+	}
+	_, err := (&outputTool{reader: reader}).Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"ref": "out1a2b3c"}})
+	assert.ErrorContains(t, err, "magus run ci --no-default-charms")
+	assert.ErrorContains(t, err, "magus_run_target always applies")
+	assert.ErrorContains(t, err, "cannot reproduce it")
 }
 
 // TestOutputToolInvokeNotExistSeveralMatches covers the multi-match branch: every
@@ -128,6 +161,12 @@ func TestOutputToolInvokeNotExistSeveralMatches(t *testing.T) {
 		identifyMatches: []types.RefMatch{
 			{Project: ".", Target: "build"},
 			{Project: "pkg/a", Target: "lint"},
+		},
+		refMatchCommand: func(mt types.RefMatch) string {
+			if mt.Project == "." {
+				return "magus run build"
+			}
+			return "magus run lint pkg/a"
 		},
 	}
 	_, err := (&outputTool{reader: reader}).Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"ref": "out1a2b3c"}})

@@ -11,18 +11,12 @@
 // It is nested under internal/interactive - the hints home (interactive.Emit and
 // the "did you mean" suggester) - since these command references exist to be shown
 // in hints; keeping it here rather than a top-level package co-locates the two.
-// It does NOT import its parent interactive, which pulls in project/codec and would
-// reintroduce a cycle through the low-level cache handler (which already depends on
-// this package). It does import types for RefMatchCommand below - types is itself a
-// low-dependency leaf (spells, libs/diagnostics only) that does not reach back to
-// this package or the cache handler, so that stays cycle-free too.
+// It stays a stdlib-only leaf (it does NOT import its parent interactive, which pulls
+// in project/codec/types), so both the low-level cache handler and the CLI can depend
+// on it without a cycle.
 package clihint
 
-import (
-	"strings"
-
-	"github.com/egladman/magus/types"
-)
+import "strings"
 
 // Command is a canonical magus command path (the tokens after "magus"). Values
 // are declared once below; call sites render them with String or With.
@@ -88,29 +82,4 @@ var All = []Command{
 	Run, QueryOutput, GraphOpen, GraphExport, GraphStats, GraphBuild,
 	ServerStart, ServerStop, ServerJob, Status, Watch, Affected,
 	DescribeTargets, DescribeProject, Ls, LsTargets, Where, MCPTokenGenerate,
-}
-
-// RefMatchCommand renders a types.RefMatch as the "magus run" invocation that would
-// key it: the target name (with a :charm1,charm2 suffix when the match required
-// explicit charms), the project (omitted for the workspace root "."), and
-// --no-default-charms when the match required the bare CI variant while
-// defaultCharms - the workspace's own configured default_charms - is non-empty, since
-// the workspace's defaults would otherwise apply and mint a different key.
-//
-// Shared by cmd/magus/query.go's ref-lookup suggestion and internal/handler/mcp's
-// magus_output not-found fallback, so the CLI and the MCP surface render the exact
-// same reproduce command instead of two copies that can drift.
-func RefMatchCommand(mt types.RefMatch, defaultCharms []string) string {
-	target := mt.Target
-	if len(mt.Charms) > 0 {
-		target += ":" + strings.Join(mt.Charms, ",")
-	}
-	args := []string{target}
-	if mt.Project != "." {
-		args = append(args, mt.Project)
-	}
-	if len(mt.Charms) == 0 && len(defaultCharms) > 0 {
-		args = append(args, "--no-default-charms")
-	}
-	return Run.With(args...)
 }

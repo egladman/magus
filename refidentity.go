@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/types"
 )
 
@@ -127,4 +128,35 @@ func (m *Magus) IdentifyRef(ctx context.Context, ref string) ([]types.RefMatch, 
 		return strings.Join(a.Charms, ",") < strings.Join(b.Charms, ",")
 	})
 	return matches, nil
+}
+
+// RefMatchCommand renders a types.RefMatch (as returned by IdentifyRef) as the
+// "magus run" invocation that would key it: the target name (with a
+// :charm1,charm2 suffix when the match required explicit charms), the project
+// (omitted for the workspace root "."), and --no-default-charms when the match
+// required the bare CI variant while m.cfg.DefaultCharms is non-empty, since the
+// workspace's configured defaults would otherwise apply and mint a different key.
+//
+// It is a method on *Magus, not a free function, so it reads m.cfg.DefaultCharms
+// itself rather than taking it as a parameter a caller could pass stale or out of
+// sync with the *Magus that produced the match in the first place.
+//
+// Shared by cmd/magus/query.go's ref-lookup suggestion and internal/handler/mcp's
+// magus_output not-found fallback, so the CLI and the MCP surface render the exact
+// same reproduce command instead of two copies that can drift. It renders the
+// "magus run" prefix via clihint.Run so the command path itself stays
+// single-sourced with every other canonical command reference.
+func (m *Magus) RefMatchCommand(mt types.RefMatch) string {
+	target := mt.Target
+	if len(mt.Charms) > 0 {
+		target += ":" + strings.Join(mt.Charms, ",")
+	}
+	args := []string{target}
+	if mt.Project != "." {
+		args = append(args, mt.Project)
+	}
+	if len(mt.Charms) == 0 && len(m.cfg.DefaultCharms) > 0 {
+		args = append(args, "--no-default-charms")
+	}
+	return clihint.Run.With(args...)
 }

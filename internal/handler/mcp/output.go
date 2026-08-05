@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -21,11 +20,14 @@ import (
 // project (no ref needed). Both read straight from the cache dir.
 
 // outputReader is the slice of the workspace magus_output needs: resolve a
-// target-output ref to its stored bytes and descriptor, and (on a miss) invert
-// the ref back to the target(s) that would produce it. *magus.Magus satisfies it.
+// target-output ref to its stored bytes and descriptor, invert the ref back to
+// the target(s) that would produce it (on a miss), and render one of those
+// matches as the `magus run` command that would reproduce it. *magus.Magus
+// satisfies it.
 type outputReader interface {
 	OutputByRef(ref string) ([]byte, cache.OutputDescriptor, error)
 	IdentifyRef(ctx context.Context, ref string) ([]types.RefMatch, error)
+	RefMatchCommand(mt types.RefMatch) string
 }
 
 // outputTool (magus_output) retrieves one target execution's captured output by its
@@ -33,10 +35,6 @@ type outputReader interface {
 // not a mode of magus_query, so a free-text graph query can never collide with a ref id.
 type outputTool struct {
 	reader outputReader
-	// defaultCharms is the workspace's configured default_charms, threaded through to
-	// clihint.RefMatchCommand so a not-found suggestion renders --no-default-charms
-	// exactly when the CLI's own suggestion would.
-	defaultCharms []string
 }
 
 func (t *outputTool) Name() string { return "magus_output" }
@@ -98,6 +96,14 @@ func (t *outputTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spel
 //
 // If IdentifyRef itself errors, cause's plain message is kept as-is: a best-effort
 // suggestion must never replace a lookup failure with a different one.
+//
+// Unlike the CLI, there is no --no-default-charms escape hatch over MCP: run.go's
+// effectiveCharms always merges the workspace's configured default_charms into
+// magus_run_target, so a command rendered with that flag (the match required the
+// bare CI variant) names a `magus run` invocation this MCP surface cannot itself
+// execute. bareVariantUnreachable flags that case so the message says so plainly
+// instead of sending an MCP-only agent after a command it will run, silently get
+// the wrong ref from, and have no explanation why.
 func (t *outputTool) notFoundError(ctx context.Context, ref string, cause error) error {
 	plain := fmt.Errorf("mcp: no stored output for ref %q: %w", ref, cause)
 	matches, err := t.reader.IdentifyRef(ctx, ref)
@@ -108,14 +114,38 @@ func (t *outputTool) notFoundError(ctx context.Context, ref string, cause error)
 	case 0:
 		return fmt.Errorf("mcp: no stored output for ref %q: no target in this workspace keys to that ref at the current tree, so the run that printed it had different inputs", ref)
 	case 1:
-		return fmt.Errorf("mcp: no stored output for ref %q: this workspace would produce it with `%s`", ref, clihint.RefMatchCommand(matches[0], t.defaultCharms))
+		cmd := t.reader.RefMatchCommand(matches[0])
+		msg := fmt.Sprintf("mcp: no stored output for ref %q: this workspace would produce it with `%s`", ref, cmd)
+		if bareVariantUnreachable(cmd) {
+			msg += "; " + noDefaultCharmsNote
+		}
+		return errors.New(msg)
 	default:
 		cmds := make([]string, len(matches))
+		anyUnreachable := false
 		for i, mt := range matches {
-			cmds[i] = clihint.RefMatchCommand(mt, t.defaultCharms)
+			cmds[i] = t.reader.RefMatchCommand(mt)
+			anyUnreachable = anyUnreachable || bareVariantUnreachable(cmds[i])
 		}
-		return fmt.Errorf("mcp: no stored output for ref %q: this workspace would produce it with any of: %s", ref, strings.Join(cmds, "; "))
+		msg := fmt.Sprintf("mcp: no stored output for ref %q: this workspace would produce it with any of: %s", ref, strings.Join(cmds, "; "))
+		if anyUnreachable {
+			msg += "; " + noDefaultCharmsNote
+		}
+		return errors.New(msg)
 	}
+}
+
+// noDefaultCharmsNote is the one sentence added to a not-found message when a
+// rendered command required --no-default-charms: this MCP surface has no
+// equivalent flag, so magus_run_target cannot reproduce that ref.
+const noDefaultCharmsNote = "this ref was minted without the workspace's default charms, which magus_run_target always applies, so that tool cannot reproduce it"
+
+// bareVariantUnreachable reports whether cmd is a RefMatchCommand rendering that
+// required --no-default-charms. Detecting this from the rendered string (rather
+// than re-deriving "bare match + configured defaults" independently) keeps
+// RefMatchCommand the single source of that decision.
+func bareVariantUnreachable(cmd string) bool {
+	return strings.Contains(cmd, "--no-default-charms")
 }
 
 type tailResult struct {

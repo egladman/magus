@@ -153,3 +153,52 @@ func TestIdentifyRef_NoCachePropagatesError(t *testing.T) {
 	_, err = m.IdentifyRef(context.Background(), "out123456789012")
 	assert.ErrorIs(t, err, types.ErrNoCache, "IdentifyRef on a cache-free workspace")
 }
+
+// TestRefMatchCommand covers the renderings cmd/magus/query.go's ref-lookup
+// suggestion and internal/handler/mcp's magus_output not-found fallback both rely
+// on: root-project omission, a charm suffix on a match that required explicit
+// charms, and --no-default-charms on a bare match in a workspace with configured
+// defaults, read from m.cfg.DefaultCharms rather than passed in.
+func TestRefMatchCommand(t *testing.T) {
+	cases := []struct {
+		name          string
+		mt            types.RefMatch
+		defaultCharms []string
+		want          string
+	}{
+		{
+			name: "root project omitted",
+			mt:   types.RefMatch{Project: ".", Target: "build"},
+			want: "magus run build",
+		},
+		{
+			name: "non-root project named",
+			mt:   types.RefMatch{Project: "pkg/a", Target: "build"},
+			want: "magus run build pkg/a",
+		},
+		{
+			name: "explicit charms suffix, no --no-default-charms",
+			mt:   types.RefMatch{Project: ".", Target: "build", Charms: []string{"rw"}},
+			want: "magus run build:rw",
+		},
+		{
+			name:          "bare match with configured defaults gets --no-default-charms",
+			mt:            types.RefMatch{Project: ".", Target: "build"},
+			defaultCharms: []string{"rw"},
+			want:          "magus run build --no-default-charms",
+		},
+		{
+			name: "bare match with no configured defaults",
+			mt:   types.RefMatch{Project: ".", Target: "build"},
+			want: "magus run build",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m := newIdentityWorkspace(t, c.defaultCharms...)
+			if got := m.RefMatchCommand(c.mt); got != c.want {
+				t.Errorf("RefMatchCommand(%+v) = %q, want %q", c.mt, got, c.want)
+			}
+		})
+	}
+}
