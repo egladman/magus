@@ -58,14 +58,14 @@ func (v %s) Values() []string { return []string{%s} }
 
 // Valid reports whether v is a declared %s. The zero value is valid: it means the
 // field was not set, which callers distinguish from a wrong value.
+//
+// A switch rather than a scan over Values: Values allocates a fresh slice per call so
+// its result can never be mutated by a caller, which is the right trade for a helper
+// that builds an error message and the wrong one for a predicate.
 func (v %s) Valid() bool {
-	if v == "" {
+	switch v {
+	case %s:
 		return true
-	}
-	for _, s := range v.Values() {
-		if string(v) == s {
-			return true
-		}
 	}
 	return false
 }
@@ -77,7 +77,7 @@ func (v %s) String() string {
 	}
 	return string(v)
 }
-`, name, name, strings.Join(vals, ", "), name, name, name)
+`, name, name, strings.Join(vals, ", "), name, name, strings.Join(append([]string{`""`}, vals...), ", "), name)
 	}
 	if emitted == 0 {
 		return fmt.Errorf("no boundary enums declared in package %q", *pkg)

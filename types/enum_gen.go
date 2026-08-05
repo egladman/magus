@@ -7,14 +7,14 @@ func (v DoctorCheckStatus) Values() []string { return []string{"ok", "fail", "ad
 
 // Valid reports whether v is a declared DoctorCheckStatus. The zero value is valid: it means the
 // field was not set, which callers distinguish from a wrong value.
+//
+// A switch rather than a scan over Values: Values allocates a fresh slice per call so
+// its result can never be mutated by a caller, which is the right trade for a helper
+// that builds an error message and the wrong one for a predicate.
 func (v DoctorCheckStatus) Valid() bool {
-	if v == "" {
+	switch v {
+	case "", "ok", "fail", "advice":
 		return true
-	}
-	for _, s := range v.Values() {
-		if string(v) == s {
-			return true
-		}
 	}
 	return false
 }
@@ -34,14 +34,14 @@ func (v EventOutcome) Values() []string {
 
 // Valid reports whether v is a declared EventOutcome. The zero value is valid: it means the
 // field was not set, which callers distinguish from a wrong value.
+//
+// A switch rather than a scan over Values: Values allocates a fresh slice per call so
+// its result can never be mutated by a caller, which is the right trade for a helper
+// that builds an error message and the wrong one for a predicate.
 func (v EventOutcome) Valid() bool {
-	if v == "" {
+	switch v {
+	case "", "waiting", "permission", "failed", "finished", "diagnostic", "update", "other":
 		return true
-	}
-	for _, s := range v.Values() {
-		if string(v) == s {
-			return true
-		}
 	}
 	return false
 }
@@ -59,14 +59,14 @@ func (v EventSeverity) Values() []string { return []string{"info", "notice", "wa
 
 // Valid reports whether v is a declared EventSeverity. The zero value is valid: it means the
 // field was not set, which callers distinguish from a wrong value.
+//
+// A switch rather than a scan over Values: Values allocates a fresh slice per call so
+// its result can never be mutated by a caller, which is the right trade for a helper
+// that builds an error message and the wrong one for a predicate.
 func (v EventSeverity) Valid() bool {
-	if v == "" {
+	switch v {
+	case "", "info", "notice", "warning", "critical":
 		return true
-	}
-	for _, s := range v.Values() {
-		if string(v) == s {
-			return true
-		}
 	}
 	return false
 }
@@ -84,14 +84,14 @@ func (v PatternType) Values() []string { return []string{"glob", "regex", "liter
 
 // Valid reports whether v is a declared PatternType. The zero value is valid: it means the
 // field was not set, which callers distinguish from a wrong value.
+//
+// A switch rather than a scan over Values: Values allocates a fresh slice per call so
+// its result can never be mutated by a caller, which is the right trade for a helper
+// that builds an error message and the wrong one for a predicate.
 func (v PatternType) Valid() bool {
-	if v == "" {
+	switch v {
+	case "", "glob", "regex", "literal":
 		return true
-	}
-	for _, s := range v.Values() {
-		if string(v) == s {
-			return true
-		}
 	}
 	return false
 }
@@ -111,14 +111,14 @@ func (v SymbolIndexFreshness) Values() []string {
 
 // Valid reports whether v is a declared SymbolIndexFreshness. The zero value is valid: it means the
 // field was not set, which callers distinguish from a wrong value.
+//
+// A switch rather than a scan over Values: Values allocates a fresh slice per call so
+// its result can never be mutated by a caller, which is the right trade for a helper
+// that builds an error message and the wrong one for a predicate.
 func (v SymbolIndexFreshness) Valid() bool {
-	if v == "" {
+	switch v {
+	case "", "up-to-date", "out-of-date", "not-indexed":
 		return true
-	}
-	for _, s := range v.Values() {
-		if string(v) == s {
-			return true
-		}
 	}
 	return false
 }
@@ -138,14 +138,14 @@ func (v TargetRunState) Values() []string {
 
 // Valid reports whether v is a declared TargetRunState. The zero value is valid: it means the
 // field was not set, which callers distinguish from a wrong value.
+//
+// A switch rather than a scan over Values: Values allocates a fresh slice per call so
+// its result can never be mutated by a caller, which is the right trade for a helper
+// that builds an error message and the wrong one for a predicate.
 func (v TargetRunState) Valid() bool {
-	if v == "" {
+	switch v {
+	case "", "queued", "running", "passed", "failed", "cached":
 		return true
-	}
-	for _, s := range v.Values() {
-		if string(v) == s {
-			return true
-		}
 	}
 	return false
 }
@@ -163,14 +163,14 @@ func (v VCSSource) Values() []string { return []string{"explicit", "auto", "defa
 
 // Valid reports whether v is a declared VCSSource. The zero value is valid: it means the
 // field was not set, which callers distinguish from a wrong value.
+//
+// A switch rather than a scan over Values: Values allocates a fresh slice per call so
+// its result can never be mutated by a caller, which is the right trade for a helper
+// that builds an error message and the wrong one for a predicate.
 func (v VCSSource) Valid() bool {
-	if v == "" {
+	switch v {
+	case "", "explicit", "auto", "default", "disabled":
 		return true
-	}
-	for _, s := range v.Values() {
-		if string(v) == s {
-			return true
-		}
 	}
 	return false
 }
@@ -188,14 +188,14 @@ func (v ConflictKind) Values() []string { return []string{"content", "deleted", 
 
 // Valid reports whether v is a declared ConflictKind. The zero value is valid: it means the
 // field was not set, which callers distinguish from a wrong value.
+//
+// A switch rather than a scan over Values: Values allocates a fresh slice per call so
+// its result can never be mutated by a caller, which is the right trade for a helper
+// that builds an error message and the wrong one for a predicate.
 func (v ConflictKind) Valid() bool {
-	if v == "" {
+	switch v {
+	case "", "content", "deleted", "both-deleted":
 		return true
-	}
-	for _, s := range v.Values() {
-		if string(v) == s {
-			return true
-		}
 	}
 	return false
 }
@@ -213,14 +213,14 @@ func (v PlatformSensitivity) Values() []string { return []string{"dependent", "i
 
 // Valid reports whether v is a declared PlatformSensitivity. The zero value is valid: it means the
 // field was not set, which callers distinguish from a wrong value.
+//
+// A switch rather than a scan over Values: Values allocates a fresh slice per call so
+// its result can never be mutated by a caller, which is the right trade for a helper
+// that builds an error message and the wrong one for a predicate.
 func (v PlatformSensitivity) Valid() bool {
-	if v == "" {
+	switch v {
+	case "", "dependent", "independent":
 		return true
-	}
-	for _, s := range v.Values() {
-		if string(v) == s {
-			return true
-		}
 	}
 	return false
 }

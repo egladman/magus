@@ -9,14 +9,14 @@ func (v PatchOpKind) Values() []string {
 
 // Valid reports whether v is a declared PatchOpKind. The zero value is valid: it means the
 // field was not set, which callers distinguish from a wrong value.
+//
+// A switch rather than a scan over Values: Values allocates a fresh slice per call so
+// its result can never be mutated by a caller, which is the right trade for a helper
+// that builds an error message and the wrong one for a predicate.
 func (v PatchOpKind) Valid() bool {
-	if v == "" {
+	switch v {
+	case "", "add", "remove", "replace", "move", "copy", "test":
 		return true
-	}
-	for _, s := range v.Values() {
-		if string(v) == s {
-			return true
-		}
 	}
 	return false
 }
@@ -34,14 +34,14 @@ func (v VersionComponent) Values() []string { return []string{"major", "minor", 
 
 // Valid reports whether v is a declared VersionComponent. The zero value is valid: it means the
 // field was not set, which callers distinguish from a wrong value.
+//
+// A switch rather than a scan over Values: Values allocates a fresh slice per call so
+// its result can never be mutated by a caller, which is the right trade for a helper
+// that builds an error message and the wrong one for a predicate.
 func (v VersionComponent) Valid() bool {
-	if v == "" {
+	switch v {
+	case "", "major", "minor", "patch":
 		return true
-	}
-	for _, s := range v.Values() {
-		if string(v) == s {
-			return true
-		}
 	}
 	return false
 }
