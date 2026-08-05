@@ -1,0 +1,418 @@
+// Shared plumbing for the PR advisors: environment reads, and the one comment they all
+// write into.
+//
+// ONE comment per pull request, not one per advisor. Each advisor owns a SECTION of it,
+// delimited by its own begin/end markers, and replaces only that section - so a reader
+// gets a single place to look and a single notification, while the advisors stay
+// separate scripts with separate steps.
+//
+// A section is RETRACTED when its advisor has nothing to say. That is what makes the
+// comment trustworthy across pushes: fix the conflicts and the conflict section
+// disappears on the next run, rather than lingering as a stale scold.
+import "os";
+import "fs";
+import "time";
+import "serialize";
+import "std";
+
+// The comment marker identifies OUR comment among everyone else's. Never rendered.
+final comment_marker = "<!-- magus:advice -->";
+
+// env reads a variable, returning "" rather than null so callers can compare directly.
+export fun env(name: str) > str {
+    final v = os\env(name);
+    if (v == null) { return ""; }
+    return "" + v;
+}
+
+export fun beginMarker(name: str) > str { return "<!-- magus:advice:" + name + ":begin -->"; }
+export fun endMarker(name: str) > str { return "<!-- magus:advice:" + name + ":end -->"; }
+
+// The preface. A reader landing on this comment in someone else's repository has no idea
+// what left it, and an unsigned bot comment is the kind people report as spam. It says
+// who is talking, that none of it blocks the merge, and where to complain.
+//
+// It also links THIS run's summary, which carries the insight report and the graphs the
+// comment deliberately leaves out: a comment should stay short enough to read, and the
+// run page is already the right home for everything a reader might want next.
+fun preface() > str {
+    var text = "### magus\n\n"
+        + "magus read this pull request against the workspace's build graph: what each "
+        + "project declares, and what depends on it. The notes below are what that turned "
+        + "up. Each is collapsed; open the ones that concern you.\n\n"
+        + "**None of this blocks the merge.** The checks do that. Each note is something "
+        + "the graph knows and a diff cannot show. If one does not apply here, label it "
+        + "away and it disappears.\n";
+    final repo = env("REPO");
+    final run = env("GITHUB_RUN_ID");
+    if (repo != "" and run != "") {
+        text = text + "\nHotspots, ownership, volatility and the dependency graph for this "
+            + "run: [run summary](https://github.com/" + repo + "/actions/runs/" + run + ").\n";
+    }
+    return text;
+}
+
+// The glossary. Terminology a reader may not share gets a deep link on FIRST mention,
+// the same courtesy the documentation site extends. Longest first, so "targets" wins over
+// "target" and the link covers the whole word.
+final glossary_terms = ["targets", "target", "spells", "spell", "charms", "charm",
+    "workspace", "projects", "project", "cache", "affected set"];
+final glossary_urls = {
+    "targets": "https://eli.gladman.cc/magus/concepts/targets/",
+    "target": "https://eli.gladman.cc/magus/concepts/targets/",
+    "spells": "https://eli.gladman.cc/magus/concepts/spells/",
+    "spell": "https://eli.gladman.cc/magus/concepts/spells/",
+    "charms": "https://eli.gladman.cc/magus/concepts/charms/",
+    "charm": "https://eli.gladman.cc/magus/concepts/charms/",
+    "workspace": "https://eli.gladman.cc/magus/concepts/workspace/",
+    "projects": "https://eli.gladman.cc/magus/concepts/workspace/",
+    "project": "https://eli.gladman.cc/magus/concepts/workspace/",
+    "cache": "https://eli.gladman.cc/magus/concepts/cache/",
+    "affected set": "https://eli.gladman.cc/magus/guides/affected/",
+};
+
+// linkTerms deep-links the first mention of each glossary term.
+//
+// Inline links, NOT footnotes. GitHub does not resolve a `[^label]` reference that sits
+// inside an HTML block, and every section here lives inside <details> - the references
+// rendered as literal text. Hoisting the definitions out to the top level did not help,
+// because it is the REFERENCE that goes unparsed, not the definition.
+//
+// Code spans are left alone: `magus\targetGraph()` is an identifier, not the concept, and
+// rewriting inside backticks would produce something that no longer runs. Splitting on the
+// backtick makes every ODD segment code, which is the whole guard.
+export fun linkTerms(text: str) > str {
+    final parts = text.split("`");
+    var done = mut [];
+    var i = 0;
+    var joined = "";
+    foreach (part in parts) {
+        var piece = part;
+        // Odd segments sit between backticks. Leave them exactly as written. A table row
+        // is skipped too: linking a header cell turns `| project |` into a link nobody
+        // asked for, and the cell is a label rather than a mention.
+        if (i % 2 == 0 and !part.trim().startsWith("|")) {
+            foreach (term in glossary_terms) {
+                var seen = false;
+                foreach (d in done) { if (d == term) { seen = true; } }
+                if (seen) { continue; }
+                final at = piece.indexOf(term);
+                if (at == null) { continue; }
+                // Never inside an existing link's TEXT, where it would nest. An unclosed
+                // "[" before the term is what says we are inside one.
+                final before = piece.sub(0, len: at);
+                if (before.split("[").len() > before.split("]").len()) { continue; }
+                done.append(term);
+                piece = piece.sub(0, len: at) + "[" + term + "](" + glossary_urls[term] + ")"
+                    + piece.sub(at + term.len());
+            }
+        }
+        if (i > 0) { joined = joined + "`"; }
+        joined = joined + piece;
+        i = i + 1;
+    }
+    return joined;
+}
+
+// linkCodes turns a bare diagnostic code into a link to its page. Inline, for the same
+// reason linkTerms is: a footnote reference inside <details> never resolves. A code is magus's
+// stable, greppable identifier for one failure, and a reader who meets MGS1003 in a
+// comment should be one click from what it means - not left to search for it.
+//
+// The area subdirectory comes from the code's number band, the same mapping types/
+// diagnostic.go uses to build the URL it prints on a raised error.
+export fun codeURL(code: str) > str {
+    var area = "sandbox";
+    if (code.startsWith("MGS1")) { area = "magusfile"; }
+    if (code.startsWith("MGS4")) { area = "race"; }
+    if (code.startsWith("MGS5")) { area = "services"; }
+    if (code.startsWith("MGS6")) { area = "charms"; }
+    if (code.startsWith("MGS7")) { area = "knowledge"; }
+    if (code.startsWith("MGS8")) { area = "outputref"; }
+    if (code.startsWith("MGS9")) { area = "auth"; }
+    return "https://eli.gladman.cc/magus/reference/codes/" + area + "/" + code + "/";
+}
+
+export fun linkCodes(text: str) > str {
+    var joined = "";
+    var rest = text;
+    while (true) {
+        final at = rest.indexOf("MGS");
+        if (at == null) { return joined + rest; }
+        final code = rest.sub(at, len: 7);
+        // Only a full MGS#### token, and only when it is not already inside a link or a
+        // URL - doctor already prints "see: <url>" for some findings.
+        final before = rest.sub(0, len: at);
+        final linked = before.split("[").len() > before.split("]").len();
+        if (code.len() == 7 and !linked and before.indexOf("codes/") == null) {
+            joined = joined + before + "[" + code + "](" + codeURL(code) + ")";
+        } else {
+            joined = joined + rest.sub(0, len: at + 3);
+            rest = rest.sub(at + 3);
+            continue;
+        }
+        rest = rest.sub(at + 7);
+    }
+    return joined;
+}
+
+// The way out, kept where an unsubscribe link belongs: last, small, and never in the way
+// of the content. Someone who does not want these should not have to read the source of a
+// composite action to find the switch.
+// Comments written before footnotes were abandoned still carry a definitions block.
+// Stripping it on the next push cleans them up rather than leaving literal
+// "[^target]:" lines at the bottom of an old comment forever.
+final footnotes_marker = "<!-- magus:advice:footnotes -->";
+
+// The footer: when this was last written, and the way out.
+//
+// The timestamp because the comment is REWRITTEN in place on every push - GitHub shows an
+// "edited" badge but not when, so a reader cannot tell whether they are looking at
+// findings for the commit they are reviewing or for one from yesterday. Every other
+// comment on the page is immutable and dated; this one is not, so it dates itself.
+// Marked so compose can strip the PREVIOUS one. Without a marker each advisor appended
+// another copy and a comment ended a run wearing eight footers, one per advisor.
+final footer_marker = "<!-- magus:advice:footer -->";
+
+fun footer() > str {
+    return footer_marker + "\n<sub><i>Last updated " + time\nowIso() + ". "
+        + "Every one of these is an input you can set to <code>false</code>, and this "
+        + "whole comment is one step you can drop. "
+        + "<a href=\"https://eli.gladman.cc/magus/guides/integrations/pr-advice/\">"
+        + "How to turn these off</a>.</i></sub>\n";
+}
+
+// compose returns the comment body with section `name` set to `body` under `title`,
+// replacing an existing section of that name, appending when there is none, and REMOVING
+// it when body is empty. Pure, so the composition rules are testable without a pull
+// request.
+//
+// Every section carries a heading and a rule above it. Run together, the sections read as
+// one wall of bold sentences and a reader cannot tell where one finding ends and the next
+// begins - which is what the first live comment looked like.
+export fun compose(current: str, name: str, title: str, body: str) > str {
+    final begin = beginMarker(name);
+    final end = endMarker(name);
+    var head = current;
+    var tail = "";
+    final at = current.indexOf(begin);
+    if (at != null) {
+        head = current.sub(0, len: at);
+        final closes = current.indexOf(end);
+        if (closes != null) { tail = current.sub(closes + end.len()); }
+    }
+    if (head.indexOf(comment_marker) == null) { head = comment_marker + "\n" + preface(); }
+    // The definitions block is rebuilt from the finished comment, so strip whatever is
+    // there before composing.
+    // Both trailers are rebuilt every time, so cut whatever a previous run left. The
+    // footnotes marker is legacy - comments written before footnotes were abandoned still
+    // carry one - and the footer marker is how this stays a single footer.
+    foreach (marker in [footnotes_marker, footer_marker]) {
+        final inHead = head.indexOf(marker);
+        if (inHead != null) { head = head.sub(0, len: inHead); }
+        final inTail = tail.indexOf(marker);
+        if (inTail != null) { tail = tail.sub(0, len: inTail); }
+    }
+    if (body == "") {
+        return (head + tail).trim() + "\n" + footer();
+    }
+    // Collapsed by default. Six findings expanded is a wall nobody reads to the end of;
+    // six one-line summaries is a table of contents you scan in two seconds and open the
+    // one that concerns you. GitHub renders markdown inside <details> as long as a blank
+    // line follows the summary, which is why the body is padded.
+    //
+    // This is why a title carries its own count: with the body hidden, the summary line is
+    // the whole signal a reader has for deciding whether to open it.
+    final section = begin + "\n<details>\n<summary><b>" + title + "</b></summary>\n\n"
+        + linkCodes(linkTerms(body.trim())) + "\n\n</details>\n" + end;
+    return (head + section + tail).trim() + "\n\n" + footer();
+}
+
+// silences reports whether these labels mute an advisor. `magus:silence` mutes every
+// one; `magus:silence:<name>` mutes exactly one. Pure over the label list so the matching
+// rule is testable.
+//
+// A LABEL rather than a config file, because silencing is usually about this change
+// rather than about the repository: you looked, you decided the finding does not apply
+// here, and you want it to stop without committing that opinion to everyone forever. The
+// label is visible on the pull request, so the next reader can see what was muted, and
+// removing it brings the finding back.
+export fun silences(labels: [str], name: str) > bool {
+    foreach (label in labels) {
+        if (label == "magus:silence") { return true; }
+        if (label == "magus:silence:" + name) { return true; }
+    }
+    return false;
+}
+
+// silenced asks GitHub for this pull request's labels and applies the rule above.
+export fun silenced(repo: str, pr: str, name: str) > bool {
+    final res = os\exec("gh", args: ["api", "repos/" + repo + "/issues/" + pr + "/labels"],
+        dir: ".", opts: {"quiet": true, "allow_failure": true});
+    if (!res.ok) { return false; }
+    var labels = mut [];
+    foreach (l in serialize\jsonDecode(res.stdout).listValue()) {
+        labels.append(l.q("name").stringValue());
+    }
+    return silences(labels, name: name);
+}
+
+// find returns the id of our comment on this PR, or "" when we have not commented yet.
+// Read through `gh api` and decoded here rather than filtered with a jq expression: the
+// marker is an HTML comment, and quoting it through a jq -r filter inside YAML inside
+// bash is three layers of escaping to get wrong.
+fun find(repo: str, pr: str) > str {
+    final listed = os\exec("gh", args: ["api", "--paginate",
+        "repos/" + repo + "/issues/" + pr + "/comments"], dir: ".", opts: {"quiet": true});
+    foreach (c in serialize\jsonDecode(listed.stdout).listValue()) {
+        if (c.q("body").stringValue().indexOf(comment_marker) != null) {
+            return "" + c.q("id").integerValue();
+        }
+    }
+    return "";
+}
+
+// publish upserts one advisor's section into the PR's magus comment. An empty body
+// retracts the section, and a comment left with no sections at all is emptied to the
+// bare marker rather than deleted - deleting would lose the thread's history.
+export fun publish(repo: str, pr: str, name: str, title: str, body: str) > void {
+    final id = find(repo, pr: pr);
+    var current = "";
+    if (id != "") {
+        final got = os\exec("gh", args: ["api", "repos/" + repo + "/issues/comments/" + id],
+            dir: ".", opts: {"quiet": true});
+        current = serialize\jsonDecode(got.stdout).q("body").stringValue();
+    }
+    final composed = compose(current, name: name, title: title, body: body);
+    if (composed.trim() == current.trim()) { return; }
+
+    // The body goes through a JSON file, never an -f flag: it is markdown with newlines,
+    // backticks, and quotes, and every one of those is a shell-quoting hazard.
+    final payload = "/tmp/magus-advice-payload.json";
+    fs\writeFile(payload, content: serialize\jsonEncode({"body": composed}));
+    if (id == "") {
+        os\exec("gh", args: ["api", "--method", "POST",
+            "repos/" + repo + "/issues/" + pr + "/comments", "--input", payload], dir: ".", opts: {});
+        return;
+    }
+    os\exec("gh", args: ["api", "--method", "PATCH",
+        "repos/" + repo + "/issues/comments/" + id, "--input", payload], dir: ".", opts: {});
+}
+
+test "compose opens with what this is before any finding" {
+    final body = compose("", name: "conflicts", title: "Merge conflicts", body: "hello");
+    std\assert(body.indexOf("### magus") != null, message: "announces itself");
+    std\assert(body.indexOf("read this pull request") != null, message: "says what it did");
+    std\assert(body.indexOf("None of this blocks the merge") != null, message: "says it is not a gate");
+    std\assert(body.indexOf("label it away") != null, message: "says how to dismiss one");
+    // The prologue comes before the first collapsed finding, not after it.
+    std\assert(body.indexOf("### magus") < body.indexOf("<details>"), message: "opens the comment");
+}
+
+test "compose folds each section away behind its title" {
+    final body = compose("", name: "conflicts", title: "Merge conflicts (2)", body: "hello");
+    std\assert(body.indexOf("<summary><b>Merge conflicts (2)</b></summary>") != null, message: "the title is the summary line");
+    std\assert(body.indexOf("<details>") != null, message: "collapsed by default");
+    std\assert(body.indexOf("hello") != null, message: "carries the body");
+}
+
+test "compose replaces only its own section" {
+    var body = compose("", name: "conflicts", title: "Merge conflicts", body: "old conflicts");
+    body = compose(body, name: "drift", title: "Generated drift", body: "drift text");
+    body = compose(body, name: "conflicts", title: "Merge conflicts", body: "new conflicts");
+    std\assert(body.indexOf("old conflicts") == null, message: "the old text is gone");
+    std\assert(body.indexOf("new conflicts") != null, message: "the new text is there");
+    std\assert(body.indexOf("drift text") != null, message: "the other section survives");
+}
+
+test "an empty body retracts the section and its heading" {
+    var body = compose("", name: "conflicts", title: "Merge conflicts", body: "there is a conflict");
+    body = compose(body, name: "drift", title: "Generated drift", body: "drift text");
+    body = compose(body, name: "conflicts", title: "Merge conflicts", body: "");
+    std\assert(body.indexOf("there is a conflict") == null, message: "the text is withdrawn");
+    std\assert(body.indexOf("Merge conflicts") == null, message: "the summary line goes too");
+    std\assert(body.indexOf("drift text") != null, message: "the other section survives");
+}
+
+test "the preface survives a section being replaced" {
+    var body = compose("", name: "a", title: "A", body: "one");
+    body = compose(body, name: "a", title: "A", body: "two");
+    std\assert(body.indexOf("### magus") != null, message: "still announces itself");
+    std\assert(body.split("### magus").len() == 2, message: "and only once");
+}
+
+test "linkTerms deep-links the first mention of a term" {
+    final got = linkTerms("A target with no outputs re-runs. Another target too.");
+    std\assert(got.indexOf("[target](https://eli.gladman.cc/magus/concepts/targets/)") != null, message: "links the concept");
+    std\assert(got.split("concepts/targets/").len() == 2, message: "only the first mention");
+    std\assert(got.indexOf("[^") == null, message: "no footnote reference: GitHub will not resolve one in here");
+}
+
+test "linkTerms leaves code spans alone" {
+    final got = linkTerms("Run `magus run target` to build the target.");
+    std\assert(got.indexOf("`magus run target`") != null, message: "the command still runs");
+    std\assert(got.indexOf("[target](") != null, message: "the prose mention is linked");
+}
+
+test "linkTerms does not nest a link inside a link" {
+    final got = linkTerms("See [the cache guide](https://example.com) for more.");
+    std\assert(got.indexOf("[the cache guide](https://example.com)") != null, message: "left intact");
+}
+
+test "linkCodes makes a bare diagnostic code clickable" {
+    final got = linkCodes("names MGS1003 in passing");
+    std\assert(got.indexOf("[MGS1003](https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1003/)") != null,
+        message: "links the code to its page");
+}
+
+test "linkCodes routes a code to its own area" {
+    std\assert(codeURL("MGS4002").indexOf("/race/") != null, message: "race codes");
+    std\assert(codeURL("MGS2007").indexOf("/sandbox/") != null, message: "sandbox is the default band");
+}
+
+test "linkTerms leaves table rows alone" {
+    final got = linkTerms("| project | why |");
+    std\assert(got == "| project | why |", message: "a header cell is a label, not a mention");
+}
+
+test "a rendered comment carries no footnote syntax" {
+    final body = compose("", name: "doctor", title: "Workspace health", body: "a target failed (MGS1003)");
+    std\assert(body.indexOf("[^") == null, message: "GitHub leaves a reference inside <details> as literal text");
+    std\assert(body.indexOf("concepts/targets/") != null, message: "the term is linked inline instead");
+    std\assert(body.indexOf("codes/magusfile/MGS1003/") != null, message: "and so is the code");
+}
+
+test "every comment says how to turn it off, last" {
+    final body = compose("", name: "doctor", title: "Workspace health", body: "a target failed");
+    std\assert(body.indexOf("How to turn these off") != null, message: "the way out is present");
+    std\assert(body.indexOf("guides/integrations/pr-advice") != null, message: "and documented");
+    std\assert(body.indexOf("How to turn these off") > body.indexOf("</details>"), message: "after the findings");
+    std\assert(body.indexOf("Last updated ") != null, message: "and says when it was written");
+}
+
+test "the footer survives a comment with nothing cited" {
+    final body = compose("", name: "x", title: "X", body: "nothing worth citing here");
+    std\assert(body.indexOf("How to turn these off") != null, message: "still says how to stop it");
+}
+
+test "silences mutes one advisor by name" {
+    std\assert(silences(["magus:silence:unclaimed"], name: "unclaimed"), message: "the named one");
+    std\assert(!silences(["magus:silence:unclaimed"], name: "doctor"), message: "and only that one");
+}
+
+test "silences mutes everything with the bare label" {
+    std\assert(silences(["magus:silence"], name: "doctor"), message: "blanket silence");
+}
+
+test "silences ignores unrelated labels" {
+    std\assert(!silences(["bug", "magus:autofix"], name: "doctor"), message: "not a silence label");
+    std\assert(!silences([], name: "doctor"), message: "no labels at all");
+}
+
+test "a comment carries exactly one footer however many advisors write to it" {
+    var body = compose("", name: "a", title: "A", body: "one");
+    body = compose(body, name: "b", title: "B", body: "two");
+    body = compose(body, name: "c", title: "C", body: "three");
+    std\assert(body.split("How to turn these off").len() == 2, message: "one footer, not three");
+    std\assert(body.split("Last updated").len() == 2, message: "and one timestamp");
+}

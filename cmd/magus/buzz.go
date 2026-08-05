@@ -8,9 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings"
-	buzzengine "github.com/egladman/magus/internal/interp/engine/buzz"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -18,9 +16,10 @@ import (
 
 // buzzCmd runs Buzz source from a file, stdin, or an inline snippet using the
 // Buzz interpreter with the full magus module surface (Buzz stdlib plus every
-// magus host module: fs, os, http, markdown, template, ...). The magus.* namespace
-// (targets, needs) is not installed, since it needs a magusfile; for that use
-// `magus buzz --workspace` or run a magusfile target.
+// magus host module: fs, os, http, markdown, template, ...) and the magus.*
+// namespace. The magus.* members that declare into a workspace being loaded
+// (magus\project and the provider selections) raise MGS1022 here, since a script
+// has no magusfile to declare into. The REPL is the surface that does load one.
 //
 // This is the in-binary form of the former standalone magus-buzz tool, folded into
 // the main command (like `kubectl kustomize`) so a clean Buzz runner is always
@@ -43,7 +42,6 @@ func buzzCmd(ctx context.Context, args []string) error {
 	var eval string
 	var test bool
 	var embedded bool
-	var workspace bool
 	var noAutoload bool
 	var workDir string
 	rest, err := cmdParse("buzz", args, func(fs *flag.FlagSet) {
@@ -51,30 +49,27 @@ func buzzCmd(ctx context.Context, args []string) error {
 		fs.BoolVar(&test, "t", false, "run the file's `test \"...\" {}` blocks and report pass/fail")
 		fs.BoolVar(&test, "test", false, "alias for -t")
 		fs.BoolVar(&embedded, "embedded", false, "relax upstream strictness (top-level statements, optional arg labels) to match the magusfile engine")
-		fs.BoolVar(&workspace, "workspace", false, "open a REPL with the current magusfile loaded")
-		fs.BoolVar(&noAutoload, "no-autoload", false, "with --workspace, skip executing the magusfile on start")
-		fs.StringVar(&workDir, "C", "", "with --workspace, working directory for import resolution (default: cwd)")
+		fs.BoolVar(&noAutoload, "no-autoload", false, "start the REPL without executing the magusfile")
+		fs.StringVar(&workDir, "C", "", "working directory for the REPL's import resolution (default: cwd)")
 		fs.Usage = buzzUsage
 	})
 	if err != nil {
 		return err
 	}
-	if workspace {
-		if eval != "" || test || len(rest) != 0 {
-			return usagef("magus buzz --workspace: a script, -e, and -t cannot be combined with the workspace REPL")
-		}
-		return workspaceBuzzRepl(ctx, workDir, noAutoload)
-	}
-	if noAutoload || workDir != "" {
-		return usagef("magus buzz: --no-autoload and -C require --workspace")
+	isRepl := eval == "" && !test && len(rest) == 0
+	if !isRepl && (noAutoload || workDir != "") {
+		return usagef("magus buzz: --no-autoload and -C apply to the REPL, not to a script, -e, or -t")
 	}
 
-	// No code, no file/stdin argument, and an interactive terminal: open a REPL.
+	// No code, no file/stdin argument, and an interactive terminal: open the REPL,
+	// which loads the magusfile at cwd when there is one - magus reads its context
+	// rather than being told about it, and a REPL opened in a workspace is a REPL on
+	// that workspace. Outside one it simply has nothing to autoload.
 	// A non-terminal stdin (pipe, redirect, heredoc) falls through to script mode.
 	// --embedded is a no-op on this path: a REPL is top-level statements by nature,
-	// so buzzRepl is always embedded regardless of the flag.
-	if eval == "" && !test && len(rest) == 0 && stdinIsTerminal() {
-		return buzzRepl(ctx)
+	// so the session is always embedded regardless of the flag.
+	if isRepl && stdinIsTerminal() {
+		return buzzRepl(ctx, workDir, noAutoload)
 	}
 
 	code, name, err := buzzSource(eval, rest)
@@ -92,11 +87,16 @@ func buzzCmd(ctx context.Context, args []string) error {
 	sess := buzz.NewSession(ctx, opts...)
 	defer func() { _ = sess.Close() }()
 	// Install the full magus module surface (Buzz stdlib + assert/suite + every
-	// magus host module), the same one the magusfile engine uses minus the magus.*
-	// namespace, which needs a magusfile's targets. Sharing one registration keeps
-	// `magus buzz` and magusfile execution in lock-step: any module a script or test
-	// imports resolves the same way in both, with no per-surface module list.
+	// magus host module), the same one the magusfile engine uses. Sharing one
+	// registration keeps `magus buzz` and magusfile execution in lock-step: any
+	// module a script or test imports resolves the same way in both, with no
+	// per-surface module list.
 	bindings.RegisterModuleSurface(ctx, sess)
+	// The magus.* namespace on top, so `import "magus"` resolves here too. The
+	// members that declare into a workspace being loaded (magus\project,
+	// magus\cache.remote, magus\ci.provider) raise MGS1022 on this surface; the rest
+	// (magus\describe, magus\cmd, magus\run, ...) work.
+	bindings.RegisterMagusNamespace(ctx, sess)
 	// Install the magus/spell and magus/charm source modules too, so a spell file
 	// (which imports them) and its `test "..." {}` blocks run here: `magus buzz -t`
 	// is the spell test harness.
@@ -109,25 +109,6 @@ func buzzCmd(ctx context.Context, args []string) error {
 		return runBuzzTests(ctx, sess, name)
 	}
 	return nil
-}
-
-// buzzRepl opens an interactive Buzz REPL with the same module surface as
-// `magus buzz` scripts (Buzz stdlib plus every magus host module), and without the
-// magus.* namespace (that needs a magusfile - use `magus buzz --workspace` for it). It reuses
-// the shared REPL driver (internal/interp.Repl), the same one the workspace REPL runs, so
-// line editing, multi-line input, and the .commands behave identically. The session
-// is embedded: a REPL is top-level statements by nature, so upstream strict mode
-// (which forbids them) never applies here.
-func buzzRepl(ctx context.Context) error {
-	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
-	defer func() { _ = sess.Close() }()
-	bindings.RegisterModuleSurface(ctx, sess)
-	return interp.Repl(ctx, buzzengine.Wrap(sess), interp.ReplOptions{
-		Stdin:  os.Stdin,
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
-		Banner: "magus buzz - Buzz REPL (.help for commands)",
-	})
 }
 
 // stdinIsTerminal reports whether stdin is an interactive terminal (a character
@@ -235,8 +216,7 @@ func buzzResolveFile(path string) string {
 }
 
 func buzzUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus buzz              # open a REPL (interactive terminal)")
-	fmt.Fprintln(os.Stderr, "       magus buzz --workspace  # open a REPL with the magusfile loaded")
+	fmt.Fprintln(os.Stderr, "Usage: magus buzz              # open a REPL with the magusfile loaded")
 	fmt.Fprintln(os.Stderr, "       magus buzz <file>       # run a script")
 	fmt.Fprintln(os.Stderr, "       magus buzz -            # run a script from stdin")
 	fmt.Fprintln(os.Stderr, "       magus buzz -e <code>    # run an inline snippet")
@@ -244,18 +224,18 @@ func buzzUsage() {
 	fmt.Fprintln(os.Stderr, "       magus buzz lsp          # language server over stdio (LSP)")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Run Buzz source from a REPL, file, stdin, or an inline snippet. With no")
-	fmt.Fprintln(os.Stderr, "argument on a terminal it opens a REPL; a piped or redirected stdin runs")
-	fmt.Fprintln(os.Stderr, "as a script. The Buzz stdlib plus every magus host module (fs, os, http,")
-	fmt.Fprintln(os.Stderr, "markdown, ...) are available; use `magus buzz --workspace` for the magus.* namespace.")
+	fmt.Fprintln(os.Stderr, "argument on a terminal it opens a REPL with the magusfile at cwd loaded,")
+	fmt.Fprintln(os.Stderr, "its targets and bindings ready; a piped or redirected stdin runs as a")
+	fmt.Fprintln(os.Stderr, "script. The Buzz stdlib, every magus host module (fs, os, http, markdown,")
+	fmt.Fprintln(os.Stderr, "...), and the magus.* namespace are available in both.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Flags:")
 	fmt.Fprintln(os.Stderr, "  -e <code>   execute code given on the command line instead of a file")
 	fmt.Fprintln(os.Stderr, "  -t, -test   run the file's test \"...\" {} blocks and report pass/fail")
 	fmt.Fprintln(os.Stderr, "  --embedded  relax upstream strictness (top-level statements, optional")
 	fmt.Fprintln(os.Stderr, "              argument labels) to match the magusfile engine")
-	fmt.Fprintln(os.Stderr, "  --workspace open a REPL with the current magusfile and its bindings loaded")
-	fmt.Fprintln(os.Stderr, "  --no-autoload  with --workspace, skip executing the magusfile on start")
-	fmt.Fprintln(os.Stderr, "  -C <dir>    with --workspace, working directory for import resolution")
+	fmt.Fprintln(os.Stderr, "  --no-autoload  start the REPL without executing the magusfile")
+	fmt.Fprintln(os.Stderr, "  -C <dir>    working directory for the REPL's import resolution")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Parsing is upstream-strict by default. A file written for the magusfile")
 	fmt.Fprintln(os.Stderr, "engine needs --embedded, or it fails on rules upstream Buzz enforces and")

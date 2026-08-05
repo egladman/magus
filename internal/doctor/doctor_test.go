@@ -21,13 +21,15 @@ func TestCheckLanguageCoverage(t *testing.T) {
 		got := r.checkLanguageCoverage([]*types.Project{{Spell: "go"}, {Spell: "rust"}})
 		assert.Equal(t, StatusOK, got.Status, got.Message)
 	})
+	// Advice, not failure: a project with no toolchain spell is a real and common
+	// shape, and magus does not get to decide it is wrong.
 	t.Run("some missing", func(t *testing.T) {
 		got := r.checkLanguageCoverage([]*types.Project{{Spell: ""}, {Spell: "go"}})
-		assert.Equal(t, StatusFail, got.Status, got.Message)
+		assert.Equal(t, StatusAdvice, got.Status, got.Message)
 	})
 	t.Run("all missing", func(t *testing.T) {
 		got := r.checkLanguageCoverage([]*types.Project{{Spell: ""}, {Spell: ""}})
-		assert.Equal(t, StatusFail, got.Status, got.Message)
+		assert.Equal(t, StatusAdvice, got.Status, got.Message)
 	})
 	t.Run("empty list", func(t *testing.T) {
 		got := r.checkLanguageCoverage([]*types.Project{})
@@ -134,7 +136,7 @@ func TestCheckSpellDocs(t *testing.T) {
 	})
 	t.Run("local spell missing a doc", func(t *testing.T) {
 		got := r.checkSpellDocs([]*spells.Spell{localMissing})
-		assert.Equal(t, StatusFail, got.Status, got.Message)
+		assert.Equal(t, StatusAdvice, got.Status, got.Message)
 	})
 	t.Run("record-style target exempt", func(t *testing.T) {
 		got := r.checkSpellDocs([]*spells.Spell{recordStyle})
@@ -142,7 +144,7 @@ func TestCheckSpellDocs(t *testing.T) {
 	})
 	t.Run("exempt does not rescue local", func(t *testing.T) {
 		got := r.checkSpellDocs([]*spells.Spell{exempt, localMissing})
-		assert.Equal(t, StatusFail, got.Status, got.Message)
+		assert.Equal(t, StatusAdvice, got.Status, got.Message)
 	})
 }
 
@@ -155,7 +157,7 @@ func TestCheckSpellDocs_Details(t *testing.T) {
 		spells.WithDocRequiredTargets("build", "lint", "test"),
 	)
 	got := (&runner{}).checkSpellDocs([]*spells.Spell{s})
-	require.Equal(t, StatusFail, got.Status)
+	require.Equal(t, StatusAdvice, got.Status)
 	assert.Equal(t, []string{"local:lint", "local:test"}, got.Details)
 }
 
@@ -182,14 +184,14 @@ func TestCheckTargetNameConventions(t *testing.T) {
 	})
 	t.Run("snake and camel mixed", func(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun go_build(ctx: magus\\Context, _a: [str]) > void {}\nexport fun goTest(ctx: magus\\Context, _a: [str]) > void {}\n"})
-		assert.Equal(t, StatusFail, got.Status, got.Message)
+		assert.Equal(t, StatusAdvice, got.Status, got.Message)
 	})
 	t.Run("mixed across magusfiles dir", func(t *testing.T) {
 		got := run(map[string]string{
 			"magusfiles/a.buzz": "export fun go_build(ctx: magus\\Context, _a: [str]) > void {}\n",
 			"magusfiles/b.buzz": "export fun GoTest(ctx: magus\\Context, _a: [str]) > void {}\n",
 		})
-		assert.Equal(t, StatusFail, got.Status, got.Message)
+		assert.Equal(t, StatusAdvice, got.Status, got.Message)
 	})
 }
 
@@ -212,12 +214,12 @@ func TestCheckBespokePhaseFragmentTargets(t *testing.T) {
 	})
 	t.Run("typecheck flagged", func(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun typecheck(ctx: magus\\Context, _a: [str]) > void {}\n"})
-		require.Equal(t, StatusFail, got.Status, got.Message)
+		require.Equal(t, StatusAdvice, got.Status, got.Message)
 		assert.Contains(t, got.Details[0], "typecheck")
 	})
 	t.Run("camelCase typeCheck normalizes to type-check and is flagged", func(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun typeCheck(ctx: magus\\Context, _a: [str]) > void {}\n"})
-		require.Equal(t, StatusFail, got.Status, got.Message)
+		require.Equal(t, StatusAdvice, got.Status, got.Message)
 	})
 	t.Run("vet audit security style prettify all flagged", func(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun vet(ctx: magus\\Context, _a: [str]) > void {}\n" +
@@ -225,8 +227,42 @@ func TestCheckBespokePhaseFragmentTargets(t *testing.T) {
 			"export fun security(ctx: magus\\Context, _a: [str]) > void {}\n" +
 			"export fun style(ctx: magus\\Context, _a: [str]) > void {}\n" +
 			"export fun prettify(ctx: magus\\Context, _a: [str]) > void {}\n"})
-		require.Equal(t, StatusFail, got.Status, got.Message)
+		require.Equal(t, StatusAdvice, got.Status, got.Message)
 		assert.Len(t, got.Details, 5)
+	})
+
+	// Two projects naming the same target are two separate decisions. Reporting
+	// one example per NAME hid the second behind whichever magusfile was scanned
+	// first, so the report could not say how many there actually were.
+	t.Run("the same name in two projects is reported twice", func(t *testing.T) {
+		root := t.TempDir()
+		for _, dir := range []string{"web", "docs"} {
+			require.NoError(t, os.MkdirAll(filepath.Join(root, dir), 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(root, dir, "magusfile.buzz"),
+				[]byte("export fun security(ctx: magus\\Context, _a: [str]) > void {}\n"), 0o644))
+		}
+		r := &runner{root: root}
+		got := r.checkBespokePhaseFragmentTargets([]*types.Project{
+			{Path: "web", Dir: filepath.Join(root, "web")},
+			{Path: "docs", Dir: filepath.Join(root, "docs")},
+		})
+		require.Equal(t, StatusAdvice, got.Status, got.Message)
+		require.Len(t, got.Details, 2)
+		assert.Contains(t, got.Details[0], "docs/magusfile.buzz")
+		assert.Contains(t, got.Details[1], "web/magusfile.buzz")
+	})
+	// A detail line exists to name a file. Doctor runs with an empty root on the
+	// daemon path, where filepath.Rel fails and used to leave the path blank -
+	// the failure said a name was wrong without saying where it lived.
+	t.Run("an empty root still names the file", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
+			[]byte("export fun security(ctx: magus\\Context, _a: [str]) > void {}\n"), 0o644))
+		r := &runner{} // no root, no workspace
+		got := r.checkBespokePhaseFragmentTargets([]*types.Project{{Path: ".", Dir: root}})
+		require.Equal(t, StatusAdvice, got.Status, got.Message)
+		require.Len(t, got.Details, 1)
+		assert.Contains(t, got.Details[0], filepath.ToSlash(filepath.Join(root, "magusfile.buzz")))
 	})
 }
 

@@ -50,6 +50,30 @@ const fsAccessReadOnly uint64 = unix.LANDLOCK_ACCESS_FS_READ_FILE |
 
 // fsAccessWrite is the full write/create/rename surface. REFER and TRUNCATE
 // are masked against the probed ABI before use.
+// fsAccessDirOnly are the rights only a directory can carry. Requesting any of them on
+// a regular file makes landlock_add_rule fail with EINVAL, which is how a rule for
+// /run/systemd/resolve/stub-resolv.conf - a FILE in an allowlist that assumed a
+// directory - took down every sandboxed run on a systemd host.
+const fsAccessDirOnly uint64 = unix.LANDLOCK_ACCESS_FS_READ_DIR |
+	unix.LANDLOCK_ACCESS_FS_REMOVE_DIR |
+	unix.LANDLOCK_ACCESS_FS_REMOVE_FILE |
+	unix.LANDLOCK_ACCESS_FS_MAKE_CHAR |
+	unix.LANDLOCK_ACCESS_FS_MAKE_DIR |
+	unix.LANDLOCK_ACCESS_FS_MAKE_REG |
+	unix.LANDLOCK_ACCESS_FS_MAKE_SOCK |
+	unix.LANDLOCK_ACCESS_FS_MAKE_FIFO |
+	unix.LANDLOCK_ACCESS_FS_MAKE_BLOCK |
+	unix.LANDLOCK_ACCESS_FS_MAKE_SYM
+
+// accessForPathType drops the rights a non-directory cannot hold. Split out from
+// addPathRule so the masking rule is testable without a kernel.
+func accessForPathType(access uint64, isDir bool) uint64 {
+	if isDir {
+		return access
+	}
+	return access &^ fsAccessDirOnly
+}
+
 const fsAccessWrite uint64 = unix.LANDLOCK_ACCESS_FS_WRITE_FILE |
 	unix.LANDLOCK_ACCESS_FS_REMOVE_DIR |
 	unix.LANDLOCK_ACCESS_FS_REMOVE_FILE |
@@ -103,6 +127,16 @@ func abiAccessFS(abi int) uint64 {
 func Apply(p *Policy) error {
 	if p == nil {
 		return nil
+	}
+
+	// Supported() promises that a false return means Apply reports ErrUnsupported, and
+	// until now Apply never asked. On a host where the landlock syscalls work but
+	// securityfs is not mounted - a GitHub Actions runner, for one - Supported() said no
+	// while Apply went ahead, built a ruleset, and failed with whatever the kernel
+	// objected to. Callers treat ErrUnsupported as a soft fallback and anything else as a
+	// hard failure, so that gap turned an unmountable securityfs into a broken run.
+	if !Supported() {
+		return fmt.Errorf("%w: sandbox: landlock securityfs is not mounted", ErrUnsupported)
 	}
 
 	// PR_SET_NO_NEW_PRIVS is mandatory for unprivileged landlock_restrict_self.
@@ -182,6 +216,12 @@ func addPathRule(rulesetFD int, r filesystem.Rule, supportedFS uint64) error {
 	}
 	if r.Write {
 		access |= fsAccessWrite & supportedFS
+	}
+	// A rule's path may be a file (an allowlist entry pointing at a config, a socket, a
+	// resolv.conf symlink target); ask only for rights its type can hold.
+	var st unix.Stat_t
+	if err := unix.Fstat(dirFD, &st); err == nil {
+		access = accessForPathType(access, st.Mode&unix.S_IFMT == unix.S_IFDIR)
 	}
 	if access == 0 {
 		return nil

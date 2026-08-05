@@ -33,6 +33,11 @@ type Load struct {
 	// instances share one set of OTel instruments and one metrics collector. When set it
 	// takes precedence over MetricsCollect (Open skips otlp.New and adopts it).
 	Provider observability.Provider
+	// Version is the running build's version, used only to check the workspace's
+	// required_version floor. Empty disables the check, which is the same escape
+	// hatch the daemon adoption gate uses (see internal/proc/identity.go): a bare
+	// library caller that never set a version has no version to be too old.
+	Version string
 }
 
 // Option configures Open or Inspect.
@@ -63,6 +68,13 @@ func WithMetricsCollection() Option {
 // provider instead of constructing its own.
 func WithProvider(p observability.Provider) Option {
 	return func(o *Load) { o.Provider = p }
+}
+
+// WithVersion supplies the running build's version so Open and Inspect can check
+// it against the workspace's required_version floor. cmd/magus passes its
+// linker-stamped version; a caller that omits it gets no floor check.
+func WithVersion(v string) Option {
+	return func(o *Load) { o.Version = v }
 }
 
 // ProjectOption mutates a Project at registration time; a non-nil error aborts Open.

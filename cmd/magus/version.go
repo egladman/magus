@@ -16,6 +16,12 @@ var (
 	version   = "unknown"
 	commit    = "unknown"
 	buildDate = "unknown"
+	// builtBy is the CI workflow that produced this binary ($GITHUB_WORKFLOW_REF),
+	// empty for a local build. A CLAIM, not proof - a signature is what proves
+	// provenance - but empty is the honest default, so a local build never asserts a
+	// pedigree it does not have. For a keyless-signed artifact it should equal the
+	// job_workflow_ref in the certificate, which is what makes the two cross-checkable.
+	builtBy = ""
 )
 
 // versionOutput is the structured view of the build stamp. Engine is unconditional
@@ -26,7 +32,10 @@ type versionOutput struct {
 	Version   string `json:"version"    yaml:"version"`
 	Commit    string `json:"commit"     yaml:"commit"`
 	BuildDate string `json:"build_date" yaml:"build_date"`
-	Engine    string `json:"engine"     yaml:"engine"`
+	// No omitempty: a local build reports built_by as "" rather than dropping the key,
+	// so `-o json` and `-o template` see one record shape either way.
+	BuiltBy string `json:"built_by"   yaml:"built_by"`
+	Engine  string `json:"engine"     yaml:"engine"`
 }
 
 func runVersion(args []string) error {
@@ -48,7 +57,7 @@ func runVersion(args []string) error {
 	if err != nil {
 		return err
 	}
-	out := versionOutput{Version: version, Commit: commit, BuildDate: buildDate, Engine: "buzz"}
+	out := versionOutput{Version: version, Commit: commit, BuildDate: buildDate, BuiltBy: builtBy, Engine: "buzz"}
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -61,6 +70,9 @@ func runVersion(args []string) error {
 	}
 
 	fmt.Printf("magus %s (%s) built %s\n", out.Version, out.Commit, out.BuildDate)
+	if out.BuiltBy != "" {
+		fmt.Printf("built by: %s\n", out.BuiltBy)
+	}
 	if hasVerboseFlag(args) {
 		fmt.Printf("engine: %s\n", out.Engine)
 	}

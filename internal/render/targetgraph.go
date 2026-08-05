@@ -202,8 +202,14 @@ func firstDocLine(doc string) string {
 // links that open the Graph Explorer pre-seeded with that query (#q=...).
 func writeRouting(b *md.Builder, r types.KnowledgeRouting, explorerURL string) {
 	b.Heading(2, "Query first")
-	b.Paragraphf("This workspace has a knowledge graph of **%d nodes** and **%d edges** "+
-		"(schema v%d). Query it instead of grepping:", r.NodeCount, r.EdgeCount, r.SchemaVersion)
+	// Deliberately NOT the node and edge totals. They move on almost every commit -
+	// a doc, a file, a function is enough - so a committed, drift-gated file carrying
+	// them churns on changes that have nothing to do with what this section says.
+	// `magus graph stats` reports the live counts to anyone who wants them, and it is
+	// right there in the block below. The schema version stays: it changes when the
+	// graph's SHAPE does, which is exactly when a reader should notice.
+	b.Paragraphf("This workspace has a knowledge graph (schema v%d). Query it instead "+
+		"of grepping:", r.SchemaVersion)
 	b.AlignedCodeBlock("sh", []md.CodeLine{
 		{Code: `magus query "<terms>"`, Note: "kind:spell, project:pkg/foo, relation:uses, free text, -negation"},
 		{Code: "magus explain <node>", Note: "one node: its edges, provenance, blast radius"},

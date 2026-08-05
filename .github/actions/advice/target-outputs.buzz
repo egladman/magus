@@ -1,0 +1,127 @@
+// Comment when a pull request adds a target that declares no outputs.
+//
+// A target with no declared outputs can never replay: magus has nothing to snapshot, so
+// every run re-runs it, and `magus clean` cannot remove what it produced. That is right
+// for a gate (lint, a check that only passes or fails) and wrong for anything that
+// writes a file, which is the mistake worth catching at review time rather than after
+// the cache never hits.
+//
+// Only NEW targets, read from the diff: an existing target without outputs is a decision
+// already made, and re-litigating it on every unrelated push is how a bot gets muted.
+//
+// Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA.
+import "os";
+import "advice";
+import "magus";
+import "std";
+
+final section = "target-outputs";
+
+// added returns the target names this PR introduces, by reading the added `export fun`
+// lines out of the diff. The magusfile is the declaration, so the diff is the honest
+// source for "new" - comparing two loaded graphs would need the base checked out.
+export fun added(diff: str) > [str] {
+    var names = mut [];
+    foreach (line in diff.split("\n")) {
+        if (!line.startsWith("+export fun ")) { continue; }
+        final rest = line.sub("+export fun ".len());
+        final open = rest.indexOf("(");
+        if (open == null) { continue; }
+        final name = rest.sub(0, open).trim();
+        if (name != "") { names.append(name); }
+    }
+    return names;
+}
+
+// existed reports whether a target of this name was already declared before the change.
+// Editing a target's body rewrites its `export fun` line, so the diff calls it added -
+// which is how a comment about NEW targets listed `preflight`, a target older than the
+// pull request. The base tree is the only thing that settles it.
+fun existed(name: str, base: str) > bool {
+    final res = os\exec("git", args: ["grep", "-q", "export fun " + name + "(",
+        "origin/" + base, "--", "*.buzz"], dir: ".", opts: {"allow_failure": true});
+    return res.ok;
+}
+
+fun body(targets: [str]) > str {
+    var text = "**New targets that declare no outputs:**\n\n";
+    foreach (t in targets) { text = text + "- `" + t + "`\n"; }
+    return text
+        + "\nA target with no declared outputs never replays from cache - magus has "
+        + "nothing to snapshot, so it re-runs every time, and `magus clean` cannot "
+        + "remove what it wrote. If it produces a file, declare it:\n\n"
+        + "```buzz\nctx.writesFiles(\"gen/**\");\n```\n\n"
+        + "If it only checks something and writes nothing, this is correct as written - "
+        + "gates have no outputs. See [Cache model](https://eli.gladman.cc/magus/concepts/cache/).\n";
+}
+
+fun main() > void {
+    final repo = advice\env("REPO");
+    final pr = advice\env("PR_NUMBER");
+    final base = advice\env("PR_BASE");
+    final head = advice\env("PR_HEAD_SHA");
+    if (pr == "" and base == "" and head == "") {
+        std\print("target-outputs: no PR context; nothing to advise");
+        return;
+    }
+    if (pr == "" or base == "" or head == "") {
+        throw "target-outputs: PR_NUMBER, PR_BASE, and PR_HEAD_SHA must be set together";
+    }
+
+    if (advice\silenced(repo, pr: pr, name: section)) {
+        // Retract rather than leave the last finding frozen on the page.
+        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        std\print("target-outputs: silenced by label");
+        return;
+    }
+
+    os\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
+    final diff = os\exec("git", args: ["diff", "-U0", "origin/" + base + "..." + head, "--", "*.buzz"],
+        dir: ".", opts: {"allow_failure": true}).stdout;
+    final names = added(diff);
+    if (names.len() == 0) {
+        advice\publish(repo, pr: pr, name: section, title: "New targets without declared outputs", body: "");
+        return;
+    }
+
+    // The loaded graph decides, not the diff: a target's footprint can be declared
+    // anywhere in its body, and only magus knows what it resolved to.
+    //
+    // QUALIFIED by project, because a target name is not unique across a workspace. Eight
+    // projects here declare `preflight`, and matching on the bare name reported the same
+    // name eight times for one edited magusfile - a list that told a reader nothing.
+    var bare = mut [];
+    foreach (project in magus\targetGraph().projects) {
+        foreach (t in project.nodes) {
+            if (t.writesFiles.len() != 0) { continue; }
+            foreach (n in names) {
+                if (magus\normalize(n) != t.name) { continue; }
+                if (!existed(n, base: base)) { bare.append(project.path + ":" + t.name); }
+            }
+        }
+    }
+    if (bare.len() == 0) {
+        advice\publish(repo, pr: pr, name: section, title: "New targets without declared outputs", body: "");
+        std\print("target-outputs: nothing to advise");
+        return;
+    }
+    advice\publish(repo, pr: pr, name: section, title: "New targets without declared outputs ({bare.len()})", body: body(bare));
+    std\print("target-outputs: advised on " + bare.join(", "));
+}
+
+main();
+
+test "added reads new target names out of a diff" {
+    final diff = "+export fun release(ctx: magus\\Context, args: [str]) > void\n"
+        + "-export fun gone(ctx: magus\\Context) > void\n"
+        + " export fun untouched(ctx: magus\\Context) > void\n"
+        + "+export fun  spaced (ctx: magus\\Context) > void\n";
+    final got = added(diff);
+    std\assert(got.len() == 2, message: "only the added lines");
+    std\assert(got[0] == "release", message: "the first new target");
+    std\assert(got[1] == "spaced", message: "trimmed");
+}
+
+test "added ignores a diff with no new targets" {
+    std\assert(added("+    ctx.needs(build);\n-export fun old() > void\n").len() == 0, message: "nothing added");
+}

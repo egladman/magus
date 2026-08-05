@@ -1,0 +1,258 @@
+name: magus advice
+description: >
+  Post non-blocking review nudges on a pull request. Each advisor is silent unless it
+  has something to say, and each is one input you can turn off by name; the read-only
+  ones are on by default, so a new advisor arrives without a workflow edit.
+
+  Named for doctor's [advice] level, so the CI surface and the tool share one word for
+  "worth knowing, never a gate".
+
+  All advisors write into ONE comment, each owning a section it replaces on every run
+  and RETRACTS when it has nothing to say - so the comment is a current statement of
+  what magus knows, not an accumulating thread.
+
+  Requires magus on PATH - run egladman/magus/.github/actions/setup-magus first. Each
+  advisor runs against the caller's checkout, so check out before this step. The
+  read-only advisors never mutate the checkout: the conflict advisor merges in memory
+  with `git merge-tree`, so there is no merge to abort and no half-merge to strand.
+
+inputs:
+  merge-conflicts:
+    description: >
+      Comment when this PR's merge conflicts land in files the workspace declares as
+      generated. Those cannot be resolved in the web editor - the correct merge of build
+      output is whatever regenerating produces - so the comment names the files and the
+      command that settles them.
+    required: false
+    default: 'true'
+  hand-edited-generated:
+    description: >
+      Comment when the pull request changes a generated file without changing anything
+      that produces it - a hand edit the next regeneration will overwrite.
+    required: false
+    default: 'true'
+  target-outputs:
+    description: >
+      Comment when the pull request adds a target that declares no outputs, which can
+      never replay from cache. Only new targets; an existing one is a decision already made.
+    required: false
+    default: 'true'
+  doctor:
+    description: >
+      Report what `magus doctor` finds about the workspace. Non-blocking by design, so a
+      consumer who never wired doctor into their own pipeline still sees it.
+    required: false
+    default: 'true'
+  version-floor:
+    description: >
+      Comment when the pull request raises `required_version`, which every contributor
+      has to act on before they can load the workspace at all.
+    required: false
+    default: 'true'
+  blast-radius:
+    description: >
+      Comment when a change reaches a large share of the workspace, naming the dependency
+      chain that pulled each project in. Threshold is `fanout-share`, not a count: five
+      projects is most of a small workspace and a rounding error in a large one.
+    required: false
+    default: 'true'
+  fanout-share:
+    description: Share of the workspace a change must reach before blast-radius comments.
+    required: false
+    default: '0.5'
+  unclaimed:
+    description: >
+      Comment when the pull request changes files no project declares, which the checks
+      therefore say nothing about.
+    required: false
+    default: 'true'
+  skip-cache:
+    description: >
+      Comment when the pull request opts a target out of the cache, quoting the reason
+      magus requires for it.
+    required: false
+    default: 'true'
+  first-contribution:
+    description: >
+      Welcome someone opening their first pull request here, with the two repository
+      rules CI enforces. Retracts itself the moment they have a merged pull request, so
+      a regular contributor never sees it.
+    required: false
+    default: 'true'
+  fix-generated-drift:
+    description: >
+      Regenerate drifted generated files and PUSH the result to the pull request branch.
+
+      OFF by default, because it is the one advisor that writes. Turning it on here is
+      only half the consent: the pull request must ALSO carry the label named by
+      `fix-label`, so the repository allows the capability and a human asks for it per
+      change. Needs `contents: write` on the job, and cannot work on a fork PR (the
+      token has no write access to the fork) - it says so in the comment rather than
+      failing.
+    required: false
+    default: 'false'
+  fix-label:
+    description: The label that consents to fix-generated-drift on a given pull request.
+    required: false
+    default: 'magus:autofix'
+  pr-number:
+    description: The pull request to comment on.
+    required: false
+    default: ${{ github.event.pull_request.number }}
+  base-ref:
+    description: The branch to test the merge against.
+    required: false
+    default: ${{ github.event.pull_request.base.ref }}
+  head-sha:
+    description: >
+      The PR's head commit. Passed explicitly because actions/checkout resolves a
+      pull_request event to the ephemeral merge commit, which is the base already merged
+      with the head - testing that against the base would find nothing.
+    required: false
+    default: ${{ github.event.pull_request.head.sha }}
+  token:
+    description: >
+      Token used to read and post the comment, and to push when fix-generated-drift is
+      on. Needs `pull-requests: write`, which the default GITHUB_TOKEN does NOT have on a
+      pull request from a fork - the comment step fails there, by design of the platform
+      rather than of this action.
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    # BUZZ_INCLUDE_PATH is how each advisor finds advice.buzz beside it: the scripts run
+    # from the CALLER's checkout, so the action's own directory is not on the search path
+    # unless it is named here.
+    - name: Advise on generated-file conflicts
+      if: inputs.merge-conflicts == 'true'
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_BASE: ${{ inputs.base-ref }}
+        PR_HEAD_SHA: ${{ inputs.head-sha }}
+      run: magus buzz "$GITHUB_ACTION_PATH/merge-conflict.buzz"
+
+    - name: Advise on hand-edited generated files
+      if: inputs.hand-edited-generated == 'true'
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_BASE: ${{ inputs.base-ref }}
+        PR_HEAD_SHA: ${{ inputs.head-sha }}
+      run: magus buzz "$GITHUB_ACTION_PATH/hand-edited-generated.buzz"
+
+    - name: Advise on targets that declare no outputs
+      if: inputs.target-outputs == 'true'
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_BASE: ${{ inputs.base-ref }}
+        PR_HEAD_SHA: ${{ inputs.head-sha }}
+      run: magus buzz "$GITHUB_ACTION_PATH/target-outputs.buzz"
+
+    - name: Report doctor findings
+      if: inputs.doctor == 'true'
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+      run: magus buzz "$GITHUB_ACTION_PATH/doctor.buzz"
+
+    - name: Advise on a raised version floor
+      if: inputs.version-floor == 'true'
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_BASE: ${{ inputs.base-ref }}
+        PR_HEAD_SHA: ${{ inputs.head-sha }}
+      run: magus buzz "$GITHUB_ACTION_PATH/version-floor.buzz"
+
+    - name: Advise on unclaimed files
+      if: inputs.unclaimed == 'true'
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_BASE: ${{ inputs.base-ref }}
+        PR_HEAD_SHA: ${{ inputs.head-sha }}
+      run: magus buzz "$GITHUB_ACTION_PATH/unclaimed.buzz"
+
+    - name: Advise on the change's blast radius
+      if: inputs.blast-radius == 'true'
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_BASE: ${{ inputs.base-ref }}
+        PR_HEAD_SHA: ${{ inputs.head-sha }}
+        FANOUT_SHARE: ${{ inputs.fanout-share }}
+      run: magus buzz "$GITHUB_ACTION_PATH/blast-radius.buzz"
+
+    - name: Advise on a target opted out of the cache
+      if: inputs.skip-cache == 'true'
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_BASE: ${{ inputs.base-ref }}
+        PR_HEAD_SHA: ${{ inputs.head-sha }}
+      run: magus buzz "$GITHUB_ACTION_PATH/skip-cache.buzz"
+
+    - name: Welcome a first-time contributor
+      if: inputs.first-contribution == 'true'
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+      run: magus buzz "$GITHUB_ACTION_PATH/first-contribution.buzz"
+
+    # Last, and deliberately after the read-only advisors: it can push, which moves the
+    # head every earlier advisor just reported on.
+    - name: Fix generated drift
+      if: inputs.fix-generated-drift == 'true'
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        FIX_DRIFT: ${{ inputs.fix-generated-drift }}
+        FIX_LABEL: ${{ inputs.fix-label }}
+      run: magus buzz "$GITHUB_ACTION_PATH/fix-generated-drift.buzz"

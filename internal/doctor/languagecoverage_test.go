@@ -32,7 +32,7 @@ func TestLanguageCoverageRespectsNoLanguage(t *testing.T) {
 			{Path: "evals", NoLanguage: "polyglot harness; no single pack describes it"},
 			{Path: "forgot-the-import"},
 		})
-		assert.Equal(t, StatusFail, got.Status)
+		assert.Equal(t, StatusAdvice, got.Status)
 		assert.Equal(t, []string{"forgot-the-import"}, got.Details)
 	})
 }

@@ -262,6 +262,16 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Before project discovery, and long before any magusfile is evaluated. The
+	// magusfile is the thing that explodes when the binary is too old, so a floor
+	// checked after it has already failed reports nothing anyone can act on.
+	var vo workspace.Load
+	for _, fn := range opts {
+		fn(&vo)
+	}
+	if d := ward.RequiredVersion(cfg.RequiredVersion, vo.Version); d != nil {
+		return nil, d
+	}
 	ws, err := project.Discover(ctx, root)
 	if err != nil {
 		return nil, err

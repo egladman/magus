@@ -39,6 +39,7 @@ config log.stream
 config mcp.address
 config mcp.enabled
 config report.filter
+config required_version
 config sandbox.allow.<name>.mode
 config sandbox.allow.<name>.name
 config sandbox.allow.<name>.path

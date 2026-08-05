@@ -8,9 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/cache"
@@ -32,6 +30,9 @@ func init() { Register(Magus) }
 // as hand-written trampolines in bindings/magus.go.
 var Magus = Module{
 	Name: "magus",
+	// The first paragraph stays one short line with no ". " in it: cmd/magus-docs
+	// derives the page's frontmatter description from the doc's first sentence, and a
+	// second sentence up here would drag a paragraph break into the YAML.
 	Doc: "Magus core primitives.\n\n" +
 		"Three provider namespaces are wired by the runtime rather than declared here, so " +
 		"they do not appear in the method list below: `magus\\cache.remote(<spell>)` selects " +
@@ -39,12 +40,19 @@ var Magus = Module{
 		"`magus\\secret.provider(<spell>)` / `magus\\secret.read(<ref>)` a secret backend and " +
 		"the credentials read through it. Each takes an imported spell handle. See " +
 		"[Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) " +
-		"and [CI integration](../../guides/integrations/ci.md).",
+		"and [CI integration](../../guides/integrations/ci.md).\n\n" +
+		"`import \"magus\"` resolves in a `magus buzz` script as well as in a magusfile. The " +
+		"members that declare into the workspace magus is loading (`magus\\project`, the provider " +
+		"selections above) and the ones served in-process from a loaded workspace (`ls`, `targets`, " +
+		"`affected`, `graph`, `where`) raise [MGS1022](../codes/magusfile/MGS1022.md) in a script; " +
+		"the nested-command methods (`cmd`, `run`, `describe`, `insight`, `doctor`) work there and " +
+		"discover the workspace themselves.",
 	Methods: []Method{
 		{
 			Name: "cmd",
-			Doc:  "Escape hatch: run `magus <args>` for any subcommand, in the target's project directory. Prefer the dedicated methods (run, describe, insight, doctor) when one exists - magus.cmd warns when args name a subcommand that has one. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
+			Doc:  "Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method (status, affected, agent, graph, ...). Its signature is the typed methods' signature with the subcommand pushed in front: magus.cmd(sub, args, [opts]) beside magus.run(args, [opts]), same argv, same opts, same ExecResult. The SUBCOMMAND is a typed argument rather than args[0] because it is the part of the invocation magus can reason about - it stays readable in the signature and greppable in the source, while the remaining argv stays free-form. Prefer the dedicated methods (run, describe, insight, doctor) when one exists - magus.cmd warns when sub names one that has. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like os.exec); opts.quiet captures the output without echoing it to the console.",
 			Args: []Arg{
+				{Name: "sub", Type: TypeString},
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
@@ -75,17 +83,6 @@ var Magus = Module{
 			Impl:    MagusAffected,
 		},
 		{
-			Name:    "go_mod_replace_args",
-			Doc:     "Derive go mod edit flags that make this Go module replace its workspace-local requirements with their relative project paths. Reads go.mod through `go mod edit -json`; it never writes the file.",
-			Returns: []Ret{{Type: TypeStringSlice}},
-			Impl:    MagusGoModReplaceArgs,
-		},
-		{
-			Name: "go_mod_replace_check",
-			Doc:  "Raise MGS1016 when this Go module's workspace-local replace directives drift from the workspace project graph. Writes nothing.",
-			Impl: MagusGoModReplaceCheck,
-		},
-		{
 			Name:    "graph",
 			Doc:     "The project dependency DAG as {nodes, dependsOn, blastRadius}. nodes is in TOPOLOGICAL order, so iterating it is already a valid build order; dependsOn gives each node's direct predecessors and blastRadius how many projects it can transitively affect. Served in-process from the workspace on the context - no subprocess.",
 			Args:    nil,
@@ -103,7 +100,7 @@ var Magus = Module{
 		},
 		{
 			Name: "run",
-			Doc:  "Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
+			Doc:  "Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like os.exec); opts.quiet captures the output without echoing it to the console.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -113,7 +110,7 @@ var Magus = Module{
 		},
 		{
 			Name: "describe",
-			Doc:  "Run `magus describe <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.",
+			Doc:  "Run `magus describe <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like os.exec); opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -123,7 +120,7 @@ var Magus = Module{
 		},
 		{
 			Name: "insight",
-			Doc:  "Run `magus insight <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
+			Doc:  "Run `magus insight <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like os.exec); opts.quiet captures the output without echoing it to the console.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -132,13 +129,52 @@ var Magus = Module{
 			Impl:    MagusInsight,
 		},
 		{
-			Name: "doctor",
-			Doc:  "Run `magus doctor <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
+			Name: "insight_report",
+			Doc:  "Every VCS-history lens plus the knowledge-graph axis, as one typed report: {hotspots, affinity, ownership, trend, volatility, graphStats}. Annotate the result `> InsightReport` for compile-checked field access - `r.ownership.projects` gives each project's primary author and bus-factor flag, `r.hotspots.files` the churn-by-complexity ranking, `r.volatility` the targets that flapped. This is the same data `magus insight report` renders as Markdown, handed over as values instead of a document to scrape. Runs a nested magus, so it works from a `magus buzz` script with no workspace on the context.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "InsightReport"}},
+			Impl:    MagusInsightReport,
+		},
+		{
+			Name: "affected_impact",
+			Doc:  "The VCS-affected set and WHY each project is in it: {base, changedFileCount, changedFiles, seedProjects, affectedProjects, notes}, each affected project carrying whether it was a seed and the files that pulled it in. Annotate the result `> Impact`. This is `magus affected --impact`, a forensic mode that reports the set without running a target - unlike `magus affected list`, which dispatches a target across every affected project to answer the same question. Runs a nested magus, so it works from a `magus buzz` script with no workspace on the context.",
+			Args: []Arg{
+				{Name: "base", Type: TypeString, Optional: true},
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Impact"}},
+			Impl:    MagusAffectedImpact,
+		},
+		{
+			Name: "target_graph",
+			Doc:  "The TARGET dependency graph of every project as a typed value: {projects}, each with its nodes and each node's declared footprint (readsFiles / writesFiles / modifiesExistingFiles). Annotate the result `> TargetGraph`. This is what magus.targets() serves in-process, reached by a nested magus instead, so it works from a `magus buzz` script with no workspace on the context - the case that matters for CI advisories reasoning about a pull request.",
+			Args: []Arg{
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "TargetGraph"}},
+			Impl:    MagusTargetGraph,
+		},
+		{
+			Name: "describe_file",
+			Doc:  "Classify paths against the workspace's declared globs: for each, the owning project and whether it is a declared `output` (generated - regenerate it, never hand-edit), a declared `source` (it feeds cache keys and the affected set), or `unclaimed`. Returns a typed DoctorReport-style envelope {definition, count, files}, not text to re-parse: this is the question \"can I disregard this changed file\", and a caller branches on `role` rather than grepping. Runs a nested magus, so it needs no workspace on the context and works from a `magus buzz` script.",
+			Args: []Arg{
+				{Name: "paths", Type: TypeStringSlice},
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "FileReport"}},
+			Impl:    MagusDescribeFile,
+		},
+		{
+			Name: "doctor",
+			Doc:  "Validate the workspace and return what every check found: {workspace, checks, summary}, each check {name, status, message, details} with status `ok`, `fail`, or `advice` (advice is worth knowing and never a gate). Annotate the result `> DoctorReport` for compile-checked field access. A caller branches on a check's status rather than grepping console text for the word fail. It does NOT raise when a check fails: doctor exits non-zero precisely when it has something to report, and raising would discard the report. Gate on `summary.fail` instead, which says more than an exit code does. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like os.exec).",
+			Args: []Arg{
+				{Name: "args", Type: TypeStringSlice},
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "DoctorReport"}},
 			Impl:    MagusDoctor,
 		},
 		{
@@ -193,6 +229,18 @@ var typedMagusSubcommands = map[string]bool{
 	"run": true, "describe": true, "insight": true, "doctor": true,
 }
 
+// errNoWorkspace is the MGS1022 error a magus.* member raises when it is called
+// without the loaded workspace it reads from. Every such member serves its answer
+// IN-PROCESS off types.WorkspaceFromContext, which magus.Open puts there for a
+// magusfile target; a `magus buzz` script has no workspace open, and shelling out
+// (magus.describe/cmd, which fork and rediscover the root) is what it reaches for
+// instead. Coded so the constraint is greppable and linkable rather than one more
+// bare sentence.
+func errNoWorkspace(member string) error {
+	return types.DiagnosticErrorf(types.MagusfileOnlyMember,
+		"magus\\%s: no workspace on the context - it is callable from a magusfile target, not a magus buzz script; from a script use magus\\describe/magus\\cmd, which run a nested magus and discover the workspace themselves", member)
+}
+
 // MagusLs lists the workspace's projects from the workspace already open on ctx.
 //
 // It is the first of the read-only verbs served IN-PROCESS. The typed methods below it
@@ -208,7 +256,7 @@ var typedMagusSubcommands = map[string]bool{
 func MagusLs(ctx context.Context) (types.ProjectsOutput, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return types.ProjectsOutput{}, errors.New("magus.ls: no workspace on the context (magus.ls is callable from a magusfile target, not a bare script)")
+		return types.ProjectsOutput{}, errNoWorkspace("ls")
 	}
 	return ws.ListProjects(ctx)
 }
@@ -220,7 +268,7 @@ func MagusLs(ctx context.Context) (types.ProjectsOutput, error) {
 func MagusTargets(ctx context.Context) (types.TargetGraphOutput, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return types.TargetGraphOutput{}, errors.New("magus.targets: no workspace on the context (magus.targets is callable from a magusfile target, not a bare script)")
+		return types.TargetGraphOutput{}, errNoWorkspace("targets")
 	}
 	return ws.TargetGraph(ctx)
 }
@@ -235,7 +283,7 @@ func MagusTargets(ctx context.Context) (types.TargetGraphOutput, error) {
 func MagusAffected(ctx context.Context, base string) (types.AffectedResult, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return types.AffectedResult{}, errors.New("magus.affected: no workspace on the context (callable from a magusfile target, not a bare script)")
+		return types.AffectedResult{}, errNoWorkspace("affected")
 	}
 	res, err := ws.Affected(ctx, base)
 	if err != nil {
@@ -244,200 +292,13 @@ func MagusAffected(ctx context.Context, base string) (types.AffectedResult, erro
 	return *res, nil
 }
 
-// MagusGoModReplaceArgs derives the go mod edit flags for the Go module in the
-// contextual project directory. It reads every workspace go.mod through the Go
-// toolchain, but deliberately leaves applying those flags to the go spell so a
-// go.mod write remains a visible, sandboxed command operation.
-func MagusGoModReplaceArgs(ctx context.Context) ([]string, error) {
-	ws := types.WorkspaceFromContext(ctx)
-	if ws == nil {
-		return nil, errors.New("magus.goModReplaceArgs: no workspace on the context (callable from a magusfile target, not a bare script)")
-	}
-	dir, err := EffectiveCwd(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("magus.goModReplaceArgs: current directory: %w", err)
-	}
-	var project *types.Project
-	for _, candidate := range ws.All() {
-		if sameDirectory(candidate.Dir, dir) {
-			project = candidate
-			break
-		}
-	}
-	if project == nil {
-		return nil, fmt.Errorf("magus.goModReplaceArgs: %s is not inside a workspace project", dir)
-	}
-
-	mods := make([]goMod, 0)
-	for _, candidate := range ws.All() {
-		if _, err := os.Stat(filepath.Join(candidate.Dir, "go.mod")); err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				continue
-			}
-			return nil, fmt.Errorf("magus.goModReplaceArgs: stat %s/go.mod: %w", candidate.Path, err)
-		}
-		mod, err := readGoMod(ctx, candidate.Dir)
-		if err != nil {
-			return nil, err
-		}
-		mods = append(mods, mod)
-	}
-
-	return deriveGoModReplaceArgs(project.Dir, mods)
-}
-
-// MagusGoModReplaceCheck is the read-only ward for workspace-local Go module
-// replaces. The corresponding go_mod_replace_args method is intentionally kept
-// separate: a sync target needs those flags to repair the drift through go mod edit.
-func MagusGoModReplaceCheck(ctx context.Context) error {
-	args, err := MagusGoModReplaceArgs(ctx)
-	if err != nil {
-		return err
-	}
-	if len(args) == 0 {
-		return nil
-	}
-	dir, err := EffectiveCwd(ctx)
-	if err != nil {
-		return fmt.Errorf("magus.goModReplaceCheck: current directory: %w", err)
-	}
-	return types.DiagnosticErrorf(types.GoModReplaceDrift,
-		"go.mod in %s has workspace-local replace drift; run `magus run mod-sync:rw` to apply the derived replacements", dir)
-}
-
-type goMod struct {
-	Dir     string
-	Path    string
-	Require []goModRequire
-	Replace []goModReplace
-}
-
-type goModRequire struct {
-	Path string
-}
-
-type goModReplace struct {
-	OldPath string
-	NewPath string
-}
-
-func readGoMod(ctx context.Context, dir string) (goMod, error) {
-	cmd := exec.CommandContext(ctx, "go", "mod", "edit", "-json")
-	cmd.Dir = dir
-	out, err := cmd.Output()
-	if err != nil {
-		return goMod{}, fmt.Errorf("magus.goModReplaceArgs: go mod edit -json in %s: %w", dir, err)
-	}
-
-	var raw struct {
-		Module struct {
-			Path string
-		}
-		Require []struct {
-			Path string
-		}
-		Replace []struct {
-			Old struct {
-				Path string
-			}
-			New struct {
-				Path string
-			}
-		}
-	}
-	if err := json.Unmarshal(out, &raw); err != nil {
-		return goMod{}, fmt.Errorf("magus.goModReplaceArgs: decode go mod edit output in %s: %w", dir, err)
-	}
-
-	mod := goMod{Dir: dir, Path: raw.Module.Path}
-	for _, require := range raw.Require {
-		mod.Require = append(mod.Require, goModRequire{Path: require.Path})
-	}
-	for _, replace := range raw.Replace {
-		mod.Replace = append(mod.Replace, goModReplace{OldPath: replace.Old.Path, NewPath: replace.New.Path})
-	}
-	return mod, nil
-}
-
-func deriveGoModReplaceArgs(projectDir string, mods []goMod) ([]string, error) {
-	var current *goMod
-	byPath := make(map[string]goMod, len(mods))
-	for i := range mods {
-		mod := mods[i]
-		if mod.Path == "" {
-			continue
-		}
-		byPath[mod.Path] = mod
-		if sameDirectory(projectDir, mod.Dir) {
-			current = &mods[i]
-		}
-	}
-	if current == nil {
-		return nil, fmt.Errorf("magus.goModReplaceArgs: no Go module for %s", projectDir)
-	}
-
-	desired := make(map[string]string)
-	for _, require := range current.Require {
-		provider, ok := byPath[require.Path]
-		if !ok || sameDirectory(current.Dir, provider.Dir) {
-			continue
-		}
-		rel, err := filepath.Rel(current.Dir, provider.Dir)
-		if err != nil {
-			return nil, fmt.Errorf("magus.goModReplaceArgs: relative path from %s to %s: %w", current.Dir, provider.Dir, err)
-		}
-		desired[require.Path] = goModReplacePath(rel)
-	}
-
-	currentByPath := make(map[string][]goModReplace)
-	for _, replace := range current.Replace {
-		if _, workspaceModule := byPath[replace.OldPath]; workspaceModule {
-			currentByPath[replace.OldPath] = append(currentByPath[replace.OldPath], replace)
-		}
-	}
-
-	var drops, replaces []string
-	for path, existing := range currentByPath {
-		want, needed := desired[path]
-		correct := needed && len(existing) == 1 && sameGoModReplace(current.Dir, existing[0].NewPath, want)
-		if !correct {
-			drops = append(drops, "-dropreplace="+path)
-		}
-	}
-	for path, want := range desired {
-		existing := currentByPath[path]
-		if len(existing) != 1 || !sameGoModReplace(current.Dir, existing[0].NewPath, want) {
-			replaces = append(replaces, "-replace="+path+"="+want)
-		}
-	}
-	slices.Sort(drops)
-	slices.Sort(replaces)
-	return append(drops, replaces...), nil
-}
-
-func goModReplacePath(rel string) string {
-	rel = filepath.ToSlash(rel)
-	if rel == "." || strings.HasPrefix(rel, "../") || strings.HasPrefix(rel, "./") {
-		return rel
-	}
-	return "./" + rel
-}
-
-func sameGoModReplace(dir, got, want string) bool {
-	return sameDirectory(filepath.Join(dir, got), filepath.Join(dir, want))
-}
-
-func sameDirectory(a, b string) bool {
-	return filepath.Clean(a) == filepath.Clean(b)
-}
-
 // MagusWhere returns the project path containing dir, or "" when dir is inside none.
 // "" rather than an error: asking whether a path is inside a project is a question, and
 // "no" is a valid answer a magusfile branches on.
 func MagusWhere(ctx context.Context, dir string) (string, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return "", errors.New("magus.where: no workspace on the context (callable from a magusfile target, not a bare script)")
+		return "", errNoWorkspace("where")
 	}
 	p, ok := ws.Where(dir)
 	if !ok {
@@ -451,7 +312,7 @@ func MagusWhere(ctx context.Context, dir string) (string, error) {
 func MagusGraph(ctx context.Context) (types.GraphView, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return types.GraphView{}, errors.New("magus.graph: no workspace on the context (callable from a magusfile target, not a bare script)")
+		return types.GraphView{}, errNoWorkspace("graph")
 	}
 	g, err := ws.Graph()
 	if err != nil {
@@ -460,23 +321,25 @@ func MagusGraph(ctx context.Context) (types.GraphView, error) {
 	return g.View(), nil
 }
 
-// MagusCmd is the escape hatch: it runs `magus <args>` for any subcommand. It
-// serves subcommands without a dedicated wrapper (status, affected, ...) but
-// warns when args[0] names one that has, nudging toward the typed method. Like
-// the typed methods it runs in the contextual project dir; see runMagus.
-func MagusCmd(ctx context.Context, args []string, opts map[string]any) (types.ExecResult, error) {
-	warnIfTypedSubcommand(ctx, args)
-	return runMagus(ctx, "cmd", args, opts)
+// MagusCmd is the escape hatch: it runs `magus <sub> <args>` for a subcommand with no
+// dedicated wrapper (status, affected, agent, ...). The subcommand is a parameter of its
+// own rather than args[0], which is what lets the warning below be exact instead of a
+// guess at a list's first element, and what keeps the invocation readable to anything
+// reading the source. Like the typed methods it runs in the contextual project dir
+// unless opts.dir says otherwise; see runMagus.
+func MagusCmd(ctx context.Context, sub string, args []string, opts map[string]any) (types.ExecResult, error) {
+	warnIfTypedSubcommand(ctx, sub)
+	return runMagusSub(ctx, sub, args, opts)
 }
 
-// warnIfTypedSubcommand warns when args[0] names a subcommand with a dedicated
+// warnIfTypedSubcommand warns when sub names a subcommand with a dedicated
 // magus.<name>(...) method, nudging authors off the escape hatch. It is the pure
 // decision half of MagusCmd, split out so it can be tested without the nested exec.
-func warnIfTypedSubcommand(ctx context.Context, args []string) {
-	if len(args) > 0 && typedMagusSubcommands[args[0]] {
+func warnIfTypedSubcommand(ctx context.Context, sub string) {
+	if typedMagusSubcommands[sub] {
 		slog.WarnContext(ctx, "magus.cmd called for a subcommand with a dedicated method; prefer it for clarity and a stable signature",
-			"subcommand", args[0],
-			"hint", fmt.Sprintf("use magus.%s([...]) instead of magus.cmd([%q, ...])", args[0], args[0]))
+			"subcommand", sub,
+			"hint", fmt.Sprintf("use magus.%s([...]) instead of magus.cmd(%q, [...])", sub, sub))
 	}
 }
 
@@ -495,9 +358,76 @@ func MagusInsight(ctx context.Context, args []string, opts map[string]any) (type
 	return runMagusSub(ctx, "insight", args, opts)
 }
 
-// MagusDoctor runs `magus doctor <args>`; see runMagus.
-func MagusDoctor(ctx context.Context, args []string, opts map[string]any) (types.ExecResult, error) {
-	return runMagusSub(ctx, "doctor", args, opts)
+// MagusDoctor validates the workspace and returns the typed report.
+//
+// It is the shape every method here should have and most do not yet: the child already
+// knows how to say this in JSON, so the answer crosses the boundary as the domain type
+// rather than as console text a caller has to parse back out of a string.
+func MagusDoctor(ctx context.Context, args []string, opts map[string]any) (types.DoctorReport, error) {
+	return runMagusJSON[types.DoctorReport](ctx, "doctor", args, opts)
+}
+
+// MagusAffectedImpact reports the affected set through a nested magus. It is the forking
+// counterpart to MagusAffected, and answers the richer question: not just which projects,
+// but which files seeded them.
+func MagusAffectedImpact(ctx context.Context, base string, opts map[string]any) (types.ImpactResult, error) {
+	args := []string{"--impact"}
+	if base != "" {
+		args = append(args, "--base", base)
+	}
+	return runMagusJSON[types.ImpactResult](ctx, "affected", args, opts)
+}
+
+// MagusTargetGraph returns every project's target graph through a nested magus, the
+// forking counterpart to MagusTargets. See runMagusJSON.
+func MagusTargetGraph(ctx context.Context, opts map[string]any) (types.TargetGraphOutput, error) {
+	return runMagusJSON[types.TargetGraphOutput](ctx, "describe", []string{"graph"}, opts)
+}
+
+// MagusInsightReport returns every insight lens as one typed report. `magus insight`
+// itself stays the escape hatch for a single lens, the same split describe keeps: the
+// noun that has a domain type gets a typed method, the rest stays free-form.
+func MagusInsightReport(ctx context.Context, args []string, opts map[string]any) (types.InsightReport, error) {
+	return runMagusJSON[types.InsightReport](ctx, "insight", append([]string{"report"}, args...), opts)
+}
+
+// MagusDescribeFile classifies paths as generated output, declared source, or
+// unclaimed. See runMagusJSON for why it forks rather than reading the workspace on
+// the context: this answer is wanted precisely where there is no workspace loaded -
+// a `magus buzz` script deciding whether a changed file is worth a human's attention.
+func MagusDescribeFile(ctx context.Context, paths []string, opts map[string]any) (types.FileReport, error) {
+	return runMagusJSON[types.FileReport](ctx, "describe", append([]string{"file"}, paths...), opts)
+}
+
+// runMagusJSON runs a nested magus subcommand and decodes its report into T.
+//
+// It forces `-o json` and quiet: the caller is consuming the value, not watching the
+// output, and letting a caller pass its own -o would hand back a shape T cannot decode.
+// The alternative - returning ExecResult and making every caller run the bytes through
+// jsonDecode - loses the type at the boundary, and annotating a decoded value back to a
+// mirror does NOT restore it: that compiles and silently reads null for every field.
+func runMagusJSON[T any](ctx context.Context, sub string, args []string, opts map[string]any) (T, error) {
+	var out T
+	quiet := map[string]any{"quiet": true}
+	for k, v := range opts {
+		if k == "quiet" {
+			continue
+		}
+		quiet[k] = v
+	}
+	res, runErr := runMagusSub(ctx, sub, append(append([]string(nil), args...), "-o", "json"), quiet)
+	// DECODE FIRST, exit status second. A report command exits non-zero precisely when
+	// it has something to report - doctor exits 1 because a check failed - and raising
+	// there would throw away the very payload the caller asked for. A report that parsed
+	// IS the answer; the caller branches on it (summary.fail), which is strictly more
+	// than an exit code carries. Only an unparseable answer is a failure to answer.
+	if derr := json.Unmarshal([]byte(res.Stdout), &out); derr == nil {
+		return out, nil
+	}
+	if runErr != nil {
+		return out, runErr
+	}
+	return out, fmt.Errorf("magus.%s: decode report: %s", sub, res.Stderr)
 }
 
 // runMagusSub runs a nested magus invocation for subcommand sub: it prepends sub
@@ -505,6 +435,22 @@ func MagusDoctor(ctx context.Context, args []string, opts map[string]any) (types
 // hands off to runMagus.
 func runMagusSub(ctx context.Context, sub string, args []string, opts map[string]any) (types.ExecResult, error) {
 	return runMagus(ctx, sub, append([]string{sub}, args...), opts)
+}
+
+// resolveRunDir picks the directory a nested magus runs in: the contextual project dir,
+// or opts.dir resolved RELATIVE to it - exactly as os.exec's dir is, so the two spell the
+// same idea the same way. An absolute opts.dir wins outright, and with no contextual dir
+// there is nothing to resolve against, so it is used as given.
+func resolveRunDir(ctx context.Context, opts map[string]any) string {
+	dir, _ := CwdFromContext(ctx)
+	sub, ok := opts["dir"].(string)
+	if !ok || sub == "" {
+		return dir
+	}
+	if filepath.IsAbs(sub) || dir == "" {
+		return sub
+	}
+	return filepath.Join(dir, sub)
 }
 
 // runMagus runs a nested magus invocation with the full arg vector, yielding the
@@ -550,8 +496,12 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 	}
 
 	// Run in the contextual project dir; "" inherits the process cwd (the
-	// behavior for magusfile targets that run under a process chdir).
-	dir, _ := CwdFromContext(ctx)
+	// behavior for magusfile targets that run under a process chdir). opts.dir
+	// redirects it, resolved RELATIVE to that contextual dir exactly as os.exec's
+	// dir is - a nested magus that must run somewhere else (a sibling project, a
+	// directory of scripts) has no other way to say so, and reaching for
+	// os.exec("magus", ...) to get it is the thing magus warns about.
+	dir := resolveRunDir(ctx, opts)
 
 	// opts.quiet captures the output without echoing it to the console, for a
 	// command whose stdout is consumed (e.g. written to a file), not displayed.
@@ -572,7 +522,13 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 			cmdErr = fmt.Errorf("magus.%s: %s: %w", label, strings.Join(full, " "), err)
 		case res.Code != 0:
 			cmdErr = fmt.Errorf("magus.%s: %s exited with code %d", label, strings.Join(full, " "), res.Code)
-		default:
+		}
+		if res.Started {
+			// Recorded even on a non-zero exit. A child that RAN said something, and
+			// that output is the answer for a command whose failure IS its report -
+			// doctor exits 1 because a check failed, and dropping stdout there left
+			// nothing to decode. The error is still returned alongside, so a caller
+			// that only wants the happy path is unaffected.
 			rec = types.ExecResult{
 				Stdout: strings.TrimSpace(res.Stdout),
 				Stderr: strings.TrimSpace(res.Stderr),

@@ -35,8 +35,7 @@ magus buzz hello.buzz
 | `magus buzz -e '<code>'` | run a snippet inline |
 | `echo '<code>' \| magus buzz -` | run from stdin (a pipe or heredoc also works with no `-`) |
 | `magus buzz -t <file>` | run the file's `test "..." {}` blocks and report pass/fail |
-| `magus buzz` (a terminal, no args) | REPL |
-| `magus buzz --workspace` | REPL with the magusfile's targets and bindings loaded |
+| `magus buzz` (a terminal, no args) | REPL, with the magusfile at cwd loaded |
 
 ## Never guess an API: ask
 
@@ -78,10 +77,35 @@ import "fs"; import "json";   // host modules
 ```
 
 Available in `magus buzz`: the Buzz stdlib plus `archive`, `charm`, `crypto`,
-`encoding`, `env`, `fmt`, `fs`, `http`, `json`, `markdown`, `os`, `path`,
-`platform`, `semver`, `strings`, `template`, `time`, `toml`, `uuid`, `vcs`,
-`xml`, `yaml`. The `magus` module itself is NOT available here{{if .Full}} - it needs a
-magusfile's targets{{end}}, so use it from a magusfile, not a standalone script.
+`encoding`, `env`, `fmt`, `fs`, `http`, `json`, `markdown`, `magus`, `os`,
+`path`, `platform`, `semver`, `strings`, `template`, `time`, `toml`, `uuid`,
+`vcs`, `xml`, `yaml`.
+
+### Calling magus from a script
+
+`import "magus"` works in a script. Ask magus about the workspace through it
+rather than shelling out to the binary{{if .Full}} - it is in-process, version-pinned, and
+has no arg-quoting to get wrong{{end}}:
+
+```buzz
+import "std"; import "magus";
+
+fun main() > void {
+    // opts.quiet captures the output instead of echoing it
+    final res = magus\describe(["file", "MAGUS.md", "-o", "json"], opts: {"quiet": true});
+    std\print(res.stdout);
+}
+main();
+```
+
+WRONG: `os\exec("magus", args: [...], dir: ".", opts: {})` - magus warns on it.
+CORRECT: `magus\cmd`, or the typed `magus\run` / `describe` / `insight` / `doctor`.
+
+Members that need a magusfile raise MGS1022 naming the constraint: the ones
+that declare into a workspace being loaded (`magus\project`, the provider
+selections) have no script equivalent, and the ones that read a loaded workspace
+(`magus\ls`, `targets`, `affected`, `graph`, `where`) are reachable through the
+nested commands above.
 
 ## Two rules that cause most first-try failures
 

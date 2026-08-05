@@ -2,7 +2,10 @@ name: magus
 description: >
   Invoke a magus subcommand, or merge per-shard run histories.
 
-  Default mode (merge-history: false) runs `magus <command>`, setting
+  Three modes, all end-to-end CI work rather than three actions to wire up:
+  a command, the run summary, and the per-shard history merge.
+
+  Default mode (merge-history and report both false) runs `magus <command>`, setting
   MAGUS_SHARD/MAGUS_N_SHARDS first so shard-aware subcommands (e.g. `run`) emit
   ci.shard.total timing events without extra shell logic in the workflow.
 
@@ -36,12 +39,40 @@ inputs:
       history.
     required: false
     default: 'false'
+  report:
+    description: >
+      When "true", write the run's outcome and the workspace's insight report to the
+      GitHub step summary. Combines with merge-history: both are end-of-run work, and a
+      caller that wants them wants them in one place.
+    required: false
+    default: 'false'
+  ci-result:
+    description: >
+      With report, the result of the job that ran the CI shards
+      (success | failure | cancelled | skipped).
+    required: false
+    default: ''
+  shard-count:
+    description: With report, how many shards the affected set produced.
+    required: false
+    default: '0'
 
 runs:
   using: composite
   steps:
+    # Report first: it describes the run that just finished, and the history merge below
+    # changes what a later reader would see.
+    - name: Summarize the run
+      if: inputs.report == 'true'
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        CI_RESULT: ${{ inputs.ci-result }}
+        SHARD_COUNT: ${{ inputs.shard-count }}
+      run: magus buzz "$GITHUB_ACTION_PATH/ci-outcome.buzz"
+
     - name: Run magus
-      if: inputs.merge-history != 'true'
+      if: inputs.merge-history != 'true' && inputs.report != 'true'
       shell: bash
       env:
         MAGUS_SHARD:       ${{ inputs.shard }}

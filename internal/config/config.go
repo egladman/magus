@@ -68,6 +68,28 @@ type Config struct {
 
 	// Spells configures workspace spell resolution (the import walk and its wards).
 	Spells SpellsConfig `json:"spells" yaml:"spells"`
+
+	// RequiredVersion is the oldest magus that can run this workspace, as a semver
+	// constraint (">= 0.4.0", "^0.4"). Empty means no floor.
+	//
+	// It exists because the binary that hits the problem is the OLD one, and an old
+	// binary cannot be told after the fact which release added the module or key it
+	// is choking on - it has never heard of that release. A declared minimum is the
+	// only thing it can evaluate against a future it does not know about, which is
+	// why Terraform's required_version, Go's `go` directive, and npm's engines all
+	// take this shape. Checked before any magusfile is evaluated, since the
+	// magusfile is what explodes; see MGS1021.
+	//
+	// cli:"-" - magus.yaml ONLY, deliberately. Every other config field takes a flag
+	// and a MAGUS_* env var because the config layering exists to let a caller
+	// override the workspace. A floor is the one field where that is backwards: it
+	// is the workspace protecting the caller from a binary too old to read it, so an
+	// override is a way to switch off a check whose entire job is to stop you. The
+	// env var would be worse than the flag - one MAGUS_REQUIRED_VERSION exported in
+	// a shell or a CI environment silently disables the floor for every workspace
+	// that session touches, and nothing would report it. If the binary is too old,
+	// the fix is to upgrade the binary or lower the floor in the file.
+	RequiredVersion string `json:"required_version" yaml:"required_version" cli:"-"`
 }
 
 // SpellsConfig holds workspace-level spell settings.

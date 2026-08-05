@@ -1,3 +1,3 @@
 module github.com/egladman/magus/libs/diagnostics
 
-go 1.25.0
+go 1.26

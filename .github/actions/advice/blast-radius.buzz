@@ -1,0 +1,168 @@
+// Show how far a pull request reaches: every project that rebuilds, and WHY each one is
+// in the set.
+//
+// The tone is the hard part, and it is deliberate. A large reach is a property of how the
+// workspace is wired, not a fact about the person's change - one edited file can pull in
+// a dozen projects because they sit downstream of it, which is a decision someone else
+// made long ago. A comment that reads "your change is too big" blames the author for the
+// graph's shape, and people stop reading a bot that scolds them.
+//
+// So: state what rebuilds, name the chain that pulled each one in, and stop. The reviewer
+// gets the same information as the author. Splitting is mentioned only where it would
+// actually help, and NOT where the coupling is upstream of the diff - telling someone to
+// split a change whose fan-out is structural is advice that cannot be followed.
+//
+// Why each project is in the set is the ANSWER - a reader here is asking "why is docs in
+// my build". magus\affectedImpact carries it: whether the project was edited directly (a
+// seed) and, when it was not, the files that pulled it in. One typed call for the whole
+// set, where this used to run `magus affected --explain` once per project and parse the
+// output. The diagram follows, for the reader who wants the shape rather than the rows.
+//
+// Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA, FANOUT_SHARE.
+import "os";
+import "advice";
+import "magus";
+import "std";
+
+final section = "blast-radius";
+
+fun changed(base: str, head: str) > [str] {
+    os\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
+    final res = os\exec("git", args: ["diff", "--name-only", "origin/" + base + "..." + head],
+        dir: ".", opts: {"allow_failure": true});
+    var paths = mut [];
+    foreach (line in res.stdout.split("\n")) {
+        if (line != "") { paths.append(line); }
+    }
+    return paths;
+}
+
+// trips reports whether `reached` of `total` projects is enough to be worth saying. Pure,
+// so the rule is testable and reviewable in one place.
+export fun trips(reached: int, total: int, share: float) > bool {
+    if (reached < 2) { return false; }
+    if (total <= 0) { return false; }
+    // Multiplied, not divided: reached / total is INTEGER division here, so 5 of 10
+    // came out 0 and the threshold never tripped.
+    return reached >= total * share;
+}
+
+fun body(projects: [str], reasons: [str], total: int, diagram: str) > str {
+    var text = "**This change reaches " + "{projects.len()}" + " of " + "{total}"
+        + " projects.**\n\n"
+        + "The reach comes from how this workspace is wired: a project is here because "
+        + "it sits downstream of one you edited. All " + "{projects.len()}" + " of them "
+        + "rebuild and retest.\n\n"
+        + "| project | why it is in the set |\n| --- | --- |\n";
+    for (var i = 0; i < projects.len(); i = i + 1) {
+        text = text + "| `" + projects[i] + "` | " + reasons[i] + " |\n";
+    }
+    if (diagram != "") {
+        text = text + "\n```mermaid\n" + diagram.trim() + "\n```\n";
+    }
+    if (projects.len() < total) {
+        text = text + "\nIf this is more than the change needs to touch, splitting it "
+            + "makes each piece cheaper to review and to revert.\n";
+    } else {
+        text = text + "\nEverything is downstream of what you edited, so splitting the "
+            + "change would not shrink any piece - the coupling is upstream of this diff.\n";
+    }
+    return text
+        + "\nIf that matches what you expected, there is nothing to do here. If it "
+        + "surprises you, look at the dependency graph before this pull request: "
+        + "`magus affected --explain <project>` lists the files that pulled one in, and "
+        + "`magus path <a> <b>` shows how any two connect.\n";
+}
+
+fun main() > void {
+    final repo = advice\env("REPO");
+    final pr = advice\env("PR_NUMBER");
+    final base = advice\env("PR_BASE");
+    final head = advice\env("PR_HEAD_SHA");
+    if (pr == "" and base == "" and head == "") {
+        std\print("blast-radius: no PR context; nothing to advise");
+        return;
+    }
+    if (pr == "" or base == "" or head == "") {
+        throw "blast-radius: PR_NUMBER, PR_BASE, and PR_HEAD_SHA must be set together";
+    }
+    if (advice\silenced(repo, pr: pr, name: section)) {
+        // Retract rather than leave the last finding frozen on the page.
+        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        std\print("blast-radius: silenced by label");
+        return;
+    }
+
+    var share = 0.5;
+    final configured = advice\env("FANOUT_SHARE");
+    // parseDouble, not parseFloat: Buzz's floating type is `double` and there is no
+    // parseFloat, so the guessed name was null at run time - which a test over the pure
+    // functions could never catch, because only main() reads the input.
+    if (configured != "") { share = std\parseDouble(configured) ?? 0.5; }
+
+    // One typed call for the whole set. --impact is the FORENSIC mode: it reports the
+    // set without running a target, unlike `magus affected list`, which dispatches one
+    // across every affected project to answer the same question.
+    final impact = magus\affectedImpact("origin/" + base);
+    var reached = mut [];
+    var why = mut [];
+    foreach (p in impact.affectedProjects) {
+        reached.append(p.path);
+        if (p.seed) { why.append("edited here"); }
+        else { if (p.files.len() == 0) { why.append("depends on a project you edited"); }
+               else { why.append("depends on a project you edited, via `" + p.files[0] + "`"); } }
+    }
+
+    var total = 0;
+    foreach (p in magus\targetGraph().projects) { total = total + 1; }
+    if (!trips(reached.len(), total: total, share: share)) {
+        advice\publish(repo, pr: pr, name: section, title: "How far this change reaches", body: "");
+        std\print("blast-radius: {reached.len()} of {total} projects; below the threshold");
+        return;
+    }
+
+    // Only the reached projects, so the picture is this change's reach and not the whole
+    // workspace - the workspace-wide graph is already rendered in MAGUS.md.
+    var argv = mut ["deps"];
+    foreach (p in reached) { argv.append(p); }
+    argv.append("-o");
+    argv.append("mermaid");
+    final drawn = magus\cmd("graph", args: argv, opts: {"quiet": true, "allow_failure": true});
+    var diagram = "";
+    if (drawn.ok) { diagram = drawn.stdout; }
+
+    advice\publish(repo, pr: pr, name: section,
+        title: "How far this change reaches ({reached.len()} of {total} projects)",
+        body: body(reached, reasons: why, total: total, diagram: diagram));
+    std\print("blast-radius: advised on {reached.len()} of {total}");
+}
+
+main();
+
+test "trips fires when the reach is at or over the share" {
+    std\assert(trips(5, total: 10, share: 0.5), message: "half the workspace");
+    std\assert(trips(9, total: 10, share: 0.5), message: "most of it");
+}
+
+test "trips stays quiet for a small reach" {
+    std\assert(!trips(1, total: 10, share: 0.5), message: "one project is never worth saying");
+    std\assert(!trips(3, total: 10, share: 0.5), message: "under the share");
+}
+
+test "trips needs at least two projects however small the workspace" {
+    std\assert(!trips(1, total: 1, share: 0.5), message: "a single-project workspace always reaches everything");
+}
+
+test "body names every project and why it is in the set" {
+    final text = body(["docs", "."], reasons: ["depends on a project you edited", "edited here"],
+        total: 9, diagram: "");
+    std\assert(text.indexOf("2 of 9 projects") != null, message: "counts the reach");
+    std\assert(text.indexOf("| `docs` | depends on a project you edited |") != null, message: "a pulled-in row");
+    std\assert(text.indexOf("| `.` | edited here |") != null, message: "a seed row");
+    std\assert(text.indexOf("splitting it") != null, message: "offers the option while it still helps");
+}
+
+test "body says splitting will not help when everything is downstream" {
+    final text = body(["a", "b"], reasons: ["edited here", "x"], total: 2, diagram: "");
+    std\assert(text.indexOf("coupling is upstream") != null, message: "does not ask for a split that cannot help");
+}

@@ -1,0 +1,77 @@
+// Write the run's outcome to the GitHub step summary.
+//
+// A step summary, NOT a pull request comment: it changes on every push, and a comment
+// that changes on every push is the kind people mute. The advice action owns the comment;
+// this owns the run's own page.
+//
+// Reads CI_RESULT, SHARD_COUNT, and GITHUB_STEP_SUMMARY.
+import "fs";
+import "magus";
+import "os";
+import "std";
+
+// outcome renders the summary for one CI result. Pure, so the wording and the branch for
+// every result GitHub can report are testable - which a shell `case` in a workflow is not.
+export fun outcome(result: str, shards: str) > str {
+    var text = "## CI outcome\n\n";
+    if (result == "success") {
+        return text + "Passed across " + shards + " affected shard(s).\n";
+    }
+    if (result == "skipped") {
+        return text + "No affected projects required a CI shard.\n";
+    }
+    if (result == "failure" or result == "cancelled") {
+        return text + "**" + result + ":** open the failed shard job above, then fetch its "
+            + "magus output reference before retrying.\n\n"
+            + "Local triage: `magus affected ci` - "
+            + "[Affected CI guide](https://eli.gladman.cc/magus/guides/affected/) - "
+            + "[CI target guide](https://eli.gladman.cc/magus/concepts/targets/ci/)\n";
+    }
+    // Not a result GitHub documents. Say so plainly rather than mapping it onto one of
+    // the known outcomes, which would report a pass that never happened.
+    return text + "CI reported an unexpected result: `" + result + "`. Open the workflow "
+        + "jobs above for the failing step.\n";
+}
+
+fun env(name: str) > str {
+    final v = os\env(name);
+    if (v == null) { return ""; }
+    return "" + v;
+}
+
+fun main() > void {
+    final path = env("GITHUB_STEP_SUMMARY");
+    if (path == "") {
+        std\print("ci-outcome: not running under GitHub Actions; nothing to summarize");
+        return;
+    }
+    var text = outcome(env("CI_RESULT"), shards: env("SHARD_COUNT"));
+    // The insight report rides along: same surface, same run, and it is the one place a
+    // reader gets the workspace's shape without running anything themselves.
+    final insight = magus\insight(["report", "--workspace", "-o", "markdown"], opts: {"quiet": true});
+    if (insight.ok) { text = text + "\n## Insight report\n\n" + insight.stdout + "\n"; }
+    fs\appendFile(path, text);
+    std\print("ci-outcome: summarized " + env("CI_RESULT"));
+}
+
+main();
+
+test "outcome reports a pass with the shard count" {
+    final got = outcome("success", shards: "3");
+    std\assert(got.indexOf("3 affected shard(s)") != null, message: "names the shard count");
+}
+
+test "outcome explains a failure and offers local triage" {
+    final got = outcome("failure", shards: "2");
+    std\assert(got.indexOf("magus affected ci") != null, message: "names the local command");
+    std\assert(got.indexOf("output reference") != null, message: "points at the output ref");
+}
+
+test "outcome says so when the result is not one GitHub documents" {
+    final got = outcome("neutral", shards: "1");
+    std\assert(got.indexOf("unexpected result") != null, message: "does not map it onto a pass");
+}
+
+test "outcome distinguishes skipped from passed" {
+    std\assert(outcome("skipped", shards: "0").indexOf("No affected projects") != null, message: "skipped is not a pass");
+}

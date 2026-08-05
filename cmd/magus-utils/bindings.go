@@ -345,25 +345,16 @@ func objectName(goType reflect.Type) string {
 	return ""
 }
 
-// buzzObjectName is the public Buzz object name for t. The generated mirror is
-// authoritative: a Go type sometimes keeps a descriptive suffix while the Buzz
-// surface exposes the concise domain name.
+// buzzObjectName is the public Buzz object name for t, resolved through the boundary
+// registry. A Go type sometimes keeps a descriptive suffix while the Buzz surface exposes
+// the concise domain name - ProjectsOutput is Projects, ImpactResult is Impact.
+//
+// This USED to be a hand-written switch listing each rename, which made the registry and
+// the switch two sources of one truth: adding a renamed type compiled fine and then failed
+// at generate time with "declares Object X but its Impl returns Y", naming neither the
+// switch nor the fix. The registry already carries the mapping, so read it there.
 func buzzObjectName(t reflect.Type) string {
-	switch t {
-	case reflect.TypeFor[types.VCSTag]():
-		return "Tag"
-	case reflect.TypeFor[types.HTTPResponse]():
-		return "HttpResponse"
-	case reflect.TypeFor[types.ProjectsOutput]():
-		return "Projects"
-	case reflect.TypeFor[types.AffectedResult]():
-		return "Affected"
-	case reflect.TypeFor[types.GraphView]():
-		return "Graph"
-	case reflect.TypeFor[types.TargetGraphOutput]():
-		return "TargetGraph"
-	}
-	return t.Name()
+	return buzzNameFor(t)
 }
 
 // checkObjectDecls verifies every method's declared Ret.Object against the Impl's
@@ -540,6 +531,13 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value string, t reflect.Type, 
 
 	switch t.Kind() {
 	case reflect.String:
+		// A NAMED string (types.DoctorCheckStatus, types.TargetRunState) is a distinct
+		// Go type, so it needs the conversion every numeric case already makes. Plain
+		// string is emitted bare rather than as string(s), which is redundant and what
+		// the unconvert linter exists to catch.
+		if t != reflect.TypeOf("") {
+			return "vm.StrValue(string(" + value + "))", nil
+		}
 		return "vm.StrValue(" + value + ")", nil
 	case reflect.Bool:
 		return "vm.BoolValue(" + value + ")", nil
@@ -577,6 +575,21 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value string, t reflect.Type, 
 			return "", err
 		}
 		fmt.Fprintf(w, "%s\t%s.MapSet(%s, %s)\n", indent, out, key, converted)
+		fmt.Fprintf(w, "%s}\n", indent)
+		return out, nil
+	case reflect.Pointer:
+		// An optional field: nil crosses the boundary as Buzz null, matching the `T?`
+		// the mirror declares. A nil-checked temporary rather than an inline
+		// expression, because the element may need statements of its own (a time
+		// needs formatting, a struct its own conversion function).
+		out := e.name("opt")
+		fmt.Fprintf(w, "%s%s := vm.Null\n", indent, out)
+		fmt.Fprintf(w, "%sif %s != nil {\n", indent, value)
+		elem, err := e.value(w, "(*"+value+")", t.Elem(), indent+"\t")
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintf(w, "%s\t%s = %s\n", indent, out, elem)
 		fmt.Fprintf(w, "%s}\n", indent)
 		return out, nil
 	default:

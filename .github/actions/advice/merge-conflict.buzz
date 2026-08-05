@@ -1,0 +1,136 @@
+// Comment once on a PR whose merge conflicts land in GENERATED files.
+//
+// GitHub never runs a merge driver, so those conflicts cannot resolve themselves and the
+// web editor is the worst place to try: the correct merge of build output is whatever
+// regenerating produces, which is what `magus vcs resolve` does. Silent unless generated
+// files actually conflict - an ordinary source conflict is the author's business.
+//
+// Reads REPO, PR_NUMBER, PR_BASE, and PR_HEAD_SHA from the environment, and writes its
+// section of the pull request's one magus comment through advice\publish.
+import "os";
+import "advice";
+import "magus";
+import "std";
+
+final section = "merge-conflicts";
+
+// conflicted reports which paths collide when head is merged into base, WITHOUT
+// performing a merge: `git merge-tree --write-tree` does the three-way merge in memory
+// and prints the conflicted paths, exiting 1 when there are any and 0 when it merges
+// clean. Nothing touches the working tree, so a cancelled job cannot strand a half-merge
+// the way a merge/abort pair can, and no committer identity is needed.
+//
+// Not `gh pr view --json mergeable`: that reports only THAT a PR conflicts, never which
+// files, and the files decide both whether to comment and what to name.
+//
+// head is passed explicitly rather than read as HEAD because actions/checkout resolves a
+// pull_request event to the ephemeral merge commit, which is base already merged with
+// head - comparing that against base would find nothing.
+fun conflicted(base: str, head: str) > [str] {
+    os\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
+    final res = os\exec("git", args: ["merge-tree", "--write-tree", "--name-only",
+        "--no-messages", "origin/" + base, head], dir: ".", opts: {"allow_failure": true});
+    if (res.code == 0) { return mut []; }
+    // 1 is "merged with conflicts"; anything else is git failing to answer at all, which
+    // must not read as "no conflicts".
+    if (res.code != 1) { throw "merge-conflict-advice: git merge-tree: " + res.stderr; }
+    return conflictPaths(res.stdout);
+}
+
+// conflictPaths reads `git merge-tree --write-tree --name-only` output: the first line
+// is the OID of the merged tree, every other non-empty line is a conflicted path. Split
+// out from conflicted so the parse is testable without a repository. `text`, not `out`,
+// because `out` is a reserved word in Buzz.
+fun conflictPaths(text: str) > [str] {
+    var paths = mut [];
+    var first = true;
+    foreach (line in text.split("\n")) {
+        if (first) { first = false; }
+        else { if (line != "") { paths.append(line); } }
+    }
+    return paths;
+}
+
+// generated keeps the paths the workspace declares as build output (role: output).
+//
+// magus\describeFile returns the report as a TYPED value, so `f.role` and `f.path` are
+// checked when this file compiles. The earlier form asked for `-o json` and walked the
+// result with q("files").listValue() / q("role").stringValue(), where a mistyped key is
+// a null at run time on a CI job nobody is watching.
+fun generated(paths: [str]) > [str] {
+    var found = mut [];
+    if (paths.len() == 0) { return found; }
+    foreach (f in magus\describeFile(paths).files) {
+        if (f.role == "output") { found.append(f.path); }
+    }
+    return found;
+}
+
+// conflictBody is the section text. Pure, so the wording is testable.
+export fun conflictBody(base: str, files: [str]) > str {
+    var body = "This branch conflicts with `" + base + "` in files magus generates:\n\n";
+    foreach (f in files) { body = body + "- `" + f + "`\n"; }
+    return body
+        + "\nThese are build output, so the correct merge is whatever regenerating produces:\n\n"
+        + "```sh\ngit merge origin/" + base + "\nmagus vcs resolve\n```\n\n"
+        + "`magus vcs resolve` settles every conflicted generated file at once and regenerates "
+        + "once. Conflicts in hand-written files are still yours.\n";
+}
+
+fun main() > void {
+    final repo = advice\env("REPO");
+    final pr = advice\env("PR_NUMBER");
+    final base = advice\env("PR_BASE");
+    final head = advice\env("PR_HEAD_SHA");
+    if (pr == "" and base == "" and head == "") {
+        // No PR context at all: not a pull request, or the file was loaded to run its
+        // test blocks. Either way there is nothing to advise on, and refusing to start
+        // is not the same as failing.
+        std\print("merge-conflict-advice: no PR context; nothing to advise");
+        return;
+    }
+    if (pr == "" or base == "" or head == "") {
+        throw "merge-conflict-advice: PR_NUMBER, PR_BASE, and PR_HEAD_SHA must be set together";
+    }
+
+    if (advice\silenced(repo, pr: pr, name: section)) {
+        // Retract rather than leave the last finding frozen on the page.
+        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        std\print("merge-conflicts: silenced by label");
+        return;
+    }
+
+    final files = generated(conflicted(base, head: head));
+    if (files.len() == 0) {
+        // Retract: conflicts that have been resolved must not leave a section behind
+        // claiming they are still there.
+        advice\publish(repo, pr: pr, name: section, title: "Merge conflicts in generated files", body: "");
+        std\print("no generated files conflict with " + base);
+        return;
+    }
+
+    advice\publish(repo, pr: pr, name: section, title: "Merge conflicts in generated files ({files.len()})",
+        body: conflictBody(base, files: files));
+    std\print("advised on PR " + pr + ": " + files.join(", "));
+}
+
+main();
+
+test "conflictPaths drops the merged tree's oid and keeps the rest" {
+    final paths = conflictPaths("38d2ff24\nMAGUS.md\ngen/target-graph.json\n");
+    std\assert(paths.len() == 2, message: "two paths");
+    std\assert(paths[0] == "MAGUS.md", message: "first path");
+    std\assert(paths[1] == "gen/target-graph.json", message: "second path");
+}
+
+test "conflictPaths on a clean merge yields nothing" {
+    std\assert(conflictPaths("38d2ff24\n").len() == 0, message: "no paths");
+}
+
+test "conflictBody names every file and the command that settles them" {
+    final body = conflictBody("main", files: ["MAGUS.md", "gen/target-graph.json"]);
+    std\assert(body.indexOf("- `MAGUS.md`") != null, message: "names the first file");
+    std\assert(body.indexOf("- `gen/target-graph.json`") != null, message: "names the second");
+    std\assert(body.indexOf("magus vcs resolve") != null, message: "names the command");
+    std\assert(body.indexOf("still yours") != null, message: "scopes what it does not cover");
+}
