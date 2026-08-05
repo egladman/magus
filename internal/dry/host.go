@@ -186,10 +186,10 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		return emptyExecResult(), nil
 	}))
 
-	// magus.cmd/describe/insight/doctor return a captured-command result on the real
+	// magus.cmd/describe/insight return a captured-command result on the real
 	// module; stub each as an empty success so `magus.describe(...).stdout` and the
 	// like don't blow up in a dry run.
-	for _, name := range []string{"cmd", "describe", "insight", "doctor"} {
+	for _, name := range []string{"cmd", "describe", "insight"} {
 		m.MapSet(name, fn("magus."+name, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 			return emptyExecResult(), nil
 		}))
@@ -215,13 +215,67 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("affected", vm.ListValue(nil))
 		return res, nil
 	}))
-	// Workspace-local Go-module helpers are read-only metadata in the real host.
-	// The dry host has no workspace, so preserve their result shapes without
-	// pretending to derive replacements.
-	m.MapSet("goModReplaceArgs", fn("magus.goModReplaceArgs", func(context.Context, []vm.Value) (vm.Value, error) {
-		return vm.ListValue(nil), nil
+	// The reports magus returns as domain types (doctor, describeFile, insightReport,
+	// affectedImpact, targetGraph) fork a real magus in the live host. Same rule as
+	// ls/affected: stub each with its result shape so `magus.doctor().summary.fail`
+	// and friends resolve. Field names track the Buzz mirrors in
+	// internal/spellruntime/gen/types.
+	m.MapSet("doctor", fn("magus.doctor", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("workspace", vm.StrValue(""))
+		res.MapSet("checks", vm.ListValue(nil))
+		summary := vm.NewMap()
+		summary.MapSet("ok", vm.IntValue(0))
+		summary.MapSet("fail", vm.IntValue(0))
+		summary.MapSet("advice", vm.IntValue(0))
+		res.MapSet("summary", summary)
+		return res, nil
 	}))
-	m.MapSet("goModReplaceCheck", fn("magus.goModReplaceCheck", retNull))
+	m.MapSet("describeFile", fn("magus.describeFile", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("definition", vm.StrValue(""))
+		res.MapSet("count", vm.IntValue(0))
+		res.MapSet("files", vm.ListValue(nil))
+		return res, nil
+	}))
+	m.MapSet("insightReport", fn("magus.insightReport", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("hotspots", insightLens("nodes", "files"))
+		res.MapSet("affinity", insightLens("pairs"))
+		res.MapSet("ownership", insightLens("projects"))
+		res.MapSet("trend", insightLens("projects"))
+		// volatility is the one optional lens; the real host crosses a nil pointer as null.
+		res.MapSet("volatility", vm.Null)
+		stats := vm.NewMap()
+		stats.MapSet("definition", vm.StrValue(""))
+		stats.MapSet("nodeCount", vm.IntValue(0))
+		stats.MapSet("edgeCount", vm.IntValue(0))
+		stats.MapSet("gods", vm.ListValue(nil))
+		stats.MapSet("orphans", vm.ListValue(nil))
+		stats.MapSet("coverage", vm.ListValue(nil))
+		stats.MapSet("isolatedCount", vm.IntValue(0))
+		stats.MapSet("componentCount", vm.IntValue(0))
+		stats.MapSet("largestComponentSize", vm.IntValue(0))
+		res.MapSet("graphStats", stats)
+		return res, nil
+	}))
+	m.MapSet("affectedImpact", fn("magus.affectedImpact", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("base", vm.StrValue(""))
+		res.MapSet("changedFileCount", vm.IntValue(0))
+		res.MapSet("changedFiles", vm.ListValue(nil))
+		res.MapSet("seedProjects", vm.ListValue(nil))
+		res.MapSet("affectedProjects", vm.ListValue(nil))
+		res.MapSet("changedSymbols", vm.ListValue(nil))
+		res.MapSet("changedFileCoverage", vm.ListValue(nil))
+		res.MapSet("notes", vm.ListValue(nil))
+		return res, nil
+	}))
+	m.MapSet("targetGraph", fn("magus.targetGraph", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("projects", vm.ListValue(nil))
+		return res, nil
+	}))
 	m.MapSet("targets", fn("magus.targets", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("projects", vm.ListValue(nil))
@@ -267,6 +321,19 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 }
 
 func retNull(context.Context, []vm.Value) (vm.Value, error) { return vm.Null, nil }
+
+// insightLens builds one empty magus.insightReport lens: the three fields every
+// lens carries, plus the list field(s) that lens names its findings.
+func insightLens(lists ...string) vm.Value {
+	v := vm.NewMap()
+	v.MapSet("definition", vm.StrValue(""))
+	v.MapSet("commits", vm.IntValue(0))
+	v.MapSet("since", vm.StrValue(""))
+	for _, name := range lists {
+		v.MapSet(name, vm.ListValue(nil))
+	}
+	return v
+}
 
 // traceNeeds backs ctx.needs: it traces a same-project edge per target
 // function argument, keyed by the function's declared name (FunName) run through the
