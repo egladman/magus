@@ -79,16 +79,18 @@ func ExtractVersion(output string) (string, bool) {
 type VersionComponent string
 
 const (
-	// VersionExact is the zero value: the whole version keys the cache, prerelease
-	// included, so any change at all moves the key. The conservative default.
-	VersionExact VersionComponent = ""
-	// VersionMajor keys on the major alone, so every 2.x shares one entry.
+	// VersionNone is the zero value: no extraction happens and the probe's whole
+	// output keys the cache. It is not a component - it is the ABSENCE of a request
+	// to find one, and it is the default precisely because guessing which number in
+	// a tool's output is its version is a guess magus should not make unasked.
+	VersionNone VersionComponent = ""
+	// VersionMajor extracts a semver and keeps the major, so every 2.x shares one entry.
 	VersionMajor VersionComponent = "major"
-	// VersionMinor keys on major.minor, so patch releases share one entry.
+	// VersionMinor extracts a semver and keeps major.minor, so patch releases share one.
 	VersionMinor VersionComponent = "minor"
-	// VersionPatch keys on major.minor.patch, discarding the prerelease. That
-	// discard is the only thing separating it from VersionExact, and choosing it IS
-	// the claim that an -rc build is not worth a separate cache entry.
+	// VersionPatch extracts a semver and keeps major.minor.patch. It narrows nothing a
+	// team has to reason about - two builds of one version agree - so it is the right
+	// declaration for a tool that pads its version line with build identity.
 	VersionPatch VersionComponent = "patch"
 )
 
@@ -96,7 +98,7 @@ const (
 // declaring nothing is how a spell asks for the exact version.
 func (c VersionComponent) Valid() bool {
 	switch c {
-	case VersionExact, VersionMajor, VersionMinor, VersionPatch:
+	case VersionNone, VersionMajor, VersionMinor, VersionPatch:
 		return true
 	}
 	return false
@@ -110,8 +112,6 @@ func (c VersionComponent) Valid() bool {
 // declaration bug: the callers that accept authored input validate first.
 func (c VersionComponent) KeyFunc() (VersionKeyFunc, error) {
 	switch c {
-	case VersionExact:
-		return semver.Canonical, nil
 	case VersionMajor:
 		return semver.Major, nil
 	case VersionMinor:
@@ -138,37 +138,29 @@ type VersionKeyFunc func(version string) string
 
 // VersionKey declares what a probed tool contributes to the cache key.
 //
-// The zero value keeps the whole version, so any change moves the key. Narrowing is a
-// CLAIM - "this tool's output does not change across the component I dropped" - that
-// trades cache hits for the risk of replaying an artifact a different tool version
-// would not have produced. That is the author's call, which is why the default is the
-// conservative one.
+// The zero value keys on the probe's WHOLE output, which is what magus has always
+// done and what it keeps doing unless a spell asks for something else. Extraction is
+// opt-in for a reason: finding the version inside a tool's output means guessing which
+// number is the version, and that guess is wrong often enough to matter. govulncheck
+// prints the Go version first and the vulnerability database's date last, so guessing
+// picks the wrong number AND discards the field that decides whether its verdict still
+// holds. A spell author knows their tool's output; magus does not.
+//
+// Declaring UpTo is therefore two requests at once: extract a semver, and keep this
+// much of it. UpTo patch narrows nothing anyone reasons about and exists to shed the
+// commit hashes and build timestamps tools pad their version lines with.
 type VersionKey struct {
 	// Const is an author-supplied constant used as the token verbatim, for a tool that
 	// cannot report its own version at all. No process is spawned; the author edits the
 	// string by hand to invalidate. When set, UpTo is ignored.
 	Const string `json:"const,omitempty"`
-	// UpTo narrows the probed version to the component that matters.
+	// UpTo asks for extraction and names how much of the extracted version to keep.
+	// Absent means no extraction: the whole output keys the cache.
 	UpTo VersionComponent `json:"upTo,omitempty"`
-	// Verbatim keys on the WHOLE trimmed probe output, skipping extraction.
-	//
-	// For a tool whose version command reports more than its version, extraction is
-	// actively wrong: govulncheck prints the Go version first, the scanner version
-	// second, and the vulnerability database's last-modified date last. First-match
-	// extraction picks the Go version, and - far worse - discards the DB date, which
-	// is the field that decides whether a verdict still holds. A new CVE would then
-	// land in the database while magus replayed the cached pass.
-	//
-	// This is what magus did for every probe before extraction existed, and what it
-	// still falls back to when nothing version-shaped is found. Verbatim makes it a
-	// declaration rather than an accident. When set, UpTo is ignored.
-	Verbatim bool `json:"verbatim,omitempty"`
 }
 
 // IsZero reports whether the key asks for anything beyond the exact version.
-func (k VersionKey) IsZero() bool {
-	return k.Const == "" && k.UpTo == VersionExact && !k.Verbatim
-}
+func (k VersionKey) IsZero() bool { return k.Const == "" && k.UpTo == VersionNone }
 
 // VersionToken reduces a probe's raw output to the string that enters the cache key,
 // and returns a note when it had to degrade.
@@ -180,15 +172,15 @@ func VersionToken(output string, key VersionKey) (token string, note string) {
 	if key.Const != "" {
 		return key.Const, ""
 	}
-
 	raw := strings.TrimSpace(output)
-	if key.Verbatim {
+	if key.UpTo == VersionNone {
+		// No extraction was asked for, so none happens. Not a degradation - the
+		// default, and the only answer that cannot silently discard something the
+		// tool considered part of its identity.
 		return raw, ""
 	}
 	probed, ok := ExtractVersion(raw)
 	if !ok {
-		// Nothing version-shaped. The whole output is the token, which is exactly what
-		// magus did for every tool before extraction existed - correct, just coarse.
 		return raw, "no semver-shaped token in probe output; keying on the whole output"
 	}
 	fn, err := key.UpTo.KeyFunc()

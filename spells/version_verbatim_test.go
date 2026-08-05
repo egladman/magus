@@ -30,27 +30,24 @@ Scanner: govulncheck@v1.0.1
 DB: https://vuln.go.dev
 DB updated: 2026-08-05 09:00:00 +0000 UTC`
 
-	verbatim := VersionKey{Verbatim: true}
-	a, noteA := VersionToken(govulncheckVersion, verbatim)
-	b, noteB := VersionToken(updated, verbatim)
+	// The DEFAULT, not an opt-out: govulncheck declares nothing and is correct.
+	a, noteA := VersionToken(govulncheckVersion, VersionKey{})
+	b, noteB := VersionToken(updated, VersionKey{})
 	assert.Empty(t, noteA)
 	assert.Empty(t, noteB)
 	assert.NotEqual(t, a, b, "a database update must move the cache key")
 	assert.Contains(t, a, "DB updated")
 
-	// Without Verbatim both collapse to the Go version, and the update vanishes.
-	c, _ := VersionToken(govulncheckVersion, VersionKey{})
-	d, _ := VersionToken(updated, VersionKey{})
-	assert.Equal(t, c, d, "this equality IS the bug Verbatim avoids")
+	// Had extraction been the default, both would collapse to the Go version and the
+	// database update would vanish. This equality is the bug the default avoids.
+	c, _ := VersionToken(govulncheckVersion, VersionKey{UpTo: VersionPatch})
+	d, _ := VersionToken(updated, VersionKey{UpTo: VersionPatch})
+	assert.Equal(t, c, d)
 }
 
-// Verbatim outranks UpTo rather than silently combining with it.
-func TestVerbatimIgnoresUpTo(t *testing.T) {
-	tok, note := VersionToken("mytool 1.2.3", VersionKey{Verbatim: true, UpTo: VersionMajor})
-	assert.Equal(t, "mytool 1.2.3", tok)
+// Const outranks everything: no process is spawned, so there is no output to read.
+func TestConstOutranksUpTo(t *testing.T) {
+	tok, note := VersionToken("mytool 1.2.3", VersionKey{Const: "pinned-1", UpTo: VersionMajor})
+	assert.Equal(t, "pinned-1", tok)
 	assert.Empty(t, note)
-}
-
-func TestVerbatimIsNotZero(t *testing.T) {
-	assert.False(t, VersionKey{Verbatim: true}.IsZero())
 }

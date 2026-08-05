@@ -283,7 +283,6 @@ func decodeVersionKey(src Obj, key string) spells.VersionKey {
 	if u, ok := rec.Str("upTo"); ok {
 		out.UpTo = spells.VersionComponent(u)
 	}
-	out.Verbatim = rec.Bool("verbatim")
 	return out
 }
 

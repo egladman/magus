@@ -30,15 +30,22 @@ export fun mgs_getVersionCommands() > {str: [str]} {
     };
 }
 
-// govulncheck's verdict does not depend on its binary alone: it reports findings from
-// the Go vulnerability DATABASE, and `govulncheck -version` prints that database's
-// last-modified date alongside the Go and scanner versions. Extracting a semver from
-// that output picks the GO version (it is printed first) and throws the database date
-// away, so a newly published CVE would leave every cached pass replaying unchanged.
-// Keying on the whole output is the only correct answer here.
+// `go version` prints the host platform (`go1.26.0 linux/amd64`) and golangci-lint
+// pads its line with the commit it was built from, the timestamp, and the Go version
+// it was compiled with. Asking for `patch` extracts the version and sheds all of that,
+// so two machines running the same tool agree on a key. It narrows nothing anyone has
+// to reason about: every component of the version still keys the cache.
+//
+// govulncheck is deliberately absent. Its verdict comes from the Go vulnerability
+// DATABASE, and `-version` reports that database's last-modified date alongside the Go
+// and scanner versions. Extracting a semver there would take the Go version (printed
+// first) and throw the database date away, leaving a newly published CVE unable to
+// invalidate a cached pass. The default - the whole output - is the correct answer.
+export fun mgs_getVersionKey() > VersionKey { return VersionKey{upTo = "patch"}; }
+
 export fun mgs_getVersionKeys() > {str: VersionKey} {
     return {
-        "govulncheck": VersionKey{verbatim = true},
+        "golangci-lint": VersionKey{upTo = "patch"},
     };
 }
 

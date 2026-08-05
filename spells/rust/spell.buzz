@@ -10,6 +10,10 @@ export fun mgs_listRequiredGlobs() > [Path] {
 
 export fun mgs_getVersionCommand() > [str] { return ["rustc", "--version"]; }
 
+// `rustc --version` carries the commit hash and its date (`1.94.1 (e408947bf
+// 2026-03-25)`), neither of which distinguishes two installs of the same release.
+export fun mgs_getVersionKey() > VersionKey { return VersionKey{upTo = "patch"}; }
+
 // mgs_getLanguage names the source language this spell adapts, canonical and lowercase
 // so it matches the language attr on the Rust files and symbols SCIP ingests. It lets
 // `magus query language:rust` reach this adapter alongside the code it builds.

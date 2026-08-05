@@ -85,16 +85,28 @@ func TestVersionTokenAuthorSuppliedVersionSkipsTheProbe(t *testing.T) {
 	assert.Empty(t, note)
 }
 
-func TestVersionTokenDefaultKeepsWholeVersion(t *testing.T) {
+// The default extracts nothing: guessing which number in a tool's output is its
+// version is a guess magus does not make unless a spell asks.
+func TestVersionTokenDefaultKeepsWholeOutput(t *testing.T) {
 	tok, note := VersionToken("Docker version 29.3.1, build c2be9cc", VersionKey{})
-	assert.Equal(t, "v29.3.1", tok)
+	assert.Equal(t, "Docker version 29.3.1, build c2be9cc", tok)
 	assert.Empty(t, note)
+}
+
+// Asking for patch is how a spell sheds the build identity tools pad a version line
+// with, without narrowing anything a team has to reason about.
+func TestVersionTokenPatchShedsBuildIdentity(t *testing.T) {
+	key := VersionKey{UpTo: VersionPatch}
+	a, _ := VersionToken("Docker version 29.3.1, build c2be9cc", key)
+	b, _ := VersionToken("Docker version 29.3.1, build 0000000", key)
+	assert.Equal(t, "v29.3.1", a)
+	assert.Equal(t, a, b)
 }
 
 // The whole-output fallback: a tool magus cannot parse keys on everything it printed,
 // which is what magus did for every tool before extraction existed.
 func TestVersionTokenUnparseableFallsBackToRawOutput(t *testing.T) {
-	tok, note := VersionToken("  some opaque build id  ", VersionKey{})
+	tok, note := VersionToken("  some opaque build id  ", VersionKey{UpTo: VersionMajor})
 	assert.Equal(t, "some opaque build id", tok)
 	assert.Contains(t, note, "no semver-shaped token")
 }
@@ -148,7 +160,7 @@ func TestVersionTokenPatchDropsPrereleaseButDefaultKeepsIt(t *testing.T) {
 
 	dp, _ := VersionToken("mytool 1.2.3-rc1", VersionKey{})
 	df, _ := VersionToken("mytool 1.2.3", VersionKey{})
-	assert.NotEqual(t, dp, df, "the default must distinguish a prerelease from the release")
+	assert.NotEqual(t, dp, df, "the whole-output default must distinguish them")
 }
 
 func TestVersionTokenUnknownKeyOnDegrades(t *testing.T) {
