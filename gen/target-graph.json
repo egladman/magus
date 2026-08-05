@@ -414,7 +414,7 @@
             },
             {
               "project": ".",
-              "glob": ".github/actions/summary/*.buzz"
+              "glob": ".github/actions/magus/*.buzz"
             }
           ]
         },

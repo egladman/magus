@@ -362,16 +362,12 @@ jobs:
           source-path: .
           mise: 'false'
 
-      # One step, one script, and the outcome wording is unit-tested - it used to be a
-      # shell case statement no test could reach.
-      - uses: ./.github/actions/summary
+      # One step for the whole job. merge-history only on main: a pull request's shard
+      # histories describe a branch that is about to disappear, and folding them into the
+      # kept history would skew it.
+      - uses: ./.github/actions/magus
         with:
+          report: 'true'
           ci-result: ${{ needs.ci.result }}
           shard-count: ${{ needs.preflight.outputs.count }}
-
-      # Only on main: a pull request's shard histories describe a branch that is about to
-      # disappear, and folding them into the kept history would skew it.
-      - uses: ./.github/actions/magus
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        with:
-          merge-history: 'true'
+          merge-history: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
