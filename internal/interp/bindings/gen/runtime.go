@@ -6,6 +6,7 @@ package gen
 import (
 	"context"
 	"errors"
+	"reflect"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -238,6 +239,39 @@ func AnyVal(v any) vm.Value {
 		return AnyMapVal(x)
 	case map[string]string:
 		return StrMapVal(x)
+	}
+	// A DEFINED type over a basic kind - types.DoctorCheckStatus, types.TargetRunState,
+	// spells.PatchOpKind - matches none of the cases above, because a type switch
+	// matches on identity and not on underlying type. That is the same trap the
+	// BuzzObject case documents, and it had the same symptom one layer down: a
+	// generated BuzzObject emits `v.Status` typed, so `doctor().checks[0].status` read
+	// as NULL in a magusfile rather than "ok" - and a caller told to branch on status
+	// instead of grepping console text was branching on nothing.
+	//
+	// Handled reflectively rather than by naming each type, because the failure is
+	// silent and the next defined type would reintroduce it. Reflection is confined to
+	// this fallthrough, which the cases above have already skipped.
+	return namedBasicVal(v)
+}
+
+// namedBasicVal converts a defined type whose underlying kind is basic. Anything else
+// stays null, which is the honest answer for a shape the boundary cannot represent.
+func namedBasicVal(v any) vm.Value {
+	rv := reflect.ValueOf(v)
+	if !rv.IsValid() {
+		return vm.Null
+	}
+	switch rv.Kind() {
+	case reflect.String:
+		return vm.StrValue(rv.String())
+	case reflect.Bool:
+		return vm.BoolValue(rv.Bool())
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return vm.IntValue(rv.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return vm.IntValue(int64(rv.Uint()))
+	case reflect.Float32, reflect.Float64:
+		return vm.FloatValue(rv.Float())
 	}
 	return vm.Null
 }
