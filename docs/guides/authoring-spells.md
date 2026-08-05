@@ -81,6 +81,39 @@ a default when it is absent, so a minimal spell is two functions.
 | `mgs_listIgnoreDirs` | `() > [Path]` | directories to prune from source expansion (`node_modules`, `target`) |
 | `mgs_getVersionProbe` | `() > [str]` | probes the primary tool's version, mixed into cache keys so a toolchain upgrade invalidates |
 | `mgs_getVersionProbes` | `() > {str: [str]}` | the same for SECOND tools a spell drives. The `docker` spell probes `hadolint` this way, because unlike `docker` it is pinned by no manifest |
+| `mgs_getVersionKey` | `() > VersionKey` | narrows what the primary probe's output contributes to the key. Absent keys the WHOLE output |
+| `mgs_getVersionKeys` | `() > {str: VersionKey}` | the same per named tool |
+| `mgs_getReadinessProbes` | `() > {str: Command}` | gates an op on its tool being usable, keyed by tool. See [Readiness](#readiness) |
+
+### Readiness
+
+A version probe answers "what is installed". It cannot answer "is it usable", and for a
+client/server tool those are different questions: `docker --version` is client-only and
+exits 0 with no daemon running at all. Without a readiness probe the op forked, docker
+failed on its own terms, and the run reported a build failure for a project with nothing
+wrong with it.
+
+```buzz
+export fun mgs_getReadinessProbes() > {str: Command} {
+    return {"docker": Command{bin = "docker", args = ["info"]}};
+}
+```
+
+Keyed by **tool**, and resolved through an op's own `bin`, so no op restates which tool
+it runs. The `docker` spell gates `docker` and deliberately not `hadolint` - linting a
+Dockerfile talks to no daemon, and a spell-scoped probe would make a lint wait on a
+service it never uses.
+
+A failing probe raises [MGS3004](../reference/codes/sandbox/MGS3004.md) before the op
+forks, carrying the probe's own output. At a terminal magus retries for 30 seconds first,
+so starting the daemon in another window lets the run continue; without a TTY it fails at
+once, because nobody starts a daemon mid-run in CI.
+
+The result **never enters a cache key**: it is a precondition, not an input. `docker info`
+reports running containers and disk usage, so keying on it would invalidate every entry on
+every run. `magus doctor` lists every declared gate without running any of them.
+
+Most spells need none - `go`, `rustc`, and `node` are self-contained.
 
 A version probe is worth more thought than it looks. If a tool changes what passes and
 nothing else in the cache key changes with it, every cached entry replays the old verdict.
