@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	semver "github.com/Masterminds/semver/v3"
 	"github.com/egladman/magus/internal/interactive/tty"
 	run "github.com/egladman/magus/internal/proc/run"
 	"log/slog"
@@ -43,7 +44,7 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 			spells.WithOutputs(spec.Provides...),
 			spells.WithTargets(spec.OpNames()...),
 			spells.WithServiceTargets(spec.ServiceOpNames()...),
-			spells.WithInvoker(newSpellInvoker(spec.Ops, readinessOf(spec))),
+			spells.WithInvoker(newSpellInvoker(spec.Ops, spec.Tools)),
 			spells.WithTools(spec.Tools),
 			spells.WithVersionProber(versionProber),
 			spells.WithCommandRenderer(newCommandRenderer(spec.Ops)),
@@ -249,11 +250,12 @@ var readinessMemo sync.Map // key "bin\x00dir" -> error (nil when ready)
 // The probe's OUTPUT never enters a cache key: it is a precondition, not an input.
 // `docker info` reports running containers and disk usage, so keying on it would
 // invalidate every entry on every run.
-func checkReady(ctx context.Context, readiness map[string]spells.Command, op spells.Op, dir string) error {
-	probe, ok := readiness[op.Bin]
-	if !ok || probe.Bin == "" {
+func checkReady(ctx context.Context, tools map[string]spells.Tool, op spells.Op, dir string) error {
+	t, ok := tools[op.Bin]
+	if !ok || t.Ready.Bin == "" {
 		return nil
 	}
+	probe := t.Ready
 	key := op.Bin + "\x00" + dir
 	if cached, hit := readinessMemo.Load(key); hit {
 		if cached == nil {
@@ -338,7 +340,7 @@ func probeUntilReady(ctx context.Context, probe spells.Command, tool, dir string
 	}
 }
 
-func dispatchOp(ctx context.Context, ops map[string]spells.Op, readiness map[string]spells.Command, req spells.InvokeRequest) (any, error) {
+func dispatchOp(ctx context.Context, ops map[string]spells.Op, tools map[string]spells.Tool, req spells.InvokeRequest) (any, error) {
 	op, ok := ops[req.Target]
 	if !ok {
 		slog.DebugContext(ctx, "spell: target not provided by this spell (fan-out skip)", "target", req.Target, "dir", req.Dir)
@@ -348,7 +350,10 @@ func dispatchOp(ctx context.Context, ops map[string]spells.Op, readiness map[str
 	// Ahead of every other setup step: a tool that cannot run makes the rest moot,
 	// and the point is to fail with what is actually wrong rather than let the op
 	// fork and report a build failure for a project with nothing wrong with it.
-	if err := checkReady(ctx, readiness, op, req.Dir); err != nil {
+	if err := checkReady(ctx, tools, op, req.Dir); err != nil {
+		return nil, err
+	}
+	if err := checkFloor(ctx, tools, op, req.Dir); err != nil {
 		return nil, err
 	}
 	opts := commandOpts{cwd: req.Dir, args: project.ExtraArgs(ctx)}
@@ -393,9 +398,9 @@ func symbolIndexEnv(ctx context.Context, projectDir string) (map[string]string, 
 
 // newSpellInvoker returns an invoker closure for a built-in spell. Built-in ops
 // are command-only (cmd/args/charms data, no script body).
-func newSpellInvoker(targets map[string]spells.Op, readiness map[string]spells.Command) func(context.Context, spells.InvokeRequest) (any, error) {
+func newSpellInvoker(targets map[string]spells.Op, tools map[string]spells.Tool) func(context.Context, spells.InvokeRequest) (any, error) {
 	return func(ctx context.Context, req spells.InvokeRequest) (any, error) {
-		return dispatchOp(ctx, targets, readiness, req)
+		return dispatchOp(ctx, targets, tools, req)
 	}
 }
 
@@ -501,7 +506,7 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 // magus.project bind time). A function-op spell instead registers eagerly at load
 // via loadBuzzSpell.
 func registerLocalSpell(m spells.Descriptor) {
-	opts := append(localSpellBaseOptions(m), spells.WithInvoker(newSpellInvoker(m.Ops, readinessOf(m))))
+	opts := append(localSpellBaseOptions(m), spells.WithInvoker(newSpellInvoker(m.Ops, m.Tools)))
 	project.DefaultSpellRegistry().RegisterIfAbsent(spells.NewSpell(m.Name, opts...))
 }
 
@@ -636,9 +641,56 @@ func levenshtein(a, b string) int {
 	return row[len(b)]
 }
 
-// readinessOf projects a descriptor's tools down to the readiness map dispatch needs:
-// bin -> the command that proves it is usable. Tools with no Ready command are absent,
-// so an op naming one is never gated.
+// checkFloor rejects a tool older than the spell's ops work against.
+//
+// It sits beside readiness because both answer "is this binary fit to run", and both
+// must resolve before the op forks - a too-old tool otherwise fails with whatever it
+// says about an unrecognized flag, which is the misleading failure readiness exists to
+// prevent, one question over.
+//
+// Memoized on the same basis: the probe forks, and the answer cannot change mid-run in
+// a way magus could act on.
+func checkFloor(ctx context.Context, tools map[string]spells.Tool, op spells.Op, dir string) error {
+	t, ok := tools[op.Bin]
+	if !ok || t.Floor == "" || t.Probe.Bin == "" {
+		return nil
+	}
+	key := "floor\x00" + op.Bin + "\x00" + dir
+	if cached, hit := readinessMemo.Load(key); hit {
+		if cached == nil {
+			return nil
+		}
+		return cached.(error)
+	}
+	out := floorVerdict(ctx, t, op.Bin, dir)
+	readinessMemo.Store(key, out)
+	return out
+}
+
+func floorVerdict(ctx context.Context, t spells.Tool, tool, dir string) error {
+	raw, err := versionProber(ctx, t.Probe, dir)
+	if err != nil {
+		// Unprobeable is not too old. Failing here would turn a floor into a second
+		// way for a missing tool to break, with a worse message than MGS3003's.
+		return nil
+	}
+	got, ok := spells.ExtractVersion(raw)
+	if !ok {
+		return nil
+	}
+	c, err := semver.NewConstraint(t.Floor)
+	if err != nil {
+		return nil // validated at decode; a bad constraint gates nothing
+	}
+	v, err := semver.NewVersion(got)
+	if err != nil || c.Check(v) {
+		return nil
+	}
+	return types.DiagnosticErrorf(types.ToolTooOld,
+		"%s %s is older than this spell supports (%s). The op %q needs a newer one",
+		tool, got, t.Floor, tool)
+}
+
 func readinessOf(m spells.Descriptor) map[string]spells.Command {
 	var out map[string]spells.Command
 	for name, t := range m.Tools {

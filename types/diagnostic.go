@@ -120,7 +120,10 @@ const (
 	// ToolNotReady is ToolNotOnPath one level deeper: the binary IS present, but the
 	// service it talks to is not reachable. Same category - the environment, not the
 	// code - so it sits beside it rather than in a family of its own.
-	ToolNotReady              DiagnosticCode = "MGS3004"
+	ToolNotReady DiagnosticCode = "MGS3004"
+	// ToolTooOld is the fourth question about a tool: it exists, it reports a version,
+	// it is usable - and that version is older than the spell's ops work against.
+	ToolTooOld                DiagnosticCode = "MGS3005"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -159,7 +162,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,
-	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady,
+	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits,

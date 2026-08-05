@@ -203,6 +203,14 @@ type Tool struct {
 	// Ready gates an op on this binary being usable, for a client whose server may be
 	// down. Its result is a precondition and never enters a cache key.
 	Ready Command `json:"ready,omitempty"`
+	// Floor is the oldest version of this binary the spell's ops work against, as a
+	// semver constraint (">= 2.0", "^1.4"). Empty accepts any version.
+	//
+	// It is the fourth question about a tool, after does it exist, what version, and is
+	// it usable. Without it a too-old binary fails with whatever that tool says about
+	// an unrecognized flag - the same misleading failure readiness exists to prevent,
+	// one step over. Checked against the extracted version, so it needs Probe.
+	Floor string `json:"floor,omitempty"`
 }
 
 // HasProbe reports whether magus can learn a version for this tool, by running one or

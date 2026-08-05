@@ -2,6 +2,7 @@ package spellruntime
 
 import (
 	"fmt"
+	semver "github.com/Masterminds/semver/v3"
 	"maps"
 	"slices"
 	"strings"
@@ -266,6 +267,15 @@ func decodeVersionKey(src Obj, key string) spells.VersionKey {
 // reads a descriptor (docs, graph extraction) is not forced to handle it.
 func validateTools(m spells.Descriptor) error {
 	for _, tool := range slices.Sorted(maps.Keys(m.Tools)) {
+		// A malformed constraint is knowable without running anything, and a floor
+		// nobody can parse protects nobody - the same reasoning magus.yaml's
+		// required_version applies to its own floor.
+		if f := m.Tools[tool].Floor; f != "" {
+			if _, err := semver.NewConstraint(f); err != nil {
+				return fmt.Errorf("spell %q: tools[%q].floor %q is not a valid semver constraint: %v",
+					m.Name, tool, f, err)
+			}
+		}
 		if c := m.Tools[tool].Key.UpTo; !c.Valid() {
 			// The candidate list comes from the same registry that generates the enum,
 			// so adding a component cannot leave this message stale.
@@ -304,13 +314,16 @@ func decodeTools(src Obj) map[string]spells.Tool {
 				t.Key.UpTo = spells.VersionComponent(u)
 			}
 		}
+		if f, ok := o.Str("floor"); ok {
+			t.Floor = f
+		}
 		if r, ok := o.Obj("ready"); ok {
 			cmd, err := decodeCommand("", "", r)
 			if err == nil {
 				t.Ready = cmd
 			}
 		}
-		if t.Probe.Bin == "" && t.Key.IsZero() && t.Ready.Bin == "" {
+		if t.Probe.Bin == "" && t.Key.IsZero() && t.Ready.Bin == "" && t.Floor == "" {
 			continue
 		}
 		if out == nil {

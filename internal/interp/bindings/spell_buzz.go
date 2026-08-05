@@ -135,7 +135,7 @@ func spellSearchPaths(roots ...string) []string {
 func newBuzzSpellInvoker(spec spells.Descriptor, src string) func(context.Context, spells.InvokeRequest) (any, error) {
 	return func(ctx context.Context, req spells.InvokeRequest) (any, error) {
 		if _, ok := spec.Ops[req.Target]; ok {
-			return dispatchOp(ctx, spec.Ops, readinessOf(spec), req)
+			return dispatchOp(ctx, spec.Ops, spec.Tools, req)
 		}
 		return callBuzzSpellFunc(ctx, src, req.Target, req)
 	}

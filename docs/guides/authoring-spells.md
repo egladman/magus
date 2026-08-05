@@ -79,7 +79,7 @@ a default when it is absent, so a minimal spell is two functions.
 | `mgs_listClaimedGlobs` | `() > [Path]` | files this spell owns, so two spells cannot both claim them |
 | `mgs_listManifests` | `() > [Path]` | dependency manifests, read for the project graph |
 | `mgs_listIgnoreDirs` | `() > [Path]` | directories to prune from source expansion (`node_modules`, `target`) |
-| `mgs_getTools` | `() > {str: Tool}` | every binary the spell drives, keyed by the bin an op names: what prints its version, what part of that keys the cache, and what proves it is usable |
+| `mgs_getTools` | `() > {str: Tool}` | every binary the spell drives, keyed by the bin an op names: what prints its version (`probe`), what part of that keys the cache (`key`), what proves it is usable (`ready`), and the oldest version its ops work against (`floor`) |
 
 ### Readiness
 

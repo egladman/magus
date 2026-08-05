@@ -17,8 +17,8 @@ import (
 // build failure for a project with nothing wrong with it.
 func TestReadinessGateBlocksOpAndCarriesCode(t *testing.T) {
 	readinessMemo.Clear()
-	readiness := map[string]spells.Command{
-		"faketool": {Bin: "sh", Args: []string{"-c", "exit 1"}},
+	readiness := map[string]spells.Tool{
+		"faketool": {Ready: spells.Command{Bin: "sh", Args: []string{"-c", "exit 1"}}},
 	}
 	op := spells.Op{Command: spells.Command{Bin: "faketool"}}
 
@@ -34,8 +34,8 @@ func TestReadinessGateBlocksOpAndCarriesCode(t *testing.T) {
 // actionable line available, so the probe's output must reach the error.
 func TestReadinessErrorCarriesProbeOutput(t *testing.T) {
 	readinessMemo.Clear()
-	readiness := map[string]spells.Command{
-		"faketool": {Bin: "sh", Args: []string{"-c", "echo 'Cannot connect to the daemon at /var/run/x.sock' >&2; exit 1"}},
+	readiness := map[string]spells.Tool{
+		"faketool": {Ready: spells.Command{Bin: "sh", Args: []string{"-c", "echo 'Cannot connect to the daemon at /var/run/x.sock' >&2; exit 1"}}},
 	}
 	op := spells.Op{Command: spells.Command{Bin: "faketool"}}
 
@@ -48,8 +48,8 @@ func TestReadinessErrorCarriesProbeOutput(t *testing.T) {
 // A silent probe still produces a usable error rather than a dangling colon.
 func TestReadinessErrorWithoutProbeOutput(t *testing.T) {
 	readinessMemo.Clear()
-	readiness := map[string]spells.Command{
-		"faketool": {Bin: "sh", Args: []string{"-c", "exit 1"}},
+	readiness := map[string]spells.Tool{
+		"faketool": {Ready: spells.Command{Bin: "sh", Args: []string{"-c", "exit 1"}}},
 	}
 	op := spells.Op{Command: spells.Command{Bin: "faketool"}}
 
@@ -62,8 +62,8 @@ func TestReadinessErrorWithoutProbeOutput(t *testing.T) {
 // A passing probe lets the op through.
 func TestReadinessGateAllowsWhenProbePasses(t *testing.T) {
 	readinessMemo.Clear()
-	readiness := map[string]spells.Command{
-		"faketool": {Bin: "sh", Args: []string{"-c", "exit 0"}},
+	readiness := map[string]spells.Tool{
+		"faketool": {Ready: spells.Command{Bin: "sh", Args: []string{"-c", "exit 0"}}},
 	}
 	op := spells.Op{Command: spells.Command{Bin: "faketool"}}
 	assert.NoError(t, checkReady(context.Background(), readiness, op, t.TempDir()))
@@ -72,8 +72,8 @@ func TestReadinessGateAllowsWhenProbePasses(t *testing.T) {
 // An op whose tool declares no probe is never gated - the hadolint-beside-docker case.
 func TestReadinessGateIgnoresUndeclaredTools(t *testing.T) {
 	readinessMemo.Clear()
-	readiness := map[string]spells.Command{
-		"docker": {Bin: "sh", Args: []string{"-c", "exit 1"}},
+	readiness := map[string]spells.Tool{
+		"docker": {Ready: spells.Command{Bin: "sh", Args: []string{"-c", "exit 1"}}},
 	}
 	lint := spells.Op{Command: spells.Command{Bin: "hadolint"}}
 	assert.NoError(t, checkReady(context.Background(), readiness, lint, t.TempDir()),
@@ -86,8 +86,8 @@ func TestReadinessProbeIsMemoized(t *testing.T) {
 	dir := t.TempDir()
 	// A probe that succeeds only while the marker is absent: if it ran twice, the
 	// second call would see the file it created and fail.
-	readiness := map[string]spells.Command{
-		"faketool": {Bin: "sh", Args: []string{"-c", "test ! -e ran && touch ran"}},
+	readiness := map[string]spells.Tool{
+		"faketool": {Ready: spells.Command{Bin: "sh", Args: []string{"-c", "test ! -e ran && touch ran"}}},
 	}
 	op := spells.Op{Command: spells.Command{Bin: "faketool"}}
 
@@ -102,8 +102,8 @@ func TestReadinessProbeIsMemoized(t *testing.T) {
 // nobody is going to start a daemon mid-run.
 func TestReadinessDoesNotWaitWhenNotInteractive(t *testing.T) {
 	readinessMemo.Clear()
-	readiness := map[string]spells.Command{
-		"faketool": {Bin: "sh", Args: []string{"-c", "exit 1"}},
+	readiness := map[string]spells.Tool{
+		"faketool": {Ready: spells.Command{Bin: "sh", Args: []string{"-c", "exit 1"}}},
 	}
 	op := spells.Op{Command: spells.Command{Bin: "faketool"}}
 
