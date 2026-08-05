@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2409,
-  "edge_count": 5440,
+  "node_count": 2407,
+  "edge_count": 5438,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -19519,24 +19519,6 @@
       "doc": "Run `magus doctor <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like os.exec); opts.quiet captures the output without echoing it to the console.",
       "attrs": {
         "buzz": "magus\\doctor(args, [opts]) → ExecResult"
-      }
-    },
-    {
-      "id": "method:magus.go_mod_replace_args",
-      "kind": "method",
-      "label": "magus.go_mod_replace_args",
-      "doc": "Derive go mod edit flags that make this Go module replace its workspace-local requirements with their relative project paths. Reads go.mod through `go mod edit -json`; it never writes the file.",
-      "attrs": {
-        "buzz": "magus\\goModReplaceArgs() → []string"
-      }
-    },
-    {
-      "id": "method:magus.go_mod_replace_check",
-      "kind": "method",
-      "label": "magus.go_mod_replace_check",
-      "doc": "Raise MGS1016 when this Go module's workspace-local replace directives drift from the workspace project graph. Writes nothing.",
-      "attrs": {
-        "buzz": "magus\\goModReplaceCheck()"
       }
     },
     {
@@ -60017,20 +59999,6 @@
     {
       "source": "module:magus",
       "target": "method:magus.doctor",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1
-    },
-    {
-      "source": "module:magus",
-      "target": "method:magus.go_mod_replace_args",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1
-    },
-    {
-      "source": "module:magus",
-      "target": "method:magus.go_mod_replace_check",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
