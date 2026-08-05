@@ -443,7 +443,7 @@
         },
         {
           "name": "preflight",
-          "doc": "Gates the build on workspace health by running `magus doctor`."
+          "doc": "No gate of its own: doctor USED to run here and fail the build on a finding, which made workspace conventions a blocker for everyone downstream."
         },
         {
           "name": "build",

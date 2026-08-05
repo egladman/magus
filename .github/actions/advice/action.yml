@@ -25,6 +25,30 @@ inputs:
       command that settles them.
     required: false
     default: 'true'
+  hand-edited-generated:
+    description: >
+      Comment when the pull request changes a generated file without changing anything
+      that produces it - a hand edit the next regeneration will overwrite.
+    required: false
+    default: 'true'
+  target-outputs:
+    description: >
+      Comment when the pull request adds a target that declares no outputs, which can
+      never replay from cache. Only new targets; an existing one is a decision already made.
+    required: false
+    default: 'true'
+  doctor:
+    description: >
+      Report what `magus doctor` finds about the workspace. Non-blocking by design, so a
+      consumer who never wired doctor into their own pipeline still sees it.
+    required: false
+    default: 'true'
+  version-floor:
+    description: >
+      Comment when the pull request raises `required_version`, which every contributor
+      has to act on before they can load the workspace at all.
+    required: false
+    default: 'true'
   fix-generated-drift:
     description: >
       Regenerate drifted generated files and PUSH the result to the pull request branch.
@@ -82,6 +106,52 @@ runs:
         PR_BASE: ${{ inputs.base-ref }}
         PR_HEAD_SHA: ${{ inputs.head-sha }}
       run: magus buzz "$GITHUB_ACTION_PATH/merge-conflict.buzz"
+
+    - name: Advise on hand-edited generated files
+      if: inputs.hand-edited-generated == 'true'
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_BASE: ${{ inputs.base-ref }}
+        PR_HEAD_SHA: ${{ inputs.head-sha }}
+      run: magus buzz "$GITHUB_ACTION_PATH/hand-edited-generated.buzz"
+
+    - name: Advise on targets that declare no outputs
+      if: inputs.target-outputs == 'true'
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_BASE: ${{ inputs.base-ref }}
+        PR_HEAD_SHA: ${{ inputs.head-sha }}
+      run: magus buzz "$GITHUB_ACTION_PATH/target-outputs.buzz"
+
+    - name: Report doctor findings
+      if: inputs.doctor == 'true'
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+      run: magus buzz "$GITHUB_ACTION_PATH/doctor.buzz"
+
+    - name: Advise on a raised version floor
+      if: inputs.version-floor == 'true'
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_BASE: ${{ inputs.base-ref }}
+        PR_HEAD_SHA: ${{ inputs.head-sha }}
+      run: magus buzz "$GITHUB_ACTION_PATH/version-floor.buzz"
 
     # Last, and deliberately after the read-only advisors: it can push, which moves the
     # head every earlier advisor just reported on.

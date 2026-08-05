@@ -1198,8 +1198,11 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 // doctor's magusfile-syntax check. Reviving them means first having standalone Buzz and
 // pinning `buzz` in mise.toml, which is not the case today.
 
-// Gates the build on workspace health by running `magus doctor`.
-export fun preflight(ctx: magus\Context, args: [str]) > void { magus\doctor([]); }
+// No gate of its own: doctor USED to run here and fail the build on a finding, which
+// made workspace conventions a blocker for everyone downstream. The advice action now
+// reports the same findings on the pull request, non-blocking - and unlike a preflight
+// gate, that works for a consumer who never wired doctor into their own pipeline.
+export fun preflight(ctx: magus\Context, args: [str]) > void {}
 
 // Compiles one artifact: the host binary, or the container image under the `container` charm.
 export fun build(ctx: magus\Context, args: [str])  > void {

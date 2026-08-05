@@ -139,6 +139,15 @@ var Magus = Module{
 			Impl:    MagusInsightReport,
 		},
 		{
+			Name: "target_graph",
+			Doc:  "The TARGET dependency graph of every project as a typed value: {projects}, each with its nodes and each node's declared footprint (readsFiles / writesFiles / modifiesExistingFiles). Annotate the result `> TargetGraph`. This is what magus.targets() serves in-process, reached by a nested magus instead, so it works from a `magus buzz` script with no workspace on the context - the case that matters for CI advisories reasoning about a pull request.",
+			Args: []Arg{
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "TargetGraph"}},
+			Impl:    MagusTargetGraph,
+		},
+		{
 			Name: "describe_file",
 			Doc:  "Classify paths against the workspace's declared globs: for each, the owning project and whether it is a declared `output` (generated - regenerate it, never hand-edit), a declared `source` (it feeds cache keys and the affected set), or `unclaimed`. Returns a typed DoctorReport-style envelope {definition, count, files}, not text to re-parse: this is the question \"can I disregard this changed file\", and a caller branches on `role` rather than grepping. Runs a nested magus, so it needs no workspace on the context and works from a `magus buzz` script.",
 			Args: []Arg{
@@ -346,6 +355,12 @@ func MagusInsight(ctx context.Context, args []string, opts map[string]any) (type
 // rather than as console text a caller has to parse back out of a string.
 func MagusDoctor(ctx context.Context, args []string, opts map[string]any) (types.DoctorReport, error) {
 	return runMagusJSON[types.DoctorReport](ctx, "doctor", args, opts)
+}
+
+// MagusTargetGraph returns every project's target graph through a nested magus, the
+// forking counterpart to MagusTargets. See runMagusJSON.
+func MagusTargetGraph(ctx context.Context, opts map[string]any) (types.TargetGraphOutput, error) {
+	return runMagusJSON[types.TargetGraphOutput](ctx, "describe", []string{"graph"}, opts)
 }
 
 // MagusInsightReport returns every insight lens as one typed report. `magus insight`

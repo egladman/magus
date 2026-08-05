@@ -107,6 +107,14 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return buzzValueMagusInsightReport(ret0), nil
 	}))
+	m.MapSet("targetGraph", vm.DirectValue("magus.targetGraph", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		opts := AnyMap(bzArgs, 0)
+		ret0, err := std.MagusTargetGraph(ctx, opts)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return buzzValueMagusTargetGraphOutput(ret0), nil
+	}))
 	m.MapSet("describeFile", vm.DirectValue("magus.describeFile", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		paths := StrSlice(bzArgs, 0)
 		opts := AnyMap(bzArgs, 1)

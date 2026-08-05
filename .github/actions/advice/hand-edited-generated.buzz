@@ -1,0 +1,114 @@
+// Comment when a pull request changes a GENERATED file without changing anything that
+// produces it.
+//
+// Generated output is regenerated, never hand-edited: the next `magus run generate`
+// overwrites the edit, and CI's drift gate fails in the meantime. The tell is a changed
+// file whose role is `output` while no `source` of any project that produces it changed
+// in the same PR - a regeneration always arrives with the change that caused it.
+//
+// Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA.
+import "os";
+import "advice";
+import "magus";
+import "std";
+
+final section = "hand-edited";
+
+// changed lists the paths this PR touches, against the merge base so a busy main branch
+// does not leak into the answer.
+fun changed(base: str, head: str) > [str] {
+    os\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
+    final res = os\exec("git", args: ["diff", "--name-only", "origin/" + base + "..." + head],
+        dir: ".", opts: {"allow_failure": true});
+    var paths = mut [];
+    foreach (line in res.stdout.split("\n")) {
+        if (line != "") { paths.append(line); }
+    }
+    return paths;
+}
+
+// explained reports whether any project that PRODUCES a generated file also had one of
+// its sources changed here - which is what a real regeneration looks like. Pure over
+// plain lists so the rule is unit-testable: the magus namespace's object types can be
+// annotated but not constructed, so a test cannot build a FileEntry to feed it.
+export fun explained(owners: [str], touched: [str]) > bool {
+    foreach (owner in owners) {
+        foreach (t in touched) {
+            if (t == owner) { return true; }
+        }
+    }
+    return false;
+}
+
+// suspect returns the generated paths this PR changed with no accompanying change to a
+// source of a project that produces them.
+fun suspect(files: [FileEntry]) > [str] {
+    var touched = mut [];
+    foreach (f in files) {
+        if (f.role == "source") {
+            foreach (p in f.sourceOf) { touched.append(p); }
+        }
+    }
+    var found = mut [];
+    foreach (f in files) {
+        if (f.role == "output" and !explained(f.outputOf, touched: touched)) {
+            found.append(f.path);
+        }
+    }
+    return found;
+}
+
+fun body(files: [str]) > str {
+    var text = "**These are generated files, and nothing that produces them changed in this pull request:**\n\n";
+    foreach (f in files) { text = text + "- `" + f + "`\n"; }
+    return text
+        + "\nIf you edited them by hand, the edit will not survive: the next run of the "
+        + "producing target overwrites it, and CI's drift gate fails until then. Change "
+        + "the source of truth instead, then regenerate:\n\n"
+        + "```sh\nmagus run generate:rw\n```\n\n"
+        + "`magus describe file <path>` says which project owns a path and what produces "
+        + "it. If the change IS the regeneration, commit the source change alongside it "
+        + "and this note goes away.\n";
+}
+
+fun main() > void {
+    final repo = advice\env("REPO");
+    final pr = advice\env("PR_NUMBER");
+    final base = advice\env("PR_BASE");
+    final head = advice\env("PR_HEAD_SHA");
+    if (pr == "" and base == "" and head == "") {
+        std\print("hand-edited-generated: no PR context; nothing to advise");
+        return;
+    }
+    if (pr == "" or base == "" or head == "") {
+        throw "hand-edited-generated: PR_NUMBER, PR_BASE, and PR_HEAD_SHA must be set together";
+    }
+
+    final paths = changed(base, head: head);
+    if (paths.len() == 0) {
+        advice\publish(repo, pr: pr, name: section, body: "");
+        return;
+    }
+    final files = suspect(magus\describeFile(paths).files);
+    if (files.len() == 0) {
+        advice\publish(repo, pr: pr, name: section, body: "");
+        std\print("hand-edited-generated: nothing to advise");
+        return;
+    }
+    advice\publish(repo, pr: pr, name: section, body: body(files));
+    std\print("hand-edited-generated: advised on " + files.join(", "));
+}
+
+main();
+
+test "explained is false when no producing project had a source change" {
+    std\assert(!explained(["."], touched: ["docs"]), message: "a docs edit does not explain a root output");
+}
+
+test "explained is true when a producing project's source changed" {
+    std\assert(explained([".", "docs"], touched: ["docs"]), message: "the regeneration is accounted for");
+}
+
+test "explained is false with no producing project at all" {
+    std\assert(!explained([], touched: ["docs"]), message: "nothing produces it");
+}

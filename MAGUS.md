@@ -50,8 +50,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | op | 57 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-edit` |
 | tool | 15 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
 | charm | 9 | `magus query kind:charm` | `rw`, `cd`, `snapshot` |
-| module | 23 | `magus query kind:module` | `fs`, `charm`, `vcs` |
-| method | 163 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
+| module | 23 | `magus query kind:module` | `fs`, `charm`, `magus` |
+| method | 164 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 56 | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS4001` |
 | doc | 263 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 134 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
@@ -92,7 +92,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `release` |  |
 | `watch` | Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive. |
 | `test` | Tests with race detection, coverage, and a drift-gated coverage badge. |
-| `preflight` | Gates the build on workspace health by running `magus doctor`. |
+| `preflight` | No gate of its own: doctor USED to run here and fail the build on a finding, which made workspace conventions a blocker for everyone downstream. |
 | `build` | Compiles one artifact: the host binary, or the container image under the `container` charm. |
 | `lint` | Formats first, then golangci-lint, go vet, govulncheck, markdownlint, and shellcheck. |
 | `format` | Regenerates, then formats Go and tidies `go.mod`. |

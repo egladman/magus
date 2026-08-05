@@ -1,0 +1,67 @@
+// Comment what `magus doctor` found about the workspace this pull request builds.
+//
+// NON-BLOCKING on purpose. Doctor validates conventions a workspace may not share, so it
+// reports rather than gates - the same reason this repo stopped running it in preflight.
+// A consumer who never wired doctor into their own CI still gets the finding here, which
+// is the point: the advice arrives without them having to build the pipeline for it.
+//
+// Advice-level findings are listed separately from failures and never framed as errors:
+// magus's own vocabulary is that advice is worth knowing and never a gate.
+//
+// Reads REPO and PR_NUMBER.
+import "advice";
+import "magus";
+import "std";
+
+final section = "doctor";
+
+// summarize renders the failing and advisory checks. Pure over plain lists so the
+// wording is testable: the magus namespace's types annotate but do not construct.
+export fun summarize(fails: [str], advisories: [str]) > str {
+    var text = "";
+    if (fails.len() != 0) {
+        text = text + "**`magus doctor` reports " + "{fails.len()}" + " failing check(s):**\n\n";
+        foreach (f in fails) { text = text + "- " + f + "\n"; }
+    }
+    if (advisories.len() != 0) {
+        if (text != "") { text = text + "\n"; }
+        text = text + "**Advice** (worth knowing, never a gate):\n\n";
+        foreach (a in advisories) { text = text + "- " + a + "\n"; }
+    }
+    if (text == "") { return ""; }
+    return text + "\nRun `magus doctor` locally for the detail behind each one.\n";
+}
+
+fun main() > void {
+    final repo = advice\env("REPO");
+    final pr = advice\env("PR_NUMBER");
+    if (repo == "" or pr == "") {
+        std\print("doctor: no PR context; nothing to advise");
+        return;
+    }
+
+    var fails = mut [];
+    var advisories = mut [];
+    foreach (c in magus\doctor([]).checks) {
+        final line = "`" + c.name + "` - " + c.message;
+        if (c.status == "fail") { fails.append(line); }
+        if (c.status == "advice") { advisories.append(line); }
+    }
+    final body = summarize(fails, advisories: advisories);
+    advice\publish(repo, pr: pr, name: section, body: body);
+    if (body == "") { std\print("doctor: workspace is clean"); return; }
+    std\print("doctor: advised on {fails.len()} failure(s), {advisories.len()} advisory");
+}
+
+main();
+
+test "summarize separates failures from advice" {
+    final body = summarize(["`sockets` - no daemon"], advisories: ["`naming` - bespoke name"]);
+    std\assert(body.indexOf("failing check") != null, message: "names the failures");
+    std\assert(body.indexOf("no daemon") != null, message: "carries the message");
+    std\assert(body.indexOf("never a gate") != null, message: "frames advice as non-blocking");
+}
+
+test "summarize is empty for a clean workspace, so the section retracts" {
+    std\assert(summarize([], advisories: []) == "", message: "nothing to say");
+}
