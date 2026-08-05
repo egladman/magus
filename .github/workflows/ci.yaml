@@ -380,33 +380,9 @@ jobs:
           installation-strategy: source
           source-path: .
           mise: 'false'
-      - name: Summarize CI outcome
-        env:
-          CI_RESULT: ${{ needs.ci.result }}
-          SHARD_COUNT: ${{ needs.preflight.outputs.count }}
-        run: |
-          {
-            echo '## CI outcome'
-            case "$CI_RESULT" in
-              success)
-                echo "Passed across ${SHARD_COUNT} affected shard(s)."
-                ;;
-              skipped)
-                echo 'No affected projects required a CI shard.'
-                ;;
-              failure|cancelled)
-                echo "**${CI_RESULT}:** open the failed shard job above, then fetch its Magus output reference before retrying."
-                echo
-                echo 'Local triage: `magus affected ci` · [Affected CI guide](https://eli.gladman.cc/magus/guides/affected/) · [CI target guide](https://eli.gladman.cc/magus/concepts/targets/ci/)'
-                ;;
-              *)
-                echo "CI reported an unexpected result: \`$CI_RESULT\`. Open the workflow jobs above for the failing step."
-                ;;
-            esac
-          } >> "$GITHUB_STEP_SUMMARY"
-      - name: Insight report to step summary
-        run: |
-          {
-            echo "## Insight report"
-            magus insight report --workspace -o markdown
-          } >> "$GITHUB_STEP_SUMMARY"
+      # One step, one script, and the outcome wording is unit-tested - it used to be a
+      # shell case statement no test could reach.
+      - uses: ./.github/actions/summary
+        with:
+          ci-result: ${{ needs.ci.result }}
+          shard-count: ${{ needs.preflight.outputs.count }}

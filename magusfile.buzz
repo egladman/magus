@@ -1139,15 +1139,16 @@ fun total_coverage(func_out: str) > str {
 // under a plain `magus buzz` in CI, so upstream-strict is exactly the parse they need
 // checked, and `-t` is the runner.
 //
-// Run from the advisors' own directory, not the project root, because each one does
+// Run from each script's own directory, not the project root, because they do
 // `import "advice"` for the shared comment plumbing and Buzz resolves a bare import
 // against the CWD. In CI the action supplies the same thing as BUZZ_INCLUDE_PATH.
 //
 export fun advice_test(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles(".github/actions/advice/*.buzz");
-    foreach (advisor in fs\glob(".github/actions/advice/*.buzz")) {
-        magus\cmd("buzz", args: ["-t", fs\basename(advisor)],
-            opts: {"dir": ".github/actions/advice"});
+    ctx.readsFiles(".github/actions/advice/*.buzz", ".github/actions/summary/*.buzz");
+    foreach (dir in [".github/actions/advice", ".github/actions/summary"]) {
+        foreach (script in fs\glob(dir + "/*.buzz")) {
+            magus\cmd("buzz", args: ["-t", fs\basename(script)], opts: {"dir": dir});
+        }
     }
 }
 

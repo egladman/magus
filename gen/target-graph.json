@@ -411,6 +411,10 @@
             {
               "project": ".",
               "glob": ".github/actions/advice/*.buzz"
+            },
+            {
+              "project": ".",
+              "glob": ".github/actions/summary/*.buzz"
             }
           ]
         },
