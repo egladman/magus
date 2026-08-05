@@ -27,14 +27,14 @@ func TestApplyEnv_VolatilityEnabledFalse(t *testing.T) {
 }
 
 func TestApplyEnvToConfig(t *testing.T) {
-	t.Setenv("MAGUS_CACHE_IMMUTABLE", "true")
+	t.Setenv("MAGUS_CACHE_WRITE_ENABLED", "false")
 	t.Setenv("MAGUS_CONCURRENCY", "6")
 	t.Setenv("MAGUS_DRY_RUN", "1")
 
 	cfg := config.Defaults()
 	configgen.ApplyEnv(&cfg, os.Getenv)
 
-	assert.True(t, cfg.Cache.Immutable)
+	assert.False(t, cfg.Cache.WriteEnabled())
 	assert.Equal(t, 6, cfg.Concurrency)
 	assert.True(t, cfg.DryRun, "DryRun should be true")
 }

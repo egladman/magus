@@ -201,9 +201,3 @@ func Exclusive() TargetOption {
 func Slots(n int) TargetOption {
 	return func(t *types.Target) { t.Slots = n }
 }
-
-// Platform records a target's claim about whether its result depends on the host
-// platform, overriding the answer its spells would otherwise give.
-func Platform(s types.PlatformSensitivity) TargetOption {
-	return func(t *types.Target) { t.Platform = s }
-}

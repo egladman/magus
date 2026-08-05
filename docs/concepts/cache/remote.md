@@ -212,10 +212,10 @@ remote `put_artifact` upload:
 
 ```yaml
 # in your CI workflow env
-MAGUS_CACHE_IMMUTABLE: ${{ github.event_name == 'pull_request' }}
+MAGUS_CACHE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}
 ```
 
-`MAGUS_CACHE_IMMUTABLE=true` (config key `cache.immutable`) opens the cache
+`MAGUS_CACHE_WRITE_ENABLED=false` (config key `cache.write.enabled`) opens the cache
 read-only; the default is mutable. See the
 [supply-chain note in the README](../../../README.md#shared-cache-trust-signing-and-read-only-refs).
 

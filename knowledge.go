@@ -112,7 +112,7 @@ func resolveCacheDir(root string, cfg config.Config) string {
 // cacheImmutable reports whether the cache is read-only, honoring both the config
 // flag and the MAGUS_CACHE_IMMUTABLE env var (matching cache.Open's behavior).
 func cacheImmutable(cfg config.Config) bool {
-	if cfg.Cache.Immutable {
+	if !cfg.Cache.WriteEnabled() {
 		return true
 	}
 	v := strings.ToLower(os.Getenv("MAGUS_CACHE_IMMUTABLE"))

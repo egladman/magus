@@ -13,10 +13,12 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | Config key | Environment variable | Flag | Type |
 |------------|----------------------|------|------|
 | `cache.dir` | `MAGUS_CACHE_DIR` | `--cache-dir` | string |
-| `cache.immutable` | `MAGUS_CACHE_IMMUTABLE` | `--cache-immutable` | bool |
+| `cache.include.arch.enabled` | `MAGUS_CACHE_INCLUDE_ARCH_ENABLED` | _(env only)_ | bool _(env only)_ |
+| `cache.include.os.enabled` | `MAGUS_CACHE_INCLUDE_OS_ENABLED` | _(env only)_ | bool _(env only)_ |
 | `cache.remote.insecure` | `MAGUS_CACHE_REMOTE_INSECURE` | `--cache-remote-insecure` | bool |
 | `cache.remote.trusted_keys` | `MAGUS_CACHE_REMOTE_TRUSTED_KEYS` | _(env only)_ | list _(comma-separated, env only)_ |
 | `cache.size_mb` | `MAGUS_CACHE_SIZE_MB` | `--cache-size-mb` | int |
+| `cache.write.enabled` | `MAGUS_CACHE_WRITE_ENABLED` | _(env only)_ | bool _(env only)_ |
 
 ## ci
 

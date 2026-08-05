@@ -916,9 +916,6 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 			}
 			for targetName, pol := range p.TargetPolicies {
 				fmt.Printf("  policy: %s", targetName)
-				if pol.Platform != types.PlatformInherit {
-					fmt.Printf("  platform=%s", pol.Platform)
-				}
 				if pol.FailOnDrift {
 					fmt.Printf("  fail_on_drift")
 				}
@@ -1113,9 +1110,6 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 		}
 		if e.Policy != nil {
 			fmt.Printf("  policy:")
-			if e.Policy.Platform != types.PlatformInherit {
-				fmt.Printf("  platform=%s", e.Policy.Platform)
-			}
 			if e.Policy.FailOnDrift {
 				fmt.Printf("  fail_on_drift")
 			}

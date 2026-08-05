@@ -310,7 +310,7 @@ func buildTelemetryStatus(t config.Telemetry) telemetryStatus {
 }
 
 func buildCacheStatus(c config.Cache) cacheStatus {
-	return cacheStatus{Immutable: c.Immutable, Dir: c.Dir, SizeMB: c.SizeMB}
+	return cacheStatus{Immutable: !c.WriteEnabled(), Dir: c.Dir, SizeMB: c.SizeMB}
 }
 
 func printStatusText(w *os.File, r statusReport, useGrid bool, animFrame int) {

@@ -220,7 +220,7 @@ func TestHashStep_KeyVersionIsHashed(t *testing.T) {
 	assert.NotEmpty(t, h1, "hashStep returned empty hash")
 	// The current KeyVersion is always mixed in; bumping it must change the
 	// hash. Verified here by asserting the current constant is the intended value.
-	const wantKeyVersion = 4
+	const wantKeyVersion = 5
 	assert.Equal(t, wantKeyVersion, KeyVersion, "KeyVersion changed; update this test when bumping")
 }
 
@@ -260,6 +260,8 @@ func TestHashKeyByteLayout(t *testing.T) {
 	// No sources and no EnvAllow → no file I/O and no environment lookups, so the
 	// key depends only on the literal fields below and the result is deterministic.
 	step := &Step{
+		IncludeOS:       true,
+		IncludeArch:     true,
 		ProjectPath:     "pkg/x",
 		Target:          "build",
 		Charms:          []string{"race"},
@@ -274,7 +276,7 @@ func TestHashKeyByteLayout(t *testing.T) {
 	// Reconstruct the expected byte stream independently, in hashStep's field order.
 	var want bytes.Buffer
 	fmt.Fprintf(&want, "keyVersion:%d\n", KeyVersion)
-	fmt.Fprintf(&want, "platform:%s/%s\n", runtime.GOOS, runtime.GOARCH)
+	fmt.Fprintf(&want, "os:%s\narch:%s\n", runtime.GOOS, runtime.GOARCH)
 	want.WriteString("projectPath:pkg/x\n")
 	want.WriteString("target:build\n")
 	want.WriteString("charm:race\n")
@@ -372,26 +374,42 @@ func TestVerifyAcceptsLegacyEnvelopeAndReportsIt(t *testing.T) {
 	assert.True(t, legacy, "the caller must be told to drop the unauthenticated extras")
 }
 
-// TestHashStepPlatformOptOut: the host platform keys a step by default, and a step
-// claiming platform independence omits that line - so two platforms share one entry.
-// The opt-out must change the key, or the claim would be decorative.
-func TestHashStepPlatformOptOut(t *testing.T) {
+// TestHashStepHostFactOptOut: os and arch key a step by default and each can be left
+// out ALONE - the point of splitting them, since an image varies by arch while a shell
+// suite varies by OS. The opt-out must change the key, or the claim is decorative.
+func TestHashStepHostFactOptOut(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	c := &Cache{mtimes: newMtimeStore(t.TempDir(), nil)}
+	key := func(os, arch bool) (string, []string) {
+		var lines []string
+		k, err := c.hashStepInputs(context.Background(), &Step{
+			ProjectPath: "pkg/x", Target: "build", WorkspaceRoot: root,
+			IncludeOS: os, IncludeArch: arch,
+		}, &lines)
+		require.NoError(t, err)
+		return k, lines
+	}
 
-	dependent := &Step{ProjectPath: "pkg/x", Target: "build", WorkspaceRoot: root}
-	independent := &Step{ProjectPath: "pkg/x", Target: "build", WorkspaceRoot: root, PlatformIndependent: true}
+	both, bothLines := key(true, true)
+	noOS, noOSLines := key(false, true)
+	noArch, _ := key(true, false)
+	neither, neitherLines := key(false, false)
 
-	var depLines, indLines []string
-	depKey, err := c.hashStepInputs(context.Background(), dependent, &depLines)
-	require.NoError(t, err)
-	indKey, err := c.hashStepInputs(context.Background(), independent, &indLines)
-	require.NoError(t, err)
+	assert.Contains(t, bothLines, fmt.Sprintf("os:%s", runtime.GOOS))
+	assert.Contains(t, bothLines, fmt.Sprintf("arch:%s", runtime.GOARCH))
 
-	assert.NotEqual(t, depKey, indKey, "opting out of platform keying must change the key")
-	assert.Contains(t, depLines, fmt.Sprintf("platform:%s/%s", runtime.GOOS, runtime.GOARCH))
-	for _, l := range indLines {
-		assert.NotContains(t, l, "platform:", "an independent step must carry no platform line")
+	// Each axis moves the key on its own, so neither is a no-op.
+	assert.NotEqual(t, both, noOS)
+	assert.NotEqual(t, both, noArch)
+	assert.NotEqual(t, noOS, noArch, "dropping os must differ from dropping arch")
+	assert.NotEqual(t, both, neither)
+
+	for _, l := range noOSLines {
+		assert.NotContains(t, l, "os:", "os was excluded but still keyed")
+	}
+	for _, l := range neitherLines {
+		assert.NotContains(t, l, "os:")
+		assert.NotContains(t, l, "arch:")
 	}
 }

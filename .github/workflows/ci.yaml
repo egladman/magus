@@ -18,7 +18,7 @@ env:
   MISE_SAFE: '1'
   GOEXPERIMENT: jsonv2
   # PRs may read the cache but cannot publish to it.
-  MAGUS_CACHE_IMMUTABLE: ${{ github.event_name == 'pull_request' }}
+  MAGUS_CACHE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}
   MAGUS_CACHE_REMOTE_INSECURE: 'true'
   MAGUS_CACHE_REMOTE_TRUSTED_KEYS: ${{ vars.MAGUS_CACHE_PUBLIC_KEY }}
   MAGUS_CI_MAX_SHARDS: '2'

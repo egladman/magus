@@ -186,11 +186,53 @@ func (l Log) SlogLevel() slog.Level {
 
 // Cache controls the content-addressed build cache.
 type Cache struct {
-	Dir       string      `json:"dir" yaml:"dir"`                          // override default cache location (.magus/ in workspace root)
-	Immutable bool        `json:"immutable" yaml:"immutable"`              // true = read-only replay; default (false) writes new artifacts
-	SizeMB    int         `json:"size_mb" yaml:"size_mb" validate:"gte=0"` // disk cap in MB (binary); 0 = unlimited
-	Remote    CacheRemote `json:"remote" yaml:"remote"`                    // settings specific to a shared remote cache backend
+	Dir string `json:"dir" yaml:"dir"` // override default cache location (.magus/ in workspace root)
+	// Write gates producing entries. It replaces a cache.immutable flag that named the
+	// absence of the behaviour: answering "can this run write?" meant parsing a double
+	// negative, and the CI snippet that used it read inverted from its own intent.
+	Write   CacheWrite   `json:"write" yaml:"write"`
+	Include CacheInclude `json:"include" yaml:"include"`
+	SizeMB  int          `json:"size_mb" yaml:"size_mb" validate:"gte=0"` // disk cap in MB (binary); 0 = unlimited
+	Remote  CacheRemote  `json:"remote" yaml:"remote"`                    // settings specific to a shared remote cache backend
 }
+
+// CacheWrite gates writing entries: the local snapshot and the remote push alike.
+//
+// One flag covers both because they are one decision today - a run either produces
+// entries or it does not. Restoring is deliberately NOT gated: a read-only run still
+// populates its local cache from a remote hit, so a pull request replays the shared
+// cache at full speed while publishing nothing to it.
+type CacheWrite struct {
+	Enabled *bool `json:"enabled" yaml:"enabled"` // nil = default true
+}
+
+// CacheInclude selects which facts about the host enter every cache key.
+//
+// OS and architecture are separate because they move independently: a container image
+// built on linux/amd64 differs from linux/arm64 by ARCH alone, while a shell test suite
+// differs between macOS and linux by OS alone. One combined switch would make a target
+// that cares about one pay for both.
+type CacheInclude struct {
+	OS   CacheIncludeFlag `json:"os" yaml:"os"`
+	Arch CacheIncludeFlag `json:"arch" yaml:"arch"`
+}
+
+// CacheIncludeFlag is one host fact's switch. Both default to enabled: excluding one
+// is a claim that the artifact does not vary along that axis, and being wrong that way
+// replays a foreign artifact out of a shared cache, where being wrong the other way
+// only costs hits.
+type CacheIncludeFlag struct {
+	Enabled *bool `json:"enabled" yaml:"enabled"` // nil = default true
+}
+
+// WriteEnabled reports whether this run may produce cache entries.
+func (c Cache) WriteEnabled() bool { return c.Write.Enabled == nil || *c.Write.Enabled }
+
+// IncludeOS reports whether the host OS keys every entry.
+func (c Cache) IncludeOS() bool { return c.Include.OS.Enabled == nil || *c.Include.OS.Enabled }
+
+// IncludeArch reports whether the host architecture keys every entry.
+func (c Cache) IncludeArch() bool { return c.Include.Arch.Enabled == nil || *c.Include.Arch.Enabled }
 
 // CacheRemote holds settings that apply only to a remote cache backend (wired via
 // magus.cache.remote in the magusfile). The backend binding is code, so it stays
@@ -419,7 +461,9 @@ func boolPtr(v bool) *bool { return &v }
 func EnvVarDocs() []EnvVarDoc {
 	return []EnvVarDoc{
 		{"MAGUS_CACHE_DIR", "cache.dir", "", "Override the default cache location (.magus/ in the workspace root)"},
-		{"MAGUS_CACHE_IMMUTABLE", "cache.immutable", "false", "When true (or 1), open the cache in read-only mode: replay hits but never write new entries"},
+		{"MAGUS_CACHE_WRITE_ENABLED", "cache.write.enabled", "true", "When false (or 0), replay cache hits but never write new entries, locally or to a remote"},
+		{"MAGUS_CACHE_INCLUDE_OS_ENABLED", "cache.include.os.enabled", "true", "When false (or 0), the host OS is left out of every cache key"},
+		{"MAGUS_CACHE_INCLUDE_ARCH_ENABLED", "cache.include.arch.enabled", "true", "When false (or 0), the host architecture is left out of every cache key"},
 		{"MAGUS_CACHE_SIZE_MB", "cache.size_mb", "0", "Cache disk usage cap in MB (binary, 1<<20); 0 means unlimited"},
 		{"MAGUS_CACHE_REMOTE_INSECURE", "cache.remote.insecure", "false", "Disable remote-cache signature verification (accept/produce unsigned artifacts); for trusted single-repo CI only"},
 		{"MAGUS_LOG_FORMAT", "log.format", "pretty", "Output format: pretty, plain, text, or json"},

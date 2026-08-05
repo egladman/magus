@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 See the unreleased changes at
 https://github.com/egladman/magus/compare/v0.2.1...main
 
+### Changed
+
+- **`cache.immutable` is now `cache.write.enabled`, inverted.** The old key named the
+  absence of a behaviour, so answering "can this run write?" meant parsing a double
+  negative, and the documented CI snippet read inverted from its own intent:
+  `MAGUS_CACHE_IMMUTABLE: ${{ github.event_name == 'pull_request' }}` becomes
+  `MAGUS_CACHE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}`. It gates the
+  local snapshot and the remote push alike; restoring is still ungated, so a pull
+  request replays the shared cache at full speed while publishing nothing to it.
+- **The host platform now keys the cache as separate `os:` and `arch:` lines**, each
+  controlled by `cache.include.os.enabled` and `cache.include.arch.enabled`. They vary
+  independently - a container image built on linux/amd64 differs from linux/arm64 by
+  arch alone, a shell suite differs between macOS and linux by OS alone - so one
+  combined switch made a workspace that cared about one pay for both. This replaces the
+  per-target `platform` policy.
+
 ### Fixed
 
 - **A defined type over a basic kind crossed into Buzz as `null`.** A type switch matches

@@ -331,30 +331,6 @@ func raceForcesNoCache(o run) bool {
 }
 
 // buildStep assembles the cache.Step for running target on p.
-// platformIndependent resolves whether target's cache entry may be shared across host
-// platforms: the target's own declaration when it makes one, otherwise the bound
-// spells' default.
-//
-// The spells combine with AND, and unanimity is the point. A project binding go and ts
-// runs targets that can reach either toolchain, so one platform-dependent spell in the
-// set is enough to make sharing unsafe - the same direction the default leans. A
-// project that binds no spell at all is dependent too: there is nobody to make the
-// claim, and silence is not a claim.
-func platformIndependent(p *types.Project, target string) bool {
-	if pol, ok := p.TargetPolicies[target]; ok && pol.Platform != types.PlatformInherit {
-		return pol.Platform == types.PlatformIndependent
-	}
-	if len(p.ResolvedSpells) == 0 {
-		return false
-	}
-	for _, s := range p.ResolvedSpells {
-		if !s.PlatformIndependent() {
-			return false
-		}
-	}
-	return true
-}
-
 func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	step := m.baseStep(p)
 	step.Target = target
@@ -384,7 +360,11 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	for _, s := range p.ResolvedSpells {
 		step.Sources = append(step.Sources, s.TargetSources()[target]...)
 	}
-	step.PlatformIndependent = platformIndependent(p, target)
+	// Which host facts key this step. Workspace-wide today: a per-target override is a
+	// narrower claim, and there is no evidence yet that anyone needs one axis on for
+	// one target and off for another within the same workspace.
+	step.IncludeOS = m.cfg.Cache.IncludeOS()
+	step.IncludeArch = m.cfg.Cache.IncludeArch()
 	// Per-target inputs declared via ctx.readsFiles define the cache footprint whenever
 	// present. Each InputRef carries its owning project; joinGlob follows the same
 	// ownership rule as outputs below.

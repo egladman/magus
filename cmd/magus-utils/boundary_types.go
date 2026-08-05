@@ -161,11 +161,6 @@ var boundaryEnums = []boundaryEnum{
 			{"replace", "replace"}, {"move", "move"}, {"copy", "copy"}, {"test", "test"}},
 	},
 	{
-		Name:  "PlatformSensitivity",
-		Type:  reflect.TypeFor[types.PlatformSensitivity](),
-		Cases: []enumCase{{"inherit", ""}, {"dependent", "dependent"}, {"independent", "independent"}},
-	},
-	{
 		Name:  "VersionComponent",
 		Type:  reflect.TypeFor[spells.VersionComponent](),
 		Cases: []enumCase{{"none", ""}, {"major", "major"}, {"minor", "minor"}, {"patch", "patch"}},

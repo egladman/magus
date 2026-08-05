@@ -1,8 +1,10 @@
 config cache.dir
-config cache.immutable
+config cache.include.arch.enabled
+config cache.include.os.enabled
 config cache.remote.insecure
 config cache.remote.trusted_keys
 config cache.size_mb
+config cache.write.enabled
 config ci.max_shards
 config ci.runner_pool_budget
 config concurrency

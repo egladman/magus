@@ -486,7 +486,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	}
 
 	cacheDir := resolveCacheDir(m.ws.Root, m.cfg)
-	cfgOpts := []cache.Option{cache.WithMutable(!m.cfg.Cache.Immutable)}
+	cfgOpts := []cache.Option{cache.WithMutable(m.cfg.Cache.WriteEnabled())}
 	if m.cfg.Cache.SizeMB != 0 {
 		cfgOpts = append(cfgOpts, cache.WithSizeMB(m.cfg.Cache.SizeMB))
 	}

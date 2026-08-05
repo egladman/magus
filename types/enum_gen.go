@@ -232,28 +232,3 @@ func (v ConflictKind) String() string {
 	}
 	return string(v)
 }
-
-// Values lists the PlatformSensitivity values a caller may choose, excluding the zero value.
-func (v PlatformSensitivity) Values() []string { return []string{"dependent", "independent"} }
-
-// Valid reports whether v is a declared PlatformSensitivity. The zero value is valid: it means the
-// field was not set, which callers distinguish from a wrong value.
-//
-// A switch rather than a scan over Values: Values allocates a fresh slice per call so
-// its result can never be mutated by a caller, which is the right trade for a helper
-// that builds an error message and the wrong one for a predicate.
-func (v PlatformSensitivity) Valid() bool {
-	switch v {
-	case "", "dependent", "independent":
-		return true
-	}
-	return false
-}
-
-// String renders v for an error message: the value, or "unset" when empty.
-func (v PlatformSensitivity) String() string {
-	if v == "" {
-		return "unset"
-	}
-	return string(v)
-}

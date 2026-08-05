@@ -21,9 +21,9 @@ import (
 )
 
 // KeyVersion is bumped when the set of hashed fields changes, forcing a full rebuild.
-// 4 adds the host platform line and switches tool versions from raw probe output to
-// extracted, bucketed tokens; both change what an unchanged step hashes to.
-const KeyVersion = 4
+// 5 splits the single platform line into separate os and arch lines, each independently
+// omittable, and switched tool versions from raw probe output to narrowed tokens.
+const KeyVersion = 5
 
 // hashStep computes the cache key for a Step (version, path, target, sources,
 // env, deps, spell version, tool versions). Sources use an mtime fast-path.
@@ -81,22 +81,27 @@ func (c *Cache) hashStepInputsMemo(ctx context.Context, s *Step, lines *[]string
 		*lines = append(*lines, string(buf[:len(buf)-1]))
 	}
 
-	// The host platform keys every entry by default, and it has to be stated HERE
-	// rather than arrive through a spell. Several toolchains print their platform as
-	// part of their version (`go version go1.26.0 linux/amd64`), so before extraction
-	// magus was keying on the platform by accident, for the subset of projects that
-	// happened to bind such a spell. Extraction strips that noise deliberately - a
-	// tool's build host is not its version - which would leave a darwin/arm64 machine
-	// free to replay a linux/amd64 artifact from a shared cache.
+	// The host keys every entry by default, and it has to be stated HERE rather than
+	// arrive through a spell. Several toolchains print their platform as part of their
+	// version (`go version go1.26.0 linux/amd64`), so before extraction magus was
+	// keying on it by accident, for the subset of projects that happened to bind such
+	// a spell. Extraction strips that deliberately - a tool's build host is not its
+	// version - which would leave a darwin/arm64 machine free to replay a linux/amd64
+	// artifact from a shared cache.
 	//
-	// Omitting the line is an opt-out a spell or target CLAIMS (types.PlatformSensitivity),
-	// never something magus infers: being wrong here costs correctness in one
-	// direction and only cache hits in the other, so the default is the safe one.
+	// OS and arch are SEPARATE lines because they vary independently: an image built
+	// on linux/amd64 differs from linux/arm64 by arch alone, a shell suite differs
+	// between macOS and linux by OS alone. Omitting one is a claim the caller makes
+	// (cache.include.*.enabled), never something magus infers - being wrong that way
+	// replays a foreign artifact, where being wrong the other way only costs hits.
 	//
-	// This is the HOST platform. The platform an artifact is built FOR travels as
-	// GOOS/GOARCH through the environment allowlist, and keys via the env lines below.
-	if !s.PlatformIndependent {
-		writeLine("platform:", runtime.GOOS, "/", runtime.GOARCH)
+	// These are HOST facts. The platform an artifact is built FOR travels as
+	// GOOS/GOARCH through the environment allowlist and keys via the env lines below.
+	if s.IncludeOS {
+		writeLine("os:", runtime.GOOS)
+	}
+	if s.IncludeArch {
+		writeLine("arch:", runtime.GOARCH)
 	}
 
 	writeLine("projectPath:", s.ProjectPath)

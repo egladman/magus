@@ -115,11 +115,9 @@ func FailOnDrift() TargetOption { return workspace.FailOnDrift() }
 // Exclusive runs the target alone — no other target runs concurrently while it does.
 func Exclusive() TargetOption { return workspace.Exclusive() }
 
-// Platform records a target's claim about whether its result depends on the host
 // platform, overriding what its spells would answer. Pass types.PlatformIndependent
 // to let one cache entry serve every platform; types.PlatformDependent to force the
 // opposite when a spell claims independence the target cannot honour.
-func Platform(s types.PlatformSensitivity) TargetOption { return workspace.Platform(s) }
 
 // RetryOnVolatile enables volatility detection and auto-retry for this target.
 func RetryOnVolatile() TargetOption { return workspace.RetryOnVolatile() }

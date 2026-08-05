@@ -192,7 +192,7 @@ What legitimately differs between them is **scope and permission, not steps**:
   steps:
 
   ```yaml
-  MAGUS_CACHE_IMMUTABLE: ${{ github.event_name == 'pull_request' }}
+  MAGUS_CACHE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}
   ```
 
 Keep delivery in its own job, gated on the merge, and let it depend on the same
@@ -258,7 +258,7 @@ A complementary defense is to open the cache **read-only on untrusted refs**: re
 
 ```yaml
 # PRs replay the cache and see main's history, but write neither
-MAGUS_CACHE_IMMUTABLE: ${{ github.event_name == 'pull_request' }}
+MAGUS_CACHE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}
 ```
 
 To set up a shared cache (GitHub Actions Cache, S3/MinIO/R2/B2, or your own backend) and generate signing keys, see [Remote caching](../cache/remote.md).

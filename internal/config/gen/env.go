@@ -18,8 +18,17 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 	if v := getenv("MAGUS_CACHE_DIR"); v != "" {
 		cfg.Cache.Dir = v
 	}
-	if v := getenv("MAGUS_CACHE_IMMUTABLE"); v != "" {
-		cfg.Cache.Immutable = parseBoolEnv(v, cfg.Cache.Immutable)
+	if v := getenv("MAGUS_CACHE_WRITE_ENABLED"); v != "" {
+		b := parseBoolEnv(v, cfg.Cache.Write.Enabled != nil && *cfg.Cache.Write.Enabled)
+		cfg.Cache.Write.Enabled = &b
+	}
+	if v := getenv("MAGUS_CACHE_INCLUDE_OS_ENABLED"); v != "" {
+		b := parseBoolEnv(v, cfg.Cache.Include.OS.Enabled != nil && *cfg.Cache.Include.OS.Enabled)
+		cfg.Cache.Include.OS.Enabled = &b
+	}
+	if v := getenv("MAGUS_CACHE_INCLUDE_ARCH_ENABLED"); v != "" {
+		b := parseBoolEnv(v, cfg.Cache.Include.Arch.Enabled != nil && *cfg.Cache.Include.Arch.Enabled)
+		cfg.Cache.Include.Arch.Enabled = &b
 	}
 	if v := getenv("MAGUS_CACHE_SIZE_MB"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {

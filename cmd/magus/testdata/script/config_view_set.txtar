@@ -32,7 +32,7 @@ stdout '"size_mb": 0'
 # -o name: the dotted key list that `config set` keys must match.
 exec magus config view -o name
 stdout 'cache\.dir'
-stdout 'cache\.immutable'
+stdout 'cache\.write\.enabled'
 stdout 'cache\.remote\.insecure'
 stdout 'cache\.remote\.trusted_keys'
 stdout 'cache\.size_mb'

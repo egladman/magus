@@ -131,8 +131,8 @@ func TestInit_WritesBuiltinDefaults(t *testing.T) {
 
 	cfg, err := Load(path)
 	require.NoError(t, err)
-	// Cache defaults to mutable (immutable = false).
-	assert.False(t, cfg.Cache.Immutable, "Init: Cache.Immutable should be false (default)")
+	// A fresh config writes cache entries; the flag is opt-OUT.
+	assert.True(t, cfg.Cache.WriteEnabled(), "Init: cache.write.enabled should default true")
 
 	assert.Error(t, Init(path, false), "expected refusal to overwrite")
 	assert.NoError(t, Init(path, true), "Init --force")

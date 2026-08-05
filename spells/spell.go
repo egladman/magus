@@ -69,9 +69,6 @@ type Spell struct {
 	// values keep the historical behavior: the exact extracted version keys the cache.
 	versionKey  VersionKey
 	versionKeys map[string]VersionKey
-	// platformIndependent is the spell's claim that its toolchain's output does not
-	// vary by host platform. False by default: independence is claimed, never inferred.
-	platformIndependent bool
 	// readinessProbes gate an op on its tool being usable; see Descriptor.ReadinessProbes.
 	readinessProbes map[string]Command
 }
@@ -247,16 +244,6 @@ func (s *Spell) ProbeVersionOf(ctx context.Context, name, dir string) (string, e
 	return fn(ctx, dir)
 }
 
-// PlatformIndependent reports whether this spell's toolchain produces a result that
-// does not vary by host platform. False - the default for a spell that says nothing -
-// keeps the host platform in the cache key.
-//
-// The spell answers rather than the target because this is a property of the
-// TOOLCHAIN: the ts spell knows tsc emits the same JavaScript everywhere, and the go
-// spell knows `go build` emits a native binary. A target may still override, for the
-// cases the toolchain cannot see from here.
-func (s *Spell) PlatformIndependent() bool { return s.platformIndependent }
-
 // ReadinessProbe returns the readiness command for a tool, and whether one is
 // declared. Callers look it up by an op's Command.Bin, so an op that names a tool with
 // no probe - hadolint beside docker - is never gated.
@@ -410,12 +397,6 @@ func WithDependsOn(fn func(dir string) []string) Option {
 // WithVersionProbe sets the toolchain version probe; the result mixes into the cache key.
 func WithVersionProbe(fn func(ctx context.Context, dir string) (string, error)) Option {
 	return func(s *Spell) { s.versionProbe = fn }
-}
-
-// WithPlatformIndependent claims this spell's toolchain emits host-independent output,
-// dropping the host platform from the cache key for targets that do not override it.
-func WithPlatformIndependent() Option {
-	return func(s *Spell) { s.platformIndependent = true }
 }
 
 // WithVersionKey sets the primary probe's cache key; the zero value keys exactly.

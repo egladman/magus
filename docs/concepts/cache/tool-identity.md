@@ -75,18 +75,28 @@ bind such a spell. Extraction strips that deliberately, so the platform is state
 the key itself where it covers every step:
 
 ```text
-platform:linux/amd64
+os:linux
+arch:amd64
 ```
 
-A target may opt out when its result genuinely does not vary by host:
+They are separate lines because they vary independently: a container image built on
+`linux/amd64` differs from `linux/arm64` by **arch** alone, while a shell test suite
+differs between macOS and linux by **OS** alone. One combined switch would make a
+workspace that cares about one pay for both.
 
-```buzz
-magus\project({ "targets": { "build": { "platform": "independent" } } });
+Either can be left out:
+
+```yaml
+cache:
+  include:
+    os:
+      enabled: true
+    arch:
+      enabled: true
 ```
 
-Default is `dependent`, and deliberately: being wrong that way costs cache hits,
-while being wrong the other way replays a darwin artifact on linux out of a shared
-cache. A spell supplies the default for its toolchain; a target overrides it.
+Both default to enabled, and deliberately: being wrong that way costs cache hits,
+while being wrong the other way replays a foreign artifact out of a shared cache.
 
 This is the **host** platform. The platform an artifact is built *for* travels as
 `GOOS`/`GOARCH` through the environment allowlist and keys through the env lines.
