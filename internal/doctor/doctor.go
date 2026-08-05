@@ -94,6 +94,7 @@ type LoadedWorkspace struct {
 type options struct {
 	cfg        config.Config
 	daemonInfo *DaemonInfo
+	probe      bool
 }
 
 // Option configures a [Run] call.
@@ -106,6 +107,15 @@ func WithConfig(c config.Config) Option { return func(o *options) { o.cfg = c } 
 // Pass a nil-pointer-equivalent (empty DaemonInfo with Reachable=false) when
 // the daemon is not running; this is not an error.
 func WithDaemonInfo(d DaemonInfo) Option { return func(o *options) { o.daemonInfo = &d } }
+
+// WithProbe RUNS each declared readiness probe rather than only listing it.
+//
+// Off by default, and that default is the design: doctor answers questions about the
+// workspace, so forking `docker info` to render a report would make a read-only command
+// depend on a daemon being up - the exact coupling readiness exists to make legible.
+// Opting in is for the case that wants it, checking an environment before a long run
+// instead of finding out eight minutes in.
+func WithProbe() Option { return func(o *options) { o.probe = true } }
 
 // KnownEnvVars is the precomputed set of every MAGUS_* env var derived
 // from the magus config struct via schema. Used to surface typos in

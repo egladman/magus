@@ -13,7 +13,10 @@ import (
 )
 
 func doctorCmd(ctx context.Context, root string, args []string) error {
+	var probe bool
 	_, err := cmdParse("doctor", args, func(fs *flag.FlagSet) {
+		fs.BoolVar(&probe, "probe", false,
+			"Run each declared tool-readiness probe instead of only listing it (forks a process per gated tool)")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus doctor [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -47,11 +50,11 @@ func doctorCmd(ctx context.Context, root string, args []string) error {
 	// Query daemon status for the daemon-related checks. Non-fatal on failure.
 	daemonInfo := buildDaemonInfo(ctx, ws)
 
-	out := doctor.Run(
-		root, ws, wsErr,
-		doctor.WithConfig(globalCfg),
-		doctor.WithDaemonInfo(daemonInfo),
-	)
+	dopts := []doctor.Option{doctor.WithConfig(globalCfg), doctor.WithDaemonInfo(daemonInfo)}
+	if probe {
+		dopts = append(dopts, doctor.WithProbe())
+	}
+	out := doctor.Run(root, ws, wsErr, dopts...)
 
 	if err := emitDoctor(opts, out); err != nil {
 		return err

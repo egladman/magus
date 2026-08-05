@@ -1,7 +1,10 @@
 package doctor
 
 import (
+	"context"
 	"fmt"
+	"github.com/egladman/magus/spells"
+	"os/exec"
 	"slices"
 	"strings"
 
@@ -17,7 +20,10 @@ import (
 // enforces; this only says what WOULD be enforced, so someone hitting MGS3004 can see
 // where the gate came from without reading a spell.
 func (r *runner) checkReadinessProbes(projects []*types.Project) Check {
-	type gate struct{ spell, tool, cmd string }
+	type gate struct {
+		spell, tool, cmd string
+		probe            spells.Command
+	}
 	var gates []gate
 	seen := map[string]bool{}
 
@@ -38,6 +44,7 @@ func (r *runner) checkReadinessProbes(projects []*types.Project) Check {
 					spell: s.Name(),
 					tool:  tool,
 					cmd:   strings.Join(append([]string{probe.Bin}, probe.Args...), " "),
+					probe: probe,
 				})
 			}
 		}
@@ -58,13 +65,27 @@ func (r *runner) checkReadinessProbes(projects []*types.Project) Check {
 	})
 
 	details := make([]string, 0, len(gates))
+	status := types.DoctorAdvice
+	var down int
 	for _, g := range gates {
-		details = append(details, fmt.Sprintf("%s: %s gated on `%s`", g.spell, g.tool, g.cmd))
+		if !r.opts.probe {
+			details = append(details, fmt.Sprintf("%s: %s gated on `%s`", g.spell, g.tool, g.cmd))
+			continue
+		}
+		// --probe was asked for, so the gate is actually exercised. A tool that is
+		// down is a FAIL rather than advice: the caller asked whether their
+		// environment is ready, and the honest answer is no.
+		if err := exec.CommandContext(context.Background(), g.probe.Bin, g.probe.Args...).Run(); err != nil {
+			down++
+			status = types.DoctorFail
+			details = append(details, fmt.Sprintf("%s: %s NOT ready - `%s` failed", g.spell, g.tool, g.cmd))
+			continue
+		}
+		details = append(details, fmt.Sprintf("%s: %s ready (`%s`)", g.spell, g.tool, g.cmd))
 	}
-	return Check{
-		Name:    "tool readiness",
-		Status:  types.DoctorAdvice,
-		Message: fmt.Sprintf("%d tool(s) gated on a readiness probe", len(gates)),
-		Details: details,
+	msg := fmt.Sprintf("%d tool(s) gated on a readiness probe", len(gates))
+	if r.opts.probe {
+		msg = fmt.Sprintf("%d of %d gated tool(s) not ready", down, len(gates))
 	}
+	return Check{Name: "tool readiness", Status: status, Message: msg, Details: details}
 }
