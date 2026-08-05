@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/types"
 )
 
 // whereMatch is one resolved location. Rel is carried alongside the absolute Path
@@ -114,7 +115,7 @@ func whereCmd(ctx context.Context, root string, args []string) error {
 	}
 
 	var matchFn func(string) bool
-	var pat watch.IgnorePattern
+	var pat types.IgnorePattern
 	switch {
 	case filterPat != "":
 		p, perr := watch.ParsePattern(filterPat)
@@ -123,17 +124,17 @@ func whereCmd(ctx context.Context, root string, args []string) error {
 		}
 		pat = p
 	case glob != "":
-		pat = watch.IgnorePattern{Type: watch.PatternGlob, Pattern: glob}
+		pat = types.IgnorePattern{Type: types.PatternGlob, Pattern: glob}
 	case regex != "":
-		pat = watch.IgnorePattern{Type: watch.PatternRegex, Pattern: regex}
+		pat = types.IgnorePattern{Type: types.PatternRegex, Pattern: regex}
 	case literal != "":
-		pat = watch.IgnorePattern{Type: watch.PatternLiteral, Pattern: literal}
+		pat = types.IgnorePattern{Type: types.PatternLiteral, Pattern: literal}
 	}
 	if pat.Type != "" {
 		if err := watch.ValidatePattern(pat); err != nil {
 			return fmt.Errorf("magus where: %w", err)
 		}
-		matchFn = watch.IgnorePatterns(ws.Root(), []watch.IgnorePattern{pat})
+		matchFn = watch.IgnorePatterns(ws.Root(), []types.IgnorePattern{pat})
 	}
 
 	scored := interactive.ScoreProjects(all, filters)

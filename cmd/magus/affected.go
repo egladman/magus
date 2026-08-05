@@ -606,7 +606,7 @@ func affectedImpact(ctx context.Context, root string, args []string) error {
 	// and hand it to the enrichment step. Best-effort: a graph that fails to load leaves
 	// the blast radius intact and records a Note rather than failing the whole report.
 	if g, gerr := loadKnowledgeGraph(ctx, root, false /*refresh*/, false /*global*/, true /*includeSymbols*/); gerr == nil {
-		impact.Enrich(out, g)
+		impact.Enrich(out, impact.GraphStore(g))
 	} else {
 		out.Notes = append(out.Notes, "changed-symbol and coverage overlays skipped: "+gerr.Error())
 	}
@@ -632,7 +632,18 @@ const impactFileCap = 12
 // counts before lists, verbs not arrows, full ids, plain ASCII. Changed files are
 // grouped under the seed project that owns them (not dumped as one flat list) so a
 // large changeset stays legible.
-func printImpactText(out *impact.Result) error {
+func printImpactText(out *types.ImpactResult) error {
+	// Notes carry graceful degradation - a knowledge graph that failed to load, a
+	// missing symbol index - so they must survive the early returns below. Without
+	// this, an empty changeset rendered as a clean "nothing is affected" while the
+	// reason the overlays were absent went unsaid, which is the worst shape a silent
+	// failure can take in a gate command.
+	defer func() {
+		for _, n := range out.Notes {
+			fmt.Printf("\nnote: %s\n", n)
+		}
+	}()
+
 	if out.ChangedFileCount == 0 {
 		fmt.Printf("No changed files against %s; nothing is affected.\n", out.Base)
 		return nil
@@ -690,10 +701,6 @@ func printImpactText(out *impact.Result) error {
 
 	printImpactOverlays(out)
 
-	for _, n := range out.Notes {
-		fmt.Printf("\nnote: %s\n", n)
-	}
-
 	// Complementary deep-link into the live Graph Explorer, focused on a single
 	// representative seed with a blast view (what depends on it - the closure the
 	// change ripples out to). The query grammar ANDs its terms with no OR, so the
@@ -724,7 +731,7 @@ const impactSymbolCap = 20
 // self-suppressing: an overlay with no data prints nothing here (its honest output is
 // the Note the enrichment appended). Same house style as the blast radius: counts before
 // lists, verbs not arrows, plain ASCII.
-func printImpactOverlays(out *impact.Result) {
+func printImpactOverlays(out *types.ImpactResult) {
 	if len(out.ChangedSymbols) > 0 {
 		files := map[string]struct{}{}
 		for _, s := range out.ChangedSymbols {
@@ -745,7 +752,7 @@ func printImpactOverlays(out *impact.Result) {
 			line := fmt.Sprintf("  %s (%s): %s across %s", name, s.File,
 				countLabel(s.RefCount, "caller", "callers"),
 				countLabel(s.FileCount, "file", "files"))
-			if s.Coverage != nil {
+			if s.Coverage.Total > 0 {
 				line += fmt.Sprintf(" [coverage %s]", impactPct(s.Coverage.Ratio))
 			}
 			fmt.Println(line)

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 )
 
 // checkSpellContract reports what each registered spell actually implements of the
@@ -33,10 +34,10 @@ import (
 // only ever observes the registered spell, never the descriptor it was built from.
 // Catching declaration-versus-application drift needs a test over magus's own
 // construction paths, not a workspace diagnostic. See TestSpellOptionsApplied.
-func checkSpellContract(spells []*spells.Spell) Check {
+func checkSpellContract(spells []*spells.Spell) types.DoctorCheck {
 	const name = "spell contract"
 	if len(spells) == 0 {
-		return Check{Name: name, Status: StatusOK, Message: "no spells registered"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no spells registered"}
 	}
 
 	var broken, details []string
@@ -57,16 +58,16 @@ func checkSpellContract(spells []*spells.Spell) Check {
 
 	if len(broken) > 0 {
 		sort.Strings(broken)
-		return Check{
+		return types.DoctorCheck{
 			Name:    name,
-			Status:  StatusFail,
+			Status:  types.DoctorFail,
 			Message: fmt.Sprintf("%d spell(s) do not satisfy the required mgs_ contract", len(broken)),
 			Details: broken,
 		}
 	}
-	return Check{
+	return types.DoctorCheck{
 		Name:    name,
-		Status:  StatusOK,
+		Status:  types.DoctorOK,
 		Message: fmt.Sprintf("%d spell(s) satisfy the required mgs_ contract", len(spells)),
 		Details: details,
 	}

@@ -10,6 +10,6 @@ export object InsightReport {
     affinity: Affinity = Affinity{},
     ownership: Ownership = Ownership{},
     trend: Trend = Trend{},
-    volatility: Volatility? = null,
+    volatility: Volatility = Volatility{},
     graphStats: KnowledgeStats = KnowledgeStats{},
 }

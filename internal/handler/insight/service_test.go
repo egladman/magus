@@ -71,7 +71,7 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 		Ownership: types.OwnershipOutput{
 			Definition: types.OwnershipDefinition,
 			Commits:    42,
-			Projects: []types.Ownership{{
+			Projects: []types.OwnershipEntry{{
 				Path:         "internal/cache",
 				Name:         "cache",
 				Commits:      9,
@@ -86,7 +86,7 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 		Trend: types.TrendOutput{
 			Definition: types.TrendDefinition,
 			Commits:    42,
-			Projects:   []types.Trend{{Path: "internal/cache", Name: "cache", Recent: 7, Earlier: 2, Delta: 5}},
+			Projects:   []types.TrendEntry{{Path: "internal/cache", Name: "cache", Recent: 7, Earlier: 2, Delta: 5}},
 		},
 		Volatility: &types.VolatilityReport{
 			Threshold: 0.05,

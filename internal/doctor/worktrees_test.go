@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,14 +25,14 @@ func mkWorktree(t *testing.T, root, name string, live bool) {
 func TestCheckStaleWorktrees(t *testing.T) {
 	t.Run("no worktrees dir is fine", func(t *testing.T) {
 		c := checkStaleWorktrees(t.TempDir())
-		assert.Equal(t, StatusOK, c.Status)
+		assert.Equal(t, types.DoctorOK, c.Status)
 	})
 
 	t.Run("live worktrees pass", func(t *testing.T) {
 		root := t.TempDir()
 		mkWorktree(t, root, "feature-a", true)
 		mkWorktree(t, root, "feature-b", true)
-		assert.Equal(t, StatusOK, checkStaleWorktrees(root).Status)
+		assert.Equal(t, types.DoctorOK, checkStaleWorktrees(root).Status)
 	})
 
 	// The case that actually happened: `git worktree prune` clears git's registry but
@@ -42,7 +43,7 @@ func TestCheckStaleWorktrees(t *testing.T) {
 		mkWorktree(t, root, "graph-explorer-viz-8008f6", false)
 
 		c := checkStaleWorktrees(root)
-		require.Equal(t, StatusFail, c.Status)
+		require.Equal(t, types.DoctorFail, c.Status)
 		assert.Contains(t, c.Message, "MGS1002", "the message must name what it breaks, not just that it is stale")
 		assert.Contains(t, c.Details, filepath.Join(".claude/worktrees", "graph-explorer-viz-8008f6"))
 		assert.NotContains(t, c.Details, filepath.Join(".claude/worktrees", "live-one"))
@@ -53,6 +54,6 @@ func TestCheckStaleWorktrees(t *testing.T) {
 		root := t.TempDir()
 		require.NoError(t, os.MkdirAll(filepath.Join(root, ".claude", "worktrees"), 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(root, ".claude", "worktrees", "README"), []byte("x"), 0o600))
-		assert.Equal(t, StatusOK, checkStaleWorktrees(root).Status)
+		assert.Equal(t, types.DoctorOK, checkStaleWorktrees(root).Status)
 	})
 }

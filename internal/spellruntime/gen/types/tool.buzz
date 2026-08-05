@@ -9,4 +9,5 @@ export object Tool {
     probe: Command = Command{},
     key: VersionKey = VersionKey{},
     ready: Command = Command{},
+    floor: str = "",
 }

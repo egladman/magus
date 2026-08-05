@@ -133,21 +133,8 @@ func clampStatusWatch(interval time.Duration) time.Duration {
 	return interval
 }
 
-// statusReport is the type alias for the shared StatusReport; kept as an alias
-// so internal callers in this package use the short name.
-type statusReport = types.StatusReport
-
-// buildStatus is the type alias for the shared BuildStatus.
-type buildStatus = types.BuildStatus
-
-// telemetryStatus is the type alias for the shared TelemetryStatus.
-type telemetryStatus = types.TelemetryStatus
-
-// cacheStatus is the type alias for the shared CacheStatus.
-type cacheStatus = types.CacheStatus
-
 // printStatus renders one status snapshot; animFrame drives the active-cell pulse (0 = static).
-func printStatus(r statusReport, opts OutputOptions, animFrame int, compact bool) error {
+func printStatus(r types.StatusReport, opts OutputOptions, animFrame int, compact bool) error {
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, r)
@@ -175,17 +162,17 @@ func buildStatusBase() types.StatusBase {
 	return types.StatusBase{
 		Telemetry: buildTelemetryStatus(globalCfg.Telemetry),
 		Cache:     buildCacheStatus(globalCfg.Cache),
-		Build: buildStatus{
+		Build: types.BuildStatus{
 			SelfUpdate: selfUpdateCompiled,
 		},
 	}
 }
 
-func buildStatusReport(ctx context.Context, socket string, symbols bool) statusReport {
-	report := statusReport{
+func buildStatusReport(ctx context.Context, socket string, symbols bool) types.StatusReport {
+	report := types.StatusReport{
 		Telemetry: buildTelemetryStatus(globalCfg.Telemetry),
 		Cache:     buildCacheStatus(globalCfg.Cache),
-		Build: buildStatus{
+		Build: types.BuildStatus{
 			SelfUpdate: selfUpdateCompiled,
 		},
 		// Held locks are read from the workspace cache, not the daemon: a lock is taken by
@@ -217,7 +204,7 @@ func buildStatusReport(ctx context.Context, socket string, symbols bool) statusR
 	return report
 }
 
-func applyStatusReply(report *statusReport, reply *proc.StatusReply) {
+func applyStatusReply(report *types.StatusReport, reply *proc.StatusReply) {
 	if reply == nil {
 		return
 	}
@@ -230,11 +217,15 @@ func applyStatusReply(report *statusReport, reply *proc.StatusReply) {
 // probe) and returns nil when there is no workspace here, so `magus status` outside a
 // magus tree simply omits the section.
 func loadSymbolIndexStatus(ctx context.Context) []types.SymbolIndexStatus {
+	// No Close: loadMagus is a process-wide sync.Once singleton, so closing it here
+	// tears down a buzz pool every LATER caller still expects to be open. Under
+	// `magus status --watch --symbols` this probe runs once per tick, so the second
+	// tick was reading through a handle the first one had already closed. The
+	// singleton's lifetime belongs to process exit, not to a status probe.
 	m, err := loadMagus(ctx, "")
 	if err != nil {
 		return nil
 	}
-	defer func() { _ = m.Close() }()
 	return m.SymbolIndexStatus(ctx)
 }
 
@@ -242,9 +233,8 @@ func loadSymbolIndexStatus(ctx context.Context) []types.SymbolIndexStatus {
 // it is workspace-local and daemon-independent: a lock is taken by whichever process
 // mutates a project, which is usually a plain `magus run` with no daemon at all.
 func loadHeldLocks(ctx context.Context) []types.StatusLock {
-	// No Close here: loadMagus is a sync.Once singleton, and loadSymbolIndexStatus
-	// above already owns its lifetime. Closing a second time tears down a shared buzz
-	// pool the first caller still expects to be open.
+	// No Close here, for the same reason as the probe above: nothing closes the
+	// singleton.
 	m, err := loadMagus(ctx, "")
 	if err != nil {
 		return nil
@@ -285,8 +275,8 @@ func statusOutputFromReply(r *proc.StatusReply) *types.StatusOutput {
 	return out
 }
 
-func buildTelemetryStatus(t config.Telemetry) telemetryStatus {
-	st := telemetryStatus{
+func buildTelemetryStatus(t config.Telemetry) types.TelemetryStatus {
+	st := types.TelemetryStatus{
 		Enabled:     t.Enabled,
 		Endpoint:    t.Endpoint,
 		Protocol:    t.Protocol,
@@ -309,11 +299,11 @@ func buildTelemetryStatus(t config.Telemetry) telemetryStatus {
 	return st
 }
 
-func buildCacheStatus(c config.Cache) cacheStatus {
-	return cacheStatus{Immutable: !c.WriteEnabled(), Dir: c.Dir, SizeMB: c.SizeMB}
+func buildCacheStatus(c config.Cache) types.CacheStatus {
+	return types.CacheStatus{Immutable: !c.WriteEnabled(), Dir: c.Dir, SizeMB: c.SizeMB}
 }
 
-func printStatusText(w *os.File, r statusReport, useGrid bool, animFrame int) {
+func printStatusText(w *os.File, r types.StatusReport, useGrid bool, animFrame int) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "telemetry")
 	fmt.Fprintf(tw, "  enabled\t%t\n", r.Telemetry.Enabled)
@@ -487,7 +477,7 @@ const compactRunningBudget = 32
 // targets multiplexer sidebars: ANSI-free, no telemetry/cache config (those are
 // static), oldest running targets first so the long-running work stays visible.
 // now is the reference time for per-target durations (parameterised for tests).
-func printStatusCompact(w io.Writer, r statusReport, now time.Time) {
+func printStatusCompact(w io.Writer, r types.StatusReport, now time.Time) {
 	if r.Pool == nil {
 		fmt.Fprintln(w, "daemon: off")
 		return

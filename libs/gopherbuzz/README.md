@@ -169,7 +169,7 @@ reproducible difference at the pinned ref.
   not `map.map`. Deliberate -- an anonymous object literal is represented as a map, and
   upstream's anonymous objects have fields and no methods -- but it is a language-wide
   flip driven by one representation choice.
-- **A backtick string interpolates, and an unparseable `{...}` stays literal.** Upstream
+- **A backtick string interpolates, and an unparsable `{...}` stays literal.** Upstream
   interpolates too, but would reject the malformed case; here it silently becomes text.
   That leniency is load-bearing (it is what lets a Mustache template and a `zdef` block
   live in a raw string), and it means a regex quantifier written `` `[0-9]{3}` `` becomes

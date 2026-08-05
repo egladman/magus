@@ -164,7 +164,7 @@ func claimsExist(root string, claims []string) bool {
 // path.Match is the matcher because its wildcards stop at "/", so "v*" selects
 // v0.3.0 while correctly skipping a namespaced tag like backup/pre-reword. A
 // malformed pattern is a caller bug and is returned, not silently treated as
-// "match nothing". A line missing a name is skipped; an unparseable date is left
+// "match nothing". A line missing a name is skipped; an unparsable date is left
 // zero rather than dropping the tag, since the name is what callers rely on.
 func parseTags(out, pattern string) ([]types.VCSTag, error) {
 	if out == "" {

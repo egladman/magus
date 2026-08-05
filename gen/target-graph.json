@@ -187,7 +187,7 @@
         {
           "name": "spells-generate",
           "declared": "spells_generate",
-          "doc": "Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen) and the Buzz value-type mirrors (internal/spellruntime/gen/types), both driven by the go:generate directives in internal/spellruntime.",
+          "doc": "Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen), the Buzz value-type mirrors (internal/spellruntime/gen/types) and the per-module host declarations (internal/spellruntime/gen/decls), all driven by the go:generate directives in internal/spellruntime.",
           "dependencies": [
             "types-generate"
           ],
@@ -197,6 +197,9 @@
             },
             {
               "glob": "internal/spellruntime/gen/types/*.buzz"
+            },
+            {
+              "glob": "internal/spellruntime/gen/decls/*.buzz"
             }
           ]
         },

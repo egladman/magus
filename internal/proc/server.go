@@ -101,13 +101,42 @@ type Options struct {
 
 // Server listens on a Unix-domain socket and accepts forwarded RPC requests from child processes.
 type Server struct {
-	ep       endpoint.Endpoint
+	ep  endpoint.Endpoint
+	svc *service
+	// mu guards listener. Start assigns it and Close reads it, and those run on
+	// different goroutines: an RPC shutdown dispatches Close from a connection
+	// handler (service.shutdown) while the accept loop Start spawned is still
+	// live. Without the lock that pair is a data race the detector catches only
+	// intermittently, because it needs a stop to land while accept is mid-flight.
+	mu       sync.Mutex
 	listener net.Listener
-	svc      *service
 	cancel   context.CancelFunc
 	once     sync.Once
 	connWg   sync.WaitGroup // tracks in-flight handleConn goroutines
 	done     chan struct{}  // closed by Close to stop the signal watcher goroutine
+}
+
+// setListener publishes the bound listener under mu.
+func (s *Server) setListener(ln net.Listener) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.listener = ln
+}
+
+// currentListener reads the listener under mu.
+func (s *Server) currentListener() net.Listener {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.listener
+}
+
+// takeListener returns the listener and clears it, so only the first caller closes it.
+func (s *Server) takeListener() net.Listener {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ln := s.listener
+	s.listener = nil
+	return ln
 }
 
 // Addr returns the canonical unix:// URL that children dial. Valid after New.
@@ -128,8 +157,8 @@ func (s *Server) Close() {
 		if s.cancel != nil {
 			s.cancel()
 		}
-		if s.listener != nil {
-			_ = s.listener.Close()
+		if ln := s.takeListener(); ln != nil {
+			_ = ln.Close()
 		}
 		_ = os.Remove(s.ep.Addr)
 	})
@@ -221,7 +250,7 @@ func (s *Server) Start() error {
 	}
 	// Socket security comes from the parent directory (0700 per sockdir_unix.go);
 	// a post-Listen chmod would create a brief world-accessible window.
-	s.listener = ln
+	s.setListener(ln)
 
 	go serve(s, s.svc)
 	watchSignals(s, s.cancel)
@@ -241,8 +270,18 @@ func isSocketLive(ctx context.Context, addr string) bool {
 }
 
 func serve(srv *Server, svc *service) {
+	// Read the listener ONCE, under the lock, and accept on the local copy. Reading
+	// srv.listener each iteration races Close, which clears the field - and Close is
+	// dispatched from a connection handler (an RPC `server stop`), so the two run
+	// concurrently by design rather than by accident. Accept on a closed listener
+	// returns an error, which is exactly the loop's existing exit condition, so
+	// holding the value across the close needs no extra signalling.
+	ln := srv.currentListener()
+	if ln == nil {
+		return // closed before the accept loop got going
+	}
 	for {
-		conn, err := srv.listener.Accept()
+		conn, err := ln.Accept()
 		if err != nil {
 			return // listener was closed
 		}

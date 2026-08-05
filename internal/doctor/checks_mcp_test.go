@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,7 +15,7 @@ func TestCheckMCPTokens(t *testing.T) {
 	t.Run("absent cli token and no connectors", func(t *testing.T) {
 		t.Setenv("XDG_STATE_HOME", t.TempDir())
 		got := (&runner{}).checkMCPTokens()
-		assert.Equal(t, StatusOK, got.Status)
+		assert.Equal(t, types.DoctorOK, got.Status)
 		assert.Contains(t, got.Message, "cli token: absent")
 		assert.Contains(t, got.Message, "0 connector token(s)")
 		assert.Empty(t, got.Details)
@@ -43,7 +44,7 @@ func TestCheckMCPTokens(t *testing.T) {
 		require.NoError(t, err)
 
 		got := (&runner{}).checkMCPTokens()
-		assert.Equal(t, StatusOK, got.Status, "credential state is informational, never a failure")
+		assert.Equal(t, types.DoctorOK, got.Status, "credential state is informational, never a failure")
 		assert.Contains(t, got.Message, "3 connector token(s)")
 
 		joined := strings.Join(got.Details, "\n")

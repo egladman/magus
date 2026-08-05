@@ -7,7 +7,7 @@
 // The engine is deliberately framed against the narrow types.WorkspaceRepository
 // interface (the same handle `magus affected --explain` uses) so a future console or
 // HTTP caller can reuse it without depending on the concrete engine. The CLI handler
-// (`magus affected --impact`) formats the returned Result; this package does no I/O.
+// (`magus affected --impact`) formats the returned types.ImpactResult; this package does no I/O.
 package impact
 
 import (
@@ -19,17 +19,81 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// SymbolStore is the narrow knowledge-graph surface the caller and coverage overlays
-// read. The concrete *knowledge.Graph satisfies it; a future console or HTTP caller can
-// enrich from its own store, and tests supply a fake.
+// SymbolStore is the narrow surface the caller and coverage overlays read. The
+// concrete *knowledge.Graph satisfies it through GraphStore; a console or HTTP caller
+// can enrich from its own store, and tests supply a fake.
+//
+// Its types are declared HERE rather than reused from internal/graph/knowledge. That
+// package is internal, so naming its types in this exported interface made the
+// interface unimplementable by anyone outside the module - which is precisely the reuse
+// the doc promised. An interface that cannot be satisfied by its stated audience is a
+// concrete dependency wearing an interface's clothes.
 type SymbolStore interface {
-	// HasSymbols reports whether the graph holds any ingested code symbol. False means
+	// HasSymbols reports whether the store holds any ingested code symbol. False means
 	// no SCIP index was ever built, so both overlays are unavailable (not merely empty).
 	HasSymbols() bool
 	// FileFacts returns the symbols defined in a workspace-relative file with their
 	// reference spread and observed coverage. The zero value means the file has no
 	// indexed symbol (a non-code file, or one absent from the index).
-	FileFacts(relPath string) knowledge.FileFacts
+	FileFacts(relPath string) FileFacts
+}
+
+// FileFacts is one file's overlay: its own coverage, and the symbols it defines.
+type FileFacts struct {
+	// Coverage is the file-level observed coverage, or nil when no profile covers this
+	// file (no `magus run coverage`, or the file has no statements).
+	Coverage *Coverage
+	// Symbols are the symbols defined in the file, sorted by descending reference count
+	// then ID, so the widest-reach symbol leads.
+	Symbols []SymbolFacts
+}
+
+// SymbolFacts is one symbol defined in a changed file: its identity, how widely it is
+// referenced, and its own observed coverage when a profile is loaded.
+type SymbolFacts struct {
+	ID        string
+	Label     string
+	RefCount  int
+	FileCount int
+	Coverage  *Coverage
+}
+
+// Coverage is a covered/total statement tally and its ratio.
+type Coverage struct {
+	Ratio   float64
+	Covered int
+	Total   int
+}
+
+// GraphStore adapts the concrete knowledge graph to SymbolStore. It names an internal
+// type, so only in-module callers can reach it - which is correct: an outside caller
+// implements SymbolStore directly rather than going through the graph.
+func GraphStore(g *knowledge.Graph) SymbolStore { return graphStore{g: g} }
+
+type graphStore struct{ g *knowledge.Graph }
+
+func (s graphStore) HasSymbols() bool { return s.g.HasSymbols() }
+
+func (s graphStore) FileFacts(relPath string) FileFacts {
+	ff := s.g.FileFacts(relPath)
+	out := FileFacts{Coverage: fromGraphCoverage(ff.Coverage)}
+	for _, sym := range ff.Symbols {
+		out.Symbols = append(out.Symbols, SymbolFacts{
+			ID:        sym.ID,
+			Label:     sym.Label,
+			RefCount:  sym.RefCount,
+			FileCount: sym.FileCount,
+			Coverage:  fromGraphCoverage(sym.Coverage),
+		})
+	}
+	return out
+}
+
+func fromGraphCoverage(c *knowledge.CoverageFacts) *Coverage {
+	if c == nil {
+		return nil
+	}
+	return &Coverage{Ratio: c.Ratio, Covered: c.Covered, Total: c.Total}
 }
 
 // Enrich folds the changed-symbol caller and coverage overlays onto res from the loaded
@@ -37,18 +101,11 @@ type SymbolStore interface {
 // Compute does not read. It is additive and never fails: the blast radius is untouched,
 // overlays are appended, and absent data degrades to a Note. A nil store or nil res is a
 // no-op.
+//
 // The report shape is a DOMAIN type (types.ImpactResult and friends): magus.affectedImpact
 // hands it to a magusfile, so a caller reads the affected set as values rather than
-// decoding JSON. Aliased rather than moved outright so this package keeps its own names.
-type (
-	Result             = types.ImpactResult
-	AffectedProject    = types.ImpactProject
-	SymbolImpact       = types.ImpactSymbol
-	FileCoverageImpact = types.ImpactFileCoverage
-	Coverage           = types.ImpactCoverage
-)
-
-func Enrich(res *Result, store SymbolStore) {
+// decoding JSON.
+func Enrich(res *types.ImpactResult, store SymbolStore) {
 	if res == nil || store == nil {
 		return
 	}
@@ -62,14 +119,14 @@ func Enrich(res *Result, store SymbolStore) {
 	for _, f := range res.ChangedFiles {
 		ff := store.FileFacts(f)
 		if ff.Coverage != nil {
-			res.ChangedFileCoverage = append(res.ChangedFileCoverage, FileCoverageImpact{
+			res.ChangedFileCoverage = append(res.ChangedFileCoverage, types.ImpactFileCoverage{
 				File:     f,
 				Coverage: toCoverage(ff.Coverage),
 			})
 			coverageSeen = true
 		}
 		for _, s := range ff.Symbols {
-			si := SymbolImpact{
+			si := types.ImpactSymbol{
 				File:      f,
 				Symbol:    s.ID,
 				Label:     s.Label,
@@ -77,8 +134,7 @@ func Enrich(res *Result, store SymbolStore) {
 				FileCount: s.FileCount,
 			}
 			if s.Coverage != nil {
-				c := toCoverage(s.Coverage)
-				si.Coverage = &c
+				si.Coverage = toCoverage(s.Coverage)
 				coverageSeen = true
 			}
 			res.ChangedSymbols = append(res.ChangedSymbols, si)
@@ -87,7 +143,7 @@ func Enrich(res *Result, store SymbolStore) {
 
 	// Flatten-and-sort by descending reference count (widest blast radius first), then
 	// file and symbol id for a deterministic tie-break.
-	slices.SortFunc(res.ChangedSymbols, func(a, b SymbolImpact) int {
+	slices.SortFunc(res.ChangedSymbols, func(a, b types.ImpactSymbol) int {
 		if c := cmp.Compare(b.RefCount, a.RefCount); c != 0 {
 			return c
 		}
@@ -107,16 +163,16 @@ func Enrich(res *Result, store SymbolStore) {
 	}
 }
 
-// toCoverage narrows the knowledge-graph coverage facts to the impact report's own
-// Coverage type, so the impact JSON does not leak the internal graph type.
-func toCoverage(c *knowledge.CoverageFacts) Coverage {
-	return Coverage{Ratio: c.Ratio, Covered: c.Covered, Total: c.Total}
+// toCoverage narrows the knowledge-graph coverage facts to the report's own
+// types.ImpactCoverage, so the impact JSON does not leak the internal graph type.
+func toCoverage(c *Coverage) types.ImpactCoverage {
+	return types.ImpactCoverage{Ratio: c.Ratio, Covered: c.Covered, Total: c.Total}
 }
 
 // Compute derives the impact report from a VCS diff against base (empty base uses
 // the workspace default). It reuses the workspace's own affected-set computation, so
 // the closure it reports is exactly the set `magus affected <target>` would run.
-func Compute(ctx context.Context, ws types.WorkspaceRepository, base string) (*Result, error) {
+func Compute(ctx context.Context, ws types.WorkspaceRepository, base string) (*types.ImpactResult, error) {
 	r, err := ws.Affected(ctx, base)
 	if err != nil {
 		return nil, err
@@ -127,7 +183,7 @@ func Compute(ctx context.Context, ws types.WorkspaceRepository, base string) (*R
 // ComputeFromPaths derives the impact report from an explicit changed-path set
 // (repo-relative or absolute-within-workspace), bypassing the VCS. It is the seam a
 // non-git caller (a watch loop, a console request carrying a diff) uses.
-func ComputeFromPaths(ctx context.Context, ws types.WorkspaceRepository, paths []string) (*Result, error) {
+func ComputeFromPaths(ctx context.Context, ws types.WorkspaceRepository, paths []string) (*types.ImpactResult, error) {
 	r, err := ws.AffectedFromPaths(ctx, paths)
 	if err != nil {
 		return nil, err
@@ -138,7 +194,7 @@ func ComputeFromPaths(ctx context.Context, ws types.WorkspaceRepository, paths [
 // build turns a raw AffectedResult into the enriched, formatter-ready report. It is
 // pure aside from the ListTargets read (customTargetsByProject): no I/O of its
 // own, deterministic ordering.
-func build(ctx context.Context, ws types.WorkspaceRepository, r *types.AffectedResult) (*Result, error) {
+func build(ctx context.Context, ws types.WorkspaceRepository, r *types.AffectedResult) (*types.ImpactResult, error) {
 	changed := slices.Clone(r.Changed)
 	slices.Sort(changed)
 
@@ -157,7 +213,7 @@ func build(ctx context.Context, ws types.WorkspaceRepository, r *types.AffectedR
 		return nil, err
 	}
 
-	res := &Result{
+	res := &types.ImpactResult{
 		Base:             r.Base,
 		ChangedFileCount: len(changed),
 		ChangedFiles:     changed,
@@ -165,7 +221,7 @@ func build(ctx context.Context, ws types.WorkspaceRepository, r *types.AffectedR
 	}
 
 	for _, path := range r.Affected {
-		ap := AffectedProject{
+		ap := types.ImpactProject{
 			Path:    path,
 			Targets: projectTargets(ws, path, customByProject),
 		}

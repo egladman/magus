@@ -83,7 +83,6 @@ concepts/
 concepts/cache/
 concepts/cache/output-refs/
 concepts/cache/remote/
-concepts/cache/tool-identity/
 concepts/charms/
 concepts/ci-providers/
 concepts/compatibility/
@@ -344,8 +343,6 @@ reference/codes/sandbox/MGS2011/
 reference/codes/sandbox/MGS3001/
 reference/codes/sandbox/MGS3002/
 reference/codes/sandbox/MGS3003/
-reference/codes/sandbox/MGS3004/
-reference/codes/sandbox/MGS3005/
 reference/codes/services/
 reference/codes/services/MGS5001/
 reference/codes/services/MGS5002/
@@ -532,7 +529,6 @@ tags/ownership/
 tags/passthrough/
 tags/path/
 tags/permissions/
-tags/platform/
 tags/pool/
 tags/powershell/
 tags/prettier/

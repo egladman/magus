@@ -60,9 +60,9 @@ func TestCacheYieldExemptsSkipCacheTargets(t *testing.T) {
 
 	got := r.checkCacheYield(projects)
 
-	assert.Equal(t, Check{
+	assert.Equal(t, types.DoctorCheck{
 		Name:    "cache yield",
-		Status:  StatusOK,
+		Status:  types.DoctorOK,
 		Message: "no target is running uncached (1 declared skip_cache)",
 	}, got, "the charm suffix must not defeat the policy lookup, and the exemption stays visible")
 }
@@ -82,7 +82,7 @@ func TestCacheYieldStillReportsUndeclaredTargets(t *testing.T) {
 
 	got := r.checkCacheYield(projects)
 
-	require.Equal(t, StatusFail, got.Status)
+	require.Equal(t, types.DoctorFail, got.Status)
 	require.Len(t, got.Details, 2, "one finding plus the advice line")
 	assert.Contains(t, got.Details[0], "docs build: 9 runs, 0 cached")
 	assert.NotContains(t, strings.Join(got.Details, "\n"), "generate",
@@ -99,7 +99,7 @@ func TestCacheYieldAdviceNamesBothCauses(t *testing.T) {
 	r := &runner{root: dir, ws: stubWorkspace{}}
 	got := r.checkCacheYield(nil)
 
-	require.Equal(t, StatusFail, got.Status)
+	require.Equal(t, types.DoctorFail, got.Status)
 	advice := got.Details[len(got.Details)-1]
 	assert.Contains(t, advice, "wider than it reads", "the footprint cause")
 	assert.Contains(t, advice, "volatile state", "the version-stamp cause")

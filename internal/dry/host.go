@@ -37,6 +37,14 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 	// teaches worse than no Run button. Every other module beside it (the WASM set
 	// above, the spells below) is already registered this way.
 	sess.SetNativeModule("magus", buildMagus(sess, tr))
+	// The DECLARATIONS beside it, so the playground checks a magus call against the
+	// same signatures the real runtime does. Without them this host was untyped: a
+	// snippet could read a field no return carries and the dry run would say nothing,
+	// which is the opposite of what a dry run is for. The stubs above are shaped to
+	// match, and TestMagusSurfaceMatchesBindings holds the member set in sync.
+	if src, ok := spellruntime.ModuleDecls("magus"); ok {
+		sess.SetModuleDecls("magus", src)
+	}
 	for name, ops := range spells {
 		sess.SetNativeModule("magus/spell/"+name, buildSpell(name, ops, tr))
 	}
@@ -238,27 +246,6 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("files", vm.ListValue(nil))
 		return res, nil
 	}))
-	m.MapSet("insightReport", fn("magus.insightReport", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		res := vm.NewMap()
-		res.MapSet("hotspots", insightLens("nodes", "files"))
-		res.MapSet("affinity", insightLens("pairs"))
-		res.MapSet("ownership", insightLens("projects"))
-		res.MapSet("trend", insightLens("projects"))
-		// volatility is the one optional lens; the real host crosses a nil pointer as null.
-		res.MapSet("volatility", vm.Null)
-		stats := vm.NewMap()
-		stats.MapSet("definition", vm.StrValue(""))
-		stats.MapSet("nodeCount", vm.IntValue(0))
-		stats.MapSet("edgeCount", vm.IntValue(0))
-		stats.MapSet("gods", vm.ListValue(nil))
-		stats.MapSet("orphans", vm.ListValue(nil))
-		stats.MapSet("coverage", vm.ListValue(nil))
-		stats.MapSet("isolatedCount", vm.IntValue(0))
-		stats.MapSet("componentCount", vm.IntValue(0))
-		stats.MapSet("largestComponentSize", vm.IntValue(0))
-		res.MapSet("graphStats", stats)
-		return res, nil
-	}))
 	m.MapSet("affectedImpact", fn("magus.affectedImpact", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("base", vm.StrValue(""))
@@ -274,6 +261,39 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	m.MapSet("targetGraph", fn("magus.targetGraph", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("projects", vm.ListValue(nil))
+		return res, nil
+	}))
+	// insightReport nests a record per lens rather than a list, so each one is shaped
+	// too: a null lens would break `.ownership.projects` where an empty list does not.
+	m.MapSet("insightReport", fn("magus.insightReport", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		stats := vm.NewMap()
+		stats.MapSet("definition", vm.StrValue(""))
+		stats.MapSet("nodeCount", vm.IntValue(0))
+		stats.MapSet("edgeCount", vm.IntValue(0))
+		stats.MapSet("gods", vm.ListValue(nil))
+		stats.MapSet("orphans", vm.ListValue(nil))
+		stats.MapSet("coverage", vm.ListValue(nil))
+		stats.MapSet("isolatedCount", vm.IntValue(0))
+		stats.MapSet("componentCount", vm.IntValue(0))
+		stats.MapSet("largestComponentSize", vm.IntValue(0))
+
+		// Volatility is shaped like every other lens rather than null. It reads as the
+		// "absent" case, but the mirror declares it non-optional (types.InsightReport
+		// carries a VolatilityReport by value), so the checker types
+		// `.volatility.targets` as always present while a null hands the run a member
+		// access on nothing - which aborts the target body mid-trace and still reports
+		// OK, the silent-truncation failure the shaped stubs above exist to avoid.
+		volatility := vm.NewMap()
+		volatility.MapSet("threshold", vm.FloatValue(0))
+		volatility.MapSet("targets", vm.ListValue(nil))
+
+		res := vm.NewMap()
+		res.MapSet("hotspots", insightLens("nodes", "files"))
+		res.MapSet("affinity", insightLens("pairs"))
+		res.MapSet("ownership", insightLens("projects"))
+		res.MapSet("trend", insightLens("projects"))
+		res.MapSet("volatility", volatility)
+		res.MapSet("graphStats", stats)
 		return res, nil
 	}))
 	m.MapSet("targets", fn("magus.targets", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
@@ -322,15 +342,15 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 
 func retNull(context.Context, []vm.Value) (vm.Value, error) { return vm.Null, nil }
 
-// insightLens builds one empty magus.insightReport lens: the three fields every
-// lens carries, plus the list field(s) that lens names its findings.
-func insightLens(lists ...string) vm.Value {
+// insightLens shapes one VCS-history lens of magus.insightReport. All four share a
+// definition/commits/since header and differ only in which lists they carry.
+func insightLens(listKeys ...string) vm.Value {
 	v := vm.NewMap()
 	v.MapSet("definition", vm.StrValue(""))
 	v.MapSet("commits", vm.IntValue(0))
 	v.MapSet("since", vm.StrValue(""))
-	for _, name := range lists {
-		v.MapSet(name, vm.ListValue(nil))
+	for _, k := range listKeys {
+		v.MapSet(k, vm.ListValue(nil))
 	}
 	return v
 }

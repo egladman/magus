@@ -420,7 +420,7 @@ func runMagusJSON[T any](ctx context.Context, sub string, args []string, opts ma
 	// it has something to report - doctor exits 1 because a check failed - and raising
 	// there would throw away the very payload the caller asked for. A report that parsed
 	// IS the answer; the caller branches on it (summary.fail), which is strictly more
-	// than an exit code carries. Only an unparseable answer is a failure to answer.
+	// than an exit code carries. Only an unparsable answer is a failure to answer.
 	if derr := json.Unmarshal([]byte(res.Stdout), &out); derr == nil {
 		return out, nil
 	}

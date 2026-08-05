@@ -1445,7 +1445,7 @@ func TestEveryBoundaryTypeHasAMirror(t *testing.T) {
 
 // assertMirrorConstructs execs a bare `Name{}` against testBoundaryTypesSource.
 // Constructing it is the whole assertion: an object that is absent, misordered
-// relative to a type it references, or emitted with an unparseable field name (a
+// relative to a type it references, or emitted with an unparsable field name (a
 // Go field named Type mirrors to the reserved word `type`) all fail here.
 func assertMirrorConstructs(t *testing.T, object string) {
 	t.Helper()
@@ -1527,4 +1527,58 @@ func TestEveryBuzzObjectOwnerIsMirrored(t *testing.T) {
 	}
 	assert.Len(t, owners, 15,
 		"a types/ struct gained or lost BuzzObject: add it to the mirror registry (cmd/magus-utils/types.go), generate it, wire it into RegisterSpellSourceModules, and list it in TestEveryBoundaryTypeHasAMirror")
+}
+
+// TestMagusNamespaceIsTyped is the guard for the half of the typed-host-module work
+// that is easiest to lose. "magus" is bound as a session GLOBAL, not a lazily-imported
+// module, so the import-triggered SetModuleDecls collection never runs for it - it is
+// declared directly (RegisterSpellSourceModules). The first version of this change wired
+// the generated declarations into the module loop only, which types every bare-import
+// module (os, fs, vcs, ...) and silently leaves the magus namespace Unknown. Nothing
+// failed: a magusfile kept loading, every target kept running, and a wrong field on a
+// magus\ return stayed a runtime surprise.
+//
+// The os case is the control. If it ever regresses alongside magus, the fault is in the
+// declarations themselves rather than in how the magus namespace gets them.
+func TestMagusNamespaceIsTyped(t *testing.T) {
+	wrongReturn := func(t *testing.T, body string) error {
+		t.Helper()
+		dir := t.TempDir()
+		writeMagusfile(t, dir, "import \"magus\";\nimport \"os\";\n"+body+
+			"\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n")
+		return runTargetIn(t, dir, "build")
+	}
+
+	err := wrongReturn(t, `fun probe() > int { return magus\where("x"); }`)
+	require.Error(t, err, "magus\\where returns str; using it as int must be caught by the checker")
+	assert.Contains(t, err.Error(), "return type mismatch")
+
+	err = wrongReturn(t, `fun probe() > int { return os\which("ls"); }`)
+	require.Error(t, err, "control: a bare-import module must stay typed")
+	assert.Contains(t, err.Error(), "return type mismatch")
+}
+
+// TestMagusMirrorsResolveInAnnotations covers the OTHER half: the object mirrors a
+// magusfile annotates with. Most ride along with the generated declarations, derived
+// from each method's declared return. Five cannot be - magus.modules/magus.module are
+// hand-bound outside std.Module, and Run/TargetRun have no producing method at all - so
+// they are supplied separately (magusUndeclaredTypeSource). This asserts both sources
+// arrive, because swapping the hand-written bundle for the generated one is exactly the
+// edit that would drop the five without any other test noticing.
+func TestMagusMirrorsResolveInAnnotations(t *testing.T) {
+	for _, tc := range []struct{ name, decl string }{
+		{"generated/Projects", `fun f(p: Projects) > int { return p.count; }`},
+		{"generated/Impact", `fun f(i: Impact) > int { return i.changedFileCount; }`},
+		{"generated/DoctorReport", `fun f(d: DoctorReport) > str { return d.workspace; }`},
+		{"supplement/Module", `fun f(m: Module) > str { return m.name; }`},
+		{"supplement/Run", `fun f(r: Run) > str { return r.trigger; }`},
+		{"supplement/TargetRun", `fun f(tr: TargetRun) > TargetRunState { return tr.state; }`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeMagusfile(t, dir, "import \"magus\";\n"+tc.decl+
+				"\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n")
+			assert.NoError(t, runTargetIn(t, dir, "build"), "mirror must resolve in an annotation")
+		})
+	}
 }

@@ -51,12 +51,12 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | tool | 15 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
 | charm | 9 | `magus query kind:charm` | `rw`, `cd`, `snapshot` |
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `magus` |
-| method | 165 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 56 | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS4001` |
-| doc | 267 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
+| method | 170 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
+| diagnostic | 58 | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS4001` |
+| doc | 270 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 136 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
 | file | 232 | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 1212 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| function | 1210 | `magus query kind:function` | `sel`, `sendObject`, `send` |
 | import | 124 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 
@@ -81,7 +81,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `image-login` | Logs in to every registry the active mode publishes to, resolving each one's credentials through the workspace's secret provider. |
 | `image-scan` | Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL. |
 | `bindings-generate` | Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations. |
-| `spells-generate` | Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen) and the Buzz value-type mirrors (internal/spellruntime/gen/types), both driven by the go:generate directives in internal/spellruntime. |
+| `spells-generate` | Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen), the Buzz value-type mirrors (internal/spellruntime/gen/types) and the per-module host declarations (internal/spellruntime/gen/decls), all driven by the go:generate directives in internal/spellruntime. |
 | `mocks-generate` | Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir. |
 | `config-generate` | Regenerates the CLI config-flag plumbing from internal/config/config.go. |
 | `postflight` | Renders the insight report (hotspots, affinity, ownership, trend) and, with the `gha` charm, appends it to a host output path supplied via env. |

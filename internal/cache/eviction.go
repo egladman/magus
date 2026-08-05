@@ -13,7 +13,7 @@ import (
 )
 
 // parseSizeMB reads MAGUS_CACHE_SIZE_MB and returns the value as an int.
-// Returns 0 (disabled) when the variable is unset, zero, or unparseable.
+// Returns 0 (disabled) when the variable is unset, zero, or unparsable.
 func parseSizeMB() int {
 	v := strings.TrimSpace(os.Getenv("MAGUS_CACHE_SIZE_MB"))
 	if v == "" {

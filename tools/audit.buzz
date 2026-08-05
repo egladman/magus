@@ -78,7 +78,7 @@ fun hasInstallablePatch(pkg: str, patched: str) > bool {
                 return true; // a fix exists and our own policy would let it in
             }
         } catch (e) {
-            continue; // unparseable version or timestamp: not a fix to rely on
+            continue; // unparsable version or timestamp: not a fix to rely on
         }
     }
     return false;

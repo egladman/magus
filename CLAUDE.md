@@ -153,7 +153,10 @@ deliberately instead:
 ## Layout
 
 - `magus.go` + root `*.go` - public API and composition root (`Open`, `Inspect`)
-- `types/` - pure domain types, stdlib-only; keep it a leaf
+- `types/` - pure domain types; near-leaf. It imports only `spells` and
+  `libs/diagnostics` (both deliberate and one-way - see `spells/doc.go`), and
+  nothing else in the module. A type a magusfile or a script reads lives HERE, not
+  behind an alias in the package that computes it.
 - `internal/` - the engine (cache, interp, depgraph, spell, proc, sandbox, ...)
 - `cmd/magus` - the CLI; `cmd/magus-*` - codegen and docs tools
 - `std/` + `host/` - Buzz stdlib modules; `host/gen/` is generated from `std/`

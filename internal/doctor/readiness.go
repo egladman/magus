@@ -19,7 +19,7 @@ import (
 // daemon being up - the very coupling readiness exists to make legible. The runner
 // enforces; this only says what WOULD be enforced, so someone hitting MGS3004 can see
 // where the gate came from without reading a spell.
-func (r *runner) checkReadinessProbes(projects []*types.Project) Check {
+func (r *runner) checkReadinessProbes(projects []*types.Project) types.DoctorCheck {
 	type gate struct {
 		spell, tool, cmd string
 		probe            spells.Command
@@ -50,7 +50,7 @@ func (r *runner) checkReadinessProbes(projects []*types.Project) Check {
 		}
 	}
 	if len(gates) == 0 {
-		return Check{
+		return types.DoctorCheck{
 			Name:    "tool readiness",
 			Status:  types.DoctorOK,
 			Message: "no spell gates an op on a tool being reachable",
@@ -87,5 +87,5 @@ func (r *runner) checkReadinessProbes(projects []*types.Project) Check {
 	if r.opts.probe {
 		msg = fmt.Sprintf("%d of %d gated tool(s) not ready", down, len(gates))
 	}
-	return Check{Name: "tool readiness", Status: status, Message: msg, Details: details}
+	return types.DoctorCheck{Name: "tool readiness", Status: status, Message: msg, Details: details}
 }

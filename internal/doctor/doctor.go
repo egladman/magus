@@ -2,6 +2,7 @@
 package doctor
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -9,54 +10,6 @@ import (
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/schema"
 	"github.com/egladman/magus/types"
-)
-
-// The CheckStatus constants enumerate the possible doctor-check outcomes.
-//
-// StatusFail and StatusAdvice are a deliberate split, and which one a check
-// returns is a statement about whose judgement is involved.
-//
-// StatusFail is for a workspace that is WRONG in a way nobody's taste can rescue:
-// a dependency cycle, a magusfile that will not parse, two targets claiming one
-// output, a policy naming a target that does not exist. These are facts, they
-// break the build or corrupt the cache, and failing on them is not an opinion.
-//
-// StatusAdvice is for a convention magus RECOMMENDS: how targets are named,
-// whether every project binds a language spell, whether a spell target carries a
-// doc comment. These are conventions that have worked well, documented so you can
-// take them - not requirements, because magus does not get to decide how your
-// repository is laid out. `ci` is the one reserved target, and everything past it
-// is yours.
-//
-// The distinction is not cosmetic. When doctor had only ok and fail, a convention
-// check had two options: fail (and dictate) or not exist. What actually happened
-// is that each one grew its own private escape hatch - no_language for language
-// coverage, and briefly allow_bespoke_name for target naming - so the config
-// surface grew one key per opinion, and taking magus's advice became mandatory
-// unless you wrote a paragraph explaining yourself. Advice that exits zero needs
-// no escape hatch at all.
-//
-// There is deliberately no switch that promotes advice to failure. A knob for
-// that would just be the imposition again with an opt-in label on it, and the
-// workspace that wants a convention enforced can enforce it - in its own lint
-// target, with its own tools, on its own terms. magus reports what it noticed and
-// gets out of the way.
-const (
-	StatusOK     = types.DoctorOK
-	StatusFail   = types.DoctorFail
-	StatusAdvice = types.DoctorAdvice
-)
-
-// The report shape is a DOMAIN type (types.DoctorReport and friends): magus.doctor
-// returns it to a magusfile, so a caller iterates checks and branches on status
-// instead of grepping console text. Aliased rather than moved outright so every
-// check in this package keeps saying Check, Status, Report - the local vocabulary
-// is the one its authors read.
-type (
-	CheckStatus = types.DoctorCheckStatus
-	Check       = types.DoctorCheck
-	Summary     = types.DoctorSummary
-	Report      = types.DoctorReport
 )
 
 // DaemonInfo carries live daemon state for the daemon-related doctor checks.
@@ -134,32 +87,53 @@ type runner struct {
 	opts options
 	root string
 	ws   types.WorkspaceReader
+	// ctx bounds the checks that touch the world: a git probe, a socket dial, an HTTP
+	// GET. Each used to invent its own context.Background(), so a `magus_doctor` an
+	// agent cancelled kept dialling and walking regardless.
+	ctx context.Context
 }
 
 // Run executes all doctor checks. ws may be nil when workspace loading failed;
 // wsErr carries the reason and is recorded as a failed "workspace" check.
 // Doctor only inspects in-memory workspace state, so it takes the narrow
 // WorkspaceReader role rather than the full repository.
-func Run(root string, ws types.WorkspaceReader, wsErr error, optFns ...Option) Report {
+//
+// ctx bounds the checks that do I/O. Doctor is not pure inspection: it resolves a VCS
+// base ref through a git subprocess, dials the daemon socket, GETs the console
+// endpoint, and walks the whole tree twice. Those took context.Background(), so the MCP
+// handler had to discard the caller's context and an agent could not cancel a run that
+// blocks for seconds on a hung socket.
+func Run(ctx context.Context, root string, ws types.WorkspaceReader, wsErr error, optFns ...Option) types.DoctorReport {
 	var o options
 	for _, fn := range optFns {
 		fn(&o)
 	}
-	r := &runner{opts: o, root: root, ws: ws}
+	r := &runner{opts: o, root: root, ws: ws, ctx: ctx}
 	return r.run(wsErr)
 }
 
-func (r *runner) run(wsErr error) Report {
-	var out Report
+// runCtx is the run's context, defaulting to Background when unset. Run always supplies
+// one; the fallback is for a runner built directly, which is how every check in this
+// package is unit tested. Without it a zero-value runner panics inside exec.CommandContext
+// rather than failing the check it was asked about.
+func (r *runner) runCtx() context.Context {
+	if r.ctx == nil {
+		return context.Background()
+	}
+	return r.ctx
+}
+
+func (r *runner) run(wsErr error) types.DoctorReport {
+	var out types.DoctorReport
 	out.Checks = append(
 		out.Checks,
 		r.checkJSONCodec(), r.checkStaleSockets(), r.checkMCPTokens(),
 	)
 
 	if wsErr != nil {
-		out.Checks = append(out.Checks, Check{
+		out.Checks = append(out.Checks, types.DoctorCheck{
 			Name:    "workspace",
-			Status:  StatusFail,
+			Status:  types.DoctorFail,
 			Message: wsErr.Error(),
 		})
 		out.Summary.Fail++
@@ -168,9 +142,9 @@ func (r *runner) run(wsErr error) Report {
 
 	projects := r.ws.All()
 	out.Workspace = r.ws.Root()
-	out.Checks = append(out.Checks, Check{
+	out.Checks = append(out.Checks, types.DoctorCheck{
 		Name:    "workspace",
-		Status:  StatusOK,
+		Status:  types.DoctorOK,
 		Message: fmt.Sprintf("%d projects discovered", len(projects)),
 	})
 
@@ -210,11 +184,11 @@ func (r *runner) run(wsErr error) Report {
 
 	for _, c := range out.Checks {
 		switch c.Status {
-		case StatusOK:
+		case types.DoctorOK:
 			out.Summary.OK++
-		case StatusFail:
+		case types.DoctorFail:
 			out.Summary.Fail++
-		case StatusAdvice:
+		case types.DoctorAdvice:
 			out.Summary.Advice++
 		}
 	}

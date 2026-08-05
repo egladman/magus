@@ -15,11 +15,12 @@ import (
 
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/file/watch"
+	"github.com/egladman/magus/types"
 )
 
 // ignoreFlag accumulates repeated --ignore values; satisfies flag.Value.
 type ignoreFlag struct {
-	patterns []watch.IgnorePattern
+	patterns []types.IgnorePattern
 }
 
 func (f *ignoreFlag) String() string {
@@ -92,7 +93,7 @@ func watchCmd(ctx context.Context, root string, rc runConfig, args []string) err
 	// on the owner, the owner's depends_on drags the writer back in, and its cache hit
 	// replays the very file that triggered the round.
 	var outputGlobs []string
-	var projectIgnores []watch.IgnorePattern
+	var projectIgnores []types.IgnorePattern
 	for _, p := range ws.All() {
 		outputGlobs = append(outputGlobs, p.AllOutputs()...)
 		projectIgnores = append(projectIgnores, p.WatchIgnores...)
@@ -104,7 +105,7 @@ func watchCmd(ctx context.Context, root string, rc runConfig, args []string) err
 	//   3. Config ignores — workspace-wide watch.ignore entries from magus.yaml.
 	//   4. Project ignores — magus.WatchIgnore() entries from magusfiles.
 	//   5. CLI ignores    — --ignore flags, highest user-supplied tier.
-	userPatterns := append([]watch.IgnorePattern{}, rc.watchIgnores...)
+	userPatterns := append([]types.IgnorePattern{}, rc.watchIgnores...)
 	userPatterns = append(userPatterns, projectIgnores...)
 	userPatterns = append(userPatterns, ignores.patterns...)
 
