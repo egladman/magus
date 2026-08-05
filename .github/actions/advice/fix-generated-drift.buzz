@@ -74,7 +74,7 @@ fun main() > void {
     if (!labelled(repo, pr: pr, want: label)) {
         // No consent for this change. Retract any section left by an earlier push, so the
         // comment never claims a fix that is no longer on offer.
-        advice\publish(repo, pr: pr, name: section, body: "");
+        advice\publish(repo, pr: pr, name: section, title: "Generated drift", body: "");
         std\print("fix-generated-drift: label " + label + " absent; nothing to do");
         return;
     }
@@ -82,7 +82,7 @@ fun main() > void {
     // A fork's head lives in another repository, and the token this job holds cannot
     // write there. Say that plainly rather than failing on a push nobody can grant.
     if (headRepo != "" and headRepo != repo) {
-        advice\publish(repo, pr: pr, name: section,
+        advice\publish(repo, pr: pr, name: section, title: "Generated drift",
             body: "This pull request comes from a fork, so magus cannot push the "
                 + "regenerated files to it - the CI token has no write access to `"
                 + headRepo + "`. Run `magus run generate:rw` locally and commit the result.");
@@ -90,7 +90,7 @@ fun main() > void {
     }
 
     if (git(["log", "-1", "--format=%ae"], tolerate: false).trim() == autofix_email) {
-        advice\publish(repo, pr: pr, name: section,
+        advice\publish(repo, pr: pr, name: section, title: "Generated drift",
             body: "Regeneration changed the output again on top of magus's own autofix "
                 + "commit, which means a generator here is not deterministic. Stopping "
                 + "rather than pushing in a loop - this needs a human, and the generator "
@@ -103,7 +103,7 @@ fun main() > void {
     os\exec("magus", args: ["affected", "generate:rw"], dir: ".", opts: {"allow_failure": true});
     final files = dirty();
     if (files.len() == 0) {
-        advice\publish(repo, pr: pr, name: section, body: "");
+        advice\publish(repo, pr: pr, name: section, title: "Generated drift", body: "");
         std\print("fix-generated-drift: nothing drifted");
         return;
     }
@@ -116,7 +116,7 @@ fun main() > void {
     os\exec("git", args: ["commit", "-m", "regenerate drifted output"], dir: ".", opts: {});
     os\exec("git", args: ["push", "origin", "HEAD:" + headRef], dir: ".", opts: {});
 
-    advice\publish(repo, pr: pr, name: section,
+    advice\publish(repo, pr: pr, name: section, title: "Generated drift",
         body: fixedBody(files, sha: git(["rev-parse", "--short", "HEAD"], tolerate: false).trim()));
     std\print("fix-generated-drift: pushed " + files.join(", "));
 }

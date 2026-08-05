@@ -56,7 +56,7 @@ fun main() > void {
 
     final paths = changed(base, head: head);
     if (paths.len() == 0) {
-        advice\publish(repo, pr: pr, name: section, body: "");
+        advice\publish(repo, pr: pr, name: section, title: "Files no project claims", body: "");
         return;
     }
     var found = mut [];
@@ -64,11 +64,11 @@ fun main() > void {
         if (f.role == "unclaimed") { found.append(f.path); }
     }
     if (found.len() == 0) {
-        advice\publish(repo, pr: pr, name: section, body: "");
+        advice\publish(repo, pr: pr, name: section, title: "Files no project claims", body: "");
         std\print("unclaimed: every changed file is claimed");
         return;
     }
-    advice\publish(repo, pr: pr, name: section, body: body(found, total: paths.len()));
+    advice\publish(repo, pr: pr, name: section, title: "Files no project claims", body: body(found, total: paths.len()));
     std\print("unclaimed: advised on " + found.join(", "));
 }
 

@@ -53,11 +53,11 @@ fun main() > void {
     if (!isFirst(repo, author: author)) {
         // Retract: once they have merged something they are not new, and a welcome that
         // outlives its welcome is just noise.
-        advice\publish(repo, pr: pr, name: section, body: "");
+        advice\publish(repo, pr: pr, name: section, title: "Welcome", body: "");
         std\print("first-contribution: not a first contribution");
         return;
     }
-    advice\publish(repo, pr: pr, name: section, body: welcome(author));
+    advice\publish(repo, pr: pr, name: section, title: "Welcome", body: welcome(author));
     std\print("first-contribution: welcomed " + author);
 }
 

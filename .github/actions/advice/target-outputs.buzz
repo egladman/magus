@@ -33,6 +33,16 @@ export fun added(diff: str) > [str] {
     return names;
 }
 
+// existed reports whether a target of this name was already declared before the change.
+// Editing a target's body rewrites its `export fun` line, so the diff calls it added -
+// which is how a comment about NEW targets listed `preflight`, a target older than the
+// pull request. The base tree is the only thing that settles it.
+fun existed(name: str, base: str) > bool {
+    final res = os\exec("git", args: ["grep", "-q", "export fun " + name + "(",
+        "origin/" + base, "--", "*.buzz"], dir: ".", opts: {"allow_failure": true});
+    return res.ok;
+}
+
 fun body(targets: [str]) > str {
     var text = "**New targets that declare no outputs:**\n\n";
     foreach (t in targets) { text = text + "- `" + t + "`\n"; }
@@ -63,27 +73,32 @@ fun main() > void {
         dir: ".", opts: {"allow_failure": true}).stdout;
     final names = added(diff);
     if (names.len() == 0) {
-        advice\publish(repo, pr: pr, name: section, body: "");
+        advice\publish(repo, pr: pr, name: section, title: "New targets without declared outputs", body: "");
         return;
     }
 
     // The loaded graph decides, not the diff: a target's footprint can be declared
     // anywhere in its body, and only magus knows what it resolved to.
+    //
+    // QUALIFIED by project, because a target name is not unique across a workspace. Eight
+    // projects here declare `preflight`, and matching on the bare name reported the same
+    // name eight times for one edited magusfile - a list that told a reader nothing.
     var bare = mut [];
-    foreach (p in magus\targetGraph().projects) {
-        foreach (t in p.nodes) {
+    foreach (project in magus\targetGraph().projects) {
+        foreach (t in project.nodes) {
             if (t.writesFiles.len() != 0) { continue; }
             foreach (n in names) {
-                if (magus\normalize(n) == t.name) { bare.append(t.name); }
+                if (magus\normalize(n) != t.name) { continue; }
+                if (!existed(n, base: base)) { bare.append(project.path + ":" + t.name); }
             }
         }
     }
     if (bare.len() == 0) {
-        advice\publish(repo, pr: pr, name: section, body: "");
+        advice\publish(repo, pr: pr, name: section, title: "New targets without declared outputs", body: "");
         std\print("target-outputs: nothing to advise");
         return;
     }
-    advice\publish(repo, pr: pr, name: section, body: body(bare));
+    advice\publish(repo, pr: pr, name: section, title: "New targets without declared outputs", body: body(bare));
     std\print("target-outputs: advised on " + bare.join(", "));
 }
 

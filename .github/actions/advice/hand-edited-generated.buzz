@@ -86,16 +86,16 @@ fun main() > void {
 
     final paths = changed(base, head: head);
     if (paths.len() == 0) {
-        advice\publish(repo, pr: pr, name: section, body: "");
+        advice\publish(repo, pr: pr, name: section, title: "Generated files changed on their own", body: "");
         return;
     }
     final files = suspect(magus\describeFile(paths).files);
     if (files.len() == 0) {
-        advice\publish(repo, pr: pr, name: section, body: "");
+        advice\publish(repo, pr: pr, name: section, title: "Generated files changed on their own", body: "");
         std\print("hand-edited-generated: nothing to advise");
         return;
     }
-    advice\publish(repo, pr: pr, name: section, body: body(files));
+    advice\publish(repo, pr: pr, name: section, title: "Generated files changed on their own", body: body(files));
     std\print("hand-edited-generated: advised on " + files.join(", "));
 }
 

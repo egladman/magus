@@ -55,11 +55,11 @@ fun main() > void {
     final floor = raised(diff);
     if (floor == "") {
         // Retract: a floor raise that was reverted must not leave the note behind.
-        advice\publish(repo, pr: pr, name: section, body: "");
+        advice\publish(repo, pr: pr, name: section, title: "The magus version floor moved", body: "");
         std\print("version-floor: unchanged");
         return;
     }
-    advice\publish(repo, pr: pr, name: section, body: body(floor));
+    advice\publish(repo, pr: pr, name: section, title: "The magus version floor moved", body: body(floor));
     std\print("version-floor: advised on " + floor);
 }
 

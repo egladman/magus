@@ -97,12 +97,12 @@ fun main() > void {
     if (files.len() == 0) {
         // Retract: conflicts that have been resolved must not leave a section behind
         // claiming they are still there.
-        advice\publish(repo, pr: pr, name: section, body: "");
+        advice\publish(repo, pr: pr, name: section, title: "Merge conflicts in generated files", body: "");
         std\print("no generated files conflict with " + base);
         return;
     }
 
-    advice\publish(repo, pr: pr, name: section, body: conflictBody(base, files: files));
+    advice\publish(repo, pr: pr, name: section, title: "Merge conflicts in generated files", body: conflictBody(base, files: files));
     std\print("advised on PR " + pr + ": " + files.join(", "));
 }
 

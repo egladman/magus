@@ -17,6 +17,27 @@ import "std";
 // The comment marker identifies OUR comment among everyone else's. Never rendered.
 final comment_marker = "<!-- magus:advice -->";
 
+// The preface. A reader landing on this comment in someone else's repository has no idea
+// what left it, and an unsigned bot comment is the kind people report as spam. It says
+// who is talking, that none of it blocks the merge, and where to complain.
+//
+// It also links THIS run's summary, which carries the insight report and the graphs the
+// comment deliberately leaves out: a comment should stay short enough to read, and the
+// run page is already the right home for everything a reader might want next.
+fun preface() > str {
+    var text = "### magus\n\n"
+        + "Notes from your workspace's own build graph. None of this blocks the merge - "
+        + "the checks below do that. "
+        + "[What leaves these comments?](https://github.com/egladman/magus/tree/main/.github/actions/advice)\n";
+    final repo = env("REPO");
+    final run = env("GITHUB_RUN_ID");
+    if (repo != "" and run != "") {
+        text = text + "\nHotspots, ownership, volatility and the dependency graph for this "
+            + "run: [run summary](https://github.com/" + repo + "/actions/runs/" + run + ").\n";
+    }
+    return text;
+}
+
 // env reads a variable, returning "" rather than null so callers can compare directly.
 export fun env(name: str) > str {
     final v = os\env(name);
@@ -27,23 +48,125 @@ export fun env(name: str) > str {
 export fun beginMarker(name: str) > str { return "<!-- magus:advice:" + name + ":begin -->"; }
 export fun endMarker(name: str) > str { return "<!-- magus:advice:" + name + ":end -->"; }
 
-// compose returns the comment body with section `name` set to `body`, replacing an
-// existing section of that name, appending when there is none, and REMOVING it when body
-// is empty. Pure, so the composition rules are testable without a pull request.
-export fun compose(current: str, name: str, body: str) > str {
+// The glossary. Terminology a reader may not share gets a deep link on FIRST mention,
+// the same courtesy the documentation site extends. Longest first, so "targets" wins over
+// "target" and the link covers the whole word.
+final glossary_terms = ["targets", "target", "spells", "spell", "charms", "charm",
+    "workspace", "projects", "project", "cache", "affected set"];
+final glossary_urls = {
+    "targets": "https://eli.gladman.cc/magus/concepts/targets/",
+    "target": "https://eli.gladman.cc/magus/concepts/targets/",
+    "spells": "https://eli.gladman.cc/magus/concepts/spells/",
+    "spell": "https://eli.gladman.cc/magus/concepts/spells/",
+    "charms": "https://eli.gladman.cc/magus/concepts/charms/",
+    "charm": "https://eli.gladman.cc/magus/concepts/charms/",
+    "workspace": "https://eli.gladman.cc/magus/concepts/workspace/",
+    "projects": "https://eli.gladman.cc/magus/concepts/workspace/",
+    "project": "https://eli.gladman.cc/magus/concepts/workspace/",
+    "cache": "https://eli.gladman.cc/magus/concepts/cache/",
+    "affected set": "https://eli.gladman.cc/magus/guides/affected/",
+};
+
+// linkTerms deep-links the first mention of each glossary term.
+//
+// Code spans are left alone: `magus\targetGraph()` is an identifier, not the concept, and
+// rewriting inside backticks would produce something that no longer runs. Splitting on the
+// backtick makes every ODD segment code, which is the whole guard.
+export fun linkTerms(text: str) > str {
+    final parts = text.split("`");
+    var done = mut [];
+    var i = 0;
+    var joined = "";
+    foreach (part in parts) {
+        var piece = part;
+        // Odd segments sit between backticks. Leave them exactly as written.
+        if (i % 2 == 0) {
+            foreach (term in glossary_terms) {
+                var seen = false;
+                foreach (d in done) { if (d == term) { seen = true; } }
+                if (seen) { continue; }
+                final at = piece.indexOf(term);
+                if (at == null) { continue; }
+                // Never inside an existing link's TEXT, where it would nest. An unclosed
+                // "[" before the term is what says we are inside one.
+                final before = piece.sub(0, len: at);
+                if (before.split("[").len() > before.split("]").len()) { continue; }
+                done.append(term);
+                piece = piece.sub(0, len: at) + "[" + term + "](" + glossary_urls[term] + ")"
+                    + piece.sub(at + term.len());
+            }
+        }
+        if (i > 0) { joined = joined + "`"; }
+        joined = joined + piece;
+        i = i + 1;
+    }
+    return joined;
+}
+
+// linkCodes turns a bare diagnostic code into a link to its page. A code is magus's
+// stable, greppable identifier for one failure, and a reader who meets MGS1003 in a
+// comment should be one click from what it means - not left to search for it.
+//
+// The area subdirectory comes from the code's number band, the same mapping types/
+// diagnostic.go uses to build the URL it prints on a raised error.
+export fun codeURL(code: str) > str {
+    var area = "sandbox";
+    if (code.startsWith("MGS1")) { area = "magusfile"; }
+    if (code.startsWith("MGS4")) { area = "race"; }
+    if (code.startsWith("MGS5")) { area = "services"; }
+    if (code.startsWith("MGS6")) { area = "charms"; }
+    if (code.startsWith("MGS7")) { area = "knowledge"; }
+    if (code.startsWith("MGS8")) { area = "outputref"; }
+    if (code.startsWith("MGS9")) { area = "auth"; }
+    return "https://eli.gladman.cc/magus/reference/codes/" + area + "/" + code + "/";
+}
+
+export fun linkCodes(text: str) > str {
+    var joined = "";
+    var rest = text;
+    while (true) {
+        final at = rest.indexOf("MGS");
+        if (at == null) { return joined + rest; }
+        final code = rest.sub(at, len: 7);
+        // Only a full MGS#### token, and only when it is not already inside a link or a
+        // URL - doctor already prints "see: <url>" for some findings.
+        final before = rest.sub(0, len: at);
+        final linked = before.split("[").len() > before.split("]").len();
+        if (code.len() == 7 and !linked and before.indexOf("codes/") == null) {
+            joined = joined + before + "[" + code + "](" + codeURL(code) + ")";
+        } else {
+            joined = joined + rest.sub(0, len: at + 3);
+            rest = rest.sub(at + 3);
+            continue;
+        }
+        rest = rest.sub(at + 7);
+    }
+    return joined;
+}
+
+// compose returns the comment body with section `name` set to `body` under `title`,
+// replacing an existing section of that name, appending when there is none, and REMOVING
+// it when body is empty. Pure, so the composition rules are testable without a pull
+// request.
+//
+// Every section carries a heading and a rule above it. Run together, the sections read as
+// one wall of bold sentences and a reader cannot tell where one finding ends and the next
+// begins - which is what the first live comment looked like.
+export fun compose(current: str, name: str, title: str, body: str) > str {
     final begin = beginMarker(name);
     final end = endMarker(name);
     var head = current;
     var tail = "";
     final at = current.indexOf(begin);
     if (at != null) {
-        head = current.sub(0, at);
+        head = current.sub(0, len: at);
         final closes = current.indexOf(end);
         if (closes != null) { tail = current.sub(closes + end.len()); }
     }
-    if (head == "") { head = comment_marker + "\n"; }
+    if (head.indexOf(comment_marker) == null) { head = comment_marker + "\n" + preface(); }
     if (body == "") { return (head + tail).trim() + "\n"; }
-    return (head + begin + "\n" + body.trim() + "\n" + end + tail).trim() + "\n";
+    final section = begin + "\n\n---\n\n#### " + title + "\n\n" + linkCodes(linkTerms(body.trim())) + "\n\n" + end;
+    return (head + section + tail).trim() + "\n";
 }
 
 // find returns the id of our comment on this PR, or "" when we have not commented yet.
@@ -64,7 +187,7 @@ fun find(repo: str, pr: str) > str {
 // publish upserts one advisor's section into the PR's magus comment. An empty body
 // retracts the section, and a comment left with no sections at all is emptied to the
 // bare marker rather than deleted - deleting would lose the thread's history.
-export fun publish(repo: str, pr: str, name: str, body: str) > void {
+export fun publish(repo: str, pr: str, name: str, title: str, body: str) > void {
     final id = find(repo, pr: pr);
     var current = "";
     if (id != "") {
@@ -72,7 +195,7 @@ export fun publish(repo: str, pr: str, name: str, body: str) > void {
             dir: ".", opts: {"quiet": true});
         current = serialize\jsonDecode(got.stdout).q("body").stringValue();
     }
-    final composed = compose(current, name: name, body: body);
+    final composed = compose(current, name: name, title: title, body: body);
     if (composed.trim() == current.trim()) { return; }
 
     // The body goes through a JSON file, never an -f flag: it is markdown with newlines,
@@ -88,27 +211,69 @@ export fun publish(repo: str, pr: str, name: str, body: str) > void {
         "repos/" + repo + "/issues/comments/" + id, "--input", payload], dir: ".", opts: {});
 }
 
-test "compose appends a section to an empty comment" {
-    final body = compose("", name: "conflicts", body: "hello");
-    std\assert(body.indexOf(comment_marker) != null, message: "carries the comment marker");
-    std\assert(body.indexOf("<!-- magus:advice:conflicts:begin -->") != null, message: "opens the section");
+test "compose introduces magus and links where to complain" {
+    final body = compose("", name: "conflicts", title: "Merge conflicts", body: "hello");
+    std\assert(body.indexOf("### magus") != null, message: "announces itself");
+    std\assert(body.indexOf("None of this blocks the merge") != null, message: "says it is not a gate");
+    std\assert(body.indexOf("actions/advice") != null, message: "links to what leaves the comment");
+}
+
+test "compose gives each section a heading and a rule" {
+    final body = compose("", name: "conflicts", title: "Merge conflicts", body: "hello");
+    std\assert(body.indexOf("#### Merge conflicts") != null, message: "titles the section");
+    std\assert(body.indexOf("---") != null, message: "separates it from what came before");
     std\assert(body.indexOf("hello") != null, message: "carries the body");
 }
 
 test "compose replaces only its own section" {
-    var body = compose("", name: "conflicts", body: "old conflicts");
-    body = compose(body, name: "drift", body: "drift text");
-    body = compose(body, name: "conflicts", body: "new conflicts");
+    var body = compose("", name: "conflicts", title: "Merge conflicts", body: "old conflicts");
+    body = compose(body, name: "drift", title: "Generated drift", body: "drift text");
+    body = compose(body, name: "conflicts", title: "Merge conflicts", body: "new conflicts");
     std\assert(body.indexOf("old conflicts") == null, message: "the old text is gone");
     std\assert(body.indexOf("new conflicts") != null, message: "the new text is there");
     std\assert(body.indexOf("drift text") != null, message: "the other section survives");
 }
 
-test "an empty body retracts the section" {
-    var body = compose("", name: "conflicts", body: "there is a conflict");
-    body = compose(body, name: "drift", body: "drift text");
-    body = compose(body, name: "conflicts", body: "");
+test "an empty body retracts the section and its heading" {
+    var body = compose("", name: "conflicts", title: "Merge conflicts", body: "there is a conflict");
+    body = compose(body, name: "drift", title: "Generated drift", body: "drift text");
+    body = compose(body, name: "conflicts", title: "Merge conflicts", body: "");
     std\assert(body.indexOf("there is a conflict") == null, message: "the text is withdrawn");
-    std\assert(body.indexOf("magus:advice:conflicts") == null, message: "the section markers go too");
+    std\assert(body.indexOf("Merge conflicts") == null, message: "the heading goes too");
     std\assert(body.indexOf("drift text") != null, message: "the other section survives");
+}
+
+test "the preface survives a section being replaced" {
+    var body = compose("", name: "a", title: "A", body: "one");
+    body = compose(body, name: "a", title: "A", body: "two");
+    std\assert(body.indexOf("### magus") != null, message: "still announces itself");
+    std\assert(body.split("### magus").len() == 2, message: "and only once");
+}
+
+test "linkTerms deep-links the first mention of a term" {
+    final got = linkTerms("A target with no outputs re-runs. Another target too.");
+    std\assert(got.indexOf("[target](https://eli.gladman.cc/magus/concepts/targets/)") != null, message: "links the concept");
+    std\assert(got.split("concepts/targets/").len() == 2, message: "only the first mention");
+}
+
+test "linkTerms leaves code spans alone" {
+    final got = linkTerms("Run `magus run target` to build the target.");
+    std\assert(got.indexOf("`magus run target`") != null, message: "the command still runs");
+    std\assert(got.indexOf("[target]") != null, message: "the prose mention is still linked");
+}
+
+test "linkTerms does not nest a link inside a link" {
+    final got = linkTerms("See [the cache guide](https://example.com) for more.");
+    std\assert(got.indexOf("[the cache guide](https://example.com)") != null, message: "left intact");
+}
+
+test "linkCodes makes a bare diagnostic code clickable" {
+    final got = linkCodes("names MGS1003 in passing");
+    std\assert(got.indexOf("[MGS1003](https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1003/)") != null,
+        message: "links the code to its page");
+}
+
+test "linkCodes routes a code to its own area" {
+    std\assert(codeURL("MGS4002").indexOf("/race/") != null, message: "race codes");
+    std\assert(codeURL("MGS2007").indexOf("/sandbox/") != null, message: "sandbox is the default band");
 }

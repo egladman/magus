@@ -12,9 +12,11 @@
 // actually help, and NOT where the coupling is upstream of the diff - telling someone to
 // split a change whose fan-out is structural is advice that cannot be followed.
 //
-// A chain, not a diagram: the target graph is already rendered elsewhere, and a picture
-// answers "what does the graph look like" while a reader here is asking "why is docs in
-// my build". `magus affected --explain` answers exactly that, per project.
+// The chain per project is the ANSWER - a reader here is asking "why is docs in my
+// build", and `magus affected --explain` answers exactly that. The diagram follows it,
+// folded away, for the reader who wants to see the shape rather than read the rows.
+// GitHub renders mermaid in a comment, so it costs nothing to include and nothing to
+// look at until someone opens it.
 //
 // Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA, FANOUT_SHARE.
 import "os";
@@ -79,7 +81,7 @@ export fun hub(chains: [str]) > str {
     return best;
 }
 
-fun body(projects: [str], chains: [str], total: int, share: float) > str {
+fun body(projects: [str], chains: [str], total: int, share: float, diagram: str) > str {
     var text = "**This change reaches " + "{projects.len()}" + " of " + "{total}"
         + " projects.**\n\n"
         + "The reach comes from how this workspace is wired: a project is here because "
@@ -104,6 +106,10 @@ fun body(projects: [str], chains: [str], total: int, share: float) > str {
     } else {
         text = text + "\nEverything is downstream of what you edited, so splitting the "
             + "change would not shrink any piece - the coupling is upstream of this diff.\n";
+    }
+    if (diagram != "") {
+        text = text + "\n<details><summary>The graph behind that reach</summary>\n\n"
+            + "```mermaid\n" + diagram.trim() + "\n```\n\n</details>\n";
     }
     return text
         + "\nIf that matches what you expected, there is nothing to do here. If it "
@@ -140,7 +146,7 @@ fun main() > void {
     var total = 0;
     foreach (p in magus\targetGraph().projects) { total = total + 1; }
     if (!trips(reached.len(), total: total, share: share)) {
-        advice\publish(repo, pr: pr, name: section, body: "");
+        advice\publish(repo, pr: pr, name: section, title: "How far this change reaches", body: "");
         std\print("blast-radius: {reached.len()} of {total} projects; below the threshold");
         return;
     }
@@ -152,8 +158,18 @@ fun main() > void {
         chains.append(chain(explained.stdout));
     }
 
-    advice\publish(repo, pr: pr, name: section,
-        body: body(reached, chains: chains, total: total, share: share));
+    // Only the reached projects, so the picture is this change's reach and not the whole
+    // workspace - the workspace-wide graph is already rendered in MAGUS.md.
+    var argv = mut ["deps"];
+    foreach (p in reached) { argv.append(p); }
+    argv.append("-o");
+    argv.append("mermaid");
+    final drawn = magus\cmd("graph", args: argv, opts: {"quiet": true, "allow_failure": true});
+    var diagram = "";
+    if (drawn.ok) { diagram = drawn.stdout; }
+
+    advice\publish(repo, pr: pr, name: section, title: "How far this change reaches",
+        body: body(reached, chains: chains, total: total, share: share, diagram: diagram));
     std\print("blast-radius: advised on {reached.len()} of {total}");
 }
 
