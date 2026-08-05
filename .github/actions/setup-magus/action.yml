@@ -57,9 +57,12 @@ outputs:
   version:
     description: >
       The version of the magus this action installed, read back from the binary
-      itself (`magus version -o name`). Derived, not assumed: it is correct for a
-      prebuilt release, a source build, and automatic's fallback between them, so a
+      itself (`magus version -o template=`). Derived, not assumed: it is correct for
+      a prebuilt release, a source build, and automatic's fallback between them, so a
       caller reports the magus it actually got rather than the one it asked for.
+      `unknown` when the binary carries no stamp, or is old enough that -o does not
+      reach `version` - a warning, not an install failure, so check it before
+      comparing it against a pin.
     value: ${{ steps.installed.outputs.version }}
   install-source:
     description: >
@@ -83,8 +86,10 @@ runs:
     - name: Reject source-path without a source build
       if: inputs.source-path != '' && inputs.installation-strategy != 'source'
       shell: bash
+      env:
+        STRATEGY: ${{ inputs.installation-strategy }}
       run: |
-        echo "::error::magus: source-path is set but installation-strategy is '${{ inputs.installation-strategy }}'; source-path builds the tree already on disk, so it only applies with installation-strategy: source" >&2
+        echo "::error::magus: source-path is set but installation-strategy is '${STRATEGY}'; source-path builds the tree already on disk, so it only applies with installation-strategy: source" >&2
         exit 1
 
     - name: Sparse checkout install script
@@ -106,12 +111,17 @@ runs:
       working-directory: .setup-magus-install
       env:
         MAGUS_RELEASE_PUBKEY_HEX: ffbb8fa6f36274defd12888093c6a322c2532bc545016f495ab4955decb66779
+        GIT_REF: ${{ inputs.git-ref }}
+        STRATEGY: ${{ inputs.installation-strategy }}
       run: |
         set -euo pipefail
-        INSTALL_PREFIX="$RUNNER_TOOL_CACHE/magus"
-        VERSION="${{ inputs.git-ref }}"
+        # EXPORTED: the installer is a separate `sh` that reads both from the
+        # environment. Unexported, it installed `latest` into ~/.local instead of
+        # git-ref into the tool cache.
+        export INSTALL_PREFIX="$RUNNER_TOOL_CACHE/magus"
+        export VERSION="${GIT_REF}"
         if [ -z "${VERSION}" ]; then
-          echo "::error::magus: installation-strategy '${{ inputs.installation-strategy }}' needs git-ref set to a release tag" >&2
+          echo "::error::magus: installation-strategy '${STRATEGY}' needs git-ref set to a release tag" >&2
           exit 1
         fi
         sh ./docs/gen/install
@@ -122,13 +132,17 @@ runs:
     - name: Resolve the install strategy
       id: strategy
       shell: bash
-      run: echo "resolved=${{ steps.prebuilt.outcome == 'success' && 'prebuilt' || 'source' }}" >> "$GITHUB_OUTPUT"
+      env:
+        RESOLVED: ${{ steps.prebuilt.outcome == 'success' && 'prebuilt' || 'source' }}
+      run: echo "resolved=${RESOLVED}" >> "$GITHUB_OUTPUT"
 
     - name: Fail if prebuilt required but unavailable
       if: inputs.installation-strategy == 'prebuilt' && steps.strategy.outputs.resolved == 'source'
       shell: bash
+      env:
+        GIT_REF: ${{ inputs.git-ref }}
       run: |
-        echo "::error::magus: no signed release artifact for git-ref '${{ inputs.git-ref }}' on $(uname -s)/$(uname -m); installation-strategy is prebuilt, so no source fallback was attempted. Use automatic to fall back to a source build, or source to build git-ref directly." >&2
+        echo "::error::magus: no signed release artifact for git-ref '${GIT_REF}' on $(uname -s)/$(uname -m); installation-strategy is prebuilt, so no source fallback was attempted. Use automatic to fall back to a source build, or source to build git-ref directly." >&2
         exit 1
 
     # Visibility for automatic's silent (continue-on-error) prebuilt failure:
@@ -137,8 +151,10 @@ runs:
     - name: Note fallback to source build
       if: inputs.installation-strategy == 'automatic' && steps.strategy.outputs.resolved == 'source'
       shell: bash
+      env:
+        GIT_REF: ${{ inputs.git-ref }}
       run: |
-        echo "::notice::magus: no signed release artifact for git-ref '${{ inputs.git-ref }}' on $(uname -s)/$(uname -m); compiling from source instead, this step will take noticeably longer than a prebuilt install" >&2
+        echo "::notice::magus: no signed release artifact for git-ref '${GIT_REF}' on $(uname -s)/$(uname -m); compiling from source instead, this step will take noticeably longer than a prebuilt install" >&2
 
     # Everything below only runs when there's no prebuilt binary. This action
     # never installs liblzma-dev/libzstd-dev/pkg-config: the bootstrap build
@@ -198,6 +214,8 @@ runs:
       if: steps.strategy.outputs.resolved == 'source' && inputs.source-path == ''
       shell: bash
       working-directory: .setup-magus-src
+      env:
+        GIT_REF: ${{ inputs.git-ref }}
       run: |
         set -euo pipefail
         git fetch origin main
@@ -212,10 +230,10 @@ runs:
         # not a supply-chain finding, and it read as one for long enough to be
         # worth naming outright.
         if git rev-parse -q --verify "${SHA}^2" >/dev/null && git merge-base --is-ancestor "${SHA}^1" origin/main; then
-          echo "::error::magus: git-ref '${{ inputs.git-ref }}' resolves to ${SHA}, a merge of an unmerged commit into main. This is what github.sha expands to on a pull_request event, and it is never reachable from main, so git-ref cannot express it. To build a pull request against its own magus, check the source out yourself and pass source-path instead of git-ref." >&2
+          echo "::error::magus: git-ref '${GIT_REF}' resolves to ${SHA}, a merge of an unmerged commit into main. This is what github.sha expands to on a pull_request event, and it is never reachable from main, so git-ref cannot express it. To build a pull request against its own magus, check the source out yourself and pass source-path instead of git-ref." >&2
           exit 1
         fi
-        echo "::error::magus: git-ref '${{ inputs.git-ref }}' resolves to ${SHA}, which is not reachable from egladman/magus main. Refusing to build unreviewed source." >&2
+        echo "::error::magus: git-ref '${GIT_REF}' resolves to ${SHA}, which is not reachable from egladman/magus main. Refusing to build unreviewed source." >&2
         exit 1
 
     - name: Build magus from source
@@ -229,13 +247,23 @@ runs:
       # the real release-build (which sets up the mingw toolchain) ever runs.
       env:
         SOURCE_DESC: ${{ inputs.source-path != '' && format('source-path ''{0}''', inputs.source-path) || format('git-ref ''{0}''', inputs.git-ref) }}
+        GIT_REF: ${{ inputs.git-ref }}
+        STRATEGY: ${{ inputs.installation-strategy }}
       run: |
-        if [ "${{ inputs.installation-strategy }}" = "source" ]; then
+        if [ "${STRATEGY}" = "source" ]; then
           echo "::notice::magus: installation-strategy is source; compiling ${SOURCE_DESC} instead of downloading a release" >&2
         fi
+        # Stamp the build the way magusfile.buzz's ld_flags does, from the same source
+        # of truth (vcs\describe is git describe). Unstamped, the binary reports magus's
+        # dev-build sentinel "unknown" for all three - no version to report or pin.
+        VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo "${GIT_REF:-unknown}")"
+        COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+        BUILD_DATE="$(git log -1 --format=%cI 2>/dev/null || echo unknown)"
         mkdir -p "$RUNNER_TOOL_CACHE/magus/bin"
-        CGO_ENABLED=0 go build -o "$RUNNER_TOOL_CACHE/magus/bin/magus" ./cmd/magus
-        echo "magus: built ${SOURCE_DESC} from source (CGO_ENABLED=0 bootstrap)" >&2
+        CGO_ENABLED=0 go build \
+          -ldflags "-X main.version=${VERSION} -X main.commit=${COMMIT} -X main.buildDate=${BUILD_DATE}" \
+          -o "$RUNNER_TOOL_CACHE/magus/bin/magus" ./cmd/magus
+        echo "magus: built ${SOURCE_DESC} from source as ${VERSION} (${COMMIT}), CGO_ENABLED=0 bootstrap" >&2
 
     # A leftover magus checkout under the caller's workspace is a second
     # magusfile.buzz/spells tree; if the caller is magus's own repo, its next
@@ -267,14 +295,18 @@ runs:
 
     - name: Write job summary
       shell: bash
+      env:
+        INSTALL_SOURCE: ${{ steps.strategy.outputs.resolved }}
+        GIT_REF: ${{ inputs.git-ref }}
+        SOURCE_PATH: ${{ inputs.source-path }}
       run: |
         {
-          if [ "${{ steps.strategy.outputs.resolved }}" = "prebuilt" ]; then
-            echo "magus: installed prebuilt release, git-ref \`${{ inputs.git-ref }}\` (signature verified)"
-          elif [ -n "${{ inputs.source-path }}" ]; then
-            echo "magus: built from source, source-path \`${{ inputs.source-path }}\` (the caller's own checkout)"
+          if [ "${INSTALL_SOURCE}" = "prebuilt" ]; then
+            echo "magus: installed prebuilt release, git-ref \`${GIT_REF}\` (signature verified)"
+          elif [ -n "${SOURCE_PATH}" ]; then
+            echo "magus: built from source, source-path \`${SOURCE_PATH}\` (the caller's own checkout)"
           else
-            echo "magus: built from source, git-ref \`${{ inputs.git-ref }}\` (verified reachable from main)"
+            echo "magus: built from source, git-ref \`${GIT_REF}\` (verified reachable from main)"
           fi
           echo
           echo '```'
@@ -282,8 +314,20 @@ runs:
           echo '```'
         } >> "$GITHUB_STEP_SUMMARY"
 
-    # magus emits the key=value lines itself.
+    # magus formats the key=value lines itself; this only checks the shape before
+    # trusting them. A release from before -o reached `version` (v0.3.0) prints its human
+    # line regardless of the template, and appending THAT to $GITHUB_OUTPUT is what the
+    # runner rejects as `Invalid format` - failing an install that otherwise worked.
     - name: Report the installed version
       id: installed
       shell: bash
-      run: magus version -o 'template=version={{.version}}{{"\n"}}commit={{.commit}}{{"\n"}}' >> "$GITHUB_OUTPUT"
+      run: |
+        REPORT="$RUNNER_TEMP/magus-version"
+        magus version -o 'template=version={{.version}}{{"\n"}}commit={{.commit}}{{"\n"}}' > "$REPORT" || true
+        if ! grep -q '^version=' "$REPORT"; then
+          echo "::warning::magus: this build does not report its version through -o (releases before v0.3.1 ignore it); reporting version=unknown"
+          printf 'version=unknown\ncommit=unknown\n' > "$REPORT"
+        elif grep -q '^version=unknown$' "$REPORT"; then
+          echo "::warning::magus: the installed binary carries no version stamp; a caller comparing this action's version output against a pin cannot use it"
+        fi
+        cat "$REPORT" >> "$GITHUB_OUTPUT"

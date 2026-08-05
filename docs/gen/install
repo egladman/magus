@@ -364,8 +364,12 @@ install_release() {
         magus \
         "${INSTALL_PREFIX}/bin/magus"
 
+    # Tolerated like the shorthand below: this script is served from main and installs
+    # older releases too. `man` landed after v0.3.0, so an unconditional call killed the
+    # install with the binary already in place.
     "${INSTALL_PREFIX}/bin/magus" man install \
-        --dir "${INSTALL_PREFIX}/share/man/man1"
+        --dir "${INSTALL_PREFIX}/share/man/man1" ||
+        printf 'warning: could not install the man pages; magus itself is installed\n' >&2
 
     # The shorthand is a convenience, so a failure here (an mgs already on the
     # prefix, a read-only bin dir) must not fail an otherwise good install.
