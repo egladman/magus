@@ -187,6 +187,13 @@ func (c *Cache) StepKeyMemo(ctx context.Context, s *Step, memo *SourceMemo) (key
 // per sweep with NewSourceMemo, thread it explicitly, and let it fall out of scope
 // when the sweep ends. Nothing here makes it long-lived, global, or safe to share
 // with an executing Cache.
+//
+// This is the same kind of per-invocation dedup cache as gopherbuzz's TargetMemo,
+// but threaded as an explicit parameter instead of TargetMemo's context.Context
+// idiom (WithTargetMemo/TargetMemoFromContext), deliberately: a memo that leaked
+// via ctx into an executing target would be a correctness bug here (see the
+// paragraph above), and an explicit parameter is what makes "prediction only, never
+// on an execution path" provable by grep instead of by trusting ctx plumbing.
 type SourceMemo struct {
 	mu      sync.Mutex
 	entries map[string]sourceMemoEntry

@@ -317,3 +317,24 @@ func TestLoadKnowledgeVCSNestedWorkspace(t *testing.T) {
 	assert.False(t, paths["sub/proj/app.buzz"], "the vcs-root prefix is stripped")
 	assert.False(t, paths["other.buzz"], "files outside the workspace subtree are excluded")
 }
+
+// TestShortRevision covers both branches: a revision longer than the 12-hex-digit
+// convention is truncated, and one already at or under that length passes through
+// unchanged rather than being padded or otherwise altered.
+func TestShortRevision(t *testing.T) {
+	cases := []struct {
+		name string
+		id   string
+		want string
+	}{
+		{"full 40-char sha1 truncates to 12", "a62ac9b158086b887f03c6f8f9c6545bd9eb1614", "a62ac9b15808"},
+		{"already-short id passes through unchanged", "abc123", "abc123"},
+		{"exactly 12 chars passes through unchanged", "abc123def456", "abc123def456"},
+		{"empty id passes through unchanged", "", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, c.want, ShortRevision(c.id))
+		})
+	}
+}

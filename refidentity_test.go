@@ -154,6 +154,57 @@ func TestIdentifyRef_NoCachePropagatesError(t *testing.T) {
 	assert.ErrorIs(t, err, types.ErrNoCache, "IdentifyRef on a cache-free workspace")
 }
 
+// TestIdentifyRef_SkipsTargetThatFailsToKey guards the sweep's documented
+// best-effort contract: "a single target that fails to key is skipped rather
+// than aborting the sweep" (IdentifyRef's doc). The workspace has two targets on
+// one spell - "build" (no per-target sources) and "broken" (a per-target source
+// glob pointing at a file made unreadable). computeTargetKey for "broken" then
+// fails deterministically (expandAndHashSources -> hashFiles -> os.Open EACCES),
+// while "build" keys fine. The sweep must still find "build"'s match rather than
+// returning an error or an empty result - a `continue` turned into a `return`
+// here would silently break every missing-ref suggestion in a workspace with one
+// bad source path.
+func TestIdentifyRef_SkipsTargetThatFailsToKey(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: permission bits do not block reads")
+	}
+
+	const spellName = "zzz-identify-skip-spell"
+	s := spells.NewSpell(spellName,
+		spells.WithTargets("build", "broken"),
+		spells.WithTargetSources(map[string][]string{"broken": {"secret.txt"}}),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(s)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	secret := filepath.Join(root, "secret.txt")
+	require.NoError(t, os.WriteFile(secret, []byte("shh"), 0o644))
+	require.NoError(t, os.Chmod(secret, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(secret, 0o644) })
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+	ctx := context.Background()
+
+	// "broken" must actually fail to key here, or the test proves nothing.
+	_, _, err = m.ComputeTargetKey(ctx, ".", "broken", nil)
+	require.Error(t, err, "test setup: \"broken\" target must fail to key")
+
+	key, _, err := m.ComputeTargetKey(ctx, ".", "build", nil)
+	require.NoError(t, err, "ComputeTargetKey(build)")
+	ref := cache.PortableRef(key)
+
+	matches, err := m.IdentifyRef(ctx, ref)
+	require.NoError(t, err, "IdentifyRef must not abort the sweep on one target's keying error")
+	require.Len(t, matches, 1, "IdentifyRef: expected exactly the \"build\" match")
+	assert.Equal(t, types.RefMatch{Project: ".", Target: "build", Charms: nil}, matches[0])
+}
+
 // TestRefMatchCommand covers the renderings cmd/magus/query.go's ref-lookup
 // suggestion and internal/handler/mcp's magus_output not-found fallback both rely
 // on: root-project omission, a charm suffix on a match that required explicit

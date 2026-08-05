@@ -441,7 +441,66 @@ func TestCheckEnvVars(t *testing.T) {
 		assert.Equal(t, StatusFail, got.Status)
 		assert.Contains(t, got.Details, "MAGUS_CACHE_MOD")
 	})
+
+	// magus reads these four itself (subprocess recursion depth, CI shard inputs,
+	// the cache-signing seed) without them being config fields, so they can never
+	// appear in KnownEnvVars - runtimeEnvVars is the allowlist that keeps this
+	// check from calling magus's own documented setup a typo.
+	t.Run("runtime env vars recognized", func(t *testing.T) {
+		for _, name := range []string{
+			"MAGUS_LEVEL",
+			"MAGUS_SHARD",
+			"MAGUS_N_SHARDS",
+			"MAGUS_CACHE_SIGNING_KEY",
+		} {
+			t.Run(name, func(t *testing.T) {
+				for _, kv := range os.Environ() {
+					if !strings.HasPrefix(kv, "MAGUS_") {
+						continue
+					}
+					k, v, _ := strings.Cut(kv, "=")
+					require.NoError(t, os.Unsetenv(k))
+					t.Cleanup(func() { _ = os.Setenv(k, v) })
+				}
+				t.Setenv(name, "1")
+				r := &runner{}
+				got := r.checkEnvVars()
+				assert.Equal(t, StatusOK, got.Status, got.Details)
+			})
+		}
+	})
 }
+
+// TestDisplayPath covers the daemon path displayPath's own doc cites as the
+// motivation: r.root empty but r.ws set (the daemon passes the workspace
+// through r.ws instead of root), which must fall back to r.ws.Root() rather
+// than leaving filepath.Rel to fail against an empty root and print nothing.
+func TestDisplayPath(t *testing.T) {
+	t.Run("root set: workspace-relative", func(t *testing.T) {
+		r := &runner{root: "/repo"}
+		assert.Equal(t, "internal/doctor/checks.go", r.displayPath("/repo/internal/doctor/checks.go"))
+	})
+
+	t.Run("root empty, ws set: falls back to ws.Root()", func(t *testing.T) {
+		r := &runner{ws: rootStubWorkspace{root: "/repo"}}
+		assert.Equal(t, "internal/doctor/checks.go", r.displayPath("/repo/internal/doctor/checks.go"))
+	})
+
+	t.Run("root empty, ws nil: absolute path", func(t *testing.T) {
+		r := &runner{}
+		assert.Equal(t, "/repo/internal/doctor/checks.go", r.displayPath("/repo/internal/doctor/checks.go"))
+	})
+}
+
+// rootStubWorkspace is a types.WorkspaceReader stub that answers Root() with a
+// fixed value; every other method panics via the embedded nil interface if
+// exercised, which no path in TestDisplayPath does.
+type rootStubWorkspace struct {
+	types.WorkspaceReader
+	root string
+}
+
+func (r rootStubWorkspace) Root() string { return r.root }
 
 func TestCheckConfigFile(t *testing.T) {
 	xdgDir := t.TempDir()

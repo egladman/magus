@@ -371,6 +371,34 @@ func TestCurrentRevisionNoVCS(t *testing.T) {
 	assert.False(t, dirty)
 }
 
+// TestCurrentRevisionWithVCS pins the success path CurrentRevisionNoVCS does not
+// reach: a real git repo yields meta.Hash/meta.IsDirty verbatim as (revision, dirty).
+// Reuses gitRun/writeCommit/gitHeadFull from knowledge_test.go rather than
+// reimplementing a git fixture helper.
+func TestCurrentRevisionWithVCS(t *testing.T) {
+	root := t.TempDir()
+	gitRun(t, root, "init", "-q")
+	writeCommit(t, root, "magusfile.buzz", "")
+	// Open creates the .magus cache dir as a side effect; untracked, it would
+	// otherwise read as an uncommitted change unrelated to anything this test
+	// does. Ignore it before the "clean tree" assertion below.
+	writeCommit(t, root, ".gitignore", ".magus/\n")
+	head := gitHeadFull(t, root)
+
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	revision, dirty := m.CurrentRevision(t.Context())
+	assert.Equal(t, head, revision, "CurrentRevision must pass meta.Hash through verbatim")
+	assert.False(t, dirty, "a freshly committed tree is clean")
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("x"), 0o644))
+	revision, dirty = m.CurrentRevision(t.Context())
+	assert.Equal(t, head, revision, "an uncommitted edit does not move HEAD")
+	assert.True(t, dirty, "an uncommitted edit must report dirty")
+}
+
 // TestRun_NoVCSLeavesRevisionEmpty drives the real Run path (executeStages -> recordOutput)
 // in a workspace with VCS disabled: the persisted descriptor's Revision must be empty and
 // Dirty false, and recording it must raise nothing - a missing revision is "unknown", the

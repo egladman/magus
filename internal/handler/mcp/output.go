@@ -71,7 +71,7 @@ func (t *outputTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spel
 		case errors.As(err, &amb):
 			return spells.InvokeResponse{}, fmt.Errorf("mcp: %w", amb)
 		case errors.Is(err, fs.ErrNotExist):
-			return spells.InvokeResponse{}, t.notFoundError(ctx, ref, err)
+			return spells.InvokeResponse{}, t.refNotFoundError(ctx, ref, err)
 		default:
 			return spells.InvokeResponse{}, err
 		}
@@ -86,10 +86,10 @@ func (t *outputTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spel
 	}}, nil
 }
 
-// notFoundError renders the "no stored output" error for a ref OutputByRef could not
+// refNotFoundError renders the "no stored output" error for a ref OutputByRef could not
 // resolve. It best-effort-inverts the ref back to the target(s) that would produce it
 // (IdentifyRef) and folds the finding into the error message in the same three shapes
-// cmd/magus/query.go's printRefIdentitySuggestion renders for the CLI - compacted to
+// cmd/magus/query.go's printIdentifyRefSuggestion renders for the CLI - compacted to
 // one sentence plus the command(s), since this is an agent-facing tool error rather
 // than a terminal layout. An MCP tool failure is still the right shape here (the
 // agent asked for bytes that do not exist), only the message gets richer.
@@ -101,10 +101,10 @@ func (t *outputTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spel
 // effectiveCharms always merges the workspace's configured default_charms into
 // magus_run_target, so a command rendered with that flag (the match required the
 // bare CI variant) names a `magus run` invocation this MCP surface cannot itself
-// execute. bareVariantUnreachable flags that case so the message says so plainly
+// execute. isBareVariantUnreachable flags that case so the message says so plainly
 // instead of sending an MCP-only agent after a command it will run, silently get
 // the wrong ref from, and have no explanation why.
-func (t *outputTool) notFoundError(ctx context.Context, ref string, cause error) error {
+func (t *outputTool) refNotFoundError(ctx context.Context, ref string, cause error) error {
 	plain := fmt.Errorf("mcp: no stored output for ref %q: %w", ref, cause)
 	matches, err := t.reader.IdentifyRef(ctx, ref)
 	if err != nil {
@@ -116,7 +116,7 @@ func (t *outputTool) notFoundError(ctx context.Context, ref string, cause error)
 	case 1:
 		cmd := t.reader.RefMatchCommand(matches[0])
 		msg := fmt.Sprintf("mcp: no stored output for ref %q: this workspace would produce it with `%s`", ref, cmd)
-		if bareVariantUnreachable(cmd) {
+		if isBareVariantUnreachable(cmd) {
 			msg += "; " + noDefaultCharmsNote
 		}
 		return errors.New(msg)
@@ -125,7 +125,7 @@ func (t *outputTool) notFoundError(ctx context.Context, ref string, cause error)
 		anyUnreachable := false
 		for i, mt := range matches {
 			cmds[i] = t.reader.RefMatchCommand(mt)
-			anyUnreachable = anyUnreachable || bareVariantUnreachable(cmds[i])
+			anyUnreachable = anyUnreachable || isBareVariantUnreachable(cmds[i])
 		}
 		msg := fmt.Sprintf("mcp: no stored output for ref %q: this workspace would produce it with any of: %s", ref, strings.Join(cmds, "; "))
 		if anyUnreachable {
@@ -140,11 +140,11 @@ func (t *outputTool) notFoundError(ctx context.Context, ref string, cause error)
 // equivalent flag, so magus_run_target cannot reproduce that ref.
 const noDefaultCharmsNote = "this ref was minted without the workspace's default charms, which magus_run_target always applies, so that tool cannot reproduce it"
 
-// bareVariantUnreachable reports whether cmd is a RefMatchCommand rendering that
+// isBareVariantUnreachable reports whether cmd is a RefMatchCommand rendering that
 // required --no-default-charms. Detecting this from the rendered string (rather
 // than re-deriving "bare match + configured defaults" independently) keeps
 // RefMatchCommand the single source of that decision.
-func bareVariantUnreachable(cmd string) bool {
+func isBareVariantUnreachable(cmd string) bool {
 	return strings.Contains(cmd, "--no-default-charms")
 }
 

@@ -64,6 +64,14 @@ func projectTargets(p *types.Project) []string {
 // method is meaningless without a cache, and there is no point walking every project
 // and probing every spell's tool version first only to discover that.
 //
+// Both nil-slice cases - ref not shaped like a ref, and a well-formed ref matching
+// nothing - render identically to a caller, which would be misleading for a garbage
+// string. That is deliberate here rather than a gap: cmd/magus/query.go's queryCmd
+// and internal/handler/mcp's outputTool.Invoke both reject a non-ref-shaped ref with
+// cache.LooksLikeRef up front, before either reaches a code path that calls
+// IdentifyRef, so every real caller already knows ref is ref-shaped by the time the
+// nil slice would need distinguishing.
+//
 // Matches are sorted by project, then target, then charms, so repeated calls and
 // rendered output are stable.
 func (m *Magus) IdentifyRef(ctx context.Context, ref string) ([]types.RefMatch, error) {
@@ -93,13 +101,13 @@ func (m *Magus) IdentifyRef(ctx context.Context, ref string) ([]types.RefMatch, 
 	// a subprocess, and computeTargetKey's own memo lives only as long as one call.
 	// Probing per target dominated the sweep - see computeTargetKey's doc.
 	projects := m.All()
-	toolVersions := m.toolVersionsByProject(ctx, projects)
+	reuse := &sweepReuse{memo: memo, toolVersions: m.toolVersionsByProject(ctx, projects)}
 
 	var matches []types.RefMatch
 	for _, p := range projects {
 		for _, target := range projectTargets(p) {
 			for _, charms := range variants {
-				key, _, err := m.computeTargetKey(ctx, p.Path, target, charms, memo, toolVersions)
+				key, _, err := m.computeTargetKey(ctx, p.Path, target, charms, reuse)
 				if err != nil {
 					if errors.Is(err, types.ErrNoCache) {
 						return nil, err

@@ -576,7 +576,7 @@ func aggregateFileHistory(changes []types.CommitChange, prefix string) []types.K
 	byPath := map[string]*acc{}
 	var order []string
 	for _, c := range changes {
-		short := shortRevision(c.ID)
+		short := ShortRevision(c.ID)
 		unix := c.Date.Unix()
 		for _, f := range c.Files {
 			f = filepath.ToSlash(strings.TrimSpace(f))
@@ -611,8 +611,11 @@ func aggregateFileHistory(changes []types.CommitChange, prefix string) []types.K
 	return entries
 }
 
-// shortRevision abbreviates a full revision id for display, leaving a short id untouched.
-func shortRevision(id string) string {
+// ShortRevision abbreviates a full VCS revision id for display, leaving a
+// short id untouched. Matches this codebase's convention of a 12-hex-digit
+// truncation elsewhere (PortableRef); the stored/compared value is always
+// the full revision, this is presentation only.
+func ShortRevision(id string) string {
 	const short = 12
 	if len(id) > short {
 		return id[:short]

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -162,7 +163,7 @@ func TestShowOutputMeta_RevisionRendering(t *testing.T) {
 		require.NoError(t, showOutputMeta(ctx, m, ref, OutputOptions{}))
 	})
 	assert.Contains(t, out, "rev:     "+firstRev[:12], "the descriptor records the revision HEAD was at when the target ran")
-	assert.NotContains(t, out, "produced at", "HEAD has not moved yet, so nothing to call out")
+	assert.NotContains(t, out, "recorded at", "HEAD has not moved yet, so nothing to call out")
 
 	// Move HEAD to a second commit without re-running the target: the stored
 	// descriptor still names firstRev, but the workspace is no longer there.
@@ -178,6 +179,97 @@ func TestShowOutputMeta_RevisionRendering(t *testing.T) {
 	assert.Contains(t, out,
 		"recorded at "+firstRev[:12]+", you are on "+secondRev[:12]+".",
 	)
+}
+
+// TestPrintIdentifyRefSuggestion_MultipleMatches covers printIdentifyRefSuggestion's
+// default case (len(matches) > 1): "any of:" plus every match's command, not just
+// one. A ref match is a content-hash prefix, so forcing a real collision takes many
+// distinct targets rather than a hand-picked one - this computes the ACTUAL live
+// keys for 32 targets and uses whichever first hex digit two of them really land
+// on (a hardcoded prefix would be asserting on a guess, not on printIdentifyRefSuggestion's
+// behavior). A collision is CERTAIN rather than likely: a first hex digit has 16
+// values and this keys 32 targets, so pigeonhole forces at least one pair. Keep the
+// count above 16 if you change it - dropping to a "probably enough" number trades a
+// guarantee for a flake.
+func TestPrintIdentifyRefSuggestion_MultipleMatches(t *testing.T) {
+	const spellName = "zzz-query-multi-spell"
+	targets := make([]string, 32)
+	for i := range targets {
+		targets[i] = fmt.Sprintf("build%02d", i)
+	}
+	s := spells.NewSpell(spellName, spells.WithTargets(targets...))
+	project.DefaultSpellRegistry().RegisterSpell(s)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+
+	reg := magus.NewWorkspaceRegistry()
+	reg.RegisterProject(".", magus.WithSpell(spellName))
+	m, err := magus.Open(context.Background(), root, magus.WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+	ctx := context.Background()
+
+	byFirstDigit := map[byte][]string{}
+	fullRef := map[string]string{}
+	for _, target := range targets {
+		key, _, err := m.ComputeTargetKey(ctx, ".", target, nil)
+		require.NoErrorf(t, err, "ComputeTargetKey(%s)", target)
+		ref := cache.PortableRef(key)
+		fullRef[target] = ref
+		digit := ref[len(cache.RefPrefix)]
+		byFirstDigit[digit] = append(byFirstDigit[digit], target)
+	}
+	var collidingTargets []string
+	for _, group := range byFirstDigit {
+		if len(group) >= 2 {
+			collidingTargets = group
+			break
+		}
+	}
+	require.GreaterOrEqualf(t, len(collidingTargets), 2,
+		"test setup: expected at least one same-first-hex-digit pair among %d targets", len(targets))
+	prefix := fullRef[collidingTargets[0]][:len(cache.RefPrefix)+1]
+
+	out := captureStderr(t, func() {
+		printIdentifyRefSuggestion(ctx, m, prefix)
+	})
+	assert.Contains(t, out, "Nothing has produced it here, but this workspace would print it for any of:")
+	for _, target := range collidingTargets {
+		assert.Contains(t, out, "magus run "+target, "expected the colliding target %q in the suggestion", target)
+	}
+}
+
+// TestPrintIdentifyRefSuggestion_SkipsOnIdentifyRefError covers the other uncovered
+// branch: when m.IdentifyRef itself errors (types.ErrNoCache on an Inspect
+// workspace, the one case IdentifyRef propagates rather than swallowing - see its
+// doc), printIdentifyRefSuggestion must print nothing at all, not even the
+// unconditional "share it with --publish" hint that follows every other path. A
+// best-effort suggestion must never partially render around an error it hit.
+func TestPrintIdentifyRefSuggestion_SkipsOnIdentifyRefError(t *testing.T) {
+	const spellName = "zzz-query-nocache-spell"
+	s := spells.NewSpell(spellName, spells.WithTargets("build"))
+	project.DefaultSpellRegistry().RegisterSpell(s)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+
+	reg := magus.NewWorkspaceRegistry()
+	reg.RegisterProject(".", magus.WithSpell(spellName))
+	ws, err := magus.Inspect(context.Background(), root, magus.WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Inspect")
+	m, ok := ws.(*magus.Magus)
+	require.True(t, ok, "magus.Inspect returns a *magus.Magus under types.WorkspaceRepository")
+
+	_, identifyErr := m.IdentifyRef(context.Background(), "out123456789012")
+	require.Error(t, identifyErr, "test setup: an Inspect (cache-free) workspace must fail to key")
+
+	out := captureStderr(t, func() {
+		printIdentifyRefSuggestion(context.Background(), m, "out123456789012")
+	})
+	assert.Empty(t, out, "an IdentifyRef error must skip the suggestion entirely, including the trailing --publish hint")
 }
 
 // mustOutput runs cmd and fails the test on error, surfacing combined output.

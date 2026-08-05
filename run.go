@@ -425,16 +425,24 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 // works-on-my-machine diff: `describe target --cache` compares these lines against
 // the set stored behind a ref. Returns types.ErrNoCache on an Inspect workspace.
 func (m *Magus) ComputeTargetKey(ctx context.Context, projectPath, target string, charms []string) (key string, lines []string, err error) {
-	return m.computeTargetKey(ctx, projectPath, target, charms, nil, nil)
+	return m.computeTargetKey(ctx, projectPath, target, charms, nil)
 }
 
-// computeTargetKey is ComputeTargetKey with two sweep-scoped reuses threaded in:
-// an optional cache.SourceMemo (passed to cache.StepKeyMemo) and an optional
-// pre-resolved tool-version map keyed by project path. ComputeTargetKey passes nil
-// for both, so its public behavior is unchanged; IdentifyRef is the one caller that
-// supplies them, since its sweep keys every candidate target under every charm
-// variant against the SAME workspace tree - see cache.SourceMemo's doc for why that
-// is safe here and nowhere a target actually runs.
+// sweepReuse bundles the two sweep-scoped reuses computeTargetKey accepts: an
+// optional cache.SourceMemo (passed to cache.StepKeyMemo) and an optional
+// pre-resolved tool-version map keyed by project path. IdentifyRef is the only
+// caller that supplies one, and it always supplies both together, since its sweep
+// keys every candidate target under every charm variant against the SAME
+// workspace tree - see cache.SourceMemo's doc for why that is safe here and
+// nowhere a target actually runs. Bundling them into one type makes "always both
+// or neither" a fact of the signature instead of a doc-comment promise.
+type sweepReuse struct {
+	memo         *cache.SourceMemo
+	toolVersions map[string][]string
+}
+
+// computeTargetKey is ComputeTargetKey with an optional sweepReuse threaded in.
+// ComputeTargetKey passes nil, so its public behavior is unchanged.
 //
 // The tool-version map matters more than it looks: toolVersionsByProject memoizes
 // only WITHIN one call, and each probe SPAWNS A SUBPROCESS (`go version`, `pnpm
@@ -442,13 +450,19 @@ func (m *Magus) ComputeTargetKey(ctx context.Context, projectPath, target string
 // every project once per target, which was the sweep's dominant cost - wall clock
 // far exceeding CPU because the process was waiting on child processes, not
 // computing.
-func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string, charms []string, memo *cache.SourceMemo, toolVersions map[string][]string) (key string, lines []string, err error) {
+func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string, charms []string, reuse *sweepReuse) (key string, lines []string, err error) {
 	if m.cache == nil {
 		return "", nil, types.ErrNoCache
 	}
 	p := m.Get(projectPath)
 	if p == nil {
 		return "", nil, fmt.Errorf("magus: compute target key: unknown project %q", projectPath)
+	}
+	var memo *cache.SourceMemo
+	var toolVersions map[string][]string
+	if reuse != nil {
+		memo = reuse.memo
+		toolVersions = reuse.toolVersions
 	}
 	if toolVersions == nil {
 		toolVersions = m.toolVersionsByProject(ctx, []*types.Project{p})
@@ -554,7 +568,9 @@ func toolVersionMode() string {
 // ONCE per invocation and copies it onto every step, exactly as toolVersionsByProject
 // does for tool versions - probing per target would spawn a VCS subprocess per step) and
 // by `magus query output <ref> --meta` to compare a stored descriptor's revision against
-// HEAD now.
+// HEAD now. The two returns are types.VCSMeta's Hash and IsDirty under this package's
+// own vocabulary (revision/dirty is what cache.Step, cache.OutputDescriptor, and the
+// CLI all print).
 func (m *Magus) CurrentRevision(ctx context.Context) (revision string, dirty bool) {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil || res.VCS == nil {

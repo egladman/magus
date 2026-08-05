@@ -238,6 +238,66 @@ func TestHashStepIgnoreDirsKeyStability(t *testing.T) {
 		"pruning a dir that holds matching source must change the key (prune is effective)")
 }
 
+// TestStepKeyMemoReusesSourceExpansion is SourceMemo's own contract, asserted
+// directly rather than through IdentifyRef's end-to-end tests: a repeated
+// (WorkspaceRoot, Sources, Outputs, IgnoreDirs) tuple is expanded and hashed
+// ONCE, and a second StepKeyMemo call with the same memo reuses that result
+// instead of re-walking and re-hashing. Reuse is proved, not just equal
+// output - if the second call actually re-walked, it would either find src.go
+// gone (WalkDir enumerates nothing under that glob, so the key would drop the
+// "src:" line and change) or fail outright, since the file is removed between
+// calls. A memo that silently stopped reusing would still produce a first key
+// equal to a comparison of two independently-computed identical steps, so an
+// assertion that only compared keys would pass with SourceMemo deleted -
+// deleting the source file between calls is what makes the second call's
+// result trustworthy evidence of reuse rather than a coincidence.
+func TestStepKeyMemoReusesSourceExpansion(t *testing.T) {
+	c := newBareCache(t)
+	ctx := context.Background()
+
+	root := t.TempDir()
+	src := filepath.Join(root, "src.go")
+	require.NoError(t, os.WriteFile(src, []byte("package main"), 0o644))
+
+	step := &Step{
+		ProjectPath:   ".",
+		WorkspaceRoot: root,
+		Sources:       []string{"**/*.go"},
+	}
+
+	memo := NewSourceMemo()
+	key1, lines1, err := c.StepKeyMemo(ctx, step, memo)
+	require.NoError(t, err, "StepKeyMemo (first call)")
+	require.Contains(t, lines1, fmt.Sprintf("src:src.go:%s:0", mustHashFile(t, src)),
+		"test setup: the first call must have actually hashed src.go")
+
+	// The tuple this memo entry is keyed on never changes between calls, so a
+	// real memo hit does not care that the file backing it is now gone.
+	require.NoError(t, os.Remove(src))
+
+	key2, lines2, err := c.StepKeyMemo(ctx, step, memo)
+	require.NoError(t, err, "StepKeyMemo (second call, memo hit)")
+	assert.Equal(t, key1, key2, "a memo hit must reuse the first call's expansion, not re-walk a tree that no longer has the file")
+	assert.Equal(t, lines1, lines2, "a memo hit must reuse the first call's key lines verbatim")
+
+	// Control: without a memo, the same step now hashes to something else,
+	// proving the disk state really did change and the equality above is not
+	// an accident of an unaffected key.
+	keyNoMemo, _, err := c.StepKeyMemo(ctx, step, nil)
+	require.NoError(t, err, "StepKeyMemo (no memo, post-removal)")
+	assert.NotEqual(t, key1, keyNoMemo, "test setup: removing src.go must change the key when nothing memoizes the expansion")
+}
+
+// mustHashFile is a small helper for pinning a "src:" key line's expected
+// digest to the file's real content hash, without hardcoding a sha256 literal
+// that would need updating if the fixture content ever changes.
+func mustHashFile(t *testing.T, path string) string {
+	t.Helper()
+	h, err := hashFile(path)
+	require.NoError(t, err)
+	return h
+}
+
 // TestStaticDirPrefix covers the metacharacter, no-slash, and no-metacharacter
 // branches of staticDirPrefix.
 func TestStaticDirPrefix(t *testing.T) {

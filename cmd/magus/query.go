@@ -378,7 +378,7 @@ func showOutputMeta(ctx context.Context, m *magus.Magus, ref string, out OutputO
 		fmt.Printf("magus:   %s\n", desc.MagusVersion)
 	}
 	if desc.Revision != "" {
-		fmt.Printf("rev:     %s", shortRevision(desc.Revision))
+		fmt.Printf("rev:     %s", magus.ShortRevision(desc.Revision))
 		if desc.Dirty {
 			fmt.Printf(" (dirty: uncommitted changes at capture time; the revision alone may not reproduce it)")
 		}
@@ -395,7 +395,7 @@ func showOutputMeta(ctx context.Context, m *magus.Magus, ref string, out OutputO
 		// Only print when the two actually differ: same revision is the common case
 		// and needs no callout.
 		if cur, _ := m.CurrentRevision(ctx); cur != "" && cur != desc.Revision {
-			fmt.Printf("recorded at %s, you are on %s.\n", shortRevision(desc.Revision), shortRevision(cur))
+			fmt.Printf("recorded at %s, you are on %s.\n", magus.ShortRevision(desc.Revision), magus.ShortRevision(cur))
 		}
 	}
 	if len(digests) == 0 {
@@ -413,20 +413,10 @@ func showOutputMeta(ctx context.Context, m *magus.Magus, ref string, out OutputO
 	return nil
 }
 
-// shortRevision truncates a full VCS revision hash for display, matching this
-// codebase's convention of a 12-hex-digit truncation elsewhere (PortableRef); the
-// stored/compared value is always the full Revision, this is presentation only.
-func shortRevision(rev string) string {
-	if len(rev) > 12 {
-		return rev[:12]
-	}
-	return rev
-}
-
 // reportRefLookupError renders the standard output-ref resolution failures (ambiguous prefix,
 // missing/aged-out, or an unexpected error) as a coded diagnostic + exit code. On the
 // missing-ref path it also prints a best-effort suggestion inverting the ref back to the
-// workspace target(s) that could have minted it - see printRefIdentitySuggestion. m may be
+// workspace target(s) that could have minted it - see printIdentifyRefSuggestion. m may be
 // nil at call sites with no loaded Magus in scope; the suggestion is then skipped, not
 // attempted against a nil receiver.
 func reportRefLookupError(ctx context.Context, m *magus.Magus, ref string, err error) error {
@@ -445,19 +435,19 @@ func reportRefLookupError(ctx context.Context, m *magus.Magus, ref string, err e
 			msg = missing.Error()
 		}
 		fmt.Fprintf(os.Stderr, "magus query: %s\n", types.DiagnosticErrorf(types.OutputRefMissing, "%s", msg).Error())
-		printRefIdentitySuggestion(ctx, m, ref)
+		printIdentifyRefSuggestion(ctx, m, ref)
 		return errSilent{exitCode: 2}
 	default:
 		return fmt.Errorf("magus query: look up output ref %q: %w", ref, err)
 	}
 }
 
-// printRefIdentitySuggestion best-effort-inverts a missing ref back to the workspace
+// printIdentifyRefSuggestion best-effort-inverts a missing ref back to the workspace
 // target(s) that could have minted it (Magus.IdentifyRef) and prints the finding to
 // stderr. A nil m, or IdentifyRef itself erroring (e.g. types.ErrNoCache on an Inspect
 // workspace), both skip silently: a best-effort suggestion must never turn a lookup
 // error into a different one.
-func printRefIdentitySuggestion(ctx context.Context, m *magus.Magus, ref string) {
+func printIdentifyRefSuggestion(ctx context.Context, m *magus.Magus, ref string) {
 	if m == nil {
 		return
 	}
