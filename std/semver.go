@@ -19,13 +19,12 @@ var Semver = Module{
 	Methods: []Method{
 		{
 			Name: "compare",
-			Doc:  `Compare two semver strings; op is "==", "!=", "<", "<=", ">", or ">=" - true when the relation holds.`,
+			Doc:  "Order two semver strings: -1 when a sorts before b, 0 when they are equal, 1 when a sorts after. Use satisfies() to test a relation or a range.",
 			Args: []Arg{
 				{Name: "a", Type: TypeString},
-				{Name: "op", Type: TypeString},
 				{Name: "b", Type: TypeString},
 			},
-			Returns: []Ret{{Type: TypeBool}},
+			Returns: []Ret{{Type: TypeInt}},
 			Impl:    SemverCompare,
 		},
 		{
@@ -83,18 +82,26 @@ var Semver = Module{
 	},
 }
 
-// SemverCompare returns true when the relation expressed by op holds between a and b.
-// op must be one of "==", "!=", "<", "<=", ">", ">=".
-func SemverCompare(_ context.Context, a, op, b string) (bool, error) {
-	c, err := semver.NewConstraint(op + " " + b)
-	if err != nil {
-		return false, fmt.Errorf("semver.compare: invalid constraint %q %q: %w", op, b, err)
-	}
+// SemverCompare orders a against b, returning -1, 0, or 1.
+//
+// This is what `compare` means everywhere else - Go's cmp.Compare and strings.Compare,
+// x/mod/semver.Compare, Masterminds' Compare, node-semver's compare - and returning a
+// bool from a function by that name is a trap: an author arriving from any of them
+// guesses three-way ordering, and the guess compiles.
+//
+// It previously took (a, op, b) and answered whether the relation held. satisfies()
+// covers that now, and covers ranges the operator form could not express, so nothing
+// is lost by giving the name back its usual meaning.
+func SemverCompare(_ context.Context, a, b string) (int, error) {
 	va, err := semver.NewVersion(a)
 	if err != nil {
-		return false, fmt.Errorf("semver.compare: invalid version %q: %w", a, err)
+		return 0, fmt.Errorf("semver.compare: invalid version %q: %w", a, err)
 	}
-	return c.Check(va), nil
+	vb, err := semver.NewVersion(b)
+	if err != nil {
+		return 0, fmt.Errorf("semver.compare: invalid version %q: %w", b, err)
+	}
+	return va.Compare(vb), nil
 }
 
 // SemverParse parses v into its constituent parts.

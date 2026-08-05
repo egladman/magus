@@ -19,13 +19,12 @@ func RegisterSemver(ctx context.Context, sess *buzz.Session) vm.Value {
 	m := vm.NewMap()
 	m.MapSet("compare", vm.DirectValue("semver.compare", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		a := Str(bzArgs, 0)
-		op := Str(bzArgs, 1)
-		b := Str(bzArgs, 2)
-		ret0, err := std.SemverCompare(ctx, a, op, b)
+		b := Str(bzArgs, 1)
+		ret0, err := std.SemverCompare(ctx, a, b)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return BoolVal(ret0), nil
+		return IntVal(ret0), nil
 	}))
 	m.MapSet("isValid", vm.DirectValue("semver.isValid", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		v := Str(bzArgs, 0)

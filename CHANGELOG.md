@@ -11,6 +11,16 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Changed
 
+- **`semver\compare` now orders instead of testing a relation.** It was
+  `compare(a, op, b) > bool`, answering whether a relation held. Every other library
+  spells `compare` as three-way ordering returning an integer - Go's `cmp.Compare` and
+  `strings.Compare`, `x/mod/semver.Compare`, Masterminds, node-semver - so the old
+  signature was a trap that compiled: an author expecting an ordering got a boolean.
+  It is now `compare(a, b) > int`, returning -1, 0, or 1. The relation form moves to the
+  new `semver\satisfies(v, constraint)`, which also accepts ranges the operator form
+  could not express, so `semver\compare(v, ">=", floor)` becomes
+  `semver\satisfies(v, ">= " + floor)`.
+
 - An output reference is now derived from the step's cache key, so the same inputs mint
   the same ref on every machine: an inspect line pasted from CI or a teammate's terminal
   resolves in your checkout. Ref equality becomes input equality, which is what makes the

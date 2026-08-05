@@ -81,3 +81,28 @@ func TestSemverSatisfiesRanges(t *testing.T) {
 	_, err = SemverSatisfies(ctx, "1.0.0", "not a constraint")
 	assert.Error(t, err)
 }
+
+// compare now means what it means in every other library: three-way ordering.
+// The bool-returning (a, op, b) form it replaced is served by satisfies().
+func TestSemverCompareOrdersThreeWay(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		a, b string
+		want int
+	}{
+		{"1.4.0", "1.10.0", -1}, // numeric, not lexical: 10 outranks 4
+		{"1.10.0", "1.4.0", 1},
+		{"1.2.3", "1.2.3", 0},
+		{"v1.2.3", "1.2.3", 0}, // the v prefix is not part of the ordering
+		{"1.2.3-rc1", "1.2.3", -1},
+	} {
+		got, err := SemverCompare(ctx, tc.a, tc.b)
+		require.NoError(t, err)
+		assert.Equal(t, tc.want, got, "compare(%q, %q)", tc.a, tc.b)
+	}
+
+	_, err := SemverCompare(ctx, "nonsense", "1.0.0")
+	assert.Error(t, err)
+	_, err = SemverCompare(ctx, "1.0.0", "nonsense")
+	assert.Error(t, err)
+}

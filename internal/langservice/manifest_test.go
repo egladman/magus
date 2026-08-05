@@ -21,6 +21,7 @@ func TestExcludedModules(t *testing.T) {
 	available := []string{
 		"platform", "crypto", "env", "json", "time", "fmt", "markdown", "charm",
 		"encoding", "path", "strings", "semver", "yaml", "template", "toml", "uuid",
+		"xml",
 		"magus",
 	}
 	got := names(ExcludedModules(available))
