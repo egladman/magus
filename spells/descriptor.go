@@ -88,42 +88,21 @@ type Descriptor struct {
 	Opaque      bool                `json:"opaque,omitempty"`
 	TargetNeeds map[string][]string `json:"target_needs,omitempty"`
 	Ops         map[string]Op       `json:"targets,omitempty"`
-	// VersionCmd argv prints the spell's toolchain version, mixed into the cache key; empty = no probe.
-	VersionCmd []string `json:"version_cmd,omitempty"`
-	// VersionCmds are ADDITIONAL named probes, tool name to argv, for a spell that
-	// drives more than one binary. One probe per spell was not enough: buf's
-	// generate op shells out to protoc-gen-go, and go's ops run gofmt, golangci-lint
-	// and mockery - tools that produce committed output while being invisible to
-	// every cache key, so a change in one replays artifacts it never built.
+	// Tools is every binary this spell drives, keyed by the bin name an op names in
+	// its Command - so no op restates which tool it runs, and everything magus knows
+	// about that binary sits in one place.
 	//
-	// Keyed by tool name rather than positional so the cache entry reads
-	// spell:tool:version and reordering a declaration invalidates nothing.
-	VersionCmds map[string][]string `json:"version_cmds,omitempty"`
-	// VersionKey narrows what the PRIMARY probe's output contributes to the cache key,
-	// and VersionKeys does the same per named tool. Both are optional: the zero value
-	// keys on the whole extracted version, which is the conservative default.
+	// It replaces five separate declarations (a primary probe, named probes, a primary
+	// key, named keys, readiness) split across two axes that were never orthogonal.
+	// The split also hid its own subtleties: govulncheck declaring no cache key is a
+	// deliberate choice, and in two parallel maps that reads as an absence nobody
+	// notices rather than a decision someone made.
 	//
-	// Keyed by tool name to match VersionCmds above, so a spell's probe and its key
-	// declaration are read with the same lookup and a tool named in one but not the
-	// other is visible as exactly that.
-	// ReadinessProbes answer a question the version probes structurally cannot:
-	// whether a tool is USABLE right now, as opposed to installed and at some version.
-	// `docker --version` is client-only and succeeds with no daemon running, so the one
-	// probe magus ran was the one that could not detect the problem - the op forked and
-	// failed, and a build failure got reported for a project with nothing wrong.
-	//
-	// Keyed by tool name to match VersionCmds, and resolved through an op's declared
-	// Command.Bin, so no op has to restate which tool it uses. A spell driving both a
-	// daemon-backed tool and a self-contained one (docker and hadolint) gates only the
-	// former: a Dockerfile lint must not wait on a daemon it never talks to.
-	//
-	// The probe result NEVER enters a cache key. It is a precondition, not an input -
-	// `docker info` changes with every container and byte of disk, so keying on it would
-	// invalidate everything on every run.
-	ReadinessProbes map[string]Command `json:"readiness_probes,omitempty"`
+	// There is no privileged "primary" tool. `go` had one only for historical cache-key
+	// reasons, and nothing principled distinguished it from golangci-lint - both are
+	// binaries the spell drives, so both key the cache as spell:tool:version.
+	Tools map[string]Tool `json:"tools,omitempty"`
 
-	VersionKey  VersionKey            `json:"version_key,omitempty"`
-	VersionKeys map[string]VersionKey `json:"version_keys,omitempty"`
 	// Language is the canonical source language this spell adapts (e.g. "go",
 	// "typescript"), declared by mgs_getLanguage. It tags the spell node so a
 	// `language:` query groups the adapter with the files and symbols of that language;

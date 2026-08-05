@@ -17,8 +17,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -192,8 +194,14 @@ func renderSpell(d spells.Descriptor) string {
 
 	// Facts derivable from the Descriptor, as a short definition list.
 	fmt.Fprintf(&b, "**Runtime name:** `%s` (source `spells/%s/`)\n\n", d.Name, meta.dir)
-	if len(d.VersionCmd) > 0 {
-		fmt.Fprintf(&b, "**Version probe:** `%s`\n\n", strings.Join(d.VersionCmd, " "))
+	if len(d.Tools) > 0 {
+		for _, name := range slices.Sorted(maps.Keys(d.Tools)) {
+			t := d.Tools[name]
+			if t.Probe.Bin == "" {
+				continue
+			}
+			fmt.Fprintf(&b, "**Version probe (%s):** `%s`\n\n", name, strings.Join(append([]string{t.Probe.Bin}, t.Probe.Args...), " "))
+		}
 	} else {
 		fmt.Fprintf(&b, "**Version probe:** none\n\n")
 	}

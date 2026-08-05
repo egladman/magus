@@ -183,3 +183,28 @@ func VersionToken(output string, key VersionKey) (token string, note string) {
 	}
 	return narrowed, ""
 }
+
+// Tool is everything a spell declares about one binary it drives.
+//
+// Keyed by bin name in Descriptor.Tools, which is what lets an op resolve its own
+// entry through the Command.Bin it already names.
+type Tool struct {
+	// Probe is the command that prints this binary's version, its result narrowed by
+	// Key and mixed into the cache key. A zero Command means magus never asks -
+	// correct for a tool that cannot report one, where Key.Const supplies the token.
+	//
+	// A Command rather than a bare argv so it matches Ready below: both are "run this
+	// and read the result", and two shapes for that inside one record is the kind of
+	// seam a reader has to hold in their head for no reason.
+	Probe Command `json:"probe,omitempty"`
+	// Key narrows what Probe's output contributes to the cache key. The zero value
+	// keys on the whole output; see VersionKey.
+	Key VersionKey `json:"key,omitempty"`
+	// Ready gates an op on this binary being usable, for a client whose server may be
+	// down. Its result is a precondition and never enters a cache key.
+	Ready Command `json:"ready,omitempty"`
+}
+
+// HasProbe reports whether magus can learn a version for this tool, by running one or
+// by being handed a constant.
+func (t Tool) HasProbe() bool { return t.Probe.Bin != "" || t.Key.Const != "" }

@@ -8,54 +8,71 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A spell declaring no version_key keeps the conservative default, so every existing
-// spell decodes exactly as before.
-func TestDecodeVersionKeyAbsentIsZero(t *testing.T) {
+// A spell declaring no tools keeps the conservative default, so every spell that says
+// nothing about its toolchain decodes exactly as before.
+func TestDecodeToolsAbsent(t *testing.T) {
 	m, err := Decode(mapObj{"name": "go"})
 	require.NoError(t, err)
-	assert.True(t, m.VersionKey.IsZero())
-	assert.Empty(t, m.VersionKeys)
+	assert.Empty(t, m.Tools)
 }
 
-func TestDecodeVersionKeyPrimaryAndNamed(t *testing.T) {
+// Everything magus knows about one binary arrives in one entry, keyed by the bin an op
+// already names - which is what replaced five parallel declarations.
+func TestDecodeToolsCarriesProbeKeyAndReady(t *testing.T) {
 	m, err := Decode(mapObj{
-		"name":        "go",
-		"version_key": map[string]any{"upTo": "minor"},
-		"version_keys": map[string]any{
-			"golangci-lint": map[string]any{"upTo": "major"},
-			"protoc-gen-go": map[string]any{"const": "protoc-gen-go-1"},
+		"name": "docker",
+		"tools": map[string]any{
+			"docker": map[string]any{
+				"probe": map[string]any{"bin": "docker", "args": []string{"--version"}},
+				"key":   map[string]any{"upTo": "patch"},
+				"ready": map[string]any{"bin": "docker", "args": []string{"info"}},
+			},
+			"hadolint": map[string]any{
+				"probe": map[string]any{"bin": "hadolint", "args": []string{"--version"}},
+			},
 		},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, spells.VersionMinor, m.VersionKey.UpTo)
-	assert.Equal(t, spells.VersionMajor, m.VersionKeys["golangci-lint"].UpTo)
-	assert.Equal(t, "protoc-gen-go-1", m.VersionKeys["protoc-gen-go"].Const)
+
+	d := m.Tools["docker"]
+	assert.Equal(t, "docker", d.Probe.Bin)
+	assert.Equal(t, spells.VersionPatch, d.Key.UpTo)
+	assert.Equal(t, "info", d.Ready.Args[0])
+
+	// The asymmetry that motivated per-tool scoping: hadolint is gated by nothing.
+	h := m.Tools["hadolint"]
+	assert.Equal(t, "hadolint", h.Probe.Bin)
+	assert.Empty(t, h.Ready.Bin, "linting a Dockerfile must not wait on the docker daemon")
+}
+
+// A constant stands in for a tool that cannot report a version, and needs no probe.
+func TestDecodeToolsConstNeedsNoProbe(t *testing.T) {
+	m, err := Decode(mapObj{
+		"name":  "x",
+		"tools": map[string]any{"protoc-gen-go": map[string]any{"key": map[string]any{"const": "protoc-gen-go-1"}}},
+	})
+	require.NoError(t, err)
+	tool := m.Tools["protoc-gen-go"]
+	assert.Equal(t, "protoc-gen-go-1", tool.Key.Const)
+	assert.True(t, tool.HasProbe(), "a constant is a version magus can key on")
 }
 
 // The whole point of validating at decode: a typo'd component would otherwise leave a
-// spell claiming "major" while the cache silently kept keying exactly, which looks
-// like a cache that simply never hits and names nothing.
-func TestDecodeVersionKeyRejectsUnknownComponent(t *testing.T) {
-	_, err := Decode(mapObj{"name": "go", "version_key": map[string]any{"upTo": "mayor"}})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "version_key.upTo")
-	assert.Contains(t, err.Error(), "mayor")
-
-	_, err = Decode(mapObj{
-		"name":         "go",
-		"version_keys": map[string]any{"golangci-lint": map[string]any{"upTo": "MAJOR"}},
+// spell claiming "major" while the cache silently kept keying on the whole output.
+func TestDecodeToolsRejectsUnknownComponent(t *testing.T) {
+	_, err := Decode(mapObj{
+		"name":  "go",
+		"tools": map[string]any{"go": map[string]any{"key": map[string]any{"upTo": "mayor"}}},
 	})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), `version_keys["golangci-lint"]`)
+	assert.Contains(t, err.Error(), `tools["go"].key.upTo`)
+	assert.Contains(t, err.Error(), "mayor")
 }
 
-// A zero-valued named entry asks for the default; carrying it would imply the spell
-// said something about that tool when it did not.
-func TestDecodeVersionKeyDropsEmptyNamedEntries(t *testing.T) {
-	m, err := Decode(mapObj{
-		"name":         "go",
-		"version_keys": map[string]any{"gofmt": map[string]any{}},
-	})
+// An entry declaring nothing at all is dropped rather than kept as a tool magus knows
+// nothing about.
+func TestDecodeToolsDropsEmptyEntries(t *testing.T) {
+	m, err := Decode(mapObj{"name": "go", "tools": map[string]any{"gofmt": map[string]any{}}})
 	require.NoError(t, err)
-	assert.Empty(t, m.VersionKeys)
+	assert.Empty(t, m.Tools)
 }

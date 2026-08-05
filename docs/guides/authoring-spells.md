@@ -79,11 +79,7 @@ a default when it is absent, so a minimal spell is two functions.
 | `mgs_listClaimedGlobs` | `() > [Path]` | files this spell owns, so two spells cannot both claim them |
 | `mgs_listManifests` | `() > [Path]` | dependency manifests, read for the project graph |
 | `mgs_listIgnoreDirs` | `() > [Path]` | directories to prune from source expansion (`node_modules`, `target`) |
-| `mgs_getVersionProbe` | `() > [str]` | probes the primary tool's version, mixed into cache keys so a toolchain upgrade invalidates |
-| `mgs_getVersionProbes` | `() > {str: [str]}` | the same for SECOND tools a spell drives. The `docker` spell probes `hadolint` this way, because unlike `docker` it is pinned by no manifest |
-| `mgs_getVersionKey` | `() > VersionKey` | narrows what the primary probe's output contributes to the key. Absent keys the WHOLE output |
-| `mgs_getVersionKeys` | `() > {str: VersionKey}` | the same per named tool |
-| `mgs_getReadinessProbes` | `() > {str: Command}` | gates an op on its tool being usable, keyed by tool. See [Readiness](#readiness) |
+| `mgs_getTools` | `() > {str: Tool}` | every binary the spell drives, keyed by the bin an op names: what prints its version, what part of that keys the cache, and what proves it is usable |
 
 ### Readiness
 
@@ -94,8 +90,15 @@ failed on its own terms, and the run reported a build failure for a project with
 wrong with it.
 
 ```buzz
-export fun mgs_getReadinessProbes() > {str: Command} {
-    return {"docker": Command{bin = "docker", args = ["info"]}};
+export fun mgs_getTools() > {str: Tool} {
+    return {
+        "docker": Tool{
+            probe = Command{bin = "docker", args = ["--version"]},
+            key   = VersionKey{upTo = VersionComponent.patch},
+            ready = Command{bin = "docker", args = ["info"]},
+        },
+        "hadolint": Tool{probe = Command{bin = "hadolint", args = ["--version"]}},
+    };
 }
 ```
 
@@ -132,7 +135,9 @@ export fun mgs_getName() > str { return "shellcheck"; }
 
 export fun mgs_listRequiredGlobs() > [Path] { return [Path{value = "**/*.sh"}]; }
 
-export fun mgs_getVersionProbe() > [str] { return ["shellcheck", "--version"]; }
+export fun mgs_getTools() > {str: Tool} {
+    return {"shellcheck": Tool{probe = Command{bin = "shellcheck", args = ["--version"]}}};
+}
 
 fun lint(target: Target) > Command {
     return Command{bin = "shellcheck", args = ["--severity", "warning"]};
@@ -168,7 +173,9 @@ import "os";
 
 export fun mgs_getName() > str { return "onepassword"; }
 
-export fun mgs_getVersionProbe() > [str] { return ["op", "--version"]; }
+export fun mgs_getTools() > {str: Tool} {
+    return {"op": Tool{probe = Command{bin = "op", args = ["--version"]}}};
+}
 
 export fun resolve_secret(target: Target, cb: fun(any)) > str {
     var io = {};

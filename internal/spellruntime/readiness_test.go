@@ -15,13 +15,15 @@ func TestDockerReadinessIsScopedToTheDaemonBackedTool(t *testing.T) {
 	d, ok := spellruntime.Builtins()["docker"]
 	require.True(t, ok, "docker spell not registered")
 
-	probe, ok := d.ReadinessProbes["docker"]
-	require.True(t, ok, "docker declares no readiness probe")
+	tool, ok := d.Tools["docker"]
+	probe := tool.Ready
+	require.True(t, ok, "docker spell declares no docker tool")
+	require.NotEmpty(t, probe.Bin, "docker declares no readiness probe")
 	assert.Equal(t, "docker", probe.Bin)
 	assert.Equal(t, []string{"info"}, probe.Args,
 		"`docker --version` is client-only and cannot detect a stopped daemon")
 
-	_, gated := d.ReadinessProbes["hadolint"]
+	gated := d.Tools["hadolint"].Ready.Bin != ""
 	assert.False(t, gated, "linting a Dockerfile must not wait on the docker daemon")
 }
 
@@ -30,7 +32,7 @@ func TestDockerReadinessIsScopedToTheDaemonBackedTool(t *testing.T) {
 func TestReadinessResolvesThroughOpBin(t *testing.T) {
 	d := spellruntime.Builtins()["docker"]
 	for name, op := range d.Ops {
-		_, gated := d.ReadinessProbes[op.Command.Bin]
+		gated := d.Tools[op.Command.Bin].Ready.Bin != ""
 		if op.Command.Bin == "docker" {
 			assert.True(t, gated, "op %q runs docker and should be gated", name)
 		}
@@ -42,6 +44,9 @@ func TestSpellsWithoutReadinessAreUngated(t *testing.T) {
 	for _, name := range []string{"go", "rust", "typescript"} {
 		s, ok := spellruntime.Builtins()[name]
 		require.True(t, ok, name)
-		assert.Empty(t, s.ReadinessProbes, "%s is self-contained and needs no probe", name)
+		for tool, tl := range s.Tools {
+			assert.Empty(t, tl.Ready.Bin,
+				"%s: %s is self-contained and needs no readiness probe", name, tool)
+		}
 	}
 }

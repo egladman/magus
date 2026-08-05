@@ -13,39 +13,25 @@ export fun mgs_listRequiredGlobs() > [Path] {
     return [Path{value = "**/*.go"}, Path{value = "**/*.txtar"}, Path{value = "go.mod"}, Path{value = "go.sum"}, Path{value = "go.work"}, Path{value = "go.work.sum"}];
 }
 
-export fun mgs_getVersionProbe() > [str] { return ["go", "version"]; }
 
-// golangci-lint and govulncheck are the OTHER binaries this spell drives, and now that they
-// run from PATH rather than `go tool` they are pinned outside the module graph - so `go
-// version` no longer implies either. An upgrade to either changes which code passes while
-// every cache entry replays the old verdict, and these probes are what move the key.
-//
-// Absent, one records UNPROBED and its op fails with a clear "not found" rather than the
-// probe failing the whole run - a workspace that binds the go spell only to build and test
-// is not forced to install a linter or a vuln scanner.
-export fun mgs_getVersionProbes() > {str: [str]} {
-    return {
-        "golangci-lint": ["golangci-lint", "--version"],
-        "govulncheck": ["govulncheck", "-version"],
-    };
-}
 
-// `go version` prints the host platform (`go1.26.0 linux/amd64`) and golangci-lint
-// pads its line with the commit it was built from, the timestamp, and the Go version
-// it was compiled with. Asking for `patch` extracts the version and sheds all of that,
-// so two machines running the same tool agree on a key. It narrows nothing anyone has
-// to reason about: every component of the version still keys the cache.
+
+
+// `go version` prints the host platform (`go1.26.0 linux/amd64`) and golangci-lint pads
+// its line with the commit it was built from, the timestamp, and the Go version it was
+// compiled with. Asking for `patch` extracts the version and sheds all of that, so two
+// machines running the same tool agree on a key. It narrows nothing anyone reasons about.
 //
-// govulncheck is deliberately absent. Its verdict comes from the Go vulnerability
+// govulncheck declares NO key on purpose. Its verdict comes from the Go vulnerability
 // DATABASE, and `-version` reports that database's last-modified date alongside the Go
-// and scanner versions. Extracting a semver there would take the Go version (printed
-// first) and throw the database date away, leaving a newly published CVE unable to
-// invalidate a cached pass. The default - the whole output - is the correct answer.
-export fun mgs_getVersionKey() > VersionKey { return VersionKey{upTo = VersionComponent.patch}; }
-
-export fun mgs_getVersionKeys() > {str: VersionKey} {
+// and scanner versions. Extracting a semver would take the Go version (printed first)
+// and throw the database date away, leaving a newly published CVE unable to invalidate
+// a cached pass. Keying on the whole output is correct, and declaring nothing asks for it.
+export fun mgs_getTools() > {str: Tool} {
     return {
-        "golangci-lint": VersionKey{upTo = VersionComponent.patch},
+        "go": Tool{probe = Command{bin = "go", args = ["version"]}, key = VersionKey{upTo = VersionComponent.patch}},
+        "golangci-lint": Tool{probe = Command{bin = "golangci-lint", args = ["--version"]}, key = VersionKey{upTo = VersionComponent.patch}},
+        "govulncheck": Tool{probe = Command{bin = "govulncheck", args = ["-version"]}},
     };
 }
 

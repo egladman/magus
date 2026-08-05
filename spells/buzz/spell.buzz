@@ -25,7 +25,7 @@ export fun mgs_listRequiredGlobs() > [Path] {
     return [Path{value = "**/*.buzz"}];
 }
 
-// No mgs_getVersionProbe: there's no useful Buzz-toolchain version to probe here.
+// No mgs_getTools entry: there's no useful Buzz-toolchain version to probe here.
 // `magus buzz` only reports magus's own version, and the upstream `buzz` toolchain
 // isn't reliably on PATH - a missing `buzz` would make every run that touches a
 // buzz-bound project warn on a failed probe. The toolchain version isn't mixed into

@@ -43,7 +43,9 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 			spells.WithOutputs(spec.Provides...),
 			spells.WithTargets(spec.OpNames()...),
 			spells.WithServiceTargets(spec.ServiceOpNames()...),
-			spells.WithInvoker(newSpellInvoker(spec.Ops, spec.ReadinessProbes)),
+			spells.WithInvoker(newSpellInvoker(spec.Ops, readinessOf(spec))),
+			spells.WithTools(spec.Tools),
+			spells.WithVersionProber(versionProber),
 			spells.WithCommandRenderer(newCommandRenderer(spec.Ops)),
 			spells.WithCommandExplainer(newCommandExplainer(spec.Ops)),
 			spells.WithCommandConflicts(newCommandConflictChecker(spec.Ops)),
@@ -54,21 +56,6 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 		}
 		if spec.Opaque {
 			opts = append(opts, spells.WithOpaque())
-		}
-		if len(spec.VersionCmd) > 0 {
-			opts = append(opts, spells.WithVersionProbe(newVersionProbe(spec.VersionCmd)))
-		}
-		for tool, argv := range spec.VersionCmds {
-			opts = append(opts, spells.WithVersionProbeNamed(tool, newVersionProbe(argv)))
-		}
-		for tool, cmd := range spec.ReadinessProbes {
-			opts = append(opts, spells.WithReadinessProbe(tool, cmd))
-		}
-		if !spec.VersionKey.IsZero() {
-			opts = append(opts, spells.WithVersionKey(spec.VersionKey))
-		}
-		for tool, key := range spec.VersionKeys {
-			opts = append(opts, spells.WithVersionKeyNamed(tool, key))
 		}
 		if spec.Language != "" {
 			opts = append(opts, spells.WithLanguage(spec.Language))
@@ -107,17 +94,20 @@ func docsByTarget(targets map[string]spells.Op) map[string]string {
 	return out
 }
 
-// newVersionProbe runs argv in the project dir and returns trimmed stdout.
-func newVersionProbe(argv []string) func(context.Context, string) (string, error) {
-	return func(ctx context.Context, dir string) (string, error) {
-		cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-		cmd.Dir = dir
-		out, err := cmd.Output()
-		if err != nil {
-			return "", fmt.Errorf("version probe %v in %s: %w", argv, dir, err)
-		}
-		return strings.TrimSpace(string(out)), nil
+// versionProber runs one tool's version argv in the project dir and returns trimmed
+// stdout. One function for every tool now that no binary is privileged: the argv comes
+// from the Tool entry rather than being baked into a per-tool closure.
+func versionProber(ctx context.Context, probe spells.Command, dir string) (string, error) {
+	if probe.Bin == "" {
+		return "", nil
 	}
+	c := exec.CommandContext(ctx, probe.Bin, probe.Args...)
+	c.Dir = dir
+	out, err := c.Output()
+	if err != nil {
+		return "", fmt.Errorf("version probe %s %v in %s: %w", probe.Bin, probe.Args, dir, err)
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 // newCommandRenderer returns the command preview used by `magus describe`: it
@@ -501,21 +491,7 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 	if m.Language != "" {
 		opts = append(opts, spells.WithLanguage(m.Language))
 	}
-	if len(m.VersionCmd) > 0 {
-		opts = append(opts, spells.WithVersionProbe(newVersionProbe(m.VersionCmd)))
-	}
-	for tool, argv := range m.VersionCmds {
-		opts = append(opts, spells.WithVersionProbeNamed(tool, newVersionProbe(argv)))
-	}
-	for tool, cmd := range m.ReadinessProbes {
-		opts = append(opts, spells.WithReadinessProbe(tool, cmd))
-	}
-	if !m.VersionKey.IsZero() {
-		opts = append(opts, spells.WithVersionKey(m.VersionKey))
-	}
-	for tool, key := range m.VersionKeys {
-		opts = append(opts, spells.WithVersionKeyNamed(tool, key))
-	}
+	opts = append(opts, spells.WithTools(m.Tools), spells.WithVersionProber(versionProber))
 	return opts
 }
 
@@ -525,7 +501,7 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 // magus.project bind time). A function-op spell instead registers eagerly at load
 // via loadBuzzSpell.
 func registerLocalSpell(m spells.Descriptor) {
-	opts := append(localSpellBaseOptions(m), spells.WithInvoker(newSpellInvoker(m.Ops, m.ReadinessProbes)))
+	opts := append(localSpellBaseOptions(m), spells.WithInvoker(newSpellInvoker(m.Ops, readinessOf(m))))
 	project.DefaultSpellRegistry().RegisterIfAbsent(spells.NewSpell(m.Name, opts...))
 }
 
@@ -658,4 +634,21 @@ func levenshtein(a, b string) int {
 		row[len(b)] = prev
 	}
 	return row[len(b)]
+}
+
+// readinessOf projects a descriptor's tools down to the readiness map dispatch needs:
+// bin -> the command that proves it is usable. Tools with no Ready command are absent,
+// so an op naming one is never gated.
+func readinessOf(m spells.Descriptor) map[string]spells.Command {
+	var out map[string]spells.Command
+	for name, t := range m.Tools {
+		if t.Ready.Bin == "" {
+			continue
+		}
+		if out == nil {
+			out = map[string]spells.Command{}
+		}
+		out[name] = t.Ready
+	}
+	return out
 }

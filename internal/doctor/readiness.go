@@ -23,11 +23,12 @@ func (r *runner) checkReadinessProbes(projects []*types.Project) Check {
 
 	for _, p := range projects {
 		for _, s := range p.ResolvedSpells {
-			for _, tool := range s.ReadinessProbeTools() {
-				probe, ok := s.ReadinessProbe(tool)
-				if !ok {
+			for _, tool := range s.ToolNames() {
+				t, ok := s.Tool(tool)
+				if !ok || t.Ready.Bin == "" {
 					continue
 				}
+				probe := t.Ready
 				key := s.Name() + "\x00" + tool
 				if seen[key] {
 					continue

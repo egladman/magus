@@ -23,6 +23,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "Charm", Type: reflect.TypeFor[spells.Charm]()},
 	{Name: "PatchOp", Type: reflect.TypeFor[spells.PatchOp]()},
 	{Name: "VersionKey", Type: reflect.TypeFor[spells.VersionKey]()},
+	{Name: "Tool", Type: reflect.TypeFor[spells.Tool]()},
 	{Name: "ExecResult", Type: reflect.TypeFor[types.ExecResult](), RuntimeObject: true},
 	{Name: "CommitAuthor", Type: reflect.TypeFor[types.CommitAuthor](), RuntimeObject: true},
 	{Name: "Commit", Type: reflect.TypeFor[types.CommitRecord](), RuntimeObject: true},

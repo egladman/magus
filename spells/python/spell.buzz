@@ -9,11 +9,14 @@ export fun mgs_listRequiredGlobs() > [Path] {
             Path{value = "Pipfile"}, Path{value = "Pipfile.lock"}, Path{value = "setup.py"}, Path{value = "setup.cfg"}, Path{value = "uv.lock"}, Path{value = "poetry.lock"}];
 }
 
-export fun mgs_getVersionProbe() > [str] { return ["python3", "--version"]; }
 
 // mgs_getLanguage names the source language this spell adapts, canonical and lowercase
 // so it matches the language attr on the Python files and symbols SCIP ingests. It lets
 // `magus query language:python` reach this adapter alongside the code it builds.
+export fun mgs_getTools() > {str: Tool} {
+    return {"python3": Tool{probe = Command{bin = "python3", args = ["--version"]}}};
+}
+
 export fun mgs_getLanguage() > str { return "python"; }
 
 // mgs_listIgnoreDirs names non-source dirs the python toolchain generates, pruned
@@ -22,7 +25,7 @@ export fun mgs_getLanguage() > str { return "python"; }
 export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "__pycache__", isDir = true}]; }
 
 // mgs_listManifests names the file that carries this project's OWN version - not
-// the toolchain's (that's mgs_getVersionProbe) and not a cache input (these three
+// the toolchain's (that's mgs_getTools) and not a cache input (these three
 // are separately listed in mgs_listRequiredGlobs above, because they also feed the
 // cache key). Python genuinely has alternatives, unlike the other built-ins: a
 // pyproject.toml-managed project may still ship a legacy setup.py or setup.cfg, so

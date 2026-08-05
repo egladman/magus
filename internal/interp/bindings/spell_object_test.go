@@ -34,8 +34,8 @@ func TestSpellOptionsApplied(t *testing.T) {
 	// "WithVersionProbeNamed", so the unnamed probe could never fail independently -
 	// a mutation test caught this test lying about its own coverage.
 	wantOptions := []string{
-		"WithVersionProbe(",
-		"WithVersionProbeNamed(",
+		"WithTools(",
+		"WithVersionProber(",
 		"WithLanguage(",
 		"WithOpaque(",
 	}

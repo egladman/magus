@@ -98,7 +98,8 @@ func TestRunToolchainChangeRebuilds(t *testing.T) {
 			_, err = f.WriteString("x")
 			return nil, err
 		}),
-		spells.WithVersionProbe(func(_ context.Context, dir string) (string, error) {
+		spells.WithTools(map[string]spells.Tool{"tool": {Probe: spells.Command{Bin: "tool", Args: []string{"--version"}}}}),
+		spells.WithVersionProber(func(_ context.Context, _ spells.Command, dir string) (string, error) {
 			return readFile(t, filepath.Join(dir, "VERSION")), nil
 		}),
 	)
@@ -197,11 +198,11 @@ export fun hit(ctx: magus\Context, args: [str]) > void {}
 func TestBuiltinSpellVersionProbeIsDataDriven(t *testing.T) {
 	goSpell, ok := project.DefaultSpellRegistry().Lookup("go")
 	require.True(t, ok, "go spell not registered")
-	assert.True(t, goSpell.HasVersionProbe(), "go spell has no version probe; meta.version_cmd is not wired")
+	assert.True(t, goSpell.HasVersionProbe(), "go spell has no version probe; mgs_getTools is not wired")
 
 	jsonSpell, ok := project.DefaultSpellRegistry().Lookup("json")
 	if ok {
-		assert.False(t, jsonSpell.HasVersionProbe(), "json spell unexpectedly has a version probe (it declares no version_cmd)")
+		assert.False(t, jsonSpell.HasVersionProbe(), "json spell unexpectedly has a version probe (it declares no tools)")
 	}
 }
 

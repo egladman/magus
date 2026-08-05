@@ -614,56 +614,44 @@ func (m *Magus) toolVersionsByProject(ctx context.Context, projects []*types.Pro
 		}
 		var vers []string
 		for _, s := range p.ResolvedSpells {
-			if !s.HasVersionProbe() {
-				continue
-			}
-			key := s.Name() + "\x00" + dir
-			v, ok := memo[key]
-			if !ok {
-				probed, err := s.ProbeVersion(ctx, dir)
-				if err != nil {
-					slog.WarnContext(ctx, "magus: tool-version probe failed; cache key records UNPROBED",
-						slog.String("spell", s.Name()), slog.String("dir", dir), slog.String("err", err.Error()))
-					probed = "UNPROBED"
-				} else {
-					token, note := spells.VersionToken(probed, s.VersionKey())
-					if note != "" {
-						slog.WarnContext(ctx, "magus: tool-version policy degraded; cache key is coarser than declared",
-							slog.String("spell", s.Name()), slog.String("dir", dir), slog.String("note", note))
-					}
-					slog.DebugContext(ctx, "magus: tool-version probe",
-						slog.String("spell", s.Name()), slog.String("dir", dir),
-						slog.String("output", probed), slog.String("token", token))
-					probed = token
+			// One uniform loop over every declared tool. There is no privileged
+			// "primary" binary any more: `go` had one for historical cache-key reasons
+			// and nothing principled separated it from golangci-lint, so both key as
+			// spell:tool:version. Memoized on (spell, dir, tool) so N tools cost N
+			// spawns per project per run rather than N per target.
+			for _, tool := range s.ToolNames() {
+				t, _ := s.Tool(tool)
+				if !t.HasProbe() {
+					continue
 				}
-				v = probed
-				memo[key] = v
-			}
-			vers = append(vers, s.Name()+":"+v)
-			// Named probes contribute spell:tool:version, so a spell driving several
-			// binaries records each. Sorted by VersionProbeNames, and memoized on the
-			// same (spell, dir, tool) basis as the primary, so N tools cost N spawns
-			// per project per run rather than N per target.
-			for _, tool := range s.VersionProbeNames() {
-				tk := key + "\x00" + tool
-				tv, ok := memo[tk]
-				if !ok {
-					probed, err := s.ProbeVersionOf(ctx, tool, dir)
-					if err != nil {
-						slog.WarnContext(ctx, "magus: tool-version probe failed; cache key records UNPROBED",
-							slog.String("spell", s.Name()), slog.String("tool", tool),
-							slog.String("dir", dir), slog.String("err", err.Error()))
-						probed = "UNPROBED"
+				tk := s.Name() + "\x00" + dir + "\x00" + tool
+				tv, hit := memo[tk]
+				if !hit {
+					// A declared constant needs no process: the author supplies the
+					// token and edits it by hand to invalidate.
+					if t.Probe.Bin == "" {
+						tv = t.Key.Const
 					} else {
-						token, note := spells.VersionToken(probed, s.VersionKeyOf(tool))
-						if note != "" {
-							slog.WarnContext(ctx, "magus: tool-version policy degraded; cache key is coarser than declared",
+						probed, err := s.ProbeVersion(ctx, tool, dir)
+						switch {
+						case err != nil:
+							slog.WarnContext(ctx, "magus: tool-version probe failed; cache key records UNPROBED",
 								slog.String("spell", s.Name()), slog.String("tool", tool),
-								slog.String("dir", dir), slog.String("note", note))
+								slog.String("dir", dir), slog.String("err", err.Error()))
+							tv = "UNPROBED"
+						default:
+							token, note := spells.VersionToken(probed, t.Key)
+							if note != "" {
+								slog.WarnContext(ctx, "magus: tool-version key degraded; cache key is coarser than declared",
+									slog.String("spell", s.Name()), slog.String("tool", tool),
+									slog.String("dir", dir), slog.String("note", note))
+							}
+							slog.DebugContext(ctx, "magus: tool-version probe",
+								slog.String("spell", s.Name()), slog.String("tool", tool),
+								slog.String("output", probed), slog.String("token", token))
+							tv = token
 						}
-						probed = token
 					}
-					tv = probed
 					memo[tk] = tv
 				}
 				vers = append(vers, s.Name()+":"+tool+":"+tv)

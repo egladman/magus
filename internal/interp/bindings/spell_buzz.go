@@ -70,21 +70,7 @@ func loadBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells
 	// all of this, which is why built-in spells were unaffected and the gap stayed
 	// invisible.
 	var extra []spells.Option
-	if len(spec.VersionCmd) > 0 {
-		extra = append(extra, spells.WithVersionProbe(newVersionProbe(spec.VersionCmd)))
-	}
-	for tool, argv := range spec.VersionCmds {
-		extra = append(extra, spells.WithVersionProbeNamed(tool, newVersionProbe(argv)))
-	}
-	for tool, cmd := range spec.ReadinessProbes {
-		extra = append(extra, spells.WithReadinessProbe(tool, cmd))
-	}
-	if !spec.VersionKey.IsZero() {
-		extra = append(extra, spells.WithVersionKey(spec.VersionKey))
-	}
-	for tool, key := range spec.VersionKeys {
-		extra = append(extra, spells.WithVersionKeyNamed(tool, key))
-	}
+	extra = append(extra, spells.WithTools(spec.Tools), spells.WithVersionProber(versionProber))
 	if spec.Language != "" {
 		extra = append(extra, spells.WithLanguage(spec.Language))
 	}
@@ -149,7 +135,7 @@ func spellSearchPaths(roots ...string) []string {
 func newBuzzSpellInvoker(spec spells.Descriptor, src string) func(context.Context, spells.InvokeRequest) (any, error) {
 	return func(ctx context.Context, req spells.InvokeRequest) (any, error) {
 		if _, ok := spec.Ops[req.Target]; ok {
-			return dispatchOp(ctx, spec.Ops, spec.ReadinessProbes, req)
+			return dispatchOp(ctx, spec.Ops, readinessOf(spec), req)
 		}
 		return callBuzzSpellFunc(ctx, src, req.Target, req)
 	}

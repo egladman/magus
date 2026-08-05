@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/spells"
 	"io/fs"
 	"os"
 	"slices"
@@ -372,22 +373,32 @@ func probeSpellVersions(ctx context.Context, name, dir string) []types.SpellVers
 		return nil
 	}
 	var out []types.SpellVersion
-	// The unnamed primary probe keeps its original spell:version key spelling;
-	// renaming it would rewrite every key in every workspace.
-	if v, err := sp.ProbeVersion(ctx, dir); err != nil {
-		out = append(out, types.SpellVersion{Tool: name, Error: err.Error()})
-	} else if v != "" {
-		out = append(out, types.SpellVersion{Tool: name, Version: v, CacheKey: "spell:version=" + v})
-	}
-	for _, tool := range sp.VersionProbeNames() {
-		v, err := sp.ProbeVersionOf(ctx, tool, dir)
+	// One uniform pass: every declared binary keys as spell:tool:version, with no
+	// privileged primary. A tool with a constant version reports it without spawning.
+	for _, tool := range sp.ToolNames() {
+		t, _ := sp.Tool(tool)
+		if !t.HasProbe() {
+			continue
+		}
+		if t.Probe.Bin == "" {
+			out = append(out, types.SpellVersion{
+				Tool: tool, Version: t.Key.Const,
+				CacheKey: "spell:" + tool + ":version=" + t.Key.Const,
+			})
+			continue
+		}
+		v, err := sp.ProbeVersion(ctx, tool, dir)
 		switch {
 		case err != nil:
 			out = append(out, types.SpellVersion{Tool: tool, Error: err.Error()})
 		case v == "":
 			out = append(out, types.SpellVersion{Tool: tool})
 		default:
-			out = append(out, types.SpellVersion{Tool: tool, Version: v, CacheKey: "spell:" + tool + ":version=" + v})
+			token, _ := spells.VersionToken(v, t.Key)
+			out = append(out, types.SpellVersion{
+				Tool: tool, Version: v,
+				CacheKey: "spell:" + tool + ":version=" + token,
+			})
 		}
 	}
 	return out
