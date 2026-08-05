@@ -104,6 +104,9 @@ func newQueryTestWorkspace(t *testing.T) *magus.Magus {
 // not-exist path must invert it back to a `magus run build` suggestion, with the root
 // project omitted since the target lives at ".".
 func TestReportRefLookupError_MatchedRefSuggestsRunCommand(t *testing.T) {
+	saved := globalCfg
+	t.Cleanup(func() { globalCfg = saved })
+
 	m := newQueryTestWorkspace(t)
 	ctx := context.Background()
 
@@ -127,7 +130,7 @@ func TestReportRefLookupError_MatchedRefSuggestsRunCommand(t *testing.T) {
 // TestShowOutputMeta_RevisionRendering drives showOutputMeta end to end in a real git
 // workspace: a target's descriptor is stamped with the revision HEAD was at when it
 // ran (CurrentRevision, resolved once by executeStages), and --meta must render it -
-// silently when it still matches HEAD, and with a "produced at X, you are on Y" line
+// silently when it still matches HEAD, and with a "recorded at X, you are on Y" line
 // once a later commit moves HEAD away from it.
 func TestShowOutputMeta_RevisionRendering(t *testing.T) {
 	dir := initGitRepo(t)
@@ -173,7 +176,7 @@ func TestShowOutputMeta_RevisionRendering(t *testing.T) {
 		require.NoError(t, showOutputMeta(ctx, m, ref, OutputOptions{}))
 	})
 	assert.Contains(t, out,
-		"produced at "+firstRev[:12]+", you are on "+secondRev[:12]+"; check out that commit first to reproduce it.",
+		"recorded at "+firstRev[:12]+", you are on "+secondRev[:12]+".",
 	)
 }
 

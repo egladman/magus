@@ -385,13 +385,17 @@ func showOutputMeta(ctx context.Context, m *magus.Magus, ref string, out OutputO
 		fmt.Println()
 		// The cache key pins a tree STATE, never a commit - this is the one place
 		// that names one, by comparing the descriptor's revision against HEAD now.
-		// Only when m is non-nil (a workspace is loaded) and the two actually
-		// differ: same revision is the common case and needs no callout.
-		if m != nil {
-			if cur, _ := m.CurrentRevision(ctx); cur != "" && cur != desc.Revision {
-				fmt.Printf("produced at %s, you are on %s; check out that commit first to reproduce it.\n",
-					shortRevision(desc.Revision), shortRevision(cur))
-			}
+		// PROVENANCE only, never instruction: on a cache HIT, recordOutput never runs,
+		// so the descriptor still carries the revision of whichever run FIRST minted
+		// this key - which can differ from HEAD even though the current tree
+		// reproduces the output perfectly (that reproduction is exactly why it was a
+		// hit). Telling the user to check out the recorded commit would therefore be
+		// wrong on the most common path that reaches this line: a ref that resolved
+		// already has its bytes, and the KEY, not the commit, is what decided that.
+		// Only print when the two actually differ: same revision is the common case
+		// and needs no callout.
+		if cur, _ := m.CurrentRevision(ctx); cur != "" && cur != desc.Revision {
+			fmt.Printf("recorded at %s, you are on %s.\n", shortRevision(desc.Revision), shortRevision(cur))
 		}
 	}
 	if len(digests) == 0 {
@@ -457,7 +461,7 @@ func printRefIdentitySuggestion(ctx context.Context, m *magus.Magus, ref string)
 	if m == nil {
 		return
 	}
-	matches, err := m.IdentifyRef(ctx, ref, globalCfg.DefaultCharms)
+	matches, err := m.IdentifyRef(ctx, ref)
 	if err != nil {
 		return
 	}
@@ -467,7 +471,6 @@ func printRefIdentitySuggestion(ctx context.Context, m *magus.Magus, ref string)
 		// run that printed it had different inputs, not because this lookup is broken.
 		fmt.Fprintln(os.Stderr, "No target in this workspace keys to that ref at the current tree, which means the run that printed it had different inputs (a different commit, uncommitted change, or environment).")
 		fmt.Fprintf(os.Stderr, "Once you know which target it should be: %s\n", clihint.DescribeTargets.With("<target>", "--cache", "--against", ref))
-		fmt.Fprintf(os.Stderr, "If someone else has it, they can share it with: %s\n", clihint.QueryOutput.With(ref, "--publish"))
 	case 1:
 		fmt.Fprintln(os.Stderr, "Nothing has produced it here, but this workspace would print it for:")
 		fmt.Fprintf(os.Stderr, "  %s\n", refMatchCommand(matches[0]))
@@ -477,6 +480,10 @@ func printRefIdentitySuggestion(ctx context.Context, m *magus.Magus, ref string)
 			fmt.Fprintf(os.Stderr, "  %s\n", refMatchCommand(mt))
 		}
 	}
+	// Reachable from every branch, not just the zero-match one: even a matched target
+	// may be nondeterministic or expensive enough that the exact bytes from whoever
+	// already has them beat a local re-run.
+	fmt.Fprintf(os.Stderr, "If someone else has it, they can share it with: %s\n", clihint.QueryOutput.With(ref, "--publish"))
 }
 
 // refMatchCommand renders a RefMatch as the "magus run" invocation that would key it:

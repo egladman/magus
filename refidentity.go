@@ -15,7 +15,6 @@ type RefMatch struct {
 	Project string
 	Target  string
 	Charms  []string
-	Key     string
 }
 
 // projectTargets returns the target names project p can actually key: those declared
@@ -51,29 +50,38 @@ func projectTargets(p *types.Project) []string {
 // the method: it exists for the moment someone pastes a ref from a teammate's terminal
 // or a CI log and asks "what is this", with no other metadata to go on.
 //
-// Each target is tried under two charm sets - defaultCharms and the empty set, deduped
-// - because CI runs `--no-default-charms` and CI is the peer whose refs most often get
-// pasted into a local terminal: a ref minted by the bare CI variant must still resolve
-// even though this workspace's local runs always carry defaultCharms.
+// Each target is tried under two charm sets - the workspace's configured default charms
+// and the empty set, deduped - because CI runs `--no-default-charms` and CI is the peer
+// whose refs most often get pasted into a local terminal: a ref minted by the bare CI
+// variant must still resolve even though this workspace's local runs always carry the
+// configured defaults. The defaults are read from m.cfg.DefaultCharms rather than taken
+// as a parameter, exactly as ListCharms reads them (see its doc comment): a caller that
+// forgets to pass defaults must not silently degrade to a bare-charm-only sweep.
 //
 // ref may be a full portable ref or a unique prefix of one, mirroring the resolver in
 // internal/cache/output.go: matches are ref-as-prefix-of-full-ref, not equality, so a
 // shortened ref still finds its target. A ref that is not shaped like a ref, or that
-// matches nothing, yields an empty slice and no error - "nothing matched" is a finding
+// matches nothing, yields a nil slice and no error - "nothing matched" is a finding
 // here, not a failure. A single target that fails to key (an unresolved project, a
 // malformed step) is skipped rather than aborting the sweep, since this runs on a
-// best-effort error path. The one exception is types.ErrNoCache: a cache-free
-// (Inspect) workspace can mint no keys at all, so ComputeTargetKey's ErrNoCache
-// propagates immediately - the whole method is meaningless without a cache.
+// best-effort error path. The one exception is types.ErrNoCache, checked up front -
+// mirroring computeTargetKey's own first line - rather than left to surface from deep
+// in the sweep: a cache-free (Inspect) workspace can mint no keys at all, so the whole
+// method is meaningless without a cache, and there is no point walking every project
+// and probing every spell's tool version first only to discover that.
 //
 // Matches are sorted by project, then target, then charms, so repeated calls and
 // rendered output are stable.
-func (m *Magus) IdentifyRef(ctx context.Context, ref string, defaultCharms []string) ([]RefMatch, error) {
+func (m *Magus) IdentifyRef(ctx context.Context, ref string) ([]RefMatch, error) {
+	if m.cache == nil {
+		return nil, types.ErrNoCache
+	}
 	ref = strings.ToLower(strings.TrimSpace(ref))
 	if !cache.LooksLikeRef(ref) {
-		return []RefMatch{}, nil
+		return nil, nil
 	}
 
+	defaultCharms := m.cfg.DefaultCharms
 	variants := [][]string{defaultCharms}
 	if len(defaultCharms) > 0 {
 		variants = append(variants, nil)
@@ -93,7 +101,7 @@ func (m *Magus) IdentifyRef(ctx context.Context, ref string, defaultCharms []str
 	projects := m.All()
 	toolVersions := m.toolVersionsByProject(ctx, projects)
 
-	matches := []RefMatch{}
+	var matches []RefMatch
 	for _, p := range projects {
 		for _, target := range projectTargets(p) {
 			for _, charms := range variants {
@@ -109,7 +117,6 @@ func (m *Magus) IdentifyRef(ctx context.Context, ref string, defaultCharms []str
 						Project: p.Path,
 						Target:  target,
 						Charms:  charms,
-						Key:     key,
 					})
 				}
 			}

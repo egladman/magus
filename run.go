@@ -543,13 +543,18 @@ func toolVersionMode() string {
 }
 
 // CurrentRevision resolves the workspace's active VCS revision (full hash) and dirty
-// state. Best-effort like verifyReadOnly's VCS resolution: no VCS, an explicitly
-// disabled VCS, or a resolution/metadata error all yield ("", false) rather than an
-// error - a missing revision is "unknown", never a reason to fail the caller. Used both
-// to stamp output descriptors (executeStages resolves it ONCE per invocation and
-// copies it onto every step, exactly as toolVersionsByProject does for tool versions -
-// probing per target would spawn a VCS subprocess per step) and by `magus query output
-// <ref> --meta` to compare a stored descriptor's revision against HEAD now.
+// state. It departs from verifyReadOnly's VCS resolution on purpose: verifyReadOnly
+// treats a vcs.Resolve error as a hard failure (a bad MAGUS_VCS_NAME is misconfiguration
+// it refuses to hide) and only no-ops on res.VCS == nil, but CurrentRevision collapses
+// BOTH a resolution error and no VCS into ("", false). That is correct here because this
+// is provenance metadata, not a drift gate: a target that never declared FailOnDrift
+// never asked to have its VCS state checked, so failing the whole run over an unrelated
+// VCS misconfiguration would be wrong - a missing revision is "unknown", never a reason
+// to fail the caller. Used both to stamp output descriptors (executeStages resolves it
+// ONCE per invocation and copies it onto every step, exactly as toolVersionsByProject
+// does for tool versions - probing per target would spawn a VCS subprocess per step) and
+// by `magus query output <ref> --meta` to compare a stored descriptor's revision against
+// HEAD now.
 func (m *Magus) CurrentRevision(ctx context.Context) (revision string, dirty bool) {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil || res.VCS == nil {

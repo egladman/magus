@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 )
@@ -19,8 +20,10 @@ import (
 // gives every target absent a TargetInputs override - see run.go:334) and
 // filesPerProject source files on disk. At nProjects=9, targetsPerProject=11,
 // filesPerProject=340 this lands at ~99 targets and ~3060 files, matching the
-// ~94-target, ~3000-file, 36.7s-sweep measurement behind this benchmark.
-func newIdentitySweepWorkspace(b *testing.B, nProjects, targetsPerProject, filesPerProject int) *Magus {
+// ~94-target, ~3000-file, 36.7s-sweep measurement behind this benchmark. defaultCharms
+// becomes the workspace's configured default_charms (m.cfg.DefaultCharms), what
+// IdentifyRef now reads directly instead of taking as a parameter.
+func newIdentitySweepWorkspace(b *testing.B, nProjects, targetsPerProject, filesPerProject int, defaultCharms []string) *Magus {
 	b.Helper()
 	root := b.TempDir()
 	require.NoError(b, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
@@ -56,24 +59,23 @@ func newIdentitySweepWorkspace(b *testing.B, nProjects, targetsPerProject, files
 		reg.RegisterProject(projPath, WithSpell(spellName))
 	}
 
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithLoadedConfig(config.Config{DefaultCharms: defaultCharms}))
 	require.NoError(b, err, "Open")
 	b.Cleanup(func() { _ = m.Close() })
 	return m
 }
 
 // BenchmarkIdentifyRefSweep measures a full no-match sweep - the shape `magus query
-// output <ref-not-found>` hits on the error path IdentifyRef exists for. "outdeadbeef"
-// is ref-shaped (so LooksLikeRef doesn't short-circuit it) but matches no live key, so
-// every candidate target/charm combination is tried and none returns early.
+// output <ref-not-found>` hits on the error path IdentifyRef exists for. "outdeadbeef" is
+// ref-shaped (so LooksLikeRef doesn't short-circuit it) but matches no live key, so every
+// candidate target/charm combination is tried and none returns early.
 func BenchmarkIdentifyRefSweep(b *testing.B) {
-	m := newIdentitySweepWorkspace(b, 9, 11, 340)
+	m := newIdentitySweepWorkspace(b, 9, 11, 340, []string{"rw"})
 	ctx := context.Background()
-	defaultCharms := []string{"rw"}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		matches, err := m.IdentifyRef(ctx, "outdeadbeef0000", defaultCharms)
+		matches, err := m.IdentifyRef(ctx, "outdeadbeef0000")
 		if err != nil {
 			b.Fatal(err)
 		}

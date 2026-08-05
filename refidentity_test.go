@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -18,8 +19,10 @@ import (
 // newIdentityWorkspace opens a real (cache-backed) single-project workspace bound to a
 // spell providing target "build" - IdentifyRef needs a live cache (ComputeTargetKey
 // returns types.ErrNoCache on an Inspect workspace), unlike the Inspect-only fixtures
-// most describe_test.go tests use.
-func newIdentityWorkspace(t *testing.T) *Magus {
+// most describe_test.go tests use. defaultCharms, when given, becomes the workspace's
+// configured default_charms (m.cfg.DefaultCharms) - what IdentifyRef now reads directly
+// instead of taking as a parameter.
+func newIdentityWorkspace(t *testing.T, defaultCharms ...string) *Magus {
 	t.Helper()
 	const spellName = "zzz-identify-spell"
 	s := spells.NewSpell(spellName, spells.WithTargets("build"))
@@ -31,7 +34,11 @@ func newIdentityWorkspace(t *testing.T) *Magus {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	opts := []Option{WithWorkspaceRegistry(reg)}
+	if len(defaultCharms) > 0 {
+		opts = append(opts, WithLoadedConfig(config.Config{DefaultCharms: defaultCharms}))
+	}
+	m, err := Open(context.Background(), root, opts...)
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	return m
@@ -47,10 +54,10 @@ func TestIdentifyRef_RoundTrip(t *testing.T) {
 	require.NoError(t, err, "ComputeTargetKey")
 	ref := cache.PortableRef(key)
 
-	matches, err := m.IdentifyRef(ctx, ref, nil)
+	matches, err := m.IdentifyRef(ctx, ref)
 	require.NoError(t, err, "IdentifyRef")
 	require.Len(t, matches, 1, "IdentifyRef: expected exactly one match")
-	assert.Equal(t, RefMatch{Project: ".", Target: "build", Charms: nil, Key: key}, matches[0])
+	assert.Equal(t, RefMatch{Project: ".", Target: "build", Charms: nil}, matches[0])
 }
 
 // TestIdentifyRef_NoMatch guards the "nothing matched" path: a ref no live target keys
@@ -59,7 +66,7 @@ func TestIdentifyRef_NoMatch(t *testing.T) {
 	m := newIdentityWorkspace(t)
 	ctx := context.Background()
 
-	matches, err := m.IdentifyRef(ctx, "outdeadbeef0000", nil)
+	matches, err := m.IdentifyRef(ctx, "outdeadbeef0000")
 	require.NoError(t, err, "IdentifyRef")
 	assert.Empty(t, matches, "IdentifyRef: expected no matches")
 }
@@ -77,20 +84,21 @@ func TestIdentifyRef_ShortenedPrefixMatches(t *testing.T) {
 	short := full[:len(full)-4]
 	require.NotEqual(t, full, short, "test setup: shortened ref should differ from full ref")
 
-	matches, err := m.IdentifyRef(ctx, short, nil)
+	matches, err := m.IdentifyRef(ctx, short)
 	require.NoError(t, err, "IdentifyRef")
 	require.Len(t, matches, 1, "IdentifyRef: expected exactly one match on shortened ref")
-	assert.Equal(t, RefMatch{Project: ".", Target: "build", Charms: nil, Key: key}, matches[0])
+	assert.Equal(t, RefMatch{Project: ".", Target: "build", Charms: nil}, matches[0])
 }
 
-// TestIdentifyRef_CharmVariants guards the two-charm-set sweep: a ref minted under
-// defaultCharms and a ref minted bare (as CI's --no-default-charms run would mint it)
-// must BOTH resolve when defaultCharms is passed in, since a pasted CI ref is exactly
-// the case this method exists for.
+// TestIdentifyRef_CharmVariants guards the two-charm-set sweep: a ref minted under the
+// workspace's configured default charms and a ref minted bare (as CI's
+// --no-default-charms run would mint it) must BOTH resolve once the workspace has
+// default_charms configured, since a pasted CI ref is exactly the case this method
+// exists for.
 func TestIdentifyRef_CharmVariants(t *testing.T) {
-	m := newIdentityWorkspace(t)
-	ctx := context.Background()
 	defaultCharms := []string{"rw"}
+	m := newIdentityWorkspace(t, defaultCharms...)
+	ctx := context.Background()
 
 	keyDefault, _, err := m.ComputeTargetKey(ctx, ".", "build", defaultCharms)
 	require.NoError(t, err, "ComputeTargetKey (default charms)")
@@ -98,15 +106,15 @@ func TestIdentifyRef_CharmVariants(t *testing.T) {
 	require.NoError(t, err, "ComputeTargetKey (bare)")
 	require.NotEqual(t, keyDefault, keyBare, "test setup: charm variants should key differently")
 
-	matchesDefault, err := m.IdentifyRef(ctx, cache.PortableRef(keyDefault), defaultCharms)
+	matchesDefault, err := m.IdentifyRef(ctx, cache.PortableRef(keyDefault))
 	require.NoError(t, err, "IdentifyRef (default-charm ref)")
 	require.Len(t, matchesDefault, 1, "IdentifyRef: expected exactly one match for the default-charm ref")
-	assert.Equal(t, RefMatch{Project: ".", Target: "build", Charms: []string{"rw"}, Key: keyDefault}, matchesDefault[0])
+	assert.Equal(t, RefMatch{Project: ".", Target: "build", Charms: []string{"rw"}}, matchesDefault[0])
 
-	matchesBare, err := m.IdentifyRef(ctx, cache.PortableRef(keyBare), defaultCharms)
+	matchesBare, err := m.IdentifyRef(ctx, cache.PortableRef(keyBare))
 	require.NoError(t, err, "IdentifyRef (bare ref)")
 	require.Len(t, matchesBare, 1, "IdentifyRef: expected exactly one match for the bare (CI) ref")
-	assert.Equal(t, RefMatch{Project: ".", Target: "build", Charms: nil, Key: keyBare}, matchesBare[0])
+	assert.Equal(t, RefMatch{Project: ".", Target: "build", Charms: nil}, matchesBare[0])
 }
 
 // TestIdentifyRef_InvalidRefShape guards the input-validation path: a string that
@@ -117,7 +125,7 @@ func TestIdentifyRef_InvalidRefShape(t *testing.T) {
 	ctx := context.Background()
 
 	for _, ref := range []string{"", "not-a-ref", "refactor"} {
-		matches, err := m.IdentifyRef(ctx, ref, nil)
+		matches, err := m.IdentifyRef(ctx, ref)
 		require.NoErrorf(t, err, "IdentifyRef(%q)", ref)
 		assert.Emptyf(t, matches, "IdentifyRef(%q): expected no matches", ref)
 	}
@@ -142,6 +150,6 @@ func TestIdentifyRef_NoCachePropagatesError(t *testing.T) {
 	require.NoError(t, err, "inspect")
 	require.NoError(t, m.load(context.Background()), "load")
 
-	_, err = m.IdentifyRef(context.Background(), "out123456789012", nil)
+	_, err = m.IdentifyRef(context.Background(), "out123456789012")
 	assert.ErrorIs(t, err, types.ErrNoCache, "IdentifyRef on a cache-free workspace")
 }
