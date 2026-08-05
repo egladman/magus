@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -186,7 +187,10 @@ func TestHashStepLinesMatchesHash(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, plain, withLines, "collecting lines must not change the key")
 
-	assert.Equal(t, "keyVersion:3", lines[0])
+	// Against the constant, not a literal: this test pins that keyVersion LEADS the
+	// key inputs, which is what the diff reader relies on; the value itself is
+	// pinned once, by TestHashStep_KeyVersionIsHashed.
+	assert.Equal(t, fmt.Sprintf("keyVersion:%d", KeyVersion), lines[0])
 	assert.Equal(t, withLines, hashOfLines(lines), "lines are byte-identical to what the hash consumed")
 }
 

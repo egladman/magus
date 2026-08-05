@@ -21,7 +21,9 @@ import (
 )
 
 // KeyVersion is bumped when the set of hashed fields changes, forcing a full rebuild.
-const KeyVersion = 3
+// 4 adds the host platform line and switches tool versions from raw probe output to
+// extracted, bucketed tokens; both change what an unchanged step hashes to.
+const KeyVersion = 4
 
 // hashStep computes the cache key for a Step (version, path, target, sources,
 // env, deps, spell version, tool versions). Sources use an mtime fast-path.
@@ -78,6 +80,17 @@ func (c *Cache) hashStepInputsMemo(ctx context.Context, s *Step, lines *[]string
 	if lines != nil {
 		*lines = append(*lines, string(buf[:len(buf)-1]))
 	}
+
+	// The host platform keys every entry, and it has to be stated HERE rather than
+	// arrive through a spell. Several toolchains print their platform as part of their
+	// version (`go version go1.26.0 linux/amd64`), so before extraction magus was
+	// keying on the platform by accident, for the subset of projects that happened to
+	// bind such a spell. Extraction strips that noise deliberately - a tool's build
+	// host is not its version - which would leave a darwin/arm64 machine free to
+	// replay a linux/amd64 artifact from a shared cache. A platform-dependent artifact
+	// is the norm, not the exception, so the seed belongs in the key itself where it
+	// covers every step rather than in whichever spells happen to leak it.
+	writeLine("platform:", runtime.GOOS, "/", runtime.GOARCH)
 
 	writeLine("projectPath:", s.ProjectPath)
 	if s.Target != "" {

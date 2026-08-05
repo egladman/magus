@@ -64,6 +64,11 @@ type Spell struct {
 	// it in as a named entry would rewrite every key in every workspace and
 	// invalidate every cache entry for a change that alters no behaviour.
 	versionProbes map[string]func(ctx context.Context, dir string) (string, error)
+	// versionPolicy and versionPolicies declare WHICH changes in a probed version may
+	// bust the cache, mirroring the probe fields above (primary, then per-tool). Zero
+	// values keep the historical behavior: the exact extracted version keys the cache.
+	versionPolicy   VersionPolicy
+	versionPolicies map[string]VersionPolicy
 }
 
 // Name implements Driver.
@@ -237,6 +242,19 @@ func (s *Spell) ProbeVersionOf(ctx context.Context, name, dir string) (string, e
 	return fn(ctx, dir)
 }
 
+// VersionPolicy returns the primary probe's declared cache policy. The zero value
+// means exact: any change in the extracted version moves the key.
+//
+// The policy is returned rather than applied inside ProbeVersion so the caller keeps
+// both halves - the raw output it probed and the token it keyed on. VersionToken's
+// degradations are notes, not errors, and a caller that only received the token could
+// not say WHY a key went coarse.
+func (s *Spell) VersionPolicy() VersionPolicy { return s.versionPolicy }
+
+// VersionPolicyOf returns the named probe's declared cache policy, zero when the
+// tool declares none.
+func (s *Spell) VersionPolicyOf(name string) VersionPolicy { return s.versionPolicies[name] }
+
 // Option configures NewSpell.
 type Option func(*Spell)
 
@@ -345,6 +363,22 @@ func WithDependsOn(fn func(dir string) []string) Option {
 // WithVersionProbe sets the toolchain version probe; the result mixes into the cache key.
 func WithVersionProbe(fn func(ctx context.Context, dir string) (string, error)) Option {
 	return func(s *Spell) { s.versionProbe = fn }
+}
+
+// WithVersionPolicy sets the primary probe's cache policy; the zero value keys exactly.
+func WithVersionPolicy(p VersionPolicy) Option {
+	return func(s *Spell) { s.versionPolicy = p }
+}
+
+// WithVersionPolicyNamed sets a named probe's cache policy. Registering a policy for a
+// tool with no probe is harmless and does nothing - the probe is what produces a token.
+func WithVersionPolicyNamed(name string, p VersionPolicy) Option {
+	return func(s *Spell) {
+		if s.versionPolicies == nil {
+			s.versionPolicies = map[string]VersionPolicy{}
+		}
+		s.versionPolicies[name] = p
+	}
 }
 
 // WithVersionProbeNamed registers an ADDITIONAL probe under a tool name, for a
