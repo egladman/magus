@@ -85,11 +85,23 @@ type OutputDescriptor struct {
 	KeyVersion   int    `json:"key_version,omitempty"` // hashStep KeyVersion that produced Key
 	Attempt      string `json:"attempt,omitempty"`     // execution-unique id; the file stem
 	MagusVersion string `json:"magus_version,omitempty"`
+
+	// Schema v3: the cache key pins a TREE STATE (via its source content hashes)
+	// without naming it - it deliberately contains no commit, branch, or base. Revision
+	// and Dirty close that gap: they record the VCS state the run's inputs were read
+	// at, so a ref fetched from a foreign machine (CI, a teammate) can say not just
+	// WHICH target produced it but which commit reproduces it. A v2 descriptor (or
+	// earlier) carries neither field, which reads as "unknown, no VCS, or predates
+	// this field" - never an error, since resolving it is best-effort by construction
+	// (a workspace with no VCS is a supported, silent no-op).
+	Revision string `json:"revision,omitempty"` // full VCS revision hash inputs were read at; "" when unknown
+	Dirty    bool   `json:"dirty,omitempty"`    // working tree had uncommitted changes; Revision alone then is necessary but not sufficient to reproduce
 }
 
-// descriptorSchema is the OutputDescriptor schema this store writes. v2 introduced
-// portable (key-derived) refs; v1 descriptors carry no schema field.
-const descriptorSchema = 2
+// descriptorSchema is the OutputDescriptor schema this store writes. v3 added
+// Revision/Dirty; v2 introduced portable (key-derived) refs; v1 descriptors carry no
+// schema field.
+const descriptorSchema = 3
 
 // AmbiguousRefError is returned by output lookup when a ref (or prefix) matches more
 // than one stored identity. Candidates are pasteable-back refs, sorted: a step

@@ -377,6 +377,23 @@ func showOutputMeta(ctx context.Context, m *magus.Magus, ref string, out OutputO
 	if desc.MagusVersion != "" {
 		fmt.Printf("magus:   %s\n", desc.MagusVersion)
 	}
+	if desc.Revision != "" {
+		fmt.Printf("rev:     %s", shortRevision(desc.Revision))
+		if desc.Dirty {
+			fmt.Printf(" (dirty: uncommitted changes at capture time; the revision alone may not reproduce it)")
+		}
+		fmt.Println()
+		// The cache key pins a tree STATE, never a commit - this is the one place
+		// that names one, by comparing the descriptor's revision against HEAD now.
+		// Only when m is non-nil (a workspace is loaded) and the two actually
+		// differ: same revision is the common case and needs no callout.
+		if m != nil {
+			if cur, _ := m.CurrentRevision(ctx); cur != "" && cur != desc.Revision {
+				fmt.Printf("produced at %s, you are on %s; check out that commit first to reproduce it.\n",
+					shortRevision(desc.Revision), shortRevision(cur))
+			}
+		}
+	}
 	if len(digests) == 0 {
 		fmt.Println("\nkey components: unavailable (run predates key-input persistence; re-run the target to record them)")
 		return nil
@@ -390,6 +407,16 @@ func showOutputMeta(ctx context.Context, m *magus.Magus, ref string, out OutputO
 		fmt.Printf("  %-16s %s  %d %s\n", d.Class, d.Digest, d.Count, noun)
 	}
 	return nil
+}
+
+// shortRevision truncates a full VCS revision hash for display, matching this
+// codebase's convention of a 12-hex-digit truncation elsewhere (PortableRef); the
+// stored/compared value is always the full Revision, this is presentation only.
+func shortRevision(rev string) string {
+	if len(rev) > 12 {
+		return rev[:12]
+	}
+	return rev
 }
 
 // reportRefLookupError renders the standard output-ref resolution failures (ambiguous prefix,

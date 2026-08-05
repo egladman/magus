@@ -542,6 +542,26 @@ func toolVersionMode() string {
 	}
 }
 
+// CurrentRevision resolves the workspace's active VCS revision (full hash) and dirty
+// state. Best-effort like verifyReadOnly's VCS resolution: no VCS, an explicitly
+// disabled VCS, or a resolution/metadata error all yield ("", false) rather than an
+// error - a missing revision is "unknown", never a reason to fail the caller. Used both
+// to stamp output descriptors (executeStages resolves it ONCE per invocation and
+// copies it onto every step, exactly as toolVersionsByProject does for tool versions -
+// probing per target would spawn a VCS subprocess per step) and by `magus query output
+// <ref> --meta` to compare a stored descriptor's revision against HEAD now.
+func (m *Magus) CurrentRevision(ctx context.Context) (revision string, dirty bool) {
+	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
+	if err != nil || res.VCS == nil {
+		return "", false
+	}
+	meta, err := res.VCS.Metadata(ctx, m.ws.Root)
+	if err != nil {
+		return "", false
+	}
+	return meta.Hash, meta.IsDirty
+}
+
 // toolVersionsByProject returns ProjectPath to "spell:version" entries for cache keys.
 // Probes are memoized by (spell, dir); failures record "spell:UNPROBED".
 func (m *Magus) toolVersionsByProject(ctx context.Context, projects []*types.Project) map[string][]string {
@@ -712,6 +732,8 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	defer releaseLocks()
 
 	toolVer := m.toolVersionsByProject(ctx, uniqueProjects)
+	// Resolved ONCE for the whole invocation, not per target - see CurrentRevision.
+	revision, dirty := m.CurrentRevision(ctx)
 
 	// Active charms participate in the cache key: a charm can change a target's
 	// behaviour (pass/fail or output), so charm-variant runs must not collide.
@@ -733,6 +755,8 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		for _, p := range st.projects {
 			step := m.buildStep(p, st.target)
 			applyRunKeying(&step, toolVer[p.Path], charmKey)
+			step.Revision = revision
+			step.Dirty = dirty
 			// Args after `--` change what the target does, so they key the cache
 			// exactly as charms do; without this a run with different args
 			// replays the previous run's result.

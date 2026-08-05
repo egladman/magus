@@ -50,6 +50,54 @@ func TestOutputStorePersistLookupRoundTrip(t *testing.T) {
 	}, desc)
 }
 
+// TestOutputStorePersistRevisionRoundTrip pins schema v3: Revision and Dirty persist and
+// read back like every other descriptor field, via the same Persist -> ByRef path
+// TestOutputStorePersistLookupRoundTrip covers for the pre-v3 fields.
+func TestOutputStorePersistRevisionRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	s := NewOutputStore(dir)
+
+	desc0 := OutputDescriptor{
+		Project: "svc/api", Target: "build", TimestampMs: 1_700_000_000_000, DurationMs: 500,
+		Revision: "abcdef0123456789abcdef0123456789abcdef01", Dirty: true,
+	}
+	ref := mustPersist(t, s, "cafebabecafebabe", []byte("built\n"), desc0)
+
+	_, desc, err := s.ByRef(ref)
+	require.NoError(t, err)
+	assert.Equal(t, OutputDescriptor{
+		Ref: ref, Project: "svc/api", Target: "build",
+		TimestampMs: 1_700_000_000_000, DurationMs: 500,
+		Revision: "abcdef0123456789abcdef0123456789abcdef01", Dirty: true,
+		Schema: descriptorSchema, Key: "cafebabecafebabe", KeyVersion: KeyVersion,
+		Attempt: desc.Attempt,
+	}, desc)
+}
+
+// TestOutputStoreV2DescriptorResolvesWithEmptyRevision pins backward compatibility for
+// schema v3: a v2 descriptor (portable refs, but written before Revision/Dirty existed)
+// keeps resolving, and reads back with an empty Revision - "unknown", not an error.
+// Mirrors TestPrePortableStoreResolves, one schema generation later.
+func TestOutputStoreV2DescriptorResolvesWithEmptyRevision(t *testing.T) {
+	dir := t.TempDir()
+	const key = "2222222222222222222222222222222222222222222222222222222222222222"
+	keyDir := filepath.Join(dir, "outputs", key)
+	require.NoError(t, os.MkdirAll(keyDir, 0o755))
+	const attempt = "out22222222" // shaped like a real attempt id
+	v2 := []byte(`{"ref":"` + PortableRef(key) + `","project":"pkg/a","target":"build","failed":false,"timestamp_ms":100,"duration_ms":5,` +
+		`"schema":2,"key":"` + key + `","key_version":1,"attempt":"` + attempt + `"}`)
+	require.NoError(t, os.WriteFile(filepath.Join(keyDir, attempt+outExt), []byte("v2 bytes\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(keyDir, attempt+descExt), v2, 0o644))
+
+	s := NewOutputStore(dir)
+	data, desc, err := s.ByRef(PortableRef(key))
+	require.NoError(t, err)
+	assert.Equal(t, "v2 bytes\n", string(data))
+	assert.Equal(t, 2, desc.Schema)
+	assert.Empty(t, desc.Revision, "a v2 descriptor predates Revision; it reads as unknown, never an error")
+	assert.False(t, desc.Dirty)
+}
+
 // TestRotateRunsKeepsNewestAndReportsFreed writes several invocation journals with staggered
 // modtimes, then prunes to a cap and checks the newest survive, the oldest are gone, and the
 // removed count and freed bytes are reported.

@@ -131,6 +131,13 @@ type Step struct {
 	Exclusive       bool     // RunAll only: when true, runs alone; no other batch step runs concurrently (ignored by Run, which has no batch)
 	Slots           int      // RunAll only: concurrency slots held while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
 	Label           string   // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
+	// Revision and Dirty are the VCS state the run's inputs were read at, resolved ONCE
+	// per invocation by the caller (a per-target probe would spawn a VCS subprocess per
+	// step) and copied onto every step. Display-only provenance for the output
+	// descriptor (recordOutput) - never hashed, so a run before vs. after a commit still
+	// shares a cache entry when the tree content is unchanged.
+	Revision string
+	Dirty    bool
 }
 
 // Result is the outcome of a Cache.Run call.
@@ -570,6 +577,8 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 		Failed:      runErr != nil,
 		TimestampMs: nowMs,
 		DurationMs:  dur.Milliseconds(),
+		Revision:    s.Revision,
+		Dirty:       s.Dirty,
 	}
 	if runErr != nil {
 		d.ErrMsg = runErr.Error()
