@@ -56,15 +56,28 @@ jobs:
           TAG="$(gh release view --repo egladman/magus --json tagName -q .tagName)"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: '2026.4.8'
+          install: false
+
+      - name: Install the pinned toolchain
+        run: mise install
+
       # Builds the magus this very commit defines, from the checkout above, so a
       # change that magusfile.buzz needs is exercised by the run that introduces
       # it. NOT git-ref: ${{ github.sha }} - on a pull_request that expands to the
       # ephemeral refs/pull/N/merge commit, which is a descendant of main and so
       # is rejected by the action's reachable-from-main gate every single time.
-      - uses: ./.github/actions/setup-workspace
+      - uses: ./.github/actions/setup-magus
         with:
           installation-strategy: source
           source-path: .
+
+      # setup-magus's source build provisions its own Go via actions/setup-go, which
+      # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
       - name: Doctor
         run: magus doctor
@@ -104,15 +117,28 @@ jobs:
       - name: Set history path
         run: echo "MAGUS_HISTORY_PATH=$RUNNER_TEMP/magus-history.json" >> "$GITHUB_ENV"
 
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: '2026.4.8'
+          install: false
+
+      - name: Install the pinned toolchain
+        run: mise install
+
       # Builds the magus this very commit defines, from the checkout above, so a
       # change that magusfile.buzz needs is exercised by the run that introduces
       # it. NOT git-ref: ${{ github.sha }} - on a pull_request that expands to the
       # ephemeral refs/pull/N/merge commit, which is a descendant of main and so
       # is rejected by the action's reachable-from-main gate every single time.
-      - uses: ./.github/actions/setup-workspace
+      - uses: ./.github/actions/setup-magus
         with:
           installation-strategy: source
           source-path: .
+
+      # setup-magus's source build provisions its own Go via actions/setup-go, which
+      # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
       - uses: crazy-max/ghaction-github-runtime@b3a9207c0e1ef41f4cf215303c976869d0c2c1c4 # v3.0.0
 
@@ -169,12 +195,27 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
-      - uses: ./.github/actions/setup-workspace
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: '2026.4.8'
+          install: false
+
+      - name: Install the pinned toolchain
+        run: mise install
+
+      - name: Install codec build dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
+
+      - uses: ./.github/actions/setup-magus
         id: magus
         with:
           installation-strategy: prebuilt
           git-ref: ${{ needs.preflight.outputs.magus_version }}
-          codec-deps: 'true'
+
+      # setup-magus's source build provisions its own Go via actions/setup-go, which
+      # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
       # prebuilt, not automatic: a silent fallback to a source build would make this job
       # compare source against source and report compatibility it never checked.
@@ -216,10 +257,23 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
-      - uses: ./.github/actions/setup-workspace
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: '2026.4.8'
+          install: false
+
+      - name: Install the pinned toolchain
+        run: mise install
+
+      - uses: ./.github/actions/setup-magus
         with:
           installation-strategy: source
           source-path: .
+
+      # setup-magus's source build provisions its own Go via actions/setup-go, which
+      # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
       # Every advisor, each silent unless it has something to say. They live in the
       # action so other workspaces get them with one `uses:` line; turn one off by name
@@ -251,6 +305,19 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: '2026.4.8'
+          install: false
+
+      - name: Install the pinned toolchain
+        run: mise install
+
+      # The docs render drives its generators through `go run`, which compiles
+      # internal/codec with cgo and needs liblzma/libzstd.
+      - name: Install codec build dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
+
       # Matches the publish workflow: page footers read `git log`, so a shallow clone would
       # exercise a different render than the one that ships.
       # A source build, matching publish-site.yaml. This mirrored the publish workflow on
@@ -260,13 +327,15 @@ jobs:
       # markdown, ...) and the magusfile updated to match, so the newest release cannot
       # load this workspace at all. publish-site.yaml made the same move; the two stay
       # matched, just on source rather than on the release.
-      - uses: ./.github/actions/setup-workspace
+      - uses: ./.github/actions/setup-magus
         with:
           installation-strategy: source
           source-path: .
-          # The docs render drives its generators through `go run`, which compiles
-          # internal/codec with cgo and needs liblzma/libzstd.
-          codec-deps: 'true'
+
+      # setup-magus's source build provisions its own Go via actions/setup-go, which
+      # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
       # deploy-generate throws when either tree lacks its index.html, so it is the
       # assertion. Nothing is uploaded: this proves the build, it does not publish.
@@ -299,15 +368,28 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: '2026.4.8'
+          install: false
+
+      - name: Install the pinned toolchain
+        run: mise install
+
       # Full history + tags: the image bakes version()/commit()/build_date() in via
       # ldflags, and git describe has to be able to reach the nearest tag.
       # Full history + tags (the composite's default): the image bakes
       # version()/commit()/build_date() in via ldflags, and git describe must reach the
       # nearest tag. mise brings cosign for the signing step inside image-build.
-      - uses: ./.github/actions/setup-workspace
+      - uses: ./.github/actions/setup-magus
         with:
           installation-strategy: source
           source-path: .
+
+      # setup-magus's source build provisions its own Go via actions/setup-go, which
+      # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
@@ -356,11 +438,10 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
-      - uses: ./.github/actions/setup-workspace
+      - uses: ./.github/actions/setup-magus
         with:
           installation-strategy: source
           source-path: .
-          mise: 'false'
 
       # One step for the whole job. merge-history only on main: a pull request's shard
       # histories describe a branch that is about to disappear, and folding them into the

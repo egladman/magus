@@ -15,10 +15,6 @@ as few of them as it needs.
 | `magus` | runs a magus command, writes the run summary, or merges shard histories |
 | `advice` | leaves [pull request advice](pr-advice.md) on what your build graph noticed |
 
-(magus's own repository carries a fourth, `setup-workspace`, which wraps `setup-magus`
-with the mise toolchain and system packages its targets happen to need. That is this
-repository's preamble rather than part of magus, and it is not meant to be consumed.)
-
 Reference them from a tag, never a branch:
 
 ```yaml
