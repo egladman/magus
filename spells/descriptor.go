@@ -106,6 +106,22 @@ type Descriptor struct {
 	// Keyed by tool name to match VersionCmds above, so a spell's probe and its key
 	// declaration are read with the same lookup and a tool named in one but not the
 	// other is visible as exactly that.
+	// ReadinessProbes answer a question the version probes structurally cannot:
+	// whether a tool is USABLE right now, as opposed to installed and at some version.
+	// `docker --version` is client-only and succeeds with no daemon running, so the one
+	// probe magus ran was the one that could not detect the problem - the op forked and
+	// failed, and a build failure got reported for a project with nothing wrong.
+	//
+	// Keyed by tool name to match VersionCmds, and resolved through an op's declared
+	// Command.Bin, so no op has to restate which tool it uses. A spell driving both a
+	// daemon-backed tool and a self-contained one (docker and hadolint) gates only the
+	// former: a Dockerfile lint must not wait on a daemon it never talks to.
+	//
+	// The probe result NEVER enters a cache key. It is a precondition, not an input -
+	// `docker info` changes with every container and byte of disk, so keying on it would
+	// invalidate everything on every run.
+	ReadinessProbes map[string]Command `json:"readiness_probes,omitempty"`
+
 	VersionKey  VersionKey            `json:"version_key,omitempty"`
 	VersionKeys map[string]VersionKey `json:"version_keys,omitempty"`
 	// Language is the canonical source language this spell adapts (e.g. "go",

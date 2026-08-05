@@ -58,6 +58,9 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 		for tool, argv := range spec.VersionCmds {
 			opts = append(opts, spells.WithVersionProbeNamed(tool, newVersionProbe(argv)))
 		}
+		for tool, cmd := range spec.ReadinessProbes {
+			opts = append(opts, spells.WithReadinessProbe(tool, cmd))
+		}
 		if !spec.VersionKey.IsZero() {
 			opts = append(opts, spells.WithVersionKey(spec.VersionKey))
 		}
@@ -391,6 +394,9 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 	}
 	for tool, argv := range m.VersionCmds {
 		opts = append(opts, spells.WithVersionProbeNamed(tool, newVersionProbe(argv)))
+	}
+	for tool, cmd := range m.ReadinessProbes {
+		opts = append(opts, spells.WithReadinessProbe(tool, cmd))
 	}
 	if !m.VersionKey.IsZero() {
 		opts = append(opts, spells.WithVersionKey(m.VersionKey))

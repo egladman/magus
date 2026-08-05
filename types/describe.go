@@ -73,7 +73,7 @@ type Spell struct {
 	// files and symbols.
 	Language string `json:"language,omitempty" yaml:"language,omitempty"`
 	// VersionProbe reports whether the spell declares a toolchain-version command
-	// (mgs_getVersionCommand). Its OUTPUT is mixed into every cache key for the
+	// (mgs_getVersionProbe). Its OUTPUT is mixed into every cache key for the
 	// project (run.go's toolVersionsByProject), making it one of the few cache
 	// inputs that is not a file - so "why did this key change" is unanswerable from
 	// the spell inventory without it. Reported as a bool rather than the argv

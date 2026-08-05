@@ -117,6 +117,10 @@ const (
 	DescendantBoundaryCrossed DiagnosticCode = "MGS3001"
 	VCSUnavailable            DiagnosticCode = "MGS3002"
 	ToolNotOnPath             DiagnosticCode = "MGS3003"
+	// ToolNotReady is ToolNotOnPath one level deeper: the binary IS present, but the
+	// service it talks to is not reachable. Same category - the environment, not the
+	// code - so it sits beside it rather than in a family of its own.
+	ToolNotReady              DiagnosticCode = "MGS3004"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -155,7 +159,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,
-	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath,
+	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits,

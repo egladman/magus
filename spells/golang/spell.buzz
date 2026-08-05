@@ -13,7 +13,7 @@ export fun mgs_listRequiredGlobs() > [Path] {
     return [Path{value = "**/*.go"}, Path{value = "**/*.txtar"}, Path{value = "go.mod"}, Path{value = "go.sum"}, Path{value = "go.work"}, Path{value = "go.work.sum"}];
 }
 
-export fun mgs_getVersionCommand() > [str] { return ["go", "version"]; }
+export fun mgs_getVersionProbe() > [str] { return ["go", "version"]; }
 
 // golangci-lint and govulncheck are the OTHER binaries this spell drives, and now that they
 // run from PATH rather than `go tool` they are pinned outside the module graph - so `go
@@ -23,7 +23,7 @@ export fun mgs_getVersionCommand() > [str] { return ["go", "version"]; }
 // Absent, one records UNPROBED and its op fails with a clear "not found" rather than the
 // probe failing the whole run - a workspace that binds the go spell only to build and test
 // is not forced to install a linter or a vuln scanner.
-export fun mgs_getVersionCommands() > {str: [str]} {
+export fun mgs_getVersionProbes() > {str: [str]} {
     return {
         "golangci-lint": ["golangci-lint", "--version"],
         "govulncheck": ["govulncheck", "-version"],
@@ -54,7 +54,7 @@ export fun mgs_getLanguage() > str { return "go"; }
 export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "vendor", isDir = true}]; }
 
 // mgs_listManifests names the file that carries this project's OWN version - not
-// the toolchain's (that's mgs_getVersionCommand) and not a cache input (go.mod is
+// the toolchain's (that's mgs_getVersionProbe) and not a cache input (go.mod is
 // separately listed in mgs_listRequiredGlobs above, because it also feeds the
 // cache key). A Go module has exactly one candidate.
 export fun mgs_listManifests() > [Path] { return [Path{value = "go.mod"}]; }
@@ -111,7 +111,7 @@ fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", 
 // Invoked directly rather than through `go tool`, for the same reason as golangCILint above:
 // `go tool govulncheck` requires the binary in the module's tool block, and a workspace that
 // had not put it there got "no such tool" - so the op could not run at all. On PATH it is
-// pinned by whatever the workspace uses, and mgs_getVersionCommands records which.
+// pinned by whatever the workspace uses, and mgs_getVersionProbes records which.
 fun goVulncheck(target: Target) > Command { return Command{bin = "govulncheck", args = ["./..."]}; }
 fun scipGo(target: Target) > Command {
     return Command{bin = "sh", args = ["-c", "scip-go --output \"$MAGUS_SYMBOL_INDEX\""]};

@@ -225,8 +225,8 @@ which is the actual loss: a cache nobody believes is worse than no cache.
 **Declare what changed, not what contains it.** The blast radius should match the
 tools a project genuinely uses:
 
-- **a tool with a version probe** (`mgs_getVersionCommand`, or
-  `mgs_getVersionCommands` for a spell driving several binaries) contributes
+- **a tool with a version probe** (`mgs_getVersionProbe`, or
+  `mgs_getVersionProbes` for a spell driving several binaries) contributes
   `spell:tool:version` to the key of every project binding that spell, and
   _nothing_ to any other. Bumping hadolint moves projects using the docker spell;
   a Go project's key never notices. This is almost always the right answer for an
@@ -264,10 +264,10 @@ and the answer was never in the repository at all. Someone's toolchain moved.
 magus keys on the tool versions for this reason. Each spell declares how to ask:
 
 ```buzz
-export fun mgs_getVersionCommand() > [str] { return ["go", "version"]; }
+export fun mgs_getVersionProbe() > [str] { return ["go", "version"]; }
 
 // A spell driving more than one binary declares each, so all of them move the key.
-export fun mgs_getVersionCommands() > {str: [str]} {
+export fun mgs_getVersionProbes() > {str: [str]} {
     return {"golangci-lint": ["golangci-lint", "--version"]};
 }
 ```
@@ -292,7 +292,7 @@ across toolchains, and the failure surfaces somewhere else entirely.
 
 magus does not infer this. Nothing sniffs your PATH or guesses which binaries a
 target touched - the probe is a declaration someone wrote by hand, and
-`mgs_getVersionCommand` is as explicit as it looks. What differs is its
+`mgs_getVersionProbe` is as explicit as it looks. What differs is its
 **location**: it sits on the SPELL, the adapter that already knows it drives
 `golangci-lint`, rather than being restated by every project that uses one. A
 project binding `spells: [go]` inherits that declaration the same way it inherits

@@ -46,7 +46,7 @@ export fun mgs_isOpaque() > bool { return true; }
 // target with ctx.writesFiles. A spell should claim what it can verify; this it cannot.
 export fun mgs_listProvidedGlobs() > [Path] { return [<Path>]; }
 
-export fun mgs_getVersionCommand() > [str] { return ["node", "--version"]; }
+export fun mgs_getVersionProbe() > [str] { return ["node", "--version"]; }
 
 // mgs_getLanguage names the source language this spell adapts, canonical and lowercase
 // so it matches the language attr on the TypeScript files and symbols SCIP ingests. It
@@ -59,7 +59,7 @@ export fun mgs_getLanguage() > str { return "typescript"; }
 export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "node_modules", isDir = true}]; }
 
 // mgs_listManifests names the file that carries this project's OWN version - not
-// the toolchain's (that's mgs_getVersionCommand) and not a cache input (package.json
+// the toolchain's (that's mgs_getVersionProbe) and not a cache input (package.json
 // is separately listed in mgs_listRequiredGlobs above, because it also feeds the
 // cache key). A node project has exactly one candidate.
 export fun mgs_listManifests() > [Path] { return [Path{value = "package.json"}]; }

@@ -51,16 +51,17 @@ func Decode(src Obj) (spells.Descriptor, error) {
 	}
 	language, _ := src.Str("language")
 	m := spells.Descriptor{
-		Name:        name,
-		Claims:      src.Strs("claims"),
-		IgnoreDirs:  src.Strs("ignore_dirs"),
-		Manifests:   src.Strs("manifests"),
-		VersionCmd:  src.Strs("version_cmd"),
-		VersionCmds: decodeVersionCmds(src),
-		VersionKey:  decodeVersionKey(src, "version_key"),
-		VersionKeys: decodeVersionKeys(src),
-		Language:    language,
-		Opaque:      src.Bool("opaque"),
+		Name:            name,
+		Claims:          src.Strs("claims"),
+		IgnoreDirs:      src.Strs("ignore_dirs"),
+		Manifests:       src.Strs("manifests"),
+		VersionCmd:      src.Strs("version_cmd"),
+		VersionCmds:     decodeVersionCmds(src),
+		ReadinessProbes: decodeReadinessProbes(src),
+		VersionKey:      decodeVersionKey(src, "version_key"),
+		VersionKeys:     decodeVersionKeys(src),
+		Language:        language,
+		Opaque:          src.Bool("opaque"),
 	}
 
 	needs, err := src.CallStrs("needs")
@@ -331,4 +332,29 @@ func validateVersionKeys(m spells.Descriptor) error {
 		}
 	}
 	return nil
+}
+
+// decodeReadinessProbes reads the per-tool readiness commands, tool name to Command.
+// An entry with no bin is dropped rather than kept as a probe that could never run.
+func decodeReadinessProbes(src Obj) map[string]spells.Command {
+	rec, ok := src.Obj("readiness_probes")
+	if !ok {
+		return nil
+	}
+	var out map[string]spells.Command
+	for _, tool := range rec.Keys() {
+		o, ok := rec.Obj(tool)
+		if !ok {
+			continue
+		}
+		cmd, err := decodeCommand("", "", o)
+		if err != nil || cmd.Bin == "" {
+			continue
+		}
+		if out == nil {
+			out = map[string]spells.Command{}
+		}
+		out[tool] = cmd
+	}
+	return out
 }

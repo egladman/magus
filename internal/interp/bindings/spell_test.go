@@ -368,7 +368,7 @@ export fun mgs_getName() > str { return "parity_buzz"; }
 export fun mgs_listRequiredGlobs() > [Path] { return [Path{value = "**/*.rb"}, Path{value = "Gemfile.lock"}]; }
 export fun mgs_listProvidedGlobs() > [Path] { return [Path{value = "vendor/bundle/**"}]; }
 export fun mgs_listClaimedGlobs() > [Path] { return [Path{value = ".rubocop.yml"}, Path{value = "Gemfile"}]; }
-export fun mgs_getVersionCommand() > [str] { return ["ruby", "--version"]; }
+export fun mgs_getVersionProbe() > [str] { return ["ruby", "--version"]; }
 export fun mgs_isOpaque() > bool { return false; }
 export fun mgs_listTargets() > any {
     return {"rspec": {"bin": "bundle", "args": ["exec", "rspec"]}};

@@ -230,7 +230,9 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Name:       "docker",
 		Needs:      []string{"Dockerfile", ".dockerignore", "**/*"},
 		VersionCmd: []string{"docker", "--version"},
-		VersionKey: spells.VersionKey{UpTo: spells.VersionPatch},
+		// `docker --version` is client-only; `docker info` is what detects a stopped daemon.
+		ReadinessProbes: map[string]spells.Command{"docker": {Bin: "docker", Args: []string{"info"}}},
+		VersionKey:      spells.VersionKey{UpTo: spells.VersionPatch},
 		// hadolint is a second binary the spell drives, pinned by no manifest, so it
 		// needs its own probe: upgrading it changes lint verdicts with nothing in any
 		// cache key to notice.

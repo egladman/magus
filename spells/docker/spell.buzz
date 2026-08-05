@@ -6,11 +6,23 @@ export fun mgs_listRequiredGlobs() > [Path] {
     return [Path{value = "Dockerfile"}, Path{value = ".dockerignore"}, Path{value = "**/*"}];
 }
 
-export fun mgs_getVersionCommand() > [str] { return ["docker", "--version"]; }
+export fun mgs_getVersionProbe() > [str] { return ["docker", "--version"]; }
 
 // `docker --version` ends in a build hash (`29.3.1, build c2be9cc`), which moves with
 // a rebuild of the same release. Extracting to patch sheds it without widening what a
 // version change means.
+// `docker --version` is CLIENT-only: it succeeds with no daemon running, so the
+// version probe cannot detect the one failure that matters here. `docker info`
+// contacts the daemon, so it answers "is this usable right now" - which magus checks
+// before forking an op whose bin is `docker`, instead of letting the op fail and
+// reporting a build failure for a project with nothing wrong.
+//
+// hadolint is deliberately absent: linting a Dockerfile talks to no daemon, and
+// gating it here would make a lint wait on a service it never uses.
+export fun mgs_getReadinessProbes() > {str: Command} {
+    return {"docker": Command{bin = "docker", args = ["info"]}};
+}
+
 export fun mgs_getVersionKey() > VersionKey { return VersionKey{upTo = VersionComponent.patch}; }
 
 // hadolint is a SECOND binary this spell drives, and unlike docker it is pinned by
@@ -19,7 +31,7 @@ export fun mgs_getVersionKey() > VersionKey { return VersionKey{upTo = VersionCo
 // invalidates on its own), but hadolint has nothing to key on: upgrading it
 // changes which Dockerfiles lint clean while every cache entry replays the old
 // verdict.
-export fun mgs_getVersionCommands() > {str: [str]} {
+export fun mgs_getVersionProbes() > {str: [str]} {
     return {"hadolint": ["hadolint", "--version"]};
 }
 

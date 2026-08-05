@@ -17,7 +17,7 @@ import "magus/spell";
 
 export fun mgs_getName() > str { return "cosign"; }
 
-export fun mgs_getVersionCommand() > [str] { return ["cosign", "version"]; }
+export fun mgs_getVersionProbe() > [str] { return ["cosign", "version"]; }
 
 // --yes skips the interactive transparency-log confirmation so signing/attesting
 // runs unattended; the caller appends the target reference and flags.

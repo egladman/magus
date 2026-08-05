@@ -72,6 +72,8 @@ type Spell struct {
 	// platformIndependent is the spell's claim that its toolchain's output does not
 	// vary by host platform. False by default: independence is claimed, never inferred.
 	platformIndependent bool
+	// readinessProbes gate an op on its tool being usable; see Descriptor.ReadinessProbes.
+	readinessProbes map[string]Command
 }
 
 // Name implements Driver.
@@ -254,6 +256,24 @@ func (s *Spell) ProbeVersionOf(ctx context.Context, name, dir string) (string, e
 // spell knows `go build` emits a native binary. A target may still override, for the
 // cases the toolchain cannot see from here.
 func (s *Spell) PlatformIndependent() bool { return s.platformIndependent }
+
+// ReadinessProbe returns the readiness command for a tool, and whether one is
+// declared. Callers look it up by an op's Command.Bin, so an op that names a tool with
+// no probe - hadolint beside docker - is never gated.
+func (s *Spell) ReadinessProbe(tool string) (Command, bool) {
+	c, ok := s.readinessProbes[tool]
+	return c, ok
+}
+
+// WithReadinessProbe registers a readiness command for one tool.
+func WithReadinessProbe(tool string, cmd Command) Option {
+	return func(s *Spell) {
+		if s.readinessProbes == nil {
+			s.readinessProbes = map[string]Command{}
+		}
+		s.readinessProbes[tool] = cmd
+	}
+}
 
 // VersionKey returns the primary probe's declared cache key. The zero value
 // means exact: any change in the extracted version moves the key.

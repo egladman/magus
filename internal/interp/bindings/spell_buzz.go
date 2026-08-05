@@ -61,7 +61,7 @@ func loadBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells
 	// it, and NewSpell takes options rather than a descriptor.
 	//
 	// Omitting them was a silent, three-way capability loss for every
-	// workspace-local spell: the descriptor carried mgs_getVersionCommand,
+	// workspace-local spell: the descriptor carried mgs_getVersionProbe,
 	// mgs_getLanguage and mgs_isOpaque faithfully, and none of them reached the
 	// registered spell. A declared version probe therefore never ran and never
 	// entered the cache key, so a local spell's toolchain could drift with nothing
@@ -75,6 +75,9 @@ func loadBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells
 	}
 	for tool, argv := range spec.VersionCmds {
 		extra = append(extra, spells.WithVersionProbeNamed(tool, newVersionProbe(argv)))
+	}
+	for tool, cmd := range spec.ReadinessProbes {
+		extra = append(extra, spells.WithReadinessProbe(tool, cmd))
 	}
 	if !spec.VersionKey.IsZero() {
 		extra = append(extra, spells.WithVersionKey(spec.VersionKey))

@@ -79,8 +79,8 @@ a default when it is absent, so a minimal spell is two functions.
 | `mgs_listClaimedGlobs` | `() > [Path]` | files this spell owns, so two spells cannot both claim them |
 | `mgs_listManifests` | `() > [Path]` | dependency manifests, read for the project graph |
 | `mgs_listIgnoreDirs` | `() > [Path]` | directories to prune from source expansion (`node_modules`, `target`) |
-| `mgs_getVersionCommand` | `() > [str]` | probes the primary tool's version, mixed into cache keys so a toolchain upgrade invalidates |
-| `mgs_getVersionCommands` | `() > {str: [str]}` | the same for SECOND tools a spell drives. The `docker` spell probes `hadolint` this way, because unlike `docker` it is pinned by no manifest |
+| `mgs_getVersionProbe` | `() > [str]` | probes the primary tool's version, mixed into cache keys so a toolchain upgrade invalidates |
+| `mgs_getVersionProbes` | `() > {str: [str]}` | the same for SECOND tools a spell drives. The `docker` spell probes `hadolint` this way, because unlike `docker` it is pinned by no manifest |
 
 A version probe is worth more thought than it looks. If a tool changes what passes and
 nothing else in the cache key changes with it, every cached entry replays the old verdict.
@@ -99,7 +99,7 @@ export fun mgs_getName() > str { return "shellcheck"; }
 
 export fun mgs_listRequiredGlobs() > [Path] { return [Path{value = "**/*.sh"}]; }
 
-export fun mgs_getVersionCommand() > [str] { return ["shellcheck", "--version"]; }
+export fun mgs_getVersionProbe() > [str] { return ["shellcheck", "--version"]; }
 
 fun lint(target: Target) > Command {
     return Command{bin = "shellcheck", args = ["--severity", "warning"]};
@@ -135,7 +135,7 @@ import "os";
 
 export fun mgs_getName() > str { return "onepassword"; }
 
-export fun mgs_getVersionCommand() > [str] { return ["op", "--version"]; }
+export fun mgs_getVersionProbe() > [str] { return ["op", "--version"]; }
 
 export fun resolve_secret(target: Target, cb: fun(any)) > str {
     var io = {};

@@ -357,7 +357,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 
 ## govulncheck
 
-Invoked directly rather than through `go tool`, for the same reason as golangCILint above: `go tool govulncheck` requires the binary in the module's tool block, and a workspace that had not put it there got "no such tool" - so the op could not run at all. On PATH it is pinned by whatever the workspace uses, and mgs_getVersionCommands records which.
+Invoked directly rather than through `go tool`, for the same reason as golangCILint above: `go tool govulncheck` requires the binary in the module's tool block, and a workspace that had not put it there got "no such tool" - so the op could not run at all. On PATH it is pinned by whatever the workspace uses, and mgs_getVersionProbes records which.
 
 **Command:** `govulncheck ./...`
 
