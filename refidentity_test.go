@@ -57,7 +57,7 @@ func TestIdentifyRef_RoundTrip(t *testing.T) {
 	matches, err := m.IdentifyRef(ctx, ref)
 	require.NoError(t, err, "IdentifyRef")
 	require.Len(t, matches, 1, "IdentifyRef: expected exactly one match")
-	assert.Equal(t, RefMatch{Project: ".", Target: "build", Charms: nil}, matches[0])
+	assert.Equal(t, types.RefMatch{Project: ".", Target: "build", Charms: nil}, matches[0])
 }
 
 // TestIdentifyRef_NoMatch guards the "nothing matched" path: a ref no live target keys
@@ -87,7 +87,7 @@ func TestIdentifyRef_ShortenedPrefixMatches(t *testing.T) {
 	matches, err := m.IdentifyRef(ctx, short)
 	require.NoError(t, err, "IdentifyRef")
 	require.Len(t, matches, 1, "IdentifyRef: expected exactly one match on shortened ref")
-	assert.Equal(t, RefMatch{Project: ".", Target: "build", Charms: nil}, matches[0])
+	assert.Equal(t, types.RefMatch{Project: ".", Target: "build", Charms: nil}, matches[0])
 }
 
 // TestIdentifyRef_CharmVariants guards the two-charm-set sweep: a ref minted under the
@@ -109,12 +109,12 @@ func TestIdentifyRef_CharmVariants(t *testing.T) {
 	matchesDefault, err := m.IdentifyRef(ctx, cache.PortableRef(keyDefault))
 	require.NoError(t, err, "IdentifyRef (default-charm ref)")
 	require.Len(t, matchesDefault, 1, "IdentifyRef: expected exactly one match for the default-charm ref")
-	assert.Equal(t, RefMatch{Project: ".", Target: "build", Charms: []string{"rw"}}, matchesDefault[0])
+	assert.Equal(t, types.RefMatch{Project: ".", Target: "build", Charms: []string{"rw"}}, matchesDefault[0])
 
 	matchesBare, err := m.IdentifyRef(ctx, cache.PortableRef(keyBare))
 	require.NoError(t, err, "IdentifyRef (bare ref)")
 	require.Len(t, matchesBare, 1, "IdentifyRef: expected exactly one match for the bare (CI) ref")
-	assert.Equal(t, RefMatch{Project: ".", Target: "build", Charms: nil}, matchesBare[0])
+	assert.Equal(t, types.RefMatch{Project: ".", Target: "build", Charms: nil}, matchesBare[0])
 }
 
 // TestIdentifyRef_InvalidRefShape guards the input-validation path: a string that

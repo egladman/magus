@@ -10,13 +10,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// RefMatch names a workspace target whose live cache key predicts a ref.
-type RefMatch struct {
-	Project string
-	Target  string
-	Charms  []string
-}
-
 // projectTargets returns the target names project p can actually key: those declared
 // directly in its magusfile plus every target its resolved spells provide. This is the
 // candidate space IdentifyRef sweeps - not every workspace target name crossed with
@@ -72,7 +65,7 @@ func projectTargets(p *types.Project) []string {
 //
 // Matches are sorted by project, then target, then charms, so repeated calls and
 // rendered output are stable.
-func (m *Magus) IdentifyRef(ctx context.Context, ref string) ([]RefMatch, error) {
+func (m *Magus) IdentifyRef(ctx context.Context, ref string) ([]types.RefMatch, error) {
 	if m.cache == nil {
 		return nil, types.ErrNoCache
 	}
@@ -101,7 +94,7 @@ func (m *Magus) IdentifyRef(ctx context.Context, ref string) ([]RefMatch, error)
 	projects := m.All()
 	toolVersions := m.toolVersionsByProject(ctx, projects)
 
-	var matches []RefMatch
+	var matches []types.RefMatch
 	for _, p := range projects {
 		for _, target := range projectTargets(p) {
 			for _, charms := range variants {
@@ -113,7 +106,7 @@ func (m *Magus) IdentifyRef(ctx context.Context, ref string) ([]RefMatch, error)
 					continue
 				}
 				if strings.HasPrefix(cache.PortableRef(key), ref) {
-					matches = append(matches, RefMatch{
+					matches = append(matches, types.RefMatch{
 						Project: p.Path,
 						Target:  target,
 						Charms:  charms,

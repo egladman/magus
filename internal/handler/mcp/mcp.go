@@ -158,7 +158,7 @@ func allMCPTools(opts Options) []spells.Driver {
 		&tailLogTool{opts: opts},
 		&memoryTool{opts: opts},
 		&queryTool{graph: opts.Magus},
-		&outputTool{reader: opts.Magus},
+		&outputTool{reader: opts.Magus, defaultCharms: opts.Config.DefaultCharms},
 		&explainTool{graph: opts.Magus},
 		&pathTool{graph: opts.Magus},
 		&statsTool{graph: opts.Magus},

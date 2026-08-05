@@ -8,21 +8,30 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // fakeOutputReader is a hand-built outputReader: it returns canned bytes and a
-// descriptor, or a chosen error, so outputTool.Invoke is unit-testable without a
-// real workspace cache.
+// descriptor, or a chosen error, from OutputByRef, and canned matches, or a chosen
+// error, from IdentifyRef - so outputTool.Invoke is unit-testable without a real
+// workspace cache.
 type fakeOutputReader struct {
 	data []byte
 	desc cache.OutputDescriptor
 	err  error
+
+	identifyMatches []types.RefMatch
+	identifyErr     error
 }
 
 func (f fakeOutputReader) OutputByRef(string) ([]byte, cache.OutputDescriptor, error) {
 	return f.data, f.desc, f.err
+}
+
+func (f fakeOutputReader) IdentifyRef(context.Context, string) ([]types.RefMatch, error) {
+	return f.identifyMatches, f.identifyErr
 }
 
 // TestOutputToolRequiredParam covers the guard that returns before any store access.
@@ -85,6 +94,58 @@ func TestOutputToolInvokeNotExist(t *testing.T) {
 	generic := errors.New("disk on fire")
 	_, err = (&outputTool{reader: fakeOutputReader{err: generic}}).Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"ref": "out1a2b3c"}})
 	assert.ErrorIs(t, err, generic)
+}
+
+// TestOutputToolInvokeNotExistNoMatch covers the zero-match branch of the
+// not-found suggestion: no candidate target keys to the ref, so the message says
+// the run that printed it had different inputs rather than naming a command.
+func TestOutputToolInvokeNotExistNoMatch(t *testing.T) {
+	reader := fakeOutputReader{err: fs.ErrNotExist}
+	_, err := (&outputTool{reader: reader}).Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"ref": "out1a2b3c"}})
+	assert.ErrorContains(t, err, "no stored output for ref")
+	assert.ErrorContains(t, err, "no target in this workspace keys to that ref")
+	assert.ErrorContains(t, err, "different inputs")
+}
+
+// TestOutputToolInvokeNotExistOneMatch covers the single-match branch: the message
+// names the exact `magus run` command that would produce the ref, rendered via
+// clihint.RefMatchCommand with the tool's configured defaultCharms.
+func TestOutputToolInvokeNotExistOneMatch(t *testing.T) {
+	reader := fakeOutputReader{
+		err:             fs.ErrNotExist,
+		identifyMatches: []types.RefMatch{{Project: ".", Target: "build"}},
+	}
+	_, err := (&outputTool{reader: reader, defaultCharms: []string{"rw"}}).Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"ref": "out1a2b3c"}})
+	assert.ErrorContains(t, err, "no stored output for ref")
+	assert.ErrorContains(t, err, "magus run build --no-default-charms")
+}
+
+// TestOutputToolInvokeNotExistSeveralMatches covers the multi-match branch: every
+// candidate command is named.
+func TestOutputToolInvokeNotExistSeveralMatches(t *testing.T) {
+	reader := fakeOutputReader{
+		err: fs.ErrNotExist,
+		identifyMatches: []types.RefMatch{
+			{Project: ".", Target: "build"},
+			{Project: "pkg/a", Target: "lint"},
+		},
+	}
+	_, err := (&outputTool{reader: reader}).Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"ref": "out1a2b3c"}})
+	assert.ErrorContains(t, err, "no stored output for ref")
+	assert.ErrorContains(t, err, "any of")
+	assert.ErrorContains(t, err, "magus run build")
+	assert.ErrorContains(t, err, "magus run lint pkg/a")
+}
+
+// TestOutputToolInvokeNotExistIdentifyRefErrors pins the fallback: when IdentifyRef
+// itself errors, the plain not-found message survives unchanged - a best-effort
+// suggestion must never replace a lookup failure with a different one.
+func TestOutputToolInvokeNotExistIdentifyRefErrors(t *testing.T) {
+	reader := fakeOutputReader{err: fs.ErrNotExist, identifyErr: errors.New("cache unavailable")}
+	_, err := (&outputTool{reader: reader}).Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"ref": "out1a2b3c"}})
+	assert.ErrorContains(t, err, "no stored output for ref \"out1a2b3c\"")
+	assert.NotContains(t, err.Error(), "cache unavailable")
+	assert.NotContains(t, err.Error(), "magus run")
 }
 
 // TestRegistryHasOutputDriver pins that magus_output is both described and wired:

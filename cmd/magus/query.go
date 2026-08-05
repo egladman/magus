@@ -473,37 +473,17 @@ func printRefIdentitySuggestion(ctx context.Context, m *magus.Magus, ref string)
 		fmt.Fprintf(os.Stderr, "Once you know which target it should be: %s\n", clihint.DescribeTargets.With("<target>", "--cache", "--against", ref))
 	case 1:
 		fmt.Fprintln(os.Stderr, "Nothing has produced it here, but this workspace would print it for:")
-		fmt.Fprintf(os.Stderr, "  %s\n", refMatchCommand(matches[0]))
+		fmt.Fprintf(os.Stderr, "  %s\n", clihint.RefMatchCommand(matches[0], globalCfg.DefaultCharms))
 	default:
 		fmt.Fprintln(os.Stderr, "Nothing has produced it here, but this workspace would print it for any of:")
 		for _, mt := range matches {
-			fmt.Fprintf(os.Stderr, "  %s\n", refMatchCommand(mt))
+			fmt.Fprintf(os.Stderr, "  %s\n", clihint.RefMatchCommand(mt, globalCfg.DefaultCharms))
 		}
 	}
 	// Reachable from every branch, not just the zero-match one: even a matched target
 	// may be nondeterministic or expensive enough that the exact bytes from whoever
 	// already has them beat a local re-run.
 	fmt.Fprintf(os.Stderr, "If someone else has it, they can share it with: %s\n", clihint.QueryOutput.With(ref, "--publish"))
-}
-
-// refMatchCommand renders a RefMatch as the "magus run" invocation that would key it:
-// the target name (with a :charm1,charm2 suffix when the match required explicit
-// charms), the project (omitted for the workspace root, "."), and --no-default-charms
-// when the match required the bare CI variant - this workspace's own default_charms
-// would otherwise apply and mint a different key.
-func refMatchCommand(mt magus.RefMatch) string {
-	target := mt.Target
-	if len(mt.Charms) > 0 {
-		target += ":" + strings.Join(mt.Charms, ",")
-	}
-	args := []string{target}
-	if mt.Project != "." {
-		args = append(args, mt.Project)
-	}
-	if len(mt.Charms) == 0 && len(globalCfg.DefaultCharms) > 0 {
-		args = append(args, "--no-default-charms")
-	}
-	return clihint.Run.With(args...)
 }
 
 // openOutputInViewer builds the viewer URL and opens a browser; --print emits the
