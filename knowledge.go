@@ -109,14 +109,10 @@ func resolveCacheDir(root string, cfg config.Config) string {
 	return filepath.Join(root, ".magus")
 }
 
-// cacheImmutable reports whether the cache is read-only, honoring both the config
-// flag and the MAGUS_CACHE_IMMUTABLE env var (matching cache.Open's behavior).
+// cacheImmutable reports whether the cache is read-only, matching cache.Open's own
+// cache.write.enabled / MAGUS_CACHE_WRITE_ENABLED check.
 func cacheImmutable(cfg config.Config) bool {
-	if !cfg.Cache.WriteEnabled() {
-		return true
-	}
-	v := strings.ToLower(os.Getenv("MAGUS_CACHE_IMMUTABLE"))
-	return v == "true" || v == "1"
+	return !cfg.Cache.WriteEnabled()
 }
 
 // allModuleEntries returns every stdlib module with its methods populated. The

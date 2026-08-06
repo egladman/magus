@@ -107,7 +107,7 @@ type Store struct {
 }
 
 // NewStore returns a store rooted at <cacheDir>/knowledge. immutable mirrors
-// MAGUS_CACHE_IMMUTABLE (Sync writes nothing, warns if stale). maxBytes soft-caps
+// cache.write.enabled (Sync writes nothing, warns if stale). maxBytes soft-caps
 // the shards dir (0 = unlimited); remote optionally backs shards (nil = local).
 func NewStore(cacheDir string, immutable bool, maxBytes int64, remote RemoteShards, log *slog.Logger) *Store {
 	if log == nil {
@@ -193,7 +193,7 @@ func (s *Store) Sync(ctx context.Context, shards []Shard, fps, inputFPs map[stri
 		// Warn only when a prior store exists and diverges - a first-ever run
 		// under immutable mode is uninitialized, not stale.
 		if old != nil && (changed || old.prunable(present)) {
-			s.log.WarnContext(ctx, "magus: knowledge graph is stale but MAGUS_CACHE_IMMUTABLE is set; serving a freshly assembled in-memory graph without persisting")
+			s.log.WarnContext(ctx, "magus: knowledge graph is stale but cache.write.enabled is false; serving a freshly assembled in-memory graph without persisting")
 		}
 		return g, nil
 	}
