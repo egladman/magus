@@ -43,8 +43,8 @@ if ((cache_trusted != null and cache_trusted != "") or cache_insecure == "true" 
 
 // Outputs are declared per-target with ctx.writesFiles (in each *-generate body
 // below) rather than project-wide: each generated tree belongs to exactly one
-// generator, so snapshotting host/gen under go-build (which never writes it) is
-// both wasteful and a hazard - a go-build cache hit would restore a stale MAGUS.md.
+// generator, so snapshotting a generated tree under go-build (which never writes one)
+// is both wasteful and a hazard - a go-build cache hit would restore a stale MAGUS.md.
 // `magus clean --outputs` still sees them all (Project.AllOutputs unions the
 // per-target sets). See docs/cache.md#per-target-inputs-and-outputs.
 magus\project({
