@@ -337,6 +337,14 @@ func runResult(ctx context.Context, name string, args []string, dir, label, cmd 
 			}
 			return types.ExecResult{}, fmt.Errorf("%s %s: %w", label, cmd, err)
 		}
+		// A cancelled run kills its in-flight children (run.KillGroup), and a process
+		// killed by a signal reports ExitCode() == -1. Rendering that as "exit -1" hides
+		// the cause and makes one real failure look like several: every sibling still
+		// running when the errgroup cancelled reports a bare exit -1 of its own, and the
+		// project that actually failed is buried among them.
+		if err != nil && errors.Is(err, context.Canceled) {
+			return types.ExecResult{}, fmt.Errorf("%s %s: %w", label, cmd, err)
+		}
 		return types.ExecResult{}, fmt.Errorf("%s %s: exit %d", label, cmd, res.Code)
 	}
 	return types.ExecResult{

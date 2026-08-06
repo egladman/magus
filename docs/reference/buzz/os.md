@@ -17,7 +17,7 @@ Process execution. os.exec runs a command directly (no shell); os.exec_sh runs a
 
 Run cmd directly (no shell; args are never shell-interpolated). Output streams live and is captured. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. Optional dir runs cmd there (relative to the target's cwd). opts.stdin is fed to the process as standard input - pipe by passing a prior call's stdout.
 
-**Signature:** `os\exec(cmd, [args], [dir], [opts]) → ExecResult` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L371)
+**Signature:** `os\exec(cmd, [args], [dir], [opts]) → ExecResult` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L379)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -32,7 +32,7 @@ Run cmd directly (no shell; args are never shell-interpolated). Output streams l
 
 Run line through a shell - for pipes, redirection, globs, and variable expansion. Default shell is /bin/sh (cmd on Windows); pass opts.shell (e.g. "bash") to override, resolved via PATH. A shell line is written in the platform shell's dialect, so sh and cmd lines are not portable across OSes - for cross-platform logic prefer os.exec plus the fs/os helpers. Same result and raise semantics as exec (opts.stdin and opts.allow_failure included); optional dir runs the shell there.
 
-**Signature:** `os\execSh(line, [dir], [opts]) → ExecResult` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L385)
+**Signature:** `os\execSh(line, [dir], [opts]) → ExecResult` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L393)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -46,7 +46,7 @@ Run line through a shell - for pipes, redirection, globs, and variable expansion
 
 Set env vars for the duration of callback; restore after.
 
-**Signature:** `os\withEnv(env, callback)` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L431)
+**Signature:** `os\withEnv(env, callback)` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L439)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -57,7 +57,7 @@ Set env vars for the duration of callback; restore after.
 
 Reserve n slots from magus's concurrency budget for the duration of callback. Use when callback runs a command with its own internal parallelism (make -j, a test runner) that magus can't see, so the global budget is not oversubscribed.
 
-**Signature:** `os\withSlots(n, callback)` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L511)
+**Signature:** `os\withSlots(n, callback)` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L519)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -140,7 +140,7 @@ Return the absolute path of the running magus binary. Pair it with fs.stat insid
 
 Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. opts: {backoff_ms:float (default 500), max_backoff_ms:float (default 30000)}.
 
-**Signature:** `os\retry(max, fn, [opts]) → any` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L447)
+**Signature:** `os\retry(max, fn, [opts]) → any` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L455)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
