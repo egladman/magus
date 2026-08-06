@@ -978,16 +978,20 @@ export fun build(ctx: magus\Context, args: [str]) > void {
     fs.mkdirall("sub");
     fs.writeFile("sub/a.txt", "alpha");
     fs.copyFile("sub/a.txt", "sub/b.txt");
-    // glob must return paths relative to the project dir, sorted.
+    // glob returns paths relative to the project dir, sorted, each carrying that dir
+    // as its base - so a caller can resolve one without knowing where the target ran.
     var hits = fs.glob("sub/*.txt");
     var acc = "";
     var first = true;
+    var base = "";
     foreach (h in hits) {
         if (!first) { acc = acc + ","; }
-        acc = acc + h;
+        acc = acc + h.value;
+        base = h.base;
         first = false;
     }
     fs.writeFile("glob.out", acc);
+    fs.writeFile("glob.base", base);
 }
 `)
 	require.NoError(t, runTargetIn(t, dir, "build"))
@@ -999,8 +1003,14 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 	}
 	got, err := os.ReadFile(filepath.Join(dir, "glob.out"))
 	require.NoError(t, err)
-	// Relative, sorted — not absolute paths.
+	// Relative, sorted - not absolute paths.
 	assert.Equal(t, "sub/a.txt,sub/b.txt", string(got))
+
+	// And each match names the directory those relative values are measured from, which
+	// is the project dir this test is about. The value alone could never say so.
+	base, err := os.ReadFile(filepath.Join(dir, "glob.base"))
+	require.NoError(t, err)
+	assert.Equal(t, dir, string(base), "a glob result is based at the project dir")
 }
 
 // TestExecResultAnnotationChecksFields proves the typed-returns mechanism: a

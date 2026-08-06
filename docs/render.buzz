@@ -223,9 +223,9 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // nested command substitution, so it reads as the path arithmetic it is.
     fs\removeAll(site.outDir + "/libs");
     foreach (svg in fs\glob(site.root + "/libs/*/coverage.svg")) {
-        final project = fs\basename(fs\dirname(svg));
+        final project = fs\basename(fs\dirname(svg.value));
         fs\mkdirall(site.outDir + "/libs/" + project);
-        fs\copyFile(svg, site.outDir + "/libs/" + project + "/coverage.svg");
+        fs\copyFile(svg.value, site.outDir + "/libs/" + project + "/coverage.svg");
     }
 
     // Bundle + minify the client assets with esbuild (pinned in mise.toml). Two outputs:

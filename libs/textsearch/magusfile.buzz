@@ -112,7 +112,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 
     final tests = fs\glob("src/**/*.test.ts");
     var bundle = mut ["exec", "esbuild"];
-    foreach (t in tests) { bundle.append(t); }
+    foreach (t in tests) { bundle.append(t.value); }
     bundle.append("--bundle"); bundle.append("--platform=node");
     bundle.append("--format=esm"); bundle.append("--sourcemap");
     bundle.append("--outdir=.testcache");
@@ -125,7 +125,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
         "--test-reporter=spec", "--test-reporter-destination=stdout",
         "--test-reporter=lcov", "--test-reporter-destination=coverage.lcov",
         "--test"];
-    foreach (b in fs\glob(".testcache/**/*.test.js")) { run.append(b); }
+    foreach (b in fs\glob(".testcache/**/*.test.js")) { run.append(b.value); }
     os\exec("node", run, ".", {});
 
     final pct = cov\lcovPercent(fs\readFile("coverage.lcov"), keep: "src/");

@@ -829,8 +829,8 @@ export fun tapes(ctx: magus\Context, args: [str]) > void {
             + "(see tapes/README.md)";
     }
     foreach (tape in fs\glob("tapes/*.tape")) {
-        magus\info("recording {tape}");
-        os\exec("vhs", [tape], ".", {});
+        magus\info("recording {tape.value}");
+        os\exec("vhs", [tape.value], ".", {});
     }
 }
 
@@ -1150,7 +1150,7 @@ export fun advice_test(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(".github/actions/advice/*.buzz", ".github/actions/magus/*.buzz");
     foreach (dir in [".github/actions/advice", ".github/actions/magus"]) {
         foreach (script in fs\glob(dir + "/*.buzz")) {
-            magus\cmd("buzz", args: ["-t", fs\basename(script)], opts: {"dir": dir});
+            magus\cmd("buzz", args: ["-t", fs\basename(script.value)], opts: {"dir": dir});
         }
     }
 }
