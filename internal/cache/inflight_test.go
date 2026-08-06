@@ -1,13 +1,13 @@
 package cache
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

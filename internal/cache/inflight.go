@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/egladman/magus/internal/json"
 )
 
 // inflight records which targets are RUNNING, on disk, so the answer survives a death
