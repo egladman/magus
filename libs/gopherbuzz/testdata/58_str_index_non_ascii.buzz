@@ -1,0 +1,42 @@
+// @expect: true
+// str.indexOf and str.byte are RUNE-indexed, and stay that way on both sides of the
+// pure-ASCII fast path those methods take (see strMember in vm/operators.go).
+//
+// The fast path exists because for ASCII a byte offset already IS the rune index, so the
+// conversion it skips is a no-op that costs a walk of the whole prefix. That reasoning is
+// only sound if the two paths agree, and the ASCII path is the one every real workload
+// takes - so without this fixture the multibyte path is the untested one.
+//
+// The characters are written literally rather than as \u escapes: Buzz spells string
+// interpolation with braces, so \u{00e9} parses as an interpolation of "00e9".
+//
+// Two multibyte runes (2 and 3 bytes) are what make the two indexings disagree: the
+// needle begins at BYTE 10 but at RUNE 7, so a fast path that returned the byte offset
+// for a non-ASCII string would be off by three.
+final ascii = "abcdefNEEDLE";
+final wide = "abéⅢdefNEEDLE";
+
+// Rune index, not byte offset. In `ascii` the two coincide at 6; in `wide` the needle is
+// rune 7 and byte 10, and the rune index is what the language must report.
+final asciiAt = ascii.indexOf("NEEDLE");
+final wideAt = wide.indexOf("NEEDLE");
+
+// byte(i) indexes by RUNE too, so the multibyte characters come back as their code
+// points rather than as the first byte of their UTF-8 encoding.
+final asciiByte = ascii.byte(2);        // "c"
+final wideCodepoint = wide.byte(2);     // e-acute (233), NOT its lead byte 0xC3
+final wideRoman = wide.byte(3);         // Roman numeral three (8546), NOT its lead byte 0xE2
+
+// Past the end is null on both paths.
+final missing = ascii.indexOf("absent");
+final missingWide = wide.indexOf("absent");
+
+final __r = asciiAt == 6
+    and wideAt == 7
+    and asciiByte == 99
+    and wideCodepoint == 233
+    and wideRoman == 8546
+    and missing == null
+    and missingWide == null
+    and ascii.sub(asciiAt) == "NEEDLE"
+    and wide.sub(wideAt) == "NEEDLE";

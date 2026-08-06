@@ -521,3 +521,74 @@ while (i < 1000000) {
 		}
 	}
 }
+
+// BenchmarkStrIndexOfLateHit measures indexOf on a large ASCII haystack where the
+// needle sits near the END. This is the docs site generator's hot shape: lib/glossary
+// and lib/html scan a rendered page (tens of KB) for markers, and every hit paid a
+// utf8.RuneCountInString over the whole prefix to convert the byte offset into the rune
+// index the language exposes. str.sub already had a cached-isASCII fast path for exactly
+// this reason; indexOf did not, so a scan that walks a page marker by marker was
+// quadratic in the page size before a single character was rewritten.
+func BenchmarkStrIndexOfLateHit(b *testing.B) {
+	chunk, env := benchSetup(b,
+		`final haystack = "x".repeat(200000) + "NEEDLE";`,
+		`final __r = haystack.indexOf("NEEDLE");`,
+	)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm := vmpackage.NewVM(_benchCtx)
+		if _, err := vm.Run(chunk, env); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkStrByteScan measures a character-at-a-time walk of a large ASCII string,
+// the shape lib/glossary's word-boundary check and lib/conventions' fence scanner use.
+// Before the isASCII fast path in str.byte, each call rebuilt a []rune of the whole
+// string, making the walk quadratic and allocating once per character.
+func BenchmarkStrByteScan(b *testing.B) {
+	chunk, env := benchSetup(b,
+		`final haystack = "abcdefghij".repeat(2000);`,
+		`var n = 0;
+var i = 0;
+while (i < haystack.len()) {
+    if (haystack.byte(i) == 99) { n = n + 1; }
+    i = i + 1;
+}`,
+	)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm := vmpackage.NewVM(_benchCtx)
+		if _, err := vm.Run(chunk, env); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkStrByteScanMultibyte is BenchmarkStrByteScan's twin for a string the ASCII
+// fast path REJECTS. The isASCII test is all-or-nothing, so one accented character in a
+// document puts every lookup in it on the multibyte path - which is not a corner case:
+// 31 of the magus docs' 200 Markdown sources contain one, and a CPU profile of the site
+// render attributed 14% of the whole build to this single method.
+func BenchmarkStrByteScanMultibyte(b *testing.B) {
+	chunk, env := benchSetup(b,
+		`final haystack = "abcdéfghij".repeat(2000);`,
+		`var n = 0;
+var i = 0;
+while (i < haystack.len()) {
+    if (haystack.byte(i) == 99) { n = n + 1; }
+    i = i + 1;
+}`,
+	)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm := vmpackage.NewVM(_benchCtx)
+		if _, err := vm.Run(chunk, env); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
