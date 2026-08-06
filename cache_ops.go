@@ -28,6 +28,15 @@ func (m *Magus) LogCharms(ctx context.Context, charms string) {
 	m.cache.LogCharms(ctx, charms)
 }
 
+// LogCache emits the cache-tier header through the cache logger. No-op on Inspect
+// workspaces, which have no cache to describe.
+func (m *Magus) LogCache(ctx context.Context) {
+	if m.cache == nil {
+		return
+	}
+	m.cache.LogCache(ctx)
+}
+
 // PruneCache removes entries older than cutoff and GC-collects orphaned blobs.
 func (m *Magus) PruneCache(ctx context.Context, cutoff time.Time, dryRun bool) (removed int, freed int64, err error) {
 	if m.cache == nil {

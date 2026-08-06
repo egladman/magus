@@ -88,6 +88,8 @@ type staticBackend struct {
 	entry         []byte
 }
 
+func (b *staticBackend) Name() string { return "staticbackend" }
+
 func (b *staticBackend) Active(context.Context) bool { return true }
 
 func (b *staticBackend) GetArtifact(_ context.Context, project, hash string) (io.ReadCloser, error) {

@@ -28,6 +28,10 @@ import (
 // is effectively a content-addressed blob store. Implementations must be safe for
 // concurrent use.
 type RemoteBackend interface {
+	// Name identifies the backend to a human: the spell that provides it ("s3", "gha").
+	// It must not probe or dial - the run header calls it before any work, precisely so
+	// the header cannot be what makes a run hang.
+	Name() string
 	// Active reports whether the backend is usable in the current environment.
 	// The cache skips both fetch and push when it returns false, so a backend
 	// gated on its environment (e.g. one that only runs under a specific CI

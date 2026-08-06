@@ -202,6 +202,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// default charm (e.g. rw not applied) is obvious rather than silent.
 	charms := withDefaultCharms(parsedTarget.Charms, globalCfg.DefaultCharms, *noDefaultCharms)
 	m.LogCharms(ctx, strings.Join(charms, ","))
+	m.LogCache(ctx)
 	if len(targets) == 0 {
 		// Zero targets here means the fan-out found no projects at all in the resolved
 		// workspace - a degenerate or wrong-workspace resolution, not "nothing to do".

@@ -237,11 +237,21 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if err != nil {
 		return err
 	}
+	// Name the projects, with the count after them. "3 projects" told a reader how many
+	// but not which, so the first thing anyone did was re-run with --plan to find out.
+	// The count stays because it is the number a shard matrix is sized from.
 	var scopeLabel string
-	if len(targets) == 1 {
+	switch {
+	case len(targets) == 1:
 		scopeLabel = targets[0].Path
-	} else {
-		scopeLabel = fmt.Sprintf("%d projects", len(targets))
+	case len(targets) > 1:
+		paths := make([]string, 0, len(targets))
+		for _, t := range targets {
+			paths = append(paths, t.Path)
+		}
+		scopeLabel = fmt.Sprintf("%s (%d)", strings.Join(paths, " "), len(paths))
+	default:
+		scopeLabel = "0 projects"
 	}
 	m.LogScope(ctx, scopeLabel, source)
 	// Merge magus.yaml default_charms with any explicit charm on the target - the same
@@ -249,6 +259,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// default_charms (e.g. rw) silently did NOT apply to `affected`, unlike `run`.
 	charms := withDefaultCharms(parsed.Charms, globalCfg.DefaultCharms, *noDefaultCharms)
 	m.LogCharms(ctx, strings.Join(charms, ","))
+	m.LogCache(ctx)
 	if len(targets) == 0 {
 		slog.InfoContext(ctx, "affected: no projects affected", slog.String("target", target))
 		return nil

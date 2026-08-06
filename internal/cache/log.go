@@ -364,6 +364,14 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		} else {
 			h.printf("charms: (none)\n")
 		}
+	case "cache.backend":
+		h.printf("cache: %s (%s)\n", recordStr(r, "tier"), recordStr(r, "mode"))
+	case "cache.base":
+		if vcs := recordStr(r, "vcs"); vcs != "" {
+			h.printf("base: %s (%s)\n", recordStr(r, "base"), vcs)
+		} else {
+			h.printf("base: %s\n", recordStr(r, "base"))
+		}
 	case "run.exec":
 		// Every subprocess magus spawns (os.exec, fork spells) logs through this event
 		// in run.Exec. Rendered as a shell-style echo, indented under the owning
