@@ -279,9 +279,8 @@ Run-outcome lens:
              With --mermaid-style=safe the Mermaid subset is restricted to what
              older or partial renderers (GitHub step summaries, blog renderers)
              reliably handle; the default "standard" emits the full Mermaid spec
-             for tools that render it. The magusfile's postflight target
-             consumes this on the workflow side, writing the doc to a sink
-             supplied via the generic MAGUS_INSIGHT_OUTPUT_PATH env var.
+             for tools that render it. The magusfile's postflight target prints
+             this to stdout for local use.
 
 The VCS lenses read the commit log: --commits caps the scan; --since bounds it by
 date (90d, 12w, 6mo, 1y). Each lens accepts -o text|json|yaml|name; hotspots and

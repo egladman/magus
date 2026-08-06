@@ -230,12 +230,17 @@ export fun cleanBody(md: str) > str {
         if (inside == false) { buf = buf + " " + p; }
         inside = (inside == false);
     }
-    while (buf.indexOf("\n") != null) { buf = buf.replace("\n", " "); }
-    while (buf.indexOf("\t") != null) { buf = buf.replace("\t", " "); }
-    while (buf.indexOf("#") != null) { buf = buf.replace("#", " "); }
-    while (buf.indexOf("*") != null) { buf = buf.replace("*", " "); }
-    while (buf.indexOf("|") != null) { buf = buf.replace("|", " "); }
-    while (buf.indexOf("`") != null) { buf = buf.replace("`", " "); }
+    // split().join() replaces every occurrence in one pass; the equivalent
+    // while(indexOf) replace() loop copies the whole (multi-KB) page once per
+    // occurrence, and every copy is a distinct string the VM interns forever
+    // (libs/gopherbuzz/vm/value.go's strIntern is never evicted) - across 472
+    // pages that was the dominant share of the docs render's peak RSS.
+    buf = buf.split("\n").join(" ");
+    buf = buf.split("\t").join(" ");
+    buf = buf.split("#").join(" ");
+    buf = buf.split("*").join(" ");
+    buf = buf.split("|").join(" ");
+    buf = buf.split("`").join(" ");
     final words: [str] = mut [<str>];
     foreach (w in buf.split(" ")) { if (w != "") { words.append(w); } }
     return words.join(" ");

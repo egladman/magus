@@ -749,30 +749,13 @@ export fun mod_sync(ctx: magus\Context, args: [str]) > void {
     }
 }
 
-// Renders the insight report (hotspots, affinity, ownership, trend) and, with the
-// `gha` charm, appends it to a host output path supplied via env. The final CI step;
-// never gates. The env var name (MAGUS_INSIGHT_OUTPUT_PATH) is generic on purpose;
-// the host that sets it (the workflow) is what knows it's GitHub Actions and
-// points it at $GITHUB_STEP_SUMMARY. The `gha` charm also opts the render into the
-// safe Mermaid subset so older or partial renderers handle it.
+// Renders the insight report (hotspots, affinity, ownership, trend) to stdout. Local
+// only: no workflow invokes this target, and ci-outcome.buzz's volatility-lens step
+// summary is the CI-facing equivalent now. It used to also append to a host path
+// under the `gha` charm; that branch was unreachable (nothing set
+// MAGUS_INSIGHT_OUTPUT_PATH or ran this target in CI) and was removed.
 export fun postflight(ctx: magus\Context, args: [str]) > void {
-    final hasGha = ctx.has_charm("gha");
-    var styleArgs = ["report", "--workspace"];
-    if (hasGha) { styleArgs = ["report", "--workspace", "--mermaid-style", "safe"]; }
-    final doc = magus\insight(styleArgs).stdout;
-
-    if (hasGha) {
-        final outputPath = os\env("MAGUS_INSIGHT_OUTPUT_PATH");
-        if (outputPath != null and outputPath != "") {
-            var existing = "";
-            if (fs\exists(outputPath)) { existing = fs\readFile(outputPath); }
-            fs\writeFile(outputPath, existing + doc + "\n");
-            magus\info("postflight: appended insight report");
-            return;
-        }
-    }
-    // Default: print to stdout so a local `magus run postflight` is useful too.
-    magus\info(doc);
+    magus\info(magus\insight(["report", "--workspace"]).stdout);
 }
 
 // Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to

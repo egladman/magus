@@ -46,7 +46,7 @@ RIGHT NOW the released `magus` on PATH CANNOT load this workspace. `evals/magusf
 declares `no_language`, which no release knows yet, so every command fails at workspace
 load with:
 
-```
+```text
 magus.project: unknown option "no_language" (known options: depends_on, exclusive, ...)
 ```
 

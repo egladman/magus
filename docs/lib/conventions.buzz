@@ -48,8 +48,8 @@ export fun parseConventions(md: str) > [Convention] {
 // backticks and bold markers, and a trailing colon.
 fun cleanConventionDef(s: str) > str {
     var d = s;
-    while (d.indexOf("`") != null) { d = d.replace("`", with: ""); }
-    while (d.indexOf("**") != null) { d = d.replace("**", with: ""); }
+    d = d.split("`").join("");
+    d = d.split("**").join("");
     d = d.trim();
     if (d.endsWith(":")) { d = d.sub(0, len: d.len() - 1).trim(); }
     return d;

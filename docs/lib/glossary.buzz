@@ -263,8 +263,7 @@ fun applyLinks(html: str, searchable: str, tokens: [str], opens: [str], keys: [s
 export fun linkGlossaryTerms(html: str, terms: [GlossaryTerm], relToGlossary: str) > GlossaryLinkResult {
     final marker = "<!-- magus-noglossary -->";
     if (html.indexOf(marker) != null) {
-        var stripped = html;
-        while (stripped.indexOf(marker) != null) { stripped = stripped.replace(marker, with: ""); }
+        final stripped = html.split(marker).join("");
         return GlossaryLinkResult{ html = stripped, linked = mut [<str>] };
     }
     // The definition is baked into each link (data-def) so the client popover/reveal needs no
@@ -351,8 +350,7 @@ export object ConfigKey {
 // cleanConfigCell trims a markdown table cell and drops its backticks (env-var underscores
 // are kept - they are part of the name, not markdown).
 fun cleanConfigCell(c: str) > str {
-    var s = c.trim();
-    while (s.indexOf("`") != null) { s = s.replace("`", with: ""); }
+    final s = c.trim().split("`").join("");
     return s.trim();
 }
 
@@ -453,7 +451,7 @@ fun cleanDef(s: str) > str {
     final seeIdx = d.indexOf(" See [");
     if (seeIdx != null) { d = d.sub(0, len: seeIdx!); }
     d = unwrapLinks(d);
-    while (d.indexOf("`") != null) { d = d.replace("`", with: ""); }
+    d = d.split("`").join("");
     return d.trim();
 }
 
