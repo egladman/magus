@@ -131,7 +131,7 @@ Now it fails as [MGS3004](../../reference/codes/sandbox/MGS3004.md) before forki
 
 The result is a **precondition, not an input**. `docker info` reports running
 containers and disk usage, so mixing it into a key would invalidate every entry on
-every run. This is worth stating because the neighbouring mechanism does the exact
+every run. This is worth stating because the neighboring mechanism does the exact
 opposite: a version key exists precisely to enter the key. The two probes look alike
 and mean opposite things.
 
