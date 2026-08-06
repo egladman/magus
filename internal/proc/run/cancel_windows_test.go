@@ -26,10 +26,10 @@ func TestCancelDeliversCtrlBreak(t *testing.T) {
 	}()
 
 	start := time.Now()
-	err := Run(ctx, t.TempDir(), "ping", "-n", "60", "127.0.0.1")
+	_, err := Exec(ctx, "ping", []string{"-n", "60", "127.0.0.1"}, ExecOptions{Dir: t.TempDir(), Quiet: true})
 	elapsed := time.Since(start)
 
 	assert.Error(t, err, "want non-nil error after context cancel")
 	// Should exit well inside the 5s WaitDelay; allow 7s for slow CI runners.
-	assert.LessOrEqual(t, elapsed, 7*time.Second, "Run should exit < 7s after cancel (WaitDelay is 5s)")
+	assert.LessOrEqual(t, elapsed, 7*time.Second, "Exec should exit < 7s after cancel (WaitDelay is 5s)")
 }

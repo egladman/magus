@@ -6,16 +6,10 @@ import (
 	"errors"
 	"io"
 	"os"
-	"os/exec"
 	"strings"
-	"time"
-
-	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/sandbox"
-	"github.com/egladman/magus/types"
 )
 
-// ErrAborted is returned by Run when the step gate returns StepActionAbort.
+// ErrAborted is returned by Exec when the step gate returns StepActionAbort.
 var ErrAborted = errors.New("run: aborted by user")
 
 type (
@@ -55,7 +49,7 @@ func OutputWriters(ctx context.Context) (stdout, stderr io.Writer) {
 	return os.Stdout, os.Stderr
 }
 
-// WithStepGate attaches a gate to ctx; Run invokes it before each subprocess.
+// WithStepGate attaches a gate to ctx; Exec invokes it before each subprocess.
 func WithStepGate(ctx context.Context, gate StepGate) context.Context {
 	return context.WithValue(ctx, stepGateKey{}, gate)
 }
@@ -88,59 +82,4 @@ func commandLine(name string, args []string) string {
 		}
 	}
 	return strings.Join(parts, " ")
-}
-
-// Run executes name with args in dir, using writers from ctx (fallback: os.Stdout/Stderr).
-// Cancellation sends a graceful signal with a 5s WaitDelay before force-kill.
-func Run(ctx context.Context, dir, name string, args ...string) error {
-	if gate, ok := ctx.Value(stepGateKey{}).(StepGate); ok && gate != nil {
-		switch gate(ctx, name, args, dir) {
-		case StepActionSkip:
-			return nil
-		case StepActionAbort:
-			return ErrAborted
-		case StepActionContinue:
-			ctx = context.WithValue(ctx, stepGateKey{}, StepGate(nil))
-		case StepActionStep:
-		}
-	}
-	// Emit a structured exec event (the command about to run) when inside a captured target
-	// step, so the log viewer can group the output that follows under its command without
-	// parsing a "$ cmd" echo out of the text. Only fires within a step (not internal probes).
-	if project, target, ok := journal.StepFromContext(ctx); ok {
-		journal.Emit(ctx, journal.Event{
-			Kind: journal.KindExec, Project: project, Target: target, Text: commandLine(name, args),
-		})
-	}
-
-	c := exec.CommandContext(ctx, name, args...)
-	c.Dir = dir
-	setCancel(c) // platform-specific graceful cancel; see run_unix.go / run_windows.go
-	c.WaitDelay = 5 * time.Second
-	if w, ok := ctx.Value(contextKey{}).(writers); ok {
-		c.Stdout = w.stdout
-		c.Stderr = w.stderr
-	} else {
-		c.Stdout = os.Stdout
-		c.Stderr = os.Stderr
-	}
-	if p := sandbox.FromContext(ctx); p != nil {
-		c.Env = p.BaseEnv
-	}
-	err := c.Run()
-	// Same classification Exec applies: a missing binary is MGS3003, matching
-	// std/os.go's os\which(). errors.Is still reaches the underlying *exec.Error.
-	if err != nil && errors.Is(err, exec.ErrNotFound) {
-		err = types.WrapDiagnostic(types.ToolNotOnPath, err, "%q is not on PATH", name)
-	}
-	if ctx.Err() != nil {
-		KillGroup(c) // reap grandchildren that ignored the graceful signal
-	}
-	// Surface ctx.Err() whenever cancelled, even if err is nil because the process
-	// won the race and exited 0, so callers can distinguish cancel from a clean
-	// finish. errors.Join drops the nil err.
-	if ctx.Err() != nil {
-		return errors.Join(ctx.Err(), err)
-	}
-	return err
 }

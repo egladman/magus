@@ -15,8 +15,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/egladman/magus/types"
 )
 
 // captureStdout redirects os.Stdout to a pipe and returns a function that
@@ -64,7 +62,8 @@ func TestIntegrationWorkdirRespected(t *testing.T) {
 	resolved, err := filepath.EvalSymlinks(dir)
 	require.NoError(t, err)
 	read := captureStdout(t)
-	require.NoError(t, Run(context.Background(), dir, "pwd"))
+	_, err = Exec(context.Background(), "pwd", nil, ExecOptions{Dir: dir})
+	require.NoError(t, err)
 	got := strings.TrimRight(string(read()), "\n")
 	assert.Equal(t, resolved, got, "working dir")
 }
@@ -74,7 +73,8 @@ func TestIntegrationStdoutPassthrough(t *testing.T) {
 		t.Skip("'echo' not available")
 	}
 	read := captureStdout(t)
-	require.NoError(t, Run(context.Background(), t.TempDir(), "echo", "hello"))
+	_, err := Exec(context.Background(), "echo", []string{"hello"}, ExecOptions{Dir: t.TempDir()})
+	require.NoError(t, err)
 	assert.Equal(t, "hello\n", string(read()))
 }
 
@@ -83,7 +83,8 @@ func TestIntegrationStderrPassthrough(t *testing.T) {
 		t.Skip("'sh' not available")
 	}
 	read := captureStderr(t)
-	require.NoError(t, Run(context.Background(), t.TempDir(), "sh", "-c", "echo err 1>&2"))
+	_, err := Exec(context.Background(), "sh", []string{"-c", "echo err 1>&2"}, ExecOptions{Dir: t.TempDir()})
+	require.NoError(t, err)
 	assert.Equal(t, "err\n", string(read()))
 }
 
@@ -92,18 +93,10 @@ func TestIntegrationNonZeroExit(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("'sh' not available")
 	}
-	err := Run(context.Background(), t.TempDir(), "sh", "-c", "exit 7")
+	_, err := Exec(context.Background(), "sh", []string{"-c", "exit 7"}, ExecOptions{Dir: t.TempDir(), Quiet: true})
 	var exitErr *exec.ExitError
 	require.ErrorAs(t, err, &exitErr)
 	assert.Equal(t, 7, exitErr.ExitCode())
-}
-
-func TestIntegrationMissingBinary(t *testing.T) {
-	t.Parallel()
-	err := Run(context.Background(), t.TempDir(), "magus-no-such-binary-xyzzy")
-	require.Error(t, err, "want error for missing binary")
-	assert.ErrorIs(t, err, types.ToolNotOnPath, "classified as MGS3003, matching std/os.go's os\\which()")
-	assert.ErrorIs(t, err, exec.ErrNotFound, "the underlying *exec.Error must still be reachable through the wrap")
 }
 
 func TestIntegrationContextCancelMidRun(t *testing.T) {
@@ -117,9 +110,9 @@ func TestIntegrationContextCancelMidRun(t *testing.T) {
 		cancel()
 	}()
 	start := time.Now()
-	err := Run(ctx, t.TempDir(), "sleep", "30")
+	_, err := Exec(ctx, "sleep", []string{"30"}, ExecOptions{Dir: t.TempDir(), Quiet: true})
 	assert.Error(t, err, "want non-nil error after context cancel")
-	assert.LessOrEqual(t, time.Since(start), 2*time.Second, "Run should exit < 2s after cancel")
+	assert.LessOrEqual(t, time.Since(start), 2*time.Second, "Exec should exit < 2s after cancel")
 }
 
 func TestIntegrationContextDeadline(t *testing.T) {
@@ -130,9 +123,9 @@ func TestIntegrationContextDeadline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	err := Run(ctx, t.TempDir(), "sleep", "30")
+	_, err := Exec(ctx, "sleep", []string{"30"}, ExecOptions{Dir: t.TempDir(), Quiet: true})
 	assert.Error(t, err, "want non-nil error after deadline")
-	assert.LessOrEqual(t, time.Since(start), 2*time.Second, "Run should exit < 2s after deadline")
+	assert.LessOrEqual(t, time.Since(start), 2*time.Second, "Exec should exit < 2s after deadline")
 }
 
 func TestIntegrationArgsVerbatim(t *testing.T) {
@@ -140,6 +133,7 @@ func TestIntegrationArgsVerbatim(t *testing.T) {
 		t.Skip("'printf' not available")
 	}
 	read := captureStdout(t)
-	require.NoError(t, Run(context.Background(), t.TempDir(), "printf", "%s\n", "*"))
+	_, err := Exec(context.Background(), "printf", []string{"%s\n", "*"}, ExecOptions{Dir: t.TempDir()})
+	require.NoError(t, err)
 	assert.Equal(t, "*\n", string(read()), "args may have been shell-expanded")
 }
