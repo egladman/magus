@@ -37,17 +37,14 @@ export fun endMarker(name: str) > str { return "<!-- magus:advice:" + name + ":e
 // run page is already the right home for everything a reader might want next.
 fun preface() > str {
     var text = "### magus\n\n"
-        + "magus read this pull request against the workspace's build graph: what each "
-        + "project declares, and what depends on it. The notes below are what that turned "
-        + "up. Each is collapsed; open the ones that concern you.\n\n"
-        + "**None of this blocks the merge.** The checks do that. Each note is something "
-        + "the graph knows and a diff cannot show. If one does not apply here, label it "
-        + "away and it disappears.\n";
+        + "> Checked this pull request against the build graph. Findings are collapsed "
+        + "below - open what concerns you. **Nothing here blocks the merge**; disagree "
+        + "with a note and label it away.\n";
     final repo = env("REPO");
     final run = env("GITHUB_RUN_ID");
     if (repo != "" and run != "") {
-        text = text + "\nHotspots, ownership, volatility and the dependency graph for this "
-            + "run: [run summary](https://github.com/" + repo + "/actions/runs/" + run + ").\n";
+        text = text + ">\n> [Full run summary](https://github.com/" + repo + "/actions/runs/" + run
+            + ") - hotspots, ownership, volatility, dependency graph.\n";
     }
     return text;
 }
@@ -302,9 +299,10 @@ export fun publish(repo: str, pr: str, name: str, title: str, body: str) > void 
 test "compose opens with what this is before any finding" {
     final body = compose("", name: "conflicts", title: "Merge conflicts", body: "hello");
     std\assert(body.indexOf("### magus") != null, message: "announces itself");
-    std\assert(body.indexOf("read this pull request") != null, message: "says what it did");
-    std\assert(body.indexOf("None of this blocks the merge") != null, message: "says it is not a gate");
+    std\assert(body.indexOf("Checked this pull request") != null, message: "says what it did");
+    std\assert(body.indexOf("Nothing here blocks the merge") != null, message: "says it is not a gate");
     std\assert(body.indexOf("label it away") != null, message: "says how to dismiss one");
+    std\assert(body.indexOf("> Checked") != null, message: "the prologue is a blockquote, set off from the findings");
     // The prologue comes before the first collapsed finding, not after it.
     std\assert(body.indexOf("### magus") < body.indexOf("<details>"), message: "opens the comment");
 }
