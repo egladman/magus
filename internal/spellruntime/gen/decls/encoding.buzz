@@ -19,7 +19,7 @@ export extern fun base64Decode(s: str) > str;
 export extern fun base64Encode(data: str) > str;
 export extern fun base64urlDecode(s: str) > str;
 export extern fun base64urlEncode(data: str) > str;
-export extern fun buildUrl(parts: {str: any}) > str;
+export extern fun buildUrl(parts: URL) > str;
 export extern fun hexDecode(s: str) > str;
 export extern fun hexEncode(data: str) > str;
 export extern fun parseUrl(raw_url: str) > URL;
