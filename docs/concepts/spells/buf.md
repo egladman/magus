@@ -152,6 +152,8 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 
 ## buf-lint
 
+No --error-format flag: buf's default `text` output (file:line:col:message, no space after the last colon - not GNU by the letter, but magus's parser tolerates it) is already what this declares. The gha charm below swaps the actual output to GitHub Actions annotations when selected, which this declared format doesn't track - a run under `buf-lint:gha` reports gnu here even though its output isn't.
+
 **Command:** `buf lint`
 
 ### gha

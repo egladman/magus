@@ -186,7 +186,10 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Needs:      []string{"**/*.sh", "**/*.bash", ".shellcheckrc"},
 		IgnoreDirs: []string{"node_modules", ".claude/worktrees"},
 		Ops: map[string]spells.Op{
-			"shellcheck": {Command: spells.Command{Bin: "sh", Args: []string{"-c", "find . \\( -name node_modules -o -path './.claude/worktrees' \\) -prune -o \\( -name '*.sh' -o -name '*.bash' \\) -print0 | xargs -0 -r shellcheck"}}},
+			"shellcheck": {
+				Command:     spells.Command{Bin: "sh", Args: []string{"-c", "find . \\( -name node_modules -o -path './.claude/worktrees' \\) -prune -o \\( -name '*.sh' -o -name '*.bash' \\) -print0 | xargs -0 -r shellcheck --format=gcc"}, Diagnostics: spells.DiagnosticGNU},
+				Diagnostics: spells.DiagnosticGNU,
+			},
 		},
 	},
 	"buf": {
@@ -197,15 +200,21 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Ops: map[string]spells.Op{
 			"buf-build":    {Command: spells.Command{Bin: "buf", Args: []string{"build"}}},
 			"buf-generate": {Command: spells.Command{Bin: "buf", Args: []string{"generate"}}},
-			"buf-lint": {Command: spells.Command{Bin: "buf", Args: []string{"lint"}, Charms: map[string]spells.Charm{
-				"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--error-format=github-actions"}}},
-			}}},
+			"buf-lint": {
+				Command: spells.Command{Bin: "buf", Args: []string{"lint"}, Diagnostics: spells.DiagnosticGNU, Charms: map[string]spells.Charm{
+					"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--error-format=github-actions"}}},
+				}},
+				Diagnostics: spells.DiagnosticGNU,
+			},
 			"buf-format": {Command: spells.Command{Bin: "buf", Args: []string{"format", "--exit-code"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/1", Value: "-w"}}},
 			}}},
-			"buf-breaking": {Command: spells.Command{Bin: "buf", Args: []string{"breaking", "--against", ".git#branch=main"}, Charms: map[string]spells.Charm{
-				"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--error-format=github-actions"}}},
-			}}},
+			"buf-breaking": {
+				Command: spells.Command{Bin: "buf", Args: []string{"breaking", "--against", ".git#branch=main"}, Diagnostics: spells.DiagnosticGNU, Charms: map[string]spells.Charm{
+					"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--error-format=github-actions"}}},
+				}},
+				Diagnostics: spells.DiagnosticGNU,
+			},
 		},
 	},
 	"buzz": {
@@ -240,8 +249,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			// needs its own probe: upgrading it changes lint verdicts with nothing in any
 			// cache key to notice. It gets no readiness probe - a lint talks to no daemon.
 			"hadolint": {
-				Probe:       spells.Command{Bin: "hadolint", Args: []string{"--version"}},
-				Diagnostics: spells.DiagnosticGNU,
+				Probe: spells.Command{Bin: "hadolint", Args: []string{"--version"}},
 			},
 		},
 		Ops: map[string]spells.Op{
@@ -249,7 +257,10 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"docker-run":         {Command: spells.Command{Bin: "docker", Args: []string{"run", "--rm"}}},
 			"docker-buildx":      {Command: spells.Command{Bin: "docker", Args: []string{"buildx", "build"}}},
 			"docker-build-check": {Command: spells.Command{Bin: "docker", Args: []string{"build", "--check"}}},
-			"hadolint":           {Command: spells.Command{Bin: "hadolint", Args: []string{"-f", "gnu", "Dockerfile"}}},
+			"hadolint": {
+				Command:     spells.Command{Bin: "hadolint", Args: []string{"-f", "gnu", "Dockerfile"}, Diagnostics: spells.DiagnosticGNU},
+				Diagnostics: spells.DiagnosticGNU,
+			},
 		},
 	},
 	"go": {
@@ -278,10 +289,13 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			// Runs from PATH, not `go tool`: the module tool block never carried it, so
 			// `go tool golangci-lint` reported "no such tool" and the op could not run.
 			// Dropping the two-element prefix moves rw's insertion point from /3 to /1.
-			"golangci-lint": {Command: spells.Command{Bin: "golangci-lint", Args: []string{"run", "./..."}, Charms: map[string]spells.Charm{
-				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
-				"rw":    {Ops: []spells.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
-			}}},
+			"golangci-lint": {
+				Command: spells.Command{Bin: "golangci-lint", Args: []string{"run", "./..."}, Diagnostics: spells.DiagnosticGNU, Charms: map[string]spells.Charm{
+					"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
+					"rw":    {Ops: []spells.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
+				}},
+				Diagnostics: spells.DiagnosticGNU,
+			},
 			"go-test": {Command: spells.Command{Bin: "go", Args: []string{"test", "./..."}, Charms: map[string]spells.Charm{
 				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 				"cd": {Ops: []spells.PatchOp{
@@ -345,9 +359,12 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		IgnoreDirs: []string{"target"},
 		Manifests:  []string{"Cargo.toml"},
 		Ops: map[string]spells.Op{
-			"cargo-build":  {Command: spells.Command{Bin: "cargo", Args: []string{"build", "--release"}}},
-			"cargo-clean":  {Command: spells.Command{Bin: "cargo", Args: []string{"clean"}}},
-			"cargo-clippy": {Command: spells.Command{Bin: "cargo", Args: []string{"clippy", "--", "-D", "warnings"}}},
+			"cargo-build": {Command: spells.Command{Bin: "cargo", Args: []string{"build", "--release"}}},
+			"cargo-clean": {Command: spells.Command{Bin: "cargo", Args: []string{"clean"}}},
+			"cargo-clippy": {
+				Command:     spells.Command{Bin: "cargo", Args: []string{"clippy", "--message-format=short", "--", "-D", "warnings"}, Diagnostics: spells.DiagnosticGNU},
+				Diagnostics: spells.DiagnosticGNU,
+			},
 			"cargo-fmt": {Command: spells.Command{Bin: "cargo", Args: []string{"fmt", "--", "--check"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}},
 			}}},
@@ -382,7 +399,12 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"prettier": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "prettier", "--check", "."}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/2", Value: "--write"}}},
 			}}},
-			"tsc":       {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc"}}},
+			"tsc": {
+				Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc"}, Diagnostics: spells.DiagnosticCustom,
+					DiagnosticPattern: `^(?P<file>.+?)\((?P<line>\d+),(?P<col>\d+)\): (?P<severity>error|warning) (?P<code>TS\d+): (?P<message>.*)$`},
+				Diagnostics:       spells.DiagnosticCustom,
+				DiagnosticPattern: `^(?P<file>.+?)\((?P<line>\d+),(?P<col>\d+)\): (?P<severity>error|warning) (?P<code>TS\d+): (?P<message>.*)$`,
+			},
 			"tsc-build": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc", "--build"}}},
 			"tsc-clean": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc", "--build", "--clean"}}},
 			"vitest": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "vitest", "run"}, Charms: map[string]spells.Charm{

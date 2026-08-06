@@ -279,6 +279,8 @@ scip is the reserved op that runs the TypeScript SCIP indexer for the knowledge 
 
 ## tsc
 
+tsc has no GNU option - confirmed against `tsc --help --all`: the only formatting flag is --pretty, which just toggles color, and the unflagged (non-TTY) default is `file(line,col): error TSxxxx: msg`, parenthesized rather than colon-delimited. A custom pattern is the escape hatch for exactly this: a tool with no standard to fall back on.
+
 **Command:** `pnpm exec tsc`
 
 ### Example

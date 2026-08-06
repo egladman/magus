@@ -13,7 +13,9 @@ export fun mgs_listIgnoreDirs() > [Path] {
 }
 
 // One shellcheck invocation over every shell source: find feeds xargs with NUL
-// separators, and -r skips running shellcheck on an empty set.
+// separators, and -r skips running shellcheck on an empty set. --format=gcc reports in
+// the GNU diagnostic format, so magus reads each finding's file, line and rule rather
+// than its prose.
 //
 // node_modules and .claude/worktrees are pruned inside the find too, not just
 // declared above: a declared ignore dir shapes what magus treats as sources, but this
@@ -29,7 +31,8 @@ export fun mgs_listIgnoreDirs() > [Path] {
 // Then every spell inherits the declared ignore dirs instead of hardcoding names here.
 fun shellcheck(target: Target) > Command {
     return Command{bin = "sh", args = ["-c",
-        "find . \\( -name node_modules -o -path './.claude/worktrees' \\) -prune -o \\( -name '*.sh' -o -name '*.bash' \\) -print0 | xargs -0 -r shellcheck"]};
+        "find . \\( -name node_modules -o -path './.claude/worktrees' \\) -prune -o \\( -name '*.sh' -o -name '*.bash' \\) -print0 | xargs -0 -r shellcheck --format=gcc"],
+        diagnostics = DiagnosticFormat.gnu};
 }
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {

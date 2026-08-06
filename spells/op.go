@@ -41,6 +41,22 @@ type Command struct {
 	// belongs on Command because it is declared by a Command-returning handler;
 	// Op carries the resolved copy that dispatch reads.
 	Capture bool `json:"capture,omitempty"`
+	// Diagnostics names the convention this command's tool prints findings in; empty
+	// means prose. On Command rather than Tool: a wrapper op ("pnpm exec eslint" vs
+	// "pnpm exec tsc") is the only place that knows which tool actually ran, since the
+	// bin two such ops share says nothing about which one is reporting. Op carries the
+	// resolved copy that dispatch reads, same as Capture.
+	Diagnostics DiagnosticFormat `json:"diagnostics,omitempty"`
+	// DiagnosticPattern is a Go-flavored regex with named capture groups - "file" and
+	// "line" required, "col"/"severity"/"code"/"message" optional - read only when
+	// Diagnostics is DiagnosticCustom. Go's regexp is RE2 (linear time, no catastrophic
+	// backtracking), so an author-supplied pattern cannot pathologically hang the engine.
+	//
+	// Decode only checks that the pattern COMPILES and NAMES the required groups - it
+	// can't know whether the pattern matches the tool's real output, since none exists
+	// yet at decode time. Verify it against real captured output before shipping it,
+	// the same rule every built-in format followed (see spells/diagnostics_test.go).
+	DiagnosticPattern string `json:"diagnosticPattern,omitempty"`
 }
 
 // Op kinds. A kind lives on the op, not the spell: one spell freely mixes command
@@ -108,6 +124,10 @@ type Op struct {
 	// Service is set only for a service op (Kind == OpKindService); nil otherwise.
 	Service *Service `json:"service,omitempty"`
 	Capture bool     `json:"capture,omitempty"`
+	// Diagnostics is the resolved copy of Command.Diagnostics that dispatch reads.
+	Diagnostics DiagnosticFormat `json:"diagnostics,omitempty"`
+	// DiagnosticPattern is the resolved copy of Command.DiagnosticPattern that dispatch reads.
+	DiagnosticPattern string `json:"diagnosticPattern,omitempty"`
 	// Doc is the handler function's documentation comment (see buzz Chunk.Doc),
 	// surfaced by `magus describe` and enforced by `magus doctor` for local Buzz
 	// spells. Empty for command built-ins (their Doc is not serialized in bytecode).

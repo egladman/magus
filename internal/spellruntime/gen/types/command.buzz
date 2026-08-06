@@ -5,9 +5,17 @@
 // see internal/spellruntime/target.go and hosttypes.go). Edit the Go struct and rerun
 // `go generate`, never this file.
 
+export enum<str> DiagnosticFormat {
+    none = "",
+    gnu = "gnu",
+    custom = "custom",
+}
+
 export object Command {
     bin: str = "",
     args: [str] = [],
     charms: {str: Charm} = {},
     capture: bool = false,
+    diagnostics: DiagnosticFormat = DiagnosticFormat.none,
+    diagnosticPattern: str = "",
 }

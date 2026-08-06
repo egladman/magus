@@ -66,7 +66,9 @@ export fun clean(ctx: magus\Context, args: [str]) > void {
 
 ## cargo-clippy
 
-**Command:** `cargo clippy -- -D warnings`
+--message-format=short reports in the GNU diagnostic format, so magus reads each finding's file, line and rule rather than its prose. Placed before the `--` since it is cargo's own flag, not one clippy/rustc forwards.
+
+**Command:** `cargo clippy --message-format=short -- -D warnings`
 
 ### Example
 

@@ -62,9 +62,13 @@ fun goFmt(target: Target) > Command {
 // block, and a workspace that had not put it there got "no such tool" - the op
 // could not run at all. On PATH it is pinned by whatever the workspace uses
 // (mise, asdf, a system package), and the spell's version probe records which.
+//
+// No explicit format flag: golangci-lint v2 dropped --out-format, and its default
+// text output (`file:line:col: message (linter)`) already matches the GNU skeleton
+// this declares, verified against a real `printf` finding.
 fun golangCILint(target: Target) > Command {
     final args = ["run", "./..."];
-    return Command{bin = "golangci-lint", args = args, charms = {
+    return Command{bin = "golangci-lint", args = args, diagnostics = DiagnosticFormat.gnu, charms = {
         "debug": append(["-v"]),
         "rw": after(args, "run", ["--fix"]),
     }};

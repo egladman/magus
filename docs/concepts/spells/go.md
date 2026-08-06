@@ -301,7 +301,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 
 ## golangci-lint
 
-Invoked directly rather than through `go tool`: golangci-lint generates no code, so it has none of the generator/runtime lockstep that keeps protoc-gen-go pinned in go.mod. `go tool golangci-lint` also required the binary in the module's tool block, and a workspace that had not put it there got "no such tool" - the op could not run at all. On PATH it is pinned by whatever the workspace uses (mise, asdf, a system package), and the spell's version probe records which.
+Invoked directly rather than through `go tool`: golangci-lint generates no code, so it has none of the generator/runtime lockstep that keeps protoc-gen-go pinned in go.mod. `go tool golangci-lint` also required the binary in the module's tool block, and a workspace that had not put it there got "no such tool" - the op could not run at all. On PATH it is pinned by whatever the workspace uses (mise, asdf, a system package), and the spell's version probe records which. No explicit format flag: golangci-lint v2 dropped --out-format, and its default text output (`file:line:col: message (linter)`) already matches the GNU skeleton this declares, verified against a real `printf` finding.
 
 **Command:** `golangci-lint run ./...`
 

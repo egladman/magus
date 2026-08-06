@@ -13,9 +13,11 @@ export fun mgs_listRequiredGlobs() > [Path] {
 fun dockerBuild(target: Target) > Command { return Command{bin = "docker", args = ["build"]}; }
 fun dockerBuildx(target: Target) > Command { return Command{bin = "docker", args = ["buildx", "build"]}; }
 fun dockerBuildCheck(target: Target) > Command { return Command{bin = "docker", args = ["build", "--check"]}; }
-// Lints the Dockerfile, reporting in the GNU diagnostic format the tool declares in
-// mgs_getTools, so magus reads each finding's file, line and rule rather than its prose.
-fun hadolint(target: Target) > Command { return Command{bin = "hadolint", args = ["-f", "gnu", "Dockerfile"]}; }
+// Lints the Dockerfile with -f gnu, so magus reads each finding's file, line and rule
+// instead of prose. Declared here rather than on mgs_getTools' hadolint entry: only
+// the invocation knows the format, since a wrapped tool can run other binaries under
+// the same bin that report differently.
+fun hadolint(target: Target) > Command { return Command{bin = "hadolint", args = ["-f", "gnu", "Dockerfile"], diagnostics = DiagnosticFormat.gnu}; }
 // --rm is baked in: an op that leaves containers behind turns a repeated target into a
 // disk leak. The caller supplies mounts, workdir, image and command through args.
 fun dockerRun(target: Target) > Command { return Command{bin = "docker", args = ["run", "--rm"]}; }
@@ -39,7 +41,6 @@ export fun mgs_getTools() > {str: Tool} {
         },
         "hadolint": Tool{
             probe = Command{bin = "hadolint", args = ["--version"]},
-            diagnostics = DiagnosticFormat.gnu,
         },
     };
 }

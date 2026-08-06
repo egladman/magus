@@ -77,29 +77,109 @@ func TestDecodeToolsDropsEmptyEntries(t *testing.T) {
 	assert.Empty(t, m.Tools)
 }
 
-// A tool declaring only a diagnostics format is kept: the entry says something magus
-// acts on, so the drop-empty-entries rule must not treat it as saying nothing.
-func TestDecodeToolsCarriesDiagnosticsFormat(t *testing.T) {
+// Diagnostics is declared on the op, not the tool: only the invocation knows which
+// binary is actually reporting when a bin is shared by a wrapper (pnpm exec eslint vs
+// pnpm exec tsc).
+func TestDecodeOpsCarriesDiagnosticsFormat(t *testing.T) {
 	m, err := Decode(mapObj{
 		"name": "docker",
-		"tools": map[string]any{
-			"hadolint": map[string]any{"diagnostics": "gnu"},
+		"ops": map[string]any{
+			"hadolint": map[string]any{
+				"bin":         "hadolint",
+				"args":        []string{"-f", "gnu", "Dockerfile"},
+				"diagnostics": "gnu",
+			},
 		},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, spells.DiagnosticGNU, m.Tools["hadolint"].Diagnostics)
+	assert.Equal(t, spells.DiagnosticGNU, m.Ops["hadolint"].Diagnostics)
 }
 
 // An unrecognized format is a spell-authoring bug caught at decode, the same place a
 // bad key.upTo lands - not a silent fall back to scraping prose.
-func TestDecodeToolsRejectsUnknownDiagnosticsFormat(t *testing.T) {
+func TestDecodeOpsRejectsUnknownDiagnosticsFormat(t *testing.T) {
 	_, err := Decode(mapObj{
 		"name": "docker",
-		"tools": map[string]any{
-			"hadolint": map[string]any{"diagnostics": "sarif"},
+		"ops": map[string]any{
+			"hadolint": map[string]any{
+				"bin":         "hadolint",
+				"diagnostics": "sarif",
+			},
 		},
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "diagnostics is sarif")
 	assert.Contains(t, err.Error(), "gnu", "the message names the formats magus accepts")
+}
+
+// A tsc-shaped op with a custom pattern decodes and validates the pattern up front,
+// the same place a bad key.upTo or an unrecognized format lands.
+func TestDecodeOpsCarriesCustomDiagnosticPattern(t *testing.T) {
+	pattern := `^(?P<file>.+?)\((?P<line>\d+),(?P<col>\d+)\): (?P<severity>error|warning) (?P<code>TS\d+): (?P<message>.*)$`
+	m, err := Decode(mapObj{
+		"name": "typescript",
+		"ops": map[string]any{
+			"tsc": map[string]any{
+				"bin":               "pnpm",
+				"args":              []string{"exec", "tsc"},
+				"diagnostics":       "custom",
+				"diagnosticPattern": pattern,
+			},
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, spells.DiagnosticCustom, m.Ops["tsc"].Diagnostics)
+	assert.Equal(t, pattern, m.Ops["tsc"].DiagnosticPattern)
+}
+
+// An uncompilable pattern is a spell-authoring bug caught before anything runs, not a
+// silent zero-findings result the first time the op actually fails.
+func TestDecodeOpsRejectsUncompilableDiagnosticPattern(t *testing.T) {
+	_, err := Decode(mapObj{
+		"name": "x",
+		"ops": map[string]any{
+			"tsc": map[string]any{"bin": "tsc", "diagnostics": "custom", "diagnosticPattern": "(unclosed"},
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "does not compile")
+}
+
+// A pattern missing the required "file" or "line" capture group is rejected: a finding
+// with no file and no line isn't a finding - it's exactly what a CI annotation needs
+// to point at.
+func TestDecodeOpsRejectsDiagnosticPatternMissingRequiredGroups(t *testing.T) {
+	_, err := Decode(mapObj{
+		"name": "x",
+		"ops": map[string]any{
+			"tsc": map[string]any{"bin": "tsc", "diagnostics": "custom", "diagnosticPattern": `^(?P<message>.*)$`},
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `must name capture groups "file" and "line"`)
+}
+
+// diagnostics defaults to none, so custom requires opting in explicitly - a pattern
+// with no diagnostics=custom is a likely spell-authoring mistake (forgot to flip the
+// format), not something to silently ignore.
+func TestDecodeOpsRejectsDiagnosticPatternWithoutCustomFormat(t *testing.T) {
+	_, err := Decode(mapObj{
+		"name": "x",
+		"ops": map[string]any{
+			"tsc": map[string]any{"bin": "tsc", "diagnosticPattern": `^(?P<file>.+):(?P<line>\d+)$`},
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "diagnosticPattern is set but diagnostics is unset, not custom")
+}
+
+// diagnostics=custom with no pattern at all is the same authoring mistake from the
+// other direction.
+func TestDecodeOpsRejectsCustomFormatWithoutPattern(t *testing.T) {
+	_, err := Decode(mapObj{
+		"name": "x",
+		"ops":  map[string]any{"tsc": map[string]any{"bin": "tsc", "diagnostics": "custom"}},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "diagnostics is custom but diagnosticPattern is empty")
 }

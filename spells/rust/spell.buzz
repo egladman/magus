@@ -33,7 +33,12 @@ export fun mgs_listManifests() > [Path] { return [Path{value = "Cargo.toml"}]; }
 
 fun cargoBuild(target: Target) > Command { return Command{bin = "cargo", args = ["build", "--release"]}; }
 fun cargoClean(target: Target) > Command { return Command{bin = "cargo", args = ["clean"]}; }
-fun cargoClippy(target: Target) > Command { return Command{bin = "cargo", args = ["clippy", "--", "-D", "warnings"]}; }
+// --message-format=short reports in the GNU diagnostic format, so magus reads each
+// finding's file, line and rule rather than its prose. Placed before the `--` since
+// it is cargo's own flag, not one clippy/rustc forwards.
+fun cargoClippy(target: Target) > Command {
+    return Command{bin = "cargo", args = ["clippy", "--message-format=short", "--", "-D", "warnings"], diagnostics = DiagnosticFormat.gnu};
+}
 fun cargoFmt(target: Target) > Command {
     final args = ["fmt", "--", "--check"];
     // rw turns the check into a write by dropping --check then -- (`cargo fmt`).

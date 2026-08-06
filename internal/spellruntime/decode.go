@@ -4,6 +4,7 @@ import (
 	"fmt"
 	semver "github.com/Masterminds/semver/v3"
 	"maps"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -158,6 +159,8 @@ func Decode(src Obj) (spells.Descriptor, error) {
 				}
 				t.Command = cmd
 				t.Capture = cmd.Capture
+				t.Diagnostics = cmd.Diagnostics
+				t.DiagnosticPattern = cmd.DiagnosticPattern
 			}
 			// Kind-coherence wards: reject an op whose argv contradicts its kind
 			// (a detached service, a never-exiting command) at resolution time,
@@ -192,6 +195,49 @@ func decodeCommand(spellName, opName string, o Obj) (spells.Command, error) {
 	if bin, ok := o.Str("bin"); ok {
 		c.Bin = bin
 	}
+	where := func() string {
+		if spellName == "" && opName == "" {
+			return ""
+		}
+		return fmt.Sprintf("spell %q op %q ", spellName, opName)
+	}
+	if d, ok := o.Str("diagnostics"); ok {
+		c.Diagnostics = spells.DiagnosticFormat(d)
+		if !c.Diagnostics.Valid() {
+			return spells.Command{}, fmt.Errorf("%sdiagnostics is %s; want one of %s",
+				where(), c.Diagnostics, strings.Join(c.Diagnostics.Values(), ", "))
+		}
+	}
+	if p, ok := o.Str("diagnosticPattern"); ok {
+		c.DiagnosticPattern = p
+	}
+	if c.Diagnostics == spells.DiagnosticCustom {
+		if c.DiagnosticPattern == "" {
+			return spells.Command{}, fmt.Errorf(
+				"%sdiagnostics is custom but diagnosticPattern is empty", where())
+		}
+		re, err := regexp.Compile(c.DiagnosticPattern)
+		if err != nil {
+			return spells.Command{}, fmt.Errorf(
+				"%sdiagnosticPattern %q does not compile: %w", where(), c.DiagnosticPattern, err)
+		}
+		var hasFile, hasLine bool
+		for _, name := range re.SubexpNames() {
+			switch name {
+			case "file":
+				hasFile = true
+			case "line":
+				hasLine = true
+			}
+		}
+		if !hasFile || !hasLine {
+			return spells.Command{}, fmt.Errorf(
+				`%sdiagnosticPattern %q must name capture groups "file" and "line"`, where(), c.DiagnosticPattern)
+		}
+	} else if c.DiagnosticPattern != "" {
+		return spells.Command{}, fmt.Errorf(
+			"%sdiagnosticPattern is set but diagnostics is %s, not custom", where(), c.Diagnostics)
+	}
 	charms, ok := o.Obj("charms")
 	if !ok {
 		return c, nil
@@ -210,8 +256,8 @@ func decodeCommand(spellName, opName string, o Obj) (spells.Command, error) {
 			// Str unwraps a PatchOpKind enum case to its backing string, so both the
 			// enum spelling charm.buzz uses and a bare "add" from a hand-written record
 			// decode the same way.
-			opName, _ := opObj.Str("op")
-			po.Op = spells.PatchOpKind(opName)
+			kind, _ := opObj.Str("op")
+			po.Op = spells.PatchOpKind(kind)
 			po.Path, _ = opObj.Str("path")
 			if v, ok := opObj.Str("value"); ok {
 				po.Value = v
@@ -225,11 +271,7 @@ func decodeCommand(spellName, opName string, o Obj) (spells.Command, error) {
 			// Qualify with spell/op only when named. The by-value entrypoint
 			// (DecodeCommandValue) passes neither, so an empty `spell "" op ""` prefix
 			// would read as a bug in the surfaced message; the engine path always names both.
-			where := ""
-			if spellName != "" || opName != "" {
-				where = fmt.Sprintf("spell %q op %q ", spellName, opName)
-			}
-			return spells.Command{}, fmt.Errorf("%scharm %q: %w", where, cn, err)
+			return spells.Command{}, fmt.Errorf("%scharm %q: %w", where(), cn, err)
 		}
 		cm[cn] = ch
 	}
@@ -258,10 +300,6 @@ func validateTools(m spells.Descriptor) error {
 			// so adding a component cannot leave this message stale.
 			return fmt.Errorf("spell %q: tools[%q].key.upTo is %s; want one of %s",
 				m.Name, tool, c, strings.Join(c.Values(), ", "))
-		}
-		if d := m.Tools[tool].Diagnostics; !d.Valid() {
-			return fmt.Errorf("spell %q: tools[%q].diagnostics is %s; want one of %s",
-				m.Name, tool, d, strings.Join(d.Values(), ", "))
 		}
 	}
 	return nil
@@ -304,11 +342,7 @@ func decodeTools(src Obj) map[string]spells.Tool {
 				t.Ready = cmd
 			}
 		}
-		if d, ok := o.Str("diagnostics"); ok {
-			t.Diagnostics = spells.DiagnosticFormat(d)
-		}
-		if t.Probe.Bin == "" && t.Key.IsZero() && t.Ready.Bin == "" && t.Floor == "" &&
-			t.Diagnostics == spells.DiagnosticNone {
+		if t.Probe.Bin == "" && t.Key.IsZero() && t.Ready.Bin == "" && t.Floor == "" {
 			continue
 		}
 		if out == nil {

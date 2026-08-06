@@ -178,7 +178,7 @@ var boundaryEnums = []boundaryEnum{
 	{
 		Name:  "DiagnosticFormat",
 		Type:  reflect.TypeFor[spells.DiagnosticFormat](),
-		Cases: []enumCase{{"none", ""}, {"gnu", "gnu"}},
+		Cases: []enumCase{{"none", ""}, {"gnu", "gnu"}, {"custom", "custom"}},
 	},
 }
 

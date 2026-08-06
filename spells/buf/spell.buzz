@@ -39,8 +39,13 @@ export fun mgs_listProvidedGlobs() > [Path] { return [Path{value = "gen/**"}]; }
 
 fun bufBuild(target: Target) > Command { return Command{bin = "buf", args = ["build"]}; }
 fun bufGenerate(target: Target) > Command { return Command{bin = "buf", args = ["generate"]}; }
+// No --error-format flag: buf's default `text` output (file:line:col:message, no space
+// after the last colon - not GNU by the letter, but magus's parser tolerates it) is
+// already what this declares. The gha charm below swaps the actual output to GitHub
+// Actions annotations when selected, which this declared format doesn't track - a run
+// under `buf-lint:gha` reports gnu here even though its output isn't.
 fun bufLint(target: Target) > Command {
-    return Command{bin = "buf", args = ["lint"], charms = {
+    return Command{bin = "buf", args = ["lint"], diagnostics = DiagnosticFormat.gnu, charms = {
         "gha": append(["--error-format=github-actions"]),
     }};
 }
@@ -63,7 +68,7 @@ fun bufFormat(target: Target) > Command {
 // swaps buf's reporter to GitHub Actions annotations.
 fun bufBreaking(target: Target) > Command {
     final args = ["breaking", "--against", ".git#branch=main"];
-    return Command{bin = "buf", args = args, charms = {
+    return Command{bin = "buf", args = args, diagnostics = DiagnosticFormat.gnu, charms = {
         "gha": append(["--error-format=github-actions"]),
     }};
 }

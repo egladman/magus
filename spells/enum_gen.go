@@ -55,7 +55,7 @@ func (v VersionComponent) String() string {
 }
 
 // Values lists the DiagnosticFormat values a caller may choose, excluding the zero value.
-func (v DiagnosticFormat) Values() []string { return []string{"gnu"} }
+func (v DiagnosticFormat) Values() []string { return []string{"gnu", "custom"} }
 
 // Valid reports whether v is a declared DiagnosticFormat. The zero value is valid: it means the
 // field was not set, which callers distinguish from a wrong value.
@@ -65,7 +65,7 @@ func (v DiagnosticFormat) Values() []string { return []string{"gnu"} }
 // that builds an error message and the wrong one for a predicate.
 func (v DiagnosticFormat) Valid() bool {
 	switch v {
-	case "", "gnu":
+	case "", "gnu", "custom":
 		return true
 	}
 	return false
