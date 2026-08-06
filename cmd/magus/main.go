@@ -78,6 +78,12 @@ func runCLI() int {
 	log.SetFlags(0)
 	log.SetPrefix("magus: ")
 
+	// Deferred, not tied to the cleanup closure below: runCLI has several early
+	// returns, and a profile that stops only on the happy path is a profile that is
+	// empty exactly when a run failed slowly. main() calls os.Exit on runCLI's RESULT,
+	// so this defer still runs. No-op unless MAGUS_PPROF is set.
+	defer startProfiling()()
+
 	args := expandVerbosityArgs(os.Args[1:])
 
 	rootCtx, stopSignals := watchInterrupts(context.Background())
