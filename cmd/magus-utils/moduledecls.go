@@ -253,6 +253,11 @@ func buzzZero(t std.TypeTag) (string, error) {
 		return "{<str: str>}", nil
 	case std.TypeAnyMap:
 		return "{<str: any>}", nil
+	case std.TypeAny:
+		// The one tag whose zero really is null: `any` is nullable, so `x: any = null`
+		// annotates cleanly. That is not true of the tags still falling through - a
+		// TypeFunc arg would emit `fn: Function = null` against a non-nullable Function.
+		return "null", nil
 	default:
 		return "", fmt.Errorf("optional arg of type tag %d has no expressible Buzz default", t)
 	}

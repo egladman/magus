@@ -62,6 +62,10 @@ var boundaryTypes = []boundaryType{
 	// must already be declared.
 	{Name: "FileEntry", Type: reflect.TypeFor[types.FileEntry](), RuntimeObject: true},
 	{Name: "FileReport", Type: reflect.TypeFor[types.FileReport](), RuntimeObject: true},
+	// Diagnostic is not a RuntimeObject: no host method RETURNS one. It reaches Buzz
+	// through a thrown error, which the VM renders from BuzzError, so only the mirror
+	// is needed - a caller narrows the caught value to it.
+	{Name: "Diagnostic", Type: reflect.TypeFor[types.Diagnostic]()},
 	{Name: "DoctorCheck", Type: reflect.TypeFor[types.DoctorCheck](), RuntimeObject: true},
 	{Name: "DoctorSummary", Type: reflect.TypeFor[types.DoctorSummary](), RuntimeObject: true},
 	{Name: "DoctorReport", Type: reflect.TypeFor[types.DoctorReport](), RuntimeObject: true},

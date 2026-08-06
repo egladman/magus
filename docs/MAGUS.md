@@ -49,14 +49,14 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | spell | 12 | `magus query kind:spell` | `go`, `markdown`, `typescript` |
 | op | 57 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-edit` |
 | tool | 15 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
-| charm | 9 | `magus query kind:charm` | `rw`, `cd`, `snapshot` |
+| charm | 10 | `magus query kind:charm` | `rw`, `cd`, `stable` |
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `magus` |
-| method | 166 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
+| method | 167 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 58 | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS4001` |
 | doc | 270 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 136 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
 | file | 232 | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 1233 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| function | 1235 | `magus query kind:function` | `sel`, `sendObject`, `send` |
 | import | 124 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 

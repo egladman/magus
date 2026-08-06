@@ -173,10 +173,18 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 			// Traced as a per-target op (attributed to tr.cur) so a dry-run shows
 			// each target's logs in order; writing to the shared output buffer would
 			// mix every probed target's logs together.
-			tr.addOp("log", level, strArg(args, 0, ""))
+			tr.addOp("log", level, strArg(args, 0))
 			return vm.Null, nil
 		}))
 	}
+
+	// magus.raise(code, message, cause?, url?) fails with a coded diagnostic. A dry run
+	// must not actually fail, so it traces the code and message and returns - the point
+	// of the probe is which branch a target would take, not that it aborts there.
+	m.MapSet("raise", fn("magus.raise", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		tr.addOp("raise", strArg(args, 0), strArg(args, 1))
+		return vm.Null, nil
+	}))
 
 	// magus.run(argv, opts?) recursively invokes `magus run <argv>`. The dry run
 	// can't re-enter the runner, so it traces the invocation (the target and any
@@ -428,7 +436,7 @@ func traceHasCharm(tr *Tracer) func(context.Context, []vm.Value) (vm.Value, erro
 		// Normalize the query the way types.HasCharm does on the real path: the
 		// stored set is canonical, so a raw compare here answers differently than
 		// the run being traced.
-		name := types.Normalize(strArg(args, 0, ""))
+		name := types.Normalize(strArg(args, 0))
 		for _, c := range tr.charms {
 			if c == name {
 				return vm.BoolValue(true), nil
@@ -684,11 +692,11 @@ func valToStrings(v vm.Value) []string {
 }
 
 // strArg returns args[i] as a string, or fallback if it is absent or not a str.
-func strArg(args []vm.Value, i int, fallback string) string {
+func strArg(args []vm.Value, i int) string {
 	if i < len(args) && args[i].IsStr() {
 		return args[i].AsString()
 	}
-	return fallback
+	return ""
 }
 
 func spellArgsDetail(args []vm.Value) string {

@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/types"
 )
 
@@ -97,6 +98,18 @@ var Magus = Module{
 			},
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    MagusWhere,
+		},
+		{
+			Name: "raise",
+			Doc:  "Fail with a CODED diagnostic instead of a bare string, so a caller can branch on the code: `catch (e) { if (e.code == \"ACME1001\") ... }`. code is yours to define and namespace - anything but the MGS prefix, which is magus's own. cause is the error being wrapped, usually the value from an inner catch; it is appended to the message the way Go's %w renders one, and the failure it came from stays reachable underneath. url is the page documenting the code, rendered as the `see:` line the CLI prints under its own diagnostics.",
+			Args: []Arg{
+				{Name: "code", Type: TypeString},
+				{Name: "message", Type: TypeString},
+				{Name: "cause", Type: TypeAny, Optional: true},
+				{Name: "url", Type: TypeString, Optional: true},
+			},
+			Returns: nil,
+			Impl:    MagusRaise,
 		},
 		{
 			Name: "run",
@@ -315,6 +328,80 @@ func MagusWhere(ctx context.Context, dir string) (string, error) {
 		return "", nil
 	}
 	return p.Path, nil
+}
+
+// MagusRaise fails with a caller-defined coded diagnostic.
+//
+// magus already gives a Buzz `catch` the code, message and url of its OWN failures
+// (diagnostics.Error.BuzzError), so a magusfile can branch on MGS2001 without matching
+// prose. Authoring one was the missing half: a magusfile could only `throw` a string,
+// which leaves its own callers doing the substring matching that mechanism exists to
+// avoid. Workspaces build things magus cannot anticipate, and their failures deserve the
+// same stable identifier magus gives its own.
+//
+// The MGS prefix is refused rather than merely discouraged. MGS codes are a closed
+// catalog that `magus explain`, the knowledge graph and the docs URL map all resolve
+// against, so a workspace minting MGS9999 would produce a diagnostic that renders like
+// magus's own and documents nothing.
+//
+// `raise` rather than `throw`, which would match the Buzz keyword: throw is reserved, so
+// a member cannot be named it. error and fatal are taken by the logging members above.
+func MagusRaise(_ context.Context, code, message string, cause any, url string) error {
+	if code == "" {
+		return errors.New("magus.raise: needs a code, e.g. \"ACME1001\" - it is the stable identifier a caller branches on")
+	}
+	if message == "" {
+		return fmt.Errorf("magus.raise: %s needs a message; a code is an identifier, not a sentence", code)
+	}
+	if strings.HasPrefix(strings.ToUpper(code), "MGS") {
+		return fmt.Errorf("magus.raise: %q is in magus's own MGS namespace, which is a closed catalog - pick a prefix for this workspace instead", code)
+	}
+	// A per-call domain is how a caller-supplied url reaches the rendered error: Error's
+	// url field is captured at construction from the domain's function, never set later.
+	d := diagnostics.New(func(diagnostics.Code) string { return url })
+	summary, c := buzzCause(cause)
+	if c == nil {
+		return d.Errorf(diagnostics.Code(code), "%s", message)
+	}
+	// Wrapf keeps the cause reachable through Unwrap but deliberately does not render it,
+	// so the summary is spliced in here to match what Go's %w prints. A cause nobody can
+	// see is the failure the author was trying to report.
+	return d.Wrapf(diagnostics.Code(code), c, "%s: %s", message, summary)
+}
+
+// buzzCause converts a caught Buzz value into the one-line summary to splice into the
+// wrapper's message, plus the Go error to keep reachable underneath it.
+//
+// A structured catch arrives as the map BuzzError produced, so a coded cause is rebuilt as
+// a coded error and errors.Is keeps matching it underneath the new code. The summary is
+// the cause's message rather than its rendered form, which would drag a second "see:" line
+// into the middle of the wrapper's.
+func buzzCause(v any) (string, error) {
+	switch t := v.(type) {
+	case nil:
+		return "", nil
+	case string:
+		if t == "" {
+			return "", nil
+		}
+		return t, errors.New(t)
+	case map[string]any:
+		msg, _ := t["message"].(string)
+		code, _ := t["code"].(string)
+		switch {
+		case code != "":
+			u, _ := t["url"].(string)
+			e := diagnostics.New(func(diagnostics.Code) string { return u }).
+				Errorf(diagnostics.Code(code), "%s", msg)
+			return "[" + code + "] " + msg, e
+		case msg != "":
+			return msg, errors.New(msg)
+		}
+		return "", nil
+	default:
+		s := fmt.Sprintf("%v", t)
+		return s, errors.New(s)
+	}
 }
 
 // MagusGraph returns the project dependency graph as a flat object. See MagusLs for

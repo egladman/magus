@@ -52,13 +52,14 @@
         {
           "name": "image-build",
           "declared": "image_build",
-          "doc": "Three PUBLISH modes and one local mode, and which you get is a charm because the default must be the harmless one: a bare `magus run image-build` on a laptop loads an image into the local daemon and pushes nothing.",
+          "doc": "Two axes, one charm each.",
           "charms": [
             "amd64",
             "arm64",
             "cd",
-            "snapshot",
-            "static"
+            "stable",
+            "static",
+            "unstable"
           ],
           "spells": [
             {
@@ -84,7 +85,8 @@
           "doc": "Reports the registries `magus run image-build` under the SAME charms will push to, and whether the credentials each one needs are actually present in the environment.",
           "charms": [
             "cd",
-            "snapshot",
+            "stable",
+            "unstable",
             "verify"
           ]
         },
@@ -94,7 +96,8 @@
           "doc": "Logs in to every registry the active mode publishes to, resolving each one's credentials through the workspace's secret provider.",
           "charms": [
             "cd",
-            "snapshot"
+            "stable",
+            "unstable"
           ]
         },
         {

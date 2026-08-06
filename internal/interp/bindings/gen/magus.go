@@ -71,6 +71,16 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return StrVal(ret0), nil
 	}))
+	m.MapSet("raise", vm.DirectValue("magus.raise", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		code := Str(bzArgs, 0)
+		message := Str(bzArgs, 1)
+		cause := Any(bzArgs, 2)
+		url := Str(bzArgs, 3)
+		if err := std.MagusRaise(ctx, code, message, cause, url); err != nil {
+			return vm.Null, HostError(err)
+		}
+		return vm.Null, nil
+	}))
 	m.MapSet("run", vm.DirectValue("magus.run", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		args := StrSlice(bzArgs, 0)
 		opts := AnyMap(bzArgs, 1)
@@ -573,7 +583,7 @@ func buzzValueMagusVolatilityReport(v types.VolatilityReport) vm.Value {
 
 func buzzValueMagusKnowledgeGodNode(v types.KnowledgeGodNode) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("iD", vm.StrValue(v.ID))
+	out.MapSet("id", vm.StrValue(v.ID))
 	out.MapSet("kind", vm.StrValue(v.Kind))
 	out.MapSet("label", vm.StrValue(v.Label))
 	out.MapSet("degree", vm.IntValue(int64(v.Degree)))
@@ -584,7 +594,7 @@ func buzzValueMagusKnowledgeGodNode(v types.KnowledgeGodNode) vm.Value {
 
 func buzzValueMagusKnowledgeOrphan(v types.KnowledgeOrphan) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("iD", vm.StrValue(v.ID))
+	out.MapSet("id", vm.StrValue(v.ID))
 	out.MapSet("kind", vm.StrValue(v.Kind))
 	out.MapSet("label", vm.StrValue(v.Label))
 	out.MapSet("reason", vm.StrValue(v.Reason))
@@ -804,7 +814,7 @@ func buzzValueMagusDriftVerdict(v types.DriftVerdict) vm.Value {
 	out.MapSet("drifted", vm.BoolValue(v.Drifted))
 	out.MapSet("code", vm.StrValue(v.Code))
 	out.MapSet("message", vm.StrValue(v.Message))
-	out.MapSet("uRL", vm.StrValue(v.URL))
+	out.MapSet("url", vm.StrValue(v.URL))
 	itemsFiles := make([]vm.Value, len(v.Files))
 	for indexFiles := range v.Files {
 		itemsFiles[indexFiles] = buzzValueMagusPath(v.Files[indexFiles])

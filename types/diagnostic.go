@@ -210,3 +210,27 @@ func WithDiagnosticSink(ctx context.Context, s DiagnosticSink) context.Context {
 func EmitDiagnostic(ctx context.Context, ev DiagnosticEvent) {
 	diagnostics.Emit(ctx, ev)
 }
+
+// Diagnostic is the shape a coded failure takes when it crosses into Buzz: the fields
+// diagnostics.Error.BuzzError already produces, declared as a type rather than left as an
+// undeclared map convention.
+//
+// It exists because `catch` hands back an untyped value - Buzz has no union types, and a
+// throw can carry a str, an int, or this - so the caller narrows it at the boundary the
+// way errors.As does in Go:
+//
+//	catch (e) {
+//	    final d: Diagnostic = e;
+//	    if (d.code == "MGS2001") { ... }
+//	}
+//
+// Url is omitted when the domain captured none, so a caller testing it is asking "did this
+// code come with docs", not reading an empty string that might mean either.
+type Diagnostic struct {
+	Code    string `json:"code" yaml:"code"`
+	Message string `json:"message" yaml:"message"`
+	// The buzz tag pins the Buzz name explicitly. LowerFirstWord would derive `url` from
+	// URL anyway, but the tag is what a reader and a rename both see - the mirror name is
+	// part of this type's contract, not a side effect of a casing rule.
+	URL string `json:"url,omitempty" yaml:"url,omitempty" buzz:"url"`
+}

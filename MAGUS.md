@@ -49,14 +49,14 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | spell | 12 | `magus query kind:spell` | `go`, `markdown`, `typescript` |
 | op | 57 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-edit` |
 | tool | 15 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
-| charm | 9 | `magus query kind:charm` | `rw`, `cd`, `snapshot` |
+| charm | 10 | `magus query kind:charm` | `rw`, `cd`, `stable` |
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `magus` |
-| method | 166 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
+| method | 167 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 58 | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS4001` |
 | doc | 270 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 136 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
 | file | 232 | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 1233 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| function | 1235 | `magus query kind:function` | `sel`, `sendObject`, `send` |
 | import | 124 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 
@@ -101,7 +101,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `deploy-generate` | deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/. |
 | `serve` | serve is the workspace-root dev loop for BOTH deployables. |
 | `go-build` | Compiles the version-stamped magus binary. |
-| `image-build` | Three PUBLISH modes and one local mode, and which you get is a charm because the default must be the harmless one: a bare `magus run image-build` on a laptop loads an image into the local daemon and pushes nothing. |
+| `image-build` | Two axes, one charm each. |
 | `man-generate` | Renders the roff man pages into manpage/ (repo root). |
 | `changelog-generate` | CHANGELOG.md is a root artifact. |
 | `types-generate` | Regenerates the runtime BuzzObject maps before anything imports a host binding. |
