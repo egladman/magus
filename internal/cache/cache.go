@@ -718,9 +718,11 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 	results := make([]Result, len(steps))
 	g, gctx := errgroup.WithContext(ctx)
 	for i, s := range steps {
-		g.Go(func() error {
-			// markDone on every exit so a failing upstream cascades cancellation.
-			defer barrier.markDone(stepKey(s))
+		g.Go(func() (err error) {
+			// markDone on every exit so a failing upstream cascades cancellation,
+			// carrying this step's own result so a dependent's wait can tell success
+			// from failure rather than just "done" (see waitForDeps).
+			defer func() { barrier.markDone(stepKey(s), err) }()
 
 			// Trace the DAG progression (blocked-on-deps, then admitted) so a
 			// "why is this serialized / what is it waiting on?" question can be read

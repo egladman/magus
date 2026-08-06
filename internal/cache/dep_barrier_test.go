@@ -283,6 +283,45 @@ func TestRunAllDependencyFailureCancelsDependents(t *testing.T) {
 	assert.False(t, bRan, "B's fn ran even though its dependency A failed")
 }
 
+// TestDepBarrierWaitForDepsFailsOnFailedUpstream is the deterministic companion to
+// TestRunAllDependencyFailureCancelsDependents: it drives depBarrier directly, with
+// no goroutines and no errgroup, so the assertion does not depend on winning or
+// losing a race - it exercises the exact defect class instead of hoping to catch it.
+//
+// The defect: markDone used to signal only "the upstream is done", not "the upstream
+// succeeded". A dependent blocked in waitForDeps unblocks the instant markDone's
+// channel closes, which happens as a defer INSIDE the upstream's own goroutine -
+// strictly before that goroutine returns to errgroup's wrapper, which is what
+// cancels the shared ctx. So a dependent could observe "done" and proceed before ctx
+// ever reflected the failure. Calling markDone with an error and then immediately
+// waitForDeps - both on the test goroutine, nothing concurrent - reproduces exactly
+// that ordering every run: if waitForDeps ever again treats "done" as "succeeded",
+// this fails unconditionally instead of some percentage of CI runs.
+func TestDepBarrierWaitForDepsFailsOnFailedUpstream(t *testing.T) {
+	steps := []Step{depStep("", "B", "A"), depStep("", "A")}
+	b := newDepBarrier(steps)
+	wantErr := errors.New("A boom")
+
+	b.markDone(stepKey(steps[1]), wantErr)
+
+	err := b.waitForDeps(context.Background(), steps[0])
+	require.Error(t, err, "B must not treat a failed A as satisfied")
+	assert.ErrorIs(t, err, wantErr, "the dependent's error names the actual upstream failure")
+}
+
+// TestDepBarrierWaitForDepsSucceedsOnPassedUpstream is the control for the test
+// above: markDone(nil) must still unblock a dependent cleanly, so the fix above
+// (checking e.err) does not turn every dependency into a false failure.
+func TestDepBarrierWaitForDepsSucceedsOnPassedUpstream(t *testing.T) {
+	steps := []Step{depStep("", "B", "A"), depStep("", "A")}
+	b := newDepBarrier(steps)
+
+	b.markDone(stepKey(steps[1]), nil)
+
+	err := b.waitForDeps(context.Background(), steps[0])
+	assert.NoError(t, err, "a successful upstream must still unblock its dependent")
+}
+
 // TestRunAllDependencyCycleRejected verifies that a true cycle (A→B→A) is
 // rejected before any fn runs, returning an error rather than hanging g.Wait()
 // forever (which it would under a non-cancellable context).
