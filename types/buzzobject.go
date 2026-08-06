@@ -36,6 +36,31 @@ type FileInfo struct {
 	IsDir bool `buzz:"is_dir"`
 }
 
+// UncompressResult mirrors archive.uncompress's {files, bytes} object: the paths written
+// (sorted) and their total uncompressed size.
+//
+// Files are Paths based at the destination directory, which is where uncompress actually
+// wrote them - so a caller can open one without first remembering which of the two
+// directories it passed in the entries were measured from.
+type UncompressResult struct {
+	Files []Path
+	Bytes int
+}
+
+// CompressResult mirrors archive.compress's {files, bytes_in, bytes_out} object.
+//
+// Deliberately NOT the same type as UncompressResult. The two look alike and are not:
+// compressing reports what went in AND what came out, because the ratio is the thing you
+// asked for, while uncompressing has only one size to report. Sharing a type would mean a
+// bytes field that means different things depending on which call produced it.
+type CompressResult struct {
+	// Files are based at the SOURCE directory - the files that went in - where
+	// UncompressResult's are based at the destination. Each is based where it exists.
+	Files    []Path
+	BytesIn  int `buzz:"bytes_in"`
+	BytesOut int `buzz:"bytes_out"`
+}
+
 // HTTPResponse mirrors http.get/post/request's {status, body, headers} object.
 // headers maps each response header name to its first value.
 type HTTPResponse struct {

@@ -258,6 +258,18 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("notes", vm.ListValue(nil))
 		return res, nil
 	}))
+	// A dry run performs no VCS probe, so nothing has drifted by construction. The
+	// shape still has to match the real verdict, so a magusfile reading .files or
+	// .drifted behaves the same under --dry-run as it does for real.
+	m.MapSet("diagnoseDrift", fn("magus.diagnoseDrift", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("drifted", vm.BoolValue(false))
+		res.MapSet("code", vm.StrValue(""))
+		res.MapSet("message", vm.StrValue(""))
+		res.MapSet("url", vm.StrValue(""))
+		res.MapSet("files", vm.ListValue(nil))
+		return res, nil
+	}))
 	m.MapSet("targetGraph", fn("magus.targetGraph", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("projects", vm.ListValue(nil))

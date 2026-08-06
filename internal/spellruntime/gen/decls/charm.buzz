@@ -6,21 +6,32 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
-export extern fun after(argv: [str], anchor: str, vals: [str]) > {str: any};
-export extern fun afterFunc(argv: [str], fn: Function, vals: [str]) > {str: any};
-export extern fun append(vals: [str]) > {str: any};
-export extern fun before(argv: [str], anchor: str, vals: [str]) > {str: any};
-export extern fun beforeFunc(argv: [str], fn: Function, vals: [str]) > {str: any};
-export extern fun copy(argv: [str], anchor: str, to: str) > {str: any};
-export extern fun copyFunc(argv: [str], fn: Function, to: str) > {str: any};
-export extern fun drop(argv: [str], anchor: str) > {str: any};
-export extern fun dropFunc(argv: [str], fn: Function) > {str: any};
-export extern fun move(argv: [str], anchor: str, to: str) > {str: any};
-export extern fun moveFunc(argv: [str], fn: Function, to: str) > {str: any};
+export object PatchOp {
+    op: PatchOpKind = PatchOpKind.none,
+    path: str = "",
+    value: str = "",
+    fromPtr: str = "",
+}
+
+export object Charm {
+    ops: [PatchOp] = [],
+}
+
+export extern fun after(argv: [str], anchor: str, vals: [str]) > Charm;
+export extern fun afterFunc(argv: [str], fn: Function, vals: [str]) > Charm;
+export extern fun append(vals: [str]) > Charm;
+export extern fun before(argv: [str], anchor: str, vals: [str]) > Charm;
+export extern fun beforeFunc(argv: [str], fn: Function, vals: [str]) > Charm;
+export extern fun copy(argv: [str], anchor: str, to: str) > Charm;
+export extern fun copyFunc(argv: [str], fn: Function, to: str) > Charm;
+export extern fun drop(argv: [str], anchor: str) > Charm;
+export extern fun dropFunc(argv: [str], fn: Function) > Charm;
+export extern fun move(argv: [str], anchor: str, to: str) > Charm;
+export extern fun moveFunc(argv: [str], fn: Function, to: str) > Charm;
 export extern fun path(argv: [str], anchor: str) > str;
 export extern fun pathFunc(argv: [str], fn: Function) > str;
-export extern fun prepend(vals: [str]) > {str: any};
-export extern fun set(argv: [str], anchor: str, val: str) > {str: any};
-export extern fun setFunc(argv: [str], fn: Function, val: str) > {str: any};
-export extern fun test(argv: [str], anchor: str) > {str: any};
-export extern fun testFunc(argv: [str], fn: Function) > {str: any};
+export extern fun prepend(vals: [str]) > Charm;
+export extern fun set(argv: [str], anchor: str, val: str) > Charm;
+export extern fun setFunc(argv: [str], fn: Function, val: str) > Charm;
+export extern fun test(argv: [str], anchor: str) > Charm;
+export extern fun testFunc(argv: [str], fn: Function) > Charm;

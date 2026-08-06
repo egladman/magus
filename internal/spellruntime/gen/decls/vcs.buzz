@@ -6,6 +6,13 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+export object ExecResult {
+    stdout: str = "",
+    stderr: str = "",
+    code: int = 0,
+    ok: bool = false,
+}
+
 export object CommitAuthor {
     name: str = "",
     email: str = "",
@@ -19,6 +26,17 @@ export object Commit {
     subject: str = "",
     body: str = "",
     parents: [str] = [],
+}
+
+export object Path {
+    value: str = "",
+    base: str = "",
+    isDir: bool = false,
+}
+
+export object Status {
+    clean: bool = false,
+    files: [Path] = [],
 }
 
 export object SemverVersion {
@@ -38,18 +56,13 @@ export object Tag {
     id: str = "",
 }
 
-export extern fun branch() > str;
+export extern fun cmd(args: [str], opts: {str: any} = {<str: any>}) > ExecResult;
 export extern fun commit(rev: str = "") > Commit;
-export extern fun commitDate() > str;
 export extern fun describe() > str;
-export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > {str: any};
-export extern fun diff(base: str = "") > [str];
-export extern fun dirtyFiles(paths: [str] = [<str>]) > [str];
-export extern fun exe() > str;
-export extern fun hash() > str;
+export extern fun diff(base: str = "") > [Path];
 export extern fun history(limit: int = 10) > [Commit];
 export extern fun isDirty(paths: [str] = [<str>]) > bool;
-export extern fun metadata() > {str: any};
+export extern fun ref() > str;
 export extern fun root() > str;
-export extern fun shortHash() > str;
+export extern fun status(paths: [str] = [<str>]) > Status;
 export extern fun tags(pattern: str = "") > [Tag];

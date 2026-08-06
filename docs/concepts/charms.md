@@ -132,7 +132,7 @@ magus run go::golangci-lint:rw,debug    # → go tool golangci-lint run --fix ./
 
 `magus describe target` renders the **fully charm-applied command** statically (no execution):
 
-```sh
+```console
 $ magus describe target lint:rw,debug
 project: .  target: lint
   charms:  [debug rw]
@@ -149,7 +149,7 @@ command, then the command after each active charm's patch, in the deterministic
 sorted-name order magus applies them. It is the RFC 6902 patch made legible, so
 you can see exactly which charm made which edit without reading the patch data.
 
-```sh
+```console
 $ magus describe target --explain lint:rw,debug
 project: .  target: lint
   charms:  [debug rw]

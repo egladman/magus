@@ -25,7 +25,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return StrSliceVal(ret0), nil
+		return buzzValueFsPathSlice(ret0), nil
 	}))
 	m.MapSet("dirname", vm.DirectValue("fs.dirname", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		path := Str(bzArgs, 0)
@@ -220,6 +220,22 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	return m
 }
+func buzzValueFsPath(v types.Path) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("value", vm.StrValue(v.Value))
+	out.MapSet("base", vm.StrValue(v.Base))
+	out.MapSet("isDir", vm.BoolValue(v.IsDir))
+	return out
+}
+
+func buzzValueFsPathSlice(values []types.Path) vm.Value {
+	items := make([]vm.Value, len(values))
+	for i, value := range values {
+		items[i] = buzzValueFsPath(value)
+	}
+	return vm.ListValue(items)
+}
+
 func buzzValueFsFileInfo(v types.FileInfo) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("size", vm.IntValue(int64(v.Size)))

@@ -4,11 +4,17 @@
 // generated-name lists come from Config (generatorDirs/generatorFiles), not hardcoded.
 namespace path;
 
-import "os";
+import "fs";
 
 // True if path is a directory.
+//
+// fs\isDir, not os\execute(["test", "-d", ...]): the shell-out forked and exec'd a
+// process PER CHECK, and this is called for every entry of every tree walk - the page
+// walk, the doc-page collection, the glossary pass, the code-entity pass. A stat syscall
+// is roughly a thousand times cheaper than a fork+exec, and the render was spending more
+// time in the kernel than in the interpreter because of it.
 export fun isDirectory(path: str) > bool {
-    return os\execute(["test", "-d", path]) == 0;
+    return fs\isDir(path);
 }
 
 // isGeneratorDir reports whether a docs-ROOT child directory is the SSG's own rather than

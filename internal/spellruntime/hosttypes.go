@@ -29,6 +29,7 @@ var ExecResultSource string
 // FileInfoSource is the generated Buzz mirror of the fs.stat result. Ships with "fs".
 //
 //go:generate go run ../../cmd/magus-utils types -type FileInfo -out gen/types/fileinfo.buzz
+//go:generate go run ../../cmd/magus-utils types -type Status -out gen/types/status.buzz
 //go:embed gen/types/fileinfo.buzz
 var FileInfoSource string
 

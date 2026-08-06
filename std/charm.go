@@ -26,31 +26,31 @@ var Charm = Module{
 			Name:    "append",
 			Doc:     "Append vals to the end of the argv.",
 			Args:    []Arg{{Name: "vals", Type: TypeStringSlice}},
-			Returns: []Ret{{Type: TypeAnyMap}}, Impl: CharmAppend,
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmAppend,
 		},
 		{
 			Name:    "prepend",
 			Doc:     "Insert vals at the front of the argv, in order.",
 			Args:    []Arg{{Name: "vals", Type: TypeStringSlice}},
-			Returns: []Ret{{Type: TypeAnyMap}}, Impl: CharmPrepend,
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmPrepend,
 		},
 		{
 			Name:    "after",
 			Doc:     "Insert vals immediately after the first argv element equal to anchor.",
 			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "anchor", Type: TypeString}, {Name: "vals", Type: TypeStringSlice}},
-			Returns: []Ret{{Type: TypeAnyMap}}, Impl: CharmAfter,
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmAfter,
 		},
 		{
 			Name:    "before",
 			Doc:     "Insert vals immediately before the first argv element equal to anchor.",
 			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "anchor", Type: TypeString}, {Name: "vals", Type: TypeStringSlice}},
-			Returns: []Ret{{Type: TypeAnyMap}}, Impl: CharmBefore,
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmBefore,
 		},
 		{
 			Name:    "set",
 			Doc:     "Replace the first argv element equal to anchor with val.",
 			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "anchor", Type: TypeString}, {Name: "val", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAnyMap}}, Impl: CharmSet,
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmSet,
 		},
 		{
 			// "drop", not "remove": the Buzz surface exposes this as a map member
@@ -59,31 +59,31 @@ var Charm = Module{
 			Name:    "drop",
 			Doc:     "Drop (remove) the first argv element equal to anchor.",
 			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "anchor", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAnyMap}}, Impl: CharmDrop,
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmDrop,
 		},
 		{
 			Name:    "after_func",
 			Doc:     "Insert vals after the first argv element for which fn(s) is truthy.",
 			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc}, {Name: "vals", Type: TypeStringSlice}},
-			Returns: []Ret{{Type: TypeAnyMap}}, Impl: CharmAfterFunc,
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmAfterFunc,
 		},
 		{
 			Name:    "before_func",
 			Doc:     "Insert vals before the first argv element for which fn(s) is truthy.",
 			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc}, {Name: "vals", Type: TypeStringSlice}},
-			Returns: []Ret{{Type: TypeAnyMap}}, Impl: CharmBeforeFunc,
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmBeforeFunc,
 		},
 		{
 			Name:    "set_func",
 			Doc:     "Replace the first argv element for which fn(s) is truthy with val.",
 			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc}, {Name: "val", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAnyMap}}, Impl: CharmSetFunc,
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmSetFunc,
 		},
 		{
 			Name:    "drop_func",
 			Doc:     "Drop (remove) the first argv element for which fn(s) is truthy.",
 			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc}},
-			Returns: []Ret{{Type: TypeAnyMap}}, Impl: CharmDropFunc,
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmDropFunc,
 		},
 		{
 			Name:    "path",
@@ -101,50 +101,52 @@ var Charm = Module{
 			Name:    "move",
 			Doc:     `Move the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/0" front, or charm.path(...)).`,
 			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "anchor", Type: TypeString}, {Name: "to", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAnyMap}}, Impl: CharmMove,
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmMove,
 		},
 		{
 			Name:    "move_func",
 			Doc:     `Move the first argv element for which fn(s) is truthy to the JSON Pointer to.`,
 			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc}, {Name: "to", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAnyMap}}, Impl: CharmMoveFunc,
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmMoveFunc,
 		},
 		{
 			Name:    "copy",
 			Doc:     `Copy the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/0" front, or charm.path(...)).`,
 			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "anchor", Type: TypeString}, {Name: "to", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAnyMap}}, Impl: CharmCopy,
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmCopy,
 		},
 		{
 			Name:    "copy_func",
 			Doc:     `Copy the first argv element for which fn(s) is truthy to the JSON Pointer to.`,
 			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc}, {Name: "to", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAnyMap}}, Impl: CharmCopyFunc,
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmCopyFunc,
 		},
 		{
 			Name:    "test",
 			Doc:     `Guard: assert the first argv element equal to anchor is still at its position when the patch applies (else the run errors).`,
 			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "anchor", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAnyMap}}, Impl: CharmTest,
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmTest,
 		},
 		{
 			Name:    "test_func",
 			Doc:     `Guard: assert the first argv element for which fn(s) is truthy is still at its position when the patch applies.`,
 			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc}},
-			Returns: []Ret{{Type: TypeAnyMap}}, Impl: CharmTestFunc,
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmTestFunc,
 		},
 	},
 }
 
-// charmResult wraps the ops as the { ops = [...] } record Decode reads. The list
-// is []any of map[string]any so the AnyMap marshallers (which recurse over those
-// two types) carry it across the VM boundary unchanged.
-func charmResult(ops ...map[string]any) map[string]any {
-	arr := make([]any, len(ops))
-	for i := range ops {
-		arr[i] = ops[i]
-	}
-	return map[string]any{"ops": arr}
+// charmResult wraps the ops as the spells.Charm every charm builder returns.
+//
+// It used to hand back map[string]any of map[string]any, hand-built, while spells.Charm
+// and spells.PatchOp already described exactly that shape - the same duplication
+// vcs.metadata was making over the typed accessors beside it. Returning the struct lets
+// the module declare Object "Charm", so the checker knows the shape and the codegen's
+// return-contract check verifies the declaration against the Impl. That check is not
+// hypothetical here: hand-built maps are how the constructors came to emit "from" where
+// the mirror said "fromPtr", and a struct field cannot drift from its own buzz tag.
+func charmResult(ops ...spells.PatchOp) spells.Charm {
+	return spells.Charm{Ops: ops}
 }
 
 // ptr renders a JSON Pointer to argv index i.
@@ -152,10 +154,10 @@ func ptr(i int) string { return "/" + strconv.Itoa(i) }
 
 // addOps builds a run of `add` ops that insert vals starting at index start, so
 // the values land in order (each subsequent insert sits one past the previous).
-func addOps(start int, vals []string) map[string]any {
-	ops := make([]map[string]any, len(vals))
+func addOps(start int, vals []string) spells.Charm {
+	ops := make([]spells.PatchOp, len(vals))
 	for k, v := range vals {
-		ops[k] = map[string]any{"op": string(spells.OpAdd), "path": ptr(start + k), "value": v}
+		ops[k] = spells.PatchOp{Op: spells.OpAdd, Path: ptr(start + k), Value: v}
 	}
 	return charmResult(ops...)
 }
@@ -194,89 +196,89 @@ func anchorIndexFunc(ctx context.Context, argv []string, fn Callback) (int, erro
 }
 
 // CharmAppend implements charm.append.
-func CharmAppend(_ context.Context, vals []string) (map[string]any, error) {
-	ops := make([]map[string]any, len(vals))
+func CharmAppend(_ context.Context, vals []string) (spells.Charm, error) {
+	ops := make([]spells.PatchOp, len(vals))
 	for i, v := range vals {
-		ops[i] = map[string]any{"op": string(spells.OpAdd), "path": "/-", "value": v}
+		ops[i] = spells.PatchOp{Op: spells.OpAdd, Path: "/-", Value: v}
 	}
 	return charmResult(ops...), nil
 }
 
 // CharmPrepend implements charm.prepend.
-func CharmPrepend(_ context.Context, vals []string) (map[string]any, error) {
+func CharmPrepend(_ context.Context, vals []string) (spells.Charm, error) {
 	return addOps(0, vals), nil
 }
 
 // CharmAfter implements charm.after.
-func CharmAfter(_ context.Context, argv []string, anchor string, vals []string) (map[string]any, error) {
+func CharmAfter(_ context.Context, argv []string, anchor string, vals []string) (spells.Charm, error) {
 	i, err := anchorIndex(argv, anchor)
 	if err != nil {
-		return nil, err
+		return spells.Charm{}, err
 	}
 	return addOps(i+1, vals), nil
 }
 
 // CharmBefore implements charm.before.
-func CharmBefore(_ context.Context, argv []string, anchor string, vals []string) (map[string]any, error) {
+func CharmBefore(_ context.Context, argv []string, anchor string, vals []string) (spells.Charm, error) {
 	i, err := anchorIndex(argv, anchor)
 	if err != nil {
-		return nil, err
+		return spells.Charm{}, err
 	}
 	return addOps(i, vals), nil
 }
 
 // CharmSet implements charm.set.
-func CharmSet(_ context.Context, argv []string, anchor, val string) (map[string]any, error) {
+func CharmSet(_ context.Context, argv []string, anchor, val string) (spells.Charm, error) {
 	i, err := anchorIndex(argv, anchor)
 	if err != nil {
-		return nil, err
+		return spells.Charm{}, err
 	}
-	return charmResult(map[string]any{"op": string(spells.OpReplace), "path": ptr(i), "value": val}), nil
+	return charmResult(spells.PatchOp{Op: spells.OpReplace, Path: ptr(i), Value: val}), nil
 }
 
 // CharmDrop implements charm.drop.
-func CharmDrop(_ context.Context, argv []string, anchor string) (map[string]any, error) {
+func CharmDrop(_ context.Context, argv []string, anchor string) (spells.Charm, error) {
 	i, err := anchorIndex(argv, anchor)
 	if err != nil {
-		return nil, err
+		return spells.Charm{}, err
 	}
-	return charmResult(map[string]any{"op": string(spells.OpRemove), "path": ptr(i)}), nil
+	return charmResult(spells.PatchOp{Op: spells.OpRemove, Path: ptr(i)}), nil
 }
 
 // CharmAfterFunc implements charm.after_func.
-func CharmAfterFunc(ctx context.Context, argv []string, fn Callback, vals []string) (map[string]any, error) {
+func CharmAfterFunc(ctx context.Context, argv []string, fn Callback, vals []string) (spells.Charm, error) {
 	i, err := anchorIndexFunc(ctx, argv, fn)
 	if err != nil {
-		return nil, err
+		return spells.Charm{}, err
 	}
 	return addOps(i+1, vals), nil
 }
 
 // CharmBeforeFunc implements charm.before_func.
-func CharmBeforeFunc(ctx context.Context, argv []string, fn Callback, vals []string) (map[string]any, error) {
+func CharmBeforeFunc(ctx context.Context, argv []string, fn Callback, vals []string) (spells.Charm, error) {
 	i, err := anchorIndexFunc(ctx, argv, fn)
 	if err != nil {
-		return nil, err
+		return spells.Charm{}, err
 	}
 	return addOps(i, vals), nil
 }
 
 // CharmSetFunc implements charm.set_func.
-func CharmSetFunc(ctx context.Context, argv []string, fn Callback, val string) (map[string]any, error) {
+func CharmSetFunc(ctx context.Context, argv []string, fn Callback, val string) (spells.Charm, error) {
 	i, err := anchorIndexFunc(ctx, argv, fn)
 	if err != nil {
-		return nil, err
+		return spells.Charm{}, err
 	}
-	return charmResult(map[string]any{"op": string(spells.OpReplace), "path": ptr(i), "value": val}), nil
+	return charmResult(spells.PatchOp{Op: spells.OpReplace, Path: ptr(i), Value: val}), nil
 }
 
 // CharmDropFunc implements charm.drop_func.
-func CharmDropFunc(ctx context.Context, argv []string, fn Callback) (map[string]any, error) {
+func CharmDropFunc(ctx context.Context, argv []string, fn Callback) (spells.Charm, error) {
 	i, err := anchorIndexFunc(ctx, argv, fn)
 	if err != nil {
-		return nil, err
+		return spells.Charm{}, err
 	}
-	return charmResult(map[string]any{"op": string(spells.OpRemove), "path": ptr(i)}), nil
+	return charmResult(spells.PatchOp{Op: spells.OpRemove, Path: ptr(i)}), nil
 }
 
 // CharmPath implements charm.path: the JSON Pointer of the anchor element.
@@ -307,70 +309,70 @@ func destPointer(to string) error {
 }
 
 // CharmMove implements charm.move.
-func CharmMove(_ context.Context, argv []string, anchor, to string) (map[string]any, error) {
+func CharmMove(_ context.Context, argv []string, anchor, to string) (spells.Charm, error) {
 	i, err := anchorIndex(argv, anchor)
 	if err != nil {
-		return nil, err
+		return spells.Charm{}, err
 	}
 	if err := destPointer(to); err != nil {
-		return nil, err
+		return spells.Charm{}, err
 	}
-	return charmResult(map[string]any{"op": string(spells.OpMove), "from": ptr(i), "path": to}), nil
+	return charmResult(spells.PatchOp{Op: spells.OpMove, From: ptr(i), Path: to}), nil
 }
 
 // CharmMoveFunc implements charm.move_func.
-func CharmMoveFunc(ctx context.Context, argv []string, fn Callback, to string) (map[string]any, error) {
+func CharmMoveFunc(ctx context.Context, argv []string, fn Callback, to string) (spells.Charm, error) {
 	i, err := anchorIndexFunc(ctx, argv, fn)
 	if err != nil {
-		return nil, err
+		return spells.Charm{}, err
 	}
 	if err := destPointer(to); err != nil {
-		return nil, err
+		return spells.Charm{}, err
 	}
-	return charmResult(map[string]any{"op": string(spells.OpMove), "from": ptr(i), "path": to}), nil
+	return charmResult(spells.PatchOp{Op: spells.OpMove, From: ptr(i), Path: to}), nil
 }
 
 // CharmCopy implements charm.copy.
-func CharmCopy(_ context.Context, argv []string, anchor, to string) (map[string]any, error) {
+func CharmCopy(_ context.Context, argv []string, anchor, to string) (spells.Charm, error) {
 	i, err := anchorIndex(argv, anchor)
 	if err != nil {
-		return nil, err
+		return spells.Charm{}, err
 	}
 	if err := destPointer(to); err != nil {
-		return nil, err
+		return spells.Charm{}, err
 	}
-	return charmResult(map[string]any{"op": string(spells.OpCopy), "from": ptr(i), "path": to}), nil
+	return charmResult(spells.PatchOp{Op: spells.OpCopy, From: ptr(i), Path: to}), nil
 }
 
 // CharmCopyFunc implements charm.copy_func.
-func CharmCopyFunc(ctx context.Context, argv []string, fn Callback, to string) (map[string]any, error) {
+func CharmCopyFunc(ctx context.Context, argv []string, fn Callback, to string) (spells.Charm, error) {
 	i, err := anchorIndexFunc(ctx, argv, fn)
 	if err != nil {
-		return nil, err
+		return spells.Charm{}, err
 	}
 	if err := destPointer(to); err != nil {
-		return nil, err
+		return spells.Charm{}, err
 	}
-	return charmResult(map[string]any{"op": string(spells.OpCopy), "from": ptr(i), "path": to}), nil
+	return charmResult(spells.PatchOp{Op: spells.OpCopy, From: ptr(i), Path: to}), nil
 }
 
 // CharmTest implements charm.test: a guard asserting the anchor is still present
 // at its index when the patch applies.
-func CharmTest(_ context.Context, argv []string, anchor string) (map[string]any, error) {
+func CharmTest(_ context.Context, argv []string, anchor string) (spells.Charm, error) {
 	i, err := anchorIndex(argv, anchor)
 	if err != nil {
-		return nil, err
+		return spells.Charm{}, err
 	}
-	return charmResult(map[string]any{"op": string(spells.OpTest), "path": ptr(i), "value": anchor}), nil
+	return charmResult(spells.PatchOp{Op: spells.OpTest, Path: ptr(i), Value: anchor}), nil
 }
 
 // CharmTestFunc implements charm.test_func.
-func CharmTestFunc(ctx context.Context, argv []string, fn Callback) (map[string]any, error) {
+func CharmTestFunc(ctx context.Context, argv []string, fn Callback) (spells.Charm, error) {
 	i, err := anchorIndexFunc(ctx, argv, fn)
 	if err != nil {
-		return nil, err
+		return spells.Charm{}, err
 	}
-	return charmResult(map[string]any{"op": string(spells.OpTest), "path": ptr(i), "value": argv[i]}), nil
+	return charmResult(spells.PatchOp{Op: spells.OpTest, Path: ptr(i), Value: argv[i]}), nil
 }
 
 // callPredicate invokes a VM predicate on s and reports its truthiness.

@@ -31,7 +31,7 @@ var Fs = Module{
 			Name:    "glob",
 			Doc:     "Return paths matching pattern (doublestar-style).",
 			Args:    []Arg{{Name: "pattern", Type: TypeString}},
-			Returns: []Ret{{Type: TypeStringSlice}},
+			Returns: []Ret{{Type: TypeAny, Object: "[Path]"}},
 			Impl:    FsGlob,
 		},
 		{
@@ -218,28 +218,43 @@ var Fs = Module{
 
 // FsGlob returns paths matching the doublestar pattern, filtered to those the
 // sandbox policy permits reading.
-func FsGlob(ctx context.Context, pattern string) ([]string, error) {
+func FsGlob(ctx context.Context, pattern string) ([]types.Path, error) {
 	// Glob against the project dir (resolvePath is a no-op without a context cwd),
 	// then report matches relative to it so the returned paths read like the
 	// pattern the caller passed, independent of the process working directory.
-	base := cwdFromContext(ctx)
+	//
+	// That base is carried on each result rather than discarded. It was already computed
+	// here and thrown away, so every caller had to know out of band which directory the
+	// strings were measured from - and a target's cwd is its PROJECT directory, not the
+	// workspace root, which is exactly the distinction a bare string cannot express.
+	// EffectiveCwd, not cwdFromContext: outside a target there is no context cwd, but the
+	// matches are still relative - to the PROCESS cwd - so reporting an empty base would
+	// hand back a relative value that names nothing. EffectiveCwd falls back to the
+	// process cwd, which makes "a glob result always knows its base" total rather than
+	// true-only-inside-a-target.
+	base, cwdErr := EffectiveCwd(ctx)
+	if cwdErr != nil {
+		base = ""
+	}
 	matches, err := doublestar.FilepathGlob(resolvePath(ctx, pattern))
 	if err != nil {
 		return nil, fmt.Errorf("fs.glob %q: %w", pattern, err)
 	}
 	p := sandbox.FromContext(ctx)
-	allowed := matches[:0]
+	allowed := make([]types.Path, 0, len(matches))
 	for _, m := range matches {
 		// The sandbox sees the absolute match; the caller sees it relative to base.
 		if p != nil && p.CheckReadCtx(ctx, m) != nil {
 			continue
 		}
+		// Rel only succeeds when both sides are absolute; a match that is already
+		// relative to the process cwd is left as-is, and the base names it either way.
 		if base != "" {
 			if rel, rerr := filepath.Rel(base, m); rerr == nil {
 				m = rel
 			}
 		}
-		allowed = append(allowed, m)
+		allowed = append(allowed, types.Path{Value: m, Base: base})
 	}
 	return allowed, nil
 }

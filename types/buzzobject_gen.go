@@ -36,12 +36,60 @@ func (v CommitRecord) BuzzObject() BuzzObject {
 	}
 }
 
+func (v StatusRecord) BuzzObject() BuzzObject {
+	itemsFiles := make([]any, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = v.Files[indexFiles].BuzzObject()
+	}
+	return BuzzObject{
+		"clean": v.Clean,
+		"files": itemsFiles,
+	}
+}
+
+func (v DriftVerdictRecord) BuzzObject() BuzzObject {
+	itemsFiles := make([]any, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = v.Files[indexFiles].BuzzObject()
+	}
+	return BuzzObject{
+		"drifted": v.Drifted,
+		"code":    v.Code,
+		"message": v.Message,
+		"uRL":     v.URL,
+		"files":   itemsFiles,
+	}
+}
+
 func (v FileInfo) BuzzObject() BuzzObject {
 	return BuzzObject{
 		"size":   v.Size,
 		"mtime":  v.Mtime,
 		"mode":   v.Mode,
 		"is_dir": v.IsDir,
+	}
+}
+
+func (v UncompressResult) BuzzObject() BuzzObject {
+	itemsFiles := make([]any, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = v.Files[indexFiles].BuzzObject()
+	}
+	return BuzzObject{
+		"files": itemsFiles,
+		"bytes": v.Bytes,
+	}
+}
+
+func (v CompressResult) BuzzObject() BuzzObject {
+	itemsFiles := make([]any, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = v.Files[indexFiles].BuzzObject()
+	}
+	return BuzzObject{
+		"files":     itemsFiles,
+		"bytes_in":  v.BytesIn,
+		"bytes_out": v.BytesOut,
 	}
 }
 

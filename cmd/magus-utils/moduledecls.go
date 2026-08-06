@@ -123,6 +123,11 @@ func externDecl(m std.Method) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("arg %s: %w", a.Name, err)
 		}
+		// A declared object wins over the raw tag: the shape is what the checker should
+		// enforce, and {str: any} enforces nothing.
+		if a.Object != "" {
+			typ = a.Object
+		}
 		p := a.Name + ": " + typ
 		if a.Optional {
 			def, derr := buzzDefault(a)

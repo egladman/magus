@@ -33,3 +33,24 @@ cache:
     # keys listed during a rotation (overlap, then drop the old one).
     trusted_keys:
       - "Jo5PqJClVoakH2DTP6v9j76mqXcJHyCjC7OHKkckMjE="
+
+# The oldest magus that can load this workspace.
+#
+# 0.4.0 because magusfile.buzz and docs/render.buzz call str.indexOf(needle, from:), which
+# no release carries yet. An older binary does not reject the extra argument, it IGNORES
+# it - so the glossary linker's "find the next match" loop never advances and the render
+# HANGS. A hang is the worst way for a version mismatch to present: no output, no exit
+# code, nothing naming the cause. The floor turns it into MGS1021, which says which build
+# is running and what it needs.
+#
+# Naming a release that does not exist yet is deliberate and safe: the ward exempts dev
+# builds, and a source build is compiled FROM the workspace it runs, so it cannot lack a
+# feature that workspace uses. The binary this catches is a shipped release built
+# somewhere else - which is the only kind that can actually be too old.
+#
+# It does NOT catch a binary older than required_version itself, which simply does not
+# know the key: v0.3.1 warns "field required_version not found" and then fails on whatever
+# it hits first. A floor is only enforceable by a binary that has heard of floors. That is
+# why requireIndexOfFrom() in docs/render.buzz stays - a capability probe runs on every
+# binary, and it is what turns the hang into a sentence on the ones this cannot reach.
+required_version: ">= 0.4.0"

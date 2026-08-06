@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"go/format"
+	"path"
 	"reflect"
 	"strings"
 	"time"
@@ -177,6 +178,9 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	if bytes.Contains(body.Bytes(), []byte("std.")) {
 		fmt.Fprintln(&b, `	"github.com/egladman/magus/std"`)
 	}
+	if objects.usesSpells {
+		fmt.Fprintln(&b, `	"github.com/egladman/magus/spells"`)
+	}
 	if objects.usesTypes {
 		fmt.Fprintln(&b, `	"github.com/egladman/magus/types"`)
 	}
@@ -331,14 +335,38 @@ func returnConv(ret std.Ret, goType reflect.Type, src string, objects *buzzValue
 	return buzzValConv(ret.Type, src), nil
 }
 
+// isBoundaryType reports whether rt crosses the typed Buzz boundary.
+//
+// Two ways to qualify. Anything in the types package does, as before. Registry membership
+// is what additionally admits the boundary types declared in spells (Charm, PatchOp,
+// Command, Service): they were registered all along, but a package-path test classified a
+// host method returning one as a SCALAR, so declaring its Object failed with "its Impl
+// returns a scalar" - naming neither the cause nor the fix.
+//
+// The types-package arm is not redundant with the registry: several entries name a
+// *Record MIRROR (StatusRecord, CommitRecord) that exists only to be reflected over,
+// while the Impl returns the live type beside it, so identity against the registry alone
+// would reject exactly the returns this check exists for.
+func isBoundaryType(rt reflect.Type) bool {
+	if rt.PkgPath() == reflect.TypeFor[types.FileInfo]().PkgPath() {
+		return true
+	}
+	for _, entry := range boundaryTypes {
+		if entry.Type == rt {
+			return true
+		}
+	}
+	return false
+}
+
 // objectName returns the Buzz object a return marshals to, or "" for a scalar.
 // It reads the Impl's reflected type at generation time. Runtime conversion is
 // emitted as direct field access in internal/interp/bindings/gen.
 func objectName(goType reflect.Type) string {
 	switch {
-	case goType.Kind() == reflect.Struct && goType.PkgPath() == reflect.TypeFor[types.FileInfo]().PkgPath():
+	case goType.Kind() == reflect.Struct && isBoundaryType(goType):
 		return buzzObjectName(goType)
-	case goType.Kind() == reflect.Slice && goType.Elem().Kind() == reflect.Struct && goType.Elem().PkgPath() == reflect.TypeFor[types.FileInfo]().PkgPath():
+	case goType.Kind() == reflect.Slice && goType.Elem().Kind() == reflect.Struct && isBoundaryType(goType.Elem()):
 		// Bracketed, so the descriptor states the shape as a magusfile annotation
 		// spells it and no consumer has to reflect to recover the list-ness.
 		return "[" + buzzObjectName(goType.Elem()) + "]"
@@ -431,11 +459,12 @@ func buzzValConv(t std.TypeTag, src string) string {
 // returns. It is generator-only reflection: the binary receives ordinary field
 // reads, loops, and vm constructors.
 type buzzValueEmitter struct {
-	funcs     bytes.Buffer
-	emitted   map[reflect.Type]bool
-	module    string
-	usesTypes bool
-	usesTime  bool
+	funcs      bytes.Buffer
+	emitted    map[reflect.Type]bool
+	module     string
+	usesTypes  bool
+	usesSpells bool
+	usesTime   bool
 }
 
 func newBuzzValueEmitter(module string) *buzzValueEmitter {
@@ -466,16 +495,16 @@ func (e *buzzValueEmitter) emitStruct(t reflect.Type) error {
 	if e.emitted[t] {
 		return nil
 	}
-	if t.PkgPath() != reflect.TypeFor[types.FileInfo]().PkgPath() {
-		return fmt.Errorf("object %s is outside the types package", t)
+	if !isBoundaryType(t) {
+		return fmt.Errorf("object %s is not declared in the boundary registry (cmd/magus-utils/boundary_types.go)", t)
 	}
 	// Mark before visiting fields so a mistaken recursive value type terminates
 	// deterministically and produces a normal Go compile error rather than looping.
 	e.emitted[t] = true
-	e.usesTypes = true
+	e.markPkg(t)
 
 	var body bytes.Buffer
-	fmt.Fprintf(&body, "func %s(v types.%s) vm.Value {\n", e.funcName(t), t.Name())
+	fmt.Fprintf(&body, "func %s(v %s) vm.Value {\n", e.funcName(t), e.qualify(t))
 	fmt.Fprintln(&body, "\tout := vm.NewMap()")
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
@@ -498,6 +527,21 @@ func (e *buzzValueEmitter) emitStruct(t reflect.Type) error {
 	return nil
 }
 
+// qualify renders t as the emitted file must spell it ("types.FileInfo",
+// "spells.Charm"), and markPkg records the import that spelling needs. Together they are
+// what let a boundary type live outside the types package.
+func (e *buzzValueEmitter) qualify(t reflect.Type) string {
+	return path.Base(t.PkgPath()) + "." + t.Name()
+}
+
+func (e *buzzValueEmitter) markPkg(t reflect.Type) {
+	if t.PkgPath() == reflect.TypeFor[types.FileInfo]().PkgPath() {
+		e.usesTypes = true
+		return
+	}
+	e.usesSpells = true
+}
+
 func (e *buzzValueEmitter) emitSlice(t reflect.Type) error {
 	if err := e.emitStruct(t); err != nil {
 		return err
@@ -507,7 +551,7 @@ func (e *buzzValueEmitter) emitSlice(t reflect.Type) error {
 		return nil
 	}
 	e.emitted[marker] = true
-	fmt.Fprintf(&e.funcs, "func %s(values []types.%s) vm.Value {\n", e.sliceFuncName(t), t.Name())
+	fmt.Fprintf(&e.funcs, "func %s(values []%s) vm.Value {\n", e.sliceFuncName(t), e.qualify(t))
 	fmt.Fprintln(&e.funcs, "\titems := make([]vm.Value, len(values))")
 	fmt.Fprintln(&e.funcs, "\tfor i, value := range values {")
 	fmt.Fprintf(&e.funcs, "\t\titems[i] = %s(value)\n", e.funcName(t))

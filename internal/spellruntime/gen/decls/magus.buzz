@@ -75,6 +75,20 @@ export object FileReport {
     files: [FileEntry] = [],
 }
 
+export object Path {
+    value: str = "",
+    base: str = "",
+    isDir: bool = false,
+}
+
+export object DriftVerdict {
+    drifted: bool = false,
+    code: str = "",
+    message: str = "",
+    uRL: str = "",
+    files: [Path] = [],
+}
+
 export object DoctorCheck {
     name: str = "",
     status: DoctorCheckStatus = DoctorCheckStatus.none,
@@ -321,6 +335,7 @@ export extern fun bustCache(project_path: str = "") > void;
 export extern fun cmd(sub: str, args: [str], opts: {str: any} = {<str: any>}) > ExecResult;
 export extern fun describe(args: [str], opts: {str: any} = {<str: any>}) > ExecResult;
 export extern fun describeFile(paths: [str], opts: {str: any} = {<str: any>}) > FileReport;
+export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftVerdict;
 export extern fun doctor(args: [str], opts: {str: any} = {<str: any>}) > DoctorReport;
 export extern fun graph() > Graph;
 export extern fun has_charm(name: str) > bool;

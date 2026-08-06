@@ -6,7 +6,9 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -99,6 +101,48 @@ func osExit(_ context.Context, args []vm.Value) (vm.Value, error) {
 	return vm.Null, nil // unreachable
 }
 
+// probeBins are shell utilities whose entire job is to answer a question the fs module
+// answers with a syscall. Spawning one costs a fork and an exec - on the order of a
+// thousand times a stat - and the cost is invisible in a profile of the CALLER, because
+// process creation is kernel time, not user time.
+//
+// This is not hypothetical. The magus documentation site used os.execute(["test", "-f",
+// ...]) as its file-existence check, and its link-integrity gate ran it for every href on
+// every page: about 113,000 forks per build, which was roughly three of the build's three
+// minutes forty. Swapping in fs.isFile took it to thirteen seconds.
+var probeBins = map[string]string{
+	"test":     "fs.exists / fs.isFile / fs.isDir",
+	"[":        "fs.exists / fs.isFile / fs.isDir",
+	"true":     "a bool literal",
+	"false":    "a bool literal",
+	"pwd":      "fs.cwd",
+	"basename": "fs.basename",
+	"dirname":  "fs.dirname",
+}
+
+var probeWarnOnce sync.Once
+
+// warnIfProbeBin emits a one-shot warning when os.execute spawns a process to compute
+// something the standard library already returns. It never blocks the call: the shell-out
+// is valid Buzz, upstream accepts it, and a script may have a reason. One line on stderr
+// is enough to make the cost visible without changing what the program does.
+func warnIfProbeBin(argv []string) {
+	if len(argv) == 0 {
+		return
+	}
+	instead, ok := probeBins[filepath.Base(argv[0])]
+	if !ok {
+		return
+	}
+	probeWarnOnce.Do(func() {
+		fmt.Fprintf(os.Stderr,
+			"buzz: os.execute spawns a process to run %q; use %s instead. "+
+				"A fork+exec costs ~1000x a syscall, and it shows up as kernel time, "+
+				"so it stays invisible in a profile of your own code.\n",
+			argv[0], instead)
+	})
+}
+
 // Buzz signature: fun execute([str] command) > int !> FileSystemError, UnexpectedError
 func osExecute(ctx context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 1 || !args[0].IsList() {
@@ -115,6 +159,7 @@ func osExecute(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		}
 		argv[i] = it.AsString()
 	}
+	warnIfProbeBin(argv)
 	//nolint:gosec -- argv is supplied by the Buzz script; the caller controls what it executes
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = cwdFromContext(ctx) // run in the embedder-set cwd ("" inherits the process cwd)

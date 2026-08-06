@@ -1,0 +1,42 @@
+// @expect: true
+// str.indexOf takes an optional start position, in RUNES like every other index this
+// type exposes. It is an ADDITION to upstream's one-argument form, which is why the
+// first assertions here pin that the old shape is untouched.
+//
+// It exists because resuming a scan without it means slicing the haystack and searching
+// the copy, which allocates the whole remainder per step. Every "find the next match I
+// have not already rejected" loop had that shape.
+final s = "ab ab ab";
+
+// One-argument form: unchanged, always the FIRST occurrence.
+final first = s.indexOf("ab");
+
+// Resuming from just past a hit walks the occurrences without copying.
+final second = s.indexOf("ab", from: first + 1);
+final third = s.indexOf("ab", from: second + 1);
+final none = s.indexOf("ab", from: third + 1);
+
+// from: 0 is exactly the one-argument form; a negative start clamps to it rather than
+// counting from the end, so a caller doing arithmetic on a previous index cannot
+// accidentally wrap around to a later match.
+final zero = s.indexOf("ab", from: 0);
+final negative = s.indexOf("ab", from: 0 - 5);
+
+// A start past the end finds nothing rather than erroring.
+final beyond = s.indexOf("ab", from: 99);
+
+// The multibyte path indexes by rune too: the needle sits at rune 6 and byte 9, and
+// resuming from rune 3 must still report rune 6.
+final wide = "abéⅢabNEEDLE";
+final wideFrom = wide.indexOf("NEEDLE", from: 3);
+final wideAll = wide.indexOf("ab", from: 1);
+
+final __r = first == 0
+    and second == 3
+    and third == 6
+    and none == null
+    and zero == 0
+    and negative == 0
+    and beyond == null
+    and wideFrom == 6
+    and wideAll == 4;

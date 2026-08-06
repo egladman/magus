@@ -316,7 +316,7 @@ reads only what rides in the link itself. See [reference/console.md](reference/c
 
 ## See also
 
-- [Documentation conventions](conventions.md) - how to read the placeholders,
+- [Conventions](conventions.md) - how to read the placeholders,
   shell commands, and admonitions used across these pages.
 - [Targets](concepts/targets.md) - the fuller Target-struct glossary (Path, Name, Files)
 for magusfile authors.

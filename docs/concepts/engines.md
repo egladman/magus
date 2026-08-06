@@ -94,7 +94,7 @@ Where a method overlaps a Buzz stdlib call, the magus form is **sandbox-aware**
 while the bare stdlib is not. For example, `env\get`/`lookup` honor the env
 allowlist, whereas Buzz's `os\env` is raw. Those overlaps are noted per-method in the
 [module reference](../reference/buzz/index.md) (either works); the cross-reference lives in
-`host/overlap.go`.
+`std/buzz_stdlib.go`.
 
 A few entries are _not_ treated as duplicates because the magus behavior the
 stdlib can't reproduce: magus's `os\exit` raises a lifecycle error (Buzz's

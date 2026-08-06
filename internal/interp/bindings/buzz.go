@@ -62,7 +62,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 
 	// The host utilities are reached under the same bare names as Buzz's own stdlib:
 	// `import "os"`, `import "fs"`, `import "http"`, `import "vcs"`, ... A magusfile
-	// selects methods off each module directly (os.exec, fs.glob, vcs.shortHash).
+	// selects methods off each module directly (os.exec, fs.glob, vcs.status).
 	// registerMagusModules layers the magus host methods onto Buzz's stdlib modules (a
 	// superset surface) and is shared with spell-loading, so a magusfile and a handler
 	// op spell see the same modules.

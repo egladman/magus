@@ -185,6 +185,31 @@ fun acceptable(searchable: str, pos: int, n: int, ins: [linkIns]) > bool {
 // and inserting into html right-to-left so earlier positions never shift. Returns the linked
 // html and the keys linked (longest-first). If masking changed the length (a non-ASCII case
 // fold, not expected in these docs), it returns html unlinked rather than misplace a link.
+// requireIndexOfFrom fails fast when the running magus predates str.indexOf's `from:`
+// argument, which applyLinks below depends on to resume a scan without copying.
+//
+// An older VM does not reject the extra argument, it IGNORES it - so every "find the next
+// occurrence" call returns the FIRST one again, the loop never advances, and the render
+// hangs. A hang is the worst way for a version mismatch to present: no output, no exit
+// code, nothing naming the cause. One O(1) probe turns it into a sentence.
+//
+// A capability probe rather than a magus.yaml `required_version` floor, because the floor
+// cannot be armed yet. Source builds stamp v<last-tag>-N-g<sha> and the ward compares on
+// the release alone (internal/ward/version.go), so a floor naming the release that will
+// first CARRY this feature rejects every build made before that release is tagged -
+// including the source-path builds CI uses to exercise a magusfile change at the commit
+// that introduces it. Raise the floor when the release is cut; see magus.yaml.
+export fun requireIndexOfFrom() > void {
+    // On a build that honors `from:` the second "a" is at index 1; a build that drops the
+    // argument answers 0, which is exactly the value that would stall the loop.
+    if ("aa".indexOf("a", from: 1) != 1) {
+        throw "this magus is too old to render the docs: str.indexOf(needle, from:) is "
+            + "ignored by this build, so the glossary linker would loop forever instead of "
+            + "advancing. Rebuild from this commit (`magus run go_build .`), or upgrade the "
+            + "binary.";
+    }
+}
+
 fun applyLinks(html: str, searchable: str, tokens: [str], opens: [str], keys: [str]) > GlossaryLinkResult {
     if (searchable.len() != html.len()) {
         return GlossaryLinkResult{ html = html, linked = mut [<str>] };
@@ -195,10 +220,14 @@ fun applyLinks(html: str, searchable: str, tokens: [str], opens: [str], keys: [s
     while (t < tokens.len()) {
         final needle = tokens[t];
         final n = needle.len();
+        // indexOf(from:) rather than sub().indexOf(): the slice form copied the whole
+        // remaining page on every REJECTED candidate, and rejection is the common case -
+        // a term like "target" occurs 166 times on concepts/targets, nearly all of them
+        // inside code or an existing link, so one term cost megabytes of copying on one
+        // page. Scanning in place is what makes this loop linear in the page.
         var pos = searchable.indexOf(needle);
         while (pos != null and acceptable(searchable, pos!, n, ins) == false) {
-            final rel = searchable.sub(pos! + 1).indexOf(needle);
-            if (rel == null) { pos = null; } else { pos = pos! + 1 + rel!; }
+            pos = searchable.indexOf(needle, from: pos! + 1);
         }
         if (pos != null) {
             ins.append(linkIns{ pos = pos!, len = n, open = opens[t] });
@@ -206,12 +235,24 @@ fun applyLinks(html: str, searchable: str, tokens: [str], opens: [str], keys: [s
         }
         t = t + 1;
     }
-    final ordered = ins.sort(fun (a: linkIns, b: linkIns) > bool { return a.pos > b.pos; });
-    var result = html;
+    // Ascending with a cursor, collected into segments and joined once. The previous
+    // pass went descending and spliced into `result` per insertion, which rebuilt the
+    // ENTIRE page string once per linked term - 47 terms on a 57 KB page is ~2.7 MB of
+    // copying to insert a few hundred bytes. Descending order existed so an early splice
+    // could not shift the positions of later ones; a cursor gives that for free, because
+    // every position is read off the untouched `html`.
+    final ordered = ins.sort(fun (a: linkIns, b: linkIns) > bool { return a.pos < b.pos; });
+    final parts: [str] = mut [<str>];
+    var cursor = 0;
     foreach (x in ordered) {
-        result = result.sub(0, len: x.pos) + x.open + result.sub(x.pos, len: x.len) + "</a>" + result.sub(x.pos + x.len);
+        parts.append(html.sub(cursor, len: x.pos - cursor));
+        parts.append(x.open);
+        parts.append(html.sub(x.pos, len: x.len));
+        parts.append("</a>");
+        cursor = x.pos + x.len;
     }
-    return GlossaryLinkResult{ html = result, linked = linked };
+    parts.append(html.sub(cursor));
+    return GlossaryLinkResult{ html = parts.join(""), linked = linked };
 }
 
 // linkGlossaryTerms links the first linkable occurrence of each term (terms MUST be

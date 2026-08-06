@@ -42,14 +42,24 @@ ci:rw`, and `generate` writes its output locally. CI strips the default
 
 ## Which magus binary
 
-DEFAULT: use the released `magus` already on PATH. Do NOT build one.
+RIGHT NOW the released `magus` on PATH CANNOT load this workspace. `evals/magusfile.buzz`
+declares `no_language`, which no release knows yet, so every command fails at workspace
+load with:
 
-Building is the exception, and it needs a reason. Rebuild only when you are
-changing what the magus RUNTIME does and need to exercise that change:
+```text
+magus.project: unknown option "no_language" (known options: depends_on, exclusive, ...)
+```
+
+So build one - `magus run go_build .` - and use `./magus`. This is a temporary state that
+ends when the next release ships; re-check it by running `magus ls` before assuming
+either way, because the guidance flips back the moment a release carries the key.
+
+The DEFAULT, whenever the PATH binary can load the tree, is to use it and NOT build.
+Building is the exception, and it needs a reason:
 
 - a `magus.project` option, target policy, or other magusfile schema change (the
   released binary rejects a key it does not know, and then no magus command can
-  even load the workspace)
+  even load the workspace - which is the situation above)
 - engine, daemon, spell-runtime, or CLI behaviour you are about to run
 - a doctor check whose output you want to see against this tree
 
@@ -72,8 +82,14 @@ workspace load, including the one that would build the binary that understands i
 Escape by shelving just that hunk - `git stash push -- <file>`, `magus run
 go_build .`, `git stash pop`.
 
-Note `magus affected ci --no-default-charms` DELETES `./magus`: it is a declared
-output of the root project and the read-only run prunes it. Rebuild after gating.
+Note `magus affected ci --no-default-charms` can leave you without `./magus`; rebuild
+after gating. NOT because it is a declared output - `go-build` deliberately declares
+none (`magus describe target go-build .` shows `sources:` and no `outputs:`), so the
+binary is never cached as an artifact and never restored from one. `ctx.writesFiles` is
+omitted on purpose: the declared-output globs are what EnsureMergeDriver writes into
+`.gitattributes`, and `/magus` is gitignored, so declaring it would name a path that can
+never be tracked and so can never conflict. The relevant part is just that a read-only
+run does not leave a fresh binary behind.
 
 BOTH raw Go entry points are DENIED by the agent guard:
 
@@ -102,17 +118,22 @@ after `--` forwards it to the test binary, which rejects it.
 
 CI runs `setup-magus` two different ways, on purpose:
 
-- `source-path: .` (preflight, the ci shards, skill-evals, image-snapshot) builds
-  the magus THIS commit defines and runs it against this commit's magusfile. So a
-  change that `magusfile.buzz` needs is exercised by the very run that introduces
-  it - there is no "release first" chicken-and-egg. image-snapshot is here because
-  its targets call `magus\secret.read`, which no release carries yet; move it back
-  to `git-ref` once one does.
-- `git-ref: <latest release tag>` (completions, deploy-build, merge-history,
-  postflight) runs the pinned, checksum-verified release instead. That is the
-  compatibility contract: if one of those jobs breaks because the magusfile
-  needs an unreleased feature, that is a breaking-change signal to surface, not
-  to paper over.
+- `source-path: .` - nearly everything: `preflight`, `ci`, `advice`, `site-build`,
+  `image-snapshot`, `report`, and skill-evals' `smoke`. Builds the magus THIS commit
+  defines and runs it against this commit's magusfile, so a change that
+  `magusfile.buzz` needs is exercised by the very run that introduces it - there is
+  no "release first" chicken-and-egg.
+- `git-ref: <latest release tag>` - exactly ONE job in ci.yaml: `compat`. It runs the
+  pinned, checksum-verified release instead. That is the compatibility contract: when
+  it breaks because the magusfile needs an unreleased feature, that is a
+  breaking-change signal to surface, not to paper over. It carries
+  `continue-on-error: true`, so it reports and never blocks a merge - which is why it
+  is currently red on `no_language` (added in 6e087567) and that is fine.
+  (`publish-site`'s `deploy` and every `cd.yaml` release job also pin a ref, but those
+  run on main or on a tag, not on a pull request.)
+
+Verify rather than trust this list - it has drifted before:
+`awk '/^  [a-z][a-z0-9_-]*:$/{j=$1} /source-path:|git-ref:/{print j, $0}' .github/workflows/ci.yaml`
 
 Do NOT write `git-ref: ${{ github.sha }}` for the first case. On a
 `pull_request` event `github.sha` is the ephemeral `refs/pull/N/merge` commit, a
@@ -159,8 +180,12 @@ deliberately instead:
   behind an alias in the package that computes it.
 - `internal/` - the engine (cache, interp, depgraph, spell, proc, sandbox, ...)
 - `cmd/magus` - the CLI; `cmd/magus-*` - codegen and docs tools
-- `std/` + `host/` - Buzz stdlib modules; `host/gen/` is generated from `std/`
-- `gopherbuzz/` - the embedded Buzz language implementation
+- `std/` - the Buzz host modules a magusfile calls (`fs`, `os`, `http`, `vcs`, ...).
+  `std/module.go` holds the registry each one registers into. There is no `host/`
+  tree any more; it was folded in here, so a reference to `host/gen/` predates that.
+- `libs/` - code that versions independently of magus. `libs/gopherbuzz` (the
+  embedded Buzz implementation) and `libs/diagnostics` carry their own `go.mod`;
+  `libs/textsearch` is part of the main module.
 - `spells/` - built-in spell sources (`.buzz`), compiled into the binary
 - `docs/` - markdown sources; `docs/render.buzz` renders them into the
   static site at `docs/gen/` (generated, NOT committed - .github/workflows/publish-site.yaml
@@ -215,7 +240,7 @@ deliberately instead:
   carries no extra suffix - the directory is the signal.
 - Docs site follows classless Pico: semantic HTML, minimal custom classes,
   no inline styles.
-- Language-level changes in `gopherbuzz/` must match upstream Buzz behavior.
+- Language-level changes in `libs/gopherbuzz/` must match upstream Buzz behavior.
 - Buzz code is tested with in-file `test "..." {}` blocks; run via
   `magus buzz -t <file>`.
 - Commits: subject line only, no area prefix, no Co-Authored-By trailer;
