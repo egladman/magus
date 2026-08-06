@@ -284,8 +284,8 @@ jobs:
       # (merge-conflicts: 'false') rather than by editing this step.
       - uses: ./.github/actions/advice
 
-  deploy-build:
-    name: magus deploy build
+  site-build:
+    name: magus site build
     needs: [preflight]
     # Separate from `magus affected ci` on purpose: affected ci shards per-project
     # correctness, and the deploy is a workspace-level composition no single project owns.
