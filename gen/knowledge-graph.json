@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2449,
-  "edge_count": 5555,
+  "node_count": 2450,
+  "edge_count": 5562,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -3030,6 +3030,17 @@
         "section": "migrating",
         "tags": "nx,migration,monorepo,terminology,comparison,porting",
         "title": "Coming from Nx"
+      }
+    },
+    {
+      "id": "doc:docs/recommendations.md",
+      "kind": "doc",
+      "label": "docs/recommendations.md",
+      "source": "docs/recommendations.md",
+      "attrs": {
+        "role": "doc",
+        "tags": "recommendations,conventions,charms,targets,naming,channels,diagnostics,best practice",
+        "title": "Recommendations"
       }
     },
     {
@@ -15787,7 +15798,7 @@
       "kind": "function",
       "label": "advice_test",
       "doc": "Runs the PR advisors' `test \"...\" {}` blocks.  They are the only .buzz sources in this tree that parse standalone: everything else imports magus/magus\\spell and uses embedding-only constructs, which is why the old standalone-Buzz test targets were deleted rather than repointed. The advisors run under a plain `magus buzz` in CI, so upstream-strict is exactly the parse they need checked, and `-t` is the runner.  Run from each script's own directory, not the project root, because they do `import \"advice\"` for",
-      "source": "magusfile.buzz:1204",
+      "source": "magusfile.buzz:1206",
       "attrs": {
         "exported": "true"
       }
@@ -15797,7 +15808,7 @@
       "kind": "function",
       "label": "bindings_generate",
       "doc": "Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.",
-      "source": "magusfile.buzz:678",
+      "source": "magusfile.buzz:680",
       "attrs": {
         "exported": "true"
       }
@@ -15807,7 +15818,7 @@
       "kind": "function",
       "label": "build",
       "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
-      "source": "magusfile.buzz:1267",
+      "source": "magusfile.buzz:1269",
       "attrs": {
         "exported": "true"
       }
@@ -15824,7 +15835,7 @@
       "kind": "function",
       "label": "build_release_variant",
       "doc": "Builds one (goos, goarch) release binary and archives it into dist/, writing a standard one-line <asset>.sha256 sidecar alongside it (sha256sum-compatible format). No cross-job aggregation needed: CD's publish job later does `cat dist/*.sha256 > dist/SHA256SUMS`, a plain shell one-liner, not a magus target. release-build's cgo and static (charm) modes both call this, differing only in CGO_ENABLED and the asset suffix.",
-      "source": "magusfile.buzz:897"
+      "source": "magusfile.buzz:899"
     },
     {
       "id": "function:magusfile.buzz:built_by",
@@ -15838,7 +15849,7 @@
       "kind": "function",
       "label": "changelog_generate",
       "doc": "CHANGELOG.md is a root artifact. Keeping its generator beside the file avoids a reverse docs -> root output edge while letting docs publication depend on the same execution stage.",
-      "source": "magusfile.buzz:661",
+      "source": "magusfile.buzz:663",
       "attrs": {
         "exported": "true"
       }
@@ -15848,14 +15859,14 @@
       "kind": "function",
       "label": "channel",
       "doc": "The active channel: \"commit\", \"unstable\", or \"stable\".  Naming both channels is rejected up front by exclusive_charms rather than left to the assertions below, which would fail too but report the version rather than the mistake.",
-      "source": "magusfile.buzz:447"
+      "source": "magusfile.buzz:449"
     },
     {
       "id": "function:magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
       "doc": "Runs the CI gates through their declared dependencies.",
-      "source": "magusfile.buzz:1305",
+      "source": "magusfile.buzz:1307",
       "attrs": {
         "exported": "true"
       }
@@ -15865,7 +15876,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.",
-      "source": "magusfile.buzz:1351",
+      "source": "magusfile.buzz:1353",
       "attrs": {
         "exported": "true"
       }
@@ -15882,7 +15893,7 @@
       "kind": "function",
       "label": "completion_test",
       "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell. Part of ci, and it REQUIRES a docker daemon rather than skipping without one: a gate that silently skips when a tool is missing is how the zsh recipe stayed broken - it told users to append a script to ~/.zshrc that registers nothing, and nothing ever ran it to find out. Its declared footprint keeps the cost off every run: affected only reaches it when the completion scripts or their checks change.  One image per she",
-      "source": "magusfile.buzz:1326",
+      "source": "magusfile.buzz:1328",
       "attrs": {
         "exported": "true"
       }
@@ -15892,7 +15903,7 @@
       "kind": "function",
       "label": "config_generate",
       "doc": "Regenerates the CLI config-flag plumbing from internal/config/config.go. One generator invocation, four trees: the flag/bind plumbing beside the CLI, the schema field list, and the env applier next to config itself. All four are declared - undeclared they classified as ordinary source, so magus told a reader they were safe to hand-edit.",
-      "source": "magusfile.buzz:733",
+      "source": "magusfile.buzz:735",
       "attrs": {
         "exported": "true"
       }
@@ -15902,14 +15913,14 @@
       "kind": "function",
       "label": "credential_state",
       "doc": "Whether both of a registry's credentials can be resolved.  ONLY called under the `verify` charm, and that gating is the point rather than a detail. Checking resolvability means actually RESOLVING, and resolving means asking the provider - which for 1Password or a vault is a biometric or password prompt. A status table that pops an unlock dialog just to print \"ready\" is the single most infuriating thing this feature could do, and it is exactly what an ungated probe would cause: `magus run image-registries` i",
-      "source": "magusfile.buzz:564"
+      "source": "magusfile.buzz:566"
     },
     {
       "id": "function:magusfile.buzz:deploy_generate",
       "kind": "function",
       "label": "deploy_generate",
       "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/.  It lives here rather than in the Pages workflow because that workflow is meant to be thin - set up a toolchain, name targets, upload the artifact - and the layout below is portable logic that would otherwise be GitHub-specific shell. It is also what makes the deploy reproducible locally: run the same three commands, then serve gen/site, and what you see is what publishe",
-      "source": "magusfile.buzz:1490",
+      "source": "magusfile.buzz:1492",
       "attrs": {
         "exported": "true"
       }
@@ -15928,15 +15939,15 @@
       "id": "function:magusfile.buzz:exclusive_charms",
       "kind": "function",
       "label": "exclusive_charms",
-      "doc": "Rejects two charms that answer one question. magus gives no charm precedence over another (they are an unordered set), so a magusfile that reads them in sequence invents one silently - `:amd64,arm64` returned amd64 and dropped the arm64 the caller asked for.  WS is this WORKSPACE's code prefix. magus.raise refuses the MGS prefix outright, which is what stops a workspace diagnostic from rendering as though magus documented it.",
-      "source": "magusfile.buzz:362"
+      "doc": "Rejects two charms that answer one question. magus gives no charm precedence over another (they are an unordered set), so a magusfile that reads them in sequence invents one silently - `:amd64,arm64` returned amd64 and dropped the arm64 the caller asked for.  WS is this WORKSPACE's code prefix, documented in docs/recommendations.md. magus.raise refuses the MGS prefix outright, which is what stops a workspace diagnostic from rendering as though magus documented it.",
+      "source": "magusfile.buzz:363"
     },
     {
       "id": "function:magusfile.buzz:format",
       "kind": "function",
       "label": "format",
       "doc": "Regenerates, then formats Go and tidies `go.mod`. Markdown is linted (not formatted): markdownlint runs in lint; there is no markdown FORMATTER any more - biome (used for all TypeScript/CSS) has no markdown support, and prettier was dropped rather than kept solely to format markdown.",
-      "source": "magusfile.buzz:1302",
+      "source": "magusfile.buzz:1304",
       "attrs": {
         "exported": "true"
       }
@@ -15946,7 +15957,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd). Drift = regeneration dirtied a previously-clean tree, via vcs.isDirty (not a raw git/porcelain shell-out), so uncommitted-but-current generated files pass; only a regeneration that changes a clean file fails (a generator input changed but its output was not re-run and committed).",
-      "source": "magusfile.buzz:837",
+      "source": "magusfile.buzz:839",
       "attrs": {
         "exported": "true"
       }
@@ -15966,7 +15977,7 @@
       "kind": "function",
       "label": "graph_generate",
       "doc": "Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects. Written into gen/ because they are generated, not authored: the knowledge graph previously sat at docs/graph.json as a hand-run export with no generating target at all, which made it stale by construction with nothing to say so. Whole-workspace scope is why this lives at the root rather than in docs/ - a describe from inside a pro",
-      "source": "magusfile.buzz:760",
+      "source": "magusfile.buzz:762",
       "attrs": {
         "exported": "true"
       }
@@ -15976,7 +15987,7 @@
       "kind": "function",
       "label": "image_build",
       "doc": "Two axes, one charm each. `cd` is magus's built-in deliver switch: without it this loads an image locally and pushes nothing. `stable` and `unstable` pick the channel and assert the version belongs to it (see channel()).  magus run image-build                # local cgo load, pushes nothing magus run image-build:static         # local static load magus run image-build:cd             # GHCR, tagged with the short commit, static only magus run image-build:cd,unstable    # both registries, version only, no flo",
-      "source": "magusfile.buzz:401",
+      "source": "magusfile.buzz:403",
       "attrs": {
         "exported": "true"
       }
@@ -15986,7 +15997,7 @@
       "kind": "function",
       "label": "image_login",
       "doc": "Logs in to every registry the active mode publishes to, resolving each one's credentials through the workspace's secret provider.  magus run image-login:cd,stable           # both, before image-build:cd,stable magus run image-login:cd                   # GHCR only magus run image-login:cd,stable docker.io # just that one  This is the whole reason the references are a field on Registry. A CI step is then one line with no shell parsing a list, the same line that works on a laptop, and it cannot disagree with",
-      "source": "magusfile.buzz:608",
+      "source": "magusfile.buzz:610",
       "attrs": {
         "exported": "true"
       }
@@ -15996,7 +16007,7 @@
       "kind": "function",
       "label": "image_registries",
       "doc": "Reports the registries `magus run image-build` under the SAME charms will push to, and whether the credentials each one needs are actually present in the environment. The diagnostic half of the pair image_login() completes: this one answers \"where does this go and am I set up for it\", touches nothing, and needs no credentials to be useful.  magus run image-registries:cd,stable       # both, for a release magus run image-registries:cd              # GHCR only, for a per-commit image magus run image-registrie",
-      "source": "magusfile.buzz:513",
+      "source": "magusfile.buzz:515",
       "attrs": {
         "exported": "true"
       }
@@ -16006,7 +16017,7 @@
       "kind": "function",
       "label": "image_scan",
       "doc": "Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL.",
-      "source": "magusfile.buzz:625",
+      "source": "magusfile.buzz:627",
       "attrs": {
         "exported": "true"
       }
@@ -16035,7 +16046,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "Formats first, then golangci-lint, go vet, govulncheck, markdownlint, and shellcheck. golangci-lint and govulncheck go through the go spell's ops rather than a raw os\\exec, so the spell's version probes (mgs_getVersionProbes) reach the cache key - without them a linter upgrade changes which code passes while every cache entry replays the old verdict. Neither runs through `go tool`: that COMPILES the tool with whichever go leads PATH, which is how CI built the linter with a different toolchain than it analyz",
-      "source": "magusfile.buzz:1286",
+      "source": "magusfile.buzz:1288",
       "attrs": {
         "exported": "true"
       }
@@ -16052,14 +16063,14 @@
       "kind": "function",
       "label": "load_variant",
       "doc": "Builds one variant single-arch into the local daemon under image_tag(): no registry, no signature. What `magus run image-build` does outside CI, and what image_scan hands to trivy.",
-      "source": "magusfile.buzz:372"
+      "source": "magusfile.buzz:374"
     },
     {
       "id": "function:magusfile.buzz:man_generate",
       "kind": "function",
       "label": "man_generate",
       "doc": "Renders the roff man pages into manpage/ (repo root). These are a DISTRIBUTION artifact - the .1 source the `man` command reads, shipped with releases - so they stay owned here at the root, NOT in the docs project. The docs project owns the Markdown manpages (docs/manpage/*.md) instead; both flavors are serialized from the same internal/manpage registry by cmd/magus-manpage (see its -format flag).  It also refreshes api.lock, the drift-gated snapshot of the public CLI surface, because that is serialized fro",
-      "source": "magusfile.buzz:651",
+      "source": "magusfile.buzz:653",
       "attrs": {
         "exported": "true"
       }
@@ -16069,7 +16080,7 @@
       "kind": "function",
       "label": "md_generate",
       "doc": "Renders MAGUS.md via `magus describe graph`.",
-      "source": "magusfile.buzz:747",
+      "source": "magusfile.buzz:749",
       "attrs": {
         "exported": "true"
       }
@@ -16079,14 +16090,14 @@
       "kind": "function",
       "label": "missing_input",
       "doc": "missing_input phrases a deploy-generate precondition that ANOTHER project owns.  Naming one single-project command teaches the wrong habit: the reader runs it, gets the next precondition, runs another, and learns the set by failing once per producer. So name every producer in one command. `magus run <target> [project...]` takes a LIST - `magus run build docs console` is one dispatch over both - which is the idiom this message teaches.  Deliberately NOT \"magus affected build\" or \"magus run build /\". Both wou",
-      "source": "magusfile.buzz:1451"
+      "source": "magusfile.buzz:1453"
     },
     {
       "id": "function:magusfile.buzz:mocks_generate",
       "kind": "function",
       "label": "mocks_generate",
       "doc": "Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir. Mocks are committed and drift-gated like every other generated tree; mockery is pinned in the go.mod tool block.",
-      "source": "magusfile.buzz:702",
+      "source": "magusfile.buzz:704",
       "attrs": {
         "exported": "true"
       }
@@ -16096,7 +16107,7 @@
       "kind": "function",
       "label": "mod_sync",
       "doc": "The Go spell's Buzz companion derives the flags; go-mod-edit alone renders or writes go.mod. Without rw, Go's -print mode must equal the checked-in file.",
-      "source": "magusfile.buzz:790",
+      "source": "magusfile.buzz:792",
       "attrs": {
         "exported": "true"
       }
@@ -16105,14 +16116,14 @@
       "id": "function:magusfile.buzz:pad",
       "kind": "function",
       "label": "pad",
-      "source": "magusfile.buzz:581"
+      "source": "magusfile.buzz:583"
     },
     {
       "id": "function:magusfile.buzz:postflight",
       "kind": "function",
       "label": "postflight",
       "doc": "Renders the insight report (hotspots, affinity, ownership, trend) and, with the `gha` charm, appends it to a host output path supplied via env. The final CI step; never gates. The env var name (MAGUS_INSIGHT_OUTPUT_PATH) is generic on purpose; the host that sets it (the workflow) is what knows it's GitHub Actions and points it at $GITHUB_STEP_SUMMARY. The `gha` charm also opts the render into the safe Mermaid subset so older or partial renderers handle it.",
-      "source": "magusfile.buzz:812",
+      "source": "magusfile.buzz:814",
       "attrs": {
         "exported": "true"
       }
@@ -16122,7 +16133,7 @@
       "kind": "function",
       "label": "preflight",
       "doc": "No gate of its own: doctor USED to run here and fail the build on a finding, which made workspace conventions a blocker for everyone downstream. The advice action now reports the same findings on the pull request, non-blocking - and unlike a preflight gate, that works for a consumer who never wired doctor into their own pipeline.",
-      "source": "magusfile.buzz:1264",
+      "source": "magusfile.buzz:1266",
       "attrs": {
         "exported": "true"
       }
@@ -16132,7 +16143,7 @@
       "kind": "function",
       "label": "publish_registries",
       "doc": "Which registries the active mode pushes to. image_build and image_registries both read it, so the build and the login step it depends on cannot disagree about which credentials a run needs.  Going through channel() also means the workflow's `image-registries:cd,stable,verify` preflight rejects a bad version before QEMU, buildx and a multi-arch compile run.",
-      "source": "magusfile.buzz:437"
+      "source": "magusfile.buzz:439"
     },
     {
       "id": "function:magusfile.buzz:publish_variant",
@@ -16146,13 +16157,13 @@
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json. Always let pnpm validate the install, matching console/magusfile.buzz. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready and handed the missing packages to esbuild. On a warm tree --frozen-lockfile is about a second and",
-      "source": "magusfile.buzz:1413"
+      "source": "magusfile.buzz:1415"
     },
     {
       "id": "function:magusfile.buzz:release",
       "kind": "function",
       "label": "release",
-      "source": "magusfile.buzz:1041",
+      "source": "magusfile.buzz:1043",
       "attrs": {
         "exported": "true"
       }
@@ -16162,7 +16173,7 @@
       "kind": "function",
       "label": "release_build",
       "doc": "Builds one release binary for one platform. Default is dynamically-linked (cgo): internal/codec's zstd/xz fast path needs a real C toolchain + libzstd/liblzma for whatever (goos, goarch) you ask for, so cross-compiling this variant only works if you already have that toolchain around — CD never does, sticking to each native job's own platform. The `static` charm (`magus run release-build:static`) switches to a CGO_ENABLED=0 build instead: pure Go cross-compiles trivially, so unlike the cgo default it's ch",
-      "source": "magusfile.buzz:974",
+      "source": "magusfile.buzz:976",
       "attrs": {
         "exported": "true"
       }
@@ -16172,7 +16183,7 @@
       "kind": "function",
       "label": "release_sign",
       "doc": "Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos).",
-      "source": "magusfile.buzz:998",
+      "source": "magusfile.buzz:1000",
       "attrs": {
         "exported": "true"
       }
@@ -16182,34 +16193,34 @@
       "kind": "function",
       "label": "release_target_platform",
       "doc": "Resolves which platform to build: the explicit (goos, goarch) args when given, else the current runner's own native platform. So a bare `magus run release-build` (with or without the static charm) builds exactly one binary — the one you're standing on — never a silent \"all 5\" surprise.",
-      "source": "magusfile.buzz:950"
+      "source": "magusfile.buzz:952"
     },
     {
       "id": "function:magusfile.buzz:rerender_docs",
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:1425"
+      "source": "magusfile.buzz:1427"
     },
     {
       "id": "function:magusfile.buzz:resolvable",
       "kind": "function",
       "label": "resolvable",
-      "source": "magusfile.buzz:572"
+      "source": "magusfile.buzz:574"
     },
     {
       "id": "function:magusfile.buzz:select_registries",
       "kind": "function",
       "label": "select_registries",
       "doc": "Narrows a registry list to one host, for the `magus run image-login:cd,stable docker.io` form. Selection is BY HOST, deliberately not by position: an index silently selects a different registry the moment REGISTRIES is reordered or the charm changes how many there are (`:cd` has one, `:cd,stable` has two, so \"index 1\" is a valid registry under one and out of range under the other), and it is unreadable in a workflow besides. A host that is not in the list is an error naming the ones that are, rather than a",
-      "source": "magusfile.buzz:483"
+      "source": "magusfile.buzz:485"
     },
     {
       "id": "function:magusfile.buzz:serve",
       "kind": "function",
       "label": "serve",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than",
-      "source": "magusfile.buzz:1539",
+      "source": "magusfile.buzz:1541",
       "attrs": {
         "exported": "true"
       }
@@ -16219,7 +16230,7 @@
       "kind": "function",
       "label": "skills_generate",
       "doc": "Reinstalls the agent skills from their embedded sources in cmd/magus/skills.  The installed copies are GENERATED, and declaring them says so: without this they classified as ordinary source, so `magus describe file .claude/skills/...` reported a hand-editable file and the agent guard stayed silent on the one edit that is always wrong. CLAUDE.md has said \"edit the sources, not the installed copies\" all along; this is the declaration that makes the tooling say it too.  AGENTS.md is deliberately NOT declared.",
-      "source": "magusfile.buzz:720",
+      "source": "magusfile.buzz:722",
       "attrs": {
         "exported": "true"
       }
@@ -16229,7 +16240,7 @@
       "kind": "function",
       "label": "spells_generate",
       "doc": "Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen), the Buzz value-type mirrors (internal/spellruntime/gen/types) and the per-module host declarations (internal/spellruntime/gen/decls), all driven by the go:generate directives in internal/spellruntime.  Both trees are declared: undeclared, magus classified them as ordinary source, so `magus describe file` told a reader a generated file was safe to hand-edit and the agent guard's generated-file advisory stayed silent on every one of",
-      "source": "magusfile.buzz:692",
+      "source": "magusfile.buzz:694",
       "attrs": {
         "exported": "true"
       }
@@ -16239,7 +16250,7 @@
       "kind": "function",
       "label": "tapes",
       "doc": "Records every VHS tape in tapes/ into assets/gen/. Each tape drives a real magus binary through a real terminal, so the GIFs are documentation that cannot quietly go stale the way a pasted transcript does - re-record and the drift is visible.  Opt-in, never wired into `generate` or `ci`: a render takes tens of seconds, needs vhs (and the ttyd/ffmpeg it pulls in) on PATH, and produces a different file every time. Run it when the CLI's output actually changes, then commit the result.  The GIFs are declared ou",
-      "source": "magusfile.buzz:871",
+      "source": "magusfile.buzz:873",
       "attrs": {
         "exported": "true"
       }
@@ -16249,7 +16260,7 @@
       "kind": "function",
       "label": "test",
       "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
-      "source": "magusfile.buzz:1214",
+      "source": "magusfile.buzz:1216",
       "attrs": {
         "exported": "true"
       }
@@ -16259,14 +16270,14 @@
       "kind": "function",
       "label": "total_coverage",
       "doc": "Renders a Go coverage badge locally (no third-party service, no network).",
-      "source": "magusfile.buzz:1184"
+      "source": "magusfile.buzz:1186"
     },
     {
       "id": "function:magusfile.buzz:types_generate",
       "kind": "function",
       "label": "types_generate",
       "doc": "Regenerates the runtime BuzzObject maps before anything imports a host binding. Its reflection lives only in magus-utils while writing this Go file; the emitted methods use direct field access, so Magus never reflects at a Buzz boundary.",
-      "source": "magusfile.buzz:672",
+      "source": "magusfile.buzz:674",
       "attrs": {
         "exported": "true"
       }
@@ -16282,7 +16293,7 @@
       "kind": "function",
       "label": "watch",
       "doc": "Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.",
-      "source": "magusfile.buzz:1170",
+      "source": "magusfile.buzz:1172",
       "attrs": {
         "exported": "true"
       }
@@ -16292,7 +16303,7 @@
       "kind": "function",
       "label": "workspace_go_mods",
       "doc": "workspace_go_mods gathers the Go spell's structured view for every workspace module. The policy that compares those records lives beside that spell in spells/golang/gomod.buzz; Magus core only supplies the typed project inventory.",
-      "source": "magusfile.buzz:776"
+      "source": "magusfile.buzz:778"
     },
     {
       "id": "function:magusfile.buzz:write_image_summary",
@@ -21279,11 +21290,11 @@
       }
     },
     {
-      "id": "rationale:magusfile.buzz:1326:TODO",
+      "id": "rationale:magusfile.buzz:1328:TODO",
       "kind": "rationale",
       "label": "TODO",
       "doc": "zsh is uncovered - it has no official image (zshusers/zsh is community-run), so",
-      "source": "magusfile.buzz:1326"
+      "source": "magusfile.buzz:1328"
     },
     {
       "id": "rationale:spells/aws/s3-cache/spell.buzz:123:NOTE",
@@ -32337,6 +32348,54 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "docs/migrating/from-nx.md"
+    },
+    {
+      "source": "doc:docs/recommendations.md",
+      "target": "doc:docs/concepts/charms.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/recommendations.md"
+    },
+    {
+      "source": "doc:docs/recommendations.md",
+      "target": "doc:docs/concepts/targets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/recommendations.md"
+    },
+    {
+      "source": "doc:docs/recommendations.md",
+      "target": "doc:docs/guides/debugging.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/recommendations.md"
+    },
+    {
+      "source": "doc:docs/recommendations.md",
+      "target": "doc:docs/guides/integrations/github-actions.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/recommendations.md"
+    },
+    {
+      "source": "doc:docs/recommendations.md",
+      "target": "doc:docs/guides/tips.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/recommendations.md"
+    },
+    {
+      "source": "doc:docs/recommendations.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/recommendations.md"
     },
     {
       "source": "doc:docs/reference/api/activity.md",
@@ -62782,6 +62841,14 @@
     },
     {
       "source": "project:docs",
+      "target": "doc:docs/recommendations.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/recommendations.md"
+    },
+    {
+      "source": "project:docs",
       "target": "file:docs/magusfile.buzz",
       "relation": "contains",
       "confidence": "extracted",
@@ -63381,12 +63448,12 @@
       "provenance": "proto"
     },
     {
-      "source": "rationale:magusfile.buzz:1326:TODO",
+      "source": "rationale:magusfile.buzz:1328:TODO",
       "target": "function:magusfile.buzz:completion_test",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "magusfile.buzz:1326"
+      "provenance": "magusfile.buzz:1328"
     },
     {
       "source": "rationale:spells/aws/s3-cache/spell.buzz:123:NOTE",

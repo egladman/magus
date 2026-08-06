@@ -18,7 +18,7 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 ### Changed
 
 - **`cache.immutable` is now `cache.write.enabled`, inverted.** The old key named the
-  absence of a behaviour, so answering "can this run write?" meant parsing a double
+  absence of a behavior, so answering "can this run write?" meant parsing a double
   negative, and the documented CI snippet read inverted from its own intent:
   `MAGUS_CACHE_IMMUTABLE: ${{ github.event_name == 'pull_request' }}` becomes
   `MAGUS_CACHE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}`. It gates the

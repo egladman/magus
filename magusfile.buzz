@@ -357,12 +357,14 @@ fun load_platform(ctx: magus\Context) > str {
 // another (they are an unordered set), so a magusfile that reads them in sequence invents
 // one silently - `:amd64,arm64` returned amd64 and dropped the arm64 the caller asked for.
 //
-// WS is this WORKSPACE's code prefix. magus.raise refuses the MGS prefix outright, which
-// is what stops a workspace diagnostic from rendering as though magus documented it.
+// WS is this WORKSPACE's code prefix, documented in docs/recommendations.md. magus.raise
+// refuses the MGS prefix outright, which is what stops a workspace diagnostic from
+// rendering as though magus documented it.
 fun exclusive_charms(ctx: magus\Context, a: str, b: str, code: str, question: str) > void {
     if (ctx.has_charm(a) and ctx.has_charm(b)) {
         magus\raise(code, message: "the `" + a + "` and `" + b
-            + "` charms both answer " + question + " - name one");
+            + "` charms both answer " + question + " - name one",
+            url: "https://eli.gladman.cc/magus/recommendations/#one-charm-answers-one-question");
     }
 }
 
