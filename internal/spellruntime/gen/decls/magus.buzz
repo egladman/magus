@@ -342,7 +342,7 @@ export extern fun has_charm(name: str) > bool;
 export extern fun insight(args: [str], opts: {str: any} = {<str: any>}) > ExecResult;
 export extern fun insightReport(args: [str], opts: {str: any} = {<str: any>}) > InsightReport;
 export extern fun ls() > Projects;
-export extern fun raise(code: str, message: str, cause: any = null, url: str = "") > void;
+export extern fun raise(code: str, message: str, opts: {str: any} = {<str: any>}) > void;
 export extern fun run(args: [str], opts: {str: any} = {<str: any>}) > ExecResult;
 export extern fun targetGraph(opts: {str: any} = {<str: any>}) > TargetGraph;
 export extern fun targets() > TargetGraph;

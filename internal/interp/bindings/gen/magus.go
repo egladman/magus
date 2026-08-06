@@ -74,9 +74,8 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("raise", vm.DirectValue("magus.raise", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		code := Str(bzArgs, 0)
 		message := Str(bzArgs, 1)
-		cause := Any(bzArgs, 2)
-		url := Str(bzArgs, 3)
-		if err := std.MagusRaise(ctx, code, message, cause, url); err != nil {
+		opts := AnyMap(bzArgs, 2)
+		if err := std.MagusRaise(ctx, code, message, opts); err != nil {
 			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil

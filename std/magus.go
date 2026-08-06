@@ -101,12 +101,11 @@ var Magus = Module{
 		},
 		{
 			Name: "raise",
-			Doc:  "Fail with a CODED diagnostic instead of a bare string, so a caller can branch on the code: `catch (e) { if (e.code == \"ACME1001\") ... }`. code is yours to define and namespace - anything but the MGS prefix, which is magus's own. cause is the error being wrapped, usually the value from an inner catch; it is appended to the message the way Go's %w renders one, and the failure it came from stays reachable underneath. url is the page documenting the code, rendered as the `see:` line the CLI prints under its own diagnostics.",
+			Doc:  "Fail with a CODED diagnostic instead of a bare string, so a caller can branch on the code: `catch (e) { if (e.code == \"ACME1001\") ... }`. code is yours to define and namespace - anything but the MGS prefix, which is magus's own. opts.cause is the error being wrapped, usually the value from an inner catch; it is appended to the message the way Go's %w renders one, and the failure it came from stays reachable underneath. opts.url is the page documenting the code, rendered as the `see:` line the CLI prints under its own diagnostics.",
 			Args: []Arg{
 				{Name: "code", Type: TypeString},
 				{Name: "message", Type: TypeString},
-				{Name: "cause", Type: TypeAny, Optional: true},
-				{Name: "url", Type: TypeString, Optional: true},
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: nil,
 			Impl:    MagusRaise,
@@ -346,7 +345,11 @@ func MagusWhere(ctx context.Context, dir string) (string, error) {
 //
 // `raise` rather than `throw`, which would match the Buzz keyword: throw is reserved, so
 // a member cannot be named it. error and fatal are taken by the logging members above.
-func MagusRaise(_ context.Context, code, message string, cause any, url string) error {
+//
+// cause and url live in an opts map, not as trailing positionals. The generated trampoline
+// binds by index, so a fourth positional url was unreachable without also passing a cause -
+// and every other optional in this module is already an opts map.
+func MagusRaise(_ context.Context, code, message string, opts map[string]any) error {
 	if code == "" {
 		return errors.New("magus.raise: needs a code, e.g. \"ACME1001\" - it is the stable identifier a caller branches on")
 	}
@@ -358,8 +361,9 @@ func MagusRaise(_ context.Context, code, message string, cause any, url string) 
 	}
 	// A per-call domain is how a caller-supplied url reaches the rendered error: Error's
 	// url field is captured at construction from the domain's function, never set later.
+	url, _ := opts["url"].(string)
 	d := diagnostics.New(func(diagnostics.Code) string { return url })
-	summary, c := buzzCause(cause)
+	summary, c := buzzCause(opts["cause"])
 	if c == nil {
 		return d.Errorf(diagnostics.Code(code), "%s", message)
 	}

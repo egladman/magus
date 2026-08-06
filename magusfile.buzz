@@ -364,7 +364,7 @@ fun exclusive_charms(ctx: magus\Context, a: str, b: str, code: str, question: st
     if (ctx.has_charm(a) and ctx.has_charm(b)) {
         magus\raise(code, message: "the `" + a + "` and `" + b
             + "` charms both answer " + question + " - name one",
-            url: "https://eli.gladman.cc/magus/recommendations/#one-charm-answers-one-question");
+            opts: {"url": "https://eli.gladman.cc/magus/recommendations/#one-charm-answers-one-question"});
     }
 }
 

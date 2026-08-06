@@ -840,9 +840,6 @@ func (v Value) ListItems() []Value { return v.asList().Items }
 // MapKeys returns the ordered key slice. Only valid when IsMap() is true.
 func (v Value) MapKeys() []string { return v.asMap().Keys }
 
-// MapView returns the underlying map Value for maps and object instances.
-// For maps it returns self. For object instances it returns a Value wrapping
-// the fields map. Returns (Null, false) for all other types.
 // EnumValue returns an enum case's backing value - what `Enum.case.value` yields -
 // and whether v is an enum case at all.
 //
@@ -858,6 +855,9 @@ func (v Value) EnumValue() (Value, bool) {
 	return v.asEnumVal().Val, true
 }
 
+// MapView returns the underlying map Value for maps and object instances.
+// For maps it returns self. For object instances it returns a Value wrapping
+// the fields map. Returns (Null, false) for all other types.
 func (v Value) MapView() (Value, bool) {
 	switch v.tag() {
 	case tagMap:
