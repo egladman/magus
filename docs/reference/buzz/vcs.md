@@ -56,11 +56,11 @@ Full commit hash. Raises when no VCS is resolved or its metadata cannot be read 
 
 **Returns:** string
 
-### branch
+### ref
 
-Current branch. Raises when no VCS is resolved or its metadata cannot be read - use vcs.name() to test for a VCS first.
+The movable name pointing at the current revision, or "" when there is none. Backend-specific by nature: a git branch, a Mercurial named branch, a Jujutsu bookmark. jj's working copy is usually an anonymous change, so "" is an ordinary answer there, not a failure. Raises when no VCS is resolved or its metadata cannot be read - use vcs.name() to test for a VCS first.
 
-**Signature:** `vcs\branch() → string` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L266)
+**Signature:** `vcs\ref() → string` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L266)
 
 **Returns:** string
 
