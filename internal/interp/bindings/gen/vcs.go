@@ -55,8 +55,8 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return StrVal(ret0), nil
 	}))
-	m.MapSet("branch", vm.DirectValue("vcs.branch", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.VcsBranch(ctx)
+	m.MapSet("ref", vm.DirectValue("vcs.ref", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := std.VcsRef(ctx)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}

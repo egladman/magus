@@ -1227,9 +1227,9 @@ export fun check(ctx: magus\Context, args: [str]) > void {
     // here; the no-VCS path, where these now RAISE rather than hand back "", is covered by
     // TestVcsCommitRaisesOutsideRepo, which chdirs to a bare temp dir to get there.
     final h = vcs.shortHash();
-    final b = vcs.branch();
+    final b = vcs.ref();
     if (h == "") { throw "shortHash returned empty inside a repo"; }
-    if (b == "") { throw "branch returned empty inside a repo"; }
+    if (b == "") { throw "ref returned empty inside a git repo"; }
     vcs.commitDate();
 
     // isDirty RAISES here, and that is the point of the change. A VCS resolves (the

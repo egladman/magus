@@ -39,7 +39,7 @@ func TestVcsAccessorsRaiseWithNoVCS(t *testing.T) {
 	for name, call := range map[string]func() (string, error){
 		"shortHash":  func() (string, error) { return VcsShortHash(ctx) },
 		"hash":       func() (string, error) { return VcsHash(ctx) },
-		"branch":     func() (string, error) { return VcsBranch(ctx) },
+		"ref":        func() (string, error) { return VcsRef(ctx) },
 		"commitDate": func() (string, error) { return VcsCommitDate(ctx) },
 		"describe":   func() (string, error) { return VcsDescribe(ctx) },
 	} {

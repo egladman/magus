@@ -272,7 +272,7 @@ var modules = []Module{
 			{Name: "diff", Doc: "List files changed against the given base (defaults to vcs.base).", Sig: "vcs.diff([base]) → []string"},
 			{Name: "short_hash", Doc: "Short commit hash, or empty on error.", Sig: "vcs.shortHash() → string"},
 			{Name: "hash", Doc: "Full commit hash, or empty on error.", Sig: "vcs.hash() → string"},
-			{Name: "branch", Doc: "Current branch, or empty on error.", Sig: "vcs.branch() → string"},
+			{Name: "ref", Doc: "The movable name at the current revision (git branch, hg named branch, jj bookmark), or empty when there is none.", Sig: "vcs.ref() → string"},
 			{Name: "commit_date", Doc: "Commit date string, or empty on error.", Sig: "vcs.commitDate() → string"},
 			{Name: "is_dirty", Doc: "True if the working tree has uncommitted changes. Pass paths to scope the check to those files/dirs (relative to the project), e.g. is_dirty([\"MAGUS.md\"]) — the right way to gate generated outputs without shelling out to git or parsing porcelain.", Sig: "vcs.isDirty([paths]) → bool"},
 			{Name: "metadata", Doc: "Full metadata table: short_hash, hash, branch, commit_date, is_dirty.", Sig: "vcs.metadata() → map[string]any"},

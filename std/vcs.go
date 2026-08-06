@@ -53,10 +53,10 @@ var Vcs = Module{
 			Impl:    VcsHash,
 		},
 		{
-			Name:    "branch",
-			Doc:     "Current branch. Raises when no VCS is resolved or its metadata cannot be read - use vcs.name() to test for a VCS first.",
+			Name:    "ref",
+			Doc:     "The movable name pointing at the current revision, or \"\" when there is none. Backend-specific by nature: a git branch, a Mercurial named branch, a Jujutsu bookmark. jj's working copy is usually an anonymous change, so \"\" is an ordinary answer there, not a failure. Raises when no VCS is resolved or its metadata cannot be read - use vcs.name() to test for a VCS first.",
 			Returns: []Ret{{Type: TypeString}},
-			Impl:    VcsBranch,
+			Impl:    VcsRef,
 		},
 		{
 			Name:    "commit_date",
@@ -263,7 +263,7 @@ func VcsHash(ctx context.Context) (string, error) {
 }
 
 // VcsBranch returns the current branch; raises when no VCS or metadata is available.
-func VcsBranch(ctx context.Context) (string, error) {
+func VcsRef(ctx context.Context) (string, error) {
 	meta, err := vcsMetadata(ctx)
 	if err != nil {
 		return "", err
