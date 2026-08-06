@@ -307,10 +307,7 @@
         },
         {
           "name": "postflight",
-          "doc": "Renders the insight report (hotspots, affinity, ownership, trend) and, with the `gha` charm, appends it to a host output path supplied via env.",
-          "charms": [
-            "gha"
-          ]
+          "doc": "Renders the insight report (hotspots, affinity, ownership, trend) to stdout."
         },
         {
           "name": "generate",

@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2450,
-  "edge_count": 5562,
+  "edge_count": 5561,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -7859,7 +7859,7 @@
       "kind": "function",
       "label": "renderAnnouncementBar",
       "doc": "renderAnnouncementBar renders a dismissible strip announcing the newest shipped release, or \"\" when none has shipped. The version comes from loadReleases (releases/*.yaml), so it is drift-stable; announcement.js hides it once the reader dismisses that version and re-shows it on the next release.",
-      "source": "docs/engine/nav.buzz:397",
+      "source": "docs/engine/nav.buzz:400",
       "attrs": {
         "exported": "true"
       }
@@ -7899,7 +7899,7 @@
       "kind": "function",
       "label": "renderSiteFooter",
       "doc": "renderSiteFooter renders the shared one-line attribution footer: root-relative site links (Search, /public/ files) reachable from every page, then absolute GitHub/Buzz links. The License link points at the pinned site.metaBranch. root is the prefix back to gen/'s root, so the site links resolve at any depth.",
-      "source": "docs/engine/nav.buzz:378",
+      "source": "docs/engine/nav.buzz:381",
       "attrs": {
         "exported": "true"
       }
@@ -8546,14 +8546,14 @@
       "kind": "function",
       "label": "cleanConfigCell",
       "doc": "cleanConfigCell trims a markdown table cell and drops its backticks (env-var underscores are kept - they are part of the name, not markdown).",
-      "source": "docs/lib/glossary.buzz:353"
+      "source": "docs/lib/glossary.buzz:352"
     },
     {
       "id": "function:docs/lib/glossary.buzz:cleanDef",
       "kind": "function",
       "label": "cleanDef",
       "doc": "cleanDef reduces a glossary definition paragraph to a short plain-text blurb for the popover: cut the trailing \"See ...\" cross-link, unwrap [text](url) to text, drop backticks.",
-      "source": "docs/lib/glossary.buzz:451"
+      "source": "docs/lib/glossary.buzz:449"
     },
     {
       "id": "function:docs/lib/glossary.buzz:glossarySlug",
@@ -8570,7 +8570,7 @@
       "kind": "function",
       "label": "injectBacklinks",
       "doc": "injectBacklinks appends each term's \"referenced on\" fragment (byAnchor[anchor], a caller-built HTML string) at the END of that term's section on the glossary page - just before the next <h3>/<h2> heading, so it sits below the definition. The glossary is rendered after the full walk, so byAnchor holds the complete cross-reference set. Pure string surgery; anchors with no fragment are left untouched.",
-      "source": "docs/lib/glossary.buzz:399",
+      "source": "docs/lib/glossary.buzz:397",
       "attrs": {
         "exported": "true"
       }
@@ -8593,7 +8593,7 @@
       "kind": "function",
       "label": "linkCodeEntities",
       "doc": "linkCodeEntities links the first occurrence of each entity's match string (inside inline code or prose, never a fenced <pre> block) to its reference page, baking the summary into data-def and the kind into data-kind for the shared popover (glossary-terms.js). entities MUST be longest-match-first; pageDir is the linking page's clean gen-root dir (for the href).",
-      "source": "docs/lib/glossary.buzz:326",
+      "source": "docs/lib/glossary.buzz:325",
       "attrs": {
         "exported": "true"
       }
@@ -8627,7 +8627,7 @@
       "kind": "function",
       "label": "parseConfigRow",
       "doc": "parseConfigRow parses a config.md table row \"| `key` | `ENV` | `--flag` | type |\" into a dotted config key and a one-line popover summary (its type, how to set it via flag/env). Returns ok=false for the header, the separator, and any non-dotted key.",
-      "source": "docs/lib/glossary.buzz:362",
+      "source": "docs/lib/glossary.buzz:360",
       "attrs": {
         "exported": "true"
       }
@@ -8637,7 +8637,7 @@
       "kind": "function",
       "label": "parseGlossary",
       "doc": "parseGlossary reads the glossary Markdown into terms: each \"### Term\" H3 becomes a GlossaryTerm with its goldmark anchor and a one-line definition (the paragraph under the heading, cross-link and markup stripped). Returned longest-first for matching.",
-      "source": "docs/lib/glossary.buzz:489",
+      "source": "docs/lib/glossary.buzz:487",
       "attrs": {
         "exported": "true"
       }
@@ -8671,7 +8671,7 @@
       "kind": "function",
       "label": "sortEntitiesLongestFirst",
       "doc": "sortEntitiesLongestFirst orders entities by descending match length, so linkCodeEntities tries \"magus affected ci\" before \"magus affected\". Selection sort; the catalogs are small.",
-      "source": "docs/lib/glossary.buzz:299",
+      "source": "docs/lib/glossary.buzz:298",
       "attrs": {
         "exported": "true"
       }
@@ -8681,7 +8681,7 @@
       "kind": "function",
       "label": "sortLongestFirst",
       "doc": "sortLongestFirst returns terms ordered by descending term length, so linkGlossaryTerms matches a multi-word term before any of its substring terms. Selection sort; the term set is small (a few dozen).",
-      "source": "docs/lib/glossary.buzz:463"
+      "source": "docs/lib/glossary.buzz:461"
     },
     {
       "id": "function:docs/lib/glossary.buzz:spaces",
@@ -8702,14 +8702,14 @@
       "kind": "function",
       "label": "unwrapLinks",
       "doc": "unwrapLinks turns each markdown \"[text](url)\" into just \"text\".",
-      "source": "docs/lib/glossary.buzz:428"
+      "source": "docs/lib/glossary.buzz:426"
     },
     {
       "id": "function:docs/lib/html.buzz:aliasStub",
       "kind": "function",
       "label": "aliasStub",
       "doc": "aliasStub is the redirect page written at each alias: meta-refresh + canonical + scripted replace + a plain <a>, so it works with or without JavaScript. csp is the caller-computed policy (cspForRedirectStub, hashing redirectScript(rel) - the page's only content, so default-src 'none' plus that one script hash suffices).",
-      "source": "docs/lib/html.buzz:255",
+      "source": "docs/lib/html.buzz:260",
       "attrs": {
         "exported": "true"
       }
@@ -8769,7 +8769,7 @@
       "kind": "function",
       "label": "redirectScript",
       "doc": "redirectScript is the exact inline-script body aliasStub emits below. Exposed so writeAliases computes the stub's CSP sha256-hash from the SAME text; hashing a hand-copied duplicate would silently drift the moment either side changes.",
-      "source": "docs/lib/html.buzz:247",
+      "source": "docs/lib/html.buzz:252",
       "attrs": {
         "exported": "true"
       }
@@ -8779,7 +8779,7 @@
       "kind": "function",
       "label": "renderContentHTML",
       "doc": "renderContentHTML is the one post-processing pipeline every page runs: rewrite links (href AND path-named link text), then the ordered content transforms. One choke point so no transform gets applied on one path and forgotten on another.",
-      "source": "docs/lib/html.buzz:394",
+      "source": "docs/lib/html.buzz:399",
       "attrs": {
         "exported": "true"
       }
@@ -8819,7 +8819,7 @@
       "kind": "function",
       "label": "stripMdFromLinkText",
       "doc": "stripMdFromLinkText drops a trailing \".md\" from LINK TEXT (between > and </a>). rewriteLinks cleans the href, but a path-named link (e.g. [workspace.md](workspace.md), common in the glossary) still shows a stale \".md\". Only \".md\" immediately before </a> is touched, so bare path-named links are hit and other link text left alone.",
-      "source": "docs/lib/html.buzz:379",
+      "source": "docs/lib/html.buzz:384",
       "attrs": {
         "exported": "true"
       }
@@ -8829,7 +8829,7 @@
       "kind": "function",
       "label": "tagAdmonition",
       "doc": "tagAdmonition turns GitHub-alert blockquotes (\"<blockquote>\\n<p>[!TYPE]\\n...\") into <div class=\"admonition admonition-<type>\"> callouts. Unknown types pass through.",
-      "source": "docs/lib/html.buzz:338",
+      "source": "docs/lib/html.buzz:343",
       "attrs": {
         "exported": "true"
       }
@@ -8838,7 +8838,7 @@
       "id": "function:docs/lib/html.buzz:tagCodeTitle",
       "kind": "function",
       "label": "tagCodeTitle",
-      "source": "docs/lib/html.buzz:300",
+      "source": "docs/lib/html.buzz:305",
       "attrs": {
         "exported": "true"
       }
@@ -8878,7 +8878,7 @@
       "kind": "function",
       "label": "tagVersionNote",
       "doc": "tagCodeTitle wraps the <pre> after a \"<!-- magus-code-title: NAME -->\" marker in a <figure class=\"code-block-titled\"> with a <figcaption>; drops the marker. tagVersionNote turns \"<!-- magus-since: v0.4.0 -->\" and \"<!-- magus-changed: v0.4.0 -->\" into the same chip the frontmatter `since:` badge renders, so one convention covers both.  SECTION level, deliberately, where the frontmatter badge is PAGE level. concepts/targets.md long predates the release that changed one behavior inside it, so a page badge read",
-      "source": "docs/lib/html.buzz:278",
+      "source": "docs/lib/html.buzz:283",
       "attrs": {
         "exported": "true"
       }
@@ -8887,7 +8887,7 @@
       "id": "function:docs/lib/html.buzz:versionNoteMarker",
       "kind": "function",
       "label": "versionNoteMarker",
-      "source": "docs/lib/html.buzz:283"
+      "source": "docs/lib/html.buzz:288"
     },
     {
       "id": "function:docs/lib/html.buzz:wrapTables",
@@ -15798,7 +15798,7 @@
       "kind": "function",
       "label": "advice_test",
       "doc": "Runs the PR advisors' `test \"...\" {}` blocks.  They are the only .buzz sources in this tree that parse standalone: everything else imports magus/magus\\spell and uses embedding-only constructs, which is why the old standalone-Buzz test targets were deleted rather than repointed. The advisors run under a plain `magus buzz` in CI, so upstream-strict is exactly the parse they need checked, and `-t` is the runner.  Run from each script's own directory, not the project root, because they do `import \"advice\"` for",
-      "source": "magusfile.buzz:1206",
+      "source": "magusfile.buzz:1189",
       "attrs": {
         "exported": "true"
       }
@@ -15818,7 +15818,7 @@
       "kind": "function",
       "label": "build",
       "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
-      "source": "magusfile.buzz:1269",
+      "source": "magusfile.buzz:1252",
       "attrs": {
         "exported": "true"
       }
@@ -15835,7 +15835,7 @@
       "kind": "function",
       "label": "build_release_variant",
       "doc": "Builds one (goos, goarch) release binary and archives it into dist/, writing a standard one-line <asset>.sha256 sidecar alongside it (sha256sum-compatible format). No cross-job aggregation needed: CD's publish job later does `cat dist/*.sha256 > dist/SHA256SUMS`, a plain shell one-liner, not a magus target. release-build's cgo and static (charm) modes both call this, differing only in CGO_ENABLED and the asset suffix.",
-      "source": "magusfile.buzz:899"
+      "source": "magusfile.buzz:882"
     },
     {
       "id": "function:magusfile.buzz:built_by",
@@ -15866,7 +15866,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "Runs the CI gates through their declared dependencies.",
-      "source": "magusfile.buzz:1307",
+      "source": "magusfile.buzz:1290",
       "attrs": {
         "exported": "true"
       }
@@ -15876,7 +15876,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.",
-      "source": "magusfile.buzz:1353",
+      "source": "magusfile.buzz:1336",
       "attrs": {
         "exported": "true"
       }
@@ -15893,7 +15893,7 @@
       "kind": "function",
       "label": "completion_test",
       "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell. Part of ci, and it REQUIRES a docker daemon rather than skipping without one: a gate that silently skips when a tool is missing is how the zsh recipe stayed broken - it told users to append a script to ~/.zshrc that registers nothing, and nothing ever ran it to find out. Its declared footprint keeps the cost off every run: affected only reaches it when the completion scripts or their checks change.  One image per she",
-      "source": "magusfile.buzz:1328",
+      "source": "magusfile.buzz:1311",
       "attrs": {
         "exported": "true"
       }
@@ -15920,7 +15920,7 @@
       "kind": "function",
       "label": "deploy_generate",
       "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/.  It lives here rather than in the Pages workflow because that workflow is meant to be thin - set up a toolchain, name targets, upload the artifact - and the layout below is portable logic that would otherwise be GitHub-specific shell. It is also what makes the deploy reproducible locally: run the same three commands, then serve gen/site, and what you see is what publishe",
-      "source": "magusfile.buzz:1492",
+      "source": "magusfile.buzz:1475",
       "attrs": {
         "exported": "true"
       }
@@ -15947,7 +15947,7 @@
       "kind": "function",
       "label": "format",
       "doc": "Regenerates, then formats Go and tidies `go.mod`. Markdown is linted (not formatted): markdownlint runs in lint; there is no markdown FORMATTER any more - biome (used for all TypeScript/CSS) has no markdown support, and prettier was dropped rather than kept solely to format markdown.",
-      "source": "magusfile.buzz:1304",
+      "source": "magusfile.buzz:1287",
       "attrs": {
         "exported": "true"
       }
@@ -15957,7 +15957,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd). Drift = regeneration dirtied a previously-clean tree, via vcs.isDirty (not a raw git/porcelain shell-out), so uncommitted-but-current generated files pass; only a regeneration that changes a clean file fails (a generator input changed but its output was not re-run and committed).",
-      "source": "magusfile.buzz:839",
+      "source": "magusfile.buzz:822",
       "attrs": {
         "exported": "true"
       }
@@ -16046,7 +16046,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "Formats first, then golangci-lint, go vet, govulncheck, markdownlint, and shellcheck. golangci-lint and govulncheck go through the go spell's ops rather than a raw os\\exec, so the spell's version probes (mgs_getVersionProbes) reach the cache key - without them a linter upgrade changes which code passes while every cache entry replays the old verdict. Neither runs through `go tool`: that COMPILES the tool with whichever go leads PATH, which is how CI built the linter with a different toolchain than it analyz",
-      "source": "magusfile.buzz:1288",
+      "source": "magusfile.buzz:1271",
       "attrs": {
         "exported": "true"
       }
@@ -16090,7 +16090,7 @@
       "kind": "function",
       "label": "missing_input",
       "doc": "missing_input phrases a deploy-generate precondition that ANOTHER project owns.  Naming one single-project command teaches the wrong habit: the reader runs it, gets the next precondition, runs another, and learns the set by failing once per producer. So name every producer in one command. `magus run <target> [project...]` takes a LIST - `magus run build docs console` is one dispatch over both - which is the idiom this message teaches.  Deliberately NOT \"magus affected build\" or \"magus run build /\". Both wou",
-      "source": "magusfile.buzz:1453"
+      "source": "magusfile.buzz:1436"
     },
     {
       "id": "function:magusfile.buzz:mocks_generate",
@@ -16122,8 +16122,8 @@
       "id": "function:magusfile.buzz:postflight",
       "kind": "function",
       "label": "postflight",
-      "doc": "Renders the insight report (hotspots, affinity, ownership, trend) and, with the `gha` charm, appends it to a host output path supplied via env. The final CI step; never gates. The env var name (MAGUS_INSIGHT_OUTPUT_PATH) is generic on purpose; the host that sets it (the workflow) is what knows it's GitHub Actions and points it at $GITHUB_STEP_SUMMARY. The `gha` charm also opts the render into the safe Mermaid subset so older or partial renderers handle it.",
-      "source": "magusfile.buzz:814",
+      "doc": "Renders the insight report (hotspots, affinity, ownership, trend) to stdout. Local only: no workflow invokes this target, and ci-outcome.buzz's volatility-lens step summary is the CI-facing equivalent now. It used to also append to a host path under the `gha` charm; that branch was unreachable (nothing set MAGUS_INSIGHT_OUTPUT_PATH or ran this target in CI) and was removed.",
+      "source": "magusfile.buzz:813",
       "attrs": {
         "exported": "true"
       }
@@ -16133,7 +16133,7 @@
       "kind": "function",
       "label": "preflight",
       "doc": "No gate of its own: doctor USED to run here and fail the build on a finding, which made workspace conventions a blocker for everyone downstream. The advice action now reports the same findings on the pull request, non-blocking - and unlike a preflight gate, that works for a consumer who never wired doctor into their own pipeline.",
-      "source": "magusfile.buzz:1266",
+      "source": "magusfile.buzz:1249",
       "attrs": {
         "exported": "true"
       }
@@ -16157,13 +16157,13 @@
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json. Always let pnpm validate the install, matching console/magusfile.buzz. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready and handed the missing packages to esbuild. On a warm tree --frozen-lockfile is about a second and",
-      "source": "magusfile.buzz:1415"
+      "source": "magusfile.buzz:1398"
     },
     {
       "id": "function:magusfile.buzz:release",
       "kind": "function",
       "label": "release",
-      "source": "magusfile.buzz:1043",
+      "source": "magusfile.buzz:1026",
       "attrs": {
         "exported": "true"
       }
@@ -16173,7 +16173,7 @@
       "kind": "function",
       "label": "release_build",
       "doc": "Builds one release binary for one platform. Default is dynamically-linked (cgo): internal/codec's zstd/xz fast path needs a real C toolchain + libzstd/liblzma for whatever (goos, goarch) you ask for, so cross-compiling this variant only works if you already have that toolchain around — CD never does, sticking to each native job's own platform. The `static` charm (`magus run release-build:static`) switches to a CGO_ENABLED=0 build instead: pure Go cross-compiles trivially, so unlike the cgo default it's ch",
-      "source": "magusfile.buzz:976",
+      "source": "magusfile.buzz:959",
       "attrs": {
         "exported": "true"
       }
@@ -16183,7 +16183,7 @@
       "kind": "function",
       "label": "release_sign",
       "doc": "Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos).",
-      "source": "magusfile.buzz:1000",
+      "source": "magusfile.buzz:983",
       "attrs": {
         "exported": "true"
       }
@@ -16193,14 +16193,14 @@
       "kind": "function",
       "label": "release_target_platform",
       "doc": "Resolves which platform to build: the explicit (goos, goarch) args when given, else the current runner's own native platform. So a bare `magus run release-build` (with or without the static charm) builds exactly one binary — the one you're standing on — never a silent \"all 5\" surprise.",
-      "source": "magusfile.buzz:952"
+      "source": "magusfile.buzz:935"
     },
     {
       "id": "function:magusfile.buzz:rerender_docs",
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:1427"
+      "source": "magusfile.buzz:1410"
     },
     {
       "id": "function:magusfile.buzz:resolvable",
@@ -16220,7 +16220,7 @@
       "kind": "function",
       "label": "serve",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than",
-      "source": "magusfile.buzz:1541",
+      "source": "magusfile.buzz:1524",
       "attrs": {
         "exported": "true"
       }
@@ -16250,7 +16250,7 @@
       "kind": "function",
       "label": "tapes",
       "doc": "Records every VHS tape in tapes/ into assets/gen/. Each tape drives a real magus binary through a real terminal, so the GIFs are documentation that cannot quietly go stale the way a pasted transcript does - re-record and the drift is visible.  Opt-in, never wired into `generate` or `ci`: a render takes tens of seconds, needs vhs (and the ttyd/ffmpeg it pulls in) on PATH, and produces a different file every time. Run it when the CLI's output actually changes, then commit the result.  The GIFs are declared ou",
-      "source": "magusfile.buzz:873",
+      "source": "magusfile.buzz:856",
       "attrs": {
         "exported": "true"
       }
@@ -16260,7 +16260,7 @@
       "kind": "function",
       "label": "test",
       "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
-      "source": "magusfile.buzz:1216",
+      "source": "magusfile.buzz:1199",
       "attrs": {
         "exported": "true"
       }
@@ -16270,7 +16270,7 @@
       "kind": "function",
       "label": "total_coverage",
       "doc": "Renders a Go coverage badge locally (no third-party service, no network).",
-      "source": "magusfile.buzz:1186"
+      "source": "magusfile.buzz:1169"
     },
     {
       "id": "function:magusfile.buzz:types_generate",
@@ -16293,7 +16293,7 @@
       "kind": "function",
       "label": "watch",
       "doc": "Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.",
-      "source": "magusfile.buzz:1172",
+      "source": "magusfile.buzz:1155",
       "attrs": {
         "exported": "true"
       }
@@ -21290,11 +21290,11 @@
       }
     },
     {
-      "id": "rationale:magusfile.buzz:1328:TODO",
+      "id": "rationale:magusfile.buzz:1311:TODO",
       "kind": "rationale",
       "label": "TODO",
       "doc": "zsh is uncovered - it has no official image (zshusers/zsh is community-run), so",
-      "source": "magusfile.buzz:1328"
+      "source": "magusfile.buzz:1311"
     },
     {
       "id": "rationale:spells/aws/s3-cache/spell.buzz:123:NOTE",
@@ -21668,7 +21668,7 @@
       "id": "target:.:postflight",
       "kind": "target",
       "label": "postflight",
-      "doc": "Renders the insight report (hotspots, affinity, ownership, trend) and, with the `gha` charm, appends it to a host output path supplied via env.",
+      "doc": "Renders the insight report (hotspots, affinity, ownership, trend) to stdout.",
       "source": ".",
       "attrs": {
         "engine": "buzz"
@@ -22560,14 +22560,6 @@
     {
       "source": "charm:gha",
       "target": "target:.:ci-shard",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "charm:gha",
-      "target": "target:.:postflight",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -63448,12 +63440,12 @@
       "provenance": "proto"
     },
     {
-      "source": "rationale:magusfile.buzz:1328:TODO",
+      "source": "rationale:magusfile.buzz:1311:TODO",
       "target": "function:magusfile.buzz:completion_test",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "magusfile.buzz:1328"
+      "provenance": "magusfile.buzz:1311"
     },
     {
       "source": "rationale:spells/aws/s3-cache/spell.buzz:123:NOTE",

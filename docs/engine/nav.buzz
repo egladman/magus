@@ -224,7 +224,7 @@ export fun refDocHtml(rel: str, site: Site) > str {
     final md = f.readAll();
     f.close();
     var html = renderContentHTML(markdown\toHtml(md), oldFlatDirectory(rel), newCleanDirectory(rel, site));
-    while (html.indexOf("=\"../") != null) { html = html.replace("=\"../", "=\"%%ROOT%%"); }
+    html = html.split("=\"../").join("=\"%%ROOT%%");
     return html;
 }
 
@@ -331,7 +331,10 @@ export fun renderReferenceDrawer(root: str, canonUrl: str, content: str, site: S
         final scoped = keepGlossarySections(_refGlossary, keep);
         if (scoped != "") { glossary = scoped; }
     }
-    while (glossary.indexOf("%%ROOT%%") != null) { glossary = glossary.replace("%%ROOT%%", root); }
+    // split().join(), not while(indexOf) replace(): this runs on every page, and the
+    // loop form copies the whole embedded drawer once per marker - each copy a
+    // distinct string the VM interns forever (see cleanBody in lib/html.buzz).
+    glossary = glossary.split("%%ROOT%%").join(root);
 
     // Same scoping, same reason - and here the saving is larger, because the conventions
     // page is one document rather than 47 short entries. Inlined whole it was 15.6 KB on
@@ -348,7 +351,7 @@ export fun renderReferenceDrawer(root: str, canonUrl: str, content: str, site: S
         conventions = "<p>This page uses none of the site's convention markers. The full set is on the "
             + "<a href=\"%%ROOT%%conventions/\">conventions page</a>.</p>";
     }
-    while (conventions.indexOf("%%ROOT%%") != null) { conventions = conventions.replace("%%ROOT%%", root); }
+    conventions = conventions.split("%%ROOT%%").join(root);
     final tmpl = `  <details class="ref-section" open>
     <summary>Glossary</summary>
     <div class="disclosure-body ref-embed">{{{glossary}}}</div>
