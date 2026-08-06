@@ -118,6 +118,14 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 	slog.DebugContext(ctx, "run.exec", "cmd", name, "args", args, "dir", c.Dir)
 
 	runErr := c.Run()
+	// A missing binary surfaces here as a raw *exec.Error otherwise - the same failure
+	// std/os.go's os\which() and std/vcs.go already classify as MGS3003 for a Buzz
+	// script, but an op's own tool binary going missing had no such classification on
+	// this path. errors.Is still reaches the underlying *exec.Error through the wrap,
+	// so callers checking for it (e.g. TestIntegrationMissingBinary) are unaffected.
+	if runErr != nil && errors.Is(runErr, exec.ErrNotFound) {
+		runErr = types.WrapDiagnostic(types.ToolNotOnPath, runErr, "%q is not on PATH", name)
+	}
 	if ctx.Err() != nil {
 		KillGroup(c) // reap grandchildren that ignored the graceful signal
 	}

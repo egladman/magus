@@ -5,7 +5,6 @@ package run
 import (
 	"bytes"
 	"context"
-	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -16,6 +15,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 // captureStdout redirects os.Stdout to a pipe and returns a function that
@@ -101,11 +102,8 @@ func TestIntegrationMissingBinary(t *testing.T) {
 	t.Parallel()
 	err := Run(context.Background(), t.TempDir(), "magus-no-such-binary-xyzzy")
 	require.Error(t, err, "want error for missing binary")
-	if !errors.Is(err, exec.ErrNotFound) &&
-		!strings.Contains(err.Error(), "executable file not found") &&
-		!strings.Contains(err.Error(), "no such file") {
-		t.Errorf("unexpected error kind %T: %v", err, err)
-	}
+	assert.ErrorIs(t, err, types.ToolNotOnPath, "classified as MGS3003, matching std/os.go's os\\which()")
+	assert.ErrorIs(t, err, exec.ErrNotFound, "the underlying *exec.Error must still be reachable through the wrap")
 }
 
 func TestIntegrationContextCancelMidRun(t *testing.T) {

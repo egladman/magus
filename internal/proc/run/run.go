@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/types"
 )
 
 // ErrAborted is returned by Run when the step gate returns StepActionAbort.
@@ -127,6 +128,11 @@ func Run(ctx context.Context, dir, name string, args ...string) error {
 		c.Env = p.BaseEnv
 	}
 	err := c.Run()
+	// Same classification Exec applies: a missing binary is MGS3003, matching
+	// std/os.go's os\which(). errors.Is still reaches the underlying *exec.Error.
+	if err != nil && errors.Is(err, exec.ErrNotFound) {
+		err = types.WrapDiagnostic(types.ToolNotOnPath, err, "%q is not on PATH", name)
+	}
 	if ctx.Err() != nil {
 		KillGroup(c) // reap grandchildren that ignored the graceful signal
 	}
