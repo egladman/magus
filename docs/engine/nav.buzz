@@ -4,6 +4,7 @@
 // the article; they never call it, so this module sits below engine/page in the layering.
 namespace nav;
 
+import "assert";
 import "fs";
 import "io";
 import "markdown";
@@ -261,6 +262,54 @@ fun keepGlossarySections(html: str, keep: {str: bool}) > str {
     return kept;
 }
 
+// keepConventionSections is keepGlossarySections one heading level up: the conventions page
+// is H2 sections where the glossary is H3 entries, so a section runs from its own
+// <h2 id="> to the next one. Order is preserved.
+export fun keepConventionSections(html: str, keep: {str: bool}) > str {
+    final marker = "<h2 id=\"";
+    var kept = "";
+    var rest = html;
+    var idx = rest.indexOf(marker);
+    while (idx != null) {
+        rest = rest.sub(idx! + marker.len());
+        final q = rest.indexOf("\"");
+        if (q == null) { return kept; }
+        final anchor = rest.sub(0, len: q!);
+        var cut = rest.len();
+        final nextH2 = rest.indexOf(marker);
+        if (nextH2 != null and nextH2! < cut) { cut = nextH2!; }
+        if (keep[anchor] != null) {
+            kept = kept + marker + rest.sub(0, len: cut);
+        }
+        rest = rest.sub(cut);
+        idx = rest.indexOf(marker);
+    }
+    return kept;
+}
+
+// conventionAnchorsIn returns the convention sections this page can actually send a reader
+// to, read off the hints injectConventionHints already placed in the content.
+//
+// Reading the INJECTED markup rather than re-deriving which markers the page has is what
+// keeps the two from drifting: whatever the hints link to is exactly what the drawer
+// carries, by construction, so adding a fourth hint kind needs no change here.
+export fun conventionAnchorsIn(html: str) > {str: bool} {
+    var found: {str: bool} = mut {};
+    final marker = "class=\"convention-hint\" href=\"";
+    var rest = html;
+    var idx = rest.indexOf(marker);
+    while (idx != null) {
+        rest = rest.sub(idx! + marker.len());
+        final q = rest.indexOf("\"");
+        if (q == null) { return found; }
+        final href = rest.sub(0, len: q!);
+        final h = href.indexOf("#");
+        if (h != null) { found[href.sub(h! + 1)] = true; }
+        idx = rest.indexOf(marker);
+    }
+    return found;
+}
+
 // renderReferenceDrawer shows the page ITS vocabulary, not the whole glossary.
 //
 // The drawer used to inline all 47 terms on every page, identically. A reference panel
@@ -272,7 +321,7 @@ fun keepGlossarySections(html: str, keep: {str: bool}) > str {
 // so the first page rendered gets the same treatment as the last. A page with no terms
 // falls back to the full glossary rather than an empty drawer - "nothing here" reads as
 // broken, and on a page with no shared vocabulary the whole glossary is the honest answer.
-export fun renderReferenceDrawer(root: str, canonUrl: str, site: Site) > str {
+export fun renderReferenceDrawer(root: str, canonUrl: str, content: str, site: Site) > str {
     loadReferenceContent(site);
     var glossary = _refGlossary;
     final joined = site.pageTerms[canonUrl];
@@ -283,7 +332,22 @@ export fun renderReferenceDrawer(root: str, canonUrl: str, site: Site) > str {
         if (scoped != "") { glossary = scoped; }
     }
     while (glossary.indexOf("%%ROOT%%") != null) { glossary = glossary.replace("%%ROOT%%", root); }
-    var conventions = _refConventions;
+
+    // Same scoping, same reason - and here the saving is larger, because the conventions
+    // page is one document rather than 47 short entries. Inlined whole it was 15.6 KB on
+    // every one of the site's pages, about a fifth of an average page, to answer a question
+    // at most three of its sections could be asked. A page links at most the three markers
+    // injectConventionHints places, so the drawer carries those and nothing else.
+    //
+    // A page with no markers gets a pointer instead of the whole document. That differs from
+    // the glossary's fallback above, which shows everything: an unfamiliar WORD can appear on
+    // a page the linker did not tag, so the full list is still a useful answer there. A
+    // convention you are not looking at is not.
+    var conventions = keepConventionSections(_refConventions, conventionAnchorsIn(content));
+    if (conventions == "") {
+        conventions = "<p>This page uses none of the site's convention markers. The full set is on the "
+            + "<a href=\"%%ROOT%%conventions/\">conventions page</a>.</p>";
+    }
     while (conventions.indexOf("%%ROOT%%") != null) { conventions = conventions.replace("%%ROOT%%", root); }
     final tmpl = `  <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -346,4 +410,36 @@ export fun renderAnnouncementBar(site: Site) > str {
   </div>
 `;
     return template\render(tmpl, {"ver": ver, "released": released, "gh": site.config.repoURL});
+}
+
+test "conventionAnchorsIn reads the anchors the injected hints point at" {
+    final html = "<p class=\"admonition-title\">Note<a class=\"convention-hint\" href=\"../conventions/#admonitions\" data-kind=\"convention\"></a></p>"
+        + "<figcaption>x<a class=\"convention-hint\" href=\"../conventions/#code-block-titles\"></a></figcaption>";
+    final got = conventionAnchorsIn(html);
+    assert\equal(got["admonitions"], true, "the admonition hint");
+    assert\equal(got["code-block-titles"], true, "the caption hint");
+    assert\equal(got["placeholders"], null, "a section this page cannot reach");
+}
+
+test "conventionAnchorsIn finds nothing on a page with no hints" {
+    assert\equal(conventionAnchorsIn("<p>plain prose</p>").keys().len(), 0, "no hints, no sections");
+}
+
+test "keepConventionSections keeps the named H2 sections and drops the rest" {
+    final doc = "<h1 id=\"conventions\">Conventions</h1>\n<p>intro</p>\n"
+        + "<h2 id=\"placeholders\">Placeholders</h2>\n<p>a</p>\n"
+        + "<h2 id=\"diffs\">Diffs</h2>\n<p>b</p>\n"
+        + "<h2 id=\"admonitions\">Admonitions</h2>\n<p>c</p>\n";
+    var keep: {str: bool} = mut {};
+    keep["admonitions"] = true;
+    final got = keepConventionSections(doc, keep);
+    assert\equal(got.indexOf("Admonitions") != null, true, "the wanted section survives");
+    assert\equal(got.indexOf("<p>c</p>") != null, true, "and its body with it");
+    assert\equal(got.indexOf("Diffs"), null, "an unwanted section is dropped");
+    assert\equal(got.indexOf("intro"), null, "so is everything before the first H2");
+}
+
+test "keepConventionSections returns empty when nothing is wanted" {
+    final doc = "<h2 id=\"diffs\">Diffs</h2>\n<p>b</p>\n";
+    assert\equal(keepConventionSections(doc, mut {}), "", "the caller substitutes a pointer");
 }
