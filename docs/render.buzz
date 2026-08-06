@@ -83,6 +83,19 @@ import "site/config" as _;
 
 
 
+// esbuild runs the pinned esbuild binary with an exact argv.
+//
+// os\exec, not os\execute(["sh", "-c", ...]): the shell form spawned a second process per
+// call purely to parse a string this code had just finished building, and every path went
+// through it as an interpolated command-line token rather than an argument. It also
+// swallowed failures - os\execute RETURNS the exit code, and none of these calls read it,
+// so a broken bundle wrote nothing and the render carried on to fail later somewhere else.
+// os\exec raises on a non-zero exit, so a bundle that cannot build stops the render where
+// it broke.
+fun esbuild(args: [str]) > void {
+    os\exec("esbuild", args, ".", {});
+}
+
 // walkBlog visits every blog/*.md post (skipping index.md and _underscored fixtures) in
 // fs.list's sorted order, so the walk is deterministic. Posts are flat: no nested subdirs
 // under blog/.
@@ -130,6 +143,9 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // Generator state for one render pass, threaded explicitly into every renderer as a
     // `site` arg - no module-global singleton, so parallel renders never share state.
     // (outDir, not out: `out` is a reserved word in buzz.)
+    // Before anything else: a build too old to honor str.indexOf(from:) would not fail
+    // here, it would HANG in the glossary linker. Probe once and say so instead.
+    requireIndexOfFrom();
     var site: Site = mut Site{};
     site.config = magusConfig();
     site.targets = targets;
@@ -177,8 +193,21 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // hljs.js) - they live in gen/assets, not site.root/assets, so a blind wipe would
     // delete them on `serve` (which re-renders without rebuilding bundles); generate
     // rebuilds them afterward anyway.
-    os\execute(["sh", "-c", "mkdir -p " + site.outDir + "/assets && find " + site.outDir + "/assets -mindepth 1 -maxdepth 1 ! -name mermaid.js ! -name hljs.js -exec rm -rf \{\} +"]);
-    os\execute(["sh", "-c", "[ -d " + site.root + "/assets ] && cp -r " + site.root + "/assets/. " + site.outDir + "/assets/ || true"]);
+    //
+    // fs\ calls, not `sh -c`: a shell-out here spawned TWO processes (the shell, then
+    // find/cp) to do what a syscall does, and every argument was interpolated into a
+    // command line, so a path with a space in it was a latent bug rather than a caught
+    // one. The typed calls are also the readable form - the intent is "keep these two
+    // files, drop the rest", which the find invocation stated as a double negative.
+    fs\mkdirall(site.outDir + "/assets");
+    foreach (name in fs\listDir(site.outDir + "/assets")) {
+        if (name != "mermaid.js" and name != "hljs.js") {
+            fs\removeAll(site.outDir + "/assets/" + name);
+        }
+    }
+    if (fs\isDir(site.root + "/assets")) {
+        fs\copyDir(site.root + "/assets", site.outDir + "/assets");
+    }
 
     // The README also badges each libs/* project's own coverage.svg, which that project
     // writes beside itself (ctx.writesFiles("coverage.svg")) rather than into assets/. The
@@ -188,8 +217,16 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // Globbed, not a hardcoded list: a second project adding a badge must not be a silent
     // 404 that only assetIntegrityCheck notices. Wiped first, like assets/ above, so a
     // removed project leaves no stale badge behind.
-    os\execute(["sh", "-c", "rm -rf " + site.outDir + "/libs"]);
-    os\execute(["sh", "-c", "for f in " + site.root + "/libs/*/coverage.svg; do [ -f \"$f\" ] || continue; d=" + site.outDir + "/libs/$(basename \"$(dirname \"$f\")\"); mkdir -p \"$d\" && cp \"$f\" \"$d/\"; done"]);
+    //
+    // fs\glob rather than a shell for-loop over `libs/*/coverage.svg`: the glob is the
+    // same pattern, but the destination is derived with fs\dirname/fs\basename instead of
+    // nested command substitution, so it reads as the path arithmetic it is.
+    fs\removeAll(site.outDir + "/libs");
+    foreach (svg in fs\glob(site.root + "/libs/*/coverage.svg")) {
+        final project = fs\basename(fs\dirname(svg));
+        fs\mkdirall(site.outDir + "/libs/" + project);
+        fs\copyFile(svg, site.outDir + "/libs/" + project + "/coverage.svg");
+    }
 
     // Bundle + minify the client assets with esbuild (pinned in mise.toml). Two outputs:
     // theme.js (head-critical, no imports so no bundle) and main.js (the deferred bundle
@@ -197,21 +234,21 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // gen/assets/mermaid.js bundle (built by build-mermaid); esbuild leaves dynamic
     // imports external. CSS is minified per-file, not bundled. Pinned esbuild ->
     // byte-stable output, so the drift gate holds.
-    os\execute(["sh", "-c", "esbuild src/styles/site.css --minify --outfile=" + site.outDir + "/site.css"]);
+    esbuild(["src/styles/site.css", "--minify", "--outfile=" + site.outDir + "/site.css"]);
     // console.css: the console-app-only shell (app bar, launcher, status bar, full-height
     // layout), loaded by /dashboard/, /logs/, /graph/ and the playground status bar but NOT
     // the docs corpus. Minified to gen root, enumerated in the precache/allowlist next to
     // site.css.
-    os\execute(["sh", "-c", "esbuild src/styles/console.css --minify --outfile=" + site.outDir + "/console.css"]);
+    esbuild(["src/styles/console.css", "--minify", "--outfile=" + site.outDir + "/console.css"]);
     // ui-panels.css: the shared nav-triggered UI panels (settings gear dropdown + reference
     // drawer) used by BOTH docs pages and console apps. Separate from console.css so the docs
     // corpus can load only this. Gen-root, precached like the others.
-    os\execute(["sh", "-c", "esbuild src/styles/ui-panels.css --minify --outfile=" + site.outDir + "/ui-panels.css"]);
-    os\execute(["sh", "-c", "esbuild src/styles/theme.css --minify --outfile=" + site.outDir + "/theme.css"]);
+    esbuild(["src/styles/ui-panels.css", "--minify", "--outfile=" + site.outDir + "/ui-panels.css"]);
+    esbuild(["src/styles/theme.css", "--minify", "--outfile=" + site.outDir + "/theme.css"]);
     // The console surfaces (graph/logs/dashboard/activity) live in the standalone console/
     // project (its own build, deployed to /console/); the docs site renders none of them.
-    os\execute(["sh", "-c", "esbuild src/theme.ts --minify --outfile=" + site.outDir + "/theme.js"]);
-    os\execute(["sh", "-c", "esbuild src/site/main.ts --bundle --minify --format=esm --outfile=" + site.outDir + "/main.js"]);
+    esbuild(["src/theme.ts", "--minify", "--outfile=" + site.outDir + "/theme.js"]);
+    esbuild(["src/site/main.ts", "--bundle", "--minify", "--format=esm", "--outfile=" + site.outDir + "/main.js"]);
 
     // The playground's wasm and its TinyGo glue are the only published bytes nothing here
     // can produce: TinyGo builds them and CI has none. They are committed under vendor/ as

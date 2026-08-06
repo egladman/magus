@@ -49,7 +49,7 @@ export fun loadReleases(site: Site) > void {
     var manifests: {str: Release} = mut {};
     var manifestOrder: [str] = mut [<str>];
     final relDir = site.root + "/releases";
-    if (os\execute(["test", "-d", relDir]) == 0) {
+    if (fs\isDir(relDir)) {
         var names: [str] = mut [<str>];
         foreach (name in fs\list(relDir)) {
             if (name.endsWith(".yaml")) { names.append(name); }

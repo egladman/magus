@@ -138,6 +138,241 @@ fun insertBeforeClose(html: str, open: str, close: str, ins: str) > str {
     return buf + rest;
 }
 
+// ---------------------------------------------------------------------------
+// The enforcement half. Above, conventions.md is parsed into hints the reader sees;
+// below, the corpus is checked AGAINST it, so a page cannot quietly stop following the
+// rules the page it links to describes.
+//
+// Every rule here earned its place by catching a bug that shipped, and every one of them
+// is a fact about the text rather than a matter of taste - a stale version literal in an
+// example, a shell prompt the reader has to strip, a backticked path that moved. Style
+// judgments are deliberately absent: a lint that argues about wording gets suppressed,
+// and then the rules that matter go with it.
+//
+// Pure, like everything above: these take the Markdown and hand back findings. The
+// filesystem half (walking the corpus, deciding whether a path exists) lives in
+// engine/gates.buzz, which is the layer allowed to do IO.
+
+// ConventionFinding is one violation. `path` is set only by pathReferences, which reports
+// CANDIDATES - a reference that looks like a repo path - and leaves the does-it-exist
+// question to the caller that can answer it.
+export object ConventionFinding {
+    file: str = "",
+    line: int = 0,
+    rule: str = "",
+    message: str = "",
+    path: str = "",
+}
+
+// A fenced block whose language is one of these is a COMMAND block - something the reader
+// copies - so the no-prompt rule applies. An unlabeled fence is NOT assumed to be shell:
+// guessing produces exactly the false positive that gets a lint turned off.
+//
+// `console` is deliberately absent. That tag means a recorded session, where the prompt is
+// what separates what was typed from what came back, and cmd/magus-examples emits it that
+// way when it captures real output into docs/concepts/knowledge.md. The two tags are the
+// convention: copy a `sh` block, read a `console` one.
+final SHELL_LANGS = ["sh", "bash", "shell", "zsh"];
+
+// Extensions that make a slash-bearing token in inline code a claim about a file in this
+// repository, rather than an import path, a URL fragment, or a namespaced name. Without
+// this list `magus/spell/go` (a Buzz import, no file behind it) reads as a broken path.
+final PATH_EXTS = [".go", ".md", ".buzz", ".ts", ".tsx", ".js", ".yaml", ".yml", ".json",
+    ".toml", ".css", ".html", ".svg", ".png", ".sh", ".mod", ".sum", ".lock", ".txt"];
+
+// runOf returns the leading run of byte `ch` in s ("```buzz" -> "```").
+fun runOf(s: str, ch: int) > str {
+    var n = 0;
+    while (n < s.len() and s.byte(n) == ch) { n = n + 1; }
+    return s.sub(0, len: n);
+}
+
+// fenceMarker returns the fence marker a line opens with, or "". CommonMark counts the
+// marker's LENGTH, which is what lets a four-backtick fence hold three-backtick fences
+// inside it - the conventions page does exactly that to show how a runnable block is
+// authored, and a naive toggle would read the inner fence as a close and mis-attribute
+// every rule after it.
+fun fenceMarker(line: str) > str {
+    final t = line.trim();
+    if (t.startsWith("```")) { return runOf(t, 96); }    // 96 = backtick
+    if (t.startsWith("~~~")) { return runOf(t, 126); }   // 126 = tilde
+    return "";
+}
+
+// fenceLang is the first word of the info string after the opening marker, lowercased.
+fun fenceLang(line: str, marker: str) > str {
+    final rest = line.trim().sub(marker.len()).trim().lower();
+    final sp = rest.indexOf(" ");
+    if (sp != null) { return rest.sub(0, len: sp); }
+    return rest;
+}
+
+// closesFence reports whether the line is a closing fence for an open marker: the same
+// character, at least as long, and nothing else on the line.
+fun closesFence(line: str, openMarker: str) > bool {
+    final t = line.trim();
+    final run = runOf(t, openMarker.byte(0));
+    return run.len() >= openMarker.len() and run.len() == t.len();
+}
+
+fun isShellLang(lang: str) > bool {
+    foreach (l in SHELL_LANGS) {
+        if (lang == l) { return true; }
+    }
+    return false;
+}
+
+// isDigit reports whether byte b is ASCII 0-9.
+fun isDigit(b: int) > bool { return b >= 48 and b <= 57; }
+
+// namesPinnedVersion reports whether s pins a magus version literally - "magus 0.4.2",
+// "magus v0.4.2". Sample output in the docs is supposed to show the SHAPE of what a
+// command prints, because a pasted-in version goes stale the next release and nothing
+// notices. This is the rule that caught `# magus 0.4.2` under "Shell commands", which was
+// two releases behind AND the wrong format.
+export fun namesPinnedVersion(s: str) > bool {
+    var rest = s;
+    var idx = rest.indexOf("magus ");
+    while (idx != null) {
+        var tail = rest.sub(idx + 6);            // 6 = len("magus ")
+        if (tail.startsWith("v")) { tail = tail.sub(1); }
+        // <digits>.<digit> - a major.minor is a pin; a bare number ("magus 3 steps") is not.
+        var i = 0;
+        while (i < tail.len() and isDigit(tail.byte(i))) { i = i + 1; }
+        if (i > 0 and i + 1 < tail.len() and tail.byte(i) == 46 and isDigit(tail.byte(i + 1))) {
+            return true;
+        }
+        rest = rest.sub(idx + 6);
+        idx = rest.indexOf("magus ");
+    }
+    return false;
+}
+
+// isCommentLine reports whether a line inside a fence is a comment - the form the docs use
+// to show a command's expected output.
+fun isCommentLine(t: str) > bool {
+    return t.startsWith("#") or t.startsWith("//");
+}
+
+// lintMarkdown checks one page against the conventions it can be checked against, and
+// returns every violation rather than the first: a run that reports one nit per invocation
+// trains people to fix one thing and re-run, which is the slowest possible loop.
+export fun lintMarkdown(file: str, md: str) > [ConventionFinding] {
+    final found: [ConventionFinding] = mut [<ConventionFinding>];
+    var marker = "";
+    var lang = "";
+    var n = 0;
+    foreach (line in md.split("\n")) {
+        n = n + 1;
+        if (marker == "") {
+            final open = fenceMarker(line);
+            if (open != "") { marker = open; lang = fenceLang(line, open); }
+            continue;
+        }
+        if (closesFence(line, marker)) { marker = ""; lang = ""; continue; }
+
+        final t = line.trim();
+        if (isShellLang(lang) and line.startsWith("$ ")) {
+            found.append(ConventionFinding{ file = file, line = n, rule = "shell-prompt",
+                message = "command block carries a `$ ` prompt; blocks are meant to be copied whole" });
+        }
+        if (isCommentLine(t) and namesPinnedVersion(t)) {
+            found.append(ConventionFinding{ file = file, line = n, rule = "pinned-version",
+                message = "example output pins a magus version; show the shape with <version> instead" });
+        }
+    }
+    return found;
+}
+
+// looksLikeRepoPath reports whether an inline-code token is claiming a file in THIS
+// repository. The bar is deliberately high, and it was raised by running the rule over the
+// corpus: the first draft produced 67 hits of which about eight were real. Everything the
+// exclusions below remove is a path this repo legitimately writes about without owning -
+// a reader's own workspace, their home directory, a cache tree that only exists at runtime.
+//
+// Two limits are worth knowing, because they are the price of a quiet rule:
+//
+//   - A single-segment directory (`gopherbuzz/`) is NOT checked. That is the shape of the
+//     README bug this rule was written for, and it is also the shape of `dist/`, `cas/`,
+//     `api/`, and `outputs/` - illustrations, not claims. Nothing lexical separates them.
+//     Telling them apart needs git history ("did this path ever exist here?"), which would
+//     put a full-depth clone in the critical path of a docs lint.
+//   - A dot- or tilde-rooted path is skipped, so `.claude/settings.json` and
+//     `~/.codex/config.toml` stay quiet. Those are files the READER creates.
+export fun looksLikeRepoPath(s: str) > bool {
+    if (s == "" or s.indexOf("/") == null) { return false; }
+    if (s.startsWith("/") or s.startsWith("~") or s.startsWith(".")) { return false; }
+    if (s.startsWith("http")) { return false; }
+    if (s.indexOf(" ") != null or s.indexOf("\t") != null) { return false; }
+    // Placeholders, globs, shell expansion, templates, and Buzz namespaces are not paths.
+    foreach (bad in ["<", ">", "*", "$", "\{", "|", "\\", ":", "?", "=", "@"]) {
+        if (s.indexOf(bad) != null) { return false; }
+    }
+    // gen/ and node_modules/ exist only after a build, so their presence says nothing about
+    // whether the docs are right. Checking them would make this rule fire in a fresh clone.
+    if (s.startsWith("gen/") or s.indexOf("/gen/") != null) { return false; }
+    if (s.indexOf("node_modules") != null) { return false; }
+    // Two segments minimum: see the note above.
+    final body = trimTrailingSlash(s);
+    if (body.indexOf("/") == null) { return false; }
+    if (s.endsWith("/")) { return true; }
+    foreach (ext in PATH_EXTS) {
+        if (s.endsWith(ext)) { return true; }
+    }
+    return false;
+}
+
+fun trimTrailingSlash(s: str) > str {
+    if (s.endsWith("/")) { return s.sub(0, len: s.len() - 1); }
+    return s;
+}
+
+// pathCheckApplies reports whether a page's inline paths are claims about THIS repository.
+// Two trees are exempt because their whole job is describing someone else's workspace: the
+// diagnostic explainers under reference/codes/ walk through an example project (`api/`,
+// `pkg/build.go`), and the guides walk through the reader's own machine and config. Scoping
+// this by tree rather than by pattern keeps the rule honest - the exemption is a statement
+// about what those pages are for, not a list of strings to suppress.
+export fun pathCheckApplies(file: str) > bool {
+    if (file.startsWith("docs/reference/codes/")) { return false; }
+    if (file.startsWith("docs/guides/")) { return false; }
+    return true;
+}
+
+// pathReferences collects every repo path named in inline code OUTSIDE a fenced block,
+// with the line it sits on. Prose is where a path claim is load-bearing - a reader follows
+// it - whereas a path inside a command block is often illustrative, so scanning only prose
+// keeps this honest without keeping it noisy.
+//
+// The caller decides which of these are broken; this half cannot touch the filesystem.
+export fun pathReferences(file: str, md: str) > [ConventionFinding] {
+    final found: [ConventionFinding] = mut [<ConventionFinding>];
+    var marker = "";
+    var n = 0;
+    foreach (line in md.split("\n")) {
+        n = n + 1;
+        if (marker != "") {
+            if (closesFence(line, marker)) { marker = ""; }
+            continue;
+        }
+        final open = fenceMarker(line);
+        if (open != "") { marker = open; continue; }
+
+        // Inline code spans are the odd-indexed pieces of a backtick split.
+        final parts = line.split("`");
+        var i = 1;
+        while (i < parts.len()) {
+            final tok = parts[i].trim();
+            if (looksLikeRepoPath(tok)) {
+                found.append(ConventionFinding{ file = file, line = n, rule = "missing-path",
+                    message = "`" + tok + "` does not exist in the repository", path = tok });
+            }
+            i = i + 2;
+        }
+    }
+    return found;
+}
+
 test "parseConventions reads H2 sections, anchors, and a cleaned lead line" {
     final md = "# Documentation conventions\n\n## Admonitions\n\nCall-outs carry a colored accent per type:\n\n> [!NOTE]\n> body\n\n## Diffs\n\nA `diff` block shows a change.\n";
     final cs = parseConventions(md);
@@ -175,4 +410,81 @@ test "the placeholder hint lands on the first inline placeholder only, never a f
         "first inline placeholder hinted");
     assert\equal(res.indexOf("<code>&lt;path&gt;</code><a") != null, false, "second placeholder not hinted");
     assert\equal(res.indexOf("more</code></pre><a") != null, false, "fenced block not hinted");
+}
+
+test "namesPinnedVersion tells a pinned version from an ordinary number" {
+    assert\equal(namesPinnedVersion("# magus 0.4.2"), true, "bare semver");
+    assert\equal(namesPinnedVersion("# magus v0.4.2 (3da15dc9) built ..."), true, "v-prefixed");
+    assert\equal(namesPinnedVersion("# magus <version> (<commit>) built <date>"), false,
+        "the shape is what we want, so it must not fire");
+    assert\equal(namesPinnedVersion("# magus 3 steps planned"), false, "a count is not a version");
+    assert\equal(namesPinnedVersion("# nothing here"), false, "no mention at all");
+}
+
+test "lintMarkdown flags a shell prompt only inside a command block" {
+    final md = "text\n\n```sh\n$ magus run build\nmagus run test\n```\n\n```buzz\n$ not a shell block\n```\n";
+    final f = lintMarkdown("p.md", md);
+    assert\equal(f.len(), 1, "one finding");
+    assert\equal(f[0].rule, "shell-prompt", "rule name");
+    assert\equal(f[0].line, 4, "the prompt line, not the fence");
+}
+
+test "a console block keeps its prompt: it is a transcript, not something to copy" {
+    assert\equal(lintMarkdown("p.md", "```console\n$ magus version\nmagus v1.2.3\n```\n").len(), 0,
+        "the prompt is what separates the input from the captured output");
+}
+
+test "lintMarkdown flags a pinned version in example output" {
+    final f = lintMarkdown("p.md", "```sh\nmagus version\n# magus 0.4.2\n```\n");
+    assert\equal(f.len(), 1, "one finding");
+    assert\equal(f[0].rule, "pinned-version", "rule name");
+}
+
+test "a four-backtick fence holds three-backtick fences without ending the block" {
+    // The conventions page shows how a runnable block is authored by nesting one fence in
+    // another. A naive toggle would close on the inner fence and read the trailing prose as
+    // shell, so the rules after it would fire on the wrong lines.
+    final md = "````md\n<!-- magus-run -->\n```buzz\nstd\\print(\"x\");\n```\n````\n\n$ not in a block\n";
+    assert\equal(lintMarkdown("p.md", md).len(), 0, "nothing inside or after the nested fence fires");
+}
+
+test "looksLikeRepoPath accepts real path claims and rejects the lookalikes" {
+    assert\equal(looksLikeRepoPath("docs/render.buzz"), true, "file with a known extension");
+    assert\equal(looksLikeRepoPath("libs/gopherbuzz/"), true, "directory, two segments");
+    assert\equal(looksLikeRepoPath("magus/spell/go"), false, "a Buzz import path, not a file");
+    assert\equal(looksLikeRepoPath("fs\\glob"), false, "a namespaced name");
+    assert\equal(looksLikeRepoPath("**/*.md"), false, "a glob");
+    assert\equal(looksLikeRepoPath("<path>/magusfile.buzz"), false, "carries a placeholder");
+    assert\equal(looksLikeRepoPath("https://example.com/a.md"), false, "a URL");
+    assert\equal(looksLikeRepoPath("magusfile.buzz"), false, "no slash: too ambiguous to check");
+    assert\equal(looksLikeRepoPath("docs/gen/index.html"), false, "generated: absent in a fresh clone");
+    assert\equal(looksLikeRepoPath("key=value/x.md"), false, "a key=value pair");
+}
+
+test "looksLikeRepoPath declines the cases no lexical rule can settle" {
+    // Each of these was a false positive in the first run over the real corpus. They are
+    // documented as limits rather than fixed, because the fix would cost more than the rule.
+    assert\equal(looksLikeRepoPath("gopherbuzz/"), false,
+        "one segment: indistinguishable from an illustrative dist/ or cas/");
+    assert\equal(looksLikeRepoPath("dist/"), false, "the same shape, and never a claim about us");
+    assert\equal(looksLikeRepoPath("~/.codex/config.toml"), false, "the reader's home directory");
+    assert\equal(looksLikeRepoPath(".claude/settings.json"), false, "a file the reader creates");
+}
+
+test "pathCheckApplies exempts the trees that document someone else's workspace" {
+    assert\equal(pathCheckApplies("docs/concepts/engines.md"), true, "our own architecture");
+    assert\equal(pathCheckApplies("README.md"), true, "repo-root prose");
+    assert\equal(pathCheckApplies("docs/reference/codes/race/MGS4004.md"), false,
+        "diagnostic explainers walk through an example project");
+    assert\equal(pathCheckApplies("docs/guides/integrations/agents.md"), false,
+        "guides walk through the reader's machine");
+}
+
+test "pathReferences reads prose only, never a command block" {
+    final md = "See `internal/gone/x.go` and `docs/render.buzz`.\n\n```sh\nmagus describe file docs/moved.md\n```\n";
+    final refs = pathReferences("README.md", md);
+    assert\equal(refs.len(), 2, "both prose references, neither from the fence");
+    assert\equal(refs[0].path, "internal/gone/x.go", "the first reference");
+    assert\equal(refs[0].line, 1, "line number");
+    assert\equal(refs[1].path, "docs/render.buzz", "the second reference");
 }

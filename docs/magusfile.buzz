@@ -274,12 +274,27 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 }
 
 export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); }
+
+// conventions holds the prose corpus to the conventions page it publishes: no shell prompt
+// in a command block, no pinned version standing in for example output, no backticked path
+// that has since moved. See docs/conventions.md for what each rule means.
+//
+// Its OWN target, not a line inside lint, and it deliberately depends on nothing. A prose
+// nit should name the thing that is wrong; folding it into lint would report a stale path in
+// the README as "docs lint failed", and a target that fails for reasons unrelated to its
+// name is a target people learn to ignore. It also means `magus run conventions docs` is a
+// two-second check you can run on its own while editing a page.
+export fun conventions(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles("**/*.md", "lib/conventions.buzz", "engine/gates.buzz",
+        workspace.file("README.md"), workspace.file("CONTRIBUTING.md"));
+    renderer\conventionsCheck(ROOT, DOCS);
+}
 // lint runs the doc formatter (prettier, via format) plus the client-side TypeScript
 // gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null
 // assertions - see biome.json). Both TS tools need node_modules, which it reaches through
 // format -> generate -> preflight; os.exec raises on a non-zero exit, so either gate fails lint.
 export fun lint(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(format);
+    ctx.needs(format, conventions);
     // The site bundle imports the search grammar from the shared libs/textsearch source,
     // so gate its type-check + biome here: a lib edit fails docs lint through the graph.
     ctx.needs(textsearch\lint);

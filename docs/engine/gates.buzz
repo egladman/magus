@@ -19,6 +19,9 @@ import "engine/types" as _;
 import "lib/text" as _;
 import "lib/csp" as _;
 import "lib/html" as _;
+// The conventions lint's pure half: lintMarkdown/pathReferences decide WHAT is wrong,
+// conventionsCheck below is the part allowed to read the tree and say so.
+import "lib/conventions" as _;
 
 // loadMeta populates the commit-metadata fields once, shelling out to git. The
 // GitHub source-navigation links (edit/blame/history/blob) use the git symbolic ref
@@ -199,17 +202,23 @@ export fun buildCommits(site: Site) > {str: str} {
 // checkPathExists returns true when target (gen-root-relative, no leading slash)
 // resolves to a real file under gen/. Directory refs (URL ending in "/" or a plain
 // slugged path) resolve to their index.html; assets pass through verbatim.
+// fs\isFile / fs\isDir, not os\execute(["test", ...]). This is the hottest filesystem
+// predicate in the render by a wide margin: assetIntegrityCheck calls it for EVERY href
+// and src on every written page, and each call took up to three forks. Tens of thousands
+// of fork+exec pairs is what put the render's kernel time at more than twice its user
+// time - the gate that proves the site has no dangling link cost more than rendering the
+// site did.
 export fun checkPathExists(target: str, site: Site) > bool {
     // Empty target = gen/'s root, always the index.html landing. This shows up
     // when a page links to "../" (Parent Directory in an autoindex root) and the
     // resolver pops back to the root.
-    if (target == "") { return os\execute(["test", "-f", site.outDir + "/index.html"]) == 0; }
-    if (os\execute(["test", "-f", site.outDir + "/" + target]) == 0) { return true; }
-    if (os\execute(["test", "-d", site.outDir + "/" + target]) == 0) {
-        return os\execute(["test", "-f", site.outDir + "/" + target + "/index.html"]) == 0;
+    if (target == "") { return fs\isFile(site.outDir + "/index.html"); }
+    if (fs\isFile(site.outDir + "/" + target)) { return true; }
+    if (fs\isDir(site.outDir + "/" + target)) {
+        return fs\isFile(site.outDir + "/" + target + "/index.html");
     }
     if (target.endsWith("/")) {
-        return os\execute(["test", "-f", site.outDir + "/" + target + "index.html"]) == 0;
+        return fs\isFile(site.outDir + "/" + target + "index.html");
     }
     return false;
 }
@@ -275,7 +284,7 @@ export fun walkGen(rel: str, acc: [str], site: Site) > void {
     foreach (name in fs\list(dir)) {
         var childRel = name;
         if (rel != "") { childRel = rel + "/" + name; }
-        if (os\execute(["test", "-d", site.outDir + "/" + childRel]) == 0) {
+        if (fs\isDir(site.outDir + "/" + childRel)) {
             walkGen(childRel, acc, site);
         } else {
             acc.append(childRel);
@@ -373,7 +382,7 @@ final RETIRED_URLS = "retired.urls.lock";
 // "#" comments. Missing file -> empty set (the bootstrap case for URL_LOCK).
 export fun readURLSet(path: str) > {str: bool} {
     var set: {str: bool} = mut {};
-    if (os\execute(["test", "-f", path]) != 0) { return set; }
+    if (fs\isFile(path) == false) { return set; }
     final f = io\File.open(path, io\FileMode.read);
     final content = f.readAll();
     f.close();
@@ -418,4 +427,110 @@ export fun updateUrlLock(site: Site) > void {
     var body = "";
     foreach (u in sorted) { body = body + u + "\n"; }
     fs\writeFile(URL_LOCK, body);
+}
+
+// LINT_SKIP_DIRS never hold prose this lint has an opinion about: build output, installed
+// packages, committed third-party bytes, and the client source tree. Matched by NAME at any
+// depth, like isNeverContentDir - a nested node_modules is the reason that rule exists.
+final LINT_SKIP_DIRS = ["gen", "node_modules", "vendor", "src", "assets"];
+
+fun lintSkipDir(name: str) > bool {
+    foreach (d in LINT_SKIP_DIRS) {
+        if (name == d) { return true; }
+    }
+    return false;
+}
+
+// collectMarkdown appends every .md file under dir (recursively) to acc, as a path relative
+// to the walk root.
+fun collectMarkdown(base: str, rel: str, acc: [str]) > void {
+    var dir = base;
+    if (rel != "") { dir = base + "/" + rel; }
+    foreach (name in fs\list(dir)) {
+        var childRel = name;
+        if (rel != "") { childRel = rel + "/" + name; }
+        if (isDirectory(dir + "/" + name)) {
+            if (lintSkipDir(name)) { continue; }
+            collectMarkdown(base, childRel, acc);
+        } else {
+            if (name.endsWith(".md")) { acc.append(childRel); }
+        }
+    }
+}
+
+// pathExists is the one filesystem question the conventions lint asks.
+fun pathExists(p: str) > bool {
+    return fs\exists(p);
+}
+
+// conventionsCheck holds the docs corpus to the conventions page it ships. It runs from
+// `lint`, NOT from the render, on purpose: a prose nit must not fail `build`. A gate that
+// fails the wrong target teaches people that the failing target is unreliable, and the next
+// real breakage in it gets waved through.
+//
+// Two tiers, the same split assetIntegrityCheck and axisReport already draw here:
+//
+//   THROWS on the objective rules. A `$ ` prompt in a command block and a pinned version
+//   standing in for example output are facts about the text, with no judgment in them.
+//
+//   REPORTS the broken repo paths. Whether an inline path is a claim about this repo or an
+//   illustration of the reader's is a question the text does not answer (see
+//   looksLikeRepoPath for the cases that defeated the first draft), so this prints and lets
+//   the number be burned down. Promote it to a throw once it sits at zero - the same path
+//   axisReport is on.
+//
+// Every violation is collected before either happens. Failing on the first would turn a
+// three-minute fix into three round trips.
+export fun conventionsCheck(root: str, docs: str) > void {
+    var files: [str] = mut [<str>];
+    collectMarkdown(root + "/" + docs, "", files);
+    final sorted = files.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+
+    var broken: [str] = mut [<str>];
+    var violations: [str] = mut [<str>];
+    var checked = 0;
+
+    // The docs corpus, addressed as docs/<rel> so a finding names a path you can open.
+    foreach (rel in sorted) {
+        checked = checked + 1;
+        collectFindings(root, file: docs + "/" + rel, abs: root + "/" + docs + "/" + rel,
+            violations: violations, broken: broken);
+    }
+    // The repo-root prose, where a stale path does the most damage: it is the first thing a
+    // newcomer reads, and a backticked path in a sentence is invisible to every markdown
+    // linter, because it is not a link.
+    foreach (name in ["README.md", "CONTRIBUTING.md"]) {
+        if (pathExists(root + "/" + name)) {
+            checked = checked + 1;
+            collectFindings(root, file: name, abs: root + "/" + name,
+                violations: violations, broken: broken);
+        }
+    }
+
+    if (broken.len() > 0) {
+        std\print("  conventions: {broken.len()} inline path(s) that no longer resolve");
+        foreach (b in broken) { std\print("    " + b); }
+    }
+    if (violations.len() > 0) {
+        var body = "";
+        foreach (v in violations) { body = body + "\n  " + v; }
+        throw "conventions: {violations.len()} violation(s) of docs/conventions.md across {checked} file(s):"
+            + body + "\n\nEach rule is documented on that page. Fix the prose, not the lint.";
+    }
+    std\print("conventions: {checked} files checked, no violations");
+}
+
+// collectFindings runs both halves over one file and sorts what they report into the tier
+// that throws and the tier that prints.
+fun collectFindings(root: str, file: str, abs: str, violations: [str], broken: [str]) > void {
+    final md = fs\readFile(abs);
+    foreach (f in lintMarkdown(file, md)) {
+        violations.append(f.file + ":" + "{f.line}" + ": [" + f.rule + "] " + f.message);
+    }
+    if (pathCheckApplies(file) == false) { return; }
+    foreach (f in pathReferences(file, md)) {
+        if (pathExists(root + "/" + f.path) == false) {
+            broken.append(f.file + ":" + "{f.line}" + ": " + f.message);
+        }
+    }
 }
