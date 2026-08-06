@@ -34,11 +34,11 @@ var Vcs = Module{
 		},
 		{
 			Name: "diff",
-			Doc:  "List files changed against the given base (defaults to vcs.base).",
+			Doc:  "The files changed against the given base (defaults to vcs.base), each a Path carrying the repository root as its base. Empty when no VCS is resolved.",
 			Args: []Arg{
 				{Name: "base", Type: TypeString, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeStringSlice}},
+			Returns: []Ret{{Type: TypeAny, Object: "[Path]"}},
 			Impl:    VcsDiff,
 		},
 		{
@@ -176,7 +176,16 @@ func VcsRoot(ctx context.Context) (string, error) {
 }
 
 // VcsDiff lists files changed against base, defaulting to the resolved base ref.
-func VcsDiff(ctx context.Context, base string) ([]string, error) {
+//
+// Paths, like vcs.status's, each carrying the repository root as their base. A VCS
+// reports diff paths from the root while a target runs in its project directory, so a
+// bare string left the caller to supply that fact from memory.
+//
+// Note the probe runs with an empty dir (the process cwd) where VcsStatus uses
+// EffectiveCwd. That difference predates this change and is preserved rather than
+// quietly altered; the root is read from the same place the diff was, so the paths and
+// their base at least agree with each other.
+func VcsDiff(ctx context.Context, base string) ([]types.Path, error) {
 	v, defaultBase := resolveVCS(ctx)
 	if v == nil {
 		return nil, nil
@@ -188,7 +197,15 @@ func VcsDiff(ctx context.Context, base string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("vcs.diff: %w", err)
 	}
-	return files, nil
+	root, err := v.Root(ctx, "")
+	if err != nil {
+		root = ""
+	}
+	out := make([]types.Path, 0, len(files))
+	for _, f := range files {
+		out = append(out, types.Path{Value: f, Base: root})
+	}
+	return out, nil
 }
 
 // vcsMetadata resolves the workspace VCS and reads its metadata, RAISING when either step

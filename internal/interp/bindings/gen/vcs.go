@@ -39,7 +39,7 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return StrSliceVal(ret0), nil
+		return buzzValueVcsPathSlice(ret0), nil
 	}))
 	m.MapSet("ref", vm.DirectValue("vcs.ref", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.VcsRef(ctx)
@@ -112,6 +112,14 @@ func buzzValueVcsPath(v types.Path) vm.Value {
 	out.MapSet("base", vm.StrValue(v.Base))
 	out.MapSet("isDir", vm.BoolValue(v.IsDir))
 	return out
+}
+
+func buzzValueVcsPathSlice(values []types.Path) vm.Value {
+	items := make([]vm.Value, len(values))
+	for i, value := range values {
+		items[i] = buzzValueVcsPath(value)
+	}
+	return vm.ListValue(items)
 }
 
 func buzzValueVcsStatus(v types.Status) vm.Value {

@@ -269,7 +269,7 @@ var modules = []Module{
 		},
 		Methods: []Method{
 			{Name: "root", Doc: "Absolute path of the repository root.", Sig: "vcs.root() → string"},
-			{Name: "diff", Doc: "List files changed against the given base (defaults to vcs.base).", Sig: "vcs.diff([base]) → []string"},
+			{Name: "diff", Doc: "The files changed against the given base (defaults to vcs.base), each a Path carrying the repository root as its base.", Sig: "vcs.diff([base]) → any"},
 			{Name: "ref", Doc: "The movable name at the current revision (git branch, hg named branch, jj bookmark), or empty when there is none.", Sig: "vcs.ref() → string"},
 			{Name: "status", Doc: "The working tree's uncommitted state as {clean, files}: clean is true when nothing changed, files are the changed paths (empty when clean). Pass paths to scope it. Each file is a Path carrying the repository root as its base.", Sig: "vcs.status([paths]) → any"},
 			{Name: "is_dirty", Doc: "True if the working tree has uncommitted changes. Pass paths to scope the check to those files/dirs (relative to the project), e.g. is_dirty([\"MAGUS.md\"]) — the right way to gate generated outputs without shelling out to git or parsing porcelain.", Sig: "vcs.isDirty([paths]) → bool"},
