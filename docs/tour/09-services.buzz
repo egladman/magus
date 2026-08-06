@@ -1,3 +1,7 @@
+// title: Services: share one across runs
+// desc: Author a spell whose op returns a Service; magus supervises one, shared across runs.
+// doc: concepts/services|Services
+//
 // Shared services: one database, many dependents. Some ops are not commands that
 // finish - they are long-running processes: a dev server, a watcher, a database.
 // You declare one by writing a SPELL (the flip side of step 3, where you only

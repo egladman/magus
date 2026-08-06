@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2450,
-  "edge_count": 5561,
+  "node_count": 2458,
+  "edge_count": 5582,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -1078,7 +1078,7 @@
       "source": "docs/tour",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "22",
+        "dir_files": "23",
         "dir_languages": "buzz"
       }
     },
@@ -5617,6 +5617,15 @@
       }
     },
     {
+      "id": "file:docs/tour/23-charm-axes.buzz",
+      "kind": "file",
+      "label": "docs/tour/23-charm-axes.buzz",
+      "source": "docs/tour/23-charm-axes.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
       "id": "file:evals/magusfile.buzz",
       "kind": "file",
       "label": "evals/magusfile.buzz",
@@ -9537,7 +9546,7 @@
       "kind": "function",
       "label": "collectDemos",
       "doc": "collectDemos maps each concept docSlug to the FIRST tour step that demonstrates it (its title + card anchor), pre-walk, so renderFile can inject a \"see the demo\" callout on the matching concept page.",
-      "source": "docs/site/tour.buzz:174",
+      "source": "docs/site/tour.buzz:173",
       "attrs": {
         "exported": "true"
       }
@@ -9563,10 +9572,30 @@
       "id": "function:docs/site/tour.buzz:renderTourPage",
       "kind": "function",
       "label": "renderTourPage",
-      "source": "docs/site/tour.buzz:184",
+      "source": "docs/site/tour.buzz:183",
       "attrs": {
         "exported": "true"
       }
+    },
+    {
+      "id": "function:docs/site/tour.buzz:tourDocLabel",
+      "kind": "function",
+      "label": "tourDocLabel",
+      "source": "docs/site/tour.buzz:163"
+    },
+    {
+      "id": "function:docs/site/tour.buzz:tourDocSlug",
+      "kind": "function",
+      "label": "tourDocSlug",
+      "doc": "The doc cross-link is one line, `// doc: <slug>|<label>`, because a slug with no label renders a link with nothing to click.",
+      "source": "docs/site/tour.buzz:156"
+    },
+    {
+      "id": "function:docs/site/tour.buzz:tourMeta",
+      "kind": "function",
+      "label": "tourMeta",
+      "doc": "tourMeta reads one `// key: value` line from a step's header. The metadata lives in the step file so adding a step is one file, not two places that can disagree.",
+      "source": "docs/site/tour.buzz:145"
     },
     {
       "id": "function:docs/site/tour.buzz:tourSrc",
@@ -9589,7 +9618,7 @@
       "id": "function:docs/tour/01-hello.buzz:greet",
       "kind": "function",
       "label": "greet",
-      "source": "docs/tour/01-hello.buzz:7",
+      "source": "docs/tour/01-hello.buzz:11",
       "attrs": {
         "exported": "true"
       }
@@ -9598,7 +9627,7 @@
       "id": "function:docs/tour/02-targets.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "docs/tour/02-targets.buzz:10",
+      "source": "docs/tour/02-targets.buzz:14",
       "attrs": {
         "exported": "true"
       }
@@ -9607,7 +9636,7 @@
       "id": "function:docs/tour/02-targets.buzz:ci",
       "kind": "function",
       "label": "ci",
-      "source": "docs/tour/02-targets.buzz:19",
+      "source": "docs/tour/02-targets.buzz:23",
       "attrs": {
         "exported": "true"
       }
@@ -9616,7 +9645,7 @@
       "id": "function:docs/tour/02-targets.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "docs/tour/02-targets.buzz:14",
+      "source": "docs/tour/02-targets.buzz:18",
       "attrs": {
         "exported": "true"
       }
@@ -9625,7 +9654,7 @@
       "id": "function:docs/tour/03-spells.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "docs/tour/03-spells.buzz:13",
+      "source": "docs/tour/03-spells.buzz:17",
       "attrs": {
         "exported": "true"
       }
@@ -9634,7 +9663,7 @@
       "id": "function:docs/tour/03-spells.buzz:ci",
       "kind": "function",
       "label": "ci",
-      "source": "docs/tour/03-spells.buzz:22",
+      "source": "docs/tour/03-spells.buzz:26",
       "attrs": {
         "exported": "true"
       }
@@ -9643,7 +9672,7 @@
       "id": "function:docs/tour/03-spells.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "docs/tour/03-spells.buzz:17",
+      "source": "docs/tour/03-spells.buzz:21",
       "attrs": {
         "exported": "true"
       }
@@ -9653,7 +9682,7 @@
       "kind": "function",
       "label": "demo",
       "doc": "The one target: it prints values the functions above compute. `run demo` evaluates them for real (the calls run inside the string interpolation), so the trace shows the actual numbers, not placeholders.",
-      "source": "docs/tour/04-buzz.buzz:35",
+      "source": "docs/tour/04-buzz.buzz:39",
       "attrs": {
         "exported": "true"
       }
@@ -9663,34 +9692,34 @@
       "kind": "function",
       "label": "fact",
       "doc": "Recursion again, building a product. `eval fact(10)` -> 3628800.",
-      "source": "docs/tour/04-buzz.buzz:16"
+      "source": "docs/tour/04-buzz.buzz:20"
     },
     {
       "id": "function:docs/tour/04-buzz.buzz:fibo",
       "kind": "function",
       "label": "fibo",
       "doc": "Recursion, the classic. `eval fibo(30)` computes 832040 in a real bytecode VM.",
-      "source": "docs/tour/04-buzz.buzz:10"
+      "source": "docs/tour/04-buzz.buzz:14"
     },
     {
       "id": "function:docs/tour/04-buzz.buzz:reduce",
       "kind": "function",
       "label": "reduce",
       "doc": "Higher-order: a function that takes a function, invoked with an inline closure. `eval sum([2, 4, 6, 8])` -> 20.",
-      "source": "docs/tour/04-buzz.buzz:23"
+      "source": "docs/tour/04-buzz.buzz:27"
     },
     {
       "id": "function:docs/tour/04-buzz.buzz:sum",
       "kind": "function",
       "label": "sum",
-      "source": "docs/tour/04-buzz.buzz:28"
+      "source": "docs/tour/04-buzz.buzz:32"
     },
     {
       "id": "function:docs/tour/05-slots.buzz:ci",
       "kind": "function",
       "label": "ci",
       "doc": "The conventional anchor. Kept to lint here so the plan stays short.",
-      "source": "docs/tour/05-slots.buzz:49",
+      "source": "docs/tour/05-slots.buzz:53",
       "attrs": {
         "exported": "true"
       }
@@ -9700,7 +9729,7 @@
       "kind": "function",
       "label": "go_lint",
       "doc": "A cheap check. It stays at the default of one slot; several like it run at once.",
-      "source": "docs/tour/05-slots.buzz:33",
+      "source": "docs/tour/05-slots.buzz:37",
       "attrs": {
         "exported": "true"
       }
@@ -9710,7 +9739,7 @@
       "kind": "function",
       "label": "js_lint",
       "doc": "The greedy one: reserve 4 slots AND tell eslint to actually use 4 threads.",
-      "source": "docs/tour/05-slots.buzz:38",
+      "source": "docs/tour/05-slots.buzz:42",
       "attrs": {
         "exported": "true"
       }
@@ -9720,7 +9749,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "lint fans out to both. The scheduler runs the 1-slot check alongside other small work, but quiets the queue around js-lint's 4-slot reservation.",
-      "source": "docs/tour/05-slots.buzz:44",
+      "source": "docs/tour/05-slots.buzz:48",
       "attrs": {
         "exported": "true"
       }
@@ -9730,7 +9759,7 @@
       "kind": "function",
       "label": "release",
       "doc": "A stand-in release, so `graph` shows the exclusive policy in context.",
-      "source": "docs/tour/05-slots.buzz:54",
+      "source": "docs/tour/05-slots.buzz:58",
       "attrs": {
         "exported": "true"
       }
@@ -9739,7 +9768,7 @@
       "id": "function:docs/tour/06-cache.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "docs/tour/06-cache.buzz:28",
+      "source": "docs/tour/06-cache.buzz:32",
       "attrs": {
         "exported": "true"
       }
@@ -9748,7 +9777,7 @@
       "id": "function:docs/tour/06-cache.buzz:bundle",
       "kind": "function",
       "label": "bundle",
-      "source": "docs/tour/06-cache.buzz:38",
+      "source": "docs/tour/06-cache.buzz:42",
       "attrs": {
         "exported": "true"
       }
@@ -9757,7 +9786,7 @@
       "id": "function:docs/tour/06-cache.buzz:ci",
       "kind": "function",
       "label": "ci",
-      "source": "docs/tour/06-cache.buzz:43",
+      "source": "docs/tour/06-cache.buzz:47",
       "attrs": {
         "exported": "true"
       }
@@ -9766,7 +9795,7 @@
       "id": "function:docs/tour/06-cache.buzz:generate",
       "kind": "function",
       "label": "generate",
-      "source": "docs/tour/06-cache.buzz:24",
+      "source": "docs/tour/06-cache.buzz:28",
       "attrs": {
         "exported": "true"
       }
@@ -9776,7 +9805,7 @@
       "kind": "function",
       "label": "test",
       "doc": "Both of these need build. In the plan it appears once, not twice.",
-      "source": "docs/tour/06-cache.buzz:34",
+      "source": "docs/tour/06-cache.buzz:38",
       "attrs": {
         "exported": "true"
       }
@@ -9786,7 +9815,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "The umbrella: magus.glob collects every current AND future *-generate target as handles, and magus.needs depends on them. glob(\"name\") with no wildcard is shorthand for \"anything ending in -name\", so glob(\"generate\") would read the same as glob(\"*-generate\") here. A pattern matching nothing yields no handles, so needs of it is just a no-op.",
-      "source": "docs/tour/07-globs.buzz:25",
+      "source": "docs/tour/07-globs.buzz:29",
       "attrs": {
         "exported": "true"
       }
@@ -9796,7 +9825,7 @@
       "kind": "function",
       "label": "generate_fast",
       "doc": "\"*-generate\" gathers the family; \"!snapshot-generate\" removes one member. Order does not matter - the negation applies to the union of the includes - and the result is deduplicated and sorted, so dispatch order never varies between runs.",
-      "source": "docs/tour/07-globs.buzz:42",
+      "source": "docs/tour/07-globs.buzz:46",
       "attrs": {
         "exported": "true"
       }
@@ -9805,7 +9834,7 @@
       "id": "function:docs/tour/07-globs.buzz:mock_generate",
       "kind": "function",
       "label": "mock_generate",
-      "source": "docs/tour/07-globs.buzz:17",
+      "source": "docs/tour/07-globs.buzz:21",
       "attrs": {
         "exported": "true"
       }
@@ -9814,7 +9843,7 @@
       "id": "function:docs/tour/07-globs.buzz:proto_all",
       "kind": "function",
       "label": "proto_all",
-      "source": "docs/tour/07-globs.buzz:79",
+      "source": "docs/tour/07-globs.buzz:83",
       "attrs": {
         "exported": "true"
       }
@@ -9824,7 +9853,7 @@
       "kind": "function",
       "label": "proto_generate",
       "doc": "One target per generator, all sharing the -generate suffix.",
-      "source": "docs/tour/07-globs.buzz:16",
+      "source": "docs/tour/07-globs.buzz:20",
       "attrs": {
         "exported": "true"
       }
@@ -9834,7 +9863,7 @@
       "kind": "function",
       "label": "proto_lint",
       "doc": "When a set is not a clean suffix family, skip the pattern and pass the target functions to magus.needs directly. proto-all gathers just the proto- family (its generate and its lint), and nothing else - the handles say exactly which. Either way needs only ever takes handles: a function, or the handles glob resolves a pattern to.",
-      "source": "docs/tour/07-globs.buzz:78",
+      "source": "docs/tour/07-globs.buzz:82",
       "attrs": {
         "exported": "true"
       }
@@ -9844,7 +9873,7 @@
       "kind": "function",
       "label": "snapshot_generate",
       "doc": "Excluding one member of a family.  Sooner or later a target belongs to a family by name but not by behavior. Here snapshot-generate re-records fixtures: it is slow and needs a live service, so running it from the umbrella would make `run generate` fail on a laptop with nothing listening. A leading \"!\" subtracts it.",
-      "source": "docs/tour/07-globs.buzz:35",
+      "source": "docs/tour/07-globs.buzz:39",
       "attrs": {
         "exported": "true"
       }
@@ -9853,7 +9882,7 @@
       "id": "function:docs/tour/07-globs.buzz:sql_generate",
       "kind": "function",
       "label": "sql_generate",
-      "source": "docs/tour/07-globs.buzz:18",
+      "source": "docs/tour/07-globs.buzz:22",
       "attrs": {
         "exported": "true"
       }
@@ -9863,7 +9892,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "Charms ride down needs() edges, so a single charm on the anchor reaches the whole plan: `run ci:rw` hands rw to format too. Try `run ci`, then `run ci:rw`.",
-      "source": "docs/tour/08-charms.buzz:26",
+      "source": "docs/tour/08-charms.buzz:30",
       "attrs": {
         "exported": "true"
       }
@@ -9873,7 +9902,7 @@
       "kind": "function",
       "label": "format",
       "doc": "Read the active charm set with has_charm, then branch. (Most real spell ops do this flip internally, so you usually get rw for free; here it is spelled out so the plan shows the difference.)",
-      "source": "docs/tour/08-charms.buzz:16",
+      "source": "docs/tour/08-charms.buzz:20",
       "attrs": {
         "exported": "true"
       }
@@ -9883,7 +9912,7 @@
       "kind": "function",
       "label": "mgs_getName",
       "doc": "A spell announces its name...",
-      "source": "docs/tour/09-services.buzz:13",
+      "source": "docs/tour/09-services.buzz:17",
       "attrs": {
         "exported": "true"
       }
@@ -9893,7 +9922,7 @@
       "kind": "function",
       "label": "mgs_listTargets",
       "doc": "...and lists its ops: a map of op name to handler. Each handler takes the Target being built and returns a Command (runs to completion) or a Service.",
-      "source": "docs/tour/09-services.buzz:32",
+      "source": "docs/tour/09-services.buzz:36",
       "attrs": {
         "exported": "true"
       }
@@ -9903,13 +9932,13 @@
       "kind": "function",
       "label": "serve",
       "doc": "serve returns a Service, so magus treats it as a long-running, shared op: command   - the process magus forks in the foreground and supervises readiness - a probe polled until it exits 0 (the Kubernetes exec-probe model), so dependents wait for \"actually up\", not a fixed sleep stop      - a graceful shutdown, replayed to reap orphans after a crash Reached as a dependency (some target's magus.needs), it runs in the background, shared by config fingerprint; run directly, it runs in the foreground.",
-      "source": "docs/tour/09-services.buzz:22"
+      "source": "docs/tour/09-services.buzz:26"
     },
     {
       "id": "function:docs/tour/10-wards.buzz:mgs_getName",
       "kind": "function",
       "label": "mgs_getName",
-      "source": "docs/tour/10-wards.buzz:16",
+      "source": "docs/tour/10-wards.buzz:20",
       "attrs": {
         "exported": "true"
       }
@@ -9918,7 +9947,7 @@
       "id": "function:docs/tour/10-wards.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "docs/tour/10-wards.buzz:27",
+      "source": "docs/tour/10-wards.buzz:31",
       "attrs": {
         "exported": "true"
       }
@@ -9927,13 +9956,13 @@
       "id": "function:docs/tour/10-wards.buzz:serve",
       "kind": "function",
       "label": "serve",
-      "source": "docs/tour/10-wards.buzz:18"
+      "source": "docs/tour/10-wards.buzz:22"
     },
     {
       "id": "function:docs/tour/11-workspace.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "docs/tour/11-workspace.buzz:33",
+      "source": "docs/tour/11-workspace.buzz:37",
       "attrs": {
         "exported": "true"
       }
@@ -9942,7 +9971,7 @@
       "id": "function:docs/tour/11-workspace.buzz:ci",
       "kind": "function",
       "label": "ci",
-      "source": "docs/tour/11-workspace.buzz:42",
+      "source": "docs/tour/11-workspace.buzz:46",
       "attrs": {
         "exported": "true"
       }
@@ -9951,7 +9980,7 @@
       "id": "function:docs/tour/11-workspace.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "docs/tour/11-workspace.buzz:37",
+      "source": "docs/tour/11-workspace.buzz:41",
       "attrs": {
         "exported": "true"
       }
@@ -9961,7 +9990,7 @@
       "kind": "function",
       "label": "build",
       "doc": "Compile the version-stamped server binary and type-check the client.",
-      "source": "docs/tour/12-magusfile.buzz:132",
+      "source": "docs/tour/12-magusfile.buzz:136",
       "attrs": {
         "exported": "true"
       }
@@ -9971,7 +10000,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "The conventional anchor `magus affected ci` keys off. It declares no work of its own; it fans out to lint, build, and test, which share the format -> generate -> preflight spine and each run once. Try `run ci` to see the plan.",
-      "source": "docs/tour/12-magusfile.buzz:148",
+      "source": "docs/tour/12-magusfile.buzz:152",
       "attrs": {
         "exported": "true"
       }
@@ -9981,7 +10010,7 @@
       "kind": "function",
       "label": "format",
       "doc": "Format every language. These ops CHECK by default; run `magus run format:rw` to APPLY the fixes: the rw charm flips gofmt -l to -w, prettier --check to --write, buf format to -w. The charm rides down from the run, so no branch is needed here. (Try `run format` then `run format:rw` in the console to compare.)",
-      "source": "docs/tour/12-magusfile.buzz:99",
+      "source": "docs/tour/12-magusfile.buzz:103",
       "attrs": {
         "exported": "true"
       }
@@ -9991,7 +10020,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "The umbrella `generate` target pulls in every `*-generate` target with ONE pattern instead of listing each by hand: ctx.glob(\"*-generate\") resolves to every target ending in -generate, and magus.needs depends on those handles, so adding a `sql-generate` later needs no edit here. (glob is the pattern resolver; needs itself only ever takes handles. A pattern with no `*` is suffix shorthand, so \"generate\" would read the same here.) That is the payoff of naming targets by a shared convention. Try `run generate`",
-      "source": "docs/tour/12-magusfile.buzz:90",
+      "source": "docs/tour/12-magusfile.buzz:94",
       "attrs": {
         "exported": "true"
       }
@@ -10000,7 +10029,7 @@
       "id": "function:docs/tour/12-magusfile.buzz:go_lint",
       "kind": "function",
       "label": "go_lint",
-      "source": "docs/tour/12-magusfile.buzz:116",
+      "source": "docs/tour/12-magusfile.buzz:120",
       "attrs": {
         "exported": "true"
       }
@@ -10010,7 +10039,7 @@
       "kind": "function",
       "label": "image_build",
       "doc": "Build the container image from the compiled binary. Default: a single-arch image loaded into the local daemon. Under the `cd` charm: a multi-arch image pushed to the registry. Kept as its own target so `magus run image-build` works standalone.",
-      "source": "docs/tour/12-magusfile.buzz:156",
+      "source": "docs/tour/12-magusfile.buzz:160",
       "attrs": {
         "exported": "true"
       }
@@ -10019,7 +10048,7 @@
       "id": "function:docs/tour/12-magusfile.buzz:js_lint",
       "kind": "function",
       "label": "js_lint",
-      "source": "docs/tour/12-magusfile.buzz:121",
+      "source": "docs/tour/12-magusfile.buzz:125",
       "attrs": {
         "exported": "true"
       }
@@ -10029,14 +10058,14 @@
       "kind": "function",
       "label": "ldflags",
       "doc": "A plain Buzz helper that assembles the -ldflags stamping the version into the server binary (used by build below). Try `ldflags(VERSION)` in the console to see Buzz evaluate it; the interpreter is real, only the build tools are stubbed.",
-      "source": "docs/tour/12-magusfile.buzz:49"
+      "source": "docs/tour/12-magusfile.buzz:53"
     },
     {
       "id": "function:docs/tour/12-magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "The umbrella `lint` fans out across the whole family with one pattern.",
-      "source": "docs/tour/12-magusfile.buzz:127",
+      "source": "docs/tour/12-magusfile.buzz:131",
       "attrs": {
         "exported": "true"
       }
@@ -10045,7 +10074,7 @@
       "id": "function:docs/tour/12-magusfile.buzz:mock_generate",
       "kind": "function",
       "label": "mock_generate",
-      "source": "docs/tour/12-magusfile.buzz:81",
+      "source": "docs/tour/12-magusfile.buzz:85",
       "attrs": {
         "exported": "true"
       }
@@ -10055,7 +10084,7 @@
       "kind": "function",
       "label": "preflight",
       "doc": "Gate the pipeline on a healthy workspace before anything builds.",
-      "source": "docs/tour/12-magusfile.buzz:73",
+      "source": "docs/tour/12-magusfile.buzz:77",
       "attrs": {
         "exported": "true"
       }
@@ -10065,7 +10094,7 @@
       "kind": "function",
       "label": "proto_generate",
       "doc": "Codegen is one `*-generate` target per generator. Each is ordinary cached codegen: magus keys it on its inputs and its gen/** outputs, so it reruns only when those inputs change. (Contrast with a drift-gate target that verifies committed output is current on every run; that one would set skip_cache because its point is the check, not a cacheable artifact.)",
-      "source": "docs/tour/12-magusfile.buzz:80",
+      "source": "docs/tour/12-magusfile.buzz:84",
       "attrs": {
         "exported": "true"
       }
@@ -10075,7 +10104,7 @@
       "kind": "function",
       "label": "proto_lint",
       "doc": "Linting is a `*-lint` set too, one target per toolchain, so `lint` can glob them the same way `generate` globs its generators. js-lint is split out on its own because it carries the load: eslint is the heavy one, so this target holds LINT_SLOTS slots and runs eslint with a matching --concurrency (the cheap buf/go checks stay at the default of 1 slot). `magus run lint:rw` applies the auto-fixable findings where a tool supports it (e.g. golangci-lint --fix).",
-      "source": "docs/tour/12-magusfile.buzz:112",
+      "source": "docs/tour/12-magusfile.buzz:116",
       "attrs": {
         "exported": "true"
       }
@@ -10085,7 +10114,7 @@
       "kind": "function",
       "label": "release",
       "doc": "Ship a release: a needs() edge onto image-build, so it shows up in `graph`/`ls` as part of the DAG. Charms ride down needs() edges from the run, so `magus run release:cd` flows the cd charm into image-build and it switches to a multi-arch push. (magus.run([\"image-build:cd\"]) would instead invoke it imperatively with the charm pinned in the call, but an imperative call is not a static edge, so it would not appear in the graph. Both are valid; needs keeps the DAG complete.)",
-      "source": "docs/tour/12-magusfile.buzz:172",
+      "source": "docs/tour/12-magusfile.buzz:176",
       "attrs": {
         "exported": "true"
       }
@@ -10095,7 +10124,7 @@
       "kind": "function",
       "label": "test",
       "doc": "Run both suites.",
-      "source": "docs/tour/12-magusfile.buzz:139",
+      "source": "docs/tour/12-magusfile.buzz:143",
       "attrs": {
         "exported": "true"
       }
@@ -10104,7 +10133,7 @@
       "id": "function:docs/tour/13-custom-targets.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "docs/tour/13-custom-targets.buzz:13",
+      "source": "docs/tour/13-custom-targets.buzz:17",
       "attrs": {
         "exported": "true"
       }
@@ -10114,7 +10143,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "The conventional anchor, wired with magus.needs like always.",
-      "source": "docs/tour/13-custom-targets.buzz:18",
+      "source": "docs/tour/13-custom-targets.buzz:22",
       "attrs": {
         "exported": "true"
       }
@@ -10124,7 +10153,7 @@
       "kind": "function",
       "label": "deploy",
       "doc": "A target can also invoke another imperatively with magus.run - the dynamic alternative to a static magus.needs edge. `run deploy` records the nested call in the plan.",
-      "source": "docs/tour/13-custom-targets.buzz:32",
+      "source": "docs/tour/13-custom-targets.buzz:36",
       "attrs": {
         "exported": "true"
       }
@@ -10134,7 +10163,7 @@
       "kind": "function",
       "label": "release",
       "doc": "A bespoke phase. It depends on ci through the same magus.needs edge the canonical targets use, then does its own extra work.",
-      "source": "docs/tour/13-custom-targets.buzz:24",
+      "source": "docs/tour/13-custom-targets.buzz:28",
       "attrs": {
         "exported": "true"
       }
@@ -10144,7 +10173,7 @@
       "kind": "function",
       "label": "stamp",
       "doc": "A target assembling build config from the stdlib the way a real one would: derive an artifact slug and compare two versions, then print them. `run stamp` computes each value for real.",
-      "source": "docs/tour/14-stdlib.buzz:15",
+      "source": "docs/tour/14-stdlib.buzz:19",
       "attrs": {
         "exported": "true"
       }
@@ -10154,13 +10183,13 @@
       "kind": "function",
       "label": "lint",
       "doc": "One op, one base command, two charms that reshape it. `after` splices values in just past an anchor argument; `append` adds to the end. Both resolve to an index now, at author time, so adding a charm later never shifts another's patch.",
-      "source": "docs/tour/15-charms-custom.buzz:17"
+      "source": "docs/tour/15-charms-custom.buzz:21"
     },
     {
       "id": "function:docs/tour/15-charms-custom.buzz:mgs_getName",
       "kind": "function",
       "label": "mgs_getName",
-      "source": "docs/tour/15-charms-custom.buzz:12",
+      "source": "docs/tour/15-charms-custom.buzz:16",
       "attrs": {
         "exported": "true"
       }
@@ -10170,7 +10199,7 @@
       "kind": "function",
       "label": "mgs_listTargets",
       "doc": "A spell lists its ops: a map of op name to handler.",
-      "source": "docs/tour/15-charms-custom.buzz:30",
+      "source": "docs/tour/15-charms-custom.buzz:34",
       "attrs": {
         "exported": "true"
       }
@@ -10179,7 +10208,7 @@
       "id": "function:docs/tour/16-guardrails.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "docs/tour/16-guardrails.buzz:39",
+      "source": "docs/tour/16-guardrails.buzz:43",
       "attrs": {
         "exported": "true"
       }
@@ -10188,7 +10217,7 @@
       "id": "function:docs/tour/16-guardrails.buzz:bundle",
       "kind": "function",
       "label": "bundle",
-      "source": "docs/tour/16-guardrails.buzz:44",
+      "source": "docs/tour/16-guardrails.buzz:48",
       "attrs": {
         "exported": "true"
       }
@@ -10197,7 +10226,7 @@
       "id": "function:docs/tour/16-guardrails.buzz:ci",
       "kind": "function",
       "label": "ci",
-      "source": "docs/tour/16-guardrails.buzz:53",
+      "source": "docs/tour/16-guardrails.buzz:57",
       "attrs": {
         "exported": "true"
       }
@@ -10206,7 +10235,7 @@
       "id": "function:docs/tour/16-guardrails.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "docs/tour/16-guardrails.buzz:49",
+      "source": "docs/tour/16-guardrails.buzz:53",
       "attrs": {
         "exported": "true"
       }
@@ -10215,7 +10244,7 @@
       "id": "function:docs/tour/17-output-refs.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "docs/tour/17-output-refs.buzz:48",
+      "source": "docs/tour/17-output-refs.buzz:52",
       "attrs": {
         "exported": "true"
       }
@@ -10225,7 +10254,7 @@
       "kind": "function",
       "label": "login",
       "doc": "Verb two: ACT. The same list, so the set logged into is by construction the set pushed to. A CI step is now one line with no shell parsing anything, and it is the same line you run locally.  TWO protections, and neither makes the other redundant. The token goes to the command on STDIN, so it never enters an argv magus persists. And it was read through magus\\secret.read, so magus knows the value is a credential and redacts it from captured output - which covers what this file does not control: the command it",
-      "source": "docs/tour/18-typed-boundaries.buzz:114",
+      "source": "docs/tour/18-typed-boundaries.buzz:118",
       "attrs": {
         "exported": "true"
       }
@@ -10235,21 +10264,21 @@
       "kind": "function",
       "label": "publish_registries",
       "doc": "The single source of truth. A typed helper, not a target: it returns [Registry], which a target could not. Every verb below reads it, so they cannot disagree about which registries a run involves - add one entry and all of them follow.",
-      "source": "docs/tour/18-typed-boundaries.buzz:47"
+      "source": "docs/tour/18-typed-boundaries.buzz:51"
     },
     {
       "id": "function:docs/tour/18-typed-boundaries.buzz:readable",
       "kind": "function",
       "label": "readable",
       "doc": "Probing with try/catch, because a provider signals \"not available\" by THROWING - $VAR unset for the built-in, a locked vault for a 1Password spell. Presence is not something a caller can test for without asking.",
-      "source": "docs/tour/18-typed-boundaries.buzz:71"
+      "source": "docs/tour/18-typed-boundaries.buzz:75"
     },
     {
       "id": "function:docs/tour/18-typed-boundaries.buzz:registries",
       "kind": "function",
       "label": "registries",
       "doc": "Verb one: LOOK. Reports where a push would go and whether the credentials are present - without needing any of them, and without ever printing a value.",
-      "source": "docs/tour/18-typed-boundaries.buzz:82",
+      "source": "docs/tour/18-typed-boundaries.buzz:86",
       "attrs": {
         "exported": "true"
       }
@@ -10259,14 +10288,14 @@
       "kind": "function",
       "label": "select",
       "doc": "Selection is BY NAME. Positional indexing looks tempting and is a trap here: the charm decides the list's length, so index 1 is a valid registry under `prod` and out of range under `dev`. An unknown host is an error naming the valid ones rather than a silent no-op.",
-      "source": "docs/tour/18-typed-boundaries.buzz:57"
+      "source": "docs/tour/18-typed-boundaries.buzz:61"
     },
     {
       "id": "function:docs/tour/19-error-handling.buzz:gate",
       "kind": "function",
       "label": "gate",
       "doc": "The judgment a real language buys you. A scanner reports whether a problem matches; a gate has to decide whether you can do anything about it today. Fail on what is actionable, report the rest, and carry on. Fail on what nobody can fix and someone will mute the gate within a week.",
-      "source": "docs/tour/19-error-handling.buzz:63",
+      "source": "docs/tour/19-error-handling.buzz:67",
       "attrs": {
         "exported": "true"
       }
@@ -10276,7 +10305,7 @@
       "kind": "function",
       "label": "stamp",
       "doc": "A failure that is EXPECTED in a known situation. Building outside a checkout is real - a release tarball, a container build context - so it is caught and named once, here, rather than every caller remembering a check the type system never asked for.",
-      "source": "docs/tour/19-error-handling.buzz:32",
+      "source": "docs/tour/19-error-handling.buzz:36",
       "attrs": {
         "exported": "true"
       }
@@ -10286,7 +10315,7 @@
       "kind": "function",
       "label": "tools",
       "doc": "Branching on the CODE, not the wording. MGS3003 is \"tool not on PATH\"; anything else is a failure this target has no answer for, so it is re-thrown rather than swallowed. Catching everything and continuing is how a gate stops being a gate.",
-      "source": "docs/tour/19-error-handling.buzz:45",
+      "source": "docs/tour/19-error-handling.buzz:49",
       "attrs": {
         "exported": "true"
       }
@@ -10296,7 +10325,7 @@
       "kind": "function",
       "label": "inject",
       "doc": "Editing rather than producing. This page is hand-written and only a region of it is generated, so it is NOT an output magus owns - declaring it with writesFiles would let `magus clean` delete somebody's prose. modifiesExistingFiles hashes it without claiming it.",
-      "source": "docs/tour/20-footprints.buzz:62",
+      "source": "docs/tour/20-footprints.buzz:66",
       "attrs": {
         "exported": "true"
       }
@@ -10306,7 +10335,7 @@
       "kind": "function",
       "label": "report",
       "doc": "Narrow on purpose. readsFiles replaces the project baseline for this target, so editing something outside data/ does not re-run it. Name every input the target reads: a glob you forget is a file whose change magus cannot see, and a stale hit is the result.",
-      "source": "docs/tour/20-footprints.buzz:38",
+      "source": "docs/tour/20-footprints.buzz:42",
       "attrs": {
         "exported": "true"
       }
@@ -10316,7 +10345,7 @@
       "kind": "function",
       "label": "stamp",
       "doc": "THE CONTRADICTION. This target claims the same output as `report`. Nothing stops both from running, so whichever finishes last wins and the other's drift gate fails against a file it did not write - a failure that points at the wrong target and wastes an afternoon.  `magus doctor` refuses it up front with MGS1020 and names both claimants. An output has one owner. If two targets both need to contribute, they write separate files and a third target combines them.",
-      "source": "docs/tour/20-footprints.buzz:53",
+      "source": "docs/tour/20-footprints.buzz:57",
       "attrs": {
         "exported": "true"
       }
@@ -10325,7 +10354,7 @@
       "id": "function:docs/tour/21-cache-identity.buzz:a",
       "kind": "function",
       "label": "a",
-      "source": "docs/tour/21-cache-identity.buzz:75",
+      "source": "docs/tour/21-cache-identity.buzz:79",
       "attrs": {
         "exported": "true"
       }
@@ -10334,7 +10363,7 @@
       "id": "function:docs/tour/21-cache-identity.buzz:b",
       "kind": "function",
       "label": "b",
-      "source": "docs/tour/21-cache-identity.buzz:80",
+      "source": "docs/tour/21-cache-identity.buzz:84",
       "attrs": {
         "exported": "true"
       }
@@ -10344,7 +10373,7 @@
       "kind": "function",
       "label": "both",
       "doc": "Both a and b need prep. prep runs once.",
-      "source": "docs/tour/21-cache-identity.buzz:86",
+      "source": "docs/tour/21-cache-identity.buzz:90",
       "attrs": {
         "exported": "true"
       }
@@ -10354,7 +10383,7 @@
       "kind": "function",
       "label": "prep",
       "doc": "ctx.needs DEDUPES within a run: a needed target executes ONCE per invocation, however many targets need it. This is why `ci` fanning out to lint, build and test does not run `format` three times - and why a shared setup step is safe to name from every target that depends on it, instead of being hoisted somewhere awkward to avoid repetition.  It is per-INVOCATION, not per-machine: it is the dispatcher deduping a dependency graph, not the cache replaying a previous run. Run `both` and count the prep line - on",
-      "source": "docs/tour/21-cache-identity.buzz:71",
+      "source": "docs/tour/21-cache-identity.buzz:75",
       "attrs": {
         "exported": "true"
       }
@@ -10364,7 +10393,7 @@
       "kind": "function",
       "label": "report",
       "doc": "Declares a charm so `report:loud` is a legal invocation. The body does not even read the charm - the point is that the KEY differs regardless, because the charm is part of the run's identity whether or not this target's code branches on it.",
-      "source": "docs/tour/21-cache-identity.buzz:53",
+      "source": "docs/tour/21-cache-identity.buzz:57",
       "attrs": {
         "exported": "true"
       }
@@ -10374,27 +10403,27 @@
       "kind": "function",
       "label": "db",
       "doc": "The baseline. Everything in this command that the fingerprint covers - image, tag, port, env - is part of what makes it THIS service rather than another one.",
-      "source": "docs/tour/22-service-adoption.buzz:30"
+      "source": "docs/tour/22-service-adoption.buzz:34"
     },
     {
       "id": "function:docs/tour/22-service-adoption.buzz:db_other_port",
       "kind": "function",
       "label": "db_other_port",
       "doc": "DOES NOT ADOPT db. One port differs, so the fingerprint differs, so this is a second container. That is correct rather than unfortunate: a dependent connecting on 5433 needs something listening on 5433, and silently handing it the 5432 instance would fail later and further away. If you meant to share, match the config; if you meant two databases, this is how you get them.",
-      "source": "docs/tour/22-service-adoption.buzz:61"
+      "source": "docs/tour/22-service-adoption.buzz:65"
     },
     {
       "id": "function:docs/tour/22-service-adoption.buzz:db_same",
       "kind": "function",
       "label": "db_same",
       "doc": "ADOPTS db. Same image and tag, same port, same env - only the flag ORDER differs, and order is normalized before hashing. One container serves both.",
-      "source": "docs/tour/22-service-adoption.buzz:44"
+      "source": "docs/tour/22-service-adoption.buzz:48"
     },
     {
       "id": "function:docs/tour/22-service-adoption.buzz:mgs_getName",
       "kind": "function",
       "label": "mgs_getName",
-      "source": "docs/tour/22-service-adoption.buzz:26",
+      "source": "docs/tour/22-service-adoption.buzz:30",
       "attrs": {
         "exported": "true"
       }
@@ -10404,10 +10433,41 @@
       "kind": "function",
       "label": "mgs_listTargets",
       "doc": "One map of op name to handler, same as any spell: a handler returning a Service is what makes the op long-running and shared, rather than a separate kind of declaration.",
-      "source": "docs/tour/22-service-adoption.buzz:75",
+      "source": "docs/tour/22-service-adoption.buzz:79",
       "attrs": {
         "exported": "true"
       }
+    },
+    {
+      "id": "function:docs/tour/23-charm-axes.buzz:channel",
+      "kind": "function",
+      "label": "channel",
+      "doc": "The channel this run publishes to, and the assertion that the version belongs there.  Note what the two charms have in common: each checks the OPPOSITE side of one semver field. That is why naming both needs no special case beyond the guard above - a version either carries a prerelease component or it does not, so one of the two assertions would fail on its own anyway.",
+      "source": "docs/tour/23-charm-axes.buzz:52"
+    },
+    {
+      "id": "function:docs/tour/23-charm-axes.buzz:exclusiveCharms",
+      "kind": "function",
+      "label": "exclusiveCharms",
+      "doc": "Two charms that answer one question are a mistake worth REPORTING, not resolving. WS is this workspace's own code prefix - magus refuses the MGS prefix, which is its closed catalog, so a workspace diagnostic can never render as though magus documented it.",
+      "source": "docs/tour/23-charm-axes.buzz:39"
+    },
+    {
+      "id": "function:docs/tour/23-charm-axes.buzz:publish",
+      "kind": "function",
+      "label": "publish",
+      "doc": "TWO axes, one charm each, and neither answers the other's question:  cd                 deliver? Absent, this builds and pushes nothing. stable / unstable  which channel? Only read when cd is set.  The default among delivering modes is the harmless one, for the same reason a bare run pushes nothing: the commit channel adds an immutable tag and moves nothing, while a release moves a tag every consumer follows.",
+      "source": "docs/tour/23-charm-axes.buzz:81",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/23-charm-axes.buzz:version",
+      "kind": "function",
+      "label": "version",
+      "doc": "The version this build would carry. Real magusfiles read vcs\\describe(); a literal keeps the tour runnable with no repository behind it. Change it to \"1.4.0\" and watch which channels accept it.",
+      "source": "docs/tour/23-charm-axes.buzz:34"
     },
     {
       "id": "function:evals/magusfile.buzz:ci",
@@ -19912,9 +19972,9 @@
       "id": "method:magus.raise",
       "kind": "method",
       "label": "magus.raise",
-      "doc": "Fail with a CODED diagnostic instead of a bare string, so a caller can branch on the code: `catch (e) { if (e.code == \"ACME1001\") ... }`. code is yours to define and namespace - anything but the MGS prefix, which is magus's own. cause is the error being wrapped, usually the value from an inner catch; it is appended to the message the way Go's %w renders one, and the failure it came from stays reachable underneath. url is the page documenting the code, rendered as the `see:` line the CLI prints under its own",
+      "doc": "Fail with a CODED diagnostic instead of a bare string, so a caller can branch on the code: `catch (e) { if (e.code == \"ACME1001\") ... }`. code is yours to define and namespace - anything but the MGS prefix, which is magus's own. opts.cause is the error being wrapped, usually the value from an inner catch; it is appended to the message the way Go's %w renders one, and the failure it came from stays reachable underneath. opts.url is the page documenting the code, rendered as the `see:` line the CLI prints und",
       "attrs": {
-        "buzz": "magus\\raise(code, message, [cause], [url])"
+        "buzz": "magus\\raise(code, message, [opts])"
       }
     },
     {
@@ -25212,6 +25272,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/tour/22-service-adoption.buzz"
+    },
+    {
+      "source": "dir:docs/tour",
+      "target": "file:docs/tour/23-charm-axes.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/23-charm-axes.buzz"
     },
     {
       "source": "dir:evals/fixtures",
@@ -42559,6 +42627,30 @@
     },
     {
       "source": "file:docs/site/tour.buzz",
+      "target": "function:docs/site/tour.buzz:tourDocLabel",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/tour.buzz"
+    },
+    {
+      "source": "file:docs/site/tour.buzz",
+      "target": "function:docs/site/tour.buzz:tourDocSlug",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/tour.buzz"
+    },
+    {
+      "source": "file:docs/site/tour.buzz",
+      "target": "function:docs/site/tour.buzz:tourMeta",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/tour.buzz"
+    },
+    {
+      "source": "file:docs/site/tour.buzz",
       "target": "function:docs/site/tour.buzz:tourSrc",
       "relation": "contains",
       "confidence": "extracted",
@@ -43708,6 +43800,62 @@
       "confidence": "inferred",
       "score": 0.7,
       "provenance": "docs/tour/22-service-adoption.buzz"
+    },
+    {
+      "source": "file:docs/tour/23-charm-axes.buzz",
+      "target": "function:docs/tour/23-charm-axes.buzz:channel",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/23-charm-axes.buzz"
+    },
+    {
+      "source": "file:docs/tour/23-charm-axes.buzz",
+      "target": "function:docs/tour/23-charm-axes.buzz:exclusiveCharms",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/23-charm-axes.buzz"
+    },
+    {
+      "source": "file:docs/tour/23-charm-axes.buzz",
+      "target": "function:docs/tour/23-charm-axes.buzz:publish",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/23-charm-axes.buzz"
+    },
+    {
+      "source": "file:docs/tour/23-charm-axes.buzz",
+      "target": "function:docs/tour/23-charm-axes.buzz:version",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/23-charm-axes.buzz"
+    },
+    {
+      "source": "file:docs/tour/23-charm-axes.buzz",
+      "target": "import:magus",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/23-charm-axes.buzz"
+    },
+    {
+      "source": "file:docs/tour/23-charm-axes.buzz",
+      "target": "import:semver",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/23-charm-axes.buzz"
+    },
+    {
+      "source": "file:docs/tour/23-charm-axes.buzz",
+      "target": "import:std",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/23-charm-axes.buzz"
     },
     {
       "source": "file:evals/magusfile.buzz",
@@ -56334,6 +56482,46 @@
       "provenance": "docs/site/tour.buzz"
     },
     {
+      "source": "function:docs/site/tour.buzz:tourDocLabel",
+      "target": "function:docs/site/tour.buzz:tourMeta",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/tour.buzz"
+    },
+    {
+      "source": "function:docs/site/tour.buzz:tourDocSlug",
+      "target": "function:docs/site/tour.buzz:tourMeta",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/tour.buzz"
+    },
+    {
+      "source": "function:docs/site/tour.buzz:tourSteps",
+      "target": "function:docs/site/tour.buzz:tourDocLabel",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/tour.buzz"
+    },
+    {
+      "source": "function:docs/site/tour.buzz:tourSteps",
+      "target": "function:docs/site/tour.buzz:tourDocSlug",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/tour.buzz"
+    },
+    {
+      "source": "function:docs/site/tour.buzz:tourSteps",
+      "target": "function:docs/site/tour.buzz:tourMeta",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/tour.buzz"
+    },
+    {
       "source": "function:docs/tour/04-buzz.buzz:demo",
       "target": "function:docs/tour/04-buzz.buzz:fact",
       "relation": "calls",
@@ -56412,6 +56600,38 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/tour/18-typed-boundaries.buzz"
+    },
+    {
+      "source": "function:docs/tour/23-charm-axes.buzz:channel",
+      "target": "function:docs/tour/23-charm-axes.buzz:exclusiveCharms",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/23-charm-axes.buzz"
+    },
+    {
+      "source": "function:docs/tour/23-charm-axes.buzz:channel",
+      "target": "function:docs/tour/23-charm-axes.buzz:version",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/23-charm-axes.buzz"
+    },
+    {
+      "source": "function:docs/tour/23-charm-axes.buzz:publish",
+      "target": "function:docs/tour/23-charm-axes.buzz:channel",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/23-charm-axes.buzz"
+    },
+    {
+      "source": "function:docs/tour/23-charm-axes.buzz:publish",
+      "target": "function:docs/tour/23-charm-axes.buzz:version",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/23-charm-axes.buzz"
     },
     {
       "source": "function:evals/magusfile.buzz:preflight",
@@ -66142,6 +66362,14 @@
     {
       "source": "target:docs:site-generate",
       "target": "file:docs/tour/22-service-adoption.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:site-generate",
+      "target": "file:docs/tour/23-charm-axes.buzz",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,

@@ -1,3 +1,7 @@
+// title: Standard library: batteries included
+// desc: Buzz ships host modules - string casing, semver math, JSON, hashing - you import and call straight from a target.
+// doc: reference/buzz|Buzz modules
+//
 // The standard library: batteries included. Step 4 was the language - branch,
 // loop, recurse. This is the other half: Buzz ships host modules you import and
 // call straight from a target - string casing, semver math, JSON and YAML,

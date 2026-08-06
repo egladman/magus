@@ -1,3 +1,7 @@
+// title: Workspaces: run only what changed
+// desc: Projects wire cross-project order with depends_on; affected runs only what changed.
+// doc: concepts/targets/ci|CI and affected
+//
 // Workspaces: many projects, one graph. A real repo is not one project - it is
 // several, each with its own magusfile in its own directory. A project declares
 // cross-project order with depends_on, and magus stitches them into a single

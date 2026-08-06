@@ -1,3 +1,7 @@
+// title: Footprints: what a target reads and writes
+// desc: Two places to put a glob and the difference is not obvious from the names. Declaring the wrong one is the mistake people make most often.
+// doc: concepts/cache|Caching
+//
 // What a target reads, what it writes, and who owns the result. This is the
 // declaration people get wrong most often, because there are two places to put a glob and
 // the difference is not obvious from the names.

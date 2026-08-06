@@ -1,3 +1,7 @@
+// title: Typed boundaries: keep the data inside
+// desc: A target returns void, so structured data belongs in the magusfile - declare the table once, export a verb per action, and let CI supply only the secrets.
+// doc: guides/tips|Tips and tricks
+//
 // Where the type system stops. A target's signature is fixed - it takes a Context
 // and args and returns `void` - so what reaches the outside world is an exit code
 // and text. `magus run <target> -o json` renders the RUN (target, charms, projects,

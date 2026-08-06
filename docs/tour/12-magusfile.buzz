@@ -1,3 +1,7 @@
+// title: Pipelines: assemble the whole build
+// desc: The full multi-toolchain pipeline: generate, format, lint, build, test, release.
+// doc: concepts/targets/ci|CI
+//
 // A magusfile: the build definition magus reads. This one models a single
 // project (a service with a protobuf API, a Go server, and a TypeScript client,
 // built as one unit) and wires the conventional pipeline: preflight, generate,

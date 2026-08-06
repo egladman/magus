@@ -1,3 +1,7 @@
+// title: Buzz: branch, match, recurse
+// desc: Functions, recursion, closures and match - evaluated live in your browser.
+// doc: concepts/engines|Engines
+//
 // Buzz, running in your browser. gopherbuzz (the interpreter magus embeds to read
 // magusfiles) is compiled to WebAssembly and runs entirely in this tab: no server,
 // no network, nothing leaves the page. The console below evaluates real Buzz

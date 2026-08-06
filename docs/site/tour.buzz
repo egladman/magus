@@ -111,61 +111,60 @@ fun playgroundLink(root: str, src: str) > str {
 // inverts each step's docSlug into a "see the demo" callout on the matching concept page).
 export fun tourSteps() > [TourStep] {
     final steps: [TourStep] = mut [<TourStep>];
-    steps.append(TourStep{ file = "01-hello.buzz", title = "Magusfiles: write your first target",
-        desc = "A magusfile is a build definition; each exported function is a runnable target.",
-        docLabel = "Targets", docSlug = "concepts/targets" });
-    steps.append(TourStep{ file = "02-targets.buzz", title = "Targets: wire the dependencies",
-        desc = "Wire a pipeline with magus.needs; ci is the conventional anchor it all keys off.",
-        docLabel = "Targets", docSlug = "concepts/targets" });
-    steps.append(TourStep{ file = "03-spells.buzz", title = "Spells: bind a real toolchain",
-        desc = "Bind a real toolchain (Go, TypeScript, Docker) as cached, kebab-case ops.",
-        docLabel = "Spells", docSlug = "concepts/spells" });
-    steps.append(TourStep{ file = "04-buzz.buzz", title = "Buzz: branch, match, recurse",
-        desc = "Functions, recursion, closures and match - evaluated live in your browser.",
-        docLabel = "Engines", docSlug = "concepts/engines" });
-    steps.append(TourStep{ file = "05-slots.buzz", title = "Slots: taming a greedy target",
-        desc = "A target starts with one slot; reserve more so a parallel tool cannot starve the rest.",
-        docLabel = "Operations", docSlug = "concepts/operations" });
-    steps.append(TourStep{ file = "06-cache.buzz", title = "Cache: replay, and catch drift",
-        desc = "Targets replay from cache and run once per plan; skip_cache opts a check out.",
-        docLabel = "Caching", docSlug = "concepts/remote-cache" });
-    steps.append(TourStep{ file = "07-globs.buzz", title = "Globs: gather a target family, minus one",
-        desc = "Name targets by a shared suffix, gather them with one glob, and subtract the odd one out with a negation.",
-        docLabel = "Dependencies", docSlug = "concepts/dependencies" });
-    steps.append(TourStep{ file = "08-charms.buzz", title = "Charms: check, then apply",
-        desc = "A charm rides down the plan; the built-in rw flips read-only checks to rewrites.",
-        docLabel = "Charms", docSlug = "concepts/charms" });
-    steps.append(TourStep{ file = "09-services.buzz", title = "Services: share one across runs",
-        desc = "Author a spell whose op returns a Service; magus supervises one, shared across runs.",
-        docLabel = "Services", docSlug = "concepts/services" });
-    steps.append(TourStep{ file = "10-wards.buzz", title = "Wards: catch the contradiction",
-        desc = "A detached service trips MGS5002 at resolution, before anything forks.",
-        docLabel = "Wards", docSlug = "concepts/wards" });
-    steps.append(TourStep{ file = "11-workspace.buzz", title = "Workspaces: run only what changed",
-        desc = "Projects wire cross-project order with depends_on; affected runs only what changed.",
-        docLabel = "CI and affected", docSlug = "concepts/targets/ci" });
-    steps.append(TourStep{ file = "12-magusfile.buzz", title = "Pipelines: assemble the whole build",
-        desc = "The full multi-toolchain pipeline: generate, format, lint, build, test, release.",
-        docLabel = "CI", docSlug = "concepts/targets/ci" });
-    steps.append(TourStep{ file = "13-custom-targets.buzz", title = "Custom targets: name your own phases",
-        desc = "The canonical names are conventions, not a closed set; export a release or deploy target and drive one from another.",
-        docLabel = "Targets", docSlug = "concepts/targets" });
-    steps.append(TourStep{ file = "14-stdlib.buzz", title = "Standard library: batteries included",
-        desc = "Buzz ships host modules - string casing, semver math, JSON, hashing - you import and call straight from a target.",
-        docLabel = "Buzz modules", docSlug = "reference/buzz" });
-    steps.append(TourStep{ file = "15-charms-custom.buzz", title = "Custom charms: patch the argv",
-        desc = "Declare your own charm as a JSON Patch over a spell op's argv; run op:charm to watch the flag splice in.",
-        docLabel = "Charms", docSlug = "concepts/charms" });
-    steps.append(TourStep{ file = "16-guardrails.buzz", title = "Guardrails: try to break it",
-        desc = "A deliberate cycle, caught at resolution before anything forks - plus the three other refusals worth knowing.",
-        docLabel = "Wards", docSlug = "concepts/wards" });
-    steps.append(TourStep{ file = "17-output-refs.buzz", title = "Output refs: what they are, and are not",
-        desc = "A failure mints a handle to that run's exact bytes - not a cache key, not deterministic, and not portable off your machine.",
-        docLabel = "Output references", docSlug = "concepts/output-refs" });
-    steps.append(TourStep{ file = "18-typed-boundaries.buzz", title = "Typed boundaries: keep the data inside",
-        desc = "A target returns void, so structured data belongs in the magusfile - declare the table once, export a verb per action, and let CI supply only the secrets.",
-        docLabel = "Tips and tricks", docSlug = "guides/tips" });
+    // Discovered from the directory, not from a list kept here. A hand-maintained
+    // registry silently omitted steps 19 through 22 for as long as they existed: the
+    // files were on disk, linted and shipped in sources, and simply never appeared on
+    // the page. The same reasoning renderDevelopment gives for asking magus rather than
+    // scanning - the set has one source of truth, so read THAT.
+    //
+    // Filenames sort into curriculum order because they are numbered, which is also what
+    // lets a step reference "step 8" in its prose and stay right.
+    // glob returns Paths, and an immutable list that sort cannot mutate in place, so
+    // take the relative value of each into a list this can order.
+    final files: [str] = mut [<str>];
+    foreach (f in fs\glob("tour/*.buzz")) { files.append(f.value); }
+    final ordered = files.sort(fun (a: str, b: str) > bool { return a < b; });
+    foreach (f in ordered) {
+        // glob yields "tour/NN-name.buzz"; TourStep.file is the bare name, because
+        // tourSrc re-joins the directory and renderCard puts the name in the card.
+        final name = f.sub("tour/".len());
+        final src = fs\readFile(f);
+        steps.append(TourStep{
+            file = name,
+            title = tourMeta(src, "title"),
+            desc = tourMeta(src, "desc"),
+            docLabel = tourDocLabel(src),
+            docSlug = tourDocSlug(src),
+        });
+    }
     return steps;
+}
+
+// tourMeta reads one `// key: value` line from a step's header. The metadata lives in the
+// step file so adding a step is one file, not two places that can disagree.
+fun tourMeta(src: str, key: str) > str {
+    foreach (line in src.split("\n")) {
+        if (!line.startsWith("// ")) { return ""; }  // header ends at the first non-comment
+        final want = "// " + key + ": ";
+        if (line.startsWith(want)) { return line.sub(want.len()); }
+    }
+    return "";
+}
+
+// The doc cross-link is one line, `// doc: <slug>|<label>`, because a slug with no label
+// renders a link with nothing to click.
+fun tourDocSlug(src: str) > str {
+    final raw = tourMeta(src, "doc");
+    final bar = raw.indexOf("|");
+    if (bar == null) { return raw; }
+    return raw.sub(0, bar);
+}
+
+fun tourDocLabel(src: str) > str {
+    final raw = tourMeta(src, "doc");
+    final bar = raw.indexOf("|");
+    if (bar == null) { return ""; }
+    return raw.sub(bar + 1);
 }
 
 // collectDemos maps each concept docSlug to the FIRST tour step that demonstrates it (its
