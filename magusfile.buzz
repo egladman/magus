@@ -305,13 +305,13 @@ fun publish_variant(ctx: magus\Context, dockerfile: str, platforms: str, registr
 //
 // This lives HERE, not in a workflow `run:` block, for the same reason image-login
 // does: the target already knows the references it pushed, so a workflow step that
-// re-derives them (`jq -r '."image.name"' snapshot-meta.json`) is parsing magus's own
+// re-derives them (`jq -r '."image.name"' commit-meta.json`) is parsing magus's own
 // output back out of a file magus wrote. That is the shell-parsing shape this
 // magusfile avoids everywhere else, and it drifts the moment the tag scheme changes.
 //
 // Self-gating on $GITHUB_STEP_SUMMARY rather than a charm, matching the second half
 // of ci_shard below: outside Actions the variable is unset and this is a no-op, so a
-// local `magus run image-build:snapshot` needs no extra flag to stay quiet.
+// local `magus run image-build:cd` needs no extra flag to stay quiet.
 fun write_image_summary(refs: [str]) > void {
     final summaryPath = os\env("GITHUB_STEP_SUMMARY");
     if (summaryPath == null or ("" + summaryPath) == "") { return; }
@@ -347,9 +347,23 @@ fun write_image_summary(refs: [str]) > void {
 // happens on the other architecture. That path goes through QEMU emulation, so expect
 // it to be slow; it is a debugging tool, not a second default.
 fun load_platform(ctx: magus\Context) > str {
+    exclusive_charms(ctx, "amd64", "arm64", "WS1001", "which platform to build for");
     if (ctx.has_charm("amd64")) { return "linux/amd64"; }
     if (ctx.has_charm("arm64")) { return "linux/arm64"; }
     return "linux/" + os\platform()[1];
+}
+
+// Rejects two charms that answer one question. magus gives no charm precedence over
+// another (they are an unordered set), so a magusfile that reads them in sequence invents
+// one silently - `:amd64,arm64` returned amd64 and dropped the arm64 the caller asked for.
+//
+// WS is this WORKSPACE's code prefix. magus.raise refuses the MGS prefix outright, which
+// is what stops a workspace diagnostic from rendering as though magus documented it.
+fun exclusive_charms(ctx: magus\Context, a: str, b: str, code: str, question: str) > void {
+    if (ctx.has_charm(a) and ctx.has_charm(b)) {
+        magus\raise(code, message: "the `" + a + "` and `" + b
+            + "` charms both answer " + question + " - name one");
+    }
 }
 
 // Builds one variant single-arch into the local daemon under image_tag(): no
@@ -365,43 +379,47 @@ fun load_variant(ctx: magus\Context, dockerfile: str) > void {
     docker["docker-buildx"](ctx.withCwd("."), {"args": args});
 }
 
-// Three PUBLISH modes and one local mode, and which you get is a charm because the
-// default must be the harmless one: a bare `magus run image-build` on a laptop loads
-// an image into the local daemon and pushes nothing.
+// Two axes, one charm each. `cd` is magus's built-in deliver switch: without it this
+// loads an image locally and pushes nothing. `stable` and `unstable` pick the channel and
+// assert the version belongs to it (see channel()).
 //
-//   :cd        a v* tag. Both variants, both registries, release tags.
-//   :snapshot  a merge to main. Static only, GHCR only, tagged with the short commit.
-//   :static    local build of the static variant instead of the cgo default.
-//   (none)     local build of the cgo variant.
+//     magus run image-build                # local cgo load, pushes nothing
+//     magus run image-build:static         # local static load
+//     magus run image-build:cd             # GHCR, tagged with the short commit, static only
+//     magus run image-build:cd,unstable    # both registries, version only, no floating tag
+//     magus run image-build:cd,stable      # both registries, version + latest, both variants
 //
-// A local build is single-architecture and says so - see load_platform(). Stack
-// `:amd64` or `:arm64` on either local mode to cross-build through emulation
-// (`magus run image-build:static,arm64`).
+// The commit channel is the default among delivering modes for the same reason a bare run
+// pushes nothing: it adds an immutable tag to one registry and moves nothing, while a
+// release moves `latest` on two public ones.
 //
-// `snapshot`, not `dev`: this pushes and cosign-signs a real artifact to a real
-// registry, so naming it after the audience rather than the act was misleading -
-// the actual development path is the no-charm default. Snapshot is the established
-// term (Maven, Gradle, Debian) for a build published from a moving branch rather
-// than a release, which is exactly what this is.
+// A commit-channel signature carries cd.yaml's certificate identity rather than
+// release.yaml's, which is what makes the documented release verify command reject one.
 //
-// A snapshot signature carries ci.yaml's certificate identity rather than cd.yaml's,
-// which is what makes the documented release verify command reject one.
-//
-// Otherwise loads one single-arch image locally: CGO/glibc (Dockerfile) by default,
-// or the static/no-libc variant (Dockerfile.static) under the `static` charm - the
-// same default-cgo/opt-in-static convention as release_build() in this file.
+// A local build is single-architecture - see load_platform(). Stack `:amd64` or `:arm64`
+// to cross-build through emulation (`magus run image-build:static,arm64`).
 export fun image_build(ctx: magus\Context, args: [str]) > void {
     final registries = publish_registries(ctx);
     var pushed = mut [<str>];
     if (ctx.has_charm("cd")) {
-        foreach (r in publish_variant(ctx, "Dockerfile.static", "linux/amd64,linux/arm64",
-            registries, [version(), "latest"], "static-meta.json")) { pushed.append(r); }
-        foreach (r in publish_variant(ctx, "Dockerfile", "linux/amd64",
-            registries, [version() + "-cgo", "latest-cgo"], "cgo-meta.json")) { pushed.append(r); }
-        write_image_summary(pushed);
-    } else if (ctx.has_charm("snapshot")) {
-        foreach (r in publish_variant(ctx, "Dockerfile.static", "linux/amd64,linux/arm64",
-            registries, [commit()], "snapshot-meta.json")) { pushed.append(r); }
+        final ch = channel(ctx);
+        if (ch == "commit") {
+            foreach (r in publish_variant(ctx, "Dockerfile.static", "linux/amd64,linux/arm64",
+                registries, [commit()], "commit-meta.json")) { pushed.append(r); }
+        } else {
+            // Only stable moves a floating tag: `latest` would hand an opted-into
+            // prerelease to every consumer who never asked for it.
+            var staticTags = [version()];
+            var cgoTags = [version() + "-cgo"];
+            if (ch == "stable") {
+                staticTags = [version(), "latest"];
+                cgoTags = [version() + "-cgo", "latest-cgo"];
+            }
+            foreach (r in publish_variant(ctx, "Dockerfile.static", "linux/amd64,linux/arm64",
+                registries, staticTags, "static-meta.json")) { pushed.append(r); }
+            foreach (r in publish_variant(ctx, "Dockerfile", "linux/amd64",
+                registries, cgoTags, "cgo-meta.json")) { pushed.append(r); }
+        }
         write_image_summary(pushed);
     } else if (ctx.has_charm("static")) {
         load_variant(ctx, "Dockerfile.static");
@@ -413,16 +431,52 @@ export fun image_build(ctx: magus\Context, args: [str]) > void {
 // Which registries the active mode pushes to. image_build and image_registries both
 // read it, so the build and the login step it depends on cannot disagree about
 // which credentials a run needs.
+//
+// Going through channel() also means the workflow's `image-registries:cd,stable,verify`
+// preflight rejects a bad version before QEMU, buildx and a multi-arch compile run.
 fun publish_registries(ctx: magus\Context) > [Registry] {
-    if (ctx.has_charm("cd")) { return REGISTRIES; }
-    if (ctx.has_charm("snapshot")) { return [GHCR]; }
-    return [];
+    if (!ctx.has_charm("cd")) { return []; }
+    if (channel(ctx) == "commit") { return [GHCR]; }
+    return REGISTRIES;
 }
 
-// Narrows a registry list to one host, for the `magus run image-login:cd docker.io`
+// The active channel: "commit", "unstable", or "stable".
+//
+// Naming both channels is rejected up front by exclusive_charms rather than left to the
+// assertions below, which would fail too but report the version rather than the mistake.
+fun channel(ctx: magus\Context) > str {
+    exclusive_charms(ctx, "stable", "unstable", "WS1002", "which channel to publish to");
+    final wantStable = ctx.has_charm("stable");
+    final wantUnstable = ctx.has_charm("unstable");
+    if (!wantStable and !wantUnstable) { return "commit"; }
+
+    final v = version();
+    if (v == "unknown") {
+        throw "image: a channel charm needs a version and this tree reports none - magus "
+            + "reads it from `git describe`, so a shallow clone with no tags cannot supply "
+            + "one. Fetch tags, or drop the charm to publish to the commit channel.";
+    }
+    // describe() renders an untagged commit as v0.4.0-3-gabc123, whose prerelease
+    // component is 3-gabc123. One field therefore answers both "is this a prerelease" and
+    // "is this even a tagged build", and stable has to reject both.
+    final pre = semver\parse(v).prerelease;
+    if (wantStable and pre != "") {
+        throw "image: `" + v + "` carries the prerelease `" + pre + "`, so it cannot go to "
+            + "the stable channel - that is the channel `latest` follows. Use `unstable` "
+            + "for it, or run this from a stable release tag.";
+    }
+    if (wantUnstable and pre == "") {
+        throw "image: `" + v + "` is a stable version, so `unstable` would file it under a "
+            + "channel it does not belong to. Use `stable` for it.";
+    }
+    if (wantStable) { return "stable"; }
+    return "unstable";
+}
+
+// Narrows a registry list to one host, for the `magus run image-login:cd,stable docker.io`
 // form. Selection is BY HOST, deliberately not by position: an index silently
 // selects a different registry the moment REGISTRIES is reordered or the charm
-// changes how many there are (`:snapshot` has one, `:cd` has two, so "index 1" is a valid
+// changes how many there are (`:cd` has one, `:cd,stable` has two, so "index 1" is a valid
 // registry under one and out of range under the other), and it is unreadable in a
 // workflow besides. A host that is not in the list is an error naming the ones that
 // are, rather than a silent no-op.
@@ -443,10 +497,10 @@ fun select_registries(registries: [Registry], host: str) > [Registry] {
 // does this go and am I set up for it", touches nothing, and needs no credentials to
 // be useful.
 //
-//     magus run image-registries:cd              # both, for a release
-//     magus run image-registries:snapshot             # GHCR only, for a per-commit image
-//     magus run image-registries:cd docker.io    # just that one
-//     magus run image-registries:cd,verify       # ...and FAIL if any are missing
+//     magus run image-registries:cd,stable       # both, for a release
+//     magus run image-registries:cd              # GHCR only, for a per-commit image
+//     magus run image-registries:cd,stable docker.io  # just that one
+//     magus run image-registries:cd,stable,verify     # ...and FAIL if any are missing
 //
 // The `verify` charm turns the report into a gate. CI runs it that way as a preflight,
 // so a missing secret fails on a named variable before checkout, QEMU, buildx and a
@@ -461,7 +515,7 @@ export fun image_registries(ctx: magus\Context, args: [str]) > void {
     if (args.len() > 0) { host = args[0]; }
     final registries = select_registries(publish_registries(ctx), host);
     if (registries.len() == 0) {
-        magus\info("image-registries: this build pushes nowhere; add the cd or snapshot charm to see a release or snapshot target");
+        magus\info("image-registries: this build pushes nowhere; add the cd charm to see where a delivery goes (`:cd` per-commit, `:cd,stable` a release)");
         return;
     }
     // The CREDENTIALS column costs a provider round trip - and a prompt, on a provider
@@ -533,9 +587,9 @@ fun pad(s: str, width: int) > str {
 // Logs in to every registry the active mode publishes to, resolving each one's
 // credentials through the workspace's secret provider.
 //
-//     magus run image-login:cd                   # both, before image-build:cd
-//     magus run image-login:snapshot                  # GHCR only
-//     magus run image-login:cd docker.io         # just that one
+//     magus run image-login:cd,stable           # both, before image-build:cd,stable
+//     magus run image-login:cd                   # GHCR only
+//     magus run image-login:cd,stable docker.io # just that one
 //
 // This is the whole reason the references are a field on Registry. A CI step is then
 // one line with no shell parsing a list, the same line that works on a laptop, and it
@@ -556,7 +610,7 @@ export fun image_login(ctx: magus\Context, args: [str]) > void {
     if (args.len() > 0) { host = args[0]; }
     final registries = select_registries(publish_registries(ctx), host);
     if (registries.len() == 0) {
-        throw "image-login: these charms publish nowhere, so there is nothing to log in to - add the cd or snapshot charm (`magus run image-login:cd` or `:snapshot`)";
+        throw "image-login: these charms publish nowhere, so there is nothing to log in to - add the cd charm (`magus run image-login:cd`, or `:cd,stable` for a release)";
     }
     foreach (reg in registries) {
         final user = magus\secret.read(reg.user_ref);
@@ -985,10 +1039,11 @@ export fun release_sign(ctx: magus\Context, args: [str]) > void {
 // Neither path ever pushes - a human reviews the tags and pushes deliberately.
 
 export fun release(ctx: magus\Context, args: [str]) > void {
-    // `cd` rather than a release-only charm: image_build above already uses it to
-    // mean "this is the real delivery path, do the side-effectful thing" (push and
-    // sign, there; tag and rewrite go.mod, here). One word for one concept beats a
-    // second one that has to be learned separately.
+    // `cd` alone, and no `versioned`: cd is the deliver switch, meaning the same
+    // thing here as in image_build above - do the side-effectful thing (push and
+    // sign, there; tag and rewrite go.mod, here). The channel charm answers a
+    // question this target does not have: cutting a version tag has only one
+    // channel, so naming it would be a word with no alternative to distinguish.
     final deliver = ctx.has_charm("cd");
     final dirty = vcs\isDirty();
     final modules = releaser\releasableModules(magus\ls().projects);

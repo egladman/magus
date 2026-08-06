@@ -82,7 +82,7 @@ image, and both follow from the static image carrying no shared libraries at all
 docker pull ghcr.io/egladman/magus:__MAGUS_VERSION__
 ```
 
-### Snapshot images (per commit on main)
+### Per-commit images
 
 Every merge to `main` also publishes a static image tagged with that commit's short
 hash, so you can run an exact commit without waiting for a release:
@@ -93,9 +93,14 @@ docker run --rm -v "$PWD":/workspace ghcr.io/egladman/magus:a1b2c3d ls
 
 These are **not releases**. They are GHCR-only (never Docker Hub), static-only (no
 `-cgo` variant), have no moving tag to follow, are not pruned on any schedule, and
-carry no compatibility promise. They are signed, but by the CI workflow rather than
-the release workflow, so the verify command below deliberately rejects them - see
+carry no compatibility promise. They are signed, but by `cd.yaml` rather than the
+release workflow, so the verify command below deliberately rejects them - see
 [Verify the signature](#verify-the-signature).
+
+Two images, two channels, and one charm tells them apart: `magus run image-build:cd`
+publishes to the per-commit channel, `magus run image-build:cd,stable` to the stable
+one. Neither word is decoration - `cd` is what makes a build publish at all, and
+`stable` is which stream it lands in.
 
 ## Build the image yourself
 
@@ -154,7 +159,7 @@ leak. To confirm an image came from this project's release workflow:
 
 ```sh
 cosign verify ghcr.io/egladman/magus:latest \
-  --certificate-identity-regexp '^https://github.com/egladman/magus/.github/workflows/cd.yaml@.*' \
+  --certificate-identity-regexp '^https://github.com/egladman/magus/.github/workflows/release.yaml@.*' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
@@ -172,13 +177,13 @@ you actually pulled - swap `ghcr.io` for `docker.io` above if that is where the
 image came from.
 
 The identity regexp pins the release workflow specifically, which is what makes the
-command reject a [snapshot image](#snapshot-images-per-commit-on-main):
-those are signed too, but under `ci.yaml`, so they fail this check by design rather
+command reject a [per-commit image](#per-commit-images):
+those are signed too, but under `cd.yaml`, so they fail this check by design rather
 than by accident. To verify one on purpose, name that workflow instead:
 
 ```sh
 cosign verify ghcr.io/egladman/magus:a1b2c3d \
-  --certificate-identity-regexp '^https://github.com/egladman/magus/.github/workflows/ci.yaml@.*' \
+  --certificate-identity-regexp '^https://github.com/egladman/magus/.github/workflows/cd.yaml@.*' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
