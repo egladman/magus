@@ -33,7 +33,10 @@ import (
 
 // Cache is an on-disk content-addressed build cache handle.
 type Cache struct {
-	dir            string
+	dir string
+	// inflight records running targets on disk so a killed run can be reported by the
+	// next one; nil when the cache has no directory to write into.
+	inflight       *inflight
 	mutable        bool // true = read+write (default); false = read-only
 	sizeMB         int
 	maxImportBytes int64 // per-entry cap for Import; 0 uses defaultMaxImportBytes
@@ -207,6 +210,7 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 	log := newLogger(os.Getenv("MAGUS_LOG_FORMAT"), defaultLevel)
 	c := &Cache{
 		dir:      dir,
+		inflight: newInflight(dir),
 		mutable:  mutable,
 		log:      log,
 		logLevel: defaultLevel,
@@ -715,6 +719,18 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 	// Member Run calls skip the per-call mtime flush; the batch flushes once below.
 	opts = append(opts, deferMtimeFlush())
 
+	// Report what a PREVIOUS run was killed mid-way through, before starting work that
+	// will scroll it off. Warn, not fail: the evidence is about a run that is over, and
+	// this one has no reason to refuse on its behalf.
+	if dead := c.inflight.takeAbandoned(); len(dead) > 0 {
+		// Structured, not just a sentence: an agent reading -o json needs the count and
+		// the targets as fields, not prose to re-parse.
+		c.log.WarnContext(ctx, abandonedMessage(dead, time.Now()),
+			slog.Int("abandoned", len(dead)),
+			slog.String("project", dead[0].Project),
+			slog.String("target", dead[0].Target))
+	}
+
 	results := make([]Result, len(steps))
 	g, gctx := errgroup.WithContext(ctx)
 	for i, s := range steps {
@@ -770,7 +786,13 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			// (the slot is free again). Handlers that do not render a status
 			// line ignore the event, so piped and CI output are unchanged.
 			c.logPool(gctx, lim)
+			// Record the target as running BEFORE fn and clear it after, so a magus
+			// that is killed outright leaves the set behind for the next run to
+			// report (see inflight). This is the only edge that knows a target is
+			// actually executing rather than queued behind a dep or a slot.
+			doneInflight := c.inflight.start(s.ProjectPath, s.Target)
 			defer func() {
+				doneInflight()
 				lim.ReleaseN(slots)
 				c.logPool(gctx, lim)
 			}()
