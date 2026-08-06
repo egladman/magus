@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
 	"go/format"
 	"path"
 	"reflect"
@@ -661,9 +662,12 @@ func (e *buzzValueEmitter) name(prefix, path string) string {
 	return prefix + path
 }
 
+// buzzVMFieldName must agree with buzzgen.MemberName exactly: this emits the RUNTIME map
+// key and that one emits the DECLARED field, so the two drifting means a magusfile reads a
+// name the encoder never writes. Both go through LowerFirstWord for that reason.
 func buzzVMFieldName(f reflect.StructField) string {
 	if name := f.Tag.Get("buzz"); name != "" {
 		return name
 	}
-	return strings.ToLower(f.Name[:1]) + f.Name[1:]
+	return buzzgen.LowerFirstWord(f.Name)
 }

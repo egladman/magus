@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"go/format"
 	"reflect"
-	"strings"
 	"time"
 )
 
@@ -108,7 +107,7 @@ func (r *runtimeRenderer) fields(rt reflect.Type) ([]runtimeField, error) {
 func MemberName(f reflect.StructField) string {
 	name := f.Tag.Get("buzz")
 	if name == "" {
-		name = strings.ToLower(f.Name[:1]) + f.Name[1:]
+		name = LowerFirstWord(f.Name)
 	}
 	return name
 }

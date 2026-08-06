@@ -19,6 +19,7 @@ import (
 	"reflect"
 	"strings"
 	"time"
+	"unicode"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/token"
@@ -201,10 +202,43 @@ func FieldType(t reflect.Type, opts Options) (typeName, zero string, err error) 
 func FieldName(f reflect.StructField) string {
 	name := f.Tag.Get("buzz")
 	if name == "" {
-		name = strings.ToLower(f.Name[:1]) + f.Name[1:]
+		name = LowerFirstWord(f.Name)
 	}
 	if buzz.IsReservedIdent(name) || token.IsKeyword(name) {
 		return `@"` + name + `"`
 	}
 	return name
+}
+
+// LowerFirstWord lowercases a Go field name's first WORD rather than its first rune, so an
+// initialism survives the crossing: URL becomes url and HTTPServer becomes httpServer,
+// where a naive first-rune fold produces uRL and hTTPServer.
+//
+// This is the transform Go itself applies in reverse (the commonInitialisms list revive
+// and protoc-gen-go's JSON naming both key off). It is a floor, not a replacement for the
+// `buzz` tag: the rule catches what nobody thought to tag - ID mirrored as iD until this
+// existed - while a tag states the intended name outright, which is what a reader sees
+// and what survives someone renaming the Go field.
+func LowerFirstWord(name string) string {
+	r := []rune(name)
+	if len(r) == 0 {
+		return name
+	}
+	n := 0
+	for n < len(r) && unicode.IsUpper(r[n]) {
+		n++
+	}
+	switch {
+	case n == 0:
+		return name
+	case n == len(r):
+		// All caps, so the whole name is the word: URL, OK, ID.
+		return strings.ToLower(name)
+	case n == 1:
+		return string(unicode.ToLower(r[0])) + string(r[1:])
+	default:
+		// The last upper rune starts the NEXT word (HTTPServer -> httpServer), so it is
+		// the one capital that stays.
+		return strings.ToLower(string(r[:n-1])) + string(r[n-1:])
+	}
 }

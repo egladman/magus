@@ -56,7 +56,7 @@ func (v DriftVerdictRecord) BuzzObject() BuzzObject {
 		"drifted": v.Drifted,
 		"code":    v.Code,
 		"message": v.Message,
-		"uRL":     v.URL,
+		"url":     v.URL,
 		"files":   itemsFiles,
 	}
 }
@@ -551,7 +551,7 @@ func (v VolatilityReport) BuzzObject() BuzzObject {
 
 func (v KnowledgeGodNode) BuzzObject() BuzzObject {
 	return BuzzObject{
-		"iD":     v.ID,
+		"id":     v.ID,
 		"kind":   v.Kind,
 		"label":  v.Label,
 		"degree": v.Degree,
@@ -562,7 +562,7 @@ func (v KnowledgeGodNode) BuzzObject() BuzzObject {
 
 func (v KnowledgeOrphan) BuzzObject() BuzzObject {
 	return BuzzObject{
-		"iD":     v.ID,
+		"id":     v.ID,
 		"kind":   v.Kind,
 		"label":  v.Label,
 		"reason": v.Reason,

@@ -6,7 +6,7 @@
 // `go generate`, never this file.
 
 export object KnowledgeGodNode {
-    iD: str = "",
+    id: str = "",
     kind: str = "",
     label: str = "",
     degree: int = 0,
