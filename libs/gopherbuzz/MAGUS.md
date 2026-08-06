@@ -84,7 +84,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `spells-generate` | Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen), the Buzz value-type mirrors (internal/spellruntime/gen/types) and the per-module host declarations (internal/spellruntime/gen/decls), all driven by the go:generate directives in internal/spellruntime. |
 | `mocks-generate` | Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir. |
 | `config-generate` | Regenerates the CLI config-flag plumbing from internal/config/config.go. |
-| `postflight` | Renders the insight report (hotspots, affinity, ownership, trend) and, with the `gha` charm, appends it to a host output path supplied via env. |
+| `postflight` | Renders the insight report (hotspots, affinity, ownership, trend) to stdout. |
 | `generate` | Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd). |
 | `tapes` | Records every VHS tape in tapes/ into assets/gen/. |
 | `release-build` | Builds one release binary for one platform. |
