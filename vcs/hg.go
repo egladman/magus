@@ -140,7 +140,7 @@ func (v hgVCS) DirtyFiles(ctx context.Context, dir string, paths []string) ([]st
 		args = append(args, "--")
 		args = append(args, paths...)
 	}
-	out, err := vcsOutput(ctx, dir, "hg", args...)
+	out, err := vcsOutputRaw(ctx, dir, "hg", args...)
 	if err != nil {
 		return nil, fmt.Errorf("hg status: %w", err)
 	}

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
 	"sync"
 
 	"github.com/egladman/magus/types"
@@ -41,28 +42,19 @@ var Vcs = Module{
 			Impl:    VcsDiff,
 		},
 		{
-			Name:    "short_hash",
-			Doc:     "Short commit hash. Raises when no VCS is resolved or its metadata cannot be read - use vcs.name() to test for a VCS first.",
-			Returns: []Ret{{Type: TypeString}},
-			Impl:    VcsShortHash,
-		},
-		{
-			Name:    "hash",
-			Doc:     "Full commit hash. Raises when no VCS is resolved or its metadata cannot be read - use vcs.name() to test for a VCS first.",
-			Returns: []Ret{{Type: TypeString}},
-			Impl:    VcsHash,
-		},
-		{
 			Name:    "ref",
 			Doc:     "The movable name pointing at the current revision, or \"\" when there is none. Backend-specific by nature: a git branch, a Mercurial named branch, a Jujutsu bookmark. jj's working copy is usually an anonymous change, so \"\" is an ordinary answer there, not a failure. Raises when no VCS is resolved or its metadata cannot be read - use vcs.name() to test for a VCS first.",
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    VcsRef,
 		},
 		{
-			Name:    "commit_date",
-			Doc:     "Commit date string. Raises when no VCS is resolved or its metadata cannot be read - use vcs.name() to test for a VCS first.",
-			Returns: []Ret{{Type: TypeString}},
-			Impl:    VcsCommitDate,
+			Name: "status",
+			Doc:  "The working tree's uncommitted state as {clean, files}: clean is true when nothing changed, files are the changed paths (empty when clean). Pass paths to scope it. Each file is a Path carrying the repository root as its base, because a VCS reports paths from the root while a target runs in its project directory. Paths only - a per-entry status code is not portable (jj reports none), so reach for vcs.exe() when the codes matter.",
+			Args: []Arg{
+				{Name: "paths", Type: TypeStringSlice, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAny, Object: "Status"}},
+			Impl:    VcsStatus,
 		},
 		{
 			Name: "is_dirty",
@@ -72,31 +64,6 @@ var Vcs = Module{
 			},
 			Returns: []Ret{{Type: TypeBool}},
 			Impl:    VcsIsDirty,
-		},
-		{
-			Name: "dirty_files",
-			Doc:  "The changed entries in the working tree as the backend's own status lines (git porcelain, hg status, jj diff --name-only), or an empty list when clean. Pass paths to scope it, exactly like is_dirty. This is is_dirty with the detail: a gate that has to say WHICH generated files moved asks this instead of shelling out to the VCS and parsing it by hand.",
-			Args: []Arg{
-				{Name: "paths", Type: TypeStringSlice, Optional: true},
-			},
-			Returns: []Ret{{Type: TypeStringSlice}},
-			Impl:    VcsDirtyFiles,
-		},
-		{
-			Name: "diagnose_drift",
-			Doc:  "Diagnose why a generate gate's outputs drifted and RETURN the verdict {drifted, code, message, url, files} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility bug); files lists the drifted outputs as the backend's status lines, so a gate reports WHICH files moved without shelling out to the VCS. drifted is false with empty fields when the outputs are clean. Composes is_dirty; does not replace it.",
-			Args: []Arg{
-				{Name: "outputs", Type: TypeStringSlice},
-				{Name: "inputs", Type: TypeStringSlice, Optional: true},
-			},
-			Returns: []Ret{{Type: TypeAnyMap}},
-			Impl:    VcsDiagnoseDrift,
-		},
-		{
-			Name:    "metadata",
-			Doc:     "Full metadata table: short_hash, hash, branch, commit_date, is_dirty.",
-			Returns: []Ret{{Type: TypeAnyMap}},
-			Impl:    VcsMetadata,
 		},
 		{
 			Name: "commit",
@@ -117,10 +84,14 @@ var Vcs = Module{
 			Impl:    VcsHistory,
 		},
 		{
-			Name:    "exe",
-			Doc:     "Absolute path to the active VCS executable (git/hg/jj), or \"\" if unresolved. Lets a magusfile run a VCS-agnostic escape-hatch command: os.exec(vcs.exe(), [...]).",
-			Returns: []Ret{{Type: TypeString}},
-			Impl:    VcsExe,
+			Name: "cmd",
+			Doc:  "Escape hatch: run the active VCS binary (git/hg/jj) with args, for something no method covers. Mirrors magus.cmd and os.exec - returns {stdout, stderr, code, ok} and raises on a non-zero exit unless opts.allow_failure. opts.dir runs it elsewhere (relative to the target's cwd). This is VCS-AGNOSTIC only in that magus picks the binary; the args are the backend's own, so branch on vcs.name() when they differ. Raises when no VCS is resolved, rather than running nothing and reporting success.",
+			Args: []Arg{
+				{Name: "args", Type: TypeStringSlice},
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
+			Impl:    VcsCmd,
 		},
 		{
 			Name: "tags",
@@ -244,24 +215,6 @@ func vcsMetadata(ctx context.Context) (types.VCSMeta, error) {
 	return meta, nil
 }
 
-// VcsShortHash returns the short commit hash; raises when no VCS or metadata is available.
-func VcsShortHash(ctx context.Context) (string, error) {
-	meta, err := vcsMetadata(ctx)
-	if err != nil {
-		return "", err
-	}
-	return meta.ShortHash, nil
-}
-
-// VcsHash returns the full commit hash; raises when no VCS or metadata is available.
-func VcsHash(ctx context.Context) (string, error) {
-	meta, err := vcsMetadata(ctx)
-	if err != nil {
-		return "", err
-	}
-	return meta.Hash, nil
-}
-
 // VcsBranch returns the current branch; raises when no VCS or metadata is available.
 func VcsRef(ctx context.Context) (string, error) {
 	meta, err := vcsMetadata(ctx)
@@ -271,117 +224,74 @@ func VcsRef(ctx context.Context) (string, error) {
 	return meta.Branch, nil
 }
 
-// VcsCommitDate returns the commit date string; raises when no VCS or metadata is available.
-func VcsCommitDate(ctx context.Context) (string, error) {
-	meta, err := vcsMetadata(ctx)
-	if err != nil {
-		return "", err
-	}
-	return meta.CommitDate, nil
-}
-
-// VcsDiagnoseDrift diagnoses a generate gate's drift into a coded diagnostic. Given the
-// target's declared output globs and input globs (project-relative) and the fact that the
-// tree drifted, it distinguishes the three causes the plan defines:
+// VcsStatus reports the working tree's uncommitted state as a typed Status.
 //
-//   - outputs dirty AND a declared input is also dirty -> MGS4006 StaleGeneratedOutput:
-//     a source input changed, so regeneration is expected; commit it.
-//   - outputs dirty, inputs byte-identical, running a DEV build -> MGS4005 EnvironmentalDrift:
-//     the committed form is produced by the pinned release (compat contract), so a dev
-//     build's differing output is version/tool skew - not the developer's change.
-//   - outputs dirty, inputs byte-identical, running a RELEASE build -> MGS4003
-//     NondeterministicOutput: same inputs and generator version, yet output differs - a
-//     reproducibility bug.
+// It replaces the vcs.dirty_files half of the old pair, which handed a magusfile the
+// backend's own status lines - git porcelain, hg status, jj diff --name-only - so a
+// caller had to know which VCS it was on to parse them, and every caller reimplemented
+// that. statusPaths does it once, here.
 //
-// It RETURNS the classification as a verdict record rather than throwing, so the gate
-// owns the response - fail on a clean-tree drift, warn on a mid-edit dirty tree (the
-// plan's local-warn / CI-fail split). The record is a plain map:
+// Paths carry the repository root as their base. A VCS reports paths from the root, but
+// a target runs with its cwd set to its PROJECT directory, so a bare string was silently
+// ambiguous exactly when a project was not the root.
 //
-//	{ drifted: bool, code: str, message: str, url: str, files: []str }
-//
-// drifted is false (and code/message/url empty, files empty) when the outputs are not
-// actually dirty. files carries the backend's status lines for the drifted outputs, so a
-// gate can say WHICH files moved without shelling out to the VCS itself.
-// It composes vcs.isDirty (called on outputs and inputs) rather than replacing it:
-// isDirty stays the general "is this path dirty" primitive; diagnoseDrift is the
-// drift-specific reading on top of it plus the version signal.
-func VcsDiagnoseDrift(ctx context.Context, outputs, inputs []string) (map[string]any, error) {
-	// Same keys as the drifted verdict, so a caller can read .files unconditionally
-	// rather than discovering the key is absent only on the clean path.
-	clean := map[string]any{"drifted": false, "code": "", "message": "", "url": "", "files": []string{}}
+// RAISES on a failed probe rather than reporting clean: a gate that cannot read the tree
+// has no answer, and a quiet empty list would let it pass having checked nothing.
+func VcsStatus(ctx context.Context, paths []string) (types.Status, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
-		return clean, nil
+		return types.Status{Clean: true}, nil
 	}
 	dir, err := EffectiveCwd(ctx)
 	if err != nil {
 		dir = ""
 	}
-	// DirtyFiles, not Dirty: the verdict carries WHICH outputs drifted, and Dirty is
-	// defined in terms of this anyway, so naming them costs nothing extra. A gate that
-	// reports only "something drifted" sends its reader to reproduce the run just to
-	// learn what a status call already knew - and a gate fires precisely when the
-	// reader is looking at a CI log rather than the tree.
-	dirtyFiles, err := v.DirtyFiles(ctx, dir, outputs)
+	lines, err := v.DirtyFiles(ctx, dir, paths)
 	if err != nil {
-		// Split from the !outDirty case below on purpose: they were one branch, so a
-		// failed probe returned the same "clean" verdict as a genuinely clean tree. A
-		// drift diagnosis that cannot read the tree has no verdict to give.
-		return nil, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s status", v.Name())
+		return types.Status{}, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s status", v.Name())
 	}
-	if len(dirtyFiles) == 0 {
-		return clean, nil
+	root, err := v.Root(ctx, dir)
+	if err != nil {
+		root = dir
 	}
-	inDirty := false
-	if len(inputs) > 0 {
-		inDirty, _ = v.Dirty(ctx, dir, inputs)
+	files := make([]types.Path, 0, len(lines))
+	for _, p := range statusPaths(v.Name(), lines) {
+		files = append(files, types.Path{Value: p, Base: root})
 	}
+	return types.Status{Clean: len(files) == 0, Files: files}, nil
+}
 
-	var code types.DiagnosticCode
-	var msg string
-	switch {
-	case inDirty:
-		code = types.StaleGeneratedOutput
-		msg = "generated output drifted and a declared input changed; re-run `magus run generate:rw` and commit"
-	case types.IsDevMagusVersion(types.MagusVersionFromContext(ctx)):
-		ver := types.MagusVersionFromContext(ctx)
-		if ver == "" {
-			ver = "unknown"
+// statusPaths strips each backend's status prefix, leaving the path.
+//
+//	git  "XY path"      porcelain: two status columns and a space
+//	hg   "X path"       one status column and a space
+//	jj   "path"         diff --name-only reports no status at all
+//
+// A git rename reads "R  old -> new"; the new path is the one that exists, so that is
+// what is kept. git quotes paths outside ASCII unless core.quotePath is off, which
+// gitEnviron disables, so no unquoting is needed here.
+func statusPaths(vcsName string, lines []string) []string {
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		p := line
+		switch vcsName {
+		case "git":
+			if len(p) > 3 {
+				p = p[3:]
+			}
+			if _, after, found := strings.Cut(p, " -> "); found {
+				p = after
+			}
+		case "hg":
+			if len(p) > 2 {
+				p = p[2:]
+			}
 		}
-		code = types.EnvironmentalDrift
-		msg = fmt.Sprintf("generated output drifted but its declared inputs are unchanged; the committed form is produced by the pinned release and you are running a dev build (%s) - not your change, do not commit", ver)
-	default:
-		code = types.NondeterministicOutput
-		msg = "generated output drifted but its declared inputs and the generator version are unchanged - a non-deterministic generator"
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
 	}
-	return map[string]any{
-		"drifted": true,
-		"code":    string(code),
-		"message": msg,
-		"url":     types.CodeURL(code),
-		"files":   dirtyFiles,
-	}, nil
-}
-
-// VcsDirtyFiles returns the changed entries as the backend's status lines, the detail
-// half of VcsIsDirty. Both resolve paths against the project's working directory and
-// both RAISE on a failed probe rather than reporting "clean": a gate that cannot read
-// the tree has no answer, and silently returning an empty list would let it pass having
-// checked nothing - the one outcome a gate must never produce quietly.
-func VcsDirtyFiles(ctx context.Context, paths []string) ([]string, error) {
-	v, _ := resolveVCS(ctx)
-	if v == nil {
-		return nil, nil
-	}
-	dir, err := EffectiveCwd(ctx)
-	if err != nil {
-		dir = ""
-	}
-	files, err := v.DirtyFiles(ctx, dir, paths)
-	if err != nil {
-		return nil, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s status", v.Name())
-	}
-	return files, nil
+	return out
 }
 
 // VcsIsDirty reports whether the working tree has uncommitted changes.
@@ -408,31 +318,6 @@ func VcsIsDirty(ctx context.Context, paths []string) (bool, error) {
 		return false, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s status", v.Name())
 	}
 	return dirty, nil
-}
-
-// VcsMetadata returns the full metadata map: short_hash, hash, branch, commit_date, is_dirty.
-func VcsMetadata(ctx context.Context) (map[string]any, error) {
-	v, _ := resolveVCS(ctx)
-	if v == nil {
-		return map[string]any{
-			"short_hash":  "",
-			"hash":        "",
-			"branch":      "",
-			"commit_date": "",
-			"is_dirty":    false,
-		}, nil
-	}
-	meta, err := v.Metadata(ctx, "")
-	if err != nil {
-		return nil, fmt.Errorf("vcs.metadata: %w", err)
-	}
-	return map[string]any{
-		"short_hash":  meta.ShortHash,
-		"hash":        meta.Hash,
-		"branch":      meta.Branch,
-		"commit_date": meta.CommitDate,
-		"is_dirty":    meta.IsDirty,
-	}, nil
 }
 
 // VcsCommit resolves rev (empty = current revision) to its commit object. When
@@ -502,9 +387,10 @@ func VcsTags(ctx context.Context, pattern string) ([]types.VCSTag, error) {
 	return v.Tags(ctx, "", pattern) // host bindings run in the project cwd
 }
 
-// VcsExe returns the absolute path of the active VCS executable, or "" when
-// unresolved or not on PATH.
-func VcsExe(ctx context.Context) (string, error) {
+// vcsExe returns the absolute path of the active VCS executable, or "" when
+// unresolved or not on PATH. Internal: the Buzz surface exposes vcs.cmd, which runs the
+// binary, rather than a path for the caller to hand to os.exec themselves.
+func vcsExe(ctx context.Context) (string, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
 		return "", nil
@@ -514,4 +400,24 @@ func VcsExe(ctx context.Context) (string, error) {
 		return "", types.WrapDiagnostic(types.ToolNotOnPath, err, "%s is the resolved VCS but is not on PATH", v.Name())
 	}
 	return path, nil
+}
+
+// VcsCmd runs the active VCS binary with args.
+//
+// This replaced vcs.exe, which handed back a PATH and left every caller to write
+// os.exec(vcs.exe(), [...]) - two calls, and a silent no-op when the path came back
+// empty because no VCS was resolved. Returning an ExecResult also puts the escape hatch
+// on the same typed footing as magus.cmd and os.exec instead of a bare string. "exe" was
+// the wrong word besides: it reads as a Windows file extension, and the value is a
+// binary on every platform magus runs.
+func VcsCmd(ctx context.Context, args []string, opts map[string]any) (types.ExecResult, error) {
+	bin, err := vcsExe(ctx)
+	if err != nil {
+		return types.ExecResult{}, err
+	}
+	if bin == "" {
+		return types.ExecResult{}, types.DiagnosticErrorf(types.VCSUnavailable,
+			"vcs.cmd: no VCS is resolved for this directory, so there is no binary to run")
+	}
+	return runResult(ctx, bin, args, resolveDir(ctx, optStringDefault(opts, "dir", "")), "vcs.cmd", bin, opts)
 }

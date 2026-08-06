@@ -410,3 +410,82 @@ type RevisionExporter interface {
 	// relative to it, so dstDir mirrors the workspace as of rev.
 	ExportRevision(ctx context.Context, dir, rev, dstDir string) error
 }
+
+// Status is the working tree's uncommitted state: whether it is clean, and which paths
+// changed. It replaces the pair of vcs.is_dirty / vcs.dirty_files at the Buzz boundary,
+// where the two answered the same question in two shapes - a bool and a list of the
+// backend's own status lines, which a caller had to parse differently per VCS.
+//
+// Files are Paths, not strings, and each carries the repository root as its base: a VCS
+// reports paths relative to the root, while a target runs with its cwd set to its PROJECT
+// directory. Handing back bare strings made that difference invisible and left every
+// caller to rediscover it.
+type Status struct {
+	// Clean reports whether the tree has no uncommitted changes. It is len(Files) == 0,
+	// named so a gate reads as a gate.
+	Clean bool
+	// Files are the changed paths, empty when Clean. Paths only: a per-entry status code
+	// is not portable (jj's diff --name-only reports none at all), and Commit's rule
+	// applies - a concept one backend lacks is not modeled here. Reach for vcs.exe() when
+	// the codes matter.
+	Files []Path
+}
+
+// BuzzObject is the Buzz boundary map vcs.status returns: {clean, files}.
+func (s Status) BuzzObject() BuzzObject {
+	files := make([]any, 0, len(s.Files))
+	for _, f := range s.Files {
+		files = append(files, f.BuzzObject())
+	}
+	return BuzzObject{"clean": s.Clean, "files": files}
+}
+
+// StatusRecord is the boundary mirror of the object vcs.status returns; the Buzz
+// `object Status` mirror is generated from it by cmd/magus-utils types. See
+// CommitRecord for why the mirror exists separately from the type it mirrors.
+type StatusRecord struct {
+	Clean bool
+	Files []Path
+}
+
+// DriftVerdict is why a generate gate's declared outputs drifted: not merely THAT they
+// did, which a status call already answers, but which of three causes it was. A gate
+// fires when its reader is looking at a CI log rather than the tree, so the verdict
+// carries the diagnostic code, the sentence to print, its explainer URL, and the files.
+//
+// It lives in types (not std) for the same reason Commit does: the shape crosses the Buzz
+// boundary, so it needs a mirror. The FUNCTION that produces it belongs to the magus
+// module rather than vcs - deciding that unchanged inputs plus a dev build means MGS4005
+// is magus policy, and vcs only supplies the dirty-file probe underneath it.
+type DriftVerdict struct {
+	// Drifted is false with every other field zero when the outputs are clean, so a
+	// caller reads the fields unconditionally instead of testing for absent keys.
+	Drifted bool
+	// Code is the MGS diagnostic: which of the three causes this was.
+	Code string
+	// Message is the sentence to show, already naming the remedy.
+	Message string
+	// URL is Code's explainer page.
+	URL string
+	// Files are the drifted outputs, based at the repository root like Status.Files.
+	Files []Path
+}
+
+// BuzzObject is the Buzz boundary map magus.diagnoseDrift returns.
+func (d DriftVerdict) BuzzObject() BuzzObject {
+	files := make([]any, 0, len(d.Files))
+	for _, f := range d.Files {
+		files = append(files, f.BuzzObject())
+	}
+	return BuzzObject{"drifted": d.Drifted, "code": d.Code, "message": d.Message, "url": d.URL, "files": files}
+}
+
+// DriftVerdictRecord is the boundary mirror cmd/magus-utils types reflects over; see
+// CommitRecord for why it is separate from the type it mirrors.
+type DriftVerdictRecord struct {
+	Drifted bool
+	Code    string
+	Message string
+	URL     string
+	Files   []Path
+}

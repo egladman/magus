@@ -70,3 +70,12 @@ func (p Path) RelativeTo(base string) (Path, error) {
 	p.Base = base
 	return p, nil
 }
+
+// BuzzObject is the Buzz boundary map a Path crosses as: {value, base, isDir}.
+//
+// Base rides along deliberately. A Buzz caller that receives a path from vcs.status or a
+// glob needs to know what it is measured from to open it, and the object mirror carries
+// no methods - so the field is the only place that fact can live.
+func (p Path) BuzzObject() BuzzObject {
+	return BuzzObject{"value": p.Value, "base": p.Base, "isDir": p.IsDir}
+}

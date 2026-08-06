@@ -142,6 +142,15 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return buzzValueMagusDoctorReport(ret0), nil
 	}))
+	m.MapSet("diagnoseDrift", vm.DirectValue("magus.diagnoseDrift", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		outputs := StrSlice(bzArgs, 0)
+		inputs := StrSlice(bzArgs, 1)
+		ret0, err := std.MagusDiagnoseDrift(ctx, outputs, inputs)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return buzzValueMagusDriftVerdict(ret0), nil
+	}))
 	m.MapSet("bustCache", vm.DirectValue("magus.bustCache", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		project_path := Str(bzArgs, 0)
 		if err := std.MagusBustCache(ctx, project_path); err != nil {
@@ -779,5 +788,27 @@ func buzzValueMagusDoctorReport(v types.DoctorReport) vm.Value {
 	}
 	out.MapSet("checks", vm.ListValue(itemsChecks))
 	out.MapSet("summary", buzzValueMagusDoctorSummary(v.Summary))
+	return out
+}
+
+func buzzValueMagusPath(v types.Path) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("value", vm.StrValue(v.Value))
+	out.MapSet("base", vm.StrValue(v.Base))
+	out.MapSet("isDir", vm.BoolValue(v.IsDir))
+	return out
+}
+
+func buzzValueMagusDriftVerdict(v types.DriftVerdict) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("drifted", vm.BoolValue(v.Drifted))
+	out.MapSet("code", vm.StrValue(v.Code))
+	out.MapSet("message", vm.StrValue(v.Message))
+	out.MapSet("uRL", vm.StrValue(v.URL))
+	itemsFiles := make([]vm.Value, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = buzzValueMagusPath(v.Files[indexFiles])
+	}
+	out.MapSet("files", vm.ListValue(itemsFiles))
 	return out
 }

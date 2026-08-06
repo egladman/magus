@@ -1,5 +1,5 @@
 // Failing, and deciding what a failure means. A host call that cannot answer RAISES; it
-// never hands back a blank as if the blank were the answer. `vcs\shortHash()` outside a
+// never hands back a blank as if the blank were the answer. `vcs\commit()` outside a
 // checkout does not return "" - "" is a value a branch name can legitimately hold, so a
 // caller testing for it could never tell "no answer" from "the answer is empty", and the
 // check was optional besides: forget it once and an empty commit lands in a version string
@@ -32,7 +32,7 @@ magus\project({
 export fun stamp(ctx: magus\Context, args: [str]) > void {
     var commit = "unknown";
     try {
-        commit = vcs\shortHash();
+        commit = vcs\commit().short;
     } catch (e) {
         magus\info("no VCS here (" + e["message"] + "); stamping as unknown");
     }

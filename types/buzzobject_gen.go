@@ -36,6 +36,31 @@ func (v CommitRecord) BuzzObject() BuzzObject {
 	}
 }
 
+func (v StatusRecord) BuzzObject() BuzzObject {
+	itemsFiles := make([]any, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = v.Files[indexFiles].BuzzObject()
+	}
+	return BuzzObject{
+		"clean": v.Clean,
+		"files": itemsFiles,
+	}
+}
+
+func (v DriftVerdictRecord) BuzzObject() BuzzObject {
+	itemsFiles := make([]any, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = v.Files[indexFiles].BuzzObject()
+	}
+	return BuzzObject{
+		"drifted": v.Drifted,
+		"code":    v.Code,
+		"message": v.Message,
+		"uRL":     v.URL,
+		"files":   itemsFiles,
+	}
+}
+
 func (v FileInfo) BuzzObject() BuzzObject {
 	return BuzzObject{
 		"size":   v.Size,

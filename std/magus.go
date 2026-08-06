@@ -178,6 +178,16 @@ var Magus = Module{
 			Impl:    MagusDoctor,
 		},
 		{
+			Name: "diagnose_drift",
+			Doc:  "Diagnose why a generate gate's declared outputs drifted and RETURN the verdict {drifted, code, message, url, files} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility bug). files are the drifted outputs as Paths based at the repository root. drifted is false with every field zero when the outputs are clean. It lives here rather than on vcs because choosing between those codes is magus policy; vcs only supplies the probe. Composes vcs.status; does not replace it.",
+			Args: []Arg{
+				{Name: "outputs", Type: TypeStringSlice},
+				{Name: "inputs", Type: TypeStringSlice, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAny, Object: "DriftVerdict"}},
+			Impl:    MagusDiagnoseDrift,
+		},
+		{
 			Name: "bust_cache",
 			Doc:  "Invalidate the build cache. Escape hatch - prefer modeling missing inputs as Sources. No arg clears all; a project path clears one project.",
 			Args: []Arg{
@@ -542,4 +552,95 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 		return types.ExecResult{}, fmt.Errorf("magus.%s: %w", label, err)
 	}
 	return rec, cmdErr
+}
+
+// MagusDiagnoseDrift diagnoses a generate gate's drift into a coded diagnostic. Given the
+// target's declared output globs and input globs (project-relative) and the fact that the
+// tree drifted, it distinguishes the three causes the plan defines:
+//
+//   - outputs dirty AND a declared input is also dirty -> MGS4006 StaleGeneratedOutput:
+//     a source input changed, so regeneration is expected; commit it.
+//   - outputs dirty, inputs byte-identical, running a DEV build -> MGS4005 EnvironmentalDrift:
+//     the committed form is produced by the pinned release (compat contract), so a dev
+//     build's differing output is version/tool skew - not the developer's change.
+//   - outputs dirty, inputs byte-identical, running a RELEASE build -> MGS4003
+//     NondeterministicOutput: same inputs and generator version, yet output differs - a
+//     reproducibility bug.
+//
+// It RETURNS the classification as a verdict record rather than throwing, so the gate
+// owns the response - fail on a clean-tree drift, warn on a mid-edit dirty tree (the
+// plan's local-warn / CI-fail split). The record is a plain map:
+//
+//	{ drifted: bool, code: str, message: str, url: str, files: []str }
+//
+// drifted is false (and code/message/url empty, files empty) when the outputs are not
+// actually dirty. files carries the backend's status lines for the drifted outputs, so a
+// gate can say WHICH files moved without shelling out to the VCS itself.
+// It composes vcs.isDirty (called on outputs and inputs) rather than replacing it:
+// isDirty stays the general "is this path dirty" primitive; diagnoseDrift is the
+// drift-specific reading on top of it plus the version signal.
+func MagusDiagnoseDrift(ctx context.Context, outputs, inputs []string) (types.DriftVerdict, error) {
+	// Same keys as the drifted verdict, so a caller can read .files unconditionally
+	// rather than discovering the key is absent only on the clean path.
+	var clean types.DriftVerdict
+	v, _ := resolveVCS(ctx)
+	if v == nil {
+		return clean, nil
+	}
+	dir, err := EffectiveCwd(ctx)
+	if err != nil {
+		dir = ""
+	}
+	// DirtyFiles, not Dirty: the verdict carries WHICH outputs drifted, and Dirty is
+	// defined in terms of this anyway, so naming them costs nothing extra. A gate that
+	// reports only "something drifted" sends its reader to reproduce the run just to
+	// learn what a status call already knew - and a gate fires precisely when the
+	// reader is looking at a CI log rather than the tree.
+	dirtyFiles, err := v.DirtyFiles(ctx, dir, outputs)
+	if err != nil {
+		// Split from the !outDirty case below on purpose: they were one branch, so a
+		// failed probe returned the same "clean" verdict as a genuinely clean tree. A
+		// drift diagnosis that cannot read the tree has no verdict to give.
+		return types.DriftVerdict{}, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s status", v.Name())
+	}
+	if len(dirtyFiles) == 0 {
+		return clean, nil
+	}
+	inDirty := false
+	if len(inputs) > 0 {
+		inDirty, _ = v.Dirty(ctx, dir, inputs)
+	}
+
+	var code types.DiagnosticCode
+	var msg string
+	switch {
+	case inDirty:
+		code = types.StaleGeneratedOutput
+		msg = "generated output drifted and a declared input changed; re-run `magus run generate:rw` and commit"
+	case types.IsDevMagusVersion(types.MagusVersionFromContext(ctx)):
+		ver := types.MagusVersionFromContext(ctx)
+		if ver == "" {
+			ver = "unknown"
+		}
+		code = types.EnvironmentalDrift
+		msg = fmt.Sprintf("generated output drifted but its declared inputs are unchanged; the committed form is produced by the pinned release and you are running a dev build (%s) - not your change, do not commit", ver)
+	default:
+		code = types.NondeterministicOutput
+		msg = "generated output drifted but its declared inputs and the generator version are unchanged - a non-deterministic generator"
+	}
+	root, err := v.Root(ctx, dir)
+	if err != nil {
+		root = dir
+	}
+	files := make([]types.Path, 0, len(dirtyFiles))
+	for _, p := range statusPaths(v.Name(), dirtyFiles) {
+		files = append(files, types.Path{Value: p, Base: root})
+	}
+	return types.DriftVerdict{
+		Drifted: true,
+		Code:    string(code),
+		Message: msg,
+		URL:     types.CodeURL(code),
+		Files:   files,
+	}, nil
 }

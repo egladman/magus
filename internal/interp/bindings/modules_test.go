@@ -71,7 +71,7 @@ func TestSupersetModules(t *testing.T) {
 	// Modules Buzz's stdlib lacks become new bare imports.
 	hasKey(t, "http", "get")         // magus
 	hasKey(t, "http", "download")    // magus/extra http companion merged in
-	hasKey(t, "vcs", "shortHash")    // magus
+	hasKey(t, "vcs", "commit")       // magus
 	hasKey(t, "archive", "compress") // magus
 	hasKey(t, "time", "format")      // magus
 	hasKey(t, "markdown", "toHtml")  // magus
@@ -1226,11 +1226,10 @@ export fun check(ctx: magus\Context, args: [str]) > void {
     // IS resolved and every accessor returns a real value. That is the case worth pinning
     // here; the no-VCS path, where these now RAISE rather than hand back "", is covered by
     // TestVcsCommitRaisesOutsideRepo, which chdirs to a bare temp dir to get there.
-    final h = vcs.shortHash();
+    final h = vcs.commit().short;
     final b = vcs.ref();
-    if (h == "") { throw "shortHash returned empty inside a repo"; }
+    if (h == "") { throw "commit().short returned empty inside a repo"; }
     if (b == "") { throw "ref returned empty inside a git repo"; }
-    vcs.commitDate();
 
     // isDirty RAISES here, and that is the point of the change. A VCS resolves (the
     // process cwd is inside magus's checkout) but the probe runs in this temp dir, so

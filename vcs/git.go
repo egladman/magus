@@ -361,12 +361,16 @@ func (v gitVCS) Dirty(ctx context.Context, dir string, paths []string) (bool, er
 }
 
 func (v gitVCS) DirtyFiles(ctx context.Context, dir string, paths []string) ([]string, error) {
-	args := []string{"status", "--porcelain"}
+	// core.quotePath=false: git otherwise renders a non-ASCII path as a C-quoted
+	// string ("\303\251.md"), which every consumer would have to unescape. Off, the
+	// bytes come through literally, so std.statusPaths can strip the status columns
+	// and stop.
+	args := []string{"-c", "core.quotePath=false", "status", "--porcelain"}
 	if len(paths) > 0 {
 		args = append(args, "--")
 		args = append(args, paths...)
 	}
-	out, err := vcsOutput(ctx, dir, "git", args...)
+	out, err := vcsOutputRaw(ctx, dir, "git", args...)
 	if err != nil {
 		return nil, fmt.Errorf("git status: %w", err)
 	}
@@ -1045,6 +1049,23 @@ func vcsOutput(ctx context.Context, dir, name string, args ...string) (string, e
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// vcsOutputRaw is vcsOutput without the leading-whitespace trim, for output whose
+// COLUMNS carry meaning. git porcelain puts two status characters before the path, and
+// the first is a space for an unstaged edit (" M path"); TrimSpace ate it on the first
+// line only, so exactly one path per status came back missing its first character.
+func vcsOutputRaw(ctx context.Context, dir, name string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = dir
+	if name == "git" {
+		cmd.Env = gitEnviron()
+	}
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(string(out), "\n"), nil
 }
 
 func splitLines(out []byte) []string {
