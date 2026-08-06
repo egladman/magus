@@ -142,7 +142,7 @@ fallback; never gate behavior on a fast path.
 ## Docs site
 
 The docs site under `docs/` renders into `docs/gen/`, which is **not** committed.
-`.github/workflows/publish-site.yaml` renders it on every push to `main` and publishes
+`.github/workflows/cd.yaml` renders it on every push to `main` and publishes
 that. Render locally to check your change:
 
 ```sh

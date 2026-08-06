@@ -1,5 +1,17 @@
 name: CI
 
+# Validates a change. Nothing here publishes an artifact, and no job asks for a write
+# scope beyond the pull-request comment the advisor posts - the top-level default is
+# contents: read and every job keeps it.
+#
+# Four workflows, one trigger each, and the name says which: ci.yaml validates (pull
+# request), cd.yaml ships what a merge produces (main push), release.yaml cuts a release
+# (v* tag), nightly.yaml runs the expensive out-of-band checks (cron).
+#
+# ci also runs on main pushes, and that is not a publish step: the push run is what
+# populates the shared cache and the run-duration history a pull request may only read.
+# See MAGUS_CACHE_WRITE_ENABLED below.
+
 on:
   pull_request:
     branches: [main]
@@ -34,27 +46,14 @@ jobs:
       matrix:        ${{ steps.plan.outputs.matrix }}
       count:         ${{ steps.plan.outputs.count }}
       max_parallel:  ${{ steps.plan.outputs.max_parallel }}
-      magus_version: ${{ steps.resolve_magus.outputs.tag }}
     steps:
       - name: Set history path
         run: echo "MAGUS_HISTORY_PATH=$RUNNER_TEMP/magus-history.json" >> "$GITHUB_ENV"
 
-      # The newest published release: the compat job runs against it, and its job name
-      # shows the version so a reader sees WHICH magus was checked. Before setup so the
-      # tag is an output even if the install later fails.
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           fetch-depth: 0
           filter: blob:none
-
-      - name: Resolve magus release
-        id: resolve_magus
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          TAG="$(gh release view --repo egladman/magus --json tagName -q .tagName)"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
       # install stays ON (the default). With install: false the action adds the shims
       # directory to PATH and computes the exported PATH BEFORE any tool exists, so a
@@ -192,69 +191,6 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  compat:
-    name: magus compatibility (${{ needs.preflight.outputs.magus_version }})
-    # Second pass: can the magus users already have still drive this workspace? The
-    # shards answer "does this change work"; this answers a different question.
-    # Non-blocking - a failure means cut a release, not fix the PR.
-    # Serial (needs: ci) to avoid paying for it when the source pass already failed.
-    needs: [preflight, ci]
-    if: always() && needs.ci.result == 'success'
-    continue-on-error: true
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-        with:
-          fetch-depth: 0
-          filter: blob:none
-
-      # install stays ON (the default). With install: false the action adds the shims
-      # directory to PATH and computes the exported PATH BEFORE any tool exists, so a
-      # later `mise install` step put pnpm and node somewhere no subsequent step could
-      # see - `os.exec pnpm: exit -1`, the child never launching. Letting the action do
-      # the install also re-enables its cache: it only saves when it installed.
-      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
-        with:
-          version: '2026.4.8'
-
-      - name: Install codec build dependencies
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
-
-      - uses: ./.github/actions/setup-magus
-        id: magus
-        with:
-          installation-strategy: prebuilt
-          git-ref: ${{ needs.preflight.outputs.magus_version }}
-
-      # setup-magus's source build provisions its own Go via actions/setup-go, which
-      # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
-      - name: Restore the mise-pinned Go toolchain
-        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
-
-      # prebuilt, not automatic: a silent fallback to a source build would make this job
-      # compare source against source and report compatibility it never checked.
-      - name: Confirm a real release was installed
-        shell: bash
-        env:
-          VERSION: ${{ steps.magus.outputs.version }}
-          INSTALL_SOURCE: ${{ steps.magus.outputs.install-source }}
-          COMMIT: ${{ steps.magus.outputs.commit }}
-        run: |
-          echo "magus $VERSION ($INSTALL_SOURCE, $COMMIT)" >> "$GITHUB_STEP_SUMMARY"
-          [[ "$INSTALL_SOURCE" == "prebuilt" ]]
-
-      # ls, not doctor: this asks only "can the release evaluate every magusfile", and ls
-      # answers it by listing each project's targets. doctor is opinionated - it would
-      # fail on workspace conventions that have nothing to do with the binary's version.
-      - name: Load the workspace with magus ${{ needs.preflight.outputs.magus_version }}
-        run: magus ls
-
-      - name: Run ci with magus ${{ needs.preflight.outputs.magus_version }}
-        run: magus affected ci --no-default-charms
-
   advice:
     # Non-blocking nudges about THIS PR - one step per check, each silent unless it has
     # something to say. Named for doctor's [advice] level so the CI surface and the tool
@@ -304,14 +240,15 @@ jobs:
     # Separate from `magus affected ci` on purpose: affected ci shards per-project
     # correctness, and the deploy is a workspace-level composition no single project owns.
     #
-    # It exists because the publish workflow runs only on main, so without this the first
-    # run of the deploy build for a change was after that change merged - "the merge is the
-    # first time a step runs" (docs/concepts/targets/ci.md).
+    # It exists because cd.yaml's site job runs only on main, so without this the first run
+    # of the deploy build for a change was after that change merged - "the merge is the
+    # first time a step runs" (docs/concepts/targets/ci.md). Same three targets cd.yaml
+    # runs, same source build, minus the upload: this proves the build, it does not publish.
     #
-    # Unfiltered by path for the same reason the publish workflow is: the input set spans
-    # the docs and console trees, root Markdown, assets, releases, embedded skills, and the
-    # Go packages the content generators read. A stale filter would skip the smoke test
-    # silently, which is the hole this closes.
+    # Unfiltered by path for the same reason cd.yaml is: the input set spans the docs and
+    # console trees, root Markdown, assets, releases, embedded skills, and the Go packages
+    # the content generators read. A stale filter would skip the smoke test silently,
+    # which is the hole this closes.
     if: needs.preflight.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -337,15 +274,12 @@ jobs:
       - name: Install codec build dependencies
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
 
-      # Matches the publish workflow: page footers read `git log`, so a shallow clone would
-      # exercise a different render than the one that ships.
-      # A source build, matching publish-site.yaml. This mirrored the publish workflow on
-      # the released binary so a source build could not test a magus the deploy never
-      # runs - but that pairing breaks for the whole window between a breaking magusfile
-      # change and the release carrying it. The built-in spells were renamed (md ->
-      # markdown, ...) and the magusfile updated to match, so the newest release cannot
-      # load this workspace at all. publish-site.yaml made the same move; the two stay
-      # matched, just on source rather than on the release.
+      # A source build, matching cd.yaml's site job. The pairing is the point: a smoke test
+      # built differently from the deploy tests a magus the deploy never runs. Both used to
+      # pin the released binary for that reason, and it broke for the whole window between
+      # a breaking magusfile change and the release carrying it - the built-in spells were
+      # renamed (md -> markdown), the magusfile followed, and no published release could
+      # load this workspace at all. They stay matched, on source rather than on the release.
       - uses: ./.github/actions/setup-magus
         with:
           installation-strategy: source
@@ -366,79 +300,6 @@ jobs:
 
       - name: Assemble the deploy tree
         run: magus run deploy-generate .
-
-  image-snapshot:
-    name: magus image snapshot
-    needs: [preflight, ci]
-    # Merges to main only, and only once `ci` has actually passed - not `always()`.
-    # A pull request must never reach this job: a fork PR would otherwise push an
-    # image and mint a Sigstore signature off unreviewed code, and a snapshot of a
-    # commit that never landed is not something anyone can go back and `docker run`.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.ci.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    permissions:
-      contents: read
-      packages: write # push to GHCR
-      id-token: write # cosign keyless (OIDC) signing
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-        with:
-          fetch-depth: 0
-          filter: blob:none
-
-      # install stays ON (the default). With install: false the action adds the shims
-      # directory to PATH and computes the exported PATH BEFORE any tool exists, so a
-      # later `mise install` step put pnpm and node somewhere no subsequent step could
-      # see - `os.exec pnpm: exit -1`, the child never launching. Letting the action do
-      # the install also re-enables its cache: it only saves when it installed.
-      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
-        with:
-          version: '2026.4.8'
-
-      # Full history + tags: the image bakes version()/commit()/build_date() in via
-      # ldflags, and git describe has to be able to reach the nearest tag.
-      # Full history + tags (the composite's default): the image bakes
-      # version()/commit()/build_date() in via ldflags, and git describe must reach the
-      # nearest tag. mise brings cosign for the signing step inside image-build.
-      - uses: ./.github/actions/setup-magus
-        with:
-          installation-strategy: source
-          source-path: .
-
-      # setup-magus's source build provisions its own Go via actions/setup-go, which
-      # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
-      - name: Restore the mise-pinned Go toolchain
-        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
-
-      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
-
-      # Same magusfile-driven login as cd.yaml, under the snapshot charm instead - which
-      # lists GHCR alone, so no Docker Hub secret is needed or read here.
-      - name: Verify registry credentials
-        env:
-          GHCR_USERNAME: ${{ github.actor }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: magus run image-registries:snapshot,verify --no-default-charms
-
-      - name: Log in to image registries
-        env:
-          GHCR_USERNAME: ${{ github.actor }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: magus run image-login:snapshot --no-default-charms
-
-      # Static variant only, tagged with the short commit. A snapshot reproduces one
-      # commit, so it gets neither the CGO variant nor a moving tag, and it is signed
-      # under THIS workflow's certificate identity - ci.yaml, not cd.yaml - which is
-      # what makes the release verify command in
-      # docs/guides/download/container-image.md reject a snapshot.
-      - name: Build, push, and sign the snapshot image
-        run: magus run image-build:snapshot --no-default-charms
-
-      # No summary step here on purpose: image-build writes $GITHUB_STEP_SUMMARY itself,
-      # from the references it actually pushed. A step that re-derived them would be
-      # parsing magus's own output back out of a file magus wrote.
 
   report:
     # One job for everything that runs AFTER the shards: the run summary always, and the

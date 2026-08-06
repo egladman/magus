@@ -116,24 +116,35 @@ Flag placement matters when forwarding: magus flags go BEFORE `--`.
 `magus run go::go-test . --silent -- ./internal/foo/` works; putting `--silent`
 after `--` forwards it to the test binary, which rejects it.
 
-CI runs `setup-magus` two different ways, on purpose:
+Four workflows, one trigger each, and the name says which:
 
-- `source-path: .` - nearly everything: `preflight`, `ci`, `advice`, `site-build`,
-  `image-snapshot`, `report`, and skill-evals' `smoke`. Builds the magus THIS commit
-  defines and runs it against this commit's magusfile, so a change that
+| File | Runs on | Ships |
+| --- | --- | --- |
+| `ci.yaml` | pull request, and main push | nothing |
+| `cd.yaml` | main push | docs site (Pages), per-commit container image (GHCR) |
+| `release.yaml` | `v*` tag | binaries and release images |
+| `nightly.yaml` | cron 05:17 UTC, manual | nothing |
+
+ci also runs on a main push, and that is not a publish step: the push run is what
+populates the shared cache and the run history a pull request may only read.
+
+`setup-magus` is called two ways, on purpose:
+
+- `source-path: .` - nearly everything: ci's `preflight`, `ci`, `advice`,
+  `site-build`, `report`, both cd jobs, and nightly's `skill-evals`. Builds the magus
+  THIS commit defines and runs it against this commit's magusfile, so a change that
   `magusfile.buzz` needs is exercised by the very run that introduces it - there is
   no "release first" chicken-and-egg.
-- `git-ref: <latest release tag>` - exactly ONE job in ci.yaml: `compat`. It runs the
+- `git-ref: <latest release tag>` - exactly ONE job, nightly's `compat`. It runs the
   pinned, checksum-verified release instead. That is the compatibility contract: when
   it breaks because the magusfile needs an unreleased feature, that is a
-  breaking-change signal to surface, not to paper over. It carries
-  `continue-on-error: true`, so it reports and never blocks a merge - which is why it
-  is currently red on `no_language` (added in 6e087567) and that is fine.
-  (`publish-site`'s `deploy` and every `cd.yaml` release job also pin a ref, but those
-  run on main or on a tag, not on a pull request.)
+  breaking-change signal to surface, not to paper over. It is non-blocking by trigger
+  now rather than by `continue-on-error` - it is not on the PR path at all - which is
+  why it being red on `no_language` (added in 6e087567) is fine. Every release.yaml
+  job also pins a ref, but those run on a tag.
 
 Verify rather than trust this list - it has drifted before:
-`awk '/^  [a-z][a-z0-9_-]*:$/{j=$1} /source-path:|git-ref:/{print j, $0}' .github/workflows/ci.yaml`
+`awk '/^  [a-z][a-z0-9_-]*:$/{j=$1} /source-path:|git-ref:/{print j, $0}' .github/workflows/*.yaml`
 
 Do NOT write `git-ref: ${{ github.sha }}` for the first case. On a
 `pull_request` event `github.sha` is the ephemeral `refs/pull/N/merge` commit, a

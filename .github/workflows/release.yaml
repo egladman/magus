@@ -1,0 +1,320 @@
+name: Release
+
+# Releases the BINARIES: cross-compiled archives, container images, and their
+# signatures, on a v* tag. Everything a main push publishes is in cd.yaml.
+#
+# Renamed from cd.yaml, because a v* tag is a deliberate release and not continuous
+# delivery - cd.yaml now holds the thing that actually is. The rename is not free:
+# cosign pins the workflow PATH as the certificate identity, so every image published
+# before it carries `.github/workflows/cd.yaml` and no longer verifies against the
+# command in docs/guides/download/container-image.md. That was an accepted cost while
+# this project has no users; it will not be once it does. Treat this filename as frozen
+# from the first release published under it.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# One live CD run per tag. Re-pushing a tag (e.g. to pick up a CD fix before the
+# release publishes) cancels the previous run so duplicate release jobs never race
+# for runners or the publish step. Keyed on the ref, so different tags still run
+# independently.
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read  # default; publish overrides to write
+
+jobs:
+  # One job per native runner: each builds BOTH its own platform's static and
+  # dynamically-linked (cgo) binary, back to back on the same runner. Static
+  # cross-compiles trivially (no C toolchain needed), so there's no reason to
+  # farm it out to a separate job. cgo needs a real C toolchain plus
+  # libzstd/liblzma for that exact platform; each job installs those itself
+  # (setup-magus doesn't - its own bootstrap build is CGO_ENABLED=0), via an
+  # "Install codec build dependencies" step, or MSYS2 packages on Windows.
+  # contents: read only; none of these see MAGUS_SIGNING_KEY.
+  release-linux-amd64:
+    name: Build release artifacts (linux/amd64)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read  # publish is the only job that creates the Release/uploads assets
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          # Full history + tags so the release-build target's version() (git describe
+          # --tags) resolves the tag and build_date() reads the commit date. Both walk the
+          # commit graph only, so blob:none keeps them working on a fraction of the fetch.
+          # Do NOT shallow these jobs: git describe needs to reach the nearest tag.
+          fetch-depth: 0
+          filter: blob:none
+      - uses: ./.github/actions/setup-magus
+        with:
+          # CD must bootstrap from the commit it's releasing, not a pinned
+          # older tag - magusfile.buzz can legitimately need host-module code
+          # newer than the last release.
+          installation-strategy: source
+          git-ref: ${{ github.ref_name }}
+      - name: Install codec build dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
+      # No remote-cache env is set in CD on purpose: a release builds clean off the
+      # cache. magusfile.buzz leaves the backend unbound without it, so there is zero
+      # chance of replaying a cached (unsigned) artifact into a release.
+      - name: Build release artifacts (static + dynamic)
+        run: |
+          magus run release-build:static --no-default-charms
+          magus run release-build --no-default-charms
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dist-linux-amd64
+          path: |
+            dist/magus_*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+
+  release-linux-arm64:
+    name: Build release artifacts (linux/arm64)
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          # Full history + tags for git describe; blob:none because none of it is read.
+          fetch-depth: 0
+          filter: blob:none
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          git-ref: ${{ github.ref_name }}
+      - name: Install codec build dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
+      - name: Build release artifacts (static + dynamic)
+        run: |
+          magus run release-build:static --no-default-charms
+          magus run release-build --no-default-charms
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dist-linux-arm64
+          path: |
+            dist/magus_*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+
+  # No separate macos-13 (Intel) job: GitHub's Intel macOS runner pool queues chronically (hours),
+  # blocking the whole release. Instead the arm64 runner below cross-compiles the darwin/amd64 STATIC
+  # binary (CGO_ENABLED=0 pure-Go cross-compiles from any host). Intel Macs ship that static binary; the
+  # darwin/amd64 DYNAMIC variant is dropped because cgo needs x86_64 liblzma/libzstd this arm64 runner
+  # does not have. The cgo fast path is a marginal win and Intel Macs are legacy, so this is the trade.
+  release-darwin:
+    name: Build release artifacts (darwin arm64 + amd64-static)
+    runs-on: macos-14
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          # Full history + tags for git describe; blob:none because none of it is read.
+          fetch-depth: 0
+          filter: blob:none
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          git-ref: ${{ github.ref_name }}
+      - name: Install codec build dependencies
+        run: brew install zstd xz
+      - name: Build release artifacts (arm64 static + dynamic, amd64 static)
+        run: |
+          magus run release-build:static --no-default-charms
+          magus run release-build --no-default-charms
+          GOOS=darwin GOARCH=amd64 magus run release-build:static --no-default-charms
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dist-darwin
+          path: |
+            dist/magus_*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+
+  release-windows-amd64:
+    name: Build release artifacts (windows/amd64)
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          # Full history + tags for git describe; blob:none because none of it is read.
+          fetch-depth: 0
+          filter: blob:none
+
+      # MSYS2 ships prebuilt mingw-w64 zstd/xz packages so internal/codec's cgo path
+      # links without building those C libs from source. pkgconf is REQUIRED in the
+      # install set: without a mingw pkg-config, cgo's `pkg-config --cflags` grabs
+      # Strawberry Perl's broken pkg-config.bat off the runner PATH and fails. We also
+      # pin the exact binary via PKG_CONFIG below, so PATH order can never reselect it.
+      - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0
+        with:
+          msystem: MINGW64
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-pkgconf mingw-w64-x86_64-zstd mingw-w64-x86_64-xz
+          path-type: inherit
+
+      - name: Point go build at the MSYS2 mingw toolchain
+        shell: msys2 {0}
+        run: |
+          echo "MAGUS_CGO_CC=$(cygpath -m /mingw64/bin/gcc.exe)" >> "$GITHUB_ENV"
+          echo "MAGUS_CGO_PKG_CONFIG=$(cygpath -m /mingw64/bin/pkgconf.exe)" >> "$GITHUB_ENV"
+          echo "MAGUS_CGO_PKG_CONFIG_PATH=$(cygpath -m /mingw64/lib/pkgconfig)" >> "$GITHUB_ENV"
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          git-ref: ${{ github.ref_name }}
+
+      # release-build:static doesn't need MAGUS_CGO_CC/PKG_CONFIG_PATH (CGO_ENABLED=0
+      # ignores them), so running it here too is harmless: same runner, same shell.
+      - name: Build release artifacts (static + dynamic)
+        shell: msys2 {0}
+        run: |
+          magus run release-build:static --no-default-charms
+          magus run release-build --no-default-charms
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dist-windows-amd64
+          path: |
+            dist/magus_*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs:
+      - release-linux-amd64
+      - release-linux-arm64
+      - release-darwin
+      - release-windows-amd64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # create the GitHub Release and upload assets
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          # Full history + tags so generate_release_notes below has commit history.
+          fetch-depth: 0
+          filter: blob:none
+
+      - uses: ./.github/actions/setup-magus  # provides the Go toolchain for the magus-utils calls below
+        with:
+          installation-strategy: source
+          git-ref: ${{ github.ref_name }}
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: dist
+          merge-multiple: true
+
+      # Every release-<platform> job wrote its own <asset>.sha256 sidecar
+      # (sha256sum-compatible, one line) alongside each tarball, so no
+      # cross-job aggregation is needed: just concatenate what's on disk.
+      - name: Build combined manifest
+        run: cat dist/*.sha256 > dist/SHA256SUMS
+
+      # Signs dist/SHA256SUMS, then self-verifies against the embedded release pubkey
+      # before the release goes out (safe here, unlike setup-magus, since this job has
+      # the magus source checked out). See release_sign() in magusfile.buzz.
+      - name: Sign and verify SHA256SUMS
+        env:
+          MAGUS_SIGNING_KEY: ${{ secrets.MAGUS_SIGNING_KEY }}
+        run: magus run release-sign --no-default-charms
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          files: |
+            dist/magus_*.tar.gz
+            dist/SHA256SUMS
+            dist/SHA256SUMS.sig
+          generate_release_notes: true
+
+  image:
+    name: Publish container images
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write  # push to GHCR
+      id-token: write  # cosign keyless (OIDC) signing
+
+    # The whole build → push → sign flow lives in the magusfile's image-build
+    # target (docker + cosign spells); `magus run image-build:cd,stable` builds the
+    # static (multi-arch) and CGO (amd64) variants, pushes them to every registry,
+    # and cosign-signs each pushed digest in each. The same command signs images
+    # locally. cosign comes from mise (mise.toml); no cosign-specific action.
+    #
+    # Each variant is built ONCE for all registries: `image-build:cd,stable` passes every
+    # tag across every registry to a single `docker buildx build --push`, so Docker
+    # Hub costs an upload rather than a rebuild. Do not split this into a per-registry
+    # step - a second buildx invocation on this runner starts from an empty BuildKit
+    # cache and rebuilds every layer.
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          # Full history + tags so version()/commit()/build_date() resolve.
+          fetch-depth: 0
+          filter: blob:none
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          git-ref: ${{ github.ref_name }}
+
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      # WHICH registries to authenticate against is not written here, and neither is
+      # any parsing of them. image-login reads the same registry table image-build
+      # does, so the login set cannot drift from the push set, and adding a registry
+      # is a magusfile change with no matching edit in this file. It is also the
+      # command you run on a laptop before `magus run image-build:cd,stable`.
+      #
+      # Only the secret VALUES stay in the workflow, and they have to: nothing outside
+      # a workflow can read GitHub secrets. The names below are the ones the magusfile
+      # declares; `magus run image-registries:cd,stable` prints them and says which are set.
+      # image-login hands each token to docker on stdin, so no secret enters an argv
+      # that magus would capture into the run log.
+      #
+      # DOCKERHUB_USERNAME / DOCKERHUB_TOKEN are repository secrets (Settings > Secrets
+      # and variables > Actions). The token is a Docker Hub access token with Read/Write
+      # scope, NOT the account password.
+      # Preflight, and the answer to "where do these variable names come from?" - it
+      # prints the registry-by-registry table this env block exists to satisfy, then
+      # fails on a NAMED variable if any is unset. That happens here, before the build
+      # steps below spend runner time on QEMU and a multi-arch compile.
+      #
+      # The env block is repeated on both steps rather than hoisted to the job, which
+      # is deliberate: at job level the Docker Hub token would also be in scope for
+      # every third-party setup action above. Step scope keeps it to the two steps
+      # that have any business with it.
+      - name: Verify registry credentials
+        env:
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: magus run image-registries:cd,stable,verify --no-default-charms
+
+      - name: Log in to image registries
+        env:
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: magus run image-login:cd,stable --no-default-charms
+
+      - name: Build, push, and sign images
+        run: magus run image-build:cd,stable --no-default-charms

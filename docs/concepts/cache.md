@@ -607,7 +607,7 @@ Two ways out, and they are not equally good.
 provenance line, and the deploy renders from source with the final commit already
 known, so there is nothing to restale. This is what this repository does: the
 rendered docs site is generated into `docs/gen/` and never committed
-(`.github/workflows/publish-site.yaml` renders it on every push to `main`). Cost: the
+(`.github/workflows/cd.yaml` renders it on every push to `main`). Cost: the
 output is no longer reviewable in a diff, and a broken generator now blocks a
 deploy that a file copy could never fail.
 
