@@ -168,7 +168,7 @@ func VcsRoot(ctx context.Context) (string, error) {
 	if v == nil {
 		return "", nil
 	}
-	root, err := v.Root(ctx, "") // host bindings run in the project cwd
+	root, err := v.Root(ctx, vcsDir(ctx))
 	if err != nil {
 		return "", fmt.Errorf("vcs.root: %w", err)
 	}
@@ -181,10 +181,12 @@ func VcsRoot(ctx context.Context) (string, error) {
 // reports diff paths from the root while a target runs in its project directory, so a
 // bare string left the caller to supply that fact from memory.
 //
-// Note the probe runs with an empty dir (the process cwd) where VcsStatus uses
-// EffectiveCwd. That difference predates this change and is preserved rather than
-// quietly altered; the root is read from the same place the diff was, so the paths and
-// their base at least agree with each other.
+// The probe runs at EffectiveCwd, matching resolveVCS and vcs.status. It used to pass an
+// empty dir, which means the PROCESS cwd: so magus resolved which VCS to use from the
+// target's project directory and then ran the command somewhere else entirely. Identical
+// only while both sit in the same repository - and a target's cwd IS its project
+// directory, so a nested repository, or a daemon whose process cwd is outside the
+// workspace, made the two disagree.
 func VcsDiff(ctx context.Context, base string) ([]types.Path, error) {
 	v, defaultBase := resolveVCS(ctx)
 	if v == nil {
@@ -193,19 +195,43 @@ func VcsDiff(ctx context.Context, base string) ([]types.Path, error) {
 	if base == "" {
 		base = defaultBase
 	}
-	files, err := v.Diff(ctx, "", base)
+	dir, err := EffectiveCwd(ctx)
+	if err != nil {
+		dir = ""
+	}
+	files, err := v.Diff(ctx, dir, base)
 	if err != nil {
 		return nil, fmt.Errorf("vcs.diff: %w", err)
 	}
-	root, err := v.Root(ctx, "")
+	root, err := v.Root(ctx, dir)
 	if err != nil {
-		root = ""
+		root = dir
 	}
 	out := make([]types.Path, 0, len(files))
 	for _, f := range files {
 		out = append(out, types.Path{Value: f, Base: root})
 	}
 	return out, nil
+}
+
+// vcsDir is the directory every vcs probe runs in: the target's, not the process's.
+//
+// These call sites passed "" and explained it as "host bindings run in the project cwd".
+// They do not. runBuzz deliberately does NOT os.Chdir - it carries the target's directory
+// on the context so projects can execute concurrently without corrupting a shared process
+// cwd (internal/interp/runtime.go) - so "" meant the PROCESS cwd, which is a different
+// place. resolveVCS already picks the driver from EffectiveCwd, so magus was choosing
+// which VCS to use from one directory and then running it in another.
+//
+// Harmless while both sit in the same repository, which is why it went unnoticed. Not
+// harmless in the daemon, where the process cwd belongs to the daemon and the context cwd
+// comes from the request (internal/proc/server.go).
+func vcsDir(ctx context.Context) string {
+	dir, err := EffectiveCwd(ctx)
+	if err != nil {
+		return ""
+	}
+	return dir
 }
 
 // vcsMetadata resolves the workspace VCS and reads its metadata, RAISING when either step
@@ -225,7 +251,7 @@ func vcsMetadata(ctx context.Context) (types.VCSMeta, error) {
 	if v == nil {
 		return types.VCSMeta{}, types.DiagnosticErrorf(types.VCSUnavailable, "no VCS resolved for this workspace; use vcs.name() to test before asking for commit metadata")
 	}
-	meta, err := v.Metadata(ctx, "")
+	meta, err := v.Metadata(ctx, vcsDir(ctx))
 	if err != nil {
 		return types.VCSMeta{}, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s metadata", v.Name())
 	}
@@ -346,7 +372,7 @@ func VcsCommit(ctx context.Context, rev string) (types.Commit, error) {
 	if v == nil {
 		return types.Commit{}, types.DiagnosticErrorf(types.VCSUnavailable, "no VCS resolved for this workspace; use vcs.name() to test before looking up a commit")
 	}
-	c, err := v.FindCommit(ctx, "", rev) // host bindings run in the project cwd
+	c, err := v.FindCommit(ctx, vcsDir(ctx), rev)
 	if err != nil {
 		which := rev
 		if which == "" {
@@ -364,7 +390,7 @@ func VcsHistory(ctx context.Context, limit int) ([]types.Commit, error) {
 	if v == nil {
 		return nil, nil
 	}
-	commits, err := v.History(ctx, "", limit)
+	commits, err := v.History(ctx, vcsDir(ctx), limit)
 	if err != nil {
 		return nil, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s history", v.Name())
 	}
@@ -380,7 +406,7 @@ func VcsDescribe(ctx context.Context) (string, error) {
 	if v == nil {
 		return "", nil
 	}
-	out, err := v.Describe(ctx, "") // host bindings run in the project cwd
+	out, err := v.Describe(ctx, vcsDir(ctx))
 	if err != nil {
 		return "", types.WrapDiagnostic(types.VCSUnavailable, err, "describe %s revision", v.Name())
 	}
@@ -401,7 +427,7 @@ func VcsTags(ctx context.Context, pattern string) ([]types.VCSTag, error) {
 	// so a non-nil error here is a real fault - git missing, not a repository, or
 	// a malformed pattern. Swallowing it would report "no releases" for "could not
 	// read releases", which is exactly the confusion a release page must not make.
-	return v.Tags(ctx, "", pattern) // host bindings run in the project cwd
+	return v.Tags(ctx, vcsDir(ctx), pattern)
 }
 
 // vcsExe returns the absolute path of the active VCS executable, or "" when
