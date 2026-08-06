@@ -70,6 +70,29 @@ func (v FileInfo) BuzzObject() BuzzObject {
 	}
 }
 
+func (v UncompressResult) BuzzObject() BuzzObject {
+	itemsFiles := make([]any, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = v.Files[indexFiles].BuzzObject()
+	}
+	return BuzzObject{
+		"files": itemsFiles,
+		"bytes": v.Bytes,
+	}
+}
+
+func (v CompressResult) BuzzObject() BuzzObject {
+	itemsFiles := make([]any, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = v.Files[indexFiles].BuzzObject()
+	}
+	return BuzzObject{
+		"files":     itemsFiles,
+		"bytes_in":  v.BytesIn,
+		"bytes_out": v.BytesOut,
+	}
+}
+
 func (v HTTPResponse) BuzzObject() BuzzObject {
 	return BuzzObject{
 		"status":  v.Status,

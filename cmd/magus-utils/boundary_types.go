@@ -25,6 +25,8 @@ var boundaryTypes = []boundaryType{
 	{Name: "Status", Type: reflect.TypeFor[types.StatusRecord](), RuntimeObject: true},
 	{Name: "DriftVerdict", Type: reflect.TypeFor[types.DriftVerdictRecord](), RuntimeObject: true},
 	{Name: "FileInfo", Type: reflect.TypeFor[types.FileInfo](), RuntimeObject: true},
+	{Name: "UncompressResult", Type: reflect.TypeFor[types.UncompressResult](), RuntimeObject: true},
+	{Name: "CompressResult", Type: reflect.TypeFor[types.CompressResult](), RuntimeObject: true},
 	{Name: "HttpResponse", Type: reflect.TypeFor[types.HTTPResponse](), RuntimeObject: true},
 	{Name: "SemverVersion", Type: reflect.TypeFor[types.SemverVersion](), RuntimeObject: true},
 	{Name: "SemverNext", Type: reflect.TypeFor[types.SemverNext](), RuntimeObject: true},

@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -89,10 +90,9 @@ func TestArchiveUncompressTarGz(t *testing.T) {
 
 	result, err := ArchiveUncompress(context.Background(), src, dest, nil)
 	require.NoError(t, err)
-	files, _ := result["files"].([]string)
-	sort.Strings(files)
+	files := pathValues(result.Files)
 	assert.Equal(t, []string{"a.txt", "b.txt"}, files)
-	got, _ := result["bytes"].(int)
+	got := result.Bytes
 	assert.Equal(t, 10, got)
 }
 
@@ -102,8 +102,19 @@ func TestArchiveUncompressTar(t *testing.T) {
 
 	result, err := ArchiveUncompress(context.Background(), src, dest, nil)
 	require.NoError(t, err)
-	files, _ := result["files"].([]string)
+	files := pathValues(result.Files)
 	assert.Equal(t, []string{"hello.txt"}, files)
+}
+
+// pathValues is the entry list as plain relative strings, for comparison. The Paths
+// themselves are asserted to carry their base in TestArchiveResultPathsCarryTheirBase.
+func pathValues(ps []types.Path) []string {
+	out := make([]string, 0, len(ps))
+	for _, p := range ps {
+		out = append(out, p.Value)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func TestArchiveUncompressZip(t *testing.T) {
@@ -115,8 +126,7 @@ func TestArchiveUncompressZip(t *testing.T) {
 
 	result, err := ArchiveUncompress(context.Background(), src, dest, nil)
 	require.NoError(t, err)
-	files, _ := result["files"].([]string)
-	sort.Strings(files)
+	files := pathValues(result.Files)
 	assert.Equal(t, []string{"x.txt", "y.txt"}, files)
 }
 
@@ -129,8 +139,7 @@ func TestArchiveUncompressStrip(t *testing.T) {
 
 	result, err := ArchiveUncompress(context.Background(), src, dest, map[string]any{"strip": 1})
 	require.NoError(t, err)
-	files, _ := result["files"].([]string)
-	sort.Strings(files)
+	files := pathValues(result.Files)
 	assert.Equal(t, []string{"a.txt", filepath.Join("b", "c.txt")}, files)
 }
 
@@ -144,7 +153,7 @@ func TestArchiveUncompressStripShallowEntrySkipped(t *testing.T) {
 
 	result, err := ArchiveUncompress(context.Background(), src, dest, map[string]any{"strip": 1})
 	require.NoError(t, err)
-	files, _ := result["files"].([]string)
+	files := pathValues(result.Files)
 	assert.Equal(t, []string{"a.txt"}, files)
 }
 
@@ -270,15 +279,14 @@ func TestArchiveCompressTarGzRoundTrip(t *testing.T) {
 
 	result, err := ArchiveCompress(context.Background(), src, dest, nil)
 	require.NoError(t, err)
-	files, _ := result["files"].([]string)
-	sort.Strings(files)
+	files := pathValues(result.Files)
 	require.Len(t, files, 2, "compress files")
 
 	// Round-trip: extract and verify content.
 	out := t.TempDir()
 	res2, err := ArchiveUncompress(context.Background(), dest, out, nil)
 	require.NoError(t, err)
-	extracted, _ := res2["files"].([]string)
+	extracted := pathValues(res2.Files)
 	sort.Strings(extracted)
 	require.Len(t, extracted, 2, "uncompress files")
 	got, _ := os.ReadFile(filepath.Join(out, "a.txt"))
@@ -295,7 +303,7 @@ func TestArchiveCompressTarZstRoundTrip(t *testing.T) {
 	out := t.TempDir()
 	res, err := ArchiveUncompress(context.Background(), dest, out, nil)
 	require.NoError(t, err)
-	files, _ := res["files"].([]string)
+	files := pathValues(res.Files)
 	require.Equal(t, []string{"x.txt"}, files, "round-trip files")
 	got, _ := os.ReadFile(filepath.Join(out, "x.txt"))
 	assert.Equal(t, "zstd content", string(got))
@@ -314,7 +322,7 @@ func TestArchiveCompressZipRoundTrip(t *testing.T) {
 	out := t.TempDir()
 	res, err := ArchiveUncompress(context.Background(), dest, out, nil)
 	require.NoError(t, err)
-	files, _ := res["files"].([]string)
+	files := pathValues(res.Files)
 	sort.Strings(files)
 	require.Equal(t, []string{"p.txt", "q.txt"}, files, "zip round-trip files")
 }
@@ -328,7 +336,7 @@ func TestArchiveCompressTarRoundTrip(t *testing.T) {
 	out := t.TempDir()
 	res, err := ArchiveUncompress(context.Background(), dest, out, nil)
 	require.NoError(t, err)
-	files, _ := res["files"].([]string)
+	files := pathValues(res.Files)
 	require.Equal(t, []string{"bare.txt"}, files, "tar round-trip files")
 }
 
@@ -346,7 +354,7 @@ func TestArchiveCompressMultiThreadZst(t *testing.T) {
 
 	result, err := ArchiveCompress(ctx, src, dest, map[string]any{"threads": 4})
 	require.NoError(t, err)
-	files, _ := result["files"].([]string)
+	files := pathValues(result.Files)
 	require.Len(t, files, 4, "compress produced wrong file count")
 	assert.Equal(t, 0, lim.Snapshot().Running, "limiter Running after compress")
 
@@ -460,8 +468,7 @@ func TestArchiveUncompressMultiThreadZip(t *testing.T) {
 
 	result, err := ArchiveUncompress(ctx, src, dest, map[string]any{"threads": 3})
 	require.NoError(t, err)
-	files, _ := result["files"].([]string)
-	sort.Strings(files)
+	files := pathValues(result.Files)
 	require.Len(t, files, 3, "parallel zip extract files")
 	assert.Equal(t, 0, lim.Snapshot().Running, "limiter Running after call")
 }
@@ -476,4 +483,29 @@ func TestArchiveUncompressLimiterAcquiresN(t *testing.T) {
 	_, err := ArchiveUncompress(ctx, src, dest, map[string]any{"threads": 2})
 	require.NoError(t, err)
 	assert.Equal(t, 0, lim.Snapshot().Running, "limiter Running after call")
+}
+
+// The base is the point of returning Paths here. An archive entry is relative, and which
+// directory it is relative to differs by operation: uncompress writes into dest, compress
+// reads from src. As bare strings the two were indistinguishable, so a caller had to
+// remember which of the arguments it had just passed applied.
+func TestArchiveResultPathsCarryTheirBase(t *testing.T) {
+	src := makeZip(t, map[string]string{"a.txt": "hello"})
+	dest := t.TempDir()
+
+	un, err := ArchiveUncompress(context.Background(), src, dest, nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, un.Files)
+	// Not an exact string compare against dest: the impl resolves the path first, and on
+	// macOS that turns /var into /private/var. What matters is the invariant - the entry
+	// knows its base, so Resolve() alone lands on the real file.
+	assert.NotEmpty(t, un.Files[0].Base, "an extracted entry knows where it was written")
+	assert.FileExists(t, un.Files[0].Resolve().Value, "so Resolve alone finds it on disk")
+
+	out := filepath.Join(t.TempDir(), "out.tar.gz")
+	cm, err := ArchiveCompress(context.Background(), dest, out, nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, cm.Files)
+	assert.NotEmpty(t, cm.Files[0].Base, "a compressed entry knows where it was read from")
+	assert.FileExists(t, cm.Files[0].Resolve().Value)
 }
