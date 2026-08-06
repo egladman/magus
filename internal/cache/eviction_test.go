@@ -158,7 +158,6 @@ func TestEvictReclaimsOrphanOutputs(t *testing.T) {
 func TestEvictLRU_SharedBlobsSurvive(t *testing.T) {
 	root := t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
-	t.Setenv("MAGUS_CACHE_MODE", "write")
 	c, err := Open(t.Context(), cdir)
 	require.NoError(t, err, "Open")
 
@@ -189,7 +188,6 @@ func TestEvictLRU_SharedBlobsSurvive(t *testing.T) {
 func TestPrune_SharedBlobsSurvive(t *testing.T) {
 	root := t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
-	t.Setenv("MAGUS_CACHE_MODE", "write")
 	c, err := Open(t.Context(), cdir)
 	require.NoError(t, err, "Open")
 
@@ -216,7 +214,6 @@ func TestPrune_SharedBlobsSurvive(t *testing.T) {
 func TestEvictLRU_OrphanBlobsCollected(t *testing.T) {
 	root := t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
-	t.Setenv("MAGUS_CACHE_MODE", "write")
 	c, err := Open(t.Context(), cdir)
 	require.NoError(t, err, "Open")
 

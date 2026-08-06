@@ -11,7 +11,7 @@ import (
 // BuildOptions carries the build toggles so callers pass named fields rather than
 // a row of transposable booleans.
 type BuildOptions struct {
-	Immutable bool         // mirror cache.write.enabled: load-only, never write
+	Immutable bool         // set when cache.write.enabled is false: load-only, never write
 	Refresh   bool         // force a full rebuild regardless of fingerprints
 	MaxBytes  int64        // soft cap on the shards dir; 0 = unlimited
 	Remote    RemoteShards // optional remote shard backing; nil = local-only

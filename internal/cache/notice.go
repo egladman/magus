@@ -50,14 +50,13 @@ func extractNotices(path string) []string {
 // context either side; windows are merged and capped. If no diagnostic is recognized,
 // fall back to the final lines, which still include the tool's terminal outcome.
 //
-// A canonicalFailureLine match is PINNED: it survives budget pressure that would
-// otherwise evict it. Without this, internal/cache's own test suite - which verifies
-// magus's failure reporting, so it is unusually dense with lines like "[fail]" and
-// "cause:" as EXPECTED, passing output - could produce enough incidental
-// diagnosticLine matches after the one real "--- FAIL: TestX" to push it out of a
-// 24-line budget entirely. That happened for real: a genuine race-condition bug in
-// RunAll's dependency barrier was invisible in the console excerpt for exactly this
-// reason, and was only found by pulling the full uploaded log.
+// A structuralFailureLine match outranks a diagnosticLine one when the budget is
+// oversubscribed, rather than being exempt from it. Rank, not exemption, is the whole
+// subtlety: internal/cache's own suite verifies magus's failure reporting, so it is
+// dense with lines like "[fail]" and "cause:" that are EXPECTED, passing output and
+// match diagnosticLine exactly as well as a real failure does. Ranking keeps the one
+// real "--- FAIL: TestX" from being evicted by that noise while still honoring limit,
+// so a broadly-failing `go test ./...` cannot dump its whole log to the console.
 func failureExcerpt(data []byte, limit int) (excerpt []byte, omitted int) {
 	if limit <= 0 {
 		return data, 0
@@ -67,70 +66,53 @@ func failureExcerpt(data []byte, limit int) (excerpt []byte, omitted int) {
 		return nil, 0
 	}
 
-	selected := make([]bool, len(lines))
-	pinned := make([]bool, len(lines))
-	mark := func(i int, pin bool) {
+	// Interest tiers, weakest first. A line's rank is the strongest reason to show it:
+	// its own match, or being within one line of a stronger one.
+	const (
+		uninteresting = iota
+		keywordMatch
+		structuralFailure
+	)
+	rank := make([]int, len(lines))
+	mark := func(i, tier int) {
 		for j := max(0, i-1); j <= min(len(lines)-1, i+1); j++ {
-			selected[j] = true
-			if pin {
-				pinned[j] = true
-			}
+			rank[j] = max(rank[j], tier)
 		}
 	}
-	anyMatch := false
+	matched := false
 	for i, line := range lines {
 		switch {
-		case canonicalFailureLine.MatchString(line):
-			mark(i, true)
-			anyMatch = true
+		case structuralFailureLine.MatchString(line):
+			mark(i, structuralFailure)
+			matched = true
 		case diagnosticLine.MatchString(line):
-			mark(i, false)
-			anyMatch = true
+			mark(i, keywordMatch)
+			matched = true
 		}
 	}
-	if !anyMatch {
+	if !matched {
 		start := max(0, len(lines)-limit)
 		return []byte(strings.Join(lines[start:], "\n") + "\n"), start
 	}
 
-	// Budget goes to pinned lines first, unconditionally - a log with more pinned
-	// (structurally real) failures than the limit prints all of them rather than
-	// silently cutting some; that case is rare, and dropping a confirmed failure to
-	// stay under a display budget is the exact bug this exists to prevent. Whatever
-	// remains of the budget goes to the loosely matched lines, keeping the LAST ones:
-	// a tool prints its setup before it prints what went wrong, so filling the
-	// budget from the top spends it on whatever merely looked diagnostic early on.
-	pinnedCount, unpinnedCount := 0, 0
-	for i := range lines {
-		switch {
-		case pinned[i]:
-			pinnedCount++
-		case selected[i]:
-			unpinnedCount++
-		}
-	}
-	budget := limit - pinnedCount
-	if budget < 0 {
-		budget = 0
-	}
-	drop := unpinnedCount - budget
-
-	kept := make([]bool, len(lines))
-	skipped := 0
-	for i := range lines {
-		switch {
-		case pinned[i]:
-			kept[i] = true
-		case selected[i] && skipped < drop:
-			skipped++
-		case selected[i]:
-			kept[i] = true
+	// Spend the budget by tier, and within a tier keep the LAST lines: a tool prints
+	// its setup before it prints what went wrong, so filling from the top spends the
+	// budget on whatever merely looked diagnostic early on and drops the actual
+	// failure - the one line the reader opened the output for.
+	keep := make([]bool, len(lines))
+	room := limit
+	for _, tier := range []int{structuralFailure, keywordMatch} {
+		for i := len(lines) - 1; i >= 0 && room > 0; i-- {
+			if rank[i] == tier {
+				keep[i] = true
+				room--
+			}
 		}
 	}
 
-	var out []string
+	out := make([]string, 0, limit)
 	for i, line := range lines {
-		if kept[i] {
+		if keep[i] {
 			out = append(out, line)
 		}
 	}
@@ -155,7 +137,7 @@ func failureExcerpt(data []byte, limit int) (excerpt []byte, omitted int) {
 var diagnosticLine = regexp.MustCompile(
 	`(?i)(^|[^\w/.\-])(errors?|fatal|panics?|fail(s|ed|ure|ures)?|mismatch|undefined|not found|cannot)($|[^\w/.\-])`)
 
-// canonicalFailureLine matches a test tool's own STRUCTURAL failure marker, as
+// structuralFailureLine matches a test tool's own STRUCTURAL failure marker, as
 // opposed to diagnosticLine's loose keyword match. `go test` writes these for
 // exactly this purpose - "this is the one that failed" - so unlike an incidental
 // "fail"/"cause" elsewhere in the log, a match here is never budget-evicted; see
@@ -163,4 +145,4 @@ var diagnosticLine = regexp.MustCompile(
 // and covers a top-level or nested subtest ("--- FAIL: ", indented under its
 // parent), a panic, and go test's own terminal "FAIL" line (bare, or the
 // package-and-duration summary "FAIL\t<pkg>\t<dur>").
-var canonicalFailureLine = regexp.MustCompile(`^\s*(--- FAIL: |panic: |FAIL(\s|$))`)
+var structuralFailureLine = regexp.MustCompile(`^\s*(--- FAIL: |panic: |FAIL(\s|$))`)

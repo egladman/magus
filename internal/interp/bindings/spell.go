@@ -673,11 +673,11 @@ func floorVerdict(ctx context.Context, t spells.Tool, tool, dir string) error {
 	raw, err := versionProber(ctx, t.Probe, dir)
 	if err != nil {
 		// Unprobeable is not too old - those are different failures and this function
-		// answers only the second. A tool that is genuinely missing or broken still
-		// fails when dispatchOp forks it for real, right after this check; swallowing
-		// the error here only stops floorVerdict from mislabeling that failure as a
-		// version problem before the op gets a chance to report its own, accurate one.
-		return nil //nolint:nilerr // probe failure is not a floor violation; the real op exec still fails on a missing tool
+		// answers only the second. A tool that is genuinely missing still fails when
+		// dispatchOp forks it for real, right after this check, and run.Exec classifies
+		// that as MGS3003; swallowing the error here only stops floorVerdict from
+		// mislabeling it as a version problem before the op reports the accurate one.
+		return nil //nolint:nilerr // probe failure is not a floor violation; the real op exec fails it as MGS3003
 	}
 	got, ok := spells.ExtractVersion(raw)
 	if !ok {

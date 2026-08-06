@@ -15,8 +15,6 @@ import (
 // false on every PR run and true on a push to main. A write-disabled cache writes no
 // entry, so every test that runs a step twice and asserts the second is a HIT fails on
 // a PR and passes everywhere else - including locally, where the variable is unset.
-// Worse, it silently overrides a test that already declared its intent: the eviction
-// tests set MAGUS_CACHE_MODE=write and were overruled anyway.
 //
 // Tests that care about a value still set it themselves with t.Setenv, which runs
 // after this and restores afterwards - defaults_test.go does exactly that for

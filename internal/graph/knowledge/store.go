@@ -106,9 +106,9 @@ type Store struct {
 	log       *slog.Logger
 }
 
-// NewStore returns a store rooted at <cacheDir>/knowledge. immutable mirrors
-// cache.write.enabled (Sync writes nothing, warns if stale). maxBytes soft-caps
-// the shards dir (0 = unlimited); remote optionally backs shards (nil = local).
+// NewStore returns a store rooted at <cacheDir>/knowledge. immutable is set when
+// cache.write.enabled is false (Sync writes nothing, warns if stale). maxBytes
+// soft-caps the shards dir (0 = unlimited); remote optionally backs shards (nil = local).
 func NewStore(cacheDir string, immutable bool, maxBytes int64, remote RemoteShards, log *slog.Logger) *Store {
 	if log == nil {
 		log = slog.Default()

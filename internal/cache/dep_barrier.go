@@ -28,10 +28,14 @@ func stepKey(s Step) string { return DepKey(s.ProjectPath, s.Target) }
 func formatCycle(cycle []string) string {
 	hops := make([]string, len(cycle))
 	for i, k := range cycle {
-		hops[i] = strings.Replace(k, nodeKeySep, " ", 1)
+		hops[i] = displayKey(k)
 	}
 	return strings.Join(hops, " -> ")
 }
+
+// displayKey renders one node key for a human, spelling out the control byte DepKey
+// joins on. Every user-facing message naming a node goes through here.
+func displayKey(key string) string { return strings.Replace(key, nodeKeySep, " ", 1) }
 
 // depBarrier gates RunAll goroutines on inter-step completion. One entry per node
 // key; dependents block in waitForDeps until markDone closes its channel.
@@ -96,16 +100,24 @@ func (b *depBarrier) waitForDeps(ctx context.Context, s Step) error {
 		if !ok {
 			return nil
 		}
+		// Probe the upstream before blocking, so a settled one always wins over a
+		// cancelled ctx. Both can be ready at once - the upstream failed AND a sibling
+		// already cancelled the group - and select picks uniformly at random among
+		// ready cases, which would surface the specific "dependency X failed" error
+		// this function exists to produce only about half the time.
 		select {
 		case <-e.ch:
-			if e.err != nil {
-				return fmt.Errorf("cache: RunAll: dependency %s failed: %w",
-					strings.Replace(key, nodeKeySep, " ", 1), e.err)
+		default:
+			select {
+			case <-e.ch:
+			case <-ctx.Done():
+				return ctx.Err()
 			}
-			return nil
-		case <-ctx.Done():
-			return ctx.Err()
 		}
+		if e.err != nil {
+			return fmt.Errorf("cache: RunAll: dependency %s failed: %w", displayKey(key), e.err)
+		}
+		return nil
 	}
 	for _, d := range s.DependsOn {
 		if err := wait(DepKey(d, s.Target)); err != nil {
