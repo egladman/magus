@@ -204,7 +204,7 @@ func decodeCommand(spellName, opName string, o Obj) (spells.Command, error) {
 			if v, ok := opObj.Str("value"); ok {
 				po.Value = v
 			}
-			if f, ok := opObj.Str("from"); ok {
+			if f, ok := opObj.Str("fromPtr"); ok {
 				po.From = f
 			}
 			ch.Ops = append(ch.Ops, po)

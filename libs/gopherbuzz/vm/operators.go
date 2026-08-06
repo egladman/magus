@@ -1017,23 +1017,91 @@ func strMethod(vm *VM, s Value, name string) Value {
 			if len(args) >= 1 && args[0].IsInt() {
 				at = int(args[0].AsInt())
 			}
-			runes := []rune(str)
-			if at < 0 || at >= len(runes) {
+			// Fast path, same cached-isASCII test str.sub uses: for pure ASCII a rune
+			// index is a byte index, so this is a direct index instead of a []rune copy
+			// of the whole string. That copy made `.byte(i)` O(len) PER CALL, which turns
+			// any character-at-a-time scan into a quadratic one - and scanning a string
+			// byte by byte is precisely what this method exists for. The docs site's
+			// glossary linker walks every rendered page this way.
+			if sobj.isASCII() {
+				if at < 0 || at >= len(str) {
+					return Null, fmt.Errorf("str.byte: index %d out of range", at)
+				}
+				return IntValue(int64(str[at])), nil
+			}
+			// Multibyte: walk from the memoized cursor instead of converting the whole
+			// string. The ASCII test above is all-or-nothing, so a single accented
+			// character anywhere in a document put every one of its lookups on this path -
+			// which is how the docs site spent 14% of its render here.
+			r, _, ok := sobj.scanRune(at)
+			if !ok {
 				return Null, fmt.Errorf("str.byte: index %d out of range", at)
 			}
-			return IntValue(int64(runes[at])), nil
+			return IntValue(int64(r)), nil
 		})
 	case "indexOf":
 		return DirectValue("str.indexOf", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 1 || !args[0].IsStr() {
 				return Null, fmt.Errorf("str.indexOf: requires a str needle argument")
 			}
-			idx := strings.Index(str, args[0].AsString())
+			// Optional `from:` start position, in RUNES like every other index this
+			// type exposes. Without it, resuming a scan means slicing the haystack and
+			// searching the copy, which allocates the whole remainder on every step and
+			// turns any scan-for-the-next-match loop into a quadratic one. That shape
+			// is not exotic: it is what "find the next occurrence I have not already
+			// rejected" looks like, and the docs site generator does it for 47 glossary
+			// terms on every rendered page.
+			//
+			// This is an ADDITION to upstream's signature, not a change to it: a call
+			// with one argument behaves exactly as before. See docs/reference/buzz.
+			from := 0
+			if len(args) >= 2 && args[1].IsInt() {
+				from = int(args[1].AsInt())
+				if from < 0 {
+					from = 0
+				}
+			}
+
+			// Fast path, same cached-isASCII test str.sub uses: for pure ASCII a rune
+			// index IS a byte offset, so neither the start conversion nor the result
+			// conversion below has to walk the string. A found needle near the end of a
+			// large string used to pay for the entire prefix on every call.
+			if sobj.isASCII() {
+				if from >= len(str) {
+					return Null, nil
+				}
+				idx := strings.Index(str[from:], args[0].AsString())
+				if idx < 0 {
+					return Null, nil
+				}
+				return IntValue(int64(from + idx)), nil
+			}
+
+			// Multibyte: convert the rune start to a byte offset, search from there,
+			// and convert the hit back. Still one pass per call rather than a copy.
+			byteStart := 0
+			if from > 0 {
+				byteStart = -1
+				runes := 0
+				// range over a string yields the byte index of each rune's first byte,
+				// so runes counts positions while i tracks where that position starts.
+				for i := range str {
+					if runes == from {
+						byteStart = i
+						break
+					}
+					runes++
+				}
+				if byteStart < 0 {
+					return Null, nil // start is past the end
+				}
+			}
+			idx := strings.Index(str[byteStart:], args[0].AsString())
 			if idx < 0 {
 				return Null, nil
 			}
 			// Return byte offset converted to rune index.
-			return IntValue(int64(utf8.RuneCountInString(str[:idx]))), nil
+			return IntValue(int64(utf8.RuneCountInString(str[:byteStart+idx]))), nil
 		})
 	case "startsWith":
 		return DirectValue("str.startsWith", func(_ context.Context, args []Value) (Value, error) {

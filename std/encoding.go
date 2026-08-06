@@ -90,8 +90,8 @@ var Encoding = Module{
 		},
 		{
 			Name:    "build_url",
-			Doc:     "Build a URL string from a {scheme, host, port, path, query, fragment} map; missing keys are treated as empty.",
-			Args:    []Arg{{Name: "parts", Type: TypeAnyMap}},
+			Doc:     "Build a URL string from a URL object - the same shape parse_url returns, so the two round-trip. Missing fields are treated as empty.",
+			Args:    []Arg{{Name: "parts", Type: TypeAnyMap, Object: "URL"}},
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    EncodingBuildURL,
 		},

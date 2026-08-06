@@ -171,7 +171,7 @@ Two things under `docs/` stay tracked on purpose:
   starts 404-ing. That gate only works if the ledger outlives a single build.
 
 Pages use extensionless URLs (`/magus/documentation/`, served from
-`documentation/index.html`). If you rename or move a page, keep the old URL alive
+`docs/gen/documentation/index.html`). If you rename or move a page, keep the old URL alive
 by listing it under `aliases:` in the page's frontmatter, so external links do
 not die:
 

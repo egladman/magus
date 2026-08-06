@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -71,7 +72,7 @@ func TestSupersetModules(t *testing.T) {
 	// Modules Buzz's stdlib lacks become new bare imports.
 	hasKey(t, "http", "get")         // magus
 	hasKey(t, "http", "download")    // magus/extra http companion merged in
-	hasKey(t, "vcs", "shortHash")    // magus
+	hasKey(t, "vcs", "commit")       // magus
 	hasKey(t, "archive", "compress") // magus
 	hasKey(t, "time", "format")      // magus
 	hasKey(t, "markdown", "toHtml")  // magus
@@ -977,16 +978,20 @@ export fun build(ctx: magus\Context, args: [str]) > void {
     fs.mkdirall("sub");
     fs.writeFile("sub/a.txt", "alpha");
     fs.copyFile("sub/a.txt", "sub/b.txt");
-    // glob must return paths relative to the project dir, sorted.
+    // glob returns paths relative to the project dir, sorted, each carrying that dir
+    // as its base - so a caller can resolve one without knowing where the target ran.
     var hits = fs.glob("sub/*.txt");
     var acc = "";
     var first = true;
+    var base = "";
     foreach (h in hits) {
         if (!first) { acc = acc + ","; }
-        acc = acc + h;
+        acc = acc + h.value;
+        base = h.base;
         first = false;
     }
     fs.writeFile("glob.out", acc);
+    fs.writeFile("glob.base", base);
 }
 `)
 	require.NoError(t, runTargetIn(t, dir, "build"))
@@ -998,8 +1003,14 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 	}
 	got, err := os.ReadFile(filepath.Join(dir, "glob.out"))
 	require.NoError(t, err)
-	// Relative, sorted — not absolute paths.
+	// Relative, sorted - not absolute paths.
 	assert.Equal(t, "sub/a.txt,sub/b.txt", string(got))
+
+	// And each match names the directory those relative values are measured from, which
+	// is the project dir this test is about. The value alone could never say so.
+	base, err := os.ReadFile(filepath.Join(dir, "glob.base"))
+	require.NoError(t, err)
+	assert.Equal(t, dir, string(base), "a glob result is based at the project dir")
 }
 
 // TestExecResultAnnotationChecksFields proves the typed-returns mechanism: a
@@ -1215,31 +1226,54 @@ export fun check(ctx: magus\Context, args: [str]) > void {
 }
 
 func TestVcsBindings(t *testing.T) {
-	t.Parallel()
+	// NOT t.Parallel: resolveVCS caches the resolved driver in package state keyed by
+	// cwd, so concurrent tests in different directories race it.
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not in PATH")
+	}
 	dir := t.TempDir()
+	// A real repository AT THE TARGET'S DIRECTORY. This used to lean on the process cwd
+	// being inside magus's own checkout, which is exactly the confusion the vcs probes
+	// were fixed for: a target carries its directory on the context and the runtime never
+	// chdirs, so "the process happens to be in a repo" is not the same as "this target is".
+	for _, args := range [][]string{
+		{"git", "init", "-b", "main"},
+		{"git", "config", "user.email", "a@b.c"},
+		{"git", "config", "user.name", "A"},
+		{"git", "config", "commit.gpgsign", "false"},
+		{"git", "commit", "--allow-empty", "-m", "hello"},
+	} {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "%v: %s", args, out)
+	}
 	writeMagusfile(t, dir, `
 import "magus";
 import "vcs";
 
 export fun check(ctx: magus\Context, args: [str]) > void {
-    // This runs with the process cwd inside magus's own checkout (no t.Chdir), so a VCS
-    // IS resolved and every accessor returns a real value. That is the case worth pinning
-    // here; the no-VCS path, where these now RAISE rather than hand back "", is covered by
-    // TestVcsCommitRaisesOutsideRepo, which chdirs to a bare temp dir to get there.
-    final h = vcs.shortHash();
-    final b = vcs.branch();
-    if (h == "") { throw "shortHash returned empty inside a repo"; }
-    if (b == "") { throw "branch returned empty inside a repo"; }
-    vcs.commitDate();
+    // The target's own directory is a git repo, so every accessor answers about THAT
+    // repo. The no-VCS path, where these RAISE rather than hand back "", is covered by
+    // TestVcsCommitRaisesOutsideRepo.
+    final h = vcs.commit().short;
+    final b = vcs.ref();
+    if (h == "") { throw "commit().short returned empty inside a repo"; }
+    if (b == "") { throw "ref returned empty inside a git repo"; }
 
-    // isDirty RAISES here, and that is the point of the change. A VCS resolves (the
-    // process cwd is inside magus's checkout) but the probe runs in this temp dir, so
-    // git status exits 128. That used to be swallowed into a plain false - a drift gate
-    // asking whether its output changed would have been told clean by a check that never
-    // ran. An unreadable tree has no answer, so it says so.
-    var raised = false;
-    try { vcs.isDirty(); } catch (e) { raised = true; }
-    if (!raised) { throw "isDirty must raise when the status probe fails, not report clean"; }
+    // status answers about THIS repo. The magusfile was written after the commit, so it
+    // is the one untracked file - and seeing exactly it is what proves the probe read the
+    // target's tree rather than the process cwd (magus's own checkout, which is a
+    // different repo with entirely different dirty files).
+    final st = vcs.status();
+    if (st.clean) { throw "status must see the untracked magusfile"; }
+    if (!vcs.isDirty()) { throw "isDirty must agree with status.clean"; }
+    var sawMagusfile = false;
+    foreach (f in st.files) {
+        if (f.value == "magusfile.buzz") { sawMagusfile = true; }
+        if (f.base == "") { throw "a status path must name what it is relative to"; }
+    }
+    if (!sawMagusfile) { throw "status listed some other repo's files"; }
 }
 `)
 	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)

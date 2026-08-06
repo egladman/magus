@@ -123,7 +123,7 @@ Parse a URL string into {scheme, host, port, path, query, fragment}; errors on m
 
 ### buildUrl
 
-Build a URL string from a {scheme, host, port, path, query, fragment} map; missing keys are treated as empty.
+Build a URL string from a URL object - the same shape parse_url returns, so the two round-trip. Missing fields are treated as empty.
 
 **Signature:** `encoding\buildUrl(parts) → string` · [source](https://github.com/egladman/magus/blob/main/std/encoding.go#L175)
 

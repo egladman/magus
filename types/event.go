@@ -116,12 +116,25 @@ type FileRef struct {
 
 // PathFromRef builds a types.Path from a FileRef, so consumers that already
 // work with Path can move between the two without a helper at every site.
+//
+// Field-by-field, not a struct conversion. The two types happened to share a layout, so
+// Path(r) compiled - and that made every future field on Path a silent compile break
+// here, which is exactly what adding Path.Base did. A FileRef is an event payload naming
+// a file; a Path is a lexical reference measured from a base. They are not the same idea
+// and should not be coupled by their field order.
+//
+// Base is empty: a FileRef carries no base, and inventing one (the workspace root, say)
+// would assert something the event never said.
 func (r FileRef) PathFromRef() Path {
-	return Path(r)
+	return Path{Value: r.Value, IsDir: r.IsDir}
 }
 
 // FileRefFromPath is the inverse of PathFromRef, for producers that have a
 // types.Path in hand and need to emit a FileRef.
+//
+// Resolve first: a FileRef has nowhere to put a base, so emitting p.Value raw would ship
+// a relative path stripped of what it was relative to - readable, and wrong.
 func FileRefFromPath(p Path) FileRef {
-	return FileRef(p)
+	abs := p.Resolve()
+	return FileRef{Value: abs.Value, IsDir: abs.IsDir}
 }

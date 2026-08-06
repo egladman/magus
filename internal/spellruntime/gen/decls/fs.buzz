@@ -6,6 +6,12 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+export object Path {
+    value: str = "",
+    base: str = "",
+    isDir: bool = false,
+}
+
 export object FileInfo {
     size: int = 0,
     mtime: double = 0.0,
@@ -21,7 +27,7 @@ export extern fun copyFile(src: str, dst: str) > void;
 export extern fun dirname(path: str) > str;
 export extern fun exists(path: str) > bool;
 export extern fun ext(path: str) > str;
-export extern fun glob(pattern: str) > [str];
+export extern fun glob(pattern: str) > [Path];
 export extern fun isDir(path: str) > bool;
 export extern fun isFile(path: str) > bool;
 // join is variadic; Buzz has no variadic parameter, so it stays untyped.

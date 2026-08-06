@@ -78,6 +78,15 @@ type Arg struct {
 	// Default is used when Optional is true and the caller omits the arg.
 	// Must be of the Go type matching Type, or nil for "zero value".
 	Default any
+	// Object names the Buzz object this argument's map must match, for an arg whose
+	// Type is TypeAnyMap but whose shape is a declared boundary type. It changes only
+	// the DECLARED signature the checker reads: a Buzz object is a map at runtime, so
+	// the Impl still receives map[string]any and needs no decoder.
+	//
+	// Without it an argument like encoding.build_url's `parts` reads as {str: any} even
+	// though parse_url returns a URL - so the round trip was typed in one direction and
+	// untyped in the other, and a caller could pass any map at all.
+	Object string
 }
 
 // Ret is one return value of a Method.

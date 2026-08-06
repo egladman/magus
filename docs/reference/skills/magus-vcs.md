@@ -2,8 +2,8 @@
 title: magus-vcs
 description: "Safe git operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs]
-skill_full_bytes: 6164
-skill_simple_bytes: 4056
+skill_full_bytes: 6635
+skill_simple_bytes: 4527
 ---
 
 # magus-vcs
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `23` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `552905bbfe98` |
+| `skill-content` | `d139f0ba0c9c` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -115,11 +115,20 @@ For a rare VCS fact that needs Magus's portable VCS module rather than porcelain
 use one inline Buzz evaluation:
 
 ```sh
-magus buzz -e 'import "std"; import "vcs"; fun main() > void { std\print(vcs\metadata()); } main();'
+magus buzz -e 'import "std"; import "vcs"; fun main() > void { std\print(vcs\branch() + " " + vcs\shortHash()); } main();'
 ```
 
-Use `vcs\diff()` for the configured-base path set, `vcs\isDirty(["path"])`
-to scope a cleanliness check, and `vcs\metadata()` for branch/revision state.
+Use `vcs\diff()` for the configured-base path set, `vcs\isDirty(["path"])` to
+scope a cleanliness check, and the discrete accessors for revision state:
+`vcs\hash()`, `vcs\shortHash()`, `vcs\branch()`, `vcs\commitDate()`,
+`vcs\isDirty()`. Each returns a typed scalar.
+
+Prefer those over `vcs\metadata()`, which returns the same five facts as an
+untyped `map[string]any`. It is the one call in this module that gives up the
+type, so a caller reads fields by string key and finds out at runtime when one
+is missing or renamed - and it buys nothing, since the typed accessors already
+cover the whole map.
+
 The inline form is intentionally dense: it is an occasional capability query,
 not another everyday CLI surface.
 
@@ -225,11 +234,20 @@ For a rare VCS fact that needs Magus's portable VCS module rather than porcelain
 use one inline Buzz evaluation:
 
 ```sh
-magus buzz -e 'import "std"; import "vcs"; fun main() > void { std\print(vcs\metadata()); } main();'
+magus buzz -e 'import "std"; import "vcs"; fun main() > void { std\print(vcs\branch() + " " + vcs\shortHash()); } main();'
 ```
 
-Use `vcs\diff()` for the configured-base path set, `vcs\isDirty(["path"])`
-to scope a cleanliness check, and `vcs\metadata()` for branch/revision state.
+Use `vcs\diff()` for the configured-base path set, `vcs\isDirty(["path"])` to
+scope a cleanliness check, and the discrete accessors for revision state:
+`vcs\hash()`, `vcs\shortHash()`, `vcs\branch()`, `vcs\commitDate()`,
+`vcs\isDirty()`. Each returns a typed scalar.
+
+Prefer those over `vcs\metadata()`, which returns the same five facts as an
+untyped `map[string]any`. It is the one call in this module that gives up the
+type, so a caller reads fields by string key and finds out at runtime when one
+is missing or renamed - and it buys nothing, since the typed accessors already
+cover the whole map.
+
 The inline form is intentionally dense: it is an occasional capability query,
 not another everyday CLI surface.
 

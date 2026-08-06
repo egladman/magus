@@ -68,10 +68,18 @@ func TestFsGlob(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := FsGlob(ctx, tc.pattern)
 			require.NoError(t, err)
-			sort.Strings(got)
+			var values []string // nil, not empty: a no-match case expects nil
+			for _, p := range got {
+				values = append(values, p.Value)
+				// Every match names the directory its value is measured from. That is
+				// the fact the old []string dropped, leaving each caller to supply it
+				// from memory.
+				assert.Equal(t, dir, p.Base, "a match is based at the context cwd")
+			}
+			sort.Strings(values)
 			want := append([]string(nil), tc.want...)
 			sort.Strings(want)
-			assert.Equal(t, want, got)
+			assert.Equal(t, want, values)
 		})
 	}
 }

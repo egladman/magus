@@ -22,7 +22,7 @@ collector is yours, and magus connects only to the endpoint you configure.
 
 This page is the complete reference for everything magus emits. Instrument
 definitions live in
-[`internal/observability/provider_otel.go`](../../internal/observability/provider_otel.go);
+[`internal/observability/provider.go`](../../internal/observability/provider.go);
 config in [`internal/config/config.go`](../../internal/config/config.go).
 
 ## Enabling

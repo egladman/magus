@@ -287,7 +287,7 @@ The strongest proof: data cannot leave a machine that has no connection.
 3. Reload. The page comes back - served from your disk. Now load your
    confidential graph (drag the file in) and explore it fully. The page
    shows an "offline - everything on this page is local" badge while
-   disconnected (`js/offline-badge.js`).
+   disconnected (`docs/src/site/offline-badge.ts`).
 
 ### Claim: we store nothing without asking
 
@@ -328,7 +328,7 @@ curl -s <asset-url> | sha256sum
 
 and compare against the manifest and the repo's committed copy (the docs site
 under `docs/gen/`, the console app under `console/gen/`). The JavaScript is
-unminified enough to read; start at the console's `graph/explorer.js` -
+unminified enough to read; start at the console's `console/src/console/graph/main.ts` -
 `loadGraph` and `readGraphFile` are the functions that
 ingest a graph (the `#data=`/`#src=`/demo fallback chain, and drag-drop/
 file-input/`launchQueue` respectively), and there is no function that sends

@@ -39,6 +39,34 @@ fun env(name: str) > str {
     return "" + v;
 }
 
+// volatilitySection is the ONLY insight lens on this surface, and it is empty unless there
+// is something to say.
+//
+// `magus insight report` used to be appended here in full. Three things were wrong with
+// that. Its own help calls it "one Markdown doc (commit it as INSIGHT.md)" - a point-in-time
+// document, not a per-run readout. It is workspace-wide and derived from the last 500
+// commits, so it rendered near-identically on every push, and a section that never changes
+// is a section nobody reads. And its hotspot heatmap draws the workspace-wide project graph
+// with a blast-radius number per node - exactly the picture MAGUS.md already commits, and
+// exactly the one blast-radius.buzz deliberately refuses to draw in the PR comment ("the
+// workspace-wide graph is already rendered in MAGUS.md"). The step summary was printing the
+// duplicate that the advisor had gone out of its way to avoid.
+//
+// Volatility is the lens that belongs on a run's own page: it reads RUN-OUTCOME history
+// rather than git, so it is about the thing the reader is looking at, and it answers the
+// one question a red or green run raises - is this result trustworthy, or does this target
+// flap? Silent when nothing is flagged, matching every advisor in ../advice.
+fun volatilitySection() > str {
+    final flagged = magus\insight(["volatility", "-o", "name"], opts: {"quiet": true, "allow_failure": true});
+    if (!flagged.ok or flagged.stdout.trim() == "") { return ""; }
+    final detail = magus\insight(["volatility", "-o", "text"], opts: {"quiet": true, "allow_failure": true});
+    if (!detail.ok) { return ""; }
+    return "\n## Volatile targets\n\n"
+        + "These targets' pass/fail records flap, so a result from one of them is weak "
+        + "evidence either way. Stabilize them before trusting a red run.\n\n"
+        + "```\n" + detail.stdout.trim() + "\n```\n";
+}
+
 fun main() > void {
     final path = env("GITHUB_STEP_SUMMARY");
     if (path == "") {
@@ -46,10 +74,7 @@ fun main() > void {
         return;
     }
     var text = outcome(env("CI_RESULT"), shards: env("SHARD_COUNT"));
-    // The insight report rides along: same surface, same run, and it is the one place a
-    // reader gets the workspace's shape without running anything themselves.
-    final insight = magus\insight(["report", "--workspace", "-o", "markdown"], opts: {"quiet": true});
-    if (insight.ok) { text = text + "\n## Insight report\n\n" + insight.stdout + "\n"; }
+    text = text + volatilitySection();
     fs\appendFile(path, text);
     std\print("ci-outcome: summarized " + env("CI_RESULT"));
 }

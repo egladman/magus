@@ -46,7 +46,7 @@ var Archive = Module{
 				{Name: "dest", Type: TypeString},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "UncompressResult"}},
 			Impl:    ArchiveUncompress,
 		},
 		{
@@ -57,7 +57,7 @@ var Archive = Module{
 				{Name: "dest", Type: TypeString},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "CompressResult"}},
 			Impl:    ArchiveCompress,
 		},
 	},
@@ -109,9 +109,9 @@ func resolveThreads(opts map[string]any, lim *cache.Limiter) int {
 	return n
 }
 
-func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]any) (map[string]any, error) {
+func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]any) (types.UncompressResult, error) {
 	if types.Tracing(ctx) {
-		return map[string]any{}, nil
+		return types.UncompressResult{}, nil
 	}
 	src, dest = resolvePath(ctx, src), resolvePath(ctx, dest)
 	strip := archiveOptInt(opts, "strip", 0)
@@ -119,10 +119,10 @@ func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]an
 
 	if p := sandbox.FromContext(ctx); p != nil {
 		if err := p.CheckReadCtx(ctx, src); err != nil {
-			return nil, fmt.Errorf("archive.uncompress: %w", err)
+			return types.UncompressResult{}, fmt.Errorf("archive.uncompress: %w", err)
 		}
 		if err := p.CheckWriteCtx(ctx, dest); err != nil {
-			return nil, fmt.Errorf("archive.uncompress: %w", err)
+			return types.UncompressResult{}, fmt.Errorf("archive.uncompress: %w", err)
 		}
 	}
 
@@ -140,7 +140,7 @@ func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]an
 			defer func() { _ = lim.AcquireN(context.WithoutCancel(ctx), held) }()
 		}
 		if err := lim.AcquireN(ctx, threads); err != nil {
-			return nil, fmt.Errorf("archive.uncompress: %w", err)
+			return types.UncompressResult{}, fmt.Errorf("archive.uncompress: %w", err)
 		}
 		defer lim.ReleaseN(threads)
 	}
@@ -149,7 +149,7 @@ func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]an
 	defer op.Set("")
 
 	if err := os.MkdirAll(dest, 0o755); err != nil {
-		return nil, fmt.Errorf("archive.uncompress: mkdir %s: %w", dest, err)
+		return types.UncompressResult{}, fmt.Errorf("archive.uncompress: mkdir %s: %w", dest, err)
 	}
 	// Resolve dest after creating it so archiveSafePath's containment check and
 	// the returned relative paths share one canonical base (macOS /var ->
@@ -160,30 +160,27 @@ func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]an
 
 	f, err := os.Open(src)
 	if err != nil {
-		return nil, fmt.Errorf("archive.uncompress: %w", err)
+		return types.UncompressResult{}, fmt.Errorf("archive.uncompress: %w", err)
 	}
 	defer f.Close()
 
 	var sniff [262]byte
 	n, _ := f.Read(sniff[:])
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return nil, fmt.Errorf("archive.uncompress: seek: %w", err)
+		return types.UncompressResult{}, fmt.Errorf("archive.uncompress: seek: %w", err)
 	}
 
 	files, totalBytes, err := archiveDispatch(ctx, sniff[:n], f, dest, strip, maxSize, threads)
 	if err != nil {
-		return nil, fmt.Errorf("archive.uncompress %s: %w", filepath.Base(src), err)
+		return types.UncompressResult{}, fmt.Errorf("archive.uncompress %s: %w", filepath.Base(src), err)
 	}
 	sort.Strings(files)
-	return map[string]any{
-		"files": files,
-		"bytes": int(totalBytes),
-	}, nil
+	return types.UncompressResult{Files: basedPaths(files, dest), Bytes: int(totalBytes)}, nil
 }
 
-func ArchiveCompress(ctx context.Context, src, dest string, opts map[string]any) (map[string]any, error) {
+func ArchiveCompress(ctx context.Context, src, dest string, opts map[string]any) (types.CompressResult, error) {
 	if types.Tracing(ctx) {
-		return map[string]any{}, nil
+		return types.CompressResult{}, nil
 	}
 	src, dest = resolvePath(ctx, src), resolvePath(ctx, dest)
 	maxSize := archiveOptInt64(opts, "max_size", archiveDefaultMaxSize)
@@ -192,10 +189,10 @@ func ArchiveCompress(ctx context.Context, src, dest string, opts map[string]any)
 
 	if p := sandbox.FromContext(ctx); p != nil {
 		if err := p.CheckReadCtx(ctx, src); err != nil {
-			return nil, fmt.Errorf("archive.compress: %w", err)
+			return types.CompressResult{}, fmt.Errorf("archive.compress: %w", err)
 		}
 		if err := p.CheckWriteCtx(ctx, dest); err != nil {
-			return nil, fmt.Errorf("archive.compress: %w", err)
+			return types.CompressResult{}, fmt.Errorf("archive.compress: %w", err)
 		}
 	}
 
@@ -223,7 +220,7 @@ func ArchiveCompress(ctx context.Context, src, dest string, opts map[string]any)
 			defer func() { _ = lim.AcquireN(context.WithoutCancel(ctx), held) }()
 		}
 		if err := lim.AcquireN(ctx, threads); err != nil {
-			return nil, fmt.Errorf("archive.compress: %w", err)
+			return types.CompressResult{}, fmt.Errorf("archive.compress: %w", err)
 		}
 		defer lim.ReleaseN(threads)
 	}
@@ -236,23 +233,19 @@ func ArchiveCompress(ctx context.Context, src, dest string, opts map[string]any)
 		format = archiveFormatFromExt(dest)
 	}
 	if format == "" {
-		return nil, fmt.Errorf("archive.compress: cannot determine format from %q; set opts.format", filepath.Base(dest))
+		return types.CompressResult{}, fmt.Errorf("archive.compress: cannot determine format from %q; set opts.format", filepath.Base(dest))
 	}
 
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-		return nil, fmt.Errorf("archive.compress: mkdir parent: %w", err)
+		return types.CompressResult{}, fmt.Errorf("archive.compress: mkdir parent: %w", err)
 	}
 
 	files, bytesIn, bytesOut, err := compressDispatch(ctx, src, dest, format, threads, level, maxSize, followSymlinks)
 	if err != nil {
-		return nil, fmt.Errorf("archive.compress %s: %w", filepath.Base(dest), err)
+		return types.CompressResult{}, fmt.Errorf("archive.compress %s: %w", filepath.Base(dest), err)
 	}
 	sort.Strings(files)
-	return map[string]any{
-		"files":     files,
-		"bytes_in":  int(bytesIn),
-		"bytes_out": int(bytesOut),
-	}, nil
+	return types.CompressResult{Files: basedPaths(files, src), BytesIn: int(bytesIn), BytesOut: int(bytesOut)}, nil
 }
 
 func archiveFormatFromExt(name string) string {
@@ -994,4 +987,15 @@ func archiveSubOpLabel(name, file string, threads int) string {
 		return fmt.Sprintf("%s %s [%d×]", name, file, threads)
 	}
 	return fmt.Sprintf("%s %s", name, file)
+}
+
+// basedPaths turns the archive's relative entries into Paths measured from base: the
+// destination for an extraction, the source for a compression. Each is where that file
+// actually is, which is the fact a bare string dropped.
+func basedPaths(rel []string, base string) []types.Path {
+	out := make([]types.Path, 0, len(rel))
+	for _, r := range rel {
+		out = append(out, types.Path{Value: r, Base: base})
+	}
+	return out
 }

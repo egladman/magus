@@ -215,7 +215,7 @@ func patchOpsToBuzzList(ops []spells.PatchOp) vm.Value {
 			m.MapSet("value", vm.StrValue(po.Value))
 		}
 		if po.From != "" {
-			m.MapSet("from", vm.StrValue(po.From))
+			m.MapSet("fromPtr", vm.StrValue(po.From))
 		}
 		items[i] = m
 	}

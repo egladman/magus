@@ -465,7 +465,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
         "pager": pager,
         "related": site.renderRelated(srcRel, root),
         "provenance": provenance,
-        "refdrawer": renderReferenceDrawer(root, canonUrl, site),
+        "refdrawer": renderReferenceDrawer(root, canonUrl, content, site),
         "footer": renderSiteFooter(root, site),
     });
 }
