@@ -175,6 +175,11 @@ var boundaryEnums = []boundaryEnum{
 		Type:  reflect.TypeFor[spells.VersionComponent](),
 		Cases: []enumCase{{"none", ""}, {"major", "major"}, {"minor", "minor"}, {"patch", "patch"}},
 	},
+	{
+		Name:  "DiagnosticFormat",
+		Type:  reflect.TypeFor[spells.DiagnosticFormat](),
+		Cases: []enumCase{{"none", ""}, {"gnu", "gnu"}},
+	},
 }
 
 type boundaryEnum struct {

@@ -79,7 +79,7 @@ a default when it is absent, so a minimal spell is two functions.
 | `mgs_listClaimedGlobs` | `() > [Path]` | files this spell owns, so two spells cannot both claim them |
 | `mgs_listManifests` | `() > [Path]` | dependency manifests, read for the project graph |
 | `mgs_listIgnoreDirs` | `() > [Path]` | directories to prune from source expansion (`node_modules`, `target`) |
-| `mgs_getTools` | `() > {str: Tool}` | every binary the spell drives, keyed by the bin an op names: what prints its version (`probe`), what part of that keys the cache (`key`), what proves it is usable (`ready`), and the oldest version its ops work against (`floor`) |
+| `mgs_getTools` | `() > {str: Tool}` | every binary the spell drives, keyed by the bin an op names: what prints its version (`probe`), what part of that keys the cache (`key`), what proves it is usable (`ready`), the oldest version its ops work against (`floor`), and how it prints its findings (`diagnostics`) |
 
 ### Readiness
 
@@ -122,6 +122,34 @@ A version probe is worth more thought than it looks. If a tool changes what pass
 nothing else in the cache key changes with it, every cached entry replays the old verdict.
 Anything pinned by a manifest the spell already reads (a `go.mod` the `go` spell claims)
 needs no probe; anything that is just "whatever is on PATH" does.
+
+### Declaring how a tool reports findings
+
+`diagnostics` names the convention a binary prints its findings in, so magus reads them
+as records (file, line, severity, message) rather than scraping prose.
+`DiagnosticFormat.gnu` is the GNU Coding Standards shape,
+`[program:]file:line[:column]: severity: message`. hadolint spells it `-f gnu` and
+shellcheck `--format=gcc`; gcc and ruff emit the same skeleton.
+
+magus implements the standard once and tools opt in, so it carries no per-tool patterns
+to rot. It also never rewrites argv: put the flag in the op's own args, beside the
+declaration.
+
+```buzz
+fun hadolint(target: Target) > Command {
+    return Command{bin = "hadolint", args = ["-f", "gnu", "Dockerfile"]};
+}
+
+export fun mgs_getTools() > {str: Tool} {
+    return {"hadolint": Tool{
+        probe       = Command{bin = "hadolint", args = ["--version"]},
+        diagnostics = DiagnosticFormat.gnu,
+    }};
+}
+```
+
+Declare nothing and the output stays prose: a mis-parsed line claims a file and a line
+that do not exist.
 
 ## A toolchain spell
 

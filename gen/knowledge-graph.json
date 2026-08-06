@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2425,
-  "edge_count": 5488,
+  "edge_count": 5490,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -16554,13 +16554,14 @@
       "kind": "function",
       "label": "dockerRun",
       "doc": "--rm is baked in: an op that leaves containers behind turns a repeated target into a disk leak. The caller supplies mounts, workdir, image and command through args.",
-      "source": "spells/docker/spell.buzz:19"
+      "source": "spells/docker/spell.buzz:21"
     },
     {
       "id": "function:spells/docker/spell.buzz:hadolint",
       "kind": "function",
       "label": "hadolint",
-      "source": "spells/docker/spell.buzz:16"
+      "doc": "Lints the Dockerfile, reporting in the GNU diagnostic format the tool declares in mgs_getTools, so magus reads each finding's file, line and rule rather than its prose.",
+      "source": "spells/docker/spell.buzz:18"
     },
     {
       "id": "function:spells/docker/spell.buzz:mgs_getName",
@@ -16576,7 +16577,7 @@
       "kind": "function",
       "label": "mgs_getTools",
       "doc": "`docker --version` ends in a build hash (`29.3.1, build c2be9cc`) that moves with a rebuild of the same release, so patch extraction sheds it. And it is CLIENT-only - it exits 0 with no daemon - so `docker info` is what answers whether it is usable.  hadolint gets no readiness probe: linting a Dockerfile talks to no daemon, and gating it here would make a lint wait on a service it never uses.",
-      "source": "spells/docker/spell.buzz:31",
+      "source": "spells/docker/spell.buzz:33",
       "attrs": {
         "exported": "true"
       }
@@ -16594,7 +16595,7 @@
       "id": "function:spells/docker/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/docker/spell.buzz:21",
+      "source": "spells/docker/spell.buzz:23",
       "attrs": {
         "exported": "true"
       }
@@ -20652,7 +20653,7 @@
       "kind": "op",
       "label": "hadolint",
       "attrs": {
-        "argv": "hadolint Dockerfile",
+        "argv": "hadolint -f gnu Dockerfile",
         "tool": "hadolint"
       }
     },
@@ -27966,7 +27967,23 @@
     },
     {
       "source": "doc:docs/changelog.md",
+      "target": "diagnostic:MGS3004",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/changelog.md"
+    },
+    {
+      "source": "doc:docs/changelog.md",
       "target": "diagnostic:MGS6001",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/changelog.md"
+    },
+    {
+      "source": "doc:docs/changelog.md",
+      "target": "diagnostic:MGS8001",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,

@@ -211,6 +211,10 @@ type Tool struct {
 	// an unrecognized flag - the same misleading failure readiness exists to prevent,
 	// one step over. Checked against the extracted version, so it needs Probe.
 	Floor string `json:"floor,omitempty"`
+	// Diagnostics names the convention this binary prints findings in; empty means
+	// prose. On the tool rather than the op because the format is the binary's:
+	// hadolint reports the same way whichever op invokes it.
+	Diagnostics DiagnosticFormat `json:"diagnostics,omitempty"`
 }
 
 // HasProbe reports whether magus can learn a version for this tool, by running one or

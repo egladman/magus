@@ -96,7 +96,9 @@ export fun image_buildx(ctx: magus\Context, args: [str]) > void {
 
 ## hadolint
 
-**Command:** `hadolint Dockerfile`
+Lints the Dockerfile, reporting in the GNU diagnostic format the tool declares in mgs_getTools, so magus reads each finding's file, line and rule rather than its prose.
+
+**Command:** `hadolint -f gnu Dockerfile`
 
 ### Example
 

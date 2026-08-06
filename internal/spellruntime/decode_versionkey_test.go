@@ -76,3 +76,30 @@ func TestDecodeToolsDropsEmptyEntries(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, m.Tools)
 }
+
+// A tool declaring only a diagnostics format is kept: the entry says something magus
+// acts on, so the drop-empty-entries rule must not treat it as saying nothing.
+func TestDecodeToolsCarriesDiagnosticsFormat(t *testing.T) {
+	m, err := Decode(mapObj{
+		"name": "docker",
+		"tools": map[string]any{
+			"hadolint": map[string]any{"diagnostics": "gnu"},
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, spells.DiagnosticGNU, m.Tools["hadolint"].Diagnostics)
+}
+
+// An unrecognized format is a spell-authoring bug caught at decode, the same place a
+// bad key.upTo lands - not a silent fall back to scraping prose.
+func TestDecodeToolsRejectsUnknownDiagnosticsFormat(t *testing.T) {
+	_, err := Decode(mapObj{
+		"name": "docker",
+		"tools": map[string]any{
+			"hadolint": map[string]any{"diagnostics": "sarif"},
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "diagnostics is sarif")
+	assert.Contains(t, err.Error(), "gnu", "the message names the formats magus accepts")
+}

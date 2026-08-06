@@ -259,6 +259,10 @@ func validateTools(m spells.Descriptor) error {
 			return fmt.Errorf("spell %q: tools[%q].key.upTo is %s; want one of %s",
 				m.Name, tool, c, strings.Join(c.Values(), ", "))
 		}
+		if d := m.Tools[tool].Diagnostics; !d.Valid() {
+			return fmt.Errorf("spell %q: tools[%q].diagnostics is %s; want one of %s",
+				m.Name, tool, d, strings.Join(d.Values(), ", "))
+		}
 	}
 	return nil
 }
@@ -300,7 +304,11 @@ func decodeTools(src Obj) map[string]spells.Tool {
 				t.Ready = cmd
 			}
 		}
-		if t.Probe.Bin == "" && t.Key.IsZero() && t.Ready.Bin == "" && t.Floor == "" {
+		if d, ok := o.Str("diagnostics"); ok {
+			t.Diagnostics = spells.DiagnosticFormat(d)
+		}
+		if t.Probe.Bin == "" && t.Key.IsZero() && t.Ready.Bin == "" && t.Floor == "" &&
+			t.Diagnostics == spells.DiagnosticNone {
 			continue
 		}
 		if out == nil {

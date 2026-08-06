@@ -239,14 +239,17 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			// hadolint is a second binary the spell drives, pinned by no manifest, so it
 			// needs its own probe: upgrading it changes lint verdicts with nothing in any
 			// cache key to notice. It gets no readiness probe - a lint talks to no daemon.
-			"hadolint": {Probe: spells.Command{Bin: "hadolint", Args: []string{"--version"}}},
+			"hadolint": {
+				Probe:       spells.Command{Bin: "hadolint", Args: []string{"--version"}},
+				Diagnostics: spells.DiagnosticGNU,
+			},
 		},
 		Ops: map[string]spells.Op{
 			"docker-build":       {Command: spells.Command{Bin: "docker", Args: []string{"build"}}},
 			"docker-run":         {Command: spells.Command{Bin: "docker", Args: []string{"run", "--rm"}}},
 			"docker-buildx":      {Command: spells.Command{Bin: "docker", Args: []string{"buildx", "build"}}},
 			"docker-build-check": {Command: spells.Command{Bin: "docker", Args: []string{"build", "--check"}}},
-			"hadolint":           {Command: spells.Command{Bin: "hadolint", Args: []string{"Dockerfile"}}},
+			"hadolint":           {Command: spells.Command{Bin: "hadolint", Args: []string{"-f", "gnu", "Dockerfile"}}},
 		},
 	},
 	"go": {
