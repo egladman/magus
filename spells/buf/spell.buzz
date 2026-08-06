@@ -24,7 +24,6 @@ export fun mgs_listRequiredGlobs() > [Path] {
 // buf.gen.yaml; "gen/**" is the buf convention.
 export fun mgs_listProvidedGlobs() > [Path] { return [Path{value = "gen/**"}]; }
 
-export fun mgs_getVersionCommand() > [str] { return ["buf", "--version"]; }
 
 // No protoc-gen-* probes here, deliberately. buf generate delegates codegen to
 // plugins, so THEY produce the committed output - but WHICH plugins is declared in
@@ -77,4 +76,8 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
         "buf-format": bufFormat,
         "buf-breaking": bufBreaking,
     };
+}
+
+export fun mgs_getTools() > {str: Tool} {
+    return {"buf": Tool{probe = Command{bin = "buf", args = ["--version"]}}};
 }

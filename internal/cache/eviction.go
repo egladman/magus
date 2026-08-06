@@ -30,6 +30,7 @@ type manifestEntry struct {
 	manifestPath string
 	createdAt    time.Time
 	blobs        []string
+	hash         string // the cache key, so an eviction can reclaim outputs/<hash> too
 }
 
 // evictLRU removes oldest manifests (by CreatedAt) until disk usage is at or
@@ -57,6 +58,13 @@ func (c *Cache) evictOldest(ctx context.Context, limit int64) {
 		}
 	}
 
+	// Reclaim ORPHAN output dirs first: a failing run persists its output but is never
+	// snapshotted, so it has no manifest and the loop below can never reach it. Those
+	// bytes still count toward the cap, so without this pass a workspace with failures
+	// would evict every manifest chasing a floor it cannot reach. Oldest first, and
+	// only while over the limit - recent failures are the ones worth keeping.
+	total -= c.evictOrphanOutputs(ctx, entries, total, limit)
+
 	for _, e := range entries {
 		if total <= limit {
 			break
@@ -70,6 +78,7 @@ func (c *Cache) evictOldest(ctx context.Context, limit int64) {
 		}
 		if os.Remove(e.manifestPath) == nil {
 			total -= info.Size()
+			total -= c.removeOutputsForKey(e.hash)
 		}
 		for _, blob := range e.blobs {
 			if blob == "" {
@@ -139,6 +148,12 @@ func (c *Cache) scanManifests() (int64, []manifestEntry) {
 		return nil
 	})
 
+	// Stored outputs count toward the cap too. They were exempt, which made the size
+	// limit a lie: a workspace whose targets print a lot grew without bound while
+	// eviction dutifully trimmed only blobs and manifests. Each key dir is charged to
+	// its entry below, so evicting an entry reclaims its outputs with it.
+	total += c.outputsBytes()
+
 	manifestsDir := filepath.Join(c.dir, "manifests")
 	_ = filepath.WalkDir(manifestsDir, func(p string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
@@ -170,8 +185,106 @@ func (c *Cache) scanManifests() (int64, []manifestEntry) {
 			manifestPath: p,
 			createdAt:    m.CreatedAt,
 			blobs:        blobs,
+			hash:         strings.TrimSuffix(filepath.Base(p), ".json"),
 		})
 		return nil
 	})
 	return total, entries
+}
+
+// evictOrphanOutputs removes output dirs no manifest claims, oldest first, until the
+// cap is met or none are left, and reports the bytes freed. An orphan is the residue
+// of a run that stored output but no entry - overwhelmingly a FAILURE, since a failing
+// run is never snapshotted. They are the one part of the store nothing else collects.
+func (c *Cache) evictOrphanOutputs(ctx context.Context, entries []manifestEntry, total, limit int64) int64 {
+	if total <= limit {
+		return 0
+	}
+	claimed := make(map[string]struct{}, len(entries))
+	for _, e := range entries {
+		claimed[e.hash] = struct{}{}
+	}
+	dirs, err := os.ReadDir(c.outputsDir())
+	if err != nil {
+		return 0
+	}
+	type orphan struct {
+		hash string
+		mod  time.Time
+	}
+	var orphans []orphan
+	for _, d := range dirs {
+		if !d.IsDir() {
+			continue
+		}
+		if _, ok := claimed[d.Name()]; ok {
+			continue
+		}
+		info, err := d.Info()
+		if err != nil {
+			continue
+		}
+		orphans = append(orphans, orphan{hash: d.Name(), mod: info.ModTime()})
+	}
+	slices.SortFunc(orphans, func(a, b orphan) int { return a.mod.Compare(b.mod) })
+	var freed int64
+	for _, o := range orphans {
+		if total-freed <= limit {
+			break
+		}
+		if ctx.Err() != nil {
+			break
+		}
+		freed += c.removeOutputsForKey(o.hash)
+	}
+	return freed
+}
+
+// outputsDir is the per-cache-key output store: <cacheDir>/outputs.
+func (c *Cache) outputsDir() string { return filepath.Join(c.dir, "outputs") }
+
+// outputsBytes sums the stored outputs' on-disk size, stat-only.
+func (c *Cache) outputsBytes() int64 {
+	var total int64
+	_ = filepath.WalkDir(c.outputsDir(), func(_ string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		if info, e := d.Info(); e == nil {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total
+}
+
+// outputsSizeForKey reports the on-disk size of one cache key's stored outputs,
+// stat-only. Prune uses it to tally a dry run without deleting anything.
+func (c *Cache) outputsSizeForKey(hash string) int64 {
+	if hash == "" {
+		return 0
+	}
+	var total int64
+	_ = filepath.WalkDir(filepath.Join(c.outputsDir(), hash), func(_ string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		if info, e := d.Info(); e == nil {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total
+}
+
+// removeOutputsForKey deletes a cache key's whole output directory and reports the
+// bytes freed. Called when the entry that produced those outputs is evicted or
+// pruned: the ref is derived from the key, so once the entry is gone the outputs
+// behind it are unreachable history, not a resource anyone can still address.
+func (c *Cache) removeOutputsForKey(hash string) int64 {
+	freed := c.outputsSizeForKey(hash)
+	if hash == "" || os.RemoveAll(filepath.Join(c.outputsDir(), hash)) != nil {
+		return 0
+	}
+	return freed
 }

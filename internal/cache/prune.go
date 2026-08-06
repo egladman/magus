@@ -35,8 +35,13 @@ func (c *Cache) Prune(ctx context.Context, cutoff time.Time, dryRun bool) (n int
 				freed += info.Size()
 			}
 		}
+		// The entry's stored outputs go with it: their refs derive from this key, so
+		// once the entry is pruned nothing can address them.
+		outBytes := c.outputsSizeForKey(e.hash)
+		freed += outBytes
 		if !dryRun {
 			_ = os.Remove(e.manifestPath)
+			c.removeOutputsForKey(e.hash)
 		}
 		n++
 	}

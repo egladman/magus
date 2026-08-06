@@ -114,7 +114,6 @@ Memory and scratch:
 | Tool               | Purpose                                                                            |
 | ------------------ | ---------------------------------------------------------------------------------- |
 | `magus_memory`     | User-owned per-repo handoff journal: list/get/put/delete/verify named entries shared across worktrees |
-| `magus_scratchpad` | Private per-workspace scratch file for the agent's intermediate notes              |
 
 Config mutation is not exposed over MCP. Use the CLI for `magus config set` and related commands.
 

@@ -29,7 +29,14 @@ func IsSurfaceRoute(seg string) bool {
 // nothing about the run, not even its ref id, ever leaves the machine. The payload is a
 // magus.viewer.v1 Journal (protobuf, gzip+base64url) of the ref's events; the browser decodes
 // it and renders pretty from structure (the generated JS client, bundled in).
-func LogViewerURL(base, ref string, events []journal.Event, inv journal.Invocation) (string, error) {
+// keyDigests carries the run's cache-key identity as a `key` directive holding
+// "<class>:<digest>,..." (see KeyDigestsParam). It is what lets the viewer answer
+// "why did CI get a different ref than me" without either machine seeing the other's
+// tree: the page compares the digests in the link against the ones the local daemon
+// computes and reports WHICH CLASS differs. Digests are short and per-class, so this
+// costs a few dozen bytes of a fragment budget measured in tens of kilobytes. Empty
+// keyDigests omits the directive entirely.
+func LogViewerURL(base, ref string, events []journal.Event, inv journal.Invocation, keyDigests string) (string, error) {
 	j := journal.InvocationFromEvents(ref, events)
 	// A single ref's display events are output+result only (no `started`), so
 	// InvocationFromEvents yields no command lineage; graft the resolved run's Command so the
@@ -41,7 +48,31 @@ func LogViewerURL(base, ref string, events []journal.Event, inv journal.Invocati
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimRight(base, "/") + "/#ref=" + url.QueryEscape(ref) + "&data=" + encoded, nil
+	u := strings.TrimRight(base, "/") + "/#ref=" + url.QueryEscape(ref)
+	if keyDigests != "" {
+		u += "&key=" + encodeComponent(keyDigests)
+	}
+	return u + "&data=" + encoded, nil
+}
+
+// KeyClassDigest is one cache-key component class and the digest of its key inputs.
+// A pair type rather than two parallel slices, so a caller cannot hand the renderer
+// mismatched lists.
+type KeyClassDigest struct {
+	Class  string
+	Digest string
+}
+
+// KeyDigestsParam renders per-class key digests as one compact fragment value:
+// "class:digest,class:digest", in the classes' key order. The rendering is
+// deliberately trivial to parse in the browser (split on "," then ":") and carries no
+// key CONTENT - a digest names that a class differs, never what is in it.
+func KeyDigestsParam(digests []KeyClassDigest) string {
+	parts := make([]string, 0, len(digests))
+	for _, d := range digests {
+		parts = append(parts, d.Class+":"+d.Digest)
+	}
+	return strings.Join(parts, ",")
 }
 
 // LinkOpts is the input to Link: the single home for the daemon-origin console URL grammar.

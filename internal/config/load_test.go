@@ -18,11 +18,12 @@ func TestMergeConfig(t *testing.T) {
 	base.Concurrency = 4
 
 	overlay := Config{}
-	overlay.Cache.Immutable = true
+	writeOff := false
+	overlay.Cache.Write.Enabled = &writeOff
 	overlay.Cache.Dir = "/tmp/cache"
 
 	got := mergeConfig(base, overlay)
-	assert.True(t, got.Cache.Immutable)
+	assert.False(t, got.Cache.WriteEnabled())
 	assert.Equal(t, "/tmp/cache", got.Cache.Dir)
 	// base value preserved when overlay is zero
 	assert.Equal(t, 4, got.Concurrency)
@@ -31,24 +32,24 @@ func TestMergeConfig(t *testing.T) {
 func TestLoadDirInto(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	content := "cache:\n  immutable: true\nconcurrency: 12\n"
+	content := "cache:\n  write:\n    enabled: false\nconcurrency: 12\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "magus.yaml"), []byte(content), 0o644))
 
 	cfg, err := loadDirInto(Defaults(), dir)
 	require.NoError(t, err)
-	assert.True(t, cfg.Cache.Immutable)
+	assert.False(t, cfg.Cache.WriteEnabled())
 	assert.Equal(t, 12, cfg.Concurrency)
 }
 
 func TestLoadDirIntoDotted(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	content := "cache:\n  immutable: true\n"
+	content := "cache:\n  write:\n    enabled: false\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".magus.yaml"), []byte(content), 0o644))
 
 	cfg, err := loadDirInto(Defaults(), dir)
 	require.NoError(t, err)
-	assert.True(t, cfg.Cache.Immutable)
+	assert.False(t, cfg.Cache.WriteEnabled())
 }
 
 func TestLoadDirIntoCoexistenceError(t *testing.T) {
@@ -68,7 +69,7 @@ func TestLoadDirIntoMissing(t *testing.T) {
 	cfg, err := loadDirInto(base, dir)
 	require.NoError(t, err)
 	// No file → cfg is unchanged from base
-	assert.Equal(t, base.Cache.Immutable, cfg.Cache.Immutable, "Cache.Immutable changed unexpectedly")
+	assert.Equal(t, base.Cache.WriteEnabled(), cfg.Cache.WriteEnabled(), "Cache.Write.Enabled changed unexpectedly")
 }
 
 func TestWarnIfConcurrencyHigh(t *testing.T) {

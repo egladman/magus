@@ -1,3 +1,7 @@
+// title: Globs: gather a target family, minus one
+// desc: Name targets by a shared suffix, gather them with one glob, and subtract the odd one out with a negation.
+// doc: concepts/dependencies|Dependencies
+//
 // Naming as a convention that pays off. Name a family of targets with a shared
 // suffix - proto-generate, mock-generate, sql-generate - and one umbrella target
 // pulls in the whole set with a single glob, instead of listing each by hand.

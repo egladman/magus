@@ -80,7 +80,7 @@ func serviceToProto(s types.StatusService) *statusv1.Service {
 		Label:      s.Label,
 		Command:    s.Command,
 		Port:       s.Ports,
-		State:      s.State,
+		State:      string(s.State),
 		Dependents: int32(s.Dependents),
 		StartedAt:  tsFromTime(s.StartedAt),
 	}

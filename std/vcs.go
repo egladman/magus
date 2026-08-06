@@ -258,7 +258,8 @@ func vcsMetadata(ctx context.Context) (types.VCSMeta, error) {
 	return meta, nil
 }
 
-// VcsBranch returns the current branch; raises when no VCS or metadata is available.
+// VcsRef returns the movable name at the current revision (a git branch, an hg named
+// branch, a jj bookmark); raises when no VCS or metadata is available.
 func VcsRef(ctx context.Context) (string, error) {
 	meta, err := vcsMetadata(ctx)
 	if err != nil {

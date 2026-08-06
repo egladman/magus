@@ -33,7 +33,10 @@ import (
 
 // Cache is an on-disk content-addressed build cache handle.
 type Cache struct {
-	dir            string
+	dir string
+	// inflight records running targets on disk so a killed run can be reported by the
+	// next one; nil when the cache has no directory to write into.
+	inflight       *inflight
 	mutable        bool // true = read+write (default); false = read-only
 	sizeMB         int
 	maxImportBytes int64 // per-entry cap for Import; 0 uses defaultMaxImportBytes
@@ -126,11 +129,25 @@ type Step struct {
 	ExtraArgs       []string
 	SpellDefVersion string   // binary fingerprint; forces miss on magus upgrade
 	ToolVersions    []string // "spell:version" strings; forces miss on toolchain upgrade
-	NoCache         bool     // when true, always run fn; never replay or snapshot (long-running targets)
-	SkipReplay      bool     // when true, never replay a hit (always run fn), but still snapshot on success - a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
-	Exclusive       bool     // RunAll only: when true, runs alone; no other batch step runs concurrently (ignored by Run, which has no batch)
-	Slots           int      // RunAll only: concurrency slots held while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
-	Label           string   // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
+	// PlatformIndependent drops the host-platform line from the key, so one entry
+	// serves every platform. Resolved from the target's declaration or its spells';
+	// false (the default) keys the platform. See types.PlatformSensitivity.
+	// IncludeOS and IncludeArch select which host facts key this step. Separate
+	// because they move independently; see config.CacheInclude.
+	IncludeOS   bool
+	IncludeArch bool
+	NoCache     bool   // when true, always run fn; never replay or snapshot (long-running targets)
+	SkipReplay  bool   // when true, never replay a hit (always run fn), but still snapshot on success - a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
+	Exclusive   bool   // RunAll only: when true, runs alone; no other batch step runs concurrently (ignored by Run, which has no batch)
+	Slots       int    // RunAll only: concurrency slots held while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
+	Label       string // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
+	// Revision and Dirty are the VCS state the run's inputs were read at, resolved ONCE
+	// per invocation by the caller (a per-target probe would spawn a VCS subprocess per
+	// step) and copied onto every step. Display-only provenance for the output
+	// descriptor (recordOutput) - never hashed, so a run before vs. after a commit still
+	// shares a cache entry when the tree content is unchanged.
+	Revision string
+	Dirty    bool
 }
 
 // Result is the outcome of a Cache.Run call.
@@ -172,7 +189,7 @@ func deferMtimeFlush() RunOption {
 	return func(rc *runCtx) { rc.deferMtimeFlush = true }
 }
 
-// Open returns a Cache rooted at dir (created on demand). MAGUS_CACHE_IMMUTABLE=true
+// Open returns a Cache rooted at dir (created on demand). MAGUS_CACHE_WRITE_ENABLED=false
 // opens read-only (replays hits, never writes). Logger respects MAGUS_LOG_FORMAT/LEVEL.
 func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 	dir = filepath.Clean(dir)
@@ -180,7 +197,7 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 		return nil, fmt.Errorf("magus/cache: mkdir %q: %w", dir, err)
 	}
 	mutable := true
-	if v := strings.ToLower(os.Getenv("MAGUS_CACHE_IMMUTABLE")); v == "true" || v == "1" {
+	if v := strings.ToLower(os.Getenv("MAGUS_CACHE_WRITE_ENABLED")); v == "false" || v == "0" {
 		mutable = false
 	}
 	defaultLevel := slog.LevelInfo
@@ -193,6 +210,7 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 	log := newLogger(os.Getenv("MAGUS_LOG_FORMAT"), defaultLevel)
 	c := &Cache{
 		dir:      dir,
+		inflight: newInflight(dir),
 		mutable:  mutable,
 		log:      log,
 		logLevel: defaultLevel,
@@ -404,7 +422,15 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				// event via recordOutput).
 				ref := ""
 				if c.outputs != nil {
-					ref = c.outputs.LatestRef(hash)
+					ref = c.outputs.StepRef(hash)
+					if ref == "" {
+						// A remote import ships the producer's descriptor without its
+						// output blob; completing it with the replayed log bytes makes
+						// this machine resolve the SAME ref the producer printed.
+						if adopted, ok := c.outputs.AdoptImported(hash, logData); ok {
+							ref = adopted
+						}
+					}
 				}
 				if ref == "" {
 					ref = c.recordOutput(ctx, s, hash, logData, result.Duration, nil)
@@ -505,16 +531,24 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 			return result, fmt.Errorf("magus/cache: snapshot %q: %w", s.ProjectPath, err)
 		}
 		result.Outputs = outs
-		if c.remote != nil {
-			c.pushToRemote(ctx, s, hash)
-		}
-		c.evictOldest(ctx, c.sizeCap())
 	}
 
 	result.Duration = time.Since(start)
 	c.misses.Add(1)
 	ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, nil)
 	result.Ref = ref
+
+	// Push AFTER recordOutput, never before: the artifact ships this run's output
+	// descriptor and key inputs, and recordOutput is what writes them. Pushing first
+	// exported an entry with no descriptor at all (or, on a repeat miss, a previous
+	// attempt's), so a consumer could not resolve the producer's ref - the whole
+	// point of shipping them.
+	if c.mutable && !s.NoCache {
+		if c.remote != nil {
+			c.pushToRemote(ctx, s, hash)
+		}
+		c.evictOldest(ctx, c.sizeCap())
+	}
 	c.log.InfoContext(ctx,
 		"cache.miss",
 		append(netAttrs(netRec),
@@ -554,6 +588,8 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 		Failed:      runErr != nil,
 		TimestampMs: nowMs,
 		DurationMs:  dur.Milliseconds(),
+		Revision:    s.Revision,
+		Dirty:       s.Dirty,
 	}
 	if runErr != nil {
 		d.ErrMsg = runErr.Error()
@@ -561,12 +597,35 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 
 	var ref string
 	if c.outputs != nil {
-		r, err := c.outputs.Persist(ctx, hash, output, d)
+		stored, err := c.outputs.Persist(ctx, hash, output, d)
 		if err != nil {
 			c.log.WarnContext(ctx, "cache.warn", slog.String("msg",
 				fmt.Sprintf("persist output for %s (%s): %v", s.ProjectPath, shortHash(hash), err)))
 		} else {
-			ref = r
+			ref = stored.Ref
+		}
+		// Persist the key's pre-hash lines beside the attempts - the explanation
+		// `--meta` and `describe target --cache --against` diff. Recomputed (cheap:
+		// source hashing is mtime-cached) rather than threaded from Run, and only
+		// written when the recomputed key still equals the one being recorded, so a
+		// source edited mid-run can never store lines that misdescribe the key.
+		var lines []string
+		switch h2, lerr := c.hashStepInputs(ctx, &s, &lines); {
+		case lerr != nil:
+			c.log.DebugContext(ctx, "cache.debug", slog.String("msg",
+				fmt.Sprintf("key inputs for %s (%s): %v", s.ProjectPath, shortHash(hash), lerr)))
+		case h2 != hash:
+			// A source changed while the target ran, so these lines describe a
+			// DIFFERENT key. Storing them would make a later --against blame the wrong
+			// input; say so instead of dropping it silently.
+			c.log.DebugContext(ctx, "cache.debug", slog.String("msg",
+				fmt.Sprintf("key inputs for %s skipped: inputs changed during the run (%s -> %s)",
+					s.ProjectPath, shortHash(hash), shortHash(h2))))
+		default:
+			if perr := c.outputs.PersistKeyInputs(ctx, hash, lines); perr != nil {
+				c.log.DebugContext(ctx, "cache.debug", slog.String("msg",
+					fmt.Sprintf("persist key inputs for %s (%s): %v", s.ProjectPath, shortHash(hash), perr)))
+			}
 		}
 	}
 
@@ -660,12 +719,26 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 	// Member Run calls skip the per-call mtime flush; the batch flushes once below.
 	opts = append(opts, deferMtimeFlush())
 
+	// Report what a PREVIOUS run was killed mid-way through, before starting work that
+	// will scroll it off. Warn, not fail: the evidence is about a run that is over, and
+	// this one has no reason to refuse on its behalf.
+	if dead := c.inflight.takeAbandoned(); len(dead) > 0 {
+		// Structured, not just a sentence: an agent reading -o json needs the count and
+		// the targets as fields, not prose to re-parse.
+		c.log.WarnContext(ctx, abandonedMessage(dead, time.Now()),
+			slog.Int("abandoned", len(dead)),
+			slog.String("project", dead[0].Project),
+			slog.String("target", dead[0].Target))
+	}
+
 	results := make([]Result, len(steps))
 	g, gctx := errgroup.WithContext(ctx)
 	for i, s := range steps {
-		g.Go(func() error {
-			// markDone on every exit so a failing upstream cascades cancellation.
-			defer barrier.markDone(stepKey(s))
+		g.Go(func() (err error) {
+			// markDone on every exit so a failing upstream cascades cancellation,
+			// carrying this step's own result so a dependent's wait can tell success
+			// from failure rather than just "done" (see waitForDeps).
+			defer func() { barrier.markDone(stepKey(s), err) }()
 
 			// Trace the DAG progression (blocked-on-deps, then admitted) so a
 			// "why is this serialized / what is it waiting on?" question can be read
@@ -713,7 +786,13 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			// (the slot is free again). Handlers that do not render a status
 			// line ignore the event, so piped and CI output are unchanged.
 			c.logPool(gctx, lim)
+			// Record the target as running BEFORE fn and clear it after, so a magus
+			// that is killed outright leaves the set behind for the next run to
+			// report (see inflight). This is the only edge that knows a target is
+			// actually executing rather than queued behind a dep or a slot.
+			doneInflight := c.inflight.start(s.ProjectPath, s.Target)
 			defer func() {
+				doneInflight()
 				lim.ReleaseN(slots)
 				c.logPool(gctx, lim)
 			}()
@@ -762,8 +841,8 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 	return results, err
 }
 
-// Clean removes cached manifests for the given project paths (all if none given).
-// Orphaned blobs are GC'd after manifests are deleted.
+// Delete removes cached manifests for the given project paths (all if none given).
+// Orphaned blobs are collected after manifests are deleted.
 func (c *Cache) Delete(ctx context.Context, projectPaths ...string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -968,7 +1047,8 @@ func (c *Cache) Import(ctx context.Context, r io.Reader) error {
 	return nil
 }
 
-// GC evicts LRU entries to the size cap and removes unreferenced CAS blobs.
+// Evict removes LRU entries down to the size cap, then collects unreferenced CAS
+// blobs.
 func (c *Cache) Evict(ctx context.Context) error {
 	c.evictOldest(ctx, c.sizeCap())
 	return c.gcBlobs(ctx)

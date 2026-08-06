@@ -1,9 +1,10 @@
-// Package tty is a minimal interactive list picker for the magus CLI.
+// The interactive list picker. The package doc lives in probe.go.
 //
 // Items are filtered by an AND substring search over whitespace-split
 // tokens of the filter input. Render goes to stderr so stdout stays
 // clean for downstream pipes; the caller is expected to have already
 // verified that stdin and stderr are TTYs.
+
 package tty
 
 import (

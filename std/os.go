@@ -337,6 +337,22 @@ func runResult(ctx context.Context, name string, args []string, dir, label, cmd 
 			}
 			return types.ExecResult{}, fmt.Errorf("%s %s: %w", label, cmd, err)
 		}
+		// ExitCode() is -1 for a process killed by a SIGNAL, never a real status, so
+		// "exit -1" is the one message here that tells a reader nothing. Go already put
+		// the reason in err ("signal: killed", or the cancellation) and this used to
+		// discard it, which is how one real failure surfaced as several mystery ones.
+		if res.Code == -1 && err != nil {
+			// SIGKILL is uncatchable, so the process itself can never explain this. On
+			// CI it is nearly always the OOM killer picking the largest RSS in the job,
+			// and the job then disappears with no other trace - name the suspicion here
+			// or nobody gets one.
+			if strings.Contains(err.Error(), "signal: killed") && !errors.Is(err, context.Canceled) {
+				return types.ExecResult{}, fmt.Errorf(
+					"%s %s: %w (SIGKILL: nothing in the process asked for this - on CI it is usually the OOM killer)",
+					label, cmd, err)
+			}
+			return types.ExecResult{}, fmt.Errorf("%s %s: %w", label, cmd, err)
+		}
 		return types.ExecResult{}, fmt.Errorf("%s %s: exit %d", label, cmd, res.Code)
 	}
 	return types.ExecResult{

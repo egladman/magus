@@ -191,7 +191,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 }
 func buzzValueCharmPatchOp(v spells.PatchOp) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("op", vm.StrValue(v.Op))
+	out.MapSet("op", vm.StrValue(string(v.Op)))
 	out.MapSet("path", vm.StrValue(v.Path))
 	out.MapSet("value", vm.StrValue(v.Value))
 	out.MapSet("fromPtr", vm.StrValue(v.From))

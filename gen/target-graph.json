@@ -52,13 +52,14 @@
         {
           "name": "image-build",
           "declared": "image_build",
-          "doc": "Three PUBLISH modes and one local mode, and which you get is a charm because the default must be the harmless one: a bare `magus run image-build` on a laptop loads an image into the local daemon and pushes nothing.",
+          "doc": "Two axes, one charm each.",
           "charms": [
             "amd64",
             "arm64",
             "cd",
-            "snapshot",
-            "static"
+            "stable",
+            "static",
+            "unstable"
           ],
           "spells": [
             {
@@ -84,7 +85,8 @@
           "doc": "Reports the registries `magus run image-build` under the SAME charms will push to, and whether the credentials each one needs are actually present in the environment.",
           "charms": [
             "cd",
-            "snapshot",
+            "stable",
+            "unstable",
             "verify"
           ]
         },
@@ -94,7 +96,8 @@
           "doc": "Logs in to every registry the active mode publishes to, resolving each one's credentials through the workspace's secret provider.",
           "charms": [
             "cd",
-            "snapshot"
+            "stable",
+            "unstable"
           ]
         },
         {
@@ -304,10 +307,7 @@
         },
         {
           "name": "postflight",
-          "doc": "Renders the insight report (hotspots, affinity, ownership, trend) and, with the `gha` charm, appends it to a host output path supplied via env.",
-          "charms": [
-            "gha"
-          ]
+          "doc": "Renders the insight report (hotspots, affinity, ownership, trend) to stdout."
         },
         {
           "name": "generate",
@@ -911,10 +911,37 @@
           ]
         },
         {
+          "name": "conventions",
+          "doc": "conventions holds the prose corpus to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved.",
+          "reads_files": [
+            {
+              "project": "docs",
+              "glob": "**/*.md"
+            },
+            {
+              "project": "docs",
+              "glob": "lib/conventions.buzz"
+            },
+            {
+              "project": "docs",
+              "glob": "engine/gates.buzz"
+            },
+            {
+              "project": ".",
+              "glob": "README.md"
+            },
+            {
+              "project": ".",
+              "glob": "CONTRIBUTING.md"
+            }
+          ]
+        },
+        {
           "name": "lint",
           "doc": "lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json).",
           "dependencies": [
-            "format"
+            "format",
+            "conventions"
           ],
           "spells": [
             {

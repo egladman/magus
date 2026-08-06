@@ -283,6 +283,62 @@ func TestRunAllDependencyFailureCancelsDependents(t *testing.T) {
 	assert.False(t, bRan, "B's fn ran even though its dependency A failed")
 }
 
+// TestDepBarrierWaitForDepsFailsOnFailedUpstream drives depBarrier directly - no
+// goroutines, no errgroup - so it pins the defect rather than racing for it: markDone
+// signalling only "done" and not "succeeded" let a dependent proceed on a failed
+// upstream, because markDone fires as a defer inside the upstream's own goroutine,
+// strictly before errgroup cancels the shared ctx. Marking done-with-error and then
+// waiting, both on this goroutine, reproduces that ordering on every run.
+func TestDepBarrierWaitForDepsFailsOnFailedUpstream(t *testing.T) {
+	steps := []Step{depStep("", "B", "A"), depStep("", "A")}
+	b := newDepBarrier(steps)
+	wantErr := errors.New("A boom")
+
+	b.markDone(stepKey(steps[1]), wantErr)
+
+	err := b.waitForDeps(context.Background(), steps[0])
+	require.Error(t, err, "B must not treat a failed A as satisfied")
+	assert.ErrorIs(t, err, wantErr, "the dependent's error names the actual upstream failure")
+}
+
+// TestDepBarrierWaitForDepsSucceedsOnPassedUpstream is the control for the test
+// above: markDone(nil) must still unblock a dependent cleanly, so the fix above
+// (checking e.err) does not turn every dependency into a false failure.
+func TestDepBarrierWaitForDepsSucceedsOnPassedUpstream(t *testing.T) {
+	steps := []Step{depStep("", "B", "A"), depStep("", "A")}
+	b := newDepBarrier(steps)
+
+	b.markDone(stepKey(steps[1]), nil)
+
+	err := b.waitForDeps(context.Background(), steps[0])
+	assert.NoError(t, err, "a successful upstream must still unblock its dependent")
+}
+
+// TestDepBarrierNamesTheFailedUpstreamEvenWhenCtxIsCancelled pins the tie-break. When
+// an upstream fails AND a sibling has already cancelled the group, both the barrier
+// channel and ctx.Done() are ready, and a bare select over the two picks uniformly at
+// random - so the error naming the actual dependency would appear only about half the
+// time and the same failure would report differently run to run. Both are ready on
+// every iteration here, so a regression to the random form fails this quickly rather
+// than flaking in CI.
+func TestDepBarrierNamesTheFailedUpstreamEvenWhenCtxIsCancelled(t *testing.T) {
+	steps := []Step{depStep("", "B", "A"), depStep("", "A")}
+	wantErr := errors.New("A boom")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	for range 100 {
+		b := newDepBarrier(steps)
+		b.markDone(stepKey(steps[1]), wantErr)
+
+		err := b.waitForDeps(ctx, steps[0])
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, wantErr, "a settled upstream must outrank a cancelled ctx")
+	}
+}
+
 // TestRunAllDependencyCycleRejected verifies that a true cycle (A→B→A) is
 // rejected before any fn runs, returning an error rather than hanging g.Wait()
 // forever (which it would under a non-cancellable context).

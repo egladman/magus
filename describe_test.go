@@ -143,7 +143,8 @@ func TestListSpells_DescribesTypedSpell(t *testing.T) {
 		spells.WithTargets("build", "check", "dynamic"),
 		spells.WithLanguage("demo"),
 		spells.WithOpaque(),
-		spells.WithVersionProbe(func(context.Context, string) (string, error) { return "v1", nil }),
+		spells.WithTools(map[string]spells.Tool{"tool": {Probe: spells.Command{Bin: "tool", Args: []string{"--version"}}}}),
+		spells.WithVersionProber(func(context.Context, spells.Command, string) (string, error) { return "v1", nil }),
 		spells.WithTargetDocs(map[string]string{"build": "Build the demo."}),
 		spells.WithCommandRenderer(func(target string, _ []string) (string, []string, bool, error) {
 			switch target {

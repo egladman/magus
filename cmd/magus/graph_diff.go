@@ -326,7 +326,8 @@ func baseGraphFromRev(ctx context.Context, root, rev string) (types.KnowledgeGra
 
 	cfg := globalCfg
 	cfg.Cache.Dir = filepath.Join(tmp, ".magus-base-cache") // absolute -> wins over any env cache dir
-	cfg.Cache.Immutable = true
+	writeOff := false
+	cfg.Cache.Write.Enabled = &writeOff // a throwaway base tree must publish nothing
 	// The exported tree has no VCS metadata, so history enrichment can't run against it;
 	// disable it so the base is not asymmetrically missing @vcs attrs the current side has.
 	cfg.Knowledge.VCS.Enabled = false

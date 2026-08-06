@@ -1,3 +1,7 @@
+// title: Guardrails: try to break it
+// desc: A deliberate cycle, caught at resolution before anything forks - plus the three other refusals worth knowing.
+// doc: concepts/wards|Wards
+//
 // Try to break it. A build tool earns trust by refusing what you should not be
 // able to do, and naming why - not by trusting you never to try. This magusfile
 // is a deliberate contradiction: `build` needs `bundle`, and `bundle` needs

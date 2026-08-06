@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/egladman/magus/internal/json"
@@ -35,9 +36,9 @@ func TestSignVerifyRoundTrip(t *testing.T) {
 	require.NoError(t, err, "newVerifier")
 
 	manifest := []byte(`{"projectPath":"test/pkg","hash":"abc123","outputs":[]}`)
-	sig, err := s.sign(manifest)
+	sig, err := s.sign(domainArtifact, manifest, nil)
 	require.NoError(t, err, "sign")
-	assert.NoError(t, v.verify(sig, manifest), "verify valid signature")
+	assert.NoError(t, mustVerify(v, sig, manifest), "verify valid signature")
 	assert.Equal(t, s.keyid, keyID(pub), "signer keyid must match derived keyid")
 }
 
@@ -50,8 +51,8 @@ func TestVerifyRejectsUntrustedKey(t *testing.T) {
 	v, _ := newVerifier([][]byte{pubB}) // trusts B, not A
 
 	manifest := []byte(`{"hash":"x"}`)
-	sig, _ := s.sign(manifest)
-	assert.Error(t, v.verify(sig, manifest), "verify accepted a signature from an untrusted key")
+	sig, _ := s.sign(domainArtifact, manifest, nil)
+	assert.Error(t, mustVerify(v, sig, manifest), "verify accepted a signature from an untrusted key")
 }
 
 // TestVerifyRejectsTamperedManifest: the bytes presented at verify time must be
@@ -62,9 +63,9 @@ func TestVerifyRejectsTamperedManifest(t *testing.T) {
 	v, _ := newVerifier([][]byte{pub})
 
 	manifest := []byte(`{"hash":"original"}`)
-	sig, _ := s.sign(manifest)
+	sig, _ := s.sign(domainArtifact, manifest, nil)
 	tampered := []byte(`{"hash":"poisoned"}`)
-	assert.Error(t, v.verify(sig, tampered), "verify accepted a signature over different manifest bytes")
+	assert.Error(t, mustVerify(v, sig, tampered), "verify accepted a signature over different manifest bytes")
 }
 
 // TestVerifyRejectsBadAlg: only ed25519 envelopes are accepted.
@@ -72,7 +73,7 @@ func TestVerifyRejectsBadAlg(t *testing.T) {
 	pub, _ := mustKeypair(t)
 	v, _ := newVerifier([][]byte{pub})
 	env, _ := json.Marshal(sigEnvelope{Alg: "rsa", KeyID: keyID(pub)})
-	assert.Error(t, v.verify(env, []byte("m")), "verify accepted a non-ed25519 algorithm")
+	assert.Error(t, mustVerify(v, env, []byte("m")), "verify accepted a non-ed25519 algorithm")
 }
 
 // TestKeyMaterialValidation: malformed key material is rejected at construction.
@@ -201,7 +202,7 @@ func TestHashStep_SpellDefVersion(t *testing.T) {
 	assert.NotEqual(t, h0, h2, "empty and second SpellDefVersion must hash differently")
 }
 
-// TestHashStep_KeyVersionIsHashed verifies that keyVersion is mixed into the
+// TestHashStep_KeyVersionIsHashed verifies that KeyVersion is mixed into the
 // hash: the hash of a fixed Step is stable across calls (deterministic) and
 // non-empty, confirming the format-version prefix is always written.
 func TestHashStep_KeyVersionIsHashed(t *testing.T) {
@@ -217,10 +218,10 @@ func TestHashStep_KeyVersionIsHashed(t *testing.T) {
 
 	assert.Equal(t, h1, h2, "hashStep not deterministic")
 	assert.NotEmpty(t, h1, "hashStep returned empty hash")
-	// The current keyVersion is always mixed in; bumping it must change the
+	// The current KeyVersion is always mixed in; bumping it must change the
 	// hash. Verified here by asserting the current constant is the intended value.
-	const wantKeyVersion = 3
-	assert.Equal(t, wantKeyVersion, keyVersion, "keyVersion changed; update this test when bumping")
+	const wantKeyVersion = 5
+	assert.Equal(t, wantKeyVersion, KeyVersion, "KeyVersion changed; update this test when bumping")
 }
 
 // TestHashStep_ToolVersionsChangeMisses verifies that two Steps differing only
@@ -259,6 +260,8 @@ func TestHashKeyByteLayout(t *testing.T) {
 	// No sources and no EnvAllow → no file I/O and no environment lookups, so the
 	// key depends only on the literal fields below and the result is deterministic.
 	step := &Step{
+		IncludeOS:       true,
+		IncludeArch:     true,
 		ProjectPath:     "pkg/x",
 		Target:          "build",
 		Charms:          []string{"race"},
@@ -272,7 +275,8 @@ func TestHashKeyByteLayout(t *testing.T) {
 
 	// Reconstruct the expected byte stream independently, in hashStep's field order.
 	var want bytes.Buffer
-	fmt.Fprintf(&want, "keyVersion:%d\n", keyVersion)
+	fmt.Fprintf(&want, "keyVersion:%d\n", KeyVersion)
+	fmt.Fprintf(&want, "os:%s\narch:%s\n", runtime.GOOS, runtime.GOARCH)
 	want.WriteString("projectPath:pkg/x\n")
 	want.WriteString("target:build\n")
 	want.WriteString("charm:race\n")
@@ -315,4 +319,97 @@ func TestHashStepKeysExtraArgs(t *testing.T) {
 	// Order is significant: `-run X` is not `X -run`, so args are never sorted.
 	assert.NotEqual(t, hashOf(step("-run", "X")), hashOf(step("X", "-run")), "arg ORDER must key")
 	assert.NotEqual(t, hashOf(step("a", "b")), hashOf(step("ab")), "args must not be concatenated")
+}
+
+// mustVerify adapts verify's (legacy, error) result for the assertions above, which
+// only care whether the envelope authenticates.
+func mustVerify(v *verifier, sigBytes, manifestBytes []byte) error {
+	_, err := v.verify(domainArtifact, sigBytes, manifestBytes, nil)
+	return err
+}
+
+// TestVerifyRejectsCrossDomainSignature is the type-confusion guard: an output
+// bundle's signature must never authenticate the same bytes as a cache artifact.
+// Without domain separation a published FAILING run could be re-tarred as an
+// artifact and replayed as a teammate's cached pass.
+func TestVerifyRejectsCrossDomainSignature(t *testing.T) {
+	pub, seed := mustKeypair(t)
+	s, _ := newSigner(seed)
+	v, _ := newVerifier([][]byte{pub})
+
+	meta := []byte(`{"schema":1,"descriptor":{"ref":"outdeadbeefcafe"}}`)
+	sig, err := s.sign(domainBundle, meta, nil)
+	require.NoError(t, err)
+
+	_, err = v.verify(domainBundle, sig, meta, nil)
+	assert.NoError(t, err, "a bundle signature verifies in its own domain")
+
+	_, err = v.verify(domainArtifact, sig, meta, nil)
+	assert.Error(t, err, "a bundle signature must NOT verify as a cache artifact")
+}
+
+// TestVerifyAcceptsLegacyEnvelopeAndReportsIt: an artifact signed by a released
+// magus (bare signature over the manifest, no members) still verifies - rejecting it
+// would turn every existing remote entry into a miss - and reports legacy so the
+// caller drops the extras the signature never covered.
+func TestVerifyAcceptsLegacyEnvelopeAndReportsIt(t *testing.T) {
+	pub, seed := mustKeypair(t)
+	s, _ := newSigner(seed)
+	v, _ := newVerifier([][]byte{pub})
+
+	manifest := []byte(`{"projectPath":"p","hash":"abc"}`)
+	sum := sha256.Sum256(manifest)
+	legacyEnv, err := json.Marshal(sigEnvelope{
+		Alg:            sigAlg,
+		KeyID:          s.keyid,
+		ManifestSHA256: hex.EncodeToString(sum[:]),
+		Sig:            base64.StdEncoding.EncodeToString(ed25519.Sign(s.priv, manifest)),
+	})
+	require.NoError(t, err)
+
+	// Extras arrived, but the legacy signature covers none of them: accepted as
+	// legacy rather than rejected outright.
+	legacy, err := v.verify(domainArtifact, legacyEnv, manifest, map[string]string{"logs/p/abc.log": "deadbeef"})
+	require.NoError(t, err, "a legacy artifact must still verify")
+	assert.True(t, legacy, "the caller must be told to drop the unauthenticated extras")
+}
+
+// TestHashStepHostFactOptOut: os and arch key a step by default and each can be left
+// out ALONE - the point of splitting them, since an image varies by arch while a shell
+// suite varies by OS. The opt-out must change the key, or the claim is decorative.
+func TestHashStepHostFactOptOut(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	c := &Cache{mtimes: newMtimeStore(t.TempDir(), nil)}
+	key := func(os, arch bool) (string, []string) {
+		var lines []string
+		k, err := c.hashStepInputs(context.Background(), &Step{
+			ProjectPath: "pkg/x", Target: "build", WorkspaceRoot: root,
+			IncludeOS: os, IncludeArch: arch,
+		}, &lines)
+		require.NoError(t, err)
+		return k, lines
+	}
+
+	both, bothLines := key(true, true)
+	noOS, noOSLines := key(false, true)
+	noArch, _ := key(true, false)
+	neither, neitherLines := key(false, false)
+
+	assert.Contains(t, bothLines, fmt.Sprintf("os:%s", runtime.GOOS))
+	assert.Contains(t, bothLines, fmt.Sprintf("arch:%s", runtime.GOARCH))
+
+	// Each axis moves the key on its own, so neither is a no-op.
+	assert.NotEqual(t, both, noOS)
+	assert.NotEqual(t, both, noArch)
+	assert.NotEqual(t, noOS, noArch, "dropping os must differ from dropping arch")
+	assert.NotEqual(t, both, neither)
+
+	for _, l := range noOSLines {
+		assert.NotContains(t, l, "os:", "os was excluded but still keyed")
+	}
+	for _, l := range neitherLines {
+		assert.NotContains(t, l, "os:")
+		assert.NotContains(t, l, "arch:")
+	}
 }

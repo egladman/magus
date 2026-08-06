@@ -1,3 +1,7 @@
+// title: Wards: catch the contradiction
+// desc: A detached service trips MGS5002 at resolution, before anything forks.
+// doc: concepts/wards|Wards
+//
 // Wards: guardrails that catch a contradiction before it runs. A ward is a coded
 // diagnostic - an MGSxxxx code - magus raises when your magusfile or a resolved op
 // disagrees with itself. This service op looks fine, but its command detaches:

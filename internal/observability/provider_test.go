@@ -136,8 +136,12 @@ func newCache(t *testing.T) (root string, c *cache.Cache) {
 	t.Helper()
 	root = t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
-	t.Setenv("MAGUS_CACHE_MODE", "auto")
-	c, err := cache.Open(t.Context(), cdir)
+	// Mutable EXPLICITLY, never inherited: MAGUS_CACHE_WRITE_ENABLED is ambient in CI
+	// (ci.yaml sets it false on every pull_request event), and a write-disabled cache writes no
+	// entry, so a test that runs a step twice and asserts the second is a hit fails on
+	// a PR run while passing everywhere else. WithMutable is how internal/cache's own
+	// newMutableCache fixture pins this.
+	c, err := cache.Open(t.Context(), cdir, cache.WithMutable(true))
 	require.NoError(t, err, "cache.Open")
 	return root, c
 }

@@ -79,13 +79,77 @@ a default when it is absent, so a minimal spell is two functions.
 | `mgs_listClaimedGlobs` | `() > [Path]` | files this spell owns, so two spells cannot both claim them |
 | `mgs_listManifests` | `() > [Path]` | dependency manifests, read for the project graph |
 | `mgs_listIgnoreDirs` | `() > [Path]` | directories to prune from source expansion (`node_modules`, `target`) |
-| `mgs_getVersionCommand` | `() > [str]` | probes the primary tool's version, mixed into cache keys so a toolchain upgrade invalidates |
-| `mgs_getVersionCommands` | `() > {str: [str]}` | the same for SECOND tools a spell drives. The `docker` spell probes `hadolint` this way, because unlike `docker` it is pinned by no manifest |
+| `mgs_getTools` | `() > {str: Tool}` | every binary the spell drives, keyed by the bin an op names: what prints its version (`probe`), what part of that keys the cache (`key`), what proves it is usable (`ready`), the oldest version its ops work against (`floor`), and how it prints its findings (`diagnostics`) |
+
+### Readiness
+
+A version probe answers "what is installed". It cannot answer "is it usable", and for a
+client/server tool those are different questions: `docker --version` is client-only and
+exits 0 with no daemon running at all. Without a readiness probe the op forked, docker
+failed on its own terms, and the run reported a build failure for a project with nothing
+wrong with it.
+
+```buzz
+export fun mgs_getTools() > {str: Tool} {
+    return {
+        "docker": Tool{
+            probe = Command{bin = "docker", args = ["--version"]},
+            key   = VersionKey{upTo = VersionComponent.patch},
+            ready = Command{bin = "docker", args = ["info"]},
+        },
+        "hadolint": Tool{probe = Command{bin = "hadolint", args = ["--version"]}},
+    };
+}
+```
+
+Keyed by **tool**, and resolved through an op's own `bin`, so no op restates which tool
+it runs. The `docker` spell gates `docker` and deliberately not `hadolint` - linting a
+Dockerfile talks to no daemon, and a spell-scoped probe would make a lint wait on a
+service it never uses.
+
+A failing probe raises [MGS3004](../reference/codes/sandbox/MGS3004.md) before the op
+forks, carrying the probe's own output. At a terminal magus retries for 30 seconds first,
+so starting the daemon in another window lets the run continue; without a TTY it fails at
+once, because nobody starts a daemon mid-run in CI.
+
+The result **never enters a cache key**: it is a precondition, not an input. `docker info`
+reports running containers and disk usage, so keying on it would invalidate every entry on
+every run. `magus doctor` lists every declared gate without running any of them.
+
+Most spells need none - `go`, `rustc`, and `node` are self-contained.
 
 A version probe is worth more thought than it looks. If a tool changes what passes and
 nothing else in the cache key changes with it, every cached entry replays the old verdict.
 Anything pinned by a manifest the spell already reads (a `go.mod` the `go` spell claims)
 needs no probe; anything that is just "whatever is on PATH" does.
+
+### Declaring how a tool reports findings
+
+`diagnostics` names the convention a binary prints its findings in, so magus reads them
+as records (file, line, severity, message) rather than scraping prose.
+`DiagnosticFormat.gnu` is the GNU Coding Standards shape,
+`[program:]file:line[:column]: severity: message`. hadolint spells it `-f gnu` and
+shellcheck `--format=gcc`; gcc and ruff emit the same skeleton.
+
+magus implements the standard once and tools opt in, so it carries no per-tool patterns
+to rot. It also never rewrites argv: put the flag in the op's own args, beside the
+declaration.
+
+```buzz
+fun hadolint(target: Target) > Command {
+    return Command{bin = "hadolint", args = ["-f", "gnu", "Dockerfile"]};
+}
+
+export fun mgs_getTools() > {str: Tool} {
+    return {"hadolint": Tool{
+        probe       = Command{bin = "hadolint", args = ["--version"]},
+        diagnostics = DiagnosticFormat.gnu,
+    }};
+}
+```
+
+Declare nothing and the output stays prose: a mis-parsed line claims a file and a line
+that do not exist.
 
 ## A toolchain spell
 
@@ -99,7 +163,9 @@ export fun mgs_getName() > str { return "shellcheck"; }
 
 export fun mgs_listRequiredGlobs() > [Path] { return [Path{value = "**/*.sh"}]; }
 
-export fun mgs_getVersionCommand() > [str] { return ["shellcheck", "--version"]; }
+export fun mgs_getTools() > {str: Tool} {
+    return {"shellcheck": Tool{probe = Command{bin = "shellcheck", args = ["--version"]}}};
+}
 
 fun lint(target: Target) > Command {
     return Command{bin = "shellcheck", args = ["--severity", "warning"]};
@@ -135,7 +201,9 @@ import "os";
 
 export fun mgs_getName() > str { return "onepassword"; }
 
-export fun mgs_getVersionCommand() > [str] { return ["op", "--version"]; }
+export fun mgs_getTools() > {str: Tool} {
+    return {"op": Tool{probe = Command{bin = "op", args = ["--version"]}}};
+}
 
 export fun resolve_secret(target: Target, cb: fun(any)) > str {
     var io = {};

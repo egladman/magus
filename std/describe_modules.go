@@ -7,7 +7,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ModulesOutput is the single typed core behind both `magus describe modules`
+// DescribeModules is the single typed core behind both `magus describe modules`
 // (the CLI formats it) and the native magus.modules()/magus.module() host methods
 // (which marshal it to Buzz via ModuleEntry.BuzzObject). With name == "" it returns
 // every module as a summary (name + doc); with a name it returns just that module

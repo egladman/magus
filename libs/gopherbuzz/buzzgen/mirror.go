@@ -19,6 +19,7 @@ import (
 	"reflect"
 	"strings"
 	"time"
+	"unicode"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/token"
@@ -32,12 +33,23 @@ import (
 // failure surfaces at check time in a magusfile rather than here.
 type Namer func(reflect.Type) string
 
+// EnumType resolves a Go type to the Buzz enum it mirrors as: the enum's declared
+// name, and the zero-case reference (e.g. "VersionComponent.patch") an unset field
+// defaults to. It is injected for the same reason Namer is - which named-string Go
+// types have a registered Buzz enum is the host's registry, not a property the Go
+// type carries itself.
+type EnumType func(reflect.Type) (name, zero string, ok bool)
+
 // Options configure a rendering pass.
 type Options struct {
 	// Namer resolves struct-valued fields to their declared Buzz object names. A nil
 	// Namer falls back to the Go type's own name, which is correct only for a host
 	// whose two vocabularies agree everywhere.
 	Namer Namer
+	// EnumType resolves named-string fields to a registered Buzz enum. A nil EnumType
+	// mirrors every string-kinded field as bare `str`, which is correct for a host
+	// with no enum registry.
+	EnumType EnumType
 	// TimeAsString mirrors time.Time as an RFC3339 `str` rather than descending into
 	// its fields. Every known host encodes a timestamp that way, so it defaults on;
 	// set it false only if yours genuinely hands Buzz a structured time.
@@ -106,6 +118,15 @@ func FieldType(t reflect.Type, opts Options) (typeName, zero string, err error) 
 	// ("1.5s") for the same reason a timestamp does - the unit travels WITH the value.
 	if t == reflect.TypeOf(time.Duration(0)) {
 		return "str", `""`, nil
+	}
+	// Checked ahead of the Kind switch, which would see only String: a registered
+	// named-string type mirrors as its enum, so a magusfile writes
+	// VersionComponent.patch and a typo is a compile error rather than a value that
+	// decodes to nothing.
+	if opts.EnumType != nil {
+		if name, zero, ok := opts.EnumType(t); ok {
+			return name, zero, nil
+		}
 	}
 	switch t.Kind() {
 	case reflect.String:
@@ -181,10 +202,43 @@ func FieldType(t reflect.Type, opts Options) (typeName, zero string, err error) 
 func FieldName(f reflect.StructField) string {
 	name := f.Tag.Get("buzz")
 	if name == "" {
-		name = strings.ToLower(f.Name[:1]) + f.Name[1:]
+		name = LowerFirstWord(f.Name)
 	}
 	if buzz.IsReservedIdent(name) || token.IsKeyword(name) {
 		return `@"` + name + `"`
 	}
 	return name
+}
+
+// LowerFirstWord lowercases a Go field name's first WORD rather than its first rune, so an
+// initialism survives the crossing: URL becomes url and HTTPServer becomes httpServer,
+// where a naive first-rune fold produces uRL and hTTPServer.
+//
+// This is the transform Go itself applies in reverse (the commonInitialisms list revive
+// and protoc-gen-go's JSON naming both key off). It is a floor, not a replacement for the
+// `buzz` tag: the rule catches what nobody thought to tag - ID mirrored as iD until this
+// existed - while a tag states the intended name outright, which is what a reader sees
+// and what survives someone renaming the Go field.
+func LowerFirstWord(name string) string {
+	r := []rune(name)
+	if len(r) == 0 {
+		return name
+	}
+	n := 0
+	for n < len(r) && unicode.IsUpper(r[n]) {
+		n++
+	}
+	switch {
+	case n == 0:
+		return name
+	case n == len(r):
+		// All caps, so the whole name is the word: URL, OK, ID.
+		return strings.ToLower(name)
+	case n == 1:
+		return string(unicode.ToLower(r[0])) + string(r[1:])
+	default:
+		// The last upper rune starts the NEXT word (HTTPServer -> httpServer), so it is
+		// the one capital that stays.
+		return strings.ToLower(string(r[:n-1])) + string(r[n-1:])
+	}
 }

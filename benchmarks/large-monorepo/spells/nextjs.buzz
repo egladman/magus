@@ -15,7 +15,7 @@ export fun mgs_listRequiredGlobs() > [Path] {
 
 export fun mgs_listProvidedGlobs() > [Path] { return [Path{value = ".next/**"}]; }
 
-export fun mgs_getVersionCommand() > [str] { return ["node", "--version"]; }
+export fun mgs_getVersionProbe() > [str] { return ["node", "--version"]; }
 
 fun nextBuild(t: Target, cb: fun(any)) > bool {
     cb({"cmd": "npm", "args": ["run", "build"]});

@@ -65,8 +65,8 @@ about the code is a `query` or `output` pointer, never stored prose.{{end}}
 
 ## Scope boundaries
 
-- Intra-session working notes (checklists, partial findings) belong in
-  `magus_scratchpad`{{if .Full}}, which is per-workspace and disposable{{end}}, not here.
+- Intra-session working notes (checklists, partial findings) stay in the
+  session{{if .Full}} - they are disposable by definition{{end}}, not here.
 - Facts the repo already records (code structure, git history, MAGUS.md) do not
   belong in memory; record the `magus_query` that surfaces them instead.
 - Records live outside the repo, keyed by repository identity.{{if .Full}} The console,

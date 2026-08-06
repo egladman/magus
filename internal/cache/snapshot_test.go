@@ -212,9 +212,8 @@ func TestTruncatedManifestTreatedAsMiss(t *testing.T) {
 	})
 	require.NoError(t, err, "corrupt manifest")
 
-	// Re-open in read mode; truncated manifest should cause a rebuild (miss),
-	// not a panic or an error that surfaces to the caller.
-	t.Setenv("MAGUS_CACHE_MODE", "write")
+	// Re-open; a truncated manifest must cause a rebuild (miss), not a panic and
+	// not an error that surfaces to the caller.
 	c2, err := Open(t.Context(), cdir)
 	require.NoError(t, err, "cache.Open(second)")
 	r, err := c2.Run(context.Background(), step, func(_ context.Context) error {
@@ -277,8 +276,7 @@ func TestPartialSnapshotDoesNotProduceHit(t *testing.T) {
 	casDir := filepath.Join(cdir, "cas")
 	require.NoError(t, os.RemoveAll(casDir), "RemoveAll cas")
 
-	// A read-mode cache must not claim a hit when the blobs are gone.
-	t.Setenv("MAGUS_CACHE_MODE", "read")
+	// A cache must not claim a hit when the blobs are gone.
 	c2, err := Open(t.Context(), cdir)
 	require.NoError(t, err, "cache.Open(read)")
 	calls := 0
@@ -550,7 +548,9 @@ func TestCopyFileMissingSource(t *testing.T) {
 // filesystems (btrfs, XFS reflink=1, APFS) the reflink path is O(1);
 // on others it falls through to hard-link then io.Copy.
 //
-// Run: go test -bench=BenchmarkReplayBlob -benchtime=5s ./magus/cache/
+// Run:
+//
+//	go test -bench=BenchmarkReplayBlob -benchtime=5s ./magus/cache/
 func BenchmarkReplayBlob(b *testing.B) {
 	const size = 64 << 20 // 64 MiB
 	b.SetBytes(size)

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -449,4 +450,42 @@ func TestWithCwdPropagatesToBuzzStdlib(t *testing.T) {
 	if _, ok := buzzstd.CwdFromContext(WithCwd(base, "")); ok {
 		t.Fatal(`WithCwd("") set a buzz cwd, want none`)
 	}
+}
+
+// TestExecCancelledReportsCancellation pins the reporting fix for a cascade. A cancelled
+// run kills in-flight children, ExitCode() is -1 for a signalled process, and rendering
+// that as "exit -1" made one real failure look like several unrelated ones.
+func TestExecCancelledReportsCancellation(t *testing.T) {
+	// Cancel AFTER the child is running, which is the shape that produced the confusing
+	// output: an already-cancelled context never starts the process and takes a different
+	// branch, so it would not exercise this at all.
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(150 * time.Millisecond)
+		cancel()
+	}()
+
+	_, err := OsExec(ctx, "sleep", []string{"30"}, ".", nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled, "a cancelled run must say so")
+	assert.NotContains(t, err.Error(), "exit -1",
+		"exit -1 is the signal-kill artifact, not the reason the command failed")
+}
+
+// TestExecSignalKilledNamesTheSignal covers the case that produced an unexplained CI
+// job: a child killed by SIGKILL (the OOM killer's weapon, and uncatchable) reported
+// only "exit -1", so the console said nothing about why the run ended.
+func TestExecSignalKilledNamesTheSignal(t *testing.T) {
+	// Kill the child from outside with SIGKILL, leaving the context alone, so this is
+	// the OOM shape rather than the cancellation one covered above.
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		_ = exec.Command("pkill", "-KILL", "-f", "sleep 31").Run()
+	}()
+
+	_, err := OsExec(context.Background(), "sleep", []string{"31"}, ".", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "signal: killed", "the signal is the whole diagnosis")
+	assert.Contains(t, err.Error(), "OOM killer", "say what usually does this on CI")
+	assert.NotContains(t, err.Error(), "exit -1")
 }

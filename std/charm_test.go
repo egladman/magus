@@ -14,7 +14,7 @@ import (
 // the constructors return spells.Charm rather than hand-built maps, so a field the test
 // misspells is now a compile error instead of a silently-absent key.
 func op(fields ...string) spells.PatchOp {
-	o := spells.PatchOp{Op: fields[0], Path: fields[1]}
+	o := spells.PatchOp{Op: spells.PatchOpKind(fields[0]), Path: fields[1]}
 	if len(fields) > 2 {
 		o.Value = fields[2]
 	}

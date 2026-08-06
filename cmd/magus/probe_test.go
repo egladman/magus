@@ -104,7 +104,8 @@ func TestHealthHTTPHandler(t *testing.T) {
 	assertHandler("readiness/ws-no-match", probeReadiness, []string{"/ws"}, "/other", http.StatusServiceUnavailable)
 }
 
-// unreachable querier for testing the error path
+// TestHealthHTTPHandlerUnreachable drives the error path with a querier that
+// cannot be reached.
 func TestHealthHTTPHandlerUnreachable(t *testing.T) {
 	// A proc-dial error carrying the daemon socket path is exactly the kind of text
 	// evaluateHealth would fold into its reason ("daemon unreachable: ...dial <socket>").

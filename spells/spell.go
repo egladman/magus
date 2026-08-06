@@ -51,19 +51,17 @@ type Spell struct {
 	declarationDirGlobs []string
 	manifests           []string
 
-	invoke       func(ctx context.Context, req InvokeRequest) (any, error)
-	renderCmd    func(target string, charms []string) (cmd string, args []string, ok bool, err error)
-	explainCmd   func(target string, charms []string) (steps []CharmTraceStep, ok bool, err error)
-	conflictCmd  func(target string, charms []string) (conflicts []CharmConflict, ok bool, err error)
-	serviceView  func(target string) (view *ServiceView, ok bool)
-	dependsOn    func(dir string) []string
-	versionProbe func(ctx context.Context, dir string) (string, error)
-	// versionProbes are ADDITIONAL named probes (tool name -> probe) for a spell
-	// that drives more than one binary. Kept separate from versionProbe so the
-	// unnamed one keeps its existing cache-key spelling (spell:version); folding
-	// it in as a named entry would rewrite every key in every workspace and
-	// invalidate every cache entry for a change that alters no behaviour.
-	versionProbes map[string]func(ctx context.Context, dir string) (string, error)
+	invoke      func(ctx context.Context, req InvokeRequest) (any, error)
+	renderCmd   func(target string, charms []string) (cmd string, args []string, ok bool, err error)
+	explainCmd  func(target string, charms []string) (steps []CharmTraceStep, ok bool, err error)
+	conflictCmd func(target string, charms []string) (conflicts []CharmConflict, ok bool, err error)
+	serviceView func(target string) (view *ServiceView, ok bool)
+	dependsOn   func(dir string) []string
+	// tools is every binary this spell drives, keyed by bin; see Descriptor.Tools.
+	tools map[string]Tool
+	// probe runs one tool's version argv in a project dir. Injected so the engine
+	// owns process execution and this package stays free of it.
+	probe func(ctx context.Context, cmd Command, dir string) (string, error)
 }
 
 // Name implements Driver.
@@ -198,43 +196,46 @@ func (s *Spell) DependsOn(dir string) []string {
 	return s.dependsOn(dir)
 }
 
-// HasVersionProbe reports whether ANY toolchain-version probe is set, named or not.
-func (s *Spell) HasVersionProbe() bool {
-	return s.versionProbe != nil || len(s.versionProbes) > 0
-}
-
-// ProbeVersion returns the spell's primary toolchain version string for dir.
-// Returns "" when no unnamed probe is set.
-func (s *Spell) ProbeVersion(ctx context.Context, dir string) (string, error) {
-	if s.versionProbe == nil {
-		return "", nil
-	}
-	return s.versionProbe(ctx, dir)
-}
-
-// VersionProbeNames returns the NAMED probes' tool names, sorted, so a caller
-// iterates them deterministically. The unnamed primary probe is not included; it
-// is reached through ProbeVersion.
-func (s *Spell) VersionProbeNames() []string {
-	if len(s.versionProbes) == 0 {
+// ToolNames returns the binaries this spell drives, sorted, so a caller iterates them
+// deterministically and the cache key they produce is stable.
+func (s *Spell) ToolNames() []string {
+	if len(s.tools) == 0 {
 		return nil
 	}
-	names := make([]string, 0, len(s.versionProbes))
-	for name := range s.versionProbes {
+	names := make([]string, 0, len(s.tools))
+	for name := range s.tools {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 	return names
 }
 
-// ProbeVersionOf runs the named probe for dir. Returns "" when no such probe is
-// set, matching ProbeVersion's shape.
-func (s *Spell) ProbeVersionOf(ctx context.Context, name, dir string) (string, error) {
-	fn, ok := s.versionProbes[name]
-	if !ok {
+// Tool returns what this spell declares about one binary, and whether it declares it.
+func (s *Spell) Tool(name string) (Tool, bool) {
+	t, ok := s.tools[name]
+	return t, ok
+}
+
+// HasVersionProbe reports whether ANY tool can report a version, so a caller can skip
+// the probe pass entirely for a spell that declares none.
+func (s *Spell) HasVersionProbe() bool {
+	for _, t := range s.tools {
+		if t.HasProbe() {
+			return true
+		}
+	}
+	return false
+}
+
+// ProbeVersion runs one tool's version argv in dir and returns its raw output. It
+// returns "" for a tool that declares no argv - including one whose version is a
+// constant, where the caller reads Tool.Key.Const instead of spawning anything.
+func (s *Spell) ProbeVersion(ctx context.Context, tool, dir string) (string, error) {
+	t, ok := s.tools[tool]
+	if !ok || t.Probe.Bin == "" || s.probe == nil {
 		return "", nil
 	}
-	return fn(ctx, dir)
+	return s.probe(ctx, t.Probe, dir)
 }
 
 // Option configures NewSpell.
@@ -290,9 +291,6 @@ func WithOpaque() Option {
 	return func(s *Spell) { s.opaque = true }
 }
 
-// WithInvoker sets the function that runs a target; a spell with none is a no-op.
-// The invoker receives the full request (so function-ops can read Params) and
-// returns structured Data (nil for fork targets), surfaced via InvokeResponse.
 // WithInternal marks a registration as dispatch plumbing rather than a spell a
 // user binds, keeping it out of every surface that enumerates spells.
 //
@@ -310,6 +308,9 @@ func WithInternal() Option {
 	return func(s *Spell) { s.internal = true }
 }
 
+// WithInvoker sets the function that runs a target; a spell with none is a no-op.
+// The invoker receives the full request (so function-ops can read Params) and
+// returns structured Data (nil for fork targets), surfaced via InvokeResponse.
 func WithInvoker(fn func(ctx context.Context, req InvokeRequest) (any, error)) Option {
 	return func(s *Spell) { s.invoke = fn }
 }
@@ -340,23 +341,6 @@ func WithServiceView(fn func(target string) (view *ServiceView, ok bool)) Option
 
 func WithDependsOn(fn func(dir string) []string) Option {
 	return func(s *Spell) { s.dependsOn = fn }
-}
-
-// WithVersionProbe sets the toolchain version probe; the result mixes into the cache key.
-func WithVersionProbe(fn func(ctx context.Context, dir string) (string, error)) Option {
-	return func(s *Spell) { s.versionProbe = fn }
-}
-
-// WithVersionProbeNamed registers an ADDITIONAL probe under a tool name, for a
-// spell driving more than one binary (buf also runs protoc-gen-go; go also runs
-// gofmt and mockery). Each contributes its own cache-key entry.
-func WithVersionProbeNamed(name string, fn func(ctx context.Context, dir string) (string, error)) Option {
-	return func(s *Spell) {
-		if s.versionProbes == nil {
-			s.versionProbes = map[string]func(ctx context.Context, dir string) (string, error){}
-		}
-		s.versionProbes[name] = fn
-	}
 }
 
 func WithDeclarationFiles(files ...string) Option {
@@ -421,3 +405,14 @@ const ModulePrefix = "magus/spell/"
 // failing. Handing back the path keeps discovery dynamic and the import static:
 // you look the spell up, then write the import yourself.
 func ModulePath(name string) string { return ModulePrefix + name }
+
+// WithTools declares every binary this spell drives, keyed by bin name.
+func WithTools(tools map[string]Tool) Option {
+	return func(s *Spell) { s.tools = tools }
+}
+
+// WithVersionProber injects how a tool's version argv is run. The engine owns process
+// execution, so this package never spawns anything itself.
+func WithVersionProber(fn func(ctx context.Context, cmd Command, dir string) (string, error)) Option {
+	return func(s *Spell) { s.probe = fn }
+}

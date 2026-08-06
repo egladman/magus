@@ -8,11 +8,17 @@ export fun mgs_listRequiredGlobs() > [Path] {
     return [Path{value = "**/*.rs"}, Path{value = "Cargo.toml"}, Path{value = "Cargo.lock"}];
 }
 
-export fun mgs_getVersionCommand() > [str] { return ["rustc", "--version"]; }
+
 
 // mgs_getLanguage names the source language this spell adapts, canonical and lowercase
 // so it matches the language attr on the Rust files and symbols SCIP ingests. It lets
 // `magus query language:rust` reach this adapter alongside the code it builds.
+// `rustc --version` carries the commit hash and its date (`1.94.1 (e408947bf
+// 2026-03-25)`), neither of which distinguishes two installs of the same release.
+export fun mgs_getTools() > {str: Tool} {
+    return {"rustc": Tool{probe = Command{bin = "rustc", args = ["--version"]}, key = VersionKey{upTo = VersionComponent.patch}}};
+}
+
 export fun mgs_getLanguage() > str { return "rust"; }
 
 // mgs_listIgnoreDirs names non-source dirs cargo generates, pruned from the
@@ -20,7 +26,7 @@ export fun mgs_getLanguage() > str { return "rust"; }
 export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "target", isDir = true}]; }
 
 // mgs_listManifests names the file that carries this project's OWN version - not
-// the toolchain's (that's mgs_getVersionCommand) and not a cache input (Cargo.toml
+// the toolchain's (that's mgs_getVersionProbe) and not a cache input (Cargo.toml
 // is separately listed in mgs_listRequiredGlobs above, because it also feeds the
 // cache key). A cargo crate has exactly one candidate.
 export fun mgs_listManifests() > [Path] { return [Path{value = "Cargo.toml"}]; }

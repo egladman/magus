@@ -28,6 +28,10 @@ import (
 // is effectively a content-addressed blob store. Implementations must be safe for
 // concurrent use.
 type RemoteBackend interface {
+	// Name identifies the backend to a human: the spell that provides it ("s3", "gha").
+	// It must not probe or dial - the run header calls it before any work, precisely so
+	// the header cannot be what makes a run hang.
+	Name() string
 	// Active reports whether the backend is usable in the current environment.
 	// The cache skips both fetch and push when it returns false, so a backend
 	// gated on its environment (e.g. one that only runs under a specific CI
@@ -139,7 +143,7 @@ func (c *Cache) fetchFromRemote(ctx context.Context, projectPath, hash string) b
 		return false // remote miss
 	}
 	defer r.Close()
-	if err := c.importArtifact(ctx, r); err != nil {
+	if err := c.importArtifact(ctx, r, projectPath, hash); err != nil {
 		c.log.WarnContext(ctx, "cache.warn", slog.String("msg",
 			fmt.Sprintf("remote import %s (%s): %v", projectPath, shortHash(hash), err)))
 		return false
@@ -179,8 +183,11 @@ func (c *Cache) pushToRemote(ctx context.Context, s Step, hash string) {
 	}
 }
 
-// exportArtifact writes a gzip-tar containing the manifest, its blobs, and (if
-// present) the captured build log for (projectPath, hash).
+// exportArtifact writes a gzip-tar containing the manifest, its blobs, the captured
+// build log, and the run's portable-ref sidecars (output descriptor + key inputs) for
+// (projectPath, hash). Every non-manifest member is recorded in the signature
+// envelope's Members map, so the whole artifact is authenticated rather than just its
+// manifest and blobs.
 func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w io.Writer) error {
 	manifest, err := c.readManifest(projectPath, hash)
 	if err != nil {
@@ -189,6 +196,11 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 
 	gz := gzip.NewWriter(w)
 	tw := tar.NewWriter(gz)
+
+	// Content hash of every extra (non-manifest, non-cas, non-signature) member, in
+	// cache-relative path form - exactly what the signature commits to. cas blobs are
+	// omitted: the manifest already names each by its content address.
+	members := map[string]string{}
 
 	addBytes := func(rel string, data []byte) error {
 		if err := ctx.Err(); err != nil {
@@ -221,6 +233,17 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 		return addBytes(rel, data)
 	}
 
+	// addSigned adds an extra member and records its digest for the signature. Unlike
+	// addFile it is used for everything outside manifests/ and cas/.
+	addSigned := func(rel string, data []byte) error {
+		if err := addBytes(rel, data); err != nil {
+			return err
+		}
+		sum := sha256.Sum256(data)
+		members[filepath.ToSlash(rel)] = hex.EncodeToString(sum[:])
+		return nil
+	}
+
 	// The manifest is the one file redacted on the way out rather than on the way in.
 	// Its Return field is replayed verbatim into a cache HIT (see cache.go's
 	// RecordReturn), so masking it on disk would make a hit differ from a miss - the
@@ -240,27 +263,6 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 		return fmt.Errorf("exportArtifact: manifest: %w", err)
 	}
 
-	// Sign the bytes actually shipped above, not the on-disk file: a verifier checks the
-	// signature against what it received, so signing the unredacted original would fail.
-	// No signing key → unsigned, which no verifying consumer will accept.
-	if c.signer != nil {
-		sig, err := c.signer.sign(manifestBytes)
-		if err != nil {
-			return fmt.Errorf("exportArtifact: sign: %w", err)
-		}
-		if err := tw.WriteHeader(&tar.Header{
-			Typeflag: tar.TypeReg,
-			Name:     sigFileName,
-			Size:     int64(len(sig)),
-			Mode:     0o644,
-		}); err != nil {
-			return fmt.Errorf("exportArtifact: signature header: %w", err)
-		}
-		if _, err := tw.Write(sig); err != nil {
-			return fmt.Errorf("exportArtifact: signature write: %w", err)
-		}
-	}
-
 	seen := make(map[string]struct{})
 	for _, out := range manifest.Outputs {
 		if out.Blob == "" {
@@ -275,8 +277,53 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 		}
 	}
 
-	// Include build log if present; errors are silently ignored (log is optional).
-	_ = addFile(c.logPath(projectPath, hash))
+	// The build log, redacted like the manifest because it crosses the same trust
+	// boundary. Absent is fine (a quiet target captures nothing); a read error is not
+	// worth failing a push over.
+	if logBytes, err := os.ReadFile(c.logPath(projectPath, hash)); err == nil {
+		rel, relErr := filepath.Rel(c.dir, c.logPath(projectPath, hash))
+		if relErr != nil {
+			return fmt.Errorf("exportArtifact: log path: %w", relErr)
+		}
+		if err := addSigned(rel, secret.Redact(ctx, logBytes)); err != nil {
+			return fmt.Errorf("exportArtifact: log: %w", err)
+		}
+	}
+
+	// The portable-ref sidecars: the newest attempt's descriptor and the step's key
+	// lines. With these, a machine importing this artifact resolves the SAME ref the
+	// producer printed, and can diff its key against the producer's, instead of
+	// minting a fresh local ref for identical inputs.
+	if c.outputs != nil {
+		if desc, err := c.outputs.newestDescriptor(hash); err == nil {
+			if data, mErr := json.Marshal(desc); mErr == nil {
+				rel := path.Join("outputs", hash, desc.Attempt+descExt)
+				if err := addSigned(rel, secret.Redact(ctx, data)); err != nil {
+					return fmt.Errorf("exportArtifact: descriptor: %w", err)
+				}
+			}
+		}
+		if lines, err := os.ReadFile(filepath.Join(c.dir, "outputs", hash, keyInputsName)); err == nil {
+			if err := addSigned(path.Join("outputs", hash, keyInputsName), lines); err != nil {
+				return fmt.Errorf("exportArtifact: key inputs: %w", err)
+			}
+		}
+	}
+
+	// Signed LAST, once every member's digest is known: the signature covers the
+	// manifest bytes actually shipped above (not the on-disk file - a verifier checks
+	// what it received, and the shipped manifest is redacted) plus the member map, so
+	// one signature authenticates the whole artifact. No signing key -> unsigned,
+	// which no verifying consumer will accept.
+	if c.signer != nil {
+		sig, err := c.signer.sign(domainArtifact, manifestBytes, members)
+		if err != nil {
+			return fmt.Errorf("exportArtifact: sign: %w", err)
+		}
+		if err := addBytes(sigFileName, sig); err != nil {
+			return fmt.Errorf("exportArtifact: signature: %w", err)
+		}
+	}
 
 	return errors.Join(tw.Close(), gz.Close())
 }
@@ -294,7 +341,12 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 //
 // Authenticity (that a trusted producer made this artifact) is the signature gate
 // below; these checks only guarantee what lands on disk is internally consistent.
-func (c *Cache) importArtifact(ctx context.Context, r io.Reader) error {
+// wantProject and wantHash are the (project, key) the artifact was REQUESTED for.
+// Every path it writes is checked against them, and the parsed manifest must name
+// them too, so a signed artifact fetched for one key can never file itself under
+// another - the check that makes a signature mean "this entry", not merely "some
+// trusted producer signed something".
+func (c *Cache) importArtifact(ctx context.Context, r io.Reader, wantProject, wantHash string) error {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
 		return fmt.Errorf("importArtifact: gzip: %w", err)
@@ -308,11 +360,23 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader) error {
 		sigBytes      []byte                      // signature.json, buffered for verification (never persisted)
 		seenBlobs     = make(map[string]struct{}) // verified blob hashes present in the tar
 		committed     bool
+		// Extra members (log, descriptor, key inputs) are STAGED, never written to
+		// their final path during the scan: they are unauthenticated until the
+		// signature gate below, and a rejected artifact must leave nothing behind.
+		extras      []stagedMember
+		extraDigest = map[string]string{} // cache-relative path -> content sha256, for the signature
 	)
-	// Drop the staged manifest on any failure so a partial import is never usable.
+	// Drop the staged manifest and any staged extras on failure so a partial import
+	// is never usable and a rejected artifact leaves no trace.
 	defer func() {
-		if !committed && manifestTmp != "" {
+		if committed {
+			return
+		}
+		if manifestTmp != "" {
 			_ = os.Remove(manifestTmp)
+		}
+		for _, e := range extras {
+			_ = os.Remove(e.tmp)
 		}
 	}()
 
@@ -378,7 +442,7 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader) error {
 				return fmt.Errorf("importArtifact: blob %s content hashes to %s", want, sum)
 			}
 			seenBlobs[sum] = struct{}{}
-		case strings.HasPrefix(rel, "manifests/"):
+		case rel == path.Join("manifests", flattenPath(wantProject), wantHash+".json"):
 			// Buffer + stage the manifest; commit is deferred until its blobs verify.
 			// One per artifact — a duplicate would shadow the first (leaking its temp
 			// file) and muddy "one signature authenticates the whole artifact".
@@ -395,11 +459,23 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader) error {
 			if err := os.WriteFile(manifestTmp, buf, 0o644); err != nil {
 				return fmt.Errorf("importArtifact: stage manifest: %w", err)
 			}
-		default:
-			// The optional build log, or any other artifact: write atomically as-is.
-			if _, err := c.writeCacheFile(tr, clean, &budget); err != nil {
+		case rel == path.Join("logs", flattenPath(wantProject), wantHash+".log") ||
+			strings.HasPrefix(rel, path.Join("outputs", wantHash)+"/"):
+			// The build log and the portable-ref sidecars, both scoped to the entry
+			// being imported so an artifact cannot write over another key's records.
+			// Staged beside their final path and committed only after the signature
+			// covers them, so an unsigned or tampered extra never lands where a later
+			// run would read it. The staging suffix carries the member index, so two
+			// members can never contend for one temp path.
+			tmp := fmt.Sprintf("%s.import-%d.tmp", clean, len(extras))
+			sum, err := c.writeCacheFile(tr, tmp, &budget)
+			if err != nil {
 				return err
 			}
+			extras = append(extras, stagedMember{tmp: tmp, final: clean})
+			extraDigest[rel] = sum
+		default:
+			return fmt.Errorf("importArtifact: artifact carries an out-of-scope member %q", rel)
 		}
 	}
 
@@ -413,13 +489,35 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader) error {
 		if sigBytes == nil {
 			return errors.New("importArtifact: artifact is unsigned; refusing (trust set configured)")
 		}
-		if err := c.verifier.verify(sigBytes, manifestBytes); err != nil {
+		legacy, err := c.verifier.verify(domainArtifact, sigBytes, manifestBytes, extraDigest)
+		if err != nil {
 			return fmt.Errorf("importArtifact: %w", err)
 		}
+		if legacy {
+			// compat: see sigAlg in signing.go. A pre-domain producer signed only the
+			// manifest, so its log is unauthenticated: keep the entry (it still
+			// replays) and drop the extras rather than reject an artifact every
+			// released magus produces. Delete this branch with sigAlg.
+			extras = nil
+		}
+	} else {
+		// No trust set (an explicitly insecure remote): nothing authenticates the
+		// extras, so drop them rather than write unverified bytes where a later run
+		// would replay them as this machine's own output.
+		extras = nil
 	}
 	var m Manifest
 	if err := json.Unmarshal(manifestBytes, &m); err != nil {
 		return fmt.Errorf("importArtifact: parse manifest: %w", err)
+	}
+	// Bind the signed bytes to the identity they are being filed under. Without this
+	// a signature only says "a trusted key signed some JSON": an output bundle's
+	// metadata, re-tarred as a manifest, unmarshals to an all-zero Manifest with no
+	// outputs, passes every remaining check, and replays as a successful entry - so a
+	// published FAILING run would become a teammate's cached pass.
+	if m.ProjectPath != wantProject || m.Hash != wantHash {
+		return fmt.Errorf("importArtifact: manifest names %q/%s but was served for %q/%s",
+			m.ProjectPath, shortHash(m.Hash), wantProject, shortHash(wantHash))
 	}
 	for _, out := range m.Outputs {
 		if out.Blob == "" {
@@ -429,11 +527,28 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader) error {
 			return fmt.Errorf("importArtifact: manifest references blob %s absent from artifact", shortHash(out.Blob))
 		}
 	}
+	// Commit the authenticated extras first, then the manifest: the manifest landing
+	// is what makes the entry replayable, so everything it implies must already be in
+	// place. A failed extra rename is not fatal - the entry still replays, it just
+	// resolves under a locally-minted ref.
+	for _, e := range extras {
+		if err := os.MkdirAll(filepath.Dir(e.final), 0o755); err != nil {
+			continue
+		}
+		_ = os.Rename(e.tmp, e.final)
+	}
 	if err := os.Rename(manifestTmp, manifestFinal); err != nil {
 		return fmt.Errorf("importArtifact: commit manifest: %w", err)
 	}
 	committed = true
 	return nil
+}
+
+// stagedMember is an extra artifact file written to a temp path during the tar scan
+// and renamed into place only after the signature authenticates it.
+type stagedMember struct {
+	tmp   string // staged path
+	final string // where it belongs once authenticated
 }
 
 // maxImportMembers caps the number of files in a single remote artifact, so a flood

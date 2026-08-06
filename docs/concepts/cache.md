@@ -155,6 +155,11 @@ the `Step`. magus writes these lines, in this order, into one hash:
   charm-variant run (`lint:rw`) hashes differently from the bare run, because the
   charm changes behavior. Empty charms add nothing, so charm-less runs are
   unaffected.
+- **`arg:` lines** - one per argument after `--` (`magus run test -- -run
+  TestFoo`), in the order given. Unlike charms and env these are never sorted,
+  since `-run X` is not `X -run`; a run with different trailing args must not
+  replay another run's result. Empty when no args are forwarded, so an ordinary
+  run hashes unaffected.
 - **`src:` lines** - for every file matched by `needs`, its workspace-relative path,
   its content SHA-256, and its executable bit. Files are discovered by a single
   walk, sorted by path, and hashed in parallel. Only the executable bit of the mode
@@ -164,6 +169,10 @@ the `Step`. magus writes these lines, in this order, into one hash:
 - **`env:` lines** - each allow-listed environment variable name and its value,
   sorted, distinguishing unset from set-to-empty. A variable's value contributes to
   the key only if the spell opted it in.
+- **`exec:` lines** - per-op `ctx.withEnv`/`ctx.withCwd` execution overrides,
+  sorted. Unlike `env:` lines, which read a variable's live process value at hash
+  time, an override's value is fixed in the magusfile source itself, so it hashes
+  directly - two runs differing only by a derived override must not share an entry.
 - **`dep:` lines** - the resolved cache keys of upstream dependencies, sorted. This
   is how a change ripples: a dependency's new key becomes an input line here, so a
   dependent misses transitively.
@@ -216,8 +225,8 @@ which is the actual loss: a cache nobody believes is worse than no cache.
 **Declare what changed, not what contains it.** The blast radius should match the
 tools a project genuinely uses:
 
-- **a tool with a version probe** (`mgs_getVersionCommand`, or
-  `mgs_getVersionCommands` for a spell driving several binaries) contributes
+- **a tool with a version probe** (`mgs_getVersionProbe`, or
+  `mgs_getVersionProbes` for a spell driving several binaries) contributes
   `spell:tool:version` to the key of every project binding that spell, and
   _nothing_ to any other. Bumping hadolint moves projects using the docker spell;
   a Go project's key never notices. This is almost always the right answer for an
@@ -255,10 +264,10 @@ and the answer was never in the repository at all. Someone's toolchain moved.
 magus keys on the tool versions for this reason. Each spell declares how to ask:
 
 ```buzz
-export fun mgs_getVersionCommand() > [str] { return ["go", "version"]; }
+export fun mgs_getVersionProbe() > [str] { return ["go", "version"]; }
 
 // A spell driving more than one binary declares each, so all of them move the key.
-export fun mgs_getVersionCommands() > {str: [str]} {
+export fun mgs_getVersionProbes() > {str: [str]} {
     return {"golangci-lint": ["golangci-lint", "--version"]};
 }
 ```
@@ -283,7 +292,7 @@ across toolchains, and the failure surfaces somewhere else entirely.
 
 magus does not infer this. Nothing sniffs your PATH or guesses which binaries a
 target touched - the probe is a declaration someone wrote by hand, and
-`mgs_getVersionCommand` is as explicit as it looks. What differs is its
+`mgs_getVersionProbe` is as explicit as it looks. What differs is its
 **location**: it sits on the SPELL, the adapter that already knows it drives
 `golangci-lint`, rather than being restated by every project that uses one. A
 project binding `spells: [go]` inherits that declaration the same way it inherits
@@ -306,7 +315,7 @@ Four controls, at four different scopes:
 | `magus run <target> --no-cache`             | one target, one invocation  | Skips replay for this run only, but still snapshots on success - the entry is refreshed, not left stale, unlike `skip_cache`.                                                                                                           |
 | `magus\bust_cache(path?)`                   | runtime, one magusfile call | Clears manifests (one project, or the whole cache if `path` is omitted) from inside a target body. An escape hatch that logs a warning every time - the fix is usually to model the missing input as a declared `needs` source instead. |
 | `magus clean --cache`                       | CLI, whole cache            | Wipes the on-disk store from outside any run.                                                                                                                                                                                           |
-| `cache.immutable` (`MAGUS_CACHE_IMMUTABLE`) | whole cache, whole run      | Read-only mode: replays hits, but a miss runs the target and does **not** write a new manifest.                                                                                                                                         |
+| `cache.write.enabled` (`MAGUS_CACHE_WRITE_ENABLED`) | whole cache, whole run      | When false, replays hits, but a miss runs the target and does **not** write a new manifest - locally or to a remote. Restoring still populates the local cache.                                                                                                                                         |
 
 `skip_cache` states that **replaying this target would be wrong**: it signs a
 fresh artifact, records a screen capture, mutates `go.mod`, rewrites a badge, or
@@ -598,7 +607,7 @@ Two ways out, and they are not equally good.
 provenance line, and the deploy renders from source with the final commit already
 known, so there is nothing to restale. This is what this repository does: the
 rendered docs site is generated into `docs/gen/` and never committed
-(`.github/workflows/publish-site.yaml` renders it on every push to `main`). Cost: the
+(`.github/workflows/cd.yaml` renders it on every push to `main`). Cost: the
 output is no longer reviewable in a diff, and a broken generator now blocks a
 deploy that a file copy could never fail.
 
@@ -714,4 +723,7 @@ on.
 - [operations.md](operations.md): the run hierarchy and the `target.result` event that fires on a hit.
 - [targets.md](targets.md): what a Target is - the unit a cache key is computed and replayed for.
 - [charms.md](charms.md): the execution modifiers that key into the cache as `charm:` lines.
+- [cache/output-refs.md](cache/output-refs.md): how the key's hex digest becomes a
+  portable reference id, what is deliberately excluded from it, and a known leak
+  that puts a tool's database timestamp in the key.
 - [remote-cache.md](cache/remote.md): sharing these artifacts across machines under a signed trust model.

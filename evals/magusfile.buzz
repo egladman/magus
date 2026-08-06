@@ -50,7 +50,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 // MUTED 2026-08-03. smoke and grid are the only targets that call promptfoo and
 // spend money on live model runs; they are commented out rather than deleted so the
 // tasks, constraints, and lint gate keep working and this comes back by uncommenting.
-// The weekly cron in .github/workflows/skill-evals.yaml is disabled to match.
+// The weekly cron in .github/workflows/nightly.yaml is disabled to match.
 //
 // // smoke is the PR gate: one trial, a subset of tasks, one model. Needs an API key.
 // export fun smoke(ctx: magus\Context, args: [str]) > void {

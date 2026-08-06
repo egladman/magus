@@ -1,3 +1,7 @@
+// title: Charms: check, then apply
+// desc: A charm rides down the plan; the built-in rw flips read-only checks to rewrites.
+// doc: concepts/charms|Charms
+//
 // Charms: check by default, apply on demand. A charm is a named modifier you
 // attach to a run with a colon suffix - `run format:rw` - and magus flows it down
 // the dependency edges to every target in the plan. The convention: a bare target

@@ -6,9 +6,9 @@ package spells
 // add/replace/test; From is the source pointer for move/copy. magus-utils types
 // mirrors it to the Buzz `object PatchOp`.
 type PatchOp struct {
-	Op    string `json:"op"`
-	Path  string `json:"path"`
-	Value string `json:"value,omitempty"`
+	Op    PatchOpKind `json:"op"`
+	Path  string      `json:"path"`
+	Value string      `json:"value,omitempty"`
 	// From is the move/copy source JSON Pointer. The Buzz field is named fromPtr
 	// because `from` is a reserved word in Buzz, so no mirror can declare it; the JSON
 	// stays "from" (RFC 6902). Everything on the Buzz side of the boundary - the charm

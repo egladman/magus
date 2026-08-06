@@ -5,15 +5,25 @@ import (
 	"sort"
 )
 
-// JSON Patch (RFC 6902) operation names. A charm is an ordered patch applied
-// over the target's base argv, treated as a JSON array of strings.
+// PatchOpKind is one JSON Patch (RFC 6902) operation name. A charm is an ordered
+// patch applied over the target's base argv, treated as a JSON array of strings.
+//
+// It is a defined type rather than a bare string so the Buzz mirror can declare it as
+// an enum: charm.buzz used to write `op = "add"` by hand at every constructor, where a
+// typo produced a patch that failed validation at load with a message naming the value
+// rather than the line. `PatchOpKind.add` is checked when the spell compiles.
+type PatchOpKind string
+
 const (
-	OpAdd     = "add"
-	OpRemove  = "remove"
-	OpReplace = "replace"
-	OpMove    = "move"
-	OpCopy    = "copy"
-	OpTest    = "test"
+	// OpNone is the zero value. It is not a valid operation - ValidatePatch rejects
+	// it - and exists so the mirror's enum has a default case to name.
+	OpNone    PatchOpKind = ""
+	OpAdd     PatchOpKind = "add"
+	OpRemove  PatchOpKind = "remove"
+	OpReplace PatchOpKind = "replace"
+	OpMove    PatchOpKind = "move"
+	OpCopy    PatchOpKind = "copy"
+	OpTest    PatchOpKind = "test"
 )
 
 // The spell value types - PatchOp, Charm, Command, Service, and the resolved Op -
@@ -78,17 +88,21 @@ type Descriptor struct {
 	Opaque      bool                `json:"opaque,omitempty"`
 	TargetNeeds map[string][]string `json:"target_needs,omitempty"`
 	Ops         map[string]Op       `json:"targets,omitempty"`
-	// VersionCmd argv prints the spell's toolchain version, mixed into the cache key; empty = no probe.
-	VersionCmd []string `json:"version_cmd,omitempty"`
-	// VersionCmds are ADDITIONAL named probes, tool name to argv, for a spell that
-	// drives more than one binary. One probe per spell was not enough: buf's
-	// generate op shells out to protoc-gen-go, and go's ops run gofmt, golangci-lint
-	// and mockery - tools that produce committed output while being invisible to
-	// every cache key, so a change in one replays artifacts it never built.
+	// Tools is every binary this spell drives, keyed by the bin name an op names in
+	// its Command - so no op restates which tool it runs, and everything magus knows
+	// about that binary sits in one place.
 	//
-	// Keyed by tool name rather than positional so the cache entry reads
-	// spell:tool:version and reordering a declaration invalidates nothing.
-	VersionCmds map[string][]string `json:"version_cmds,omitempty"`
+	// It replaces five separate declarations (a primary probe, named probes, a primary
+	// key, named keys, readiness) split across two axes that were never orthogonal.
+	// The split also hid its own subtleties: govulncheck declaring no cache key is a
+	// deliberate choice, and in two parallel maps that reads as an absence nobody
+	// notices rather than a decision someone made.
+	//
+	// There is no privileged "primary" tool. `go` had one only for historical cache-key
+	// reasons, and nothing principled distinguished it from golangci-lint - both are
+	// binaries the spell drives, so both key the cache as spell:tool:version.
+	Tools map[string]Tool `json:"tools,omitempty"`
+
 	// Language is the canonical source language this spell adapts (e.g. "go",
 	// "typescript"), declared by mgs_getLanguage. It tags the spell node so a
 	// `language:` query groups the adapter with the files and symbols of that language;

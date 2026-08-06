@@ -41,7 +41,9 @@ func TestReadBatches_TrailingNoBoundary(t *testing.T) {
 // TestReadBatches_NullMode verifies NUL-separated batches with double-NUL boundaries.
 // The format mirrors watch.go: each path is NUL-terminated, then a double-NUL
 // batchSep follows the last path in each batch. So batch ["a","b"] followed by
-// ["c"] encodes as: a\x00 b\x00 \x00\x00 c\x00 \x00\x00
+// ["c"] encodes as:
+//
+//	a\x00 b\x00 \x00\x00 c\x00 \x00\x00
 func TestReadBatches_NullMode(t *testing.T) {
 	t.Parallel()
 	input := "a\x00b\x00\x00\x00c\x00\x00\x00"

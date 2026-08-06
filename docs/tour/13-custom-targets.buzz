@@ -1,3 +1,7 @@
+// title: Custom targets: name your own phases
+// desc: The canonical names are conventions, not a closed set; export a release or deploy target and drive one from another.
+// doc: concepts/targets|Targets
+//
 // Custom targets: name your own phases. The names magus knows - build, test,
 // lint, format, generate, ci, clean - are conventions, not a closed set. Every
 // exported function is a runnable target, so name one for whatever your project

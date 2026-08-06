@@ -100,7 +100,7 @@ func printConfigText(cfg config.Config) {
 	fmt.Println()
 	fmt.Println("cache:")
 	fmt.Printf("  dir:  %s\n", strOrDef(cfg.Cache.Dir, "(default)"))
-	fmt.Printf("  immutable: %v\n", cfg.Cache.Immutable)
+	fmt.Printf("  immutable: %v\n", !cfg.Cache.WriteEnabled())
 	fmt.Printf("  size_mb: %s\n", intOrDef(cfg.Cache.SizeMB, "(unlimited)"))
 	fmt.Println()
 	fmt.Println("ci:")

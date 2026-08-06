@@ -578,6 +578,16 @@ func checkVCSBaseRef(ctx context.Context, root string, opts types.VCSOptions) ty
 	return types.DoctorCheck{Name: "vcs base ref", Status: types.DoctorOK, Message: fmt.Sprintf("%s %q resolves", res.Name, res.Base)}
 }
 
+// runtimeEnvVars are the MAGUS_* variables magus reads without them being config
+// fields; see checkEnvVars for why each one cannot be migrated onto the config
+// struct the way that function's doc otherwise requires.
+var runtimeEnvVars = map[string]struct{}{
+	"MAGUS_LEVEL":             {},
+	"MAGUS_SHARD":             {},
+	"MAGUS_N_SHARDS":          {},
+	"MAGUS_CACHE_SIGNING_KEY": {},
+}
+
 func (*runner) checkEnvVars() types.DoctorCheck {
 	var unknown []string
 	for _, kv := range os.Environ() {
@@ -592,11 +602,19 @@ func (*runner) checkEnvVars() types.DoctorCheck {
 		if _, ok := KnownEnvVars[key]; ok {
 			continue
 		}
-		// MAGUS_LEVEL is injected into every subprocess (the recursion
-		// depth, like GNU Make's MAKELEVEL; see internal/proc/run SelfVars). It's a
-		// runtime signal, not a config field, so it won't be in KnownEnvVars - a
-		// nested magus legitimately sees it.
-		if key == "MAGUS_LEVEL" {
+		// Vars magus itself reads that are deliberately NOT config fields, so they
+		// will never appear in KnownEnvVars. Each is a runtime or secret input, and
+		// flagging them told users their own documented setup was a typo:
+		//   MAGUS_LEVEL              subprocess recursion depth, like GNU Make's
+		//                            MAKELEVEL (internal/proc/run SelfVars); a nested
+		//                            magus legitimately sees it.
+		//   MAGUS_SHARD              CI matrix inputs, read as the --shard/--n-shards
+		//   MAGUS_N_SHARDS           flag defaults (cmd/magus/run.go) and exported by
+		//                            magus's own GitHub action.
+		//   MAGUS_CACHE_SIGNING_KEY  the remote-cache signing seed. It must stay
+		//                            env-only: a signing secret that could be set in a
+		//                            committed magus.yaml is not a secret.
+		if _, ok := runtimeEnvVars[key]; ok {
 			continue
 		}
 		// MAGUS_VCS_<NAME>_BASE_REF is a dynamic per-VCS pattern, not a
@@ -682,9 +700,15 @@ func nameConvention(name string) string {
 // their own: static analysis or formatting a lesser model might carve out as its
 // own target. typecheck and type-check are both listed because they normalize to
 // different kebab forms (no word boundary vs. an explicit hyphen).
+// `security` is deliberately NOT here. It looks like a lint fragment and was listed as
+// one, which had magus advising against a target three of its own projects declare. A
+// scanner reads an advisory database that changes independently of the tree, so it needs
+// skip_cache; composing it into lint would spread that to every op lint runs and cost the
+// whole phase its caching. Different cache contract is a real phase boundary, which is
+// criterion 2 (Distinctness) in targets.md, not a naming preference.
 var bespokePhaseFragmentNames = map[string]bool{
 	"typecheck": true, "type-check": true, "vet": true,
-	"audit": true, "security": true, "style": true, "prettify": true,
+	"audit": true, "style": true, "prettify": true,
 }
 
 // checkBespokePhaseFragmentTargets is MGS1003: a target whose normalized name

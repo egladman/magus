@@ -1,5 +1,9 @@
 package main
 
+//go:generate go run . enums -package types -out ../../types/enum_gen.go
+//go:generate go run . enums -package spells -out ../../spells/enum_gen.go
+//go:generate go run . boundarylist -out ../../internal/interp/bindings/gen/boundary_list.go
+
 import (
 	"reflect"
 
@@ -19,6 +23,8 @@ var boundaryTypes = []boundaryType{
 	{Name: "Service", Type: reflect.TypeFor[spells.Service]()},
 	{Name: "Charm", Type: reflect.TypeFor[spells.Charm]()},
 	{Name: "PatchOp", Type: reflect.TypeFor[spells.PatchOp]()},
+	{Name: "VersionKey", Type: reflect.TypeFor[spells.VersionKey]()},
+	{Name: "Tool", Type: reflect.TypeFor[spells.Tool]()},
 	{Name: "ExecResult", Type: reflect.TypeFor[types.ExecResult](), RuntimeObject: true},
 	{Name: "CommitAuthor", Type: reflect.TypeFor[types.CommitAuthor](), RuntimeObject: true},
 	{Name: "Commit", Type: reflect.TypeFor[types.CommitRecord](), RuntimeObject: true},
@@ -56,6 +62,10 @@ var boundaryTypes = []boundaryType{
 	// must already be declared.
 	{Name: "FileEntry", Type: reflect.TypeFor[types.FileEntry](), RuntimeObject: true},
 	{Name: "FileReport", Type: reflect.TypeFor[types.FileReport](), RuntimeObject: true},
+	// Diagnostic is not a RuntimeObject: no host method RETURNS one. It reaches Buzz
+	// through a thrown error, which the VM renders from BuzzError, so only the mirror
+	// is needed - a caller narrows the caught value to it.
+	{Name: "Diagnostic", Type: reflect.TypeFor[types.Diagnostic]()},
 	{Name: "DoctorCheck", Type: reflect.TypeFor[types.DoctorCheck](), RuntimeObject: true},
 	{Name: "DoctorSummary", Type: reflect.TypeFor[types.DoctorSummary](), RuntimeObject: true},
 	{Name: "DoctorReport", Type: reflect.TypeFor[types.DoctorReport](), RuntimeObject: true},
@@ -94,6 +104,112 @@ var boundaryTypes = []boundaryType{
 	{Name: "Impact", Type: reflect.TypeFor[types.ImpactResult](), RuntimeObject: true},
 	{Name: "TargetRun", Type: reflect.TypeFor[types.StatusTargetRun](), RuntimeObject: true},
 	{Name: "Run", Type: reflect.TypeFor[types.StatusRun](), RuntimeObject: true},
+}
+
+// boundaryEnums declares the Go named string types that mirror as Buzz `enum<str>`
+// rather than as a bare `str`.
+//
+// The cases are listed here rather than derived because reflect cannot enumerate a
+// named type's constants - it sees only the underlying kind. That is the whole reason
+// a registry exists: without it every one of these crosses as an untyped string, and a
+// magusfile typo is a silent miss instead of a compile error.
+//
+// A case must be a legal Buzz identifier, and the first entry is the field's default,
+// so a zero-valued case belongs first.
+var boundaryEnums = []boundaryEnum{
+	// A case NAME must be a legal Buzz identifier while its VALUE is whatever the Go
+	// constant carries, which is why the two are separate: "up-to-date" and
+	// "both-deleted" are perfectly good JSON and impossible identifiers.
+	{
+		Name:  "DoctorCheckStatus",
+		Type:  reflect.TypeFor[types.DoctorCheckStatus](),
+		Cases: []enumCase{{"none", ""}, {"ok", "ok"}, {"fail", "fail"}, {"advice", "advice"}},
+	},
+	{
+		Name: "EventOutcome",
+		Type: reflect.TypeFor[types.EventOutcome](),
+		Cases: []enumCase{{"none", ""}, {"waiting", "waiting"}, {"permission", "permission"}, {"failed", "failed"},
+			{"finished", "finished"}, {"diagnostic", "diagnostic"}, {"update", "update"}, {"other", "other"}},
+	},
+	{
+		Name: "EventSeverity",
+		Type: reflect.TypeFor[types.EventSeverity](),
+		Cases: []enumCase{{"none", ""}, {"info", "info"}, {"notice", "notice"}, {"warning", "warning"},
+			{"critical", "critical"}},
+	},
+	{
+		Name: "ServiceState",
+		Type: reflect.TypeFor[types.ServiceState](),
+		Cases: []enumCase{{"none", ""}, {"starting", "starting"}, {"running", "running"},
+			{"idle", "idle"}, {"failed", "failed"}},
+	},
+	{
+		Name:  "PatternType",
+		Type:  reflect.TypeFor[types.PatternType](),
+		Cases: []enumCase{{"none", ""}, {"glob", "glob"}, {"regex", "regex"}, {"literal", "literal"}},
+	},
+	{
+		Name: "SymbolIndexFreshness",
+		Type: reflect.TypeFor[types.SymbolIndexFreshness](),
+		Cases: []enumCase{{"none", ""}, {"upToDate", "up-to-date"}, {"outOfDate", "out-of-date"},
+			{"notIndexed", "not-indexed"}},
+	},
+	{
+		Name: "TargetRunState",
+		Type: reflect.TypeFor[types.TargetRunState](),
+		Cases: []enumCase{{"none", ""}, {"queued", "queued"}, {"running", "running"}, {"passed", "passed"},
+			{"failed", "failed"}, {"cached", "cached"}},
+	},
+	{
+		Name: "VCSSource",
+		Type: reflect.TypeFor[types.VCSSource](),
+		Cases: []enumCase{{"none", ""}, {"explicit", "explicit"}, {"auto", "auto"}, {"default", "default"},
+			{"disabled", "disabled"}},
+	},
+	{
+		Name: "ConflictKind",
+		Type: reflect.TypeFor[types.ConflictKind](),
+		Cases: []enumCase{{"none", ""}, {"content", "content"}, {"deleted", "deleted"},
+			{"bothDeleted", "both-deleted"}},
+	},
+	{
+		Name: "PatchOpKind",
+		Type: reflect.TypeFor[spells.PatchOpKind](),
+		Cases: []enumCase{{"none", ""}, {"add", "add"}, {"remove", "remove"},
+			{"replace", "replace"}, {"move", "move"}, {"copy", "copy"}, {"test", "test"}},
+	},
+	{
+		Name:  "VersionComponent",
+		Type:  reflect.TypeFor[spells.VersionComponent](),
+		Cases: []enumCase{{"none", ""}, {"major", "major"}, {"minor", "minor"}, {"patch", "patch"}},
+	},
+	{
+		Name:  "DiagnosticFormat",
+		Type:  reflect.TypeFor[spells.DiagnosticFormat](),
+		Cases: []enumCase{{"none", ""}, {"gnu", "gnu"}},
+	},
+}
+
+type boundaryEnum struct {
+	Name  string
+	Type  reflect.Type
+	Cases []enumCase
+}
+
+// enumCase is one case: the Buzz identifier and the string it carries.
+type enumCase struct {
+	Name  string
+	Value string
+}
+
+// buzzEnumFor returns the enum a Go type mirrors as, if any.
+func buzzEnumFor(rt reflect.Type) (boundaryEnum, bool) {
+	for _, e := range boundaryEnums {
+		if e.Type == rt {
+			return e, true
+		}
+	}
+	return boundaryEnum{}, false
 }
 
 type boundaryType struct {

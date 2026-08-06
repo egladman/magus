@@ -28,6 +28,24 @@ func (m *Magus) LogCharms(ctx context.Context, charms string) {
 	m.cache.LogCharms(ctx, charms)
 }
 
+// LogCache emits the cache-tier header through the cache logger. No-op on Inspect
+// workspaces, which have no cache to describe.
+func (m *Magus) LogCache(ctx context.Context) {
+	if m.cache == nil {
+		return
+	}
+	m.cache.LogCache(ctx)
+}
+
+// LogBase emits the affected-set base header through the cache logger. No-op on Inspect
+// workspaces.
+func (m *Magus) LogBase(ctx context.Context, base, vcs string) {
+	if m.cache == nil {
+		return
+	}
+	m.cache.LogBase(ctx, base, vcs)
+}
+
 // PruneCache removes entries older than cutoff and GC-collects orphaned blobs.
 func (m *Magus) PruneCache(ctx context.Context, cutoff time.Time, dryRun bool) (removed int, freed int64, err error) {
 	if m.cache == nil {
@@ -147,6 +165,59 @@ func (m *Magus) OutputByRef(ref string) ([]byte, cache.OutputDescriptor, error) 
 	return cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg)).ByRef(ref)
 }
 
+// OutputAttempts lists every stored execution of the step ref names, newest first - the
+// keep-last-K history behind one portable ref, for `magus query output <ref> --attempts`.
+// Like OutputByRef it reads the store straight off the resolved cache dir, so Inspect
+// workspaces work too. Returns fs.ErrNotExist when no ref matches, or
+// *cache.AmbiguousRefError when a prefix matches several.
+func (m *Magus) OutputAttempts(ref string) ([]cache.OutputDescriptor, error) {
+	return cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg)).Attempts(ref)
+}
+
+// PublishOutput uploads the run behind ref to the configured remote cache as a signed
+// OUTPUT BUNDLE, and returns the ref a teammate can then resolve. A passing run's
+// output already travels with its cache artifact; this is what makes a FAILING run -
+// never cached, never pushed - shareable, and it is always an explicit act because
+// captured output can contain anything the target printed. The bundle carries no
+// manifest and no blobs, so it can never be replayed as a cache hit. Requires a
+// remote backend and a signing key; [types.ErrNoCache] on an Inspect workspace.
+func (m *Magus) PublishOutput(ctx context.Context, ref string) (string, error) {
+	if m.cache == nil {
+		return "", types.ErrNoCache
+	}
+	return m.cache.PublishOutput(ctx, ref)
+}
+
+// OutputByRefRemote resolves a ref to its captured bytes and descriptor, falling back
+// to the remote published-output namespace when the ref is unknown locally - so an
+// inspect line pasted from CI or a teammate resolves even on a machine that never ran
+// the target. Requires a live cache (the remote backend and trust set live there); on
+// an Inspect workspace it degrades to the local-only path.
+func (m *Magus) OutputByRefRemote(ctx context.Context, ref string) ([]byte, cache.OutputDescriptor, error) {
+	if m.cache == nil {
+		return m.OutputByRef(ref)
+	}
+	return m.cache.OutputByRef(ctx, ref)
+}
+
+// OutputDescriptorByRef resolves a ref to just its stored descriptor, without reading
+// the output blob. The metadata views (`query output <ref> --meta`, `describe target
+// --cache --against <ref>`) want the identity, not the bytes, and a captured log can
+// be large.
+func (m *Magus) OutputDescriptorByRef(ref string) (cache.OutputDescriptor, error) {
+	return cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg)).DescriptorByRef(ref)
+}
+
+// OutputKeyInputs returns the pre-hash key inputs stored behind ref - the deterministic
+// label:value lines hashStep consumed to mint the step's cache key, secret-redacted at
+// write. They are the explanation surface for `magus query output <ref> --meta`
+// (component-class digests) and `describe target --cache --against <ref>` (the exact
+// disagreeing line). Returns fs.ErrNotExist when the ref resolves but the run predates
+// key-input persistence.
+func (m *Magus) OutputKeyInputs(ref string) ([]string, error) {
+	return cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg)).KeyInputsByRef(ref)
+}
+
 // InvocationByID resolves an invocation id (OutputDescriptor.Inv) to its run header - the command
 // lineage (subcommand/args/trigger), timing, and outcome - read from the union run log. It is the
 // lineage source for `magus query output <ref> --meta` and the viewer. Returns fs.ErrNotExist when
@@ -181,7 +252,7 @@ func (m *Magus) ListArtifacts(ctx context.Context, projectPath, wsPath string) (
 	return m.cache.ListArtifacts(ctx, projectPath, wsPath)
 }
 
-// MaterializeArtifact writes a cached version to dst, cloning from the store when
+// GetArtifact writes a cached version to dst, cloning from the store when
 // the filesystem supports reflink.
 func (m *Magus) GetArtifact(ctx context.Context, v cache.ArtifactVersion, dst string) error {
 	if m.cache == nil {

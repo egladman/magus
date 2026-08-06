@@ -7,7 +7,7 @@
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
 export object PatchOp {
-    op: str = "",
+    op: PatchOpKind = PatchOpKind.none,
     path: str = "",
     value: str = "",
     fromPtr: str = "",

@@ -94,8 +94,14 @@ Print version, commit, and build date. See \fBmagus\-version\fR(1).
 \fBMAGUS_CACHE_DIR\fR
 Override the default cache location (.magus/ in the workspace root). Equivalent magus.yaml key: \fBcache.dir\fR.
 .TP
-\fBMAGUS_CACHE_IMMUTABLE\fR
-When true (or 1), open the cache in read\-only mode: replay hits but never write new entries (default: false). Equivalent magus.yaml key: \fBcache.immutable\fR.
+\fBMAGUS_CACHE_WRITE_ENABLED\fR
+When false (or 0), replay cache hits but never write new entries, locally or to a remote (default: true). Equivalent magus.yaml key: \fBcache.write.enabled\fR.
+.TP
+\fBMAGUS_CACHE_INCLUDE_OS_ENABLED\fR
+When false (or 0), the host OS is left out of every cache key (default: true). Equivalent magus.yaml key: \fBcache.include.os.enabled\fR.
+.TP
+\fBMAGUS_CACHE_INCLUDE_ARCH_ENABLED\fR
+When false (or 0), the host architecture is left out of every cache key (default: true). Equivalent magus.yaml key: \fBcache.include.arch.enabled\fR.
 .TP
 \fBMAGUS_CACHE_SIZE_MB\fR
 Cache disk usage cap in MB (binary, 1<<20); 0 means unlimited (default: 0). Equivalent magus.yaml key: \fBcache.size_mb\fR.

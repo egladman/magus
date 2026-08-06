@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	semver "github.com/Masterminds/semver/v3"
+	"github.com/egladman/magus/internal/interactive/tty"
+	run "github.com/egladman/magus/internal/proc/run"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -11,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interp"
@@ -40,7 +44,9 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 			spells.WithOutputs(spec.Provides...),
 			spells.WithTargets(spec.OpNames()...),
 			spells.WithServiceTargets(spec.ServiceOpNames()...),
-			spells.WithInvoker(newSpellInvoker(spec.Ops)),
+			spells.WithInvoker(newSpellInvoker(spec.Ops, spec.Tools)),
+			spells.WithTools(spec.Tools),
+			spells.WithVersionProber(versionProber),
 			spells.WithCommandRenderer(newCommandRenderer(spec.Ops)),
 			spells.WithCommandExplainer(newCommandExplainer(spec.Ops)),
 			spells.WithCommandConflicts(newCommandConflictChecker(spec.Ops)),
@@ -51,12 +57,6 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 		}
 		if spec.Opaque {
 			opts = append(opts, spells.WithOpaque())
-		}
-		if len(spec.VersionCmd) > 0 {
-			opts = append(opts, spells.WithVersionProbe(newVersionProbe(spec.VersionCmd)))
-		}
-		for tool, argv := range spec.VersionCmds {
-			opts = append(opts, spells.WithVersionProbeNamed(tool, newVersionProbe(argv)))
 		}
 		if spec.Language != "" {
 			opts = append(opts, spells.WithLanguage(spec.Language))
@@ -95,17 +95,20 @@ func docsByTarget(targets map[string]spells.Op) map[string]string {
 	return out
 }
 
-// newVersionProbe runs argv in the project dir and returns trimmed stdout.
-func newVersionProbe(argv []string) func(context.Context, string) (string, error) {
-	return func(ctx context.Context, dir string) (string, error) {
-		cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-		cmd.Dir = dir
-		out, err := cmd.Output()
-		if err != nil {
-			return "", fmt.Errorf("version probe %v in %s: %w", argv, dir, err)
-		}
-		return strings.TrimSpace(string(out)), nil
+// versionProber runs one tool's version argv in the project dir and returns trimmed
+// stdout. One function for every tool now that no binary is privileged: the argv comes
+// from the Tool entry rather than being baked into a per-tool closure.
+func versionProber(ctx context.Context, probe spells.Command, dir string) (string, error) {
+	if probe.Bin == "" {
+		return "", nil
 	}
+	c := exec.CommandContext(ctx, probe.Bin, probe.Args...)
+	c.Dir = dir
+	out, err := c.Output()
+	if err != nil {
+		return "", fmt.Errorf("version probe %s %v in %s: %w", probe.Bin, probe.Args, dir, err)
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 // newCommandRenderer returns the command preview used by `magus describe`: it
@@ -233,13 +236,127 @@ func noResult() (any, error) {
 // declared command as a subprocess. An unknown target is a no-op, matching the
 // fan-out-and-skip dispatch model. Every op is a command; in-VM work (a cache
 // backend) is dispatched separately (see newBuzzSpellInvoker), not through here.
-func dispatchOp(ctx context.Context, ops map[string]spells.Op, req spells.InvokeRequest) (any, error) {
+// readinessMemo records the outcome of each readiness probe per (bin, dir) for the
+// life of the process. A probe forks, so re-running it for every op of every project
+// would cost more than the failure it prevents; and its answer cannot change mid-run
+// in a way magus could act on - a daemon that dies after the check fails the op
+// anyway, with the tool's own message.
+var readinessMemo sync.Map // key "bin\x00dir" -> error (nil when ready)
+
+// checkReady gates an op on its tool being usable, when the spell declared a probe
+// for that tool. Resolved through the op's own Bin, so no op restates which tool it
+// runs, and a spell driving both docker and hadolint gates only the former.
+//
+// The probe's OUTPUT never enters a cache key: it is a precondition, not an input.
+// `docker info` reports running containers and disk usage, so keying on it would
+// invalidate every entry on every run.
+func checkReady(ctx context.Context, tools map[string]spells.Tool, op spells.Op, dir string) error {
+	t, ok := tools[op.Bin]
+	if !ok || t.Ready.Bin == "" {
+		return nil
+	}
+	probe := t.Ready
+	key := op.Bin + "\x00" + dir
+	if cached, hit := readinessMemo.Load(key); hit {
+		if cached == nil {
+			return nil
+		}
+		err, _ := cached.(error)
+		return err
+	}
+	out := probeUntilReady(ctx, probe, op.Bin, dir)
+	readinessMemo.Store(key, out)
+	return out
+}
+
+// readinessGrace is how long an INTERACTIVE run waits for a tool to become usable
+// before giving up. It is roughly what Docker Desktop takes to finish starting.
+const readinessGrace = 30 * time.Second
+
+// probeUntilReady runs the probe, and when a human is watching, keeps trying until the
+// tool comes up or the grace period expires.
+//
+// Waiting is deliberately interactive-only. In CI or under an agent nobody is going to
+// start a daemon mid-run, so a grace period there is minutes burned across projects to
+// reach the same failure - and it would make a deterministic failure depend on how fast
+// something else happened to start. At a terminal the trade inverts: the fix is one
+// command away, and waiting saves re-running everything.
+//
+// Failing fast stays cheap either way: the check runs before the op forks, so nothing
+// was consumed and a re-run replays from cache.
+func probeUntilReady(ctx context.Context, probe spells.Command, tool, dir string) error {
+	cmdline := strings.Join(append([]string{probe.Bin}, probe.Args...), " ")
+	// Captured so the tool's OWN diagnosis reaches the user. `docker info` says
+	// "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the
+	// docker daemon running?" - it names the socket and asks the right question,
+	// which is strictly better than anything magus can say about a tool it does not
+	// own. Paraphrasing it was throwing away the most actionable line available.
+	probeOp := spells.Op{Command: probe, Capture: true}
+	probeOp.Command.Capture = true
+
+	notReady := func(res run.ExecResult, cause error) error {
+		msg := strings.TrimSpace(res.Stderr)
+		if msg == "" {
+			msg = strings.TrimSpace(res.Stdout)
+		}
+		// Wrapped, not formatted in: errors.Is still reaches the underlying exec
+		// failure, matching how MGS3003 wraps its cause in std/os.go.
+		if msg == "" {
+			return types.WrapDiagnostic(types.ToolNotReady, cause,
+				"%s is installed but not ready: `%s` failed. The op %q needs it running",
+				tool, cmdline, tool)
+		}
+		return types.WrapDiagnostic(types.ToolNotReady, cause,
+			"%s is installed but not ready. The op %q needs it running, and `%s` said:\n  %s",
+			tool, tool, cmdline, strings.ReplaceAll(msg, "\n", "\n  "))
+	}
+
+	res, err := runCommand(ctx, probeOp, commandOpts{cwd: dir})
+	if err == nil {
+		return nil
+	}
+	if !tty.StdinIsTerminal() {
+		return notReady(res, err)
+	}
+
+	slog.WarnContext(ctx, "waiting for tool to become ready",
+		slog.String("tool", tool), slog.String("probe", cmdline),
+		slog.Duration("grace", readinessGrace))
+
+	deadline := time.Now().Add(readinessGrace)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second):
+		}
+		res, err = runCommand(ctx, probeOp, commandOpts{cwd: dir})
+		if err == nil {
+			slog.InfoContext(ctx, "tool became ready", slog.String("tool", tool))
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return notReady(res, err)
+		}
+	}
+}
+
+func dispatchOp(ctx context.Context, ops map[string]spells.Op, tools map[string]spells.Tool, req spells.InvokeRequest) (any, error) {
 	op, ok := ops[req.Target]
 	if !ok {
 		slog.DebugContext(ctx, "spell: target not provided by this spell (fan-out skip)", "target", req.Target, "dir", req.Dir)
 		return noResult()
 	}
 	slog.DebugContext(ctx, "spell: dispatch command", "target", req.Target, "cmd", op.Bin, "dir", req.Dir)
+	// Ahead of every other setup step: a tool that cannot run makes the rest moot,
+	// and the point is to fail with what is actually wrong rather than let the op
+	// fork and report a build failure for a project with nothing wrong with it.
+	if err := checkReady(ctx, tools, op, req.Dir); err != nil {
+		return nil, err
+	}
+	if err := checkFloor(ctx, tools, op, req.Dir); err != nil {
+		return nil, err
+	}
 	opts := commandOpts{cwd: req.Dir, args: project.ExtraArgs(ctx)}
 	// The reserved `scip` op writes its index into the cache, not the tree: magus
 	// hands it the destination via MAGUS_SYMBOL_INDEX so the spell command
@@ -282,9 +399,9 @@ func symbolIndexEnv(ctx context.Context, projectDir string) (map[string]string, 
 
 // newSpellInvoker returns an invoker closure for a built-in spell. Built-in ops
 // are command-only (cmd/args/charms data, no script body).
-func newSpellInvoker(targets map[string]spells.Op) func(context.Context, spells.InvokeRequest) (any, error) {
+func newSpellInvoker(targets map[string]spells.Op, tools map[string]spells.Tool) func(context.Context, spells.InvokeRequest) (any, error) {
 	return func(ctx context.Context, req spells.InvokeRequest) (any, error) {
-		return dispatchOp(ctx, targets, req)
+		return dispatchOp(ctx, targets, tools, req)
 	}
 }
 
@@ -380,12 +497,7 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 	if m.Language != "" {
 		opts = append(opts, spells.WithLanguage(m.Language))
 	}
-	if len(m.VersionCmd) > 0 {
-		opts = append(opts, spells.WithVersionProbe(newVersionProbe(m.VersionCmd)))
-	}
-	for tool, argv := range m.VersionCmds {
-		opts = append(opts, spells.WithVersionProbeNamed(tool, newVersionProbe(argv)))
-	}
+	opts = append(opts, spells.WithTools(m.Tools), spells.WithVersionProber(versionProber))
 	return opts
 }
 
@@ -395,7 +507,7 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 // magus.project bind time). A function-op spell instead registers eagerly at load
 // via loadBuzzSpell.
 func registerLocalSpell(m spells.Descriptor) {
-	opts := append(localSpellBaseOptions(m), spells.WithInvoker(newSpellInvoker(m.Ops)))
+	opts := append(localSpellBaseOptions(m), spells.WithInvoker(newSpellInvoker(m.Ops, m.Tools)))
 	project.DefaultSpellRegistry().RegisterIfAbsent(spells.NewSpell(m.Name, opts...))
 }
 
@@ -528,4 +640,58 @@ func levenshtein(a, b string) int {
 		row[len(b)] = prev
 	}
 	return row[len(b)]
+}
+
+// checkFloor rejects a tool older than the spell's ops work against.
+//
+// It sits beside readiness because both answer "is this binary fit to run", and both
+// must resolve before the op forks - a too-old tool otherwise fails with whatever it
+// says about an unrecognized flag, which is the misleading failure readiness exists to
+// prevent, one question over.
+//
+// Memoized on the same basis: the probe forks, and the answer cannot change mid-run in
+// a way magus could act on.
+func checkFloor(ctx context.Context, tools map[string]spells.Tool, op spells.Op, dir string) error {
+	t, ok := tools[op.Bin]
+	if !ok || t.Floor == "" || t.Probe.Bin == "" {
+		return nil
+	}
+	key := "floor\x00" + op.Bin + "\x00" + dir
+	if cached, hit := readinessMemo.Load(key); hit {
+		if cached == nil {
+			return nil
+		}
+		err, _ := cached.(error)
+		return err
+	}
+	out := floorVerdict(ctx, t, op.Bin, dir)
+	readinessMemo.Store(key, out)
+	return out
+}
+
+func floorVerdict(ctx context.Context, t spells.Tool, tool, dir string) error {
+	raw, err := versionProber(ctx, t.Probe, dir)
+	if err != nil {
+		// Unprobeable is not too old - those are different failures and this function
+		// answers only the second. A tool that is genuinely missing still fails when
+		// dispatchOp forks it for real, right after this check, and run.Exec classifies
+		// that as MGS3003; swallowing the error here only stops floorVerdict from
+		// mislabeling it as a version problem before the op reports the accurate one.
+		return nil //nolint:nilerr // probe failure is not a floor violation; the real op exec fails it as MGS3003
+	}
+	got, ok := spells.ExtractVersion(raw)
+	if !ok {
+		return nil
+	}
+	c, err := semver.NewConstraint(t.Floor)
+	if err != nil {
+		return nil //nolint:nilerr // validated at decode; a bad constraint gates nothing
+	}
+	v, err := semver.NewVersion(got)
+	if err != nil || c.Check(v) {
+		return nil //nolint:nilerr // an unparseable probed version gates nothing rather than blocking the op
+	}
+	return types.DiagnosticErrorf(types.ToolTooOld,
+		"%s %s is older than this spell supports (%s). The op %q needs a newer one",
+		tool, got, t.Floor, tool)
 }

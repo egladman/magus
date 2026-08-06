@@ -8,7 +8,7 @@ tags: [output refs, diagnostics, error codes, MGS8xxx, query, cache]
 # Output-reference diagnostics
 
 Codes in the `MGS8xxx` range flag problems resolving a target-output reference
-id (`ref1a2b3c`) with `magus query output <ref>`. Every target that runs is given
+id (`out1a2b3c`) with `magus query output <ref>`. Every target that runs is given
 a short reference id for its captured output; these codes fire when that id cannot
 be resolved to stored output.
 

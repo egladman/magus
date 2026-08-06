@@ -726,6 +726,15 @@ func TestRemoteCacheInsecureSkipsTrustSet(t *testing.T) {
 func TestRemoteCacheTrustSetDecodes(t *testing.T) {
 	pub, seed := b64Pub(t)
 
+	// The verify-only half below asserts the ABSENCE of a signing key, so it must
+	// not inherit one. ci.yaml exports MAGUS_CACHE_SIGNING_KEY with the real secret
+	// on a push to main, which turns "want 1 opt" into 2. t.Setenv has no unset
+	// form, so restore by hand.
+	if prev, ok := os.LookupEnv(signingKeyEnv); ok {
+		require.NoError(t, os.Unsetenv(signingKeyEnv))
+		t.Cleanup(func() { _ = os.Setenv(signingKeyEnv, prev) })
+	}
+
 	opts, err := remoteCacheSigningOpts([]string{pub}, false)
 	require.NoError(t, err, "valid trust set rejected")
 	assert.Len(t, opts, 1, "verify-only: want 1 opt (trusted keys only)")

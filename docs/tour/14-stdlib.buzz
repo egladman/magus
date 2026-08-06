@@ -1,9 +1,13 @@
+// title: Standard library: batteries included
+// desc: Buzz ships host modules - string casing, semver math, JSON, hashing - you import and call straight from a target.
+// doc: reference/buzz|Buzz modules
+//
 // The standard library: batteries included. Step 4 was the language - branch,
 // loop, recurse. This is the other half: Buzz ships host modules you import and
 // call straight from a target - string casing, semver math, JSON and YAML,
 // base64, hashing, time - all in-process, no shelling out. They run live in this
 // tab. Try `eval strings.kebabCase("Build The App")` or
-// `eval semver.compare("1.10.0", ">", "1.4.0")`, then `run stamp`.
+// `eval semver.satisfies("1.10.0", "> 1.4.0")`, then `run stamp`.
 
 import "magus";
 import "semver";
@@ -14,7 +18,9 @@ import "strings";
 // computes each value for real.
 export fun stamp(ctx: magus\Context, args: [str]) > void {
     final slug = strings\kebabCase("Build The App");
-    final newer = semver\compare("1.10.0", ">", "1.4.0");   // true: 1.10.0 outranks 1.4.0
+    // satisfies() tests a relation or a range; compare() orders two versions
+    // and returns -1, 0, or 1, the way every other semver library spells it.
+    final newer = semver\satisfies("1.10.0", constraint: "> 1.4.0");   // true: 1.10.0 outranks 1.4.0
     magus\info("artifact slug: {slug}");
     magus\info("tag:           v1.4.0");
     magus\info("1.10.0 newer than 1.4.0? {newer}");

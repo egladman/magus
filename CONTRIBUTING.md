@@ -142,7 +142,7 @@ fallback; never gate behavior on a fast path.
 ## Docs site
 
 The docs site under `docs/` renders into `docs/gen/`, which is **not** committed.
-`.github/workflows/publish-site.yaml` renders it on every push to `main` and publishes
+`.github/workflows/cd.yaml` renders it on every push to `main` and publishes
 that. Render locally to check your change:
 
 ```sh
@@ -339,26 +339,27 @@ The GitHub Actions workflow files are intentionally thin. Every meaningful
 CI operation lives in a target in `magusfile.buzz`, not in a workflow YAML
 step. The workflow just orchestrates: it sets up the toolchain, calls the
 target, and uploads artifacts. Host-specific knowledge (GitHub Actions
-concepts like `$GITHUB_STEP_SUMMARY`, the `gha` charm, the
-`MAGUS_INSIGHT_OUTPUT_PATH` env var) lives at one boundary, and every other
-piece of the pipeline stays portable.
+concepts like `$GITHUB_OUTPUT`, the `gha` charm) lives at one boundary,
+and every other piece of the pipeline stays portable.
 
 Concretely:
 
-- **The workflow YAML** names jobs and steps, sets `MAGUS_*` env vars that
-  host the host-specific plumbing, and uploads artifacts. It never
-  contains logic that could live in a target.
+- **The workflow YAML** names jobs and steps, sets env vars that host the
+  host-specific plumbing, and uploads artifacts. It never contains logic
+  that could live in a target.
 - **The magusfile targets** hold the actual work: which projects to fan out
   over, what to render, how to interpret drift, what to write to a sink
   the workflow supplies via env.
 - **A target that wants host-specific behavior** declares it via a charm
-  (`gha`, `cd`, `rw`) and reads env vars whose names are generic
-  (`MAGUS_INSIGHT_OUTPUT_PATH`, not `GITHUB_STEP_SUMMARY`). The workflow
-  sets the env to whatever the host provides.
+  (`gha`, `cd`, `rw`) and only reaches for a host-specific env var
+  (`ci_shard` reads `$GITHUB_OUTPUT`) once that charm is set - without
+  the charm it prints a preview instead. The workflow sets the env to
+  whatever the host provides.
 
 This way a future port to a different CI system only needs a thin
-workflow file plus the same magusfile. The targets, charms, and env-var
-naming are portable.
+workflow file plus the same magusfile. The targets and charms are
+portable; a target that must read a host-native env var confines that
+knowledge behind its charm check.
 
 ## Workspace references: `workspace://path` and friends
 

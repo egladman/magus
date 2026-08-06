@@ -85,13 +85,13 @@ export object DriftVerdict {
     drifted: bool = false,
     code: str = "",
     message: str = "",
-    uRL: str = "",
+    url: str = "",
     files: [Path] = [],
 }
 
 export object DoctorCheck {
     name: str = "",
-    status: str = "",
+    status: DoctorCheckStatus = DoctorCheckStatus.none,
     message: str = "",
     details: [str] = [],
 }
@@ -213,7 +213,7 @@ export object Volatility {
 }
 
 export object KnowledgeGodNode {
-    iD: str = "",
+    id: str = "",
     kind: str = "",
     label: str = "",
     degree: int = 0,
@@ -222,7 +222,7 @@ export object KnowledgeGodNode {
 }
 
 export object KnowledgeOrphan {
-    iD: str = "",
+    id: str = "",
     kind: str = "",
     label: str = "",
     reason: str = "",
@@ -342,6 +342,7 @@ export extern fun has_charm(name: str) > bool;
 export extern fun insight(args: [str], opts: {str: any} = {<str: any>}) > ExecResult;
 export extern fun insightReport(args: [str], opts: {str: any} = {<str: any>}) > InsightReport;
 export extern fun ls() > Projects;
+export extern fun raise(code: str, message: str, opts: {str: any} = {<str: any>}) > void;
 export extern fun run(args: [str], opts: {str: any} = {<str: any>}) > ExecResult;
 export extern fun targetGraph(opts: {str: any} = {<str: any>}) > TargetGraph;
 export extern fun targets() > TargetGraph;

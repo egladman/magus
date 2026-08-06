@@ -17,7 +17,6 @@ import (
 // Regenerate with: cd magus && go generate ./cmd/magus/...
 func BindFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.StringVar(&cfg.Cache.Dir, "cache-dir", cfg.Cache.Dir, "MAGUS_CACHE_DIR")
-	fs.BoolVar(&cfg.Cache.Immutable, "cache-immutable", cfg.Cache.Immutable, "MAGUS_CACHE_IMMUTABLE")
 	fs.IntVar(&cfg.Cache.SizeMB, "cache-size-mb", cfg.Cache.SizeMB, "MAGUS_CACHE_SIZE_MB")
 	fs.BoolVar(&cfg.Cache.Remote.Insecure, "cache-remote-insecure", cfg.Cache.Remote.Insecure, "MAGUS_CACHE_REMOTE_INSECURE: Insecure disables remote-cache signature verification: unsigned artifacts are")
 	fs.IntVar(&cfg.CI.MaxShards, "ci-max-shards", cfg.CI.MaxShards, "MAGUS_CI_MAX_SHARDS")

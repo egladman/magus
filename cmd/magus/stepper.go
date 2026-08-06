@@ -17,11 +17,19 @@ func withStepGate(ctx context.Context) context.Context {
 }
 
 // newStepGate returns a run.StepGate that prompts before each subprocess (s/c/k/r/a).
+//
+// "continue" latches HERE rather than by clearing the gate off a context: the gate is
+// installed once on the run's root ctx, and a caller that cleared it would only be
+// clearing its own copy, so the next command re-prompted and [c] never meant continue.
 func newStepGate() run.StepGate {
 	var mu sync.Mutex // serialize prompts: overlapping raw-mode TTY prompts corrupt the terminal
+	var resumed bool  // set by [c]; guarded by mu
 	return func(ctx context.Context, name string, args []string, dir string) run.StepAction {
 		mu.Lock()
 		defer mu.Unlock()
+		if resumed {
+			return run.StepActionContinue
+		}
 		for {
 			argv := append([]string{name}, args...)
 			fmt.Fprintf(os.Stderr, "\n→ %s  (cwd: %s)\n", strings.Join(argv, " "), dir)
@@ -55,6 +63,7 @@ func newStepGate() run.StepGate {
 				case 'c':
 					fmt.Fprintln(os.Stderr, "continue")
 					restore()
+					resumed = true
 					return run.StepActionContinue
 				case 'k':
 					fmt.Fprintln(os.Stderr, "skip")

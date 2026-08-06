@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -67,6 +68,18 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		slog.InfoContext(ctx, "run.exec", "cmd", name, "args", args, "dir", opts.Dir)
 		return ExecResult{Started: true, Code: 0}, nil
 	}
+	// The --step gate, consulted here because Exec is what every caller forks through.
+	// A skipped command reports as a start-that-never-happened rather than an error:
+	// the user chose not to run it, which is not a failure of the target.
+	if gate, ok := ctx.Value(stepGateKey{}).(StepGate); ok && gate != nil {
+		switch gate(ctx, name, args, opts.Dir) {
+		case StepActionSkip:
+			return ExecResult{}, nil
+		case StepActionAbort:
+			return ExecResult{Code: -1}, ErrAborted
+		case StepActionContinue, StepActionStep:
+		}
+	}
 	if project, target, ok := journal.StepFromContext(ctx); ok {
 		// The argv can contain a credential when a magusfile passes one as an argument
 		// (`-p <token>`) instead of on stdin. journal.Emit redacts Text for every event
@@ -118,6 +131,7 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 	slog.DebugContext(ctx, "run.exec", "cmd", name, "args", args, "dir", c.Dir)
 
 	runErr := c.Run()
+	runErr = classifyMissingBinary(runErr, name, c.ProcessState != nil)
 	if ctx.Err() != nil {
 		KillGroup(c) // reap grandchildren that ignored the graceful signal
 	}
@@ -152,6 +166,33 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		runErr = errors.Join(ctx.Err(), runErr)
 	}
 	return res, runErr
+}
+
+// classifyMissingBinary tags a failure to START the process as MGS3003, the same code
+// std/os.go's os\which() already gives a Buzz script for the same condition. An op's
+// tool going missing used to surface here as a bare exec error with no code and no
+// docs link.
+//
+// Two distinct shapes, and only the first is exec.ErrNotFound: a BARE name that PATH
+// lookup missed, and a PATH-FORM name ("./tool", "/usr/local/bin/tool") that the exec
+// syscall reports as ENOENT without LookPath ever running. Matching only the first
+// left every path-form invocation unclassified - std/magus.go re-execs magus by its
+// absolute path, so that is not a hypothetical shape. started guards the ENOENT arm:
+// a process that ran and exited can fail for its own reasons that wrap ENOENT, and
+// that is the tool's failure, not a missing tool.
+//
+// The wrap is transparent: errors.Is still reaches the underlying error, so callers
+// matching exec.ErrNotFound keep working.
+func classifyMissingBinary(err error, name string, started bool) error {
+	switch {
+	case err == nil, started:
+		return err
+	case errors.Is(err, exec.ErrNotFound):
+		return types.WrapDiagnostic(types.ToolNotOnPath, err, "%q is not on PATH", name)
+	case errors.Is(err, fs.ErrNotExist):
+		return types.WrapDiagnostic(types.ToolNotOnPath, err, "%q does not exist", name)
+	}
+	return err
 }
 
 // DaemonForwardVars never reach ordinary op subprocesses.

@@ -54,6 +54,22 @@ var CharmTypeSource string
 //go:embed gen/types/command.buzz
 var CommandSource string
 
+// VersionKeySource is the generated mirror of spells.VersionKey - what a probed tool
+// contributes to the cache key - together with the VersionComponent enum its upTo
+// field is typed as. It ships in the magus/spell bundle so a spell can declare
+// mgs_getVersionKey, and it carries its own enum, so it has no ordering constraint
+// against the others.
+//
+//go:embed gen/types/versionkey.buzz
+var VersionKeySource string
+
+// ToolSource is the generated mirror of spells.Tool: everything a spell declares about
+// one binary it drives. It must FOLLOW VersionKeySource in the bundle - Tool.key is a
+// VersionKey, and Command is already declared ahead of both.
+//
+//go:embed gen/types/tool.buzz
+var ToolSource string
+
 // ServiceSource is the generated Buzz `object Service` mirror of spells.Service: the
 // {command, readiness, stop} a service op returns, each field a Command (command is the
 // process; readiness/stop are optional). It ships in the magus/spell bundle so a spell
@@ -82,7 +98,7 @@ var CharmModuleSource string
 // Service, each referencing the prior; Target has no cross-references so its
 // position is free). Shared by the runtime registration (modules.go) and the
 // built-in inliner (builtinModuleSources) below, so the two can't drift apart.
-var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, CommandSource, ServiceSource}, "\n")
+var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, CommandSource, ServiceSource, VersionKeySource, ToolSource}, "\n")
 
 // builtinModuleSources maps an import path a self-contained built-in may use to
 // the module source prepended in its place (imports emit no bytecode, so an

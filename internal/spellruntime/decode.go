@@ -2,7 +2,10 @@ package spellruntime
 
 import (
 	"fmt"
+	semver "github.com/Masterminds/semver/v3"
+	"maps"
 	"slices"
+	"strings"
 
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/spells"
@@ -49,14 +52,13 @@ func Decode(src Obj) (spells.Descriptor, error) {
 	}
 	language, _ := src.Str("language")
 	m := spells.Descriptor{
-		Name:        name,
-		Claims:      src.Strs("claims"),
-		IgnoreDirs:  src.Strs("ignore_dirs"),
-		Manifests:   src.Strs("manifests"),
-		VersionCmd:  src.Strs("version_cmd"),
-		VersionCmds: decodeVersionCmds(src),
-		Language:    language,
-		Opaque:      src.Bool("opaque"),
+		Name:       name,
+		Claims:     src.Strs("claims"),
+		IgnoreDirs: src.Strs("ignore_dirs"),
+		Manifests:  src.Strs("manifests"),
+		Tools:      decodeTools(src),
+		Language:   language,
+		Opaque:     src.Bool("opaque"),
 	}
 
 	needs, err := src.CallStrs("needs")
@@ -173,6 +175,12 @@ func Decode(src Obj) (spells.Descriptor, error) {
 			m.DocOps = docOps
 		}
 	}
+	// Checked here rather than at probe time: an unusable component is a declaration
+	// bug knowable without running anything, and discovering it from a cache that
+	// silently never narrows is the failure this prevents.
+	if err := validateTools(m); err != nil {
+		return spells.Descriptor{}, err
+	}
 	return m, nil
 }
 
@@ -199,7 +207,11 @@ func decodeCommand(spellName, opName string, o Obj) (spells.Command, error) {
 		var ch spells.Charm
 		for _, opObj := range ce.Objs("ops") {
 			po := spells.PatchOp{}
-			po.Op, _ = opObj.Str("op")
+			// Str unwraps a PatchOpKind enum case to its backing string, so both the
+			// enum spelling charm.buzz uses and a bare "add" from a hand-written record
+			// decode the same way.
+			opName, _ := opObj.Str("op")
+			po.Op = spells.PatchOpKind(opName)
 			po.Path, _ = opObj.Str("path")
 			if v, ok := opObj.Str("value"); ok {
 				po.Value = v
@@ -227,29 +239,82 @@ func decodeCommand(spellName, opName string, o Obj) (spells.Command, error) {
 	return c, nil
 }
 
-// decodeVersionCmds reads the named additional version probes, tool name to argv.
-// It uses only Obj/Keys/Strs, so a second authoring backend implementing Obj gets
-// this field for free rather than needing a new method on the interface.
-//
-// An entry with an empty argv is dropped rather than kept as a probe that could
-// never run: a spell naming a tool it cannot version is a declaration bug, and
-// carrying it would put a permanent "UNPROBED" into every cache key for that
-// project - noise that never resolves.
-func decodeVersionCmds(src Obj) map[string][]string {
-	rec, ok := src.Obj("version_cmds")
+// validateTools reports the first unusable declaration in a decoded descriptor.
+// Separate from decoding so the error can name the spell, and so a caller that only
+// reads a descriptor (docs, graph extraction) is not forced to handle it.
+func validateTools(m spells.Descriptor) error {
+	for _, tool := range slices.Sorted(maps.Keys(m.Tools)) {
+		// A malformed constraint is knowable without running anything, and a floor
+		// nobody can parse protects nobody - the same reasoning magus.yaml's
+		// required_version applies to its own floor.
+		if f := m.Tools[tool].Floor; f != "" {
+			if _, err := semver.NewConstraint(f); err != nil {
+				return fmt.Errorf("spell %q: tools[%q].floor %q is not a valid semver constraint: %w",
+					m.Name, tool, f, err)
+			}
+		}
+		if c := m.Tools[tool].Key.UpTo; !c.Valid() {
+			// The candidate list comes from the same registry that generates the enum,
+			// so adding a component cannot leave this message stale.
+			return fmt.Errorf("spell %q: tools[%q].key.upTo is %s; want one of %s",
+				m.Name, tool, c, strings.Join(c.Values(), ", "))
+		}
+		if d := m.Tools[tool].Diagnostics; !d.Valid() {
+			return fmt.Errorf("spell %q: tools[%q].diagnostics is %s; want one of %s",
+				m.Name, tool, d, strings.Join(d.Values(), ", "))
+		}
+	}
+	return nil
+}
+
+// decodeTools reads the per-binary declarations: what prints its version, what part of
+// that keys the cache, and what proves it is usable. An entry with none of the three is
+// dropped rather than kept as a tool magus knows nothing about.
+func decodeTools(src Obj) map[string]spells.Tool {
+	rec, ok := src.Obj("tools")
 	if !ok {
 		return nil
 	}
-	var out map[string][]string
-	for _, tool := range rec.Keys() {
-		argv := rec.Strs(tool)
-		if len(argv) == 0 {
+	var out map[string]spells.Tool
+	for _, name := range rec.Keys() {
+		o, ok := rec.Obj(name)
+		if !ok {
+			continue
+		}
+		t := spells.Tool{}
+		if pr, ok := o.Obj("probe"); ok {
+			if cmd, err := decodeCommand("", "", pr); err == nil {
+				t.Probe = cmd
+			}
+		}
+		if k, ok := o.Obj("key"); ok {
+			if c, ok := k.Str("const"); ok {
+				t.Key.Const = c
+			}
+			if u, ok := k.Str("upTo"); ok {
+				t.Key.UpTo = spells.VersionComponent(u)
+			}
+		}
+		if f, ok := o.Str("floor"); ok {
+			t.Floor = f
+		}
+		if r, ok := o.Obj("ready"); ok {
+			cmd, err := decodeCommand("", "", r)
+			if err == nil {
+				t.Ready = cmd
+			}
+		}
+		if d, ok := o.Str("diagnostics"); ok {
+			t.Diagnostics = spells.DiagnosticFormat(d)
+		}
+		if t.Probe.Bin == "" && t.Key.IsZero() && t.Ready.Bin == "" && t.Floor == "" &&
+			t.Diagnostics == spells.DiagnosticNone {
 			continue
 		}
 		if out == nil {
-			out = map[string][]string{}
+			out = map[string]spells.Tool{}
 		}
-		out[tool] = argv
+		out[name] = t
 	}
 	return out
 }

@@ -95,7 +95,7 @@ Typical flow:
   Then act: magus_run_target / magus_run_affected; magus_affected_plan (CI shard plan), magus_affected_explain (why a project is affected).
   After a run: magus_output (fetch a target's captured output by its ref), magus_tail_log (latest cache log for a project).
   Understand the graph: magus_query (search) -> magus_explain (a node's edges and provenance) -> magus_path (shortest path); magus_refs (symbol defs and refs); magus_stats (graph shape).
-  Health and meta: magus_status, magus_doctor, magus_config_get, magus_scratchpad.
+  Health and meta: magus_status, magus_doctor, magus_config_get.
 
 Config mutation is intentionally not exposed. Use the magus CLI for that.`
 

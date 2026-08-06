@@ -1,3 +1,7 @@
+// title: Custom charms: patch the argv
+// desc: Declare your own charm as a JSON Patch over a spell op's argv; run op:charm to watch the flag splice in.
+// doc: concepts/charms|Charms
+//
 // Charms you define: one flag, applied as a patch. Step 8 read a charm with
 // has_charm and branched by hand. The declarative form - the one built-in spells
 // use - lives in a SPELL: an op returns a Command with a `charms` table, each entry

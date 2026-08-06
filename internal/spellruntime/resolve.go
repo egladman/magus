@@ -235,7 +235,18 @@ type buzzSpellObj struct {
 
 func (o buzzSpellObj) Str(key string) (string, bool) {
 	x, ok := o.v.MapGet(key)
-	if !ok || !x.IsStr() {
+	if !ok {
+		return "", false
+	}
+	// An enum case reads as its backing value. A field the mirror types as an
+	// `enum<str>` arrives as a case object, not a string, so without this a spell
+	// writing `upTo = VersionComponent.patch` would decode as absent - the silent
+	// miss the enum was adopted to prevent. A plain string still passes through, so
+	// both spellings decode identically.
+	if ev, isEnum := x.EnumValue(); isEnum {
+		x = ev
+	}
+	if !x.IsStr() {
 		return "", false
 	}
 	return x.AsString(), true

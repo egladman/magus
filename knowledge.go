@@ -109,14 +109,10 @@ func resolveCacheDir(root string, cfg config.Config) string {
 	return filepath.Join(root, ".magus")
 }
 
-// cacheImmutable reports whether the cache is read-only, honoring both the config
-// flag and the MAGUS_CACHE_IMMUTABLE env var (matching cache.Open's behavior).
+// cacheImmutable reports whether the cache is read-only, matching cache.Open's own
+// cache.write.enabled / MAGUS_CACHE_WRITE_ENABLED check.
 func cacheImmutable(cfg config.Config) bool {
-	if cfg.Cache.Immutable {
-		return true
-	}
-	v := strings.ToLower(os.Getenv("MAGUS_CACHE_IMMUTABLE"))
-	return v == "true" || v == "1"
+	return !cfg.Cache.WriteEnabled()
 }
 
 // allModuleEntries returns every stdlib module with its methods populated. The
@@ -576,7 +572,7 @@ func aggregateFileHistory(changes []types.CommitChange, prefix string) []types.K
 	byPath := map[string]*acc{}
 	var order []string
 	for _, c := range changes {
-		short := shortRevision(c.ID)
+		short := ShortRevision(c.ID)
 		unix := c.Date.Unix()
 		for _, f := range c.Files {
 			f = filepath.ToSlash(strings.TrimSpace(f))
@@ -611,8 +607,11 @@ func aggregateFileHistory(changes []types.CommitChange, prefix string) []types.K
 	return entries
 }
 
-// shortRevision abbreviates a full revision id for display, leaving a short id untouched.
-func shortRevision(id string) string {
+// ShortRevision abbreviates a full VCS revision id for display, leaving a
+// short id untouched. Matches this codebase's convention of a 12-hex-digit
+// truncation elsewhere (PortableRef); the stored/compared value is always
+// the full revision, this is presentation only.
+func ShortRevision(id string) string {
 	const short = 12
 	if len(id) > short {
 		return id[:short]

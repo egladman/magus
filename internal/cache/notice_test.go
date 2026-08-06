@@ -1,6 +1,8 @@
 package cache
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -85,4 +87,50 @@ func TestFailureExcerptPrefersTheLastMatches(t *testing.T) {
 
 	assert.Contains(t, string(excerpt), "the real failure")
 	assert.NotContains(t, string(excerpt), "early noise")
+}
+
+// TestFailureExcerptPinsRealTestFailureAgainstLaterNoise: this package's own suite
+// exercises magus's failure reporting, so it prints many EXPECTED "[fail]"/"cause:"
+// lines as passing output, each matching diagnosticLine as well as a real failure
+// does and each outnumbering the display budget. Without a structural tier the
+// incidental matches that came LAST evicted the one real failure entirely.
+func TestFailureExcerptPinsRealTestFailureAgainstLaterNoise(t *testing.T) {
+	t.Parallel()
+	var b strings.Builder
+	b.WriteString("--- FAIL: TestRunAllDependencyFailureCancelsDependents (0.00s)\n")
+	b.WriteString("    dep_barrier_test.go:283: Error Trace: B's fn ran even though its dependency A failed\n")
+	for i := 0; i < 40; i++ {
+		fmt.Fprintf(&b, "[fail] fixture%d (ran, 1ms)\n  cause: fixture%d boom\n", i, i)
+	}
+	b.WriteString("FAIL\n")
+
+	excerpt, omitted := failureExcerpt([]byte(b.String()), maxFailureExcerptLines)
+
+	assert.Positive(t, omitted, "the fixture noise alone is well over budget")
+	assert.Contains(t, string(excerpt), "TestRunAllDependencyFailureCancelsDependents",
+		"the real failure must survive even though 40 later matches would otherwise evict it")
+	assert.Contains(t, string(excerpt), "B's fn ran even though its dependency A failed")
+}
+
+// TestFailureExcerptHonoursLimitWhenEveryLineIsStructural is the other half of the
+// rule above, and guards the mistake made while implementing it: ranking a structural
+// marker above keyword noise must not become an EXEMPTION from the budget. A broadly
+// failing `go test ./...` is nothing but structural markers, and exempting them turned
+// the excerpt back into the full log dump failureExcerpt exists to prevent - while
+// reporting omitted=0, so nothing on screen said the output had been let through.
+func TestFailureExcerptHonoursLimitWhenEveryLineIsStructural(t *testing.T) {
+	t.Parallel()
+	var b strings.Builder
+	for i := 0; i < 30; i++ {
+		fmt.Fprintf(&b, "--- FAIL: TestThing%d (0.01s)\n", i)
+		fmt.Fprintf(&b, "    thing_test.go:%d: assertion failed\n", i)
+		fmt.Fprintf(&b, "FAIL\tgithub.com/egladman/magus/pkg%d\t0.5s\n", i)
+	}
+	total := 90
+
+	excerpt, omitted := failureExcerpt([]byte(b.String()), maxFailureExcerptLines)
+
+	got := strings.Count(strings.TrimSuffix(string(excerpt), "\n"), "\n") + 1
+	assert.LessOrEqual(t, got, maxFailureExcerptLines, "the budget is a cap, not a suggestion")
+	assert.Equal(t, total-got, omitted, "omitted must account for every line actually withheld")
 }

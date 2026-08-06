@@ -39,7 +39,10 @@ exec git commit -m touch-proj-b
 # Selection: only proj-b changed since "base", so only proj-b is dry-run. The root
 # project (spells/acme, untouched) must not appear.
 exec magus affected list --base=base --dry-run
-stderr 'projects: proj-b \(git diff vs base\)'
+stderr 'projects: proj-b'
+# The base moved out of the projects suffix onto its own header line, beside charms
+# and cache, because it is an input that decides what runs rather than a footnote.
+stderr 'base: git diff vs base'
 stderr '\[dry\] proj-b'
 ! stderr 'projects: 2 projects'
 

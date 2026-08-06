@@ -1,3 +1,7 @@
+// title: Cache identity: what counts as the same work
+// desc: A hit means magus decided this run is identical to an earlier one, so every surprise comes from something that is part of that identity without looking like an input.
+// doc: concepts/cache/tool-identity|Tool identity
+//
 // What counts as "the same work". A cache hit means magus decided this run is identical to
 // a previous one, so the surprises all come from things that are part of that identity
 // without looking like inputs. None of these is exotic; each one has cost somebody an

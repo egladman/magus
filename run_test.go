@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/project"
@@ -351,6 +352,89 @@ func TestVerifyReadOnlyPropagatesTargetError(t *testing.T) {
 	err := verifyReadOnly(t.Context(), t.TempDir(), "generate", func() error { return want })
 
 	require.ErrorIs(t, err, want, "the target's own failure is returned before any drift check")
+}
+
+// TestCurrentRevisionNoVCS pins CurrentRevision's no-VCS behavior directly: a disabled
+// VCS yields ("", false), never an error - the caller (executeStages) always has a
+// value to stamp onto every step, and "unknown" is the correct answer, not a failure.
+func TestCurrentRevisionNoVCS(t *testing.T) {
+	t.Setenv("MAGUS_VCS_ENABLED", "false")
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	revision, dirty := m.CurrentRevision(t.Context())
+	assert.Empty(t, revision)
+	assert.False(t, dirty)
+}
+
+// TestCurrentRevisionWithVCS pins the success path CurrentRevisionNoVCS does not
+// reach: a real git repo yields meta.Hash/meta.IsDirty verbatim as (revision, dirty).
+// Reuses gitRun/writeCommit/gitHeadFull from knowledge_test.go rather than
+// reimplementing a git fixture helper.
+func TestCurrentRevisionWithVCS(t *testing.T) {
+	root := t.TempDir()
+	gitRun(t, root, "init", "-q")
+	writeCommit(t, root, "magusfile.buzz", "")
+	// Open creates the .magus cache dir as a side effect; untracked, it would
+	// otherwise read as an uncommitted change unrelated to anything this test
+	// does. Ignore it before the "clean tree" assertion below.
+	writeCommit(t, root, ".gitignore", ".magus/\n")
+	head := gitHeadFull(t, root)
+
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	revision, dirty := m.CurrentRevision(t.Context())
+	assert.Equal(t, head, revision, "CurrentRevision must pass meta.Hash through verbatim")
+	assert.False(t, dirty, "a freshly committed tree is clean")
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("x"), 0o644))
+	revision, dirty = m.CurrentRevision(t.Context())
+	assert.Equal(t, head, revision, "an uncommitted edit does not move HEAD")
+	assert.True(t, dirty, "an uncommitted edit must report dirty")
+}
+
+// TestRun_NoVCSLeavesRevisionEmpty drives the real Run path (executeStages -> recordOutput)
+// in a workspace with VCS disabled: the persisted descriptor's Revision must be empty and
+// Dirty false, and recording it must raise nothing - a missing revision is "unknown", the
+// same silent no-op verifyReadOnly's VCS resolution already treats it as.
+func TestRun_NoVCSLeavesRevisionEmpty(t *testing.T) {
+	t.Setenv("MAGUS_VCS_ENABLED", "false")
+
+	const spellName = "zzz-no-vcs-revision-test-spell"
+	spell := spells.NewSpell(spellName,
+		spells.WithTargets("build"),
+		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
+			return nil, nil
+		}),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(spell)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	ctx := context.Background()
+	targets := []types.Target{{Path: ".", Name: "build"}}
+	require.NoError(t, m.Run(ctx, targets))
+
+	key, _, err := m.ComputeTargetKey(ctx, ".", "build", nil)
+	require.NoError(t, err, "ComputeTargetKey")
+	desc, err := m.OutputDescriptorByRef(cache.PortableRef(key))
+	require.NoError(t, err, "OutputDescriptorByRef")
+	assert.Empty(t, desc.Revision, "no VCS: revision is unknown, not an error")
+	assert.False(t, desc.Dirty)
 }
 
 // The affected fallback selects EVERY project when the VCS cannot produce a changed-file

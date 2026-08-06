@@ -222,14 +222,21 @@ func TestCheckBespokePhaseFragmentTargets(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun typeCheck(ctx: magus\\Context, _a: [str]) > void {}\n"})
 		require.Equal(t, types.DoctorAdvice, got.Status, got.Message)
 	})
-	t.Run("vet audit security style prettify all flagged", func(t *testing.T) {
+	t.Run("vet audit style prettify all flagged", func(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun vet(ctx: magus\\Context, _a: [str]) > void {}\n" +
 			"export fun audit(ctx: magus\\Context, _a: [str]) > void {}\n" +
-			"export fun security(ctx: magus\\Context, _a: [str]) > void {}\n" +
 			"export fun style(ctx: magus\\Context, _a: [str]) > void {}\n" +
 			"export fun prettify(ctx: magus\\Context, _a: [str]) > void {}\n"})
 		require.Equal(t, types.DoctorAdvice, got.Status, got.Message)
-		assert.Len(t, got.Details, 5)
+		assert.Len(t, got.Details, 4)
+	})
+
+	// security is NOT a fragment: a scanner reads an advisory database that changes
+	// independently of the tree, so it carries skip_cache, and composing it into lint
+	// would cost that whole phase its caching. magus's own projects declare one.
+	t.Run("security is not flagged", func(t *testing.T) {
+		got := run(map[string]string{"magusfile.buzz": "export fun security(ctx: magus\\Context, _a: [str]) > void {}\n"})
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 
 	// Two projects naming the same target are two separate decisions. Reporting
@@ -240,7 +247,7 @@ func TestCheckBespokePhaseFragmentTargets(t *testing.T) {
 		for _, dir := range []string{"web", "docs"} {
 			require.NoError(t, os.MkdirAll(filepath.Join(root, dir), 0o755))
 			require.NoError(t, os.WriteFile(filepath.Join(root, dir, "magusfile.buzz"),
-				[]byte("export fun security(ctx: magus\\Context, _a: [str]) > void {}\n"), 0o644))
+				[]byte("export fun vet(ctx: magus\\Context, _a: [str]) > void {}\n"), 0o644))
 		}
 		r := &runner{root: root}
 		got := r.checkBespokePhaseFragmentTargets([]*types.Project{
@@ -258,7 +265,7 @@ func TestCheckBespokePhaseFragmentTargets(t *testing.T) {
 	t.Run("an empty root still names the file", func(t *testing.T) {
 		root := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-			[]byte("export fun security(ctx: magus\\Context, _a: [str]) > void {}\n"), 0o644))
+			[]byte("export fun vet(ctx: magus\\Context, _a: [str]) > void {}\n"), 0o644))
 		r := &runner{} // no root, no workspace
 		got := r.checkBespokePhaseFragmentTargets([]*types.Project{{Path: ".", Dir: root}})
 		require.Equal(t, types.DoctorAdvice, got.Status, got.Message)
@@ -417,11 +424,18 @@ func TestCheckHasCharmTypos(t *testing.T) {
 
 func TestCheckEnvVars(t *testing.T) {
 	t.Run("no unknown vars", func(t *testing.T) {
+		// UNSET, not set-to-empty: checkEnvVars scans os.Environ() by KEY, so
+		// t.Setenv(k, "") leaves the variable present and the isolation does
+		// nothing. This test read the ambient environment for real until CI
+		// exported three MAGUS_* vars and failed it. t.Setenv has no unset form,
+		// so restore by hand.
 		for _, kv := range os.Environ() {
-			if strings.HasPrefix(kv, "MAGUS_") {
-				k := strings.SplitN(kv, "=", 2)[0]
-				t.Setenv(k, "")
+			if !strings.HasPrefix(kv, "MAGUS_") {
+				continue
 			}
+			k, v, _ := strings.Cut(kv, "=")
+			require.NoError(t, os.Unsetenv(k))
+			t.Cleanup(func() { _ = os.Setenv(k, v) })
 		}
 		r := &runner{}
 		got := r.checkEnvVars()
@@ -435,7 +449,66 @@ func TestCheckEnvVars(t *testing.T) {
 		assert.Equal(t, types.DoctorFail, got.Status)
 		assert.Contains(t, got.Details, "MAGUS_CACHE_MOD")
 	})
+
+	// magus reads these four itself (subprocess recursion depth, CI shard inputs,
+	// the cache-signing seed) without them being config fields, so they can never
+	// appear in KnownEnvVars - runtimeEnvVars is the allowlist that keeps this
+	// check from calling magus's own documented setup a typo.
+	t.Run("runtime env vars recognized", func(t *testing.T) {
+		for _, name := range []string{
+			"MAGUS_LEVEL",
+			"MAGUS_SHARD",
+			"MAGUS_N_SHARDS",
+			"MAGUS_CACHE_SIGNING_KEY",
+		} {
+			t.Run(name, func(t *testing.T) {
+				for _, kv := range os.Environ() {
+					if !strings.HasPrefix(kv, "MAGUS_") {
+						continue
+					}
+					k, v, _ := strings.Cut(kv, "=")
+					require.NoError(t, os.Unsetenv(k))
+					t.Cleanup(func() { _ = os.Setenv(k, v) })
+				}
+				t.Setenv(name, "1")
+				r := &runner{}
+				got := r.checkEnvVars()
+				assert.Equal(t, types.DoctorOK, got.Status, got.Details)
+			})
+		}
+	})
 }
+
+// TestDisplayPath covers the daemon path displayPath's own doc cites as the
+// motivation: r.root empty but r.ws set (the daemon passes the workspace
+// through r.ws instead of root), which must fall back to r.ws.Root() rather
+// than leaving filepath.Rel to fail against an empty root and print nothing.
+func TestDisplayPath(t *testing.T) {
+	t.Run("root set: workspace-relative", func(t *testing.T) {
+		r := &runner{root: "/repo"}
+		assert.Equal(t, "internal/doctor/checks.go", r.displayPath("/repo/internal/doctor/checks.go"))
+	})
+
+	t.Run("root empty, ws set: falls back to ws.Root()", func(t *testing.T) {
+		r := &runner{ws: rootStubWorkspace{root: "/repo"}}
+		assert.Equal(t, "internal/doctor/checks.go", r.displayPath("/repo/internal/doctor/checks.go"))
+	})
+
+	t.Run("root empty, ws nil: absolute path", func(t *testing.T) {
+		r := &runner{}
+		assert.Equal(t, "/repo/internal/doctor/checks.go", r.displayPath("/repo/internal/doctor/checks.go"))
+	})
+}
+
+// rootStubWorkspace is a types.WorkspaceReader stub that answers Root() with a
+// fixed value; every other method panics via the embedded nil interface if
+// exercised, which no path in TestDisplayPath does.
+type rootStubWorkspace struct {
+	types.WorkspaceReader
+	root string
+}
+
+func (r rootStubWorkspace) Root() string { return r.root }
 
 func TestCheckConfigFile(t *testing.T) {
 	xdgDir := t.TempDir()

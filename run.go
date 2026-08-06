@@ -360,6 +360,21 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	for _, s := range p.ResolvedSpells {
 		step.Sources = append(step.Sources, s.TargetSources()[target]...)
 	}
+	// Which host facts key this step. Workspace-wide today: a per-target override is a
+	// narrower claim, and there is no evidence yet that anyone needs one axis on for
+	// one target and off for another within the same workspace.
+	// Workspace answer, then the target's override when it made one. A target that
+	// says nothing inherits, which is what every target did before overrides existed.
+	step.IncludeOS = m.cfg.Cache.IncludeOS()
+	step.IncludeArch = m.cfg.Cache.IncludeArch()
+	if pol, ok := p.TargetPolicies[target]; ok {
+		if pol.IncludeOS != nil {
+			step.IncludeOS = *pol.IncludeOS
+		}
+		if pol.IncludeArch != nil {
+			step.IncludeArch = *pol.IncludeArch
+		}
+	}
 	// Per-target inputs declared via ctx.readsFiles define the cache footprint whenever
 	// present. Each InputRef carries its owning project; joinGlob follows the same
 	// ownership rule as outputs below.
@@ -414,6 +429,74 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	step.Exclusive = pol.Exclusive
 	step.Slots = pol.Slots
 	return step
+}
+
+// ComputeTargetKey computes target's live cache key and the pre-hash key inputs behind
+// it for the project at projectPath, without executing anything. The step is keyed
+// exactly as a run with these charms would key it - spell claims, tool versions and
+// the env allowlist all included - so the returned key equals the one a real run
+// mints, and PortableRef of it equals the ref that run would print. Only args after
+// `--` are absent (this is not a run, so there are none). It is the live half of the
+// works-on-my-machine diff: `describe target --cache` compares these lines against
+// the set stored behind a ref. Returns types.ErrNoCache on an Inspect workspace.
+func (m *Magus) ComputeTargetKey(ctx context.Context, projectPath, target string, charms []string) (key string, lines []string, err error) {
+	return m.computeTargetKey(ctx, projectPath, target, charms, nil)
+}
+
+// sweepReuse bundles the two sweep-scoped reuses computeTargetKey accepts: an
+// optional cache.SourceMemo (passed to cache.StepKeyMemo) and an optional
+// pre-resolved tool-version map keyed by project path. IdentifyRef is the only
+// caller that supplies one, and it always supplies both together, since its sweep
+// keys every candidate target under every charm variant against the SAME
+// workspace tree - see cache.SourceMemo's doc for why that is safe here and
+// nowhere a target actually runs. Bundling them into one type makes "always both
+// or neither" a fact of the signature instead of a doc-comment promise.
+type sweepReuse struct {
+	memo         *cache.SourceMemo
+	toolVersions map[string][]string
+}
+
+// computeTargetKey is ComputeTargetKey with an optional sweepReuse threaded in.
+// ComputeTargetKey passes nil, so its public behavior is unchanged.
+//
+// The tool-version map matters more than it looks: toolVersionsByProject memoizes
+// only WITHIN one call, and each probe SPAWNS A SUBPROCESS (`go version`, `pnpm
+// --version`, ...). Resolving per target made the sweep re-probe every spell of
+// every project once per target, which was the sweep's dominant cost - wall clock
+// far exceeding CPU because the process was waiting on child processes, not
+// computing.
+func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string, charms []string, reuse *sweepReuse) (key string, lines []string, err error) {
+	if m.cache == nil {
+		return "", nil, types.ErrNoCache
+	}
+	p := m.Get(projectPath)
+	if p == nil {
+		return "", nil, fmt.Errorf("magus: compute target key: unknown project %q", projectPath)
+	}
+	var memo *cache.SourceMemo
+	var toolVersions map[string][]string
+	if reuse != nil {
+		memo = reuse.memo
+		toolVersions = reuse.toolVersions
+	}
+	if toolVersions == nil {
+		toolVersions = m.toolVersionsByProject(ctx, []*types.Project{p})
+	}
+	step := m.buildStep(p, target)
+	applyRunKeying(&step, toolVersions[p.Path], charms)
+	return m.cache.StepKeyMemo(ctx, &step, memo)
+}
+
+// applyRunKeying stamps the key-relevant fields the RUN SCHEDULER adds on top of
+// buildStep: resolved tool versions and the active charm set (sorted and deduped, so
+// charm order never forks a key). Both the scheduler and ComputeTargetKey go through
+// it, so `describe target --cache` cannot silently drift from the key a real run
+// mints when a new key-relevant field is added here.
+func applyRunKeying(step *cache.Step, toolVersions, charms []string) {
+	step.ToolVersions = toolVersions
+	ck := slices.Clone(charms)
+	slices.Sort(ck)
+	step.Charms = slices.Compact(ck)
 }
 
 // outputWatchDirs are the base directories the race detector and the race-replay
@@ -488,6 +571,33 @@ func toolVersionMode() string {
 	}
 }
 
+// CurrentRevision resolves the workspace's active VCS revision (full hash) and dirty
+// state. It departs from verifyReadOnly's VCS resolution on purpose: verifyReadOnly
+// treats a vcs.Resolve error as a hard failure (a bad MAGUS_VCS_NAME is misconfiguration
+// it refuses to hide) and only no-ops on res.VCS == nil, but CurrentRevision collapses
+// BOTH a resolution error and no VCS into ("", false). That is correct here because this
+// is provenance metadata, not a drift gate: a target that never declared FailOnDrift
+// never asked to have its VCS state checked, so failing the whole run over an unrelated
+// VCS misconfiguration would be wrong - a missing revision is "unknown", never a reason
+// to fail the caller. Used both to stamp output descriptors (executeStages resolves it
+// ONCE per invocation and copies it onto every step, exactly as toolVersionsByProject
+// does for tool versions - probing per target would spawn a VCS subprocess per step) and
+// by `magus query output <ref> --meta` to compare a stored descriptor's revision against
+// HEAD now. The two returns are types.VCSMeta's Hash and IsDirty under this package's
+// own vocabulary (revision/dirty is what cache.Step, cache.OutputDescriptor, and the
+// CLI all print).
+func (m *Magus) CurrentRevision(ctx context.Context) (revision string, dirty bool) {
+	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
+	if err != nil || res.VCS == nil {
+		return "", false
+	}
+	meta, err := res.VCS.Metadata(ctx, m.ws.Root)
+	if err != nil {
+		return "", false
+	}
+	return meta.Hash, meta.IsDirty
+}
+
 // toolVersionsByProject returns ProjectPath to "spell:version" entries for cache keys.
 // Probes are memoized by (spell, dir); failures record "spell:UNPROBED".
 func (m *Magus) toolVersionsByProject(ctx context.Context, projects []*types.Project) map[string][]string {
@@ -504,41 +614,44 @@ func (m *Magus) toolVersionsByProject(ctx context.Context, projects []*types.Pro
 		}
 		var vers []string
 		for _, s := range p.ResolvedSpells {
-			if !s.HasVersionProbe() {
-				continue
-			}
-			key := s.Name() + "\x00" + dir
-			v, ok := memo[key]
-			if !ok {
-				probed, err := s.ProbeVersion(ctx, dir)
-				if err != nil {
-					slog.WarnContext(ctx, "magus: tool-version probe failed; cache key records UNPROBED",
-						slog.String("spell", s.Name()), slog.String("dir", dir), slog.String("err", err.Error()))
-					probed = "UNPROBED"
-				} else {
-					slog.DebugContext(ctx, "magus: tool-version probe",
-						slog.String("spell", s.Name()), slog.String("dir", dir), slog.String("version", probed))
+			// One uniform loop over every declared tool. There is no privileged
+			// "primary" binary any more: `go` had one for historical cache-key reasons
+			// and nothing principled separated it from golangci-lint, so both key as
+			// spell:tool:version. Memoized on (spell, dir, tool) so N tools cost N
+			// spawns per project per run rather than N per target.
+			for _, tool := range s.ToolNames() {
+				t, _ := s.Tool(tool)
+				if !t.HasProbe() {
+					continue
 				}
-				v = probed
-				memo[key] = v
-			}
-			vers = append(vers, s.Name()+":"+v)
-			// Named probes contribute spell:tool:version, so a spell driving several
-			// binaries records each. Sorted by VersionProbeNames, and memoized on the
-			// same (spell, dir, tool) basis as the primary, so N tools cost N spawns
-			// per project per run rather than N per target.
-			for _, tool := range s.VersionProbeNames() {
-				tk := key + "\x00" + tool
-				tv, ok := memo[tk]
-				if !ok {
-					probed, err := s.ProbeVersionOf(ctx, tool, dir)
-					if err != nil {
-						slog.WarnContext(ctx, "magus: tool-version probe failed; cache key records UNPROBED",
-							slog.String("spell", s.Name()), slog.String("tool", tool),
-							slog.String("dir", dir), slog.String("err", err.Error()))
-						probed = "UNPROBED"
+				tk := s.Name() + "\x00" + dir + "\x00" + tool
+				tv, hit := memo[tk]
+				if !hit {
+					// A declared constant needs no process: the author supplies the
+					// token and edits it by hand to invalidate.
+					if t.Probe.Bin == "" {
+						tv = t.Key.Const
+					} else {
+						probed, err := s.ProbeVersion(ctx, tool, dir)
+						switch {
+						case err != nil:
+							slog.WarnContext(ctx, "magus: tool-version probe failed; cache key records UNPROBED",
+								slog.String("spell", s.Name()), slog.String("tool", tool),
+								slog.String("dir", dir), slog.String("err", err.Error()))
+							tv = "UNPROBED"
+						default:
+							token, note := spells.VersionToken(probed, t.Key)
+							if note != "" {
+								slog.WarnContext(ctx, "magus: tool-version key degraded; cache key is coarser than declared",
+									slog.String("spell", s.Name()), slog.String("tool", tool),
+									slog.String("dir", dir), slog.String("note", note))
+							}
+							slog.DebugContext(ctx, "magus: tool-version probe",
+								slog.String("spell", s.Name()), slog.String("tool", tool),
+								slog.String("output", probed), slog.String("token", token))
+							tv = token
+						}
 					}
-					tv = probed
 					memo[tk] = tv
 				}
 				vers = append(vers, s.Name()+":"+tool+":"+tv)
@@ -658,13 +771,14 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	defer releaseLocks()
 
 	toolVer := m.toolVersionsByProject(ctx, uniqueProjects)
+	// Resolved ONCE for the whole invocation, not per target - see CurrentRevision.
+	revision, dirty := m.CurrentRevision(ctx)
 
 	// Active charms participate in the cache key: a charm can change a target's
 	// behaviour (pass/fail or output), so charm-variant runs must not collide.
 	// A charm-less run hashes identically to before, keeping existing entries valid.
-	charmKey := slices.Clone(opts.Charms)
-	slices.Sort(charmKey)
-	charmKey = slices.Compact(charmKey)
+	// Normalized by applyRunKeying below, shared with ComputeTargetKey.
+	charmKey := opts.Charms
 
 	var steps []cache.Step
 	byPath := make(map[string]*types.Project)
@@ -679,8 +793,9 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		}
 		for _, p := range st.projects {
 			step := m.buildStep(p, st.target)
-			step.ToolVersions = toolVer[p.Path]
-			step.Charms = charmKey
+			applyRunKeying(&step, toolVer[p.Path], charmKey)
+			step.Revision = revision
+			step.Dirty = dirty
 			// Args after `--` change what the target does, so they key the cache
 			// exactly as charms do; without this a run with different args
 			// replays the previous run's result.

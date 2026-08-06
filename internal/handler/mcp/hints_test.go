@@ -94,7 +94,12 @@ func TestDecorateResultChainHints(t *testing.T) {
 func TestFirstRef(t *testing.T) {
 	t.Parallel()
 
-	// A fully-minted ref (ref + 8 hex) is isolated from the JSON payload.
+	// The id a REAL run prints today: the portable ref, out + 12 hex. This is the
+	// shape the agent surface actually receives, so pinning only the shorter attempt
+	// form below would let the scanner stop recognizing live refs unnoticed.
+	assert.Equal(t, "out9c92fef96e60", firstRef(mcplib.NewToolResultText(`{"ref":"out9c92fef96e60"}`)))
+	// An attempt id (out + 8 hex, also every pre-portable ref) stays chainable, so an
+	// id from `--attempts` or from old scrollback is still picked up.
 	assert.Equal(t, "out1a2b3c4d", firstRef(mcplib.NewToolResultText(`{"ref":"out1a2b3c4d"}`)))
 	assert.Empty(t, firstRef(mcplib.NewToolResultText(`{"ok":true}`)))
 	// "refactor" has a non-hex tail, so it is a free-text word, not a ref.

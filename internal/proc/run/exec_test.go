@@ -1,10 +1,13 @@
 package run
 
 import (
+	"context"
+	"os/exec"
 	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -63,4 +66,81 @@ func TestExecCapturesOutputWithNoTrailingNewline(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "v1.2.3", res.Stdout, "resolver=%v: unterminated output must survive", withResolver)
 	}
+}
+
+// TestExecClassifiesAMissingBinary covers Exec specifically, because Exec is the path
+// every real caller takes (internal/interp/bindings/command.go's spell-op dispatch,
+// std/os.go's os\exec, std/magus.go, internal/service/journal.go). The sibling
+// assertion in run_integration_test.go sits behind //go:build integration, which no
+// target passes, so it runs nowhere - a missing tool is common enough that its
+// classification should be checked by the ordinary suite.
+//
+// Both name shapes, because only the bare one is exec.ErrNotFound: a path-form name
+// never reaches LookPath and arrives as ENOENT instead, so matching one pattern left
+// the other unclassified.
+func TestExecClassifiesAMissingBinary(t *testing.T) {
+	for _, name := range []string{"magus-no-such-binary-xyzzy", "./magus-no-such-binary-xyzzy"} {
+		_, err := Exec(t.Context(), name, nil, ExecOptions{Dir: ".", Quiet: true})
+
+		require.Error(t, err, name)
+		assert.ErrorIs(t, err, types.ToolNotOnPath, "%s: classified as MGS3003, matching std/os.go's os\\which()", name)
+	}
+}
+
+// TestExecMissingBinaryStaysUnwrappable pins wrap transparency: a caller matching the
+// stdlib sentinel (run_integration_test.go does, and so could any consumer) must keep
+// working through the diagnostic wrap.
+func TestExecMissingBinaryStaysUnwrappable(t *testing.T) {
+	_, err := Exec(t.Context(), "magus-no-such-binary-xyzzy", nil, ExecOptions{Dir: ".", Quiet: true})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, exec.ErrNotFound, "the underlying *exec.Error stays reachable")
+}
+
+// TestExecConsultsTheStepGate is the regression for --step being a silent no-op. The
+// gate is installed by `magus run/x/affected --step` on the run's root ctx, but only
+// the old run.Run consulted it, and nothing in production called run.Run - every
+// subprocess forks through Exec. So the flag forced concurrency to 1, demanded a TTY,
+// and then ran everything without ever prompting.
+func TestExecConsultsTheStepGate(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		action  StepAction
+		wantRun bool
+		wantErr error
+	}{
+		{"step runs the command", StepActionStep, true, nil},
+		{"continue runs the command", StepActionContinue, true, nil},
+		{"skip does not run it", StepActionSkip, false, nil},
+		{"abort does not run it", StepActionAbort, false, ErrAborted},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			seen := false
+			ctx := WithStepGate(t.Context(), func(_ context.Context, _ string, _ []string, _ string) StepAction {
+				seen = true
+				return tc.action
+			})
+
+			res, err := Exec(ctx, "printf", []string{"ran"}, ExecOptions{Dir: ".", Capture: true, Quiet: true})
+
+			assert.True(t, seen, "the gate must be consulted before forking")
+			if tc.wantErr != nil {
+				assert.ErrorIs(t, err, tc.wantErr)
+			} else {
+				assert.NoError(t, err)
+			}
+			assert.Equal(t, tc.wantRun, res.Stdout == "ran", "command ran = %v", tc.wantRun)
+		})
+	}
+}
+
+// TestExecDoesNotClassifyAnExitedProcess guards classifyMissingBinary's `started`
+// arm: a tool that RAN and failed for its own reasons must not be reported as a
+// missing tool, however its error reads.
+func TestExecDoesNotClassifyAnExitedProcess(t *testing.T) {
+	_, err := Exec(t.Context(), "sh", []string{"-c", "cat /nonexistent-xyzzy; exit 1"},
+		ExecOptions{Dir: ".", Quiet: true})
+
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, types.ToolNotOnPath, "sh exists; its own ENOENT is not a missing tool")
 }

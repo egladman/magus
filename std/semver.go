@@ -19,14 +19,51 @@ var Semver = Module{
 	Methods: []Method{
 		{
 			Name: "compare",
-			Doc:  `Compare two semver strings; op is "==", "!=", "<", "<=", ">", or ">=" - true when the relation holds.`,
+			Doc:  "Order two semver strings: -1 when a sorts before b, 0 when they are equal, 1 when a sorts after. Use satisfies() to test a relation or a range.",
 			Args: []Arg{
 				{Name: "a", Type: TypeString},
-				{Name: "op", Type: TypeString},
 				{Name: "b", Type: TypeString},
 			},
-			Returns: []Ret{{Type: TypeBool}},
+			Returns: []Ret{{Type: TypeInt}},
 			Impl:    SemverCompare,
+		},
+		{
+			Name:    "isValid",
+			Doc:     "Whether v parses as a semantic version. Use it instead of calling parse purely to see whether it raises.",
+			Args:    []Arg{{Name: "v", Type: TypeString}},
+			Returns: []Ret{{Type: TypeBool}},
+			Impl:    SemverIsValid,
+		},
+		{
+			Name:    "canonical",
+			Doc:     `Canonical "vX.Y.Z" form of v, filling in missing components and discarding build metadata; errors on invalid input.`,
+			Args:    []Arg{{Name: "v", Type: TypeString}},
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    SemverCanonical,
+		},
+		{
+			Name:    "major",
+			Doc:     `The major prefix of v as a string: major("1.2.3") is "v1". This is the cache token a spell's VersionKey{upTo = "major"} produces; parse().major is the same number as an int.`,
+			Args:    []Arg{{Name: "v", Type: TypeString}},
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    SemverMajor,
+		},
+		{
+			Name:    "majorMinor",
+			Doc:     `The major.minor prefix of v as a string: majorMinor("1.2.3") is "v1.2". This is the cache token a spell's VersionKey{upTo = "minor"} produces.`,
+			Args:    []Arg{{Name: "v", Type: TypeString}},
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    SemverMajorMinor,
+		},
+		{
+			Name: "satisfies",
+			Doc:  `Whether v meets constraint, the full range syntax magus.yaml required_version uses: ">= 1.2, < 2.0", "^1.2.3", "~1.2". compare() tests one relation; this tests a range.`,
+			Args: []Arg{
+				{Name: "v", Type: TypeString},
+				{Name: "constraint", Type: TypeString},
+			},
+			Returns: []Ret{{Type: TypeBool}},
+			Impl:    SemverSatisfies,
 		},
 		{
 			Name:    "parse",
@@ -45,18 +82,26 @@ var Semver = Module{
 	},
 }
 
-// SemverCompare returns true when the relation expressed by op holds between a and b.
-// op must be one of "==", "!=", "<", "<=", ">", ">=".
-func SemverCompare(_ context.Context, a, op, b string) (bool, error) {
-	c, err := semver.NewConstraint(op + " " + b)
-	if err != nil {
-		return false, fmt.Errorf("semver.compare: invalid constraint %q %q: %w", op, b, err)
-	}
+// SemverCompare orders a against b, returning -1, 0, or 1.
+//
+// This is what `compare` means everywhere else - Go's cmp.Compare and strings.Compare,
+// x/mod/semver.Compare, Masterminds' Compare, node-semver's compare - and returning a
+// bool from a function by that name is a trap: an author arriving from any of them
+// guesses three-way ordering, and the guess compiles.
+//
+// It previously took (a, op, b) and answered whether the relation held. satisfies()
+// covers that now, and covers ranges the operator form could not express, so nothing
+// is lost by giving the name back its usual meaning.
+func SemverCompare(_ context.Context, a, b string) (int, error) {
 	va, err := semver.NewVersion(a)
 	if err != nil {
-		return false, fmt.Errorf("semver.compare: invalid version %q: %w", a, err)
+		return 0, fmt.Errorf("semver.compare: invalid version %q: %w", a, err)
 	}
-	return c.Check(va), nil
+	vb, err := semver.NewVersion(b)
+	if err != nil {
+		return 0, fmt.Errorf("semver.compare: invalid version %q: %w", b, err)
+	}
+	return va.Compare(vb), nil
 }
 
 // SemverParse parses v into its constituent parts.
@@ -94,4 +139,69 @@ func SemverNext(_ context.Context, v string) (types.SemverNext, error) {
 		Minor: "v" + minor.String(),
 		Patch: "v" + patch.String(),
 	}, nil
+}
+
+// SemverIsValid reports whether v parses as a semantic version.
+//
+// It exists because the module previously offered no way to ask: magusfile.buzz called
+// `semver\parse(v)` purely for its side effect of raising, which is an exception used
+// as a predicate. Both x/mod (IsValid) and node-semver (valid) carry one.
+func SemverIsValid(_ context.Context, v string) (bool, error) {
+	_, err := semver.NewVersion(v)
+	return err == nil, nil
+}
+
+// SemverCanonical returns v in canonical "vX.Y.Z" form.
+//
+// The leading "v" is what every function in this file that returns a version STRING
+// emits, so a caller can compare two of them directly. Input stays lenient - "1.2",
+// "v1.2.0", and "1.2.0+build" all canonicalize - which keeps it consistent with parse,
+// the module's other entry point.
+func SemverCanonical(_ context.Context, v string) (string, error) {
+	sv, err := semver.NewVersion(v)
+	if err != nil {
+		return "", fmt.Errorf("semver.canonical: %w", err)
+	}
+	return fmt.Sprintf("v%d.%d.%d", sv.Major(), sv.Minor(), sv.Patch()), nil
+}
+
+// SemverMajor returns the major prefix of v, e.g. "v1" for "1.2.3".
+//
+// It returns a STRING where parse().major returns an int, and the difference is the
+// point: this is the projection a cache key holds, so two versions sharing a major
+// produce one identical token. Named for golang.org/x/mod/semver.Major, which is the
+// same function and the same spelling the engine calls when narrowing a probe.
+func SemverMajor(_ context.Context, v string) (string, error) {
+	sv, err := semver.NewVersion(v)
+	if err != nil {
+		return "", fmt.Errorf("semver.major: %w", err)
+	}
+	return fmt.Sprintf("v%d", sv.Major()), nil
+}
+
+// SemverMajorMinor returns the major.minor prefix of v, e.g. "v1.2" for "1.2.3".
+// See SemverMajor for why it is a string.
+func SemverMajorMinor(_ context.Context, v string) (string, error) {
+	sv, err := semver.NewVersion(v)
+	if err != nil {
+		return "", fmt.Errorf("semver.majorMinor: %w", err)
+	}
+	return fmt.Sprintf("v%d.%d", sv.Major(), sv.Minor()), nil
+}
+
+// SemverSatisfies reports whether v meets a full constraint RANGE.
+//
+// compare() takes a single operator and one version, so it cannot express ">= 1.2,
+// < 2.0" - the form magus.yaml's required_version already accepts and the one a
+// magusfile reaches for when gating on a toolchain window.
+func SemverSatisfies(_ context.Context, v, constraint string) (bool, error) {
+	c, err := semver.NewConstraint(constraint)
+	if err != nil {
+		return false, fmt.Errorf("semver.satisfies: invalid constraint %q: %w", constraint, err)
+	}
+	sv, err := semver.NewVersion(v)
+	if err != nil {
+		return false, fmt.Errorf("semver.satisfies: invalid version %q: %w", v, err)
+	}
+	return c.Check(sv), nil
 }

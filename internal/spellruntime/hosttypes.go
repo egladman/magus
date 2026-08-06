@@ -205,6 +205,13 @@ var FileEntrySource string
 //go:embed gen/types/filereport.buzz
 var FileReportSource string
 
+// DiagnosticSource mirrors the value a coded failure presents to a Buzz `catch`, so a
+// magusfile can narrow one instead of indexing an undeclared map.
+//
+//go:generate go run ../../cmd/magus-utils types -type Diagnostic -out gen/types/diagnostic.buzz
+//go:embed gen/types/diagnostic.buzz
+var DiagnosticSource string
+
 // DoctorCheckSource / DoctorSummarySource / DoctorReportSource mirror magus.doctor's
 // result. Leaf-first: DoctorReport carries a list of DoctorCheck and one DoctorSummary.
 //

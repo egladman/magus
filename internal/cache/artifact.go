@@ -26,7 +26,7 @@ type ArtifactVersion struct {
 	Output    OutputRecord
 	Target    string    // the target whose run produced it
 	CreatedAt time.Time // when that entry was written
-	EntryHash string    // the cache key; Cache.LatestRef maps it to an output ref
+	EntryHash string    // the cache key; OutputStore.StepRef maps it to an output ref
 }
 
 // ShortBlob abbreviates the content hash for display. Empty for a symlink record,

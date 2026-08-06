@@ -28,10 +28,14 @@ func stepKey(s Step) string { return DepKey(s.ProjectPath, s.Target) }
 func formatCycle(cycle []string) string {
 	hops := make([]string, len(cycle))
 	for i, k := range cycle {
-		hops[i] = strings.Replace(k, nodeKeySep, " ", 1)
+		hops[i] = displayKey(k)
 	}
 	return strings.Join(hops, " -> ")
 }
+
+// displayKey renders one node key for a human, spelling out the control byte DepKey
+// joins on. Every user-facing message naming a node goes through here.
+func displayKey(key string) string { return strings.Replace(key, nodeKeySep, " ", 1) }
 
 // depBarrier gates RunAll goroutines on inter-step completion. One entry per node
 // key; dependents block in waitForDeps until markDone closes its channel.
@@ -44,6 +48,10 @@ type depBarrier struct {
 type barrierEntry struct {
 	ch   chan struct{}
 	once sync.Once
+	// err is the upstream's own result, set before ch closes. Safe to read once <-ch
+	// unblocks: close happens-before any receive that observes it (Go memory model),
+	// and err is written strictly before the close in the same once.Do.
+	err error
 }
 
 // newDepBarrier builds a barrier with one entry per distinct node key.
@@ -59,17 +67,29 @@ func newDepBarrier(steps []Step) *depBarrier {
 	return &depBarrier{done: done}
 }
 
-// markDone signals completion for key, unblocking its dependents. Idempotent.
-func (b *depBarrier) markDone(key string) {
+// markDone signals completion for key, unblocking its dependents, and records the
+// step's own result so a waiting dependent can tell success from failure. Idempotent.
+func (b *depBarrier) markDone(key string, err error) {
 	e, ok := b.done[key]
 	if !ok {
 		return
 	}
-	e.once.Do(func() { close(e.ch) })
+	e.once.Do(func() {
+		e.err = err
+		close(e.ch)
+	})
 }
 
 // waitForDeps blocks until all in-scope DependsOn (same-target) upstreams have
-// markDone'd, or ctx is cancelled.
+// markDone'd, or ctx is cancelled - and fails a dependent whose upstream itself
+// failed, even if ctx has not observed that cancellation yet.
+//
+// Checking e.err rather than only ctx.Done() closes a real race: markDone runs as a
+// defer inside the SAME goroutine errgroup wraps, so it fires before that goroutine
+// returns to errgroup's own wrapper, which is what cancels the shared ctx. A
+// dependent's select can see e.ch already closed while ctx is still live, and used to
+// read that as "upstream done, proceed" - running its own fn after a dependency it
+// depends on had already failed.
 func (b *depBarrier) waitForDeps(ctx context.Context, s Step) error {
 	self := stepKey(s)
 	wait := func(key string) error {
@@ -80,12 +100,24 @@ func (b *depBarrier) waitForDeps(ctx context.Context, s Step) error {
 		if !ok {
 			return nil
 		}
+		// Probe the upstream before blocking, so a settled one always wins over a
+		// cancelled ctx. Both can be ready at once - the upstream failed AND a sibling
+		// already cancelled the group - and select picks uniformly at random among
+		// ready cases, which would surface the specific "dependency X failed" error
+		// this function exists to produce only about half the time.
 		select {
 		case <-e.ch:
-			return nil
-		case <-ctx.Done():
-			return ctx.Err()
+		default:
+			select {
+			case <-e.ch:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		}
+		if e.err != nil {
+			return fmt.Errorf("cache: RunAll: dependency %s failed: %w", displayKey(key), e.err)
+		}
+		return nil
 	}
 	for _, d := range s.DependsOn {
 		if err := wait(DepKey(d, s.Target)); err != nil {

@@ -71,7 +71,7 @@ fun hasInstallablePatch(pkg: str, patched: str) > bool {
             continue;
         }
         try {
-            if (!semver\compare(version, op: ">=", b: floor)) {
+            if (!semver\satisfies(version, constraint: ">= " + floor)) {
                 continue;
             }
             if (time\parse("2006-01-02T15:04:05.000Z", value: published) <= cutoff) {

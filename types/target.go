@@ -137,6 +137,18 @@ type Target struct {
 	Slots           int    `json:"slots,omitempty"`                    // concurrency slots to hold while running (0 or 1 = one slot); throttles parallel work around a resource-heavy target. Clamped to the run's total slot budget.
 	FailOnDrift     bool   `json:"failOnDrift,omitempty" buzz:"-"`     // fail the run if the working tree is dirty after this target (drift gate)
 	RetryOnVolatile bool   `json:"retryOnVolatile,omitempty" buzz:"-"` // route through volatility detection + auto-retry
+	// IncludeOS and IncludeArch override cache.include.*.enabled for this target.
+	// nil inherits the workspace answer, which is what an undeclared target gets.
+	//
+	// Authored NESTED, to mirror magus.yaml rather than invent a second shape for the
+	// same decision:
+	//
+	//	"image": { "cache": { "include": { "arch": { "enabled": false } } } }
+	//
+	// Stored flat because the nesting exists for the author's benefit - a Go caller
+	// reading two optional bools should not walk three structs to find them.
+	IncludeOS   *bool `json:"includeOS,omitempty" buzz:"-"`
+	IncludeArch *bool `json:"includeArch,omitempty" buzz:"-"`
 }
 
 // String returns the canonical "path:target" form.

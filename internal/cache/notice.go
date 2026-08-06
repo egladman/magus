@@ -49,6 +49,14 @@ func extractNotices(path string) []string {
 // so a tail alone is often not actionable. Each matching line keeps one line of
 // context either side; windows are merged and capped. If no diagnostic is recognized,
 // fall back to the final lines, which still include the tool's terminal outcome.
+//
+// A structuralFailureLine match outranks a diagnosticLine one when the budget is
+// oversubscribed, rather than being exempt from it. Rank, not exemption, is the whole
+// subtlety: internal/cache's own suite verifies magus's failure reporting, so it is
+// dense with lines like "[fail]" and "cause:" that are EXPECTED, passing output and
+// match diagnosticLine exactly as well as a real failure does. Ranking keeps the one
+// real "--- FAIL: TestX" from being evicted by that noise while still honoring limit,
+// so a broadly-failing `go test ./...` cannot dump its whole log to the console.
 func failureExcerpt(data []byte, limit int) (excerpt []byte, omitted int) {
 	if limit <= 0 {
 		return data, 0
@@ -58,36 +66,55 @@ func failureExcerpt(data []byte, limit int) (excerpt []byte, omitted int) {
 		return nil, 0
 	}
 
-	selected := make([]bool, len(lines))
-	count := 0
-	for i, line := range lines {
-		if !diagnosticLine.MatchString(line) {
-			continue
-		}
+	// Interest tiers, weakest first. A line's rank is the strongest reason to show it:
+	// its own match, or being within one line of a stronger one.
+	const (
+		uninteresting = iota
+		keywordMatch
+		structuralFailure
+	)
+	rank := make([]int, len(lines))
+	mark := func(i, tier int) {
 		for j := max(0, i-1); j <= min(len(lines)-1, i+1); j++ {
-			if !selected[j] {
-				selected[j] = true
-				count++
-			}
+			rank[j] = max(rank[j], tier)
 		}
 	}
-	if count == 0 {
+	matched := false
+	for i, line := range lines {
+		switch {
+		case structuralFailureLine.MatchString(line):
+			mark(i, structuralFailure)
+			matched = true
+		case diagnosticLine.MatchString(line):
+			mark(i, keywordMatch)
+			matched = true
+		}
+	}
+	if !matched {
 		start := max(0, len(lines)-limit)
 		return []byte(strings.Join(lines[start:], "\n") + "\n"), start
 	}
 
-	// Over budget, keep the LAST matches rather than the first. A tool prints its
-	// setup before it prints what went wrong, so filling the budget from the top
-	// spends it on whatever merely looked diagnostic early on and drops the actual
+	// Spend the budget by tier, and within a tier keep the LAST lines: a tool prints
+	// its setup before it prints what went wrong, so filling from the top spends the
+	// budget on whatever merely looked diagnostic early on and drops the actual
 	// failure - the one line the reader opened the output for.
-	var out []string
-	for i, line := range lines {
-		if selected[i] {
-			out = append(out, line)
+	keep := make([]bool, len(lines))
+	room := limit
+	for _, tier := range []int{structuralFailure, keywordMatch} {
+		for i := len(lines) - 1; i >= 0 && room > 0; i-- {
+			if rank[i] == tier {
+				keep[i] = true
+				room--
+			}
 		}
 	}
-	if len(out) > limit {
-		out = out[len(out)-limit:]
+
+	out := make([]string, 0, limit)
+	for i, line := range lines {
+		if keep[i] {
+			out = append(out, line)
+		}
 	}
 	return []byte(strings.Join(out, "\n") + "\n"), len(lines) - len(out)
 }
@@ -109,3 +136,13 @@ func failureExcerpt(data []byte, limit int) (excerpt []byte, omitted int) {
 // "2 errors occurred", "error:" and "--- FAIL:".
 var diagnosticLine = regexp.MustCompile(
 	`(?i)(^|[^\w/.\-])(errors?|fatal|panics?|fail(s|ed|ure|ures)?|mismatch|undefined|not found|cannot)($|[^\w/.\-])`)
+
+// structuralFailureLine matches a test tool's own STRUCTURAL failure marker, as
+// opposed to diagnosticLine's loose keyword match. `go test` writes these for
+// exactly this purpose - "this is the one that failed" - so unlike an incidental
+// "fail"/"cause" elsewhere in the log, a match here is never budget-evicted; see
+// failureExcerpt. Anchored to (indented) line start so it cannot fire mid-sentence,
+// and covers a top-level or nested subtest ("--- FAIL: ", indented under its
+// parent), a panic, and go test's own terminal "FAIL" line (bare, or the
+// package-and-duration summary "FAIL\t<pkg>\t<dur>").
+var structuralFailureLine = regexp.MustCompile(`^\s*(--- FAIL: |panic: |FAIL(\s|$))`)

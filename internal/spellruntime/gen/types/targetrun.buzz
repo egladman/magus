@@ -5,10 +5,19 @@
 // see internal/spellruntime/target.go and hosttypes.go). Edit the Go struct and rerun
 // `go generate`, never this file.
 
+export enum<str> TargetRunState {
+    none = "",
+    queued = "queued",
+    running = "running",
+    passed = "passed",
+    failed = "failed",
+    cached = "cached",
+}
+
 export object TargetRun {
     project: str = "",
     target: str = "",
-    state: str = "",
+    state: TargetRunState = TargetRunState.none,
     startedAt: str = "",
     endedAt: str = "",
     outputRef: str = "",

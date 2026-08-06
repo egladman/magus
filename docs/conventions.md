@@ -92,7 +92,7 @@ placeholders in it, not one machine's answer. A pasted-in literal goes stale sil
 a shape does not.
 
 A ` ```console ` block is a **session transcript**: a command and the output it actually
-produced, with the `$ ` prompt kept because that is what separates the two. You read these
+produced, with the `$` prompt kept because that is what separates the two. You read these
 rather than copy them. Several are captured from real runs against a fixture workspace and
 re-injected on every build, so they cannot drift from what the command prints
 ([`cmd/magus-examples`](https://github.com/egladman/magus/blob/main/cmd/magus-examples/main.go)).

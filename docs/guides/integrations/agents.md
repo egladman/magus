@@ -257,7 +257,7 @@ your user-level Codex configuration as well.
 The CLI works without a daemon. It still reads the workspace, runs targets,
 uses the cache, and answers graph queries. What it lacks is MCP tool discovery,
 the daemon's warm graph and background indexes, structured output retrieval,
-and MCP-only capabilities such as scratchpad and memory. An agent must not turn
+and MCP-only capabilities such as the handoff journal. An agent must not turn
 that into a blocker: at task start, or after an MCP error, it should run
 `magus status --probe=mcp`; if unavailable, tell the user once to run
 `magus server start`, then use the CLI fallback. The next task picks up the
@@ -379,21 +379,32 @@ blocked, and why an earlier attempt to deny it had to be reverted.
     writes its declared outputs as it runs, so a tree is routinely dirty with
     generated files you did not edit; sweeping them into a commit about something
     else is how a focused change becomes unreviewable.
+  - piping OR redirecting magus's own output (`| tail`, `> file`, `>> file`,
+    `2>&1`). The equivalent is exact: `-o name|json|template=` returns the field
+    the filter was reaching for, and every run already persists its full log, so
+    a failure prints that path with the ref. A pipe additionally REPLACES the exit
+    status with the last stage's, so `magus affected ci | tail` reports tail's
+    success and a failing gate reads as exit 0. `magus query output <ref>` is the
+    one exemption - a raw captured tool log has no schema to project.
+  - running magus from a COPY of the workspace in a temp or scratchpad directory
+    (`cd /tmp/... && magus ...`, including via a variable assigned earlier on the
+    same line). The verdict would describe a tree nobody ships: generated files
+    land in the copy, the cache is split, and duplicated spell sources trip
+    MGS1002. A genuinely different workspace is `--root <path>`.
 - `advise`, with `context` to inject while the call proceeds:
   - `git commit` / `git add <paths>` - classify the dirty tree first. Deliberate
     staging is the replacement the rule above points at, so it is never denied.
   - a path-scoped `git checkout -- <paths>` / `git restore` - regenerated output
     is a declared target output; reverting it because you did not hand-edit it is
     what makes CI fail on drift.
-  - trimming magus's own output with the shell (`| tail`, `2>&1`) - magus has
-    `-s/--silent` and `-o json|name|template`, and `magus query output <ref>`
-    for a failing target's full log.
   - a repo-wide text search (`grep -r`, `rg`, `find -name`) - the graph answers
     structural questions from declared sources (`magus refs` for a code symbol,
     `magus query` for a domain entity).
-  - `cd <dir> && magus ...` - magus is CWD-relative, and the project is always an
-    explicit argument, so the `cd` is how the right command lands on the wrong
-    project.
+  - `cd <dir> && magus ...` WITHIN the workspace - magus is CWD-relative, and the
+    project is always an explicit argument, so the `cd` is how the right command
+    lands on the wrong project. (A `cd` into a temp or scratchpad copy is denied
+    outright, above: that one changes what the answer means, not just where it
+    runs.)
 - `pass`: everything else.
 
 `magus hook --path <file>` is the one rule that is not a heuristic. It
@@ -1259,7 +1270,7 @@ and fails when it is older than your working tree.
 ## The MCP daemon
 
 `magus server start` brings up the daemon, and the MCP server with it. Agents
-connected over MCP get the same verbs as the CLI plus run/log/scratchpad tools;
+connected over MCP get the same verbs as the CLI plus run and log tools;
 `magus describe mcp-tools` lists all of them with parameters. See
 [MCP](mcp.md) for transport and token setup, and
 [Knowledge graph](../../concepts/knowledge.md) for the graph the query tools read.
@@ -1267,12 +1278,11 @@ connected over MCP get the same verbs as the CLI plus run/log/scratchpad tools;
 Skills prefer the MCP tools and fall back to the CLI, so they work in both
 connected and daemon-less sessions.
 
-Two tools deserve a callout because they carry state across sessions:
-`magus_scratchpad` (a disposable per-workspace working file) and `magus_memory`
-(a deliberate, user-owned handoff journal of per-repository records, each
-pointing into the codebase, kept in the user state directory outside the repo,
-and shared across branches and worktrees). Both are pull-based: nothing is
-injected into an agent's context. The journal is also available through `magus
+One tool deserves a callout because it carries state across sessions:
+`magus_memory` (a deliberate, user-owned handoff journal of per-repository
+records, each pointing into the codebase, kept in the user state directory
+outside the repo, and shared across branches and worktrees). It is pull-based:
+nothing is injected into an agent's context. The journal is also available through `magus
 memory ls|get|put|delete|verify`; use `verify` to surface stale, malformed,
 or broken linked entries. Captured build output is addressed by
 [output references](../../concepts/cache/output-refs.md).

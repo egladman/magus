@@ -173,10 +173,18 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 			// Traced as a per-target op (attributed to tr.cur) so a dry-run shows
 			// each target's logs in order; writing to the shared output buffer would
 			// mix every probed target's logs together.
-			tr.addOp("log", level, strArg(args, 0, ""))
+			tr.addOp("log", level, strArg(args, 0))
 			return vm.Null, nil
 		}))
 	}
+
+	// magus.raise(code, message, cause?, url?) fails with a coded diagnostic. A dry run
+	// must not actually fail, so it traces the code and message and returns - the point
+	// of the probe is which branch a target would take, not that it aborts there.
+	m.MapSet("raise", fn("magus.raise", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		tr.addOp("raise", strArg(args, 0), strArg(args, 1))
+		return vm.Null, nil
+	}))
 
 	// magus.run(argv, opts?) recursively invokes `magus run <argv>`. The dry run
 	// can't re-enter the runner, so it traces the invocation (the target and any
@@ -194,10 +202,10 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		return emptyExecResult(), nil
 	}))
 
-	// magus.cmd/describe/insight/doctor return a captured-command result on the real
+	// magus.cmd/describe/insight return a captured-command result on the real
 	// module; stub each as an empty success so `magus.describe(...).stdout` and the
 	// like don't blow up in a dry run.
-	for _, name := range []string{"cmd", "describe", "insight", "doctor"} {
+	for _, name := range []string{"cmd", "describe", "insight"} {
 		m.MapSet(name, fn("magus."+name, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 			return emptyExecResult(), nil
 		}))
@@ -223,6 +231,29 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("affected", vm.ListValue(nil))
 		return res, nil
 	}))
+	// The reports magus returns as domain types (doctor, describeFile, insightReport,
+	// affectedImpact, targetGraph) fork a real magus in the live host. Same rule as
+	// ls/affected: stub each with its result shape so `magus.doctor().summary.fail`
+	// and friends resolve. Field names track the Buzz mirrors in
+	// internal/spellruntime/gen/types.
+	m.MapSet("doctor", fn("magus.doctor", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("workspace", vm.StrValue(""))
+		res.MapSet("checks", vm.ListValue(nil))
+		summary := vm.NewMap()
+		summary.MapSet("ok", vm.IntValue(0))
+		summary.MapSet("fail", vm.IntValue(0))
+		summary.MapSet("advice", vm.IntValue(0))
+		res.MapSet("summary", summary)
+		return res, nil
+	}))
+	m.MapSet("describeFile", fn("magus.describeFile", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("definition", vm.StrValue(""))
+		res.MapSet("count", vm.IntValue(0))
+		res.MapSet("files", vm.ListValue(nil))
+		return res, nil
+	}))
 	m.MapSet("affectedImpact", fn("magus.affectedImpact", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("base", vm.StrValue(""))
@@ -233,13 +264,6 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("changedSymbols", vm.ListValue(nil))
 		res.MapSet("changedFileCoverage", vm.ListValue(nil))
 		res.MapSet("notes", vm.ListValue(nil))
-		return res, nil
-	}))
-	m.MapSet("describeFile", fn("magus.describeFile", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		res := vm.NewMap()
-		res.MapSet("definition", vm.StrValue(""))
-		res.MapSet("count", vm.IntValue(0))
-		res.MapSet("files", vm.ListValue(nil))
 		return res, nil
 	}))
 	// A dry run performs no VCS probe, so nothing has drifted by construction. The
@@ -412,7 +436,7 @@ func traceHasCharm(tr *Tracer) func(context.Context, []vm.Value) (vm.Value, erro
 		// Normalize the query the way types.HasCharm does on the real path: the
 		// stored set is canonical, so a raw compare here answers differently than
 		// the run being traced.
-		name := types.Normalize(strArg(args, 0, ""))
+		name := types.Normalize(strArg(args, 0))
 		for _, c := range tr.charms {
 			if c == name {
 				return vm.BoolValue(true), nil
@@ -668,11 +692,11 @@ func valToStrings(v vm.Value) []string {
 }
 
 // strArg returns args[i] as a string, or fallback if it is absent or not a str.
-func strArg(args []vm.Value, i int, fallback string) string {
+func strArg(args []vm.Value, i int) string {
 	if i < len(args) && args[i].IsStr() {
 		return args[i].AsString()
 	}
-	return fallback
+	return ""
 }
 
 func spellArgsDetail(args []vm.Value) string {

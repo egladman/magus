@@ -164,7 +164,6 @@ func TestSkipReplayForcesRerunButStillSnapshots(t *testing.T) {
 func TestModeAutoWritesOnMiss(t *testing.T) {
 	root := t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
-	// Do NOT set MAGUS_CACHE_MODE — default (ModeAuto) must write.
 	c, err := Open(t.Context(), cdir)
 	require.NoError(t, err, "cache.Open")
 	writeMain(t, root, "package main")

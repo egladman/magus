@@ -1606,7 +1606,7 @@ func TestMagusMirrorsResolveInAnnotations(t *testing.T) {
 		{"generated/DoctorReport", `fun f(d: DoctorReport) > str { return d.workspace; }`},
 		{"supplement/Module", `fun f(m: Module) > str { return m.name; }`},
 		{"supplement/Run", `fun f(r: Run) > str { return r.trigger; }`},
-		{"supplement/TargetRun", `fun f(tr: TargetRun) > str { return tr.state; }`},
+		{"supplement/TargetRun", `fun f(tr: TargetRun) > TargetRunState { return tr.state; }`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()

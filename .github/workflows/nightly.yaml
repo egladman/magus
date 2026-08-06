@@ -1,0 +1,145 @@
+name: Nightly
+
+# The out-of-band checks: expensive, non-blocking, and answering a question that does not
+# change per pull request. Neither job gates a merge and neither publishes anything.
+#
+# They share a file because they share a trigger and a promise, not because they are
+# related work. Putting them on the PR path would pay per pull request for an answer that
+# only moves when something OUTSIDE this branch does - a new magus release, or a model
+# provider's behaviour. Both stay dispatchable by hand for when you want the answer now.
+#
+# `compat` moved here out of ci.yaml, where it ran on every pull request as
+# continue-on-error. A check that never blocks and never changes with the diff is noise on
+# a pull request and a real signal on a schedule.
+
+on:
+  schedule:
+    # 05:00 UTC daily. Nothing downstream waits on this, so the hour only needs to be off
+    # the top-of-hour rush that GitHub delays hardest.
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # PR-controlled mise.toml must not execute config hooks or plugins.
+  MISE_SAFE: '1'
+  GOEXPERIMENT: jsonv2
+
+jobs:
+  compat:
+    # Can the magus users already have still drive this workspace? The CI shards answer
+    # "does this change work", built from this commit's source; this answers a different
+    # question against the newest published release, and it changes when a RELEASE ships,
+    # not when a diff lands. A failure means cut a release, not fix a branch.
+    name: magus compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      # install stays ON (the default). With install: false the action adds the shims
+      # directory to PATH and computes the exported PATH BEFORE any tool exists, so a
+      # later `mise install` step put pnpm and node somewhere no subsequent step could
+      # see - `os.exec pnpm: exit -1`, the child never launching. Letting the action do
+      # the install also re-enables its cache: it only saves when it installed.
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: '2026.4.8'
+
+      - name: Install codec build dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
+
+      - name: Resolve magus release
+        id: resolve_magus
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="$(gh release view --repo egladman/magus --json tagName -q .tagName)"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/setup-magus
+        id: magus
+        with:
+          installation-strategy: prebuilt
+          git-ref: ${{ steps.resolve_magus.outputs.tag }}
+
+      # setup-magus's source build provisions its own Go via actions/setup-go, which
+      # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
+
+      # prebuilt, not automatic: a silent fallback to a source build would make this job
+      # compare source against source and report compatibility it never checked.
+      - name: Confirm a real release was installed
+        shell: bash
+        env:
+          VERSION: ${{ steps.magus.outputs.version }}
+          INSTALL_SOURCE: ${{ steps.magus.outputs.install-source }}
+          COMMIT: ${{ steps.magus.outputs.commit }}
+        run: |
+          echo "magus $VERSION ($INSTALL_SOURCE, $COMMIT)" >> "$GITHUB_STEP_SUMMARY"
+          [[ "$INSTALL_SOURCE" == "prebuilt" ]]
+
+      # ls, not doctor: this asks only "can the release evaluate every magusfile", and ls
+      # answers it by listing each project's targets. doctor is opinionated - it would
+      # fail on workspace conventions that have nothing to do with the binary's version.
+      - name: Load the workspace with the released magus
+        run: magus ls
+
+      - name: Run ci with the released magus
+        run: magus affected ci --no-default-charms
+
+  skill-evals:
+    # MUTED 2026-08-03. This drives promptfoo against live models and costs real money.
+    # The evals `smoke` and `grid` targets it calls are commented out in
+    # evals/magusfile.buzz, so it would fail on an undefined target anyway. Revive both
+    # together: uncomment those targets, then replace the `if: false` below.
+    #
+    # It carried `if: secrets.ANTHROPIC_API_KEY != ''` so forks and keyless repositories
+    # would skip rather than fail. That expression is not valid where it sat: `secrets` is
+    # not one of the contexts a job-level `if:` can read, and an unrecognized named-value
+    # invalidates the whole workflow file - which would take `compat` above down with it.
+    # Reviving this needs the real pattern: guard inside a step, where the secret can be
+    # read through `env`.
+    name: skill evals
+    if: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: '2026.4.8'
+
+      # Build from the checkout, not git-ref, so a workflow_dispatch off a branch is not
+      # rejected by setup-magus's reachable-from-main gate.
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      - name: Run skill smoke matrix
+        run: magus run smoke evals
+
+      - name: Analyze paired results
+        run: python3 evals/tools/analyze.py evals/results/smoke.json
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: skill-eval-smoke-results
+          path: evals/results/smoke.json
+          if-no-files-found: error
+          retention-days: 30

@@ -108,16 +108,8 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
-		Name:        string(ToolScratchpad),
-		Description: "A private, per-workspace scratch file for the agent to jot intermediate work into and read back later, instead of dumping it all into the conversation. Use it to park a plan, a running checklist, partial findings, or notes across several tool calls, then read them back on demand. It is NOT shown to the user unless they open the file themselves. One file per workspace; write and append overwrite/extend the same file.",
-		Params: []ParamDescriptor{
-			{Name: "op", Type: "string", Description: "One of: read (default; returns current contents, empty if never written), write (overwrite with content), append (add content on a new line), clear (empty the scratchpad)."},
-			{Name: "content", Type: "string", Description: "The text to write or append. Required for write and append; ignored for read and clear."},
-		},
-	},
-	{
 		Name:        string(ToolMemory),
-		Description: "A user-owned per-repository handoff journal, shared across worktrees and kept outside the checkout. It is not automatic agent memory: create a named entry only for a decision, plan, or saved pointer a later person should reopen. Entries point to a query, graph node, output ref, command, or document; decision and plan entries may carry a short why. Use verify to surface malformed, stale, and broken-linked entries. The CLI (`magus memory`) and console read the same store. For disposable in-session notes use magus_scratchpad. Legacy cursor reads remain for migration; writes are retired because one shared snapshot can erase another session's handoff.",
+		Description: "A user-owned per-repository handoff journal, shared across worktrees and kept outside the checkout. It is not automatic agent memory: create a named entry only for a decision, plan, or saved pointer a later person should reopen. Entries point to a query, graph node, output ref, command, or document; decision and plan entries may carry a short why. Use verify to surface malformed, stale, and broken-linked entries. The CLI (`magus memory`) and console read the same store. Legacy cursor reads remain for migration; writes are retired because one shared snapshot can erase another session's handoff.",
 		Params: []ParamDescriptor{
 			{Name: "op", Type: "string", Description: "One of: list (default; records plus issues), get, put (create or replace by name), delete, verify. cursor is legacy read-only."},
 			{Name: "name", Type: "string", Description: "The record's kebab-slug identity. Required for get, put, delete."},

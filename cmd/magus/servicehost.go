@@ -46,7 +46,7 @@ func serviceStatuses(reg *service.Registry) []types.StatusService {
 			Label:      s.Label,
 			Command:    s.Command,
 			Ports:      s.Ports,
-			State:      s.State,
+			State:      types.ServiceState(s.State),
 			Dependents: s.Dependents,
 			StartedAt:  s.StartedAt,
 		})

@@ -1,6 +1,6 @@
 ---
 title: Target output references
-description: Every target that runs gets a short reference id (ref1a2b3c) for its captured output. Retrieve any target's exact output later with magus query, pipe it anywhere, or open it in the browser log viewer - no copy-pasting a wall of text.
+description: Every target that runs gets a short reference id (out1a2b3c) for its captured output. Retrieve any target's exact output later with magus query, pipe it anywhere, or open it in the browser log viewer - no copy-pasting a wall of text.
 tags: [output, ref, logs, query, failure, debugging, clipboard, mcp, agent]
 aliases: [concepts/output-refs]
 ---
@@ -17,13 +17,13 @@ for its captured output, printed on its own line:
 
 ```text
 [pass] docs test (1.2s)
-ref1a2b3c
+out1a2b3c
 ```
 
 Retrieve that exact output at any time with `magus query output`:
 
 ```sh
-magus query output ref1a2b3c
+magus query output out1a2b3c
 ```
 
 It writes the raw bytes to stdout and nothing else, so it pipes cleanly anywhere.
@@ -39,29 +39,251 @@ A failing target adds two hints, the exact commands ready to copy:
 
 ```text
 [fail] docs test (1.2s): tsc exit 2
-refcc49db1f
-  full output: magus query output refcc49db1f
-  open in browser: magus query output refcc49db1f --open
+outcc49db1f
+  full output: magus query output outcc49db1f
+  open in browser: magus query output outcc49db1f --open
 ```
 
 ## Retrieval: `magus query output <ref>`
 
 `magus query` doubles as the retrieval verb through an explicit `output` subcommand.
-`magus query output ref1a2b3c` prints that execution's captured output instead of
+`magus query output out1a2b3c` prints that execution's captured output instead of
 searching the [knowledge graph](../knowledge.md). It is a subcommand, not a shape-routed
 positional, so a free-text search term can never collide with a ref id - `magus query
 refactor` always searches the graph.
 
-- `magus query output ref1a2b3c` - print the exact output to stdout.
-- `magus query output ref1a2b3c -o json` - the descriptor (ref, project, target,
+- `magus query output out1a2b3c` - print the exact output to stdout.
+- `magus query output out1a2b3c -o json` - the descriptor (ref, project, target,
   status, duration) plus the output as one record; `-o yaml` too.
-- `magus query output ref1a2b3c --open` - open the output in the browser [log viewer](#the-log-viewer).
+- `magus query output out1a2b3c --open` - open the output in the browser [log viewer](#the-log-viewer).
+- `magus query output out1a2b3c --attempts` - list the ref's stored executions.
+- `magus query output out1a2b3c --meta` - the run's identity: descriptor, lineage,
+  cache key, per-class key digests, and the VCS revision its inputs were read at.
 
 Refs prefix-match like a git short hash: type as few characters as are unique, and
 an ambiguous prefix lists the candidates.
 
+## Refs are portable: same inputs, same ref
+
+The ref is a truncation of the step's [cache key](../cache.md), which is computed
+from workspace-relative paths, content hashes, and sorted components - nothing
+machine-local. So the SAME inputs produce the SAME ref on every machine: an inspect
+line pasted from CI or a teammate's terminal resolves in your checkout, provided
+your cache holds a run of that step.
+
+The corollary is the debugging story: ref equality is input equality. If CI prints
+`outa1b2c3d4e5f6` and your laptop prints a different ref for the same target, your
+inputs differ - a source file, a tool version, an env var, or a charm disagrees.
+
+### Attempts: one ref, every execution
+
+The ref names the step, not one execution. Retention keeps the last few executions
+per step - a volatile target's recent failures each stay addressable:
+
+```sh
+magus query output outa1b2c3d4e5f6 --attempts
+```
+
+lists them newest first (attempt id, pass/fail, duration, time, invocation id). The
+bare ref always answers with the newest execution; pass a full attempt id to
+`magus query output` to retrieve an older one's exact bytes.
+
+### Explaining a ref difference
+
+Because the ref is the key, "different ref" means "different inputs" - and magus can
+name the input. Each run stores the deterministic label:value lines its key was
+hashed from (secret-redacted), so:
+
+```sh
+magus query output out4ef30de6abcd --meta
+```
+
+shows one digest per component class (`src`, `env`, `tool`, `charm`, `dep`, ...) -
+compact enough to compare across machines to learn WHICH class disagrees - and a
+`rev:` line: the VCS revision the run's inputs were read at, with a `(dirty:
+...)` note when the working tree had uncommitted changes, and a `recorded at X,
+you are on Y.` line when it differs from your current HEAD.
+
+`rev:` is provenance, not part of the key: the cache key pins a TREE STATE
+through its source content hashes, never a commit, so two different commits
+with identical file contents key identically. The recorded revision names
+whichever commit the FIRST run to mint this key happened to be on, which can
+differ from HEAD even on a cache hit whose bytes reproduce perfectly - checking
+out that commit is not the fix for a mismatch. Whether the key still matches is
+the question that matters. This command answers it:
+
+```sh
+magus describe target build . --cache --against out4ef30de6abcd
+```
+
+computes the key a run would mint RIGHT NOW (without running anything) and diffs it
+against the stored lines behind the ref, printing the exact line that drifted: the
+edited source file with old and new content hash, the changed env var, the bumped
+tool version. `--cache` alone shows the live key, the ref a run would print, and the
+class digests. This is the works-on-my-machine debugging story: paste CI's ref into
+`--against` and read off what your machine disagrees about.
+
+The verdict is key equality, not the line list, and a mismatch exits non-zero so a
+script can gate on it. CI runs with `--no-default-charms`, so pass that flag too when
+comparing against a CI ref - otherwise your local `default_charms` show up as the
+difference.
+
+Env values never reach the store: a key line's value is replaced by a short digest
+(`env:TOKEN=sha256:...`) before it is written or printed, on both sides of the diff.
+The digest still changes when the value does, so a drifted variable is named without
+its contents being shown.
+
 For the LATEST log of a project or target (rather than a specific past execution),
 [`magus tail`](../../guides/debugging.md) is a convenience, with `-f` to follow a running build.
+
+### What the ref does not depend on
+
+The key is a pure function of [the hashed `Step` fields](../cache.md#the-cache-key):
+`keyVersion`, `projectPath`, `target`, `charm`, `arg`, `src`, `env`, `exec`, `dep`,
+`spellDefVersion`, `tool`. Nothing else reaches the hash. Four omissions account for
+most of the questions people ask.
+
+- **No commit, no branch.** A target's key is the content of its declared sources,
+  not the commit they sit on. Check the same bytes out at two commits and they hash
+  the same. `--base` (see [choosing the diff
+  base](../workspace/affected.md#choosing-the-diff-base)) picks which projects a
+  `magus affected` run touches. It scopes the diff. It has no bearing on what any
+  one target hashes to.
+- **No wall-clock time.** A ref printed two years ago still names today's run when
+  the inputs agree.
+- **No absolute paths.** `src:` lines record the workspace-relative path
+  (`internal/cache/hash.go`), never the machine-specific one. Your checkout and
+  CI's disagree on everything above the workspace root and agree below it, which is
+  what carries a ref across machines.
+- **No machine identity.** Hostname, OS, user, runner id: none of it is an input. A
+  tool's *version* is, through the `tool:` lines. Where it ran is not.
+
+`Step.Label` is also excluded, so renaming what a log line calls a project (root
+prints as `magus`, not `.`) cannot change a ref.
+
+Ref equality is therefore input equality. When two refs differ, one of the lines
+above differs, and `--against` will name which.
+
+## A known leak: a multi-line tool probe lands whole in the key
+
+[Tool-version probing](../cache.md#the-opposite-failure-tools-outside-the-key-entirely)
+assumes a probe prints one version string. `govulncheck -version` does not:
+
+```text
+Go: go1.26.5
+Scanner: govulncheck@v1.3.0
+DB: https://vuln.go.dev
+DB updated: 2026-07-27 20:14:16 +0000 UTC
+```
+
+The probe runner trims surrounding whitespace and keeps the rest, so that whole
+block becomes the version string and folds into one `tool:` line with its newlines
+intact. The key hashes those bytes as written. A vulnerability database's update
+timestamp is now part of your cache key.
+
+Every target in a project that binds the `go` spell carries the line, including
+targets that never call govulncheck. Tool-version resolution probes each tool a
+spell drives, whatever target is being keyed. Here it is in a stored key in this
+workspace, under `go-build:rw`:
+
+```text
+tool:go:govulncheck:Go: go1.26.5
+Scanner: govulncheck@v1.3.0
+DB: https://vuln.go.dev
+DB updated: 2026-07-27 20:14:16 +0000 UTC
+```
+
+That costs you twice. The database refreshes, `DB updated:` moves, and every target
+in every `go`-bound project takes a new key for no reason you can see. And two
+machines that probed on different days compute different `tool:` bytes from
+identical sources, so they mint different refs. For those targets the guarantee
+this page makes does not hold.
+
+Storage adds a display bug on top. Persisting key lines joins them with `\n`,
+redacts secrets across the joined text, then splits on `\n` again. The govulncheck
+line already contains newlines, so one logical `tool:` line lands as four, three of
+them with no class prefix. Class digests cut at the first colon, so those three
+surface as classes named `Scanner`, `DB`, and `DB updated`:
+
+```text
+$ magus query output out0931f826468f --meta
+...
+  tool             8944986013e2  3 lines
+  Scanner          aed443a297a2  1 line
+  DB               928087de7d59  1 line
+  DB updated       64a5ee1dd77f  1 line
+```
+
+`describe target <t> --cache` reads the lines before that round-trip and shows them
+intact, so the two views disagree. Only the display disagrees. The timestamp is in
+the hash either way.
+
+Fixing it means deciding what a probe's version string is: the first line, some
+trimmed join, or a parsed subset. Every answer changes cache keys for any workspace
+whose spell has a multi-line probe, so it wants a
+[`KeyVersion`](../cache.md#the-cache-key) bump to force the rebuild in the open.
+Read this as a limit of tool-version probing rather than a govulncheck quirk. Any
+probe that prints more than a version does the same thing.
+
+## What computing a key costs
+
+Two costs dominate, and they behave differently.
+
+**Source hashing** walks the workspace once per step, matches the declared globs,
+and content-hashes what matched, in parallel. An mtime and size check comes first,
+so an unchanged tree re-keys without re-reading a byte. Keying one target with 1802
+`src:` lines in this workspace takes about a second, probes included.
+
+**Tool-version probes spawn a subprocess each.** Resolving a project's versions runs
+`go version`, `golangci-lint --version`, `govulncheck -version`, one per tool a
+version-probed spell drives. Results memoize by `(spell, dir)` for the length of a
+single call and no longer. Call it twice for the same project and you probe twice.
+
+That distinction decides how a caller should be written. `magus run`'s scheduler
+resolves versions once per batch, over the batch's unique projects, before it builds
+any step, so a run over many targets in one project pays each probe once. A caller
+that instead keys targets one at a time, through the single-target entry point, pays
+every probe again on every target. Anything that keys the whole workspace has to
+hoist version resolution above its loop the way the scheduler does. Skipping that
+step is the difference between seconds and half a minute.
+
+## Sharing a ref across machines
+
+A ref is portable arithmetic, but the OUTPUT behind it still has to exist where you
+look. Two paths put it there:
+
+- **Passing runs travel automatically.** When a [remote cache](remote.md) is
+  configured, a pushed artifact now carries the run's descriptor, its key lines, and
+  its build log alongside the manifest and blobs. A teammate who gets a remote cache
+  hit resolves the ref the producer printed, rather than minting a local one for the
+  same inputs.
+- **Failing runs are never shared unless you say so.** A failure is not cached and
+  not pushed, which is exactly backwards from what humans want, so publishing is an
+  explicit act:
+
+  ```sh
+  magus query output out4ef30de6abcd --publish
+  ```
+
+  That uploads a signed **output bundle**: the descriptor, the key lines, and the
+  captured bytes. A bundle carries no manifest and no artifact blobs, so it can never
+  be replayed as a cache hit - a published failure cannot become someone's cached
+  success. Publishing needs a signing key, and reading one needs the matching trust
+  set, the same asymmetry the remote cache already uses.
+
+`magus query output <ref>` consults the local store first and the published bundles
+only if the ref is unknown locally. When nothing has it, the error names the stores it
+checked, so a never-published ref is distinguishable from a typo.
+
+Everything the signature covers grew with this: it now authenticates the build log
+and the sidecars, not just the manifest. An artifact whose log was altered in transit
+is rejected outright instead of having that log written to your cache, and imported
+extras are staged until the signature clears, so a rejected artifact leaves nothing
+behind. A signature is also bound to the KIND of object it was made over and to the
+`(project, cache key)` it is served for, so a published output can never be re-served
+as a cache entry, and an entry can never file itself under a different key. Artifacts
+from an older magus still verify; magus simply ignores the extras their signature did
+not cover.
 
 ## Tips and tricks
 
@@ -69,27 +291,27 @@ Copy-paste-ready one-liners:
 
 ```sh
 # To the clipboard (macOS)
-magus query output ref1a2b3c | pbcopy
+magus query output out1a2b3c | pbcopy
 # Linux
-magus query output ref1a2b3c | wl-copy            # Wayland
-magus query output ref1a2b3c | xclip -selection clipboard
+magus query output out1a2b3c | wl-copy            # Wayland
+magus query output out1a2b3c | xclip -selection clipboard
 
 # Just the failing lines
-magus query output ref1a2b3c | grep -iE "error|fail"
+magus query output out1a2b3c | grep -iE "error|fail"
 
 # Straight into Claude Code (reads piped stdin in print mode)
-magus query output ref1a2b3c | claude -p "why did this fail and how do I fix it?"
+magus query output out1a2b3c | claude -p "why did this fail and how do I fix it?"
 
 # Into a PR or issue comment
-magus query output ref1a2b3c | gh pr comment 42 --body-file -
+magus query output out1a2b3c | gh pr comment 42 --body-file -
 
 # The descriptor and output together as one JSON record
-magus query output ref1a2b3c -o json
+magus query output out1a2b3c -o json
 ```
 
 ## The log viewer
 
-`magus query output ref1a2b3c --open` opens the [log viewer](https://eli.gladman.cc/magus/console/) -
+`magus query output out1a2b3c --open` opens the [log viewer](https://eli.gladman.cc/magus/console/) -
 a standalone browser page that renders the captured output with collapsible sections,
 status badges, in-page search, ANSI color, and copy. A "Copy command" button hands back
 a `magus query output` one-liner (per section too), so you can pass an exact slice to an agent,
@@ -99,14 +321,14 @@ and a pretty/raw toggle shows the exact captured bytes. It is the log analog of
 fragment is never sent to any server, so nothing about the run - not even its ref - ever
 leaves your machine.
 
-For a very large log, print it instead (`magus query output ref1a2b3c`) and pipe it - a URL
+For a very large log, print it instead (`magus query output out1a2b3c`) and pipe it - a URL
 fragment is bounded by the browser's address-bar length.
 
 `--open` follows the `BROWSER` environment variable (the freedesktop convention) to
 choose which browser to launch, so you can override your desktop default per command:
 
 ```sh
-BROWSER=firefox magus query output ref1a2b3c --open
+BROWSER=firefox magus query output out1a2b3c --open
 ```
 
 `BROWSER` may be a colon-separated list of commands, each optionally containing `%s`
@@ -117,7 +339,7 @@ equivalent).
 ## For agents and MCP
 
 The [MCP](../../guides/mcp.md) `magus_output` tool is the agent analog of `magus query output`:
-pass a `ref` (`ref1a2b3c`, or a unique prefix) and it returns that execution's exact
+pass a `ref` (`out1a2b3c`, or a unique prefix) and it returns that execution's exact
 bytes plus its descriptor. An agent that saw a ref in a run fetches the full output
 directly, instead of re-reading a wall of text or asking you to paste it. It is a
 dedicated tool, not a mode of `magus_query`, so a free-text graph query never
@@ -125,16 +347,25 @@ collides with a ref id.
 
 ## How refs are stored
 
-- The ref is derived from the step's cache key plus a per-execution nonce, so it is
-  cache-key-flavored but unique to each run.
-- Output is persisted verbatim as a per-ref blob under the cache directory
-  (`outputs/`), alongside a small descriptor sidecar (project, target, status,
-  timestamp, duration), on success and on failure. Retrieval is a straight byte read,
-  so `magus query output` returns exactly the bytes the target wrote.
+- The ref is the step's cache key, truncated: same inputs, same key, same ref,
+  on any machine. Each execution additionally gets a nonce-derived **attempt id**,
+  so repeated runs of one step never overwrite each other.
+- The truncation is 12 hex digits (48 bits), chosen so a workspace with a million
+  distinct step keys collides at roughly 1-in-1000 odds - acceptable for a
+  per-workspace namespace. A colliding prefix is never silently resolved to one
+  answer: it lists every matching candidate, git-style, and any longer prefix (up
+  to the full 64 hex digits) still resolves.
+- Output is persisted verbatim as a per-attempt blob under the cache directory
+  (`outputs/<key>/`), alongside a small descriptor sidecar (ref, project, target,
+  status, timestamp, duration, key, attempt, magus version), on success and on
+  failure. Retrieval is a straight byte read, so `magus query output` returns
+  exactly the bytes the target wrote.
 - Retention keeps the last few executions per cache key, so a nondeterministic
   target's recent failures stay independently addressable, and is garbage-collected
   along with the rest of the [cache](../cache.md). Refs are run artifacts, not
   [knowledge-graph](../knowledge.md) nodes; the graph schema is untouched.
+- Stores written before portable refs keep resolving: the old per-execution ids
+  still address their bytes, and the same step resolves under its new portable ref.
 
 ## Diagnostics
 
@@ -147,6 +378,44 @@ When a ref cannot be resolved, `magus query` reports a coded
   stored output, so the lookup is ambiguous.
 - [MGS8003](../../reference/codes/outputref/MGS8003.md): `magus query output` was given an argument
   that is not a well-formed `ref<hex>` id, so it cannot name a stored output.
+
+### Reproducing a ref that resolves nowhere
+
+On MGS8001, `magus query output <ref>` does not just report the ref missing. A
+ref cannot be decoded back into a target - it is a truncated hash, not an
+encoding - but it CAN be predicted: `magus describe target <target> --cache`
+already prints the ref a run of that target's exact current inputs would print,
+so the lookup sweeps every candidate target in the workspace, keys each one
+exactly as a run would, and compares. A match is exact in the same sense
+`--cache --against` is exact: cache-key equality, not a heuristic.
+
+One match leads with the command:
+
+```text
+Nothing has produced it here, but this workspace would print it for:
+  magus run test --no-default-charms
+```
+
+No match is the informative branch, not a failure:
+
+```text
+No target in this workspace keys to that ref at the current tree, which means the
+run that printed it had different inputs (a different commit, uncommitted change,
+or environment).
+```
+
+followed by `magus describe target <target> --cache --against <ref>` once you know
+which target it should be, and the `--publish` hint above for the case where
+someone else already has the bytes.
+
+Two things worth stating precisely, since getting them wrong defeats the point:
+
+- **`--base` plays no part.** `--base` scopes which targets `magus affected` treats
+  as changed; it does not change what any one target hashes to. The command to
+  reproduce a ref is always `magus run <target> [project]` - no `--base`.
+- **A ref minted by a run that forwarded extra args after `--` cannot be
+  predicted.** Those arguments are part of the key, and a prediction computes a
+  key with none to compare against.
 
 ## The artifact twin: history and diff
 

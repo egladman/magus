@@ -2,13 +2,19 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/spells"
+	"io/fs"
 	"os"
 	"slices"
 	"strings"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/clihint"
@@ -367,22 +373,32 @@ func probeSpellVersions(ctx context.Context, name, dir string) []types.SpellVers
 		return nil
 	}
 	var out []types.SpellVersion
-	// The unnamed primary probe keeps its original spell:version key spelling;
-	// renaming it would rewrite every key in every workspace.
-	if v, err := sp.ProbeVersion(ctx, dir); err != nil {
-		out = append(out, types.SpellVersion{Tool: name, Error: err.Error()})
-	} else if v != "" {
-		out = append(out, types.SpellVersion{Tool: name, Version: v, CacheKey: "spell:version=" + v})
-	}
-	for _, tool := range sp.VersionProbeNames() {
-		v, err := sp.ProbeVersionOf(ctx, tool, dir)
+	// One uniform pass: every declared binary keys as spell:tool:version, with no
+	// privileged primary. A tool with a constant version reports it without spawning.
+	for _, tool := range sp.ToolNames() {
+		t, _ := sp.Tool(tool)
+		if !t.HasProbe() {
+			continue
+		}
+		if t.Probe.Bin == "" {
+			out = append(out, types.SpellVersion{
+				Tool: tool, Version: t.Key.Const,
+				CacheKey: "spell:" + tool + ":version=" + t.Key.Const,
+			})
+			continue
+		}
+		v, err := sp.ProbeVersion(ctx, tool, dir)
 		switch {
 		case err != nil:
 			out = append(out, types.SpellVersion{Tool: tool, Error: err.Error()})
 		case v == "":
 			out = append(out, types.SpellVersion{Tool: tool})
 		default:
-			out = append(out, types.SpellVersion{Tool: tool, Version: v, CacheKey: "spell:" + tool + ":version=" + v})
+			token, _ := spells.VersionToken(v, t.Key)
+			out = append(out, types.SpellVersion{
+				Tool: tool, Version: v,
+				CacheKey: "spell:" + tool + ":version=" + token,
+			})
 		}
 	}
 	return out
@@ -526,9 +542,15 @@ func describeTargetNoun(ctx context.Context, root string, args []string) error {
 	// Single parse for the whole noun: the delegates below take the parsed
 	// positionals and do not re-parse, so flags are handled exactly once.
 	var explain bool
+	var cacheKey bool
+	var against string
+	var noDefaultCharms bool
 	pos, err := cmdParse("describe target", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&explain, "explain", false, "show the per-charm argv trace (base -> +charm -> +charm) for the rendered command")
 		fs.BoolVar(&explain, "e", false, "shorthand for --explain")
+		fs.BoolVar(&cacheKey, "cache", false, "show the target's live cache key, the ref a run would print, and its component classes")
+		fs.StringVar(&against, "against", "", "with --cache, diff the live key inputs against the stored lines behind an output `ref`")
+		fs.BoolVar(&noDefaultCharms, "no-default-charms", false, "with --cache, ignore magus.yaml default_charms when keying, matching a run made the same way (CI)")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe target[s] [<path:target>] [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -541,6 +563,11 @@ func describeTargetNoun(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, types.EvaluatedTargetDefinition)
 			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "--cache computes the target's cache key exactly as a run would and shows")
+			fmt.Fprintln(os.Stderr, "its component classes; --against <ref> then diffs the live key against a")
+			fmt.Fprintln(os.Stderr, "stored run's, naming the exact source/env/tool line that disagrees (the")
+			fmt.Fprintln(os.Stderr, "works-on-my-machine explainer).")
+			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
 		}
@@ -548,10 +575,230 @@ func describeTargetNoun(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	if against != "" {
+		cacheKey = true
+	}
+	if cacheKey {
+		if explain {
+			// --explain traces argv, --cache keys inputs: two different questions, and
+			// silently answering one would misread as the other having no output.
+			fmt.Fprintln(os.Stderr, "magus describe target: --explain traces the rendered command and --cache keys the inputs; run them separately")
+			return errSilent{exitCode: 2}
+		}
+		return describeTargetCache(ctx, root, pos, against, noDefaultCharms)
+	}
+	if noDefaultCharms {
+		fmt.Fprintln(os.Stderr, "magus describe target: --no-default-charms applies only to --cache")
+		return errSilent{exitCode: 2}
+	}
 	if len(pos) == 0 {
 		return describeTargets(ctx, root)
 	}
 	return describeTarget(ctx, root, pos, explain)
+}
+
+// targetCacheReport is the -o json/yaml projection of `describe target --cache`: one
+// entry per resolved (project, target) pair with its live key, predicted ref, and
+// component-class digests; Against carries the stored-vs-live diff when --against
+// named a ref.
+type targetCacheReport struct {
+	Project      string              `json:"project"`
+	Target       string              `json:"target"`
+	Charms       []string            `json:"charms,omitempty"`
+	Key          string              `json:"key"`
+	KeyVersion   int                 `json:"key_version"`
+	Ref          string              `json:"ref"`
+	ClassDigests []cache.ClassDigest `json:"class_digests"`
+	Against      *targetCacheAgainst `json:"against,omitempty"`
+}
+
+type targetCacheAgainst struct {
+	Ref     string               `json:"ref"`
+	Key     string               `json:"key"` // the stored run's full cache key
+	Matches bool                 `json:"matches"`
+	Diff    []cache.KeyInputDiff `json:"diff,omitempty"`
+}
+
+// describeTargetCache answers "what cache key would this target mint RIGHT NOW, and
+// why does it differ from that stored run": it keys the target exactly as `magus run`
+// would (default charms merged, tool versions resolved) without executing, and with
+// --against diffs the live key inputs against the redacted lines stored behind an
+// output ref. This is the CLI half of the portable-ref debugging story: two machines
+// print different refs for one target; this names the line that disagrees.
+func describeTargetCache(ctx context.Context, root string, pos []string, against string, noDefaultCharms bool) error {
+	if len(pos) == 0 {
+		fmt.Fprintln(os.Stderr, "magus describe target --cache: requires a <target> [project] argument")
+		return errSilent{exitCode: 2}
+	}
+	t, err := types.ParseTarget(pos[0])
+	hintCanonicalSpelling(t)
+	if err != nil {
+		return err
+	}
+	if len(pos) > 1 {
+		t.Path = pos[1]
+	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return err
+	}
+	evaluated, err := m.EvaluateTarget(ctx, t)
+	if err != nil {
+		return err
+	}
+	if len(evaluated) == 0 {
+		fmt.Fprintf(os.Stderr, "magus describe target --cache: no project matches %q\n", pos[0])
+		return errSilent{exitCode: 2}
+	}
+	if against != "" && len(evaluated) > 1 {
+		fmt.Fprintf(os.Stderr, "magus describe target --cache: %q resolves to %d projects; --against compares ONE step - name the project (e.g. `magus describe target %s %s --cache --against %s`)\n",
+			pos[0], len(evaluated), pos[0], evaluated[0].Project, against)
+		return errSilent{exitCode: 2}
+	}
+
+	// The key must match what a run computes, so merge magus.yaml default charms
+	// exactly as the run command does - including --no-default-charms, since CI runs
+	// that way and CI is the comparison peer --against exists for.
+	charms := withDefaultCharms(t.Charms, globalCfg.DefaultCharms, noDefaultCharms)
+
+	var storedLines []string
+	var storedRef, storedKey string
+	if against != "" {
+		desc, aerr := m.OutputDescriptorByRef(against)
+		if aerr != nil {
+			return reportRefLookupError(ctx, m, against, aerr)
+		}
+		storedRef, storedKey = desc.Ref, desc.Key
+		if storedRef == "" {
+			storedRef = against
+		}
+		storedLines, err = m.OutputKeyInputs(against)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			fmt.Fprintf(os.Stderr, "magus describe target --cache: ref %s resolves but has no stored key inputs (the run predates key-input persistence); re-run the target once to record them\n", storedRef)
+			return errSilent{exitCode: 1}
+		case err != nil:
+			return fmt.Errorf("magus describe target --cache: read stored key inputs for %s: %w", storedRef, err)
+		}
+	}
+
+	reports := make([]targetCacheReport, 0, len(evaluated))
+	mismatched := false
+	for _, e := range evaluated {
+		key, lines, kerr := m.ComputeTargetKey(ctx, e.Project, e.Target, charms)
+		if kerr != nil {
+			return kerr
+		}
+		// Mask before comparing or showing: the store persists masked lines, so both
+		// sides must be masked to be byte-comparable - and a live env value must not
+		// print merely because this machine holds it.
+		lines = cache.MaskKeyInputs(lines)
+		r := targetCacheReport{
+			Project:      e.Project,
+			Target:       e.Target,
+			Charms:       charms,
+			Key:          key,
+			KeyVersion:   cache.KeyVersion,
+			Ref:          cache.PortableRef(key),
+			ClassDigests: cache.ClassDigests(lines),
+		}
+		if against != "" {
+			// The VERDICT is key equality, never the line diff: DiffKeyInputs is a
+			// set difference (multiplicity and order collapse), so an empty diff
+			// cannot prove two keys equal. The lines explain the verdict; they do
+			// not decide it. A stored descriptor predating descriptor v2 carries no
+			// key, so fall back to the lines it does have.
+			matches := key == storedKey
+			if storedKey == "" {
+				matches = hashOfKeyInputs(storedLines) == hashOfKeyInputs(lines)
+			}
+			r.Against = &targetCacheAgainst{
+				Ref: storedRef, Key: storedKey, Matches: matches,
+				Diff: cache.DiffKeyInputs(storedLines, lines),
+			}
+			if !matches {
+				mismatched = true
+			}
+		}
+		reports = append(reports, r)
+	}
+
+	// Every format reports the mismatch the same way - through the exit code - so a
+	// script gating on `--against` behaves identically whichever renderer it picked.
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		if err := emitFormatted(opts, reports); err != nil {
+			return err
+		}
+		if mismatched {
+			return errSilent{exitCode: 1}
+		}
+		return nil
+	case outputName:
+		for _, r := range reports {
+			fmt.Println(r.Ref)
+		}
+		if mismatched {
+			return errSilent{exitCode: 1}
+		}
+		return nil
+	}
+
+	for _, r := range reports {
+		fmt.Printf("project: %s  target: %s\n", r.Project, r.Target)
+		if len(r.Charms) > 0 {
+			fmt.Printf("  charms: %s\n", strings.Join(r.Charms, ","))
+		}
+		fmt.Printf("  key:    %s (keyVersion %d)\n", r.Key, r.KeyVersion)
+		fmt.Printf("  ref:    %s (what a run of these exact inputs prints)\n", r.Ref)
+		fmt.Println("  components:")
+		for _, d := range r.ClassDigests {
+			noun := "lines"
+			if d.Count == 1 {
+				noun = "line"
+			}
+			fmt.Printf("    %-16s %s  %d %s\n", d.Class, d.Digest, d.Count, noun)
+		}
+		if r.Against == nil {
+			fmt.Println()
+			continue
+		}
+		if r.Against.Matches {
+			fmt.Printf("  against %s: keys MATCH - a run here mints the same ref\n\n", r.Against.Ref)
+			continue
+		}
+		fmt.Printf("  against %s: keys DIFFER\n", r.Against.Ref)
+		if len(r.Against.Diff) == 0 {
+			fmt.Println("    (no line-level difference to show: the stored run recorded no key inputs)")
+		}
+		for _, d := range r.Against.Diff {
+			fmt.Printf("    %s:\n", d.Class)
+			for _, l := range d.StoredOnly {
+				fmt.Printf("      - stored  %s\n", l)
+			}
+			for _, l := range d.LiveOnly {
+				fmt.Printf("      + live    %s\n", l)
+			}
+		}
+		fmt.Println()
+	}
+	// --against is a comparison a script should be able to gate on, so a mismatch
+	// exits non-zero (the report above is the explanation, already printed).
+	if mismatched {
+		return errSilent{exitCode: 1}
+	}
+	return nil
+}
+
+// hashOfKeyInputs digests a key-input set for equality comparison, used only when a
+// stored descriptor predates the v2 field carrying the key itself.
+func hashOfKeyInputs(lines []string) string {
+	sum := sha256.Sum256([]byte(strings.Join(lines, "\n")))
+	return hex.EncodeToString(sum[:])
 }
 
 func describeTargets(ctx context.Context, root string) error {
@@ -680,6 +927,12 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 			}
 			for targetName, pol := range p.TargetPolicies {
 				fmt.Printf("  policy: %s", targetName)
+				if pol.IncludeOS != nil {
+					fmt.Printf("  include_os=%t", *pol.IncludeOS)
+				}
+				if pol.IncludeArch != nil {
+					fmt.Printf("  include_arch=%t", *pol.IncludeArch)
+				}
 				if pol.FailOnDrift {
 					fmt.Printf("  fail_on_drift")
 				}
@@ -874,6 +1127,12 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 		}
 		if e.Policy != nil {
 			fmt.Printf("  policy:")
+			if e.Policy.IncludeOS != nil {
+				fmt.Printf("  include_os=%t", *e.Policy.IncludeOS)
+			}
+			if e.Policy.IncludeArch != nil {
+				fmt.Printf("  include_arch=%t", *e.Policy.IncludeArch)
+			}
 			if e.Policy.FailOnDrift {
 				fmt.Printf("  fail_on_drift")
 			}

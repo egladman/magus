@@ -6,7 +6,7 @@
 // `go generate`, never this file.
 
 export object KnowledgeOrphan {
-    iD: str = "",
+    id: str = "",
     kind: str = "",
     label: str = "",
     reason: str = "",

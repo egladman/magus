@@ -24,6 +24,10 @@ func NewFSRemoteBackend(dir string) (*FSRemoteBackend, error) {
 	return &FSRemoteBackend{dir: dir}, nil
 }
 
+// Name identifies this backend in the run header. "fs" rather than the directory: the
+// header names the KIND of tier, and the path is already config the reader can look up.
+func (r *FSRemoteBackend) Name() string { return "fs" }
+
 // Active reports true: a filesystem backend is usable wherever its dir is.
 func (r *FSRemoteBackend) Active(context.Context) bool { return true }
 

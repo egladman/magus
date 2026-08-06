@@ -19,9 +19,49 @@ func RegisterSemver(ctx context.Context, sess *buzz.Session) vm.Value {
 	m := vm.NewMap()
 	m.MapSet("compare", vm.DirectValue("semver.compare", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		a := Str(bzArgs, 0)
-		op := Str(bzArgs, 1)
-		b := Str(bzArgs, 2)
-		ret0, err := std.SemverCompare(ctx, a, op, b)
+		b := Str(bzArgs, 1)
+		ret0, err := std.SemverCompare(ctx, a, b)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return IntVal(ret0), nil
+	}))
+	m.MapSet("isValid", vm.DirectValue("semver.isValid", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		v := Str(bzArgs, 0)
+		ret0, err := std.SemverIsValid(ctx, v)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return BoolVal(ret0), nil
+	}))
+	m.MapSet("canonical", vm.DirectValue("semver.canonical", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		v := Str(bzArgs, 0)
+		ret0, err := std.SemverCanonical(ctx, v)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrVal(ret0), nil
+	}))
+	m.MapSet("major", vm.DirectValue("semver.major", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		v := Str(bzArgs, 0)
+		ret0, err := std.SemverMajor(ctx, v)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrVal(ret0), nil
+	}))
+	m.MapSet("majorMinor", vm.DirectValue("semver.majorMinor", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		v := Str(bzArgs, 0)
+		ret0, err := std.SemverMajorMinor(ctx, v)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrVal(ret0), nil
+	}))
+	m.MapSet("satisfies", vm.DirectValue("semver.satisfies", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		v := Str(bzArgs, 0)
+		constraint := Str(bzArgs, 1)
+		ret0, err := std.SemverSatisfies(ctx, v, constraint)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}

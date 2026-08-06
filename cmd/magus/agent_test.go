@@ -367,11 +367,44 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "MAGUS_X=1 magus query foo | grep bar", deny: true},
 		{command: "magus describe targets | wc -l", deny: true},
 		{command: "magus run test -s | grep -i fail | head -3", deny: true},
+		// Running magus from a COPY of the workspace in temp/scratchpad. Denied: the
+		// verdict describes a tree nobody will ship. Taken from a real observed
+		// command that chained a raw `go test`, four redirected magus runs and a
+		// hand-rolled PASS/FAIL loop onto one `cd` into a scratchpad copy.
+		{command: `SP=/private/tmp/claude-501/x/scratchpad; cd "$SP/fixci" && ./magus run generate:rw .`, deny: true},
+		{command: "cd /tmp/copy && magus run lint .", deny: true},
+		{command: "cd /private/tmp/x/scratchpad/repo && magus affected ci", deny: true},
+		{command: "cd /var/folders/ab/xyz/T/repo && magus run test .", deny: true},
+		// A cd WITHIN the workspace stays an advisory: naming the project is the
+		// fix, and the run still describes the tree that ships.
+		{command: "cd libs/gopherbuzz && magus run test .", context: "CWD-relative"},
+		// --root is the sanctioned way to mean a different workspace, and a temp
+		// path merely MENTIONED is not a relocation.
+		{command: "magus run test . --root /tmp/other-workspace"},
+		{command: "magus graph export -o json --tee /tmp/graph.json"},
+		// REDIRECTS are denied on the same footing as pipes, and for the same
+		// measured reason. These all passed until 2026-08-04, and one session used
+		// every shape below to hide a gate's output from itself: `> /dev/null 2>&1`
+		// reported an exit code with no cause and forced a re-run to learn it.
+		{command: "magus run lint . > /tmp/x.txt", deny: true},
+		{command: "magus run build . >> /tmp/log.txt", deny: true},
+		{command: "magus run lint . -s 2>&1", deny: true},
+		{command: "magus affected ci --silent > /dev/null 2>&1", deny: true},
+		// --silent plus a redirect is the WORST case, not the careful one: silent
+		// mode is quiet until it fails, so the redirect discards exactly the
+		// diagnostics it exists to print.
+		{command: "magus run lint . --silent > /tmp/x.txt", deny: true},
+		// --tee is the sanctioned way to keep a copy: it writes the file AND shows
+		// the output, so it is never denied.
+		{command: "magus affected ci --tee /tmp/ci.log --silent"},
 		// `magus query output <ref>` is the ONE exemption: a raw captured tool log
 		// has no schema for magus to project, so searching it has no flag that
-		// replaces it.
+		// replaces it. The exemption covers redirects too.
 		{command: "magus query output ref1a2b3c | grep -n error"},
 		{command: "magus query output ref1a2b3c | tail -50"},
+		{command: "magus query output ref1a2b3c > /tmp/out.txt"},
+		// An input redirect FEEDS magus rather than hiding what it said.
+		{command: "magus buzz - < script.buzz"},
 		// magus must be the COMMAND, not a substring: these are paths and text.
 		{command: "grep -n x cmd/magus/agent_test.go | head"},
 		{command: "ls cmd/magus | wc -l"},
@@ -717,6 +750,54 @@ func TestGuardKnownHoles(t *testing.T) {
 				"%q is a KNOWN HOLE (%s). If this now denies, the guard got stronger: move it into TestGuardAdversarial rather than deleting it.", tt.command, tt.why)
 		})
 	}
+}
+
+// TestDenyOutranksHeldAdvisory pins severity ordering across rules. A git rule
+// that merely ADVISES used to answer first and return, so appending `git commit`
+// to an otherwise-denied line downgraded the whole verdict to an advisory. That is
+// not hypothetical: the observed command cd'd into a scratchpad copy, sent four
+// magus runs to /dev/null, and ended in `git commit` - and the guard said "advise".
+func TestDenyOutranksHeldAdvisory(t *testing.T) {
+	const offending = `SP=/private/tmp/x/scratchpad; cd "$SP/fixci" && ./magus run generate . -s >/dev/null 2>&1`
+
+	require.NotEmpty(t, evaluateBashGuard(offending).Deny, "the line alone must deny")
+	for _, suffix := range []string{
+		"; git commit -q -m x && git log --oneline -1",
+		"; git status --porcelain",
+		"; git add -- file.go",
+	} {
+		assert.NotEmpty(t, evaluateBashGuard(offending+suffix).Deny,
+			"appending %q must not downgrade a deny to an advisory", suffix)
+	}
+
+	// The advisory still surfaces when nothing denies - holding it must not drop it.
+	plain := evaluateBashGuard("git commit -q -m x")
+	assert.Empty(t, plain.Deny)
+	assert.NotEmpty(t, plain.Context, "a held advisory is still the answer when no rule denies")
+}
+
+// TestOutputGuardNamesTheReplacement pins the REASON each output denial gives,
+// because a deny that only prohibits teaches the next reach for a workaround. The
+// pattern being reinforced is "ask magus for the field" - so the pipe denial has
+// to name the projection flags, and the redirect denial has to name --tee. Two
+// distinct messages, because the right replacement differs by shape: a filter
+// wanted one value, a redirect wanted a copy of the whole thing.
+func TestOutputGuardNamesTheReplacement(t *testing.T) {
+	piped := evaluateBashGuard("magus describe targets | grep build").Deny
+	require.NotEmpty(t, piped)
+	assert.Contains(t, piped, "-o name")
+	assert.Contains(t, piped, "-o template=")
+	assert.Contains(t, piped, "exit status", "a pipe replaces the exit status; that is why it is denied, not advised")
+
+	redirected := evaluateBashGuard("magus affected ci --silent > /dev/null 2>&1").Deny
+	require.NotEmpty(t, redirected)
+	assert.Contains(t, redirected, "magus query output", "the captured log is already persisted; that is the replacement")
+	assert.Contains(t, redirected, ".magus/logs/", "a failure names the full-log path, so capturing it is redundant")
+	assert.Contains(t, redirected, "never console text",
+		"--tee mirrors STRUCTURED output only; telling an agent to tee console output would write nothing")
+	assert.Contains(t, redirected, "silent", "the -s + redirect combination is the case worth calling out")
+
+	assert.NotEqual(t, piped, redirected, "the two shapes need different corrections")
 }
 
 func TestStageEverythingDenialNamesDirectStaging(t *testing.T) {

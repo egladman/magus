@@ -2,7 +2,7 @@
 # hooks a minimal load needs.
 #
 # It did not. loadBuzzSpell built the spell without WithVersionProbe, WithLanguage or
-# WithOpaque, so a descriptor that carried mgs_getVersionCommand, mgs_getLanguage and
+# WithOpaque, so a descriptor that carried mgs_getTools, mgs_getLanguage and
 # mgs_isOpaque faithfully had all three dropped on the floor. The consequences were
 # silent and unequal: a declared version probe never ran and never entered the cache
 # key, so a local spell's toolchain could drift with nothing invalidating; the spell
@@ -17,7 +17,7 @@ exec magus describe spells acme
 stdout 'acme'
 stdout 'targets: lint'
 
-# mgs_isOpaque, mgs_getLanguage, mgs_getVersionCommand: the three that were lost.
+# mgs_isOpaque, mgs_getLanguage, mgs_getTools: the three that were lost.
 exec magus describe spells acme -o json
 stdout '"opaque": true'
 stdout '"language": "acme-lang"'
@@ -29,13 +29,13 @@ stdout '"version_probe": true'
 exec magus describe spells acme --versions
 stdout 'versions \(probed just now, never cached\)'
 stdout 'acme-probe-ok'
-stdout 'key: spell:version=acme-probe-ok'
+stdout 'key: spell:acme:version=acme-probe-ok'
 
 # On the model, so every format carries it. An agent reading -o json needs it most.
 exec magus describe spells acme --versions -o json
 stdout '"tool": "acme"'
 stdout '"version": "acme-probe-ok"'
-stdout '"cache_key": "spell:version=acme-probe-ok"'
+stdout '"cache_key": "spell:acme:version=acme-probe-ok"'
 
 -- magus.yaml --
 concurrency: 2
@@ -51,7 +51,9 @@ export fun mgs_getName() > str { return "acme"; }
 // A deterministic stand-in for a real toolchain probe: `echo` exists everywhere and
 // its output is fixed, so this asserts magus's plumbing rather than whatever versions
 // happen to be installed on the machine running the test.
-export fun mgs_getVersionCommand() > [str] { return ["echo", "acme-probe-ok"]; }
+export fun mgs_getTools() > {str: Tool} {
+    return {"acme": Tool{probe = Command{bin = "echo", args = ["acme-probe-ok"]}}};
+}
 export fun mgs_getLanguage() > str { return "acme-lang"; }
 export fun mgs_isOpaque() > bool { return true; }
 

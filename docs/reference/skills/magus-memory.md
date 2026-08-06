@@ -2,8 +2,8 @@
 title: magus-memory
 description: "Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, and pointers that survive worktrees and sessions."
 tags: [agents, skills, magus-memory]
-skill_full_bytes: 3843
-skill_simple_bytes: 3165
+skill_full_bytes: 3831
+skill_simple_bytes: 3156
 ---
 
 # magus-memory
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `23` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `d139f0ba0c9c` |
+| `skill-content` | `ace009cb3627` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -105,8 +105,8 @@ There is no free-text/`note` type. A claim that is true about the code is a
 
 ## Scope boundaries
 
-- Intra-session working notes (checklists, partial findings) belong in
-  `magus_scratchpad`, which is per-workspace and disposable, not here.
+- Intra-session working notes (checklists, partial findings) stay in the
+  session - they are disposable by definition, not here.
 - Facts the repo already records (code structure, git history, MAGUS.md) do not
   belong in memory; record the `magus_query` that surfaces them instead.
 - Records live outside the repo, keyed by repository identity. The console,
@@ -185,8 +185,8 @@ about the code is a `query` or `output` pointer, never stored prose.
 
 ## Scope boundaries
 
-- Intra-session working notes (checklists, partial findings) belong in
-  `magus_scratchpad`, not here.
+- Intra-session working notes (checklists, partial findings) stay in the
+  session, not here.
 - Facts the repo already records (code structure, git history, MAGUS.md) do not
   belong in memory; record the `magus_query` that surfaces them instead.
 - Records live outside the repo, keyed by repository identity. Console, CLI and MCP all show the same entries.

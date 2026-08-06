@@ -24,6 +24,53 @@ func (c *Cache) LogCharms(ctx context.Context, charms string) {
 	c.log.InfoContext(ctx, "cache.charms", slog.String("charms", charms))
 }
 
+// LogCache emits the cache header: which tiers this run can reach and whether it may
+// write to them.
+//
+// Always printed, including the boring case, because the value is in never having to
+// wonder. "Why was nothing cached" and "am I even talking to the remote" were previously
+// answerable only by reading config and env, and the answer differs per event - a pull
+// request reads the shared cache but must not publish to it, which is invisible unless
+// something says so.
+//
+// It names the backend rather than probing it. Active() is a spell op on the real
+// implementation - arbitrary Buzz, with the whole host surface - and calling it here put
+// that on the path before the first line of output, where a slow probe stalls the run
+// with nothing on screen to explain the pause. Presence and name are known without
+// asking; whether the backend engages is the run's business, not the header's.
+func (c *Cache) LogCache(ctx context.Context) {
+	tier := "local"
+	if c.remote != nil {
+		name := c.remote.Name()
+		if name == "" {
+			name = "remote"
+		}
+		tier = name + " + local"
+	}
+	mode := "read-only"
+	if c.mutable {
+		mode = "read+write"
+	}
+	c.log.InfoContext(ctx, "cache.backend",
+		slog.String("tier", tier), slog.String("mode", mode))
+}
+
+// LogBase emits what a run's affected set was compared against, beside the projects and
+// charms headers, because it is the third input that decides what runs: the same command
+// against a different base is a different build.
+//
+// base already reads "git diff vs origin/main" - the VCS name in front of the ref, rather
+// than a git:// URI, because no such scheme is standard across git, Mercurial and jj and
+// inventing one would put a magus-only string where a reader expects a ref they can paste
+// straight back into their own VCS. vcs is accepted for a caller that has the two apart.
+func (c *Cache) LogBase(ctx context.Context, base, vcs string) {
+	if base == "" {
+		return
+	}
+	c.log.InfoContext(ctx, "cache.base",
+		slog.String("base", base), slog.String("vcs", vcs))
+}
+
 // LogStage emits a per-stage progress event for one magus.needs sub-target that ran
 // under a project, routed through the cache logger like the other events. In collapse
 // mode (where a project's subprocess output is withheld) these lines give the reader a

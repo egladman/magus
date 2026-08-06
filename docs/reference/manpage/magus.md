@@ -104,8 +104,14 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_CACHE_DIR**
 : Override the default cache location (.magus/ in the workspace root). Equivalent magus.yaml key: **cache.dir**.
 
-**MAGUS_CACHE_IMMUTABLE**
-: When true (or 1), open the cache in read-only mode: replay hits but never write new entries (default: false). Equivalent magus.yaml key: **cache.immutable**.
+**MAGUS_CACHE_WRITE_ENABLED**
+: When false (or 0), replay cache hits but never write new entries, locally or to a remote (default: true). Equivalent magus.yaml key: **cache.write.enabled**.
+
+**MAGUS_CACHE_INCLUDE_OS_ENABLED**
+: When false (or 0), the host OS is left out of every cache key (default: true). Equivalent magus.yaml key: **cache.include.os.enabled**.
+
+**MAGUS_CACHE_INCLUDE_ARCH_ENABLED**
+: When false (or 0), the host architecture is left out of every cache key (default: true). Equivalent magus.yaml key: **cache.include.arch.enabled**.
 
 **MAGUS_CACHE_SIZE_MB**
 : Cache disk usage cap in MB (binary, 1\<\<20); 0 means unlimited (default: 0). Equivalent magus.yaml key: **cache.size_mb**.

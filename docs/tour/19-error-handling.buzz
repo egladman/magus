@@ -1,3 +1,7 @@
+// title: Errors: raise, catch, and branch on a code
+// desc: A host call that cannot answer raises rather than returning a blank; catch binds a map with message, and a code and url when the failure carries one, so a target branches on identity instead of matching prose.
+// doc: reference/diagnostics|Diagnostics
+//
 // Failing, and deciding what a failure means. A host call that cannot answer RAISES; it
 // never hands back a blank as if the blank were the answer. `vcs\commit()` outside a
 // checkout does not return "" - "" is a value a branch name can legitimately hold, so a

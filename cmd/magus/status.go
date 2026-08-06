@@ -300,7 +300,7 @@ func buildTelemetryStatus(t config.Telemetry) types.TelemetryStatus {
 }
 
 func buildCacheStatus(c config.Cache) types.CacheStatus {
-	return types.CacheStatus{Immutable: c.Immutable, Dir: c.Dir, SizeMB: c.SizeMB}
+	return types.CacheStatus{Immutable: !c.WriteEnabled(), Dir: c.Dir, SizeMB: c.SizeMB}
 }
 
 func printStatusText(w *os.File, r types.StatusReport, useGrid bool, animFrame int) {

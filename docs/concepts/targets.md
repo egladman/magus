@@ -100,7 +100,9 @@ A target name is typically one of the seven canonical operations (see below); cu
 
 There is also `ci`: an ordinary magusfile-defined target, not a hardcoded chain - you compose its stages yourself with `magus\needs`. `Magus.RunCI` treats it specially in exactly three ways: it strips the `rw` charm (ci always runs read-only), it is the anchor `magus affected ci` and `magus affected --plan` key off, and it must not silently no-op - a selected scope with no project declaring `ci` is a load error (see [dependencies.md](dependencies.md)), not a quiet success.
 
-Tool operations compose **into** these targets; they are not targets of their own. All static analysis - `go-vet`, `golangci-lint`, `cargo-clippy`, type-checks - and security scanning (`govulncheck`) belong under `lint` (its definition is "static analysis, type-check"), not a bespoke `vet`, `audit`, or `security` target. A slow security scan can instead be gated in `ci`. Reserve custom target names for genuinely distinct work with no canonical home (a `deploy` or `release`), not for fragmenting a canonical phase.
+Tool operations compose **into** these targets; they are not targets of their own. All static analysis - `go-vet`, `golangci-lint`, `cargo-clippy`, type-checks - belongs under `lint` (its definition is "static analysis, type-check"), not a bespoke `vet`, `audit`, or `typecheck` target. Reserve custom target names for genuinely distinct work with no canonical home (a `deploy` or `release`), not for fragmenting a canonical phase.
+
+`security` is the exception that proves the rule, and magus's own workspace declares one. A scanner reads an advisory database that changes independently of your tree, so it needs `skip_cache` - and composing it into `lint` would spread that to every op `lint` runs, costing the whole phase its caching. A different cache contract is a real phase boundary, which is criterion 2 below rather than a naming preference. [MGS1003](../reference/codes/magusfile/MGS1003.md) does not flag it.
 
 Custom target names must use the target-name charset: letters, digits, `-`, `_` (`types.ValidateTargetName`). `:`, `@`, and `/` are reserved for the grammar above.
 
@@ -114,9 +116,10 @@ name earns a place in it only if it passes all four:
    `typecheck` is universal-sounding but Go and Rust type-check as part of
    `build`, not as a separate phase, so it does not earn a canonical slot.
 2. **Distinctness** - it must be a genuine phase, not a subset of an existing
-   one. `vet`, `audit`, `security`, and `typecheck` are all static analysis or
-   formatting fragments of `lint`/`format` (see [MGS1003](../reference/codes/magusfile/MGS1003.md)),
-   not phases of their own.
+   one. `vet`, `audit`, and `typecheck` are all static analysis or formatting
+   fragments of `lint`/`format` (see [MGS1003](../reference/codes/magusfile/MGS1003.md)),
+   not phases of their own. A different CACHE CONTRACT counts as distinct: that is
+   what separates `security` from the fragments it otherwise resembles.
 3. **Pipeline membership** - `ci` must need to order it against the other
    phases. A step nobody's `ci` ever sequences against `build`/`test`/`lint`
    has no claim on the canonical vocabulary.

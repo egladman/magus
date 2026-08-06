@@ -15,6 +15,108 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 See the unreleased changes at
 https://github.com/egladman/magus/compare/v0.2.1...main
 
+### Changed
+
+- **`cache.immutable` is now `cache.write.enabled`, inverted.** The old key named the
+  absence of a behavior, so answering "can this run write?" meant parsing a double
+  negative, and the documented CI snippet read inverted from its own intent:
+  `MAGUS_CACHE_IMMUTABLE: ${{ github.event_name == 'pull_request' }}` becomes
+  `MAGUS_CACHE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}`. It gates the
+  local snapshot and the remote push alike; restoring is still ungated, so a pull
+  request replays the shared cache at full speed while publishing nothing to it.
+- **The host platform now keys the cache as separate `os:` and `arch:` lines**, each
+  controlled by `cache.include.os.enabled` and `cache.include.arch.enabled`. They vary
+  independently - a container image built on linux/amd64 differs from linux/arm64 by
+  arch alone, a shell suite differs between macOS and linux by OS alone - so one
+  combined switch made a workspace that cared about one pay for both. This replaces the
+  per-target `platform` policy.
+
+### Fixed
+
+- **A defined type over a basic kind crossed into Buzz as `null`.** Now guarded by a
+  test that crosses every runtime boundary type, with the list generated from the same
+  registry that emits the Buzz mirrors - so a new boundary type is covered when it is
+  declared rather than when someone remembers. A type switch matches
+  on type identity, not underlying type, so a field typed `types.DoctorCheckStatus` or
+  `types.TargetRunState` matched no case and arrived as null - `doctor().checks[0].status`
+  read null rather than `"ok"`, while the SDK guidance told callers to branch on exactly
+  that field instead of grepping console text. Handled reflectively now, so the next
+  defined type does not reintroduce it.
+
+### Added
+
+- **Tool readiness probes.** A spell can declare `mgs_getReadinessProbes`, keyed by tool,
+  and magus checks it before dispatching an op that runs that tool. `docker --version` is
+  client-only and succeeds with no daemon, so a stopped daemon used to surface as a build
+  failure on a project with nothing wrong with it; it now fails as MGS3004 before the op
+  forks. Readiness never enters a cache key - it is a precondition, not an input.
+
+### Changed
+
+- **`semver\compare` now orders instead of testing a relation.** It was
+  `compare(a, op, b) > bool`, answering whether a relation held. Every other library
+  spells `compare` as three-way ordering returning an integer - Go's `cmp.Compare` and
+  `strings.Compare`, `x/mod/semver.Compare`, Masterminds, node-semver - so the old
+  signature was a trap that compiled: an author expecting an ordering got a boolean.
+  It is now `compare(a, b) > int`, returning -1, 0, or 1. The relation form moves to the
+  new `semver\satisfies(v, constraint)`, which also accepts ranges the operator form
+  could not express, so `semver\compare(v, ">=", floor)` becomes
+  `semver\satisfies(v, ">= " + floor)`.
+
+- An output reference is now derived from the step's cache key, so the same inputs mint
+  the same ref on every machine: an inspect line pasted from CI or a teammate's terminal
+  resolves in your checkout. Ref equality becomes input equality, which is what makes the
+  works-on-my-machine question answerable at all - if CI prints one ref and your laptop
+  prints another for the same target, your inputs differ, and magus can now say which
+  ones. **A ref is `out` plus 12 hex (`out9c92fef96e60`) where it was `out` plus 8**, so a
+  script, fixture, or pattern that pinned the old width needs updating. Execution identity
+  moved down a level to per-run ATTEMPT ids, which keep the 8-hex shape - a volatile
+  target's recent failures each stay independently addressable, and an id printed by an
+  older magus still resolves.
+
+### Added
+
+- `magus query output <ref> --attempts` lists the executions stored behind one ref, newest
+  first, and `--meta` shows that run's identity rather than its output: descriptor,
+  invocation lineage, cache key, and one digest per key component class.
+- `magus describe target <target> --cache` computes the key a run would mint right now,
+  without running anything, and `--against <ref>` diffs it against a stored run's key to
+  name the exact source file, environment variable, or tool version that drifted. The
+  verdict is key equality rather than the line list, and a mismatch exits non-zero so a
+  script can gate on it; pass `--no-default-charms` when comparing against a CI ref, since
+  CI runs that way. Env values never reach the store or the terminal - a key input's value
+  is replaced by a short digest that still changes when the value does.
+- `magus query output <ref> --publish` uploads a failing run's output to the remote cache
+  as a signed bundle, so a teammate can resolve the same ref. Failures are never cached and
+  never pushed, which is backwards from what people actually want to share, so this is an
+  explicit act. A bundle carries no manifest and no artifact blobs, so a published failure
+  can never replay as someone's cache hit. Passing runs still travel automatically, and
+  their artifact now carries the run's descriptor and key inputs as well.
+- An unresolvable `magus query output <ref>` (MGS8001) is no longer a dead end. magus
+  sweeps every candidate target in the workspace, keys each exactly as a run would, and
+  compares against the ref - the same prediction `describe target --cache` already does
+  for one target on demand. One match prints the exact `magus run <target> [project]`
+  that would reproduce it; no match says plainly that the run which printed it had
+  different inputs (a different commit, an uncommitted change, or an environment), which
+  is a finding, not a failed lookup. `--base` plays no part in either case - it scopes
+  which targets `affected` treats as changed, not what a target hashes to. `--meta` also
+  gains a `rev:` line: the VCS revision the run's inputs were read at, with a `(dirty:
+  ...)` note and a `recorded at X, you are on Y.` callout when it differs from HEAD - the
+  key pins a tree state, never a commit, so this is provenance, not something to check
+  out. A ref minted by a run that forwarded extra arguments after `--` still cannot be
+  predicted, since those arguments are part of the key and a prediction has none.
+
+### Security
+
+- The remote cache artifact's signature covers every member instead of the manifest alone:
+  the build log and the portable-ref sidecars are authenticated, imported extras are staged
+  until the signature clears so a rejected artifact leaves nothing behind, and a signature
+  is bound both to the KIND of object it was made over and to the (project, cache key) it
+  is served for. Without that binding a signed output bundle could be re-tarred as a cache
+  artifact and replay as a successful entry, turning a published failing run into a
+  teammate's cached pass. Artifacts signed by an older magus still verify; the extras their
+  signature never covered are dropped rather than trusted.
+
 ### Added
 
 - Host module calls are typechecked. Every method a host module declares now ships a Buzz

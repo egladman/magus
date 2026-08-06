@@ -23,7 +23,6 @@ func spellHandleFromMeta(m spells.Descriptor) vm.Value {
 	h.MapSet("needs", strSliceToBuzzList(m.Needs))
 	h.MapSet("provides", strSliceToBuzzList(m.Provides))
 	h.MapSet("claims", strSliceToBuzzList(m.Claims))
-	h.MapSet("version_cmd", strSliceToBuzzList(m.VersionCmd))
 	h.MapSet("language", vm.StrValue(m.Language))
 	h.MapSet("opaque", vm.BoolValue(m.Opaque))
 	h.MapSet("ops", targetsToMap(m.Ops))
@@ -209,7 +208,7 @@ func patchOpsToBuzzList(ops []spells.PatchOp) vm.Value {
 	items := make([]vm.Value, len(ops))
 	for i, po := range ops {
 		m := vm.NewMap()
-		m.MapSet("op", vm.StrValue(po.Op))
+		m.MapSet("op", vm.StrValue(string(po.Op)))
 		m.MapSet("path", vm.StrValue(po.Path))
 		if po.Value != "" {
 			m.MapSet("value", vm.StrValue(po.Value))

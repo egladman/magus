@@ -17,7 +17,6 @@ import "magus/spell";
 
 export fun mgs_getName() > str { return "cosign"; }
 
-export fun mgs_getVersionCommand() > [str] { return ["cosign", "version"]; }
 
 // --yes skips the interactive transparency-log confirmation so signing/attesting
 // runs unattended; the caller appends the target reference and flags.
@@ -31,4 +30,8 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
         "cosign-verify": verify,
         "cosign-attest": attest,
     };
+}
+
+export fun mgs_getTools() > {str: Tool} {
+    return {"cosign": Tool{probe = Command{bin = "cosign", args = ["version"]}}};
 }

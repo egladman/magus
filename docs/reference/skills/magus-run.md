@@ -2,8 +2,8 @@
 title: magus-run
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 8912
-skill_simple_bytes: 5141
+skill_full_bytes: 9375
+skill_simple_bytes: 5604
 ---
 
 # magus-run
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `23` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `d139f0ba0c9c` |
+| `skill-content` | `ace009cb3627` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -119,10 +119,14 @@ truncating it after the fact:
   bare identifiers one per line, `template=` to project exactly the fields you
   need and nothing else.
 
-### Never pipe a magus command through a text filter
+### Never pipe OR redirect a magus command
 
 **Do NOT pipe magus output through `grep`, `head`, `tail`, `awk`, `sed`, `cut`,
-or `wc`.** Every magus command already has an output contract, so filtering its
+or `wc`, and do NOT redirect it with `> file`, `>> file`, or `2>&1`.** Both are
+denied by the guard. A pipe also REPLACES the exit status with the last stage's,
+so `magus affected ci | tail` reports tail's success and a failing gate reads as
+exit 0. You never need to capture the output: every run persists its full log,
+and a failure prints that path along with the output ref. Every magus command already has an output contract, so filtering its
 text after the fact is always the wrong tool. It is not a style preference; it
 actively breaks things:
 
@@ -150,7 +154,8 @@ Replace the filter with the flag that already does it:
 prohibition is on text filters standing in for an output format.
 
 **Piping magus INTO magus is supported and encouraged.** The composition seam is
-`--stdin`, not a tee flag (there is no `--tee`). These are contracts on both
+`--stdin`. (`--tee <file>` exists but is not a composition seam: it mirrors
+STRUCTURED output only - `-o json|yaml|jsonl|template` - never console text.) These are contracts on both
 ends, so they are the opposite of the antipattern above:
 
 ```sh
@@ -186,10 +191,10 @@ composition, so the full composition is what has to pass.
 
 ## When a target fails
 
-Each target's result line mints an output reference id (`ref1a2b3c`).
+Each target's result line mints an output reference id (`out1a2b3c`).
 
 1. Fetch the exact captured output: `magus_output` {ref} over MCP, or
-   `magus query output ref1a2b3c` on the CLI. Do this instead of re-running the
+   `magus query output out1a2b3c` on the CLI. Do this instead of re-running the
    target to see the error again.
 2. `magus_tail_log` {project} returns the most recent captured log for a project
    when you have no ref.
@@ -289,16 +294,21 @@ CORRECT: `magus run test`, then `magus affected ci` once the change is done.
   project's full output.
 - `-o <fmt>`: `text|json|yaml|jsonl|name|template=<go-template>`.
 
-### Never pipe a magus command through a text filter
+### Never pipe OR redirect a magus command
 
 **Do NOT pipe magus output through `grep`, `head`, `tail`, `awk`, `sed`, `cut`,
-or `wc`.** Use the flag
+or `wc`, and do NOT redirect it with `> file`, `>> file`, or `2>&1`.** Both are
+denied by the guard. A pipe also REPLACES the exit status with the last stage's,
+so `magus affected ci | tail` reports tail's success and a failing gate reads as
+exit 0. You never need to capture the output: every run persists its full log,
+and a failure prints that path along with the output ref. Use the flag
 instead: `-o template='{{.Field}}'` for a field, `-o name` for bare identifiers,
 `-o json` to parse, `-s` to quieten. `jq` over `-o json` is fine - that is a
 contract, not scraped text.
 
 **Piping magus INTO magus is supported and encouraged.** The composition seam is
-`--stdin`, not a tee flag (there is no `--tee`).
+`--stdin`. (`--tee <file>` exists but is not a composition seam: it mirrors
+STRUCTURED output only - `-o json|yaml|jsonl|template` - never console text.)
 
 ```sh
 magus watch | magus affected --stdin        # changed paths -> affected set
@@ -320,10 +330,10 @@ Re-run the top-level target before you call the work done.
 
 ## When a target fails
 
-Each target's result line mints an output reference id (`ref1a2b3c`).
+Each target's result line mints an output reference id (`out1a2b3c`).
 
 1. Fetch the exact captured output: `magus_output` {ref} over MCP, or
-   `magus query output ref1a2b3c` on the CLI. Never re-run just to see the error again.
+   `magus query output out1a2b3c` on the CLI. Never re-run just to see the error again.
 2. `magus_tail_log` {project} returns the most recent captured log for a project
    when you have no ref.
 3. `magus doctor` validates the workspace itself (config, cache, tool

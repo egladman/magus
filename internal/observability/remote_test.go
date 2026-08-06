@@ -22,6 +22,8 @@ type fakeBackend struct {
 	pruned bool
 }
 
+func (f *fakeBackend) Name() string { return "fake" }
+
 func (f *fakeBackend) Active(context.Context) bool { return true }
 
 func (f *fakeBackend) GetArtifact(context.Context, string, string) (io.ReadCloser, error) {

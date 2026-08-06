@@ -190,10 +190,10 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		},
 	},
 	"buf": {
-		Name:       "buf",
-		Needs:      []string{"**/*.proto", "buf.yaml", "buf.gen.yaml", "buf.work.yaml", "buf.lock"},
-		Provides:   []string{"gen/**"},
-		VersionCmd: []string{"buf", "--version"},
+		Name:     "buf",
+		Needs:    []string{"**/*.proto", "buf.yaml", "buf.gen.yaml", "buf.work.yaml", "buf.lock"},
+		Provides: []string{"gen/**"},
+		Tools:    map[string]spells.Tool{"buf": {Probe: spells.Command{Bin: "buf", Args: []string{"--version"}}}},
 		Ops: map[string]spells.Op{
 			"buf-build":    {Command: spells.Command{Bin: "buf", Args: []string{"build"}}},
 			"buf-generate": {Command: spells.Command{Bin: "buf", Args: []string{"generate"}}},
@@ -218,8 +218,8 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		},
 	},
 	"cosign": {
-		Name:       "cosign",
-		VersionCmd: []string{"cosign", "version"},
+		Name:  "cosign",
+		Tools: map[string]spells.Tool{"cosign": {Probe: spells.Command{Bin: "cosign", Args: []string{"version"}}}},
 		Ops: map[string]spells.Op{
 			"cosign-sign":   {Command: spells.Command{Bin: "cosign", Args: []string{"sign", "--yes"}}},
 			"cosign-verify": {Command: spells.Command{Bin: "cosign", Args: []string{"verify"}}},
@@ -227,30 +227,38 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		},
 	},
 	"docker": {
-		Name:       "docker",
-		Needs:      []string{"Dockerfile", ".dockerignore", "**/*"},
-		VersionCmd: []string{"docker", "--version"},
-		// hadolint is a second binary the spell drives, pinned by no manifest, so it
-		// needs its own probe: upgrading it changes lint verdicts with nothing in any
-		// cache key to notice.
-		VersionCmds: map[string][]string{"hadolint": {"hadolint", "--version"}},
+		Name:  "docker",
+		Needs: []string{"Dockerfile", ".dockerignore", "**/*"},
+		Tools: map[string]spells.Tool{
+			// `docker --version` is client-only; `docker info` detects a stopped daemon.
+			"docker": {
+				Probe: spells.Command{Bin: "docker", Args: []string{"--version"}},
+				Key:   spells.VersionKey{UpTo: spells.VersionPatch},
+				Ready: spells.Command{Bin: "docker", Args: []string{"info"}},
+			},
+			// hadolint is a second binary the spell drives, pinned by no manifest, so it
+			// needs its own probe: upgrading it changes lint verdicts with nothing in any
+			// cache key to notice. It gets no readiness probe - a lint talks to no daemon.
+			"hadolint": {
+				Probe:       spells.Command{Bin: "hadolint", Args: []string{"--version"}},
+				Diagnostics: spells.DiagnosticGNU,
+			},
+		},
 		Ops: map[string]spells.Op{
 			"docker-build":       {Command: spells.Command{Bin: "docker", Args: []string{"build"}}},
 			"docker-run":         {Command: spells.Command{Bin: "docker", Args: []string{"run", "--rm"}}},
 			"docker-buildx":      {Command: spells.Command{Bin: "docker", Args: []string{"buildx", "build"}}},
 			"docker-build-check": {Command: spells.Command{Bin: "docker", Args: []string{"build", "--check"}}},
-			"hadolint":           {Command: spells.Command{Bin: "hadolint", Args: []string{"Dockerfile"}}},
+			"hadolint":           {Command: spells.Command{Bin: "hadolint", Args: []string{"-f", "gnu", "Dockerfile"}}},
 		},
 	},
 	"go": {
-		Name:       "go",
-		Needs:      []string{"**/*.go", "**/*.txtar", "go.mod", "go.sum", "go.work", "go.work.sum"},
-		VersionCmd: []string{"go", "version"},
-		// golangci-lint runs from PATH rather than `go tool`, so it is pinned outside
-		// the module graph and `go version` no longer implies it.
-		VersionCmds: map[string][]string{
-			"golangci-lint": {"golangci-lint", "--version"},
-			"govulncheck":   {"govulncheck", "-version"},
+		Name:  "go",
+		Needs: []string{"**/*.go", "**/*.txtar", "go.mod", "go.sum", "go.work", "go.work.sum"},
+		Tools: map[string]spells.Tool{
+			"go":            {Probe: spells.Command{Bin: "go", Args: []string{"version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}},
+			"golangci-lint": {Probe: spells.Command{Bin: "golangci-lint", Args: []string{"--version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}},
+			"govulncheck":   {Probe: spells.Command{Bin: "govulncheck", Args: []string{"-version"}}},
 		},
 		Language:   "go",
 		IgnoreDirs: []string{"vendor"},
@@ -308,7 +316,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 	"python": {
 		Name:       "python",
 		Needs:      []string{"**/*.py", "pyproject.toml", "requirements.txt", "requirements-*.txt", "Pipfile", "Pipfile.lock", "setup.py", "setup.cfg", "uv.lock", "poetry.lock"},
-		VersionCmd: []string{"python3", "--version"},
+		Tools:      map[string]spells.Tool{"python3": {Probe: spells.Command{Bin: "python3", Args: []string{"--version"}}}},
 		Language:   "python",
 		IgnoreDirs: []string{"__pycache__"},
 		Manifests:  []string{"pyproject.toml", "setup.py", "setup.cfg"},
@@ -332,7 +340,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 	"rust": {
 		Name:       "rust",
 		Needs:      []string{"**/*.rs", "Cargo.toml", "Cargo.lock"},
-		VersionCmd: []string{"rustc", "--version"},
+		Tools:      map[string]spells.Tool{"rustc": {Probe: spells.Command{Bin: "rustc", Args: []string{"--version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}}},
 		Language:   "rust",
 		IgnoreDirs: []string{"target"},
 		Manifests:  []string{"Cargo.toml"},
@@ -354,7 +362,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		// No Provides: tsc's output location is the project's tsconfig outDir, which the spell
 		// cannot read, so it claims nothing rather than guessing "dist/**" (see MGS1018).
 		Opaque:     true,
-		VersionCmd: []string{"node", "--version"},
+		Tools:      map[string]spells.Tool{"node": {Probe: spells.Command{Bin: "node", Args: []string{"--version"}}}},
 		Language:   "typescript",
 		IgnoreDirs: []string{"node_modules"},
 		Manifests:  []string{"package.json"},

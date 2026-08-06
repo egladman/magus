@@ -30,7 +30,7 @@ func openSpellRemoteBackend(ctx context.Context, selector string) (cache.RemoteB
 	if err != nil {
 		return nil, err
 	}
-	return &spellRemoteBackend{drv: drv}, nil
+	return &spellRemoteBackend{drv: drv, name: selector}, nil
 }
 
 // spellRemoteBackend adapts a spell to the cache's RemoteBackend contract. The spell is
@@ -45,7 +45,8 @@ func openSpellRemoteBackend(ctx context.Context, selector string) (cache.RemoteB
 // The adapter moves a temp file across the boundary and reads the op's Data; it
 // has no provider knowledge, so the binary stays CI-provider-agnostic.
 type spellRemoteBackend struct {
-	drv spells.Driver
+	drv  spells.Driver
+	name string // the selector this was opened with, reported by Name
 
 	mu          sync.Mutex
 	activeKnown bool // true once a probe has returned a definitive answer
@@ -58,6 +59,10 @@ type spellRemoteBackend struct {
 // declares no enabled() op is treated as always active. A probe *error* is not
 // cached: it's not a definitive "inactive" (a VM/network hiccup would otherwise
 // disable the remote cache for the whole build), so the next call re-probes.
+// Name reports the spell selector this backend was opened with. Cheap and probe-free:
+// the run header prints it before any target executes.
+func (b *spellRemoteBackend) Name() string { return b.name }
+
 func (b *spellRemoteBackend) Active(ctx context.Context) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()

@@ -83,6 +83,7 @@ concepts/
 concepts/cache/
 concepts/cache/output-refs/
 concepts/cache/remote/
+concepts/cache/tool-identity/
 concepts/charms/
 concepts/ci-providers/
 concepts/compatibility/
@@ -246,6 +247,7 @@ public/release/index.json
 public/release/v0.1.0/
 public/release/v0.2.0/
 public/release/v0.2.1/
+recommendations/
 reference/
 reference/api/
 reference/api/activity/
@@ -343,6 +345,8 @@ reference/codes/sandbox/MGS2011/
 reference/codes/sandbox/MGS3001/
 reference/codes/sandbox/MGS3002/
 reference/codes/sandbox/MGS3003/
+reference/codes/sandbox/MGS3004/
+reference/codes/sandbox/MGS3005/
 reference/codes/services/
 reference/codes/services/MGS5001/
 reference/codes/services/MGS5002/
@@ -516,6 +520,7 @@ tags/mise/
 tags/module/
 tags/monitoring/
 tags/monorepo/
+tags/naming/
 tags/needs/
 tags/node/
 tags/oci/
@@ -529,6 +534,7 @@ tags/ownership/
 tags/passthrough/
 tags/path/
 tags/permissions/
+tags/platform/
 tags/pool/
 tags/powershell/
 tags/prettier/

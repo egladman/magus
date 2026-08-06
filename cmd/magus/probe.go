@@ -393,16 +393,16 @@ func buildReadinessReport(ctx context.Context, ready bool, snapshot *types.Statu
 // without a client having to re-derive it from Ready alone. Detail carries a count only,
 // never a workspace root (see the Detail policy above).
 func workspacesComponent(snapshot *types.StatusOutput) types.ReadinessComponent {
-	c := types.ReadinessComponent{Name: "workspaces"}
+	c := types.ReadinessComponent{Name: types.ReadinessWorkspaces}
 	switch {
 	case snapshot == nil:
-		c.Status, c.Detail = "down", "daemon unreachable"
+		c.Status, c.Detail = types.ReadinessDown, "daemon unreachable"
 	case snapshot.Mode == "proc":
-		c.Status, c.Detail = "down", "daemon is in per-process mode"
+		c.Status, c.Detail = types.ReadinessDown, "daemon is in per-process mode"
 	case len(snapshot.Workspaces) == 0:
-		c.Status, c.Detail = "down", "no workspaces loaded"
+		c.Status, c.Detail = types.ReadinessDown, "no workspaces loaded"
 	default:
-		c.Status, c.Detail = "ok", fmt.Sprintf("%d loaded", len(snapshot.Workspaces))
+		c.Status, c.Detail = types.ReadinessOK, fmt.Sprintf("%d loaded", len(snapshot.Workspaces))
 	}
 	return c
 }
@@ -411,9 +411,9 @@ func workspacesComponent(snapshot *types.StatusOutput) types.ReadinessComponent 
 // project: ok when all are up to date, degraded when any are out of date or not yet
 // built, disabled when there is no symbol-capable project to report on.
 func symbolIndexComponent(indexes []types.SymbolIndexStatus) types.ReadinessComponent {
-	c := types.ReadinessComponent{Name: "symbol_index"}
+	c := types.ReadinessComponent{Name: types.ReadinessSymbolIndex}
 	if len(indexes) == 0 {
-		c.Status, c.Detail = "disabled", "no symbol-capable project"
+		c.Status, c.Detail = types.ReadinessDisabled, "no symbol-capable project"
 		return c
 	}
 	fresh := 0
@@ -423,9 +423,9 @@ func symbolIndexComponent(indexes []types.SymbolIndexStatus) types.ReadinessComp
 		}
 	}
 	if fresh == len(indexes) {
-		c.Status = "ok"
+		c.Status = types.ReadinessOK
 	} else {
-		c.Status = "degraded"
+		c.Status = types.ReadinessDegraded
 	}
 	// Counts only, never project names (see the Detail policy above workspacesComponent).
 	c.Detail = fmt.Sprintf("%d of %d up to date", fresh, len(indexes))
@@ -436,9 +436,9 @@ func symbolIndexComponent(indexes []types.SymbolIndexStatus) types.ReadinessComp
 // degraded when some have failed but others are still up, down when every service has
 // failed, disabled when the daemon hosts no services at all.
 func servicesComponent(services []types.StatusService) types.ReadinessComponent {
-	c := types.ReadinessComponent{Name: "services"}
+	c := types.ReadinessComponent{Name: types.ReadinessServices}
 	if len(services) == 0 {
-		c.Status, c.Detail = "disabled", "no hosted services"
+		c.Status, c.Detail = types.ReadinessDisabled, "no hosted services"
 		return c
 	}
 	var running, failed int
@@ -451,11 +451,11 @@ func servicesComponent(services []types.StatusService) types.ReadinessComponent 
 	}
 	switch {
 	case failed == 0:
-		c.Status = "ok"
+		c.Status = types.ReadinessOK
 	case running > 0:
-		c.Status = "degraded"
+		c.Status = types.ReadinessDegraded
 	default:
-		c.Status = "down"
+		c.Status = types.ReadinessDown
 	}
 	// Counts only, never service names (see the Detail policy above workspacesComponent).
 	c.Detail = fmt.Sprintf("%d running, %d failed", running, failed)
@@ -467,14 +467,14 @@ func servicesComponent(services []types.StatusService) types.ReadinessComponent 
 // but the cache is mid-rebuild (a query still answers, just not from memory), down when
 // no watcher is running at all (every query falls back to a cache-first rebuild).
 func knowledgeGraphComponent(watching, valid bool) types.ReadinessComponent {
-	c := types.ReadinessComponent{Name: "knowledge_graph"}
+	c := types.ReadinessComponent{Name: types.ReadinessKnowledgeGraph}
 	switch {
 	case watching && valid:
-		c.Status, c.Detail = "ok", "watcher active, graph fresh"
+		c.Status, c.Detail = types.ReadinessOK, "watcher active, graph fresh"
 	case watching:
-		c.Status, c.Detail = "degraded", "watcher active, graph rebuilding"
+		c.Status, c.Detail = types.ReadinessDegraded, "watcher active, graph rebuilding"
 	default:
-		c.Status, c.Detail = "down", "no watcher; falling back to cache-first rebuild per query"
+		c.Status, c.Detail = types.ReadinessDown, "no watcher; falling back to cache-first rebuild per query"
 	}
 	return c
 }

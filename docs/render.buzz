@@ -315,7 +315,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // only their target page appears. docs/reference/console.md aliases the old /console/ URL,
     // so a stub lands at gen/console/index.html, keeping internal links to /console/ resolving
     // for the asset gate. The console SPA is a separate project copied over gen/console/ at
-    // deploy (.github/workflows/publish-site.yaml), so the app wins there.
+    // deploy (.github/workflows/cd.yaml), so the app wins there.
     site.writeAliases();
 
     writeSEOFiles(site);

@@ -3,11 +3,14 @@ package std
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestMagusCmdWarnsForTypedSubcommands verifies the escape hatch nudges authors
@@ -76,4 +79,91 @@ func TestResolveRunDir(t *testing.T) {
 			assert.Equal(t, tc.want, resolveRunDir(ctx, tc.opts))
 		})
 	}
+}
+
+// TestMagusRaise covers the contract a magusfile author depends on: the code and url
+// survive onto the caught value as fields, and the MGS namespace is closed to them.
+func TestMagusRaise(t *testing.T) {
+	t.Run("carries code, message and url onto the caught value", func(t *testing.T) {
+		err := MagusRaise(context.Background(), "ACME1001", "registry rejected the manifest", raiseOpts(nil, "https://acme.dev/codes/ACME1001"))
+		require.Error(t, err)
+
+		var de *diagnostics.Error
+		require.ErrorAs(t, err, &de, "must be a diagnostics.Error so Buzz sees structured fields")
+		assert.Equal(t, map[string]string{
+			"code":    "ACME1001",
+			"message": "registry rejected the manifest",
+			"url":     "https://acme.dev/codes/ACME1001",
+		}, de.BuzzError())
+		assert.Equal(t, "[ACME1001] registry rejected the manifest\n  see: https://acme.dev/codes/ACME1001", de.Error())
+	})
+
+	t.Run("omits url when none was supplied", func(t *testing.T) {
+		err := MagusRaise(context.Background(), "ACME1002", "no url", raiseOpts(nil, ""))
+		var de *diagnostics.Error
+		require.ErrorAs(t, err, &de)
+		assert.Equal(t, map[string]string{"code": "ACME1002", "message": "no url"}, de.BuzzError(),
+			"an absent url must be absent, not an empty field a caller has to test for")
+	})
+
+	// The whole point of refusing MGS: a workspace code must never render like magus's
+	// own, because explain and the docs URL map resolve MGS against a closed catalog.
+	for _, code := range []string{"MGS9999", "mgs1001", "Mgs0001"} {
+		t.Run("refuses the magus namespace: "+code, func(t *testing.T) {
+			err := MagusRaise(context.Background(), code, "impersonating magus", nil)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "MGS namespace")
+			var de *diagnostics.Error
+			assert.NotErrorIs(t, err, diagnostics.ErrSentinel, "the refusal is a usage error, not a minted diagnostic")
+			assert.False(t, errors.As(err, &de), "refusing must not produce the very diagnostic it rejected")
+		})
+	}
+
+	t.Run("requires a code and a message", func(t *testing.T) {
+		assert.ErrorContains(t, MagusRaise(context.Background(), "", "msg", raiseOpts(nil, "")), "needs a code")
+		assert.ErrorContains(t, MagusRaise(context.Background(), "ACME1001", "", raiseOpts(nil, "")), "needs a message")
+	})
+}
+
+// TestMagusRaiseCause covers wrapping: the cause has to stay reachable for errors.Is and
+// stay VISIBLE in the rendered message, which Wrapf alone does not do.
+func TestMagusRaiseCause(t *testing.T) {
+	t.Run("splices a string cause and unwraps to it", func(t *testing.T) {
+		err := MagusRaise(context.Background(), "ACME1001", "push failed", raiseOpts("exec docker: exit 1", ""))
+		assert.EqualError(t, err, "[ACME1001] push failed: exec docker: exit 1")
+		assert.ErrorContains(t, errors.Unwrap(err), "exec docker: exit 1")
+	})
+
+	// The realistic shape: an inner catch hands back the map BuzzError built, and the
+	// inner code must keep matching once the outer one wraps it.
+	t.Run("keeps a coded cause matchable underneath the new code", func(t *testing.T) {
+		inner := map[string]any{"code": "MGS2001", "message": "spell not found", "url": "https://x/MGS2001"}
+		err := MagusRaise(context.Background(), "ACME1001", "build failed", raiseOpts(inner, ""))
+		assert.EqualError(t, err, "[ACME1001] build failed: [MGS2001] spell not found")
+		assert.ErrorIs(t, err, diagnostics.Code("MGS2001"),
+			"the inner code must still match after wrapping, which is the point of a cause")
+	})
+
+	t.Run("an absent cause changes nothing", func(t *testing.T) {
+		for _, empty := range []any{nil, "", map[string]any{}} {
+			err := MagusRaise(context.Background(), "ACME1001", "plain", raiseOpts(empty, ""))
+			assert.EqualError(t, err, "[ACME1001] plain")
+		}
+	})
+}
+
+// raiseOpts builds the opts map the way a magusfile would, keeping the tests readable
+// now that cause and url are keys rather than positions.
+func raiseOpts(cause any, url string) map[string]any {
+	o := map[string]any{}
+	if cause != nil {
+		o["cause"] = cause
+	}
+	if url != "" {
+		o["url"] = url
+	}
+	if len(o) == 0 {
+		return nil
+	}
+	return o
 }

@@ -1,3 +1,7 @@
+// title: Cache: replay, and catch drift
+// desc: Targets replay from cache and run once per plan; skip_cache opts a check out.
+// doc: concepts/remote-cache|Caching
+//
 // Caching: why a target does not run twice. magus keys each target on its inputs
 // and its declared outputs, then replays the outputs when nothing changed - so a
 // second `run` in a session is mostly cache hits, and a target that several

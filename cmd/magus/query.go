@@ -8,7 +8,9 @@ import (
 	"io/fs"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/url"
@@ -45,6 +47,9 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		open        bool
 		printURL    bool
 		viewerBase  string
+		attempts    bool
+		meta        bool
+		publish     bool
 	)
 	pos, err := cmdParse("query", args, func(fs *flag.FlagSet) {
 		fs.IntVar(&budget, "budget", 0, "max nodes in the returned neighborhood (default 50)")
@@ -54,9 +59,12 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		fs.BoolVar(&open, "open", false, "with `output <ref>`, open the captured output in the browser log viewer (delivered privately; never uploaded)")
 		fs.BoolVar(&printURL, "print", false, "with --open, print the viewer URL instead of launching a browser")
 		fs.StringVar(&viewerBase, "url", defaultLogViewerURL, "with --open, base URL of the log viewer page (override for a self-hosted mirror)")
+		fs.BoolVar(&attempts, "attempts", false, "with `output <ref>`, list the ref's stored executions (newest first) instead of printing output")
+		fs.BoolVar(&meta, "meta", false, "with `output <ref>`, show the run's identity instead of its output: descriptor, lineage, cache key, component digests")
+		fs.BoolVar(&publish, "publish", false, "with `output <ref>`, upload this run's output to the remote cache as a signed bundle so a teammate can resolve the same ref (failing runs are never shared automatically)")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus query <terms> [flags]")
-			fmt.Fprintln(os.Stderr, "       magus query output <ref> [-o json] [--open]")
+			fmt.Fprintln(os.Stderr, "       magus query output <ref> [-o json] [--open] [--attempts] [--meta] [--publish]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, types.KnowledgeQueryDefinition)
 			fmt.Fprintln(os.Stderr, "")
@@ -69,6 +77,8 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintf(os.Stderr, "  %-38s print the exact bytes (pipe anywhere)\n", clihint.QueryOutput.With("out1a2b3c"))
 			fmt.Fprintf(os.Stderr, "  %-38s the descriptor + output as a record\n", clihint.QueryOutput.With("out1a2b3c", "-o json"))
 			fmt.Fprintf(os.Stderr, "  %-38s open it in the browser log viewer\n", clihint.QueryOutput.With("out1a2b3c", "--open"))
+			fmt.Fprintf(os.Stderr, "  %-38s list the ref's stored executions\n", clihint.QueryOutput.With("out1a2b3c", "--attempts"))
+			fmt.Fprintf(os.Stderr, "  %-38s the run's identity + cache-key digests\n", clihint.QueryOutput.With("out1a2b3c", "--meta"))
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--open respects the BROWSER environment variable to pick the browser")
 			fmt.Fprintln(os.Stderr, "(e.g. BROWSER=firefox); otherwise it uses your desktop's default handler.")
@@ -98,12 +108,22 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		if oerr != nil {
 			return oerr
 		}
-		return queryOutputRef(ctx, root, ref, outputRefOpts{open: open, printURL: printURL, viewerBase: viewerBase, out: outOpts})
+		exclusive := 0
+		for _, set := range []bool{attempts, meta, publish, open || printURL} {
+			if set {
+				exclusive++
+			}
+		}
+		if exclusive > 1 {
+			fmt.Fprintf(os.Stderr, "magus query output: --attempts, --meta, --publish, and --open/--print are distinct actions; pick one\n")
+			return errSilent{exitCode: 2}
+		}
+		return queryOutputRef(ctx, root, ref, outputRefOpts{open: open, printURL: printURL, viewerBase: viewerBase, attempts: attempts, meta: meta, publish: publish, out: outOpts})
 	}
-	if open || printURL {
-		// --open/--print only apply to `query output <ref>`. Set on a graph search, they were a
-		// mistake; stop rather than silently ignore them.
-		fmt.Fprintf(os.Stderr, "magus query: --open/--print apply only to `%s <ref>`. To open the knowledge graph in a browser, use `%s`.\n", clihint.QueryOutput, clihint.GraphOpen)
+	if open || printURL || attempts || meta || publish {
+		// --open/--print/--attempts/--meta only apply to `query output <ref>`. Set on a graph
+		// search, they were a mistake; stop rather than silently ignore them.
+		fmt.Fprintf(os.Stderr, "magus query: --open/--print/--attempts/--meta/--publish apply only to `%s <ref>`. To open the knowledge graph in a browser, use `%s`.\n", clihint.QueryOutput, clihint.GraphOpen)
 		return errSilent{exitCode: 2}
 	}
 	if len(pos) == 0 && kinds == "" {
@@ -159,6 +179,9 @@ type outputRefOpts struct {
 	open       bool          // open the browser log viewer instead of printing
 	printURL   bool          // with open, print the URL instead of launching a browser
 	viewerBase string        // log viewer base URL
+	attempts   bool          // list the ref's stored executions instead of printing output
+	meta       bool          // show the run's identity (descriptor, lineage, key digests)
+	publish    bool          // upload this run's output to the remote as a signed bundle
 	out        OutputOptions // -o: text prints raw bytes, json/yaml prints the descriptor record
 }
 
@@ -180,23 +203,59 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 	if err != nil {
 		return err
 	}
+	if o.attempts {
+		return listOutputAttempts(ctx, m, ref, o.out)
+	}
+	if o.meta {
+		return showOutputMeta(ctx, m, ref, o.out)
+	}
+	if o.publish {
+		published, perr := m.PublishOutput(ctx, ref)
+		if perr != nil {
+			if errors.Is(perr, fs.ErrNotExist) {
+				// Not the generic lookup path: its hint suggests --publish, which is
+				// the command that just failed.
+				msg := fmt.Sprintf("no stored output for ref %q to publish; it may have aged out of the cache, or the ref is mistyped", ref)
+				fmt.Fprintf(os.Stderr, "magus query output: %s\n", types.DiagnosticErrorf(types.OutputRefMissing, "%s", msg).Error())
+				return errSilent{exitCode: 2}
+			}
+			return fmt.Errorf("magus query output: publish %s: %w", ref, perr)
+		}
+		fmt.Printf("published %s to the remote cache\n", published)
+		fmt.Printf("a teammate with the same trust set can now run: %s\n", clihint.QueryOutput.With(published))
+		return nil
+	}
 	if o.open {
 		// The viewer ingests a magus.viewer.v1 Journal, so hand it the ref's display events -
 		// the browser renders pretty from structure.
 		data, desc, err := m.OutputByRef(ref)
 		if err != nil {
-			return reportRefLookupError(ref, err)
+			return reportRefLookupError(ctx, m, ref, err)
 		}
 		events := console.StitchDisplayEvents(data, desc)
 		var inv journal.Invocation
 		if desc.Inv != "" {
 			inv, _ = m.InvocationByID(desc.Inv) // best-effort lineage; omitted if the run log aged out
 		}
-		return openOutputInViewer(desc, events, inv, o)
+		// The run's per-class key digests ride along so the viewer can show a
+		// machine-vs-machine key comparison. Best-effort: a run predating key-input
+		// persistence just opens without them.
+		var keyDigests string
+		if lines, lerr := m.OutputKeyInputs(ref); lerr == nil {
+			pairs := make([]console.KeyClassDigest, 0, len(cache.ClassDigests(lines)))
+			for _, c := range cache.ClassDigests(lines) {
+				pairs = append(pairs, console.KeyClassDigest{Class: c.Class, Digest: c.Digest})
+			}
+			keyDigests = console.KeyDigestsParam(pairs)
+		}
+		return openOutputInViewer(desc, events, inv, keyDigests, o)
 	}
-	data, desc, err := m.OutputByRef(ref)
+	// Remote-aware: a ref unknown locally may have been published from CI or a
+	// teammate's machine, so the print path consults the remote bundle namespace
+	// before reporting it missing.
+	data, desc, err := m.OutputByRefRemote(ctx, ref)
 	if err != nil {
-		return reportRefLookupError(ref, err)
+		return reportRefLookupError(ctx, m, ref, err)
 	}
 	if o.out.Format == FormatJSON || o.out.Format == FormatYAML {
 		return emitFormatted(o.out, outputRefRecord{OutputDescriptor: desc, Output: string(data)})
@@ -205,27 +264,222 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 	return err
 }
 
+// listOutputAttempts renders the keep-last-K executions behind one portable ref, newest
+// first. Every attempt of a step shares the step's ref; the attempt id is the
+// execution-unique handle, and passing a full attempt id to `magus query output`
+// retrieves that exact execution's bytes.
+func listOutputAttempts(ctx context.Context, m *magus.Magus, ref string, out OutputOptions) error {
+	list, err := m.OutputAttempts(ref)
+	if err != nil {
+		return reportRefLookupError(ctx, m, ref, err)
+	}
+	if out.Format == FormatJSON || out.Format == FormatYAML {
+		return emitFormatted(out, list)
+	}
+	// Head the listing with the STEP's identity: the portable ref when a v2
+	// descriptor carries the key, else the ref as the user typed it. list[0].Ref
+	// would name one arbitrary execution for a pre-portable directory.
+	stepRef := ref
+	for _, d := range list {
+		if d.Key != "" {
+			stepRef = d.Ref
+			break
+		}
+	}
+	fmt.Printf("attempts for %s (newest first):\n", stepRef)
+	for _, d := range list {
+		status := "pass"
+		if d.Failed {
+			status = "fail"
+		}
+		when := time.UnixMilli(d.TimestampMs).Format("2006-01-02 15:04:05")
+		dur := (time.Duration(d.DurationMs) * time.Millisecond).Round(time.Millisecond)
+		fmt.Printf("  %s  %s  %8s  %s  %s\n", d.Attempt, status, dur, when, d.Inv)
+	}
+	// The bare ref already answers with the newest attempt; the hint earns its keep
+	// for reaching an OLDER one.
+	if len(list) > 1 {
+		fmt.Printf("\nRetrieve one attempt's exact output: %s\n", clihint.QueryOutput.With(list[len(list)-1].Attempt))
+	}
+	return nil
+}
+
+// outputMetaRecord is the -o json/yaml projection of `query output <ref> --meta`: the
+// stored descriptor, the producing invocation's lineage when its run log survives, and
+// the cache key's component-class digests when the run persisted its key inputs.
+type outputMetaRecord struct {
+	cache.OutputDescriptor
+	Invocation   *journal.Invocation `json:"invocation,omitempty"`
+	ClassDigests []cache.ClassDigest `json:"class_digests,omitempty"`
+}
+
+// showOutputMeta renders a stored run's IDENTITY rather than its output: what ran,
+// how it ended, which invocation produced it, and the digests of its cache key's
+// component classes - the machine-comparable half of the works-on-my-machine story
+// (two machines compare digests to learn WHICH class disagrees; `describe target
+// --cache --against` then names the exact line).
+func showOutputMeta(ctx context.Context, m *magus.Magus, ref string, out OutputOptions) error {
+	desc, err := m.OutputDescriptorByRef(ref)
+	if err != nil {
+		return reportRefLookupError(ctx, m, ref, err)
+	}
+	var digests []cache.ClassDigest
+	lines, lerr := m.OutputKeyInputs(ref)
+	switch {
+	case lerr == nil:
+		digests = cache.ClassDigests(lines)
+	case !errors.Is(lerr, fs.ErrNotExist):
+		// Absent lines are ordinary (a run predating persistence); anything else is a
+		// real read failure and must not masquerade as one.
+		return fmt.Errorf("magus query output: read stored key inputs for %s: %w", ref, lerr)
+	}
+	var inv *journal.Invocation
+	if desc.Inv != "" {
+		if got, ierr := m.InvocationByID(desc.Inv); ierr == nil {
+			inv = &got
+		}
+	}
+	switch out.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(out, outputMetaRecord{OutputDescriptor: desc, Invocation: inv, ClassDigests: digests})
+	case outputName:
+		fmt.Println(desc.Ref)
+		return nil
+	}
+	fmt.Printf("ref:     %s\n", desc.Ref)
+	fmt.Printf("project: %s\n", desc.Project)
+	if desc.Target != "" {
+		fmt.Printf("target:  %s\n", desc.Target)
+	}
+	status := "pass"
+	if desc.Failed {
+		status = "fail"
+	}
+	fmt.Printf("status:  %s (%s) at %s\n", status,
+		(time.Duration(desc.DurationMs) * time.Millisecond).Round(time.Millisecond),
+		time.UnixMilli(desc.TimestampMs).Format("2006-01-02 15:04:05"))
+	if desc.ErrMsg != "" {
+		fmt.Printf("error:   %s\n", desc.ErrMsg)
+	}
+	if desc.Attempt != "" {
+		fmt.Printf("attempt: %s\n", desc.Attempt)
+	}
+	if desc.Inv != "" {
+		fmt.Printf("inv:     %s", desc.Inv)
+		if inv != nil && len(inv.Command.Arguments) > 0 {
+			fmt.Printf("  (magus %s)", strings.Join(inv.Command.Arguments, " "))
+		}
+		fmt.Println()
+	}
+	if desc.Key != "" {
+		fmt.Printf("key:     %s (keyVersion %d)\n", desc.Key, desc.KeyVersion)
+	}
+	if desc.MagusVersion != "" {
+		fmt.Printf("magus:   %s\n", desc.MagusVersion)
+	}
+	if desc.Revision != "" {
+		fmt.Printf("rev:     %s", magus.ShortRevision(desc.Revision))
+		if desc.Dirty {
+			fmt.Printf(" (dirty: uncommitted changes at capture time; the revision alone may not reproduce it)")
+		}
+		fmt.Println()
+		// The cache key pins a tree STATE, never a commit - this is the one place
+		// that names one, by comparing the descriptor's revision against HEAD now.
+		// PROVENANCE only, never instruction: on a cache HIT, recordOutput never runs,
+		// so the descriptor still carries the revision of whichever run FIRST minted
+		// this key - which can differ from HEAD even though the current tree
+		// reproduces the output perfectly (that reproduction is exactly why it was a
+		// hit). Telling the user to check out the recorded commit would therefore be
+		// wrong on the most common path that reaches this line: a ref that resolved
+		// already has its bytes, and the KEY, not the commit, is what decided that.
+		// Only print when the two actually differ: same revision is the common case
+		// and needs no callout.
+		if cur, _ := m.CurrentRevision(ctx); cur != "" && cur != desc.Revision {
+			fmt.Printf("recorded at %s, you are on %s.\n", magus.ShortRevision(desc.Revision), magus.ShortRevision(cur))
+		}
+	}
+	if len(digests) == 0 {
+		fmt.Println("\nkey components: unavailable (run predates key-input persistence; re-run the target to record them)")
+		return nil
+	}
+	fmt.Println("\nkey components:")
+	for _, d := range digests {
+		noun := "lines"
+		if d.Count == 1 {
+			noun = "line"
+		}
+		fmt.Printf("  %-16s %s  %d %s\n", d.Class, d.Digest, d.Count, noun)
+	}
+	return nil
+}
+
 // reportRefLookupError renders the standard output-ref resolution failures (ambiguous prefix,
-// missing/aged-out, or an unexpected error) as a coded diagnostic + exit code.
-func reportRefLookupError(ref string, err error) error {
+// missing/aged-out, or an unexpected error) as a coded diagnostic + exit code. On the
+// missing-ref path it also prints a best-effort suggestion inverting the ref back to the
+// workspace target(s) that could have minted it - see printIdentifyRefSuggestion. m may be
+// nil at call sites with no loaded Magus in scope; the suggestion is then skipped, not
+// attempted against a nil receiver.
+func reportRefLookupError(ctx context.Context, m *magus.Magus, ref string, err error) error {
 	var amb *cache.AmbiguousRefError
 	switch {
 	case errors.As(err, &amb):
 		fmt.Fprintf(os.Stderr, "magus query: %s\n", types.DiagnosticErrorf(types.OutputRefAmbiguous, "%s", amb.Error()).Error())
 		return errSilent{exitCode: 2}
 	case errors.Is(err, fs.ErrNotExist):
+		// Name the stores consulted when the lookup knows them: a foreign ref that was
+		// never published reads exactly like a mistyped one otherwise. Render the message
+		// ONCE - RefNotFoundError.Error() already includes "consulted: <stores>".
 		msg := fmt.Sprintf("no stored output for ref %q. It may have aged out of the cache, or the ref is mistyped; re-run the target to regenerate it.", ref)
+		var missing *cache.RefNotFoundError
+		if errors.As(err, &missing) {
+			msg = missing.Error()
+		}
 		fmt.Fprintf(os.Stderr, "magus query: %s\n", types.DiagnosticErrorf(types.OutputRefMissing, "%s", msg).Error())
+		printIdentifyRefSuggestion(ctx, m, ref)
 		return errSilent{exitCode: 2}
 	default:
 		return fmt.Errorf("magus query: look up output ref %q: %w", ref, err)
 	}
 }
 
+// printIdentifyRefSuggestion best-effort-inverts a missing ref back to the workspace
+// target(s) that could have minted it (Magus.IdentifyRef) and prints the finding to
+// stderr. A nil m, or IdentifyRef itself erroring (e.g. types.ErrNoCache on an Inspect
+// workspace), both skip silently: a best-effort suggestion must never turn a lookup
+// error into a different one.
+func printIdentifyRefSuggestion(ctx context.Context, m *magus.Magus, ref string) {
+	if m == nil {
+		return
+	}
+	matches, err := m.IdentifyRef(ctx, ref)
+	if err != nil {
+		return
+	}
+	switch len(matches) {
+	case 0:
+		// Informative, not a failure to try: nothing here keys to the ref because the
+		// run that printed it had different inputs, not because this lookup is broken.
+		fmt.Fprintln(os.Stderr, "No target in this workspace keys to that ref at the current tree, which means the run that printed it had different inputs (a different commit, uncommitted change, or environment).")
+		fmt.Fprintf(os.Stderr, "Once you know which target it should be: %s\n", clihint.DescribeTargets.With("<target>", "--cache", "--against", ref))
+	case 1:
+		fmt.Fprintln(os.Stderr, "Nothing has produced it here, but this workspace would print it for:")
+		fmt.Fprintf(os.Stderr, "  %s\n", m.RefMatchCommand(matches[0]))
+	default:
+		fmt.Fprintln(os.Stderr, "Nothing has produced it here, but this workspace would print it for any of:")
+		for _, mt := range matches {
+			fmt.Fprintf(os.Stderr, "  %s\n", m.RefMatchCommand(mt))
+		}
+	}
+	// Reachable from every branch, not just the zero-match one: even a matched target
+	// may be nondeterministic or expensive enough that the exact bytes from whoever
+	// already has them beat a local re-run.
+	fmt.Fprintf(os.Stderr, "If someone else has it, they can share it with: %s\n", clihint.QueryOutput.With(ref, "--publish"))
+}
+
 // openOutputInViewer builds the viewer URL and opens a browser; --print emits the
 // URL instead. It warns when the link nears browser URL-length limits.
-func openOutputInViewer(desc cache.OutputDescriptor, events []journal.Event, inv journal.Invocation, o outputRefOpts) error {
-	openURL, err := console.LogViewerURL(o.viewerBase, desc.Ref, events, inv)
+func openOutputInViewer(desc cache.OutputDescriptor, events []journal.Event, inv journal.Invocation, keyDigests string, o outputRefOpts) error {
+	openURL, err := console.LogViewerURL(o.viewerBase, desc.Ref, events, inv, keyDigests)
 	if err != nil {
 		return err
 	}

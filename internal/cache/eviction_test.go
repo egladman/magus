@@ -1,7 +1,9 @@
 package cache
 
 import (
+	"bytes"
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -86,13 +88,76 @@ func assertReferencedBlobsExist(t *testing.T, cdir string, manifests []Manifest)
 	}
 }
 
+// TestEvictAndPruneReclaimOutputs: stored outputs used to be exempt from both the
+// size cap and Prune, so a workspace whose targets print a lot grew without bound.
+// They now count toward the cap and are reclaimed with the entry that produced them.
+func TestEvictAndPruneReclaimOutputs(t *testing.T) {
+	_, cdir, c := newMutableCache(t)
+	const key = "abcdefabcdefabcdefabcdef"
+	require.NoError(t, os.MkdirAll(filepath.Join(cdir, "manifests", "p"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(cdir, "manifests", "p", key+".json"),
+		[]byte(`{"projectPath":"p","hash":"`+key+`","outputs":[],"createdAt":"2020-01-01T00:00:00Z"}`), 0o644))
+	_, err := c.outputs.Persist(context.Background(), key, bytes.Repeat([]byte("x"), 4096),
+		OutputDescriptor{Project: "p", Target: "build"})
+	require.NoError(t, err)
+
+	sized, _ := c.scanManifests()
+	assert.Greater(t, sized, int64(4096), "stored outputs count toward the measured size")
+
+	n, freed, err := c.Prune(context.Background(), time.Now(), true) // dry run
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+	assert.Greater(t, freed, int64(4096), "a dry run tallies the outputs it would reclaim")
+	_, statErr := os.Stat(filepath.Join(cdir, "outputs", key))
+	require.NoError(t, statErr, "a dry run deletes nothing")
+
+	n, _, err = c.Prune(context.Background(), time.Now(), false)
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+	_, statErr = os.Stat(filepath.Join(cdir, "outputs", key))
+	assert.ErrorIs(t, statErr, fs.ErrNotExist, "pruning the entry reclaims its outputs")
+}
+
+// TestEvictReclaimsOrphanOutputs: a FAILING run stores output but is never
+// snapshotted, so no manifest ever claims it. Those bytes count toward the cap, so
+// eviction has to be able to reclaim them - otherwise it would delete every manifest
+// chasing a floor it can never reach, and the failure residue would still be there.
+func TestEvictReclaimsOrphanOutputs(t *testing.T) {
+	root, cdir, c := newMutableCache(t)
+	writeMain(t, root, "package main")
+	touchOut(t, root)
+
+	// A real, manifest-backed entry.
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
+	out := filepath.Join(root, "test", "pkg", "out.txt")
+	_, err := c.Run(context.Background(), step, func(context.Context) error {
+		return os.WriteFile(out, []byte("built"), 0o644)
+	})
+	require.NoError(t, err)
+	kept := listManifests(t, cdir)
+	require.Len(t, kept, 1)
+
+	// Orphan output: a stored execution whose key has no manifest (the failure shape).
+	const orphanKey = "0000111122223333444455556666"
+	_, err = c.outputs.Persist(context.Background(), orphanKey, bytes.Repeat([]byte("x"), 8192),
+		OutputDescriptor{Project: "test/pkg", Target: "test", Failed: true})
+	require.NoError(t, err)
+
+	total, _ := c.scanManifests()
+	c.evictOldest(context.Background(), total-4096) // must shed ~4KB
+
+	_, statErr := os.Stat(filepath.Join(cdir, "outputs", orphanKey))
+	assert.ErrorIs(t, statErr, fs.ErrNotExist, "the orphan output must be reclaimed")
+	assert.Len(t, listManifests(t, cdir), 1, "the manifest-backed entry must survive: the orphan covered the deficit")
+}
+
 // TestEvictLRU_SharedBlobsSurvive: two manifests reference the same blob
 // (identical output content). Eviction drops the older one. The shared
 // blob must survive because the newer manifest still references it.
 func TestEvictLRU_SharedBlobsSurvive(t *testing.T) {
 	root := t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
-	t.Setenv("MAGUS_CACHE_MODE", "write")
 	c, err := Open(t.Context(), cdir)
 	require.NoError(t, err, "Open")
 
@@ -123,7 +188,6 @@ func TestEvictLRU_SharedBlobsSurvive(t *testing.T) {
 func TestPrune_SharedBlobsSurvive(t *testing.T) {
 	root := t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
-	t.Setenv("MAGUS_CACHE_MODE", "write")
 	c, err := Open(t.Context(), cdir)
 	require.NoError(t, err, "Open")
 
@@ -150,7 +214,6 @@ func TestPrune_SharedBlobsSurvive(t *testing.T) {
 func TestEvictLRU_OrphanBlobsCollected(t *testing.T) {
 	root := t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
-	t.Setenv("MAGUS_CACHE_MODE", "write")
 	c, err := Open(t.Context(), cdir)
 	require.NoError(t, err, "Open")
 

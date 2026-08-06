@@ -100,10 +100,36 @@ type ReadinessReport struct {
 // identifying detail lives behind the bearer-guarded StatusService. Never the sole
 // signal - a client should key off Status.
 type ReadinessComponent struct {
-	Name   string `json:"name"`   // "workspaces" | "symbol_index" | "services" | "knowledge_graph"
-	Status string `json:"status"` // "ok" | "degraded" | "down" | "idle" | "disabled"
-	Detail string `json:"detail"`
+	Name   ReadinessName   `json:"name"`
+	Status ReadinessStatus `json:"status"`
+	Detail string          `json:"detail"`
 }
+
+// ReadinessName identifies which subsystem a readiness component reports on, and
+// ReadinessStatus is its verdict. Both were bare strings whose vocabulary lived in a
+// trailing comment - which a compiler cannot check and a reader has to trust. A probe
+// endpoint is read by a kubelet, so a value drifting from what the reader expects is
+// the kind of break nothing surfaces until a rollout stalls.
+type ReadinessName string
+
+const (
+	ReadinessWorkspaces     ReadinessName = "workspaces"
+	ReadinessSymbolIndex    ReadinessName = "symbol_index"
+	ReadinessServices       ReadinessName = "services"
+	ReadinessKnowledgeGraph ReadinessName = "knowledge_graph"
+)
+
+// ReadinessStatus is one component's verdict. Idle and disabled are deliberately
+// distinct from ok: a subsystem nobody asked for is not the same as one that ran.
+type ReadinessStatus string
+
+const (
+	ReadinessOK       ReadinessStatus = "ok"
+	ReadinessDegraded ReadinessStatus = "degraded"
+	ReadinessDown     ReadinessStatus = "down"
+	ReadinessIdle     ReadinessStatus = "idle"
+	ReadinessDisabled ReadinessStatus = "disabled"
+)
 
 // MCPEndpointStatus is the runtime health of the MCP HTTP endpoint agent hosts connect
 // to. State is one of: serving (listening and a workspace is loaded), not-ready
@@ -128,17 +154,31 @@ type StatusConfig struct {
 	Sandbox bool `json:"sandbox" yaml:"sandbox"`
 }
 
+// ServiceState is where a supervised service sits in its lifecycle. Deliberately NOT
+// TargetRunState: the two share only "running" and "failed", and describe different
+// things - a service is idle when nothing needs it, a target run is cached when its
+// result was replayed. One union type would make half the values invalid for each
+// user, which is the opposite of what naming them buys.
+type ServiceState string
+
+const (
+	ServiceStarting ServiceState = "starting"
+	ServiceRunning  ServiceState = "running"
+	ServiceIdle     ServiceState = "idle"
+	ServiceFailed   ServiceState = "failed"
+)
+
 // StatusService is one long-running shared service the daemon is hosting, surfaced on
 // the status wire so a dashboard can show what is running and how many targets depend
 // on it. It mirrors service.ServiceStatus (the registry's introspection view).
 type StatusService struct {
-	ID         string    `json:"id" yaml:"id"`
-	Label      string    `json:"label,omitempty" yaml:"label,omitempty"`
-	Command    string    `json:"command,omitempty" yaml:"command,omitempty"`
-	Ports      []string  `json:"ports,omitempty" yaml:"ports,omitempty"`
-	State      string    `json:"state,omitempty" yaml:"state,omitempty"` // starting | running | idle | failed
-	Dependents int       `json:"dependents,omitempty" yaml:"dependents,omitempty"`
-	StartedAt  time.Time `json:"started_at,omitempty" yaml:"started_at,omitempty"`
+	ID         string       `json:"id" yaml:"id"`
+	Label      string       `json:"label,omitempty" yaml:"label,omitempty"`
+	Command    string       `json:"command,omitempty" yaml:"command,omitempty"`
+	Ports      []string     `json:"ports,omitempty" yaml:"ports,omitempty"`
+	State      ServiceState `json:"state,omitempty" yaml:"state,omitempty"`
+	Dependents int          `json:"dependents,omitempty" yaml:"dependents,omitempty"`
+	StartedAt  time.Time    `json:"started_at,omitempty" yaml:"started_at,omitempty"`
 }
 
 // StatusLock is one held per-project workspace lock and the process holding it.

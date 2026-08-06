@@ -46,7 +46,7 @@ RIGHT NOW the released `magus` on PATH CANNOT load this workspace. `evals/magusf
 declares `no_language`, which no release knows yet, so every command fails at workspace
 load with:
 
-```
+```text
 magus.project: unknown option "no_language" (known options: depends_on, exclusive, ...)
 ```
 
@@ -116,24 +116,35 @@ Flag placement matters when forwarding: magus flags go BEFORE `--`.
 `magus run go::go-test . --silent -- ./internal/foo/` works; putting `--silent`
 after `--` forwards it to the test binary, which rejects it.
 
-CI runs `setup-magus` two different ways, on purpose:
+Four workflows, one trigger each, and the name says which:
 
-- `source-path: .` - nearly everything: `preflight`, `ci`, `advice`, `site-build`,
-  `image-snapshot`, `report`, and skill-evals' `smoke`. Builds the magus THIS commit
-  defines and runs it against this commit's magusfile, so a change that
+| File | Runs on | Ships |
+| --- | --- | --- |
+| `ci.yaml` | pull request, and main push | nothing |
+| `cd.yaml` | main push | docs site (Pages), per-commit container image (GHCR) |
+| `release.yaml` | `v*` tag | binaries and release images |
+| `nightly.yaml` | cron 05:17 UTC, manual | nothing |
+
+ci also runs on a main push, and that is not a publish step: the push run is what
+populates the shared cache and the run history a pull request may only read.
+
+`setup-magus` is called two ways, on purpose:
+
+- `source-path: .` - nearly everything: ci's `preflight`, `ci`, `advice`,
+  `site-build`, `report`, both cd jobs, and nightly's `skill-evals`. Builds the magus
+  THIS commit defines and runs it against this commit's magusfile, so a change that
   `magusfile.buzz` needs is exercised by the very run that introduces it - there is
   no "release first" chicken-and-egg.
-- `git-ref: <latest release tag>` - exactly ONE job in ci.yaml: `compat`. It runs the
+- `git-ref: <latest release tag>` - exactly ONE job, nightly's `compat`. It runs the
   pinned, checksum-verified release instead. That is the compatibility contract: when
   it breaks because the magusfile needs an unreleased feature, that is a
-  breaking-change signal to surface, not to paper over. It carries
-  `continue-on-error: true`, so it reports and never blocks a merge - which is why it
-  is currently red on `no_language` (added in 6e087567) and that is fine.
-  (`publish-site`'s `deploy` and every `cd.yaml` release job also pin a ref, but those
-  run on main or on a tag, not on a pull request.)
+  breaking-change signal to surface, not to paper over. It is non-blocking by trigger
+  now rather than by `continue-on-error` - it is not on the PR path at all - which is
+  why it being red on `no_language` (added in 6e087567) is fine. Every release.yaml
+  job also pins a ref, but those run on a tag.
 
 Verify rather than trust this list - it has drifted before:
-`awk '/^  [a-z][a-z0-9_-]*:$/{j=$1} /source-path:|git-ref:/{print j, $0}' .github/workflows/ci.yaml`
+`awk '/^  [a-z][a-z0-9_-]*:$/{j=$1} /source-path:|git-ref:/{print j, $0}' .github/workflows/*.yaml`
 
 Do NOT write `git-ref: ${{ github.sha }}` for the first case. On a
 `pull_request` event `github.sha` is the ephemeral `refs/pull/N/merge` commit, a
@@ -212,9 +223,23 @@ deliberately instead:
   otherwise GREEN as of 2026-08-02 - the "pre-existing lint findings" this file
   used to warn about are gone, so treat a lint failure as yours rather than
   assuming it is background noise.
-- The agent guard denies piping or redirecting magus output (`| head`,
-  `2>&1`, `> file`). Use `-s/--silent`, `-o json|name|template=`, or `--tee
-<file>` instead; `magus query output <ref>` is the one command you may pipe.
+- Need one value out of a magus command? ASK MAGUS FOR IT: `-o name` (ids, one
+  per line), `-o json` (the record), `-o template='{{.Field}}'` (one field).
+  Never reach for a filter - the guard denies piping AND redirecting magus
+  output (`| head`, `> file`, `>> file`, `2>&1`), because a pipe also replaces
+  the exit status with the last stage's, so a FAILING gate reads as exit 0. Use
+  `-s/--silent` to bound it (silent already trims, so filtering it is never the
+  careful version). You never need to capture console output: every run persists
+  its full log and a failure prints that path, and `--tee <file>` mirrors only
+  STRUCTURED output (`-o json|yaml|jsonl|template`), never console text.
+  `magus query output <ref>` is the one command you may pipe or redirect: a raw
+  captured tool log has no schema to project.
+- Run magus from the workspace and NAME the project (`magus run <target>
+  <project>`) instead of `cd`-ing to it. Running magus inside a temp or
+  scratchpad COPY of the tree is denied outright: the verdict would describe a
+  tree nobody ships, generated files land in the copy, the cache splits, and
+  duplicated spell sources trip MGS1002. A different workspace is `--root
+  <path>`; a pristine tree is a throwaway `git worktree`, not a copy.
 
 ## Rules
 
@@ -235,6 +260,23 @@ deliberately instead:
   subagent, and run mutating subagents isolated or serialized. Never a whole-tree
   git op (`stash`/`reset`/`checkout .`/`clean`) to verify a build - it wipes a
   concurrent agent's untracked work. See the magus-vcs skill.
+- Code that exists ONLY to keep older data, artifacts, or callers working carries a
+  `compat(until: <condition>):` comment, in the shape of the existing
+  `optimization:` prefix. Three things, or it is not auditable: what it supports,
+  the condition that retires it, and how you would OBSERVE that dropping it is
+  safe. A date is not a condition - "no store still serves ed25519 envelopes" is.
+  Secondary sites say `compat: see <the primary site>` rather than restating it.
+  Use Go's `// Deprecated:` instead when the thing is an exported API callers
+  should stop using - staticcheck's SA1019 already enforces that one, and it is
+  the wrong marker for an internal branch nobody should stop reaching. Do not mark
+  code that merely LOOKS like a shim: resolving an old-width output ref is not
+  compat, because attempt ids share that shape and there is nothing to rip out.
+- `TODO`, `FIXME`, and `BUG` comments are WELCOME and stay. Do not add `godox` (or
+  any linter that reports them) to `.golangci.yml`: a gate that fails because a
+  note exists is red by design, and banning the note does not do the work. This is
+  a standing decision, not an oversight - the `compat(until:)` marker above is the
+  one comment convention worth enforcing, and even it is served better by a
+  structural check than by keyword matching.
 
 ## Working style
 

@@ -237,18 +237,35 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if err != nil {
 		return err
 	}
+	// Name the projects, with the count after them. "3 projects" told a reader how many
+	// but not which, so the first thing anyone did was re-run with --plan to find out.
+	// The count stays because it is the number a shard matrix is sized from.
 	var scopeLabel string
-	if len(targets) == 1 {
+	switch {
+	case len(targets) == 1:
 		scopeLabel = targets[0].Path
-	} else {
-		scopeLabel = fmt.Sprintf("%d projects", len(targets))
+	case len(targets) > 1:
+		paths := make([]string, 0, len(targets))
+		for _, t := range targets {
+			paths = append(paths, t.Path)
+		}
+		scopeLabel = fmt.Sprintf("%s (%d)", strings.Join(paths, " "), len(paths))
+	default:
+		scopeLabel = "0 projects"
 	}
-	m.LogScope(ctx, scopeLabel, source)
+	// The base goes on its own line rather than in the projects suffix. It is the third
+	// input that decides what runs - the same command against a different base is a
+	// different build - and burying it in parentheses after a project list made it the
+	// one header fact nobody read. source already names the VCS that produced it
+	// ("git diff vs origin/main"), which is what distinguishes a git base from a jj one.
+	m.LogScope(ctx, scopeLabel, "")
+	m.LogBase(ctx, source, "")
 	// Merge magus.yaml default_charms with any explicit charm on the target - the same
 	// as `magus run` does. Previously `affected` used only the explicit charms, so
 	// default_charms (e.g. rw) silently did NOT apply to `affected`, unlike `run`.
 	charms := withDefaultCharms(parsed.Charms, globalCfg.DefaultCharms, *noDefaultCharms)
 	m.LogCharms(ctx, strings.Join(charms, ","))
+	m.LogCache(ctx)
 	if len(targets) == 0 {
 		slog.InfoContext(ctx, "affected: no projects affected", slog.String("target", target))
 		return nil

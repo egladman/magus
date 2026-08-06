@@ -17,7 +17,9 @@ var overrideVerifyPubKey ed25519.PublicKey
 // release_sign() in magusfile.buzz (CD's publish job) to self-check a signature
 // against the same key baked into the magus binary that verifies self-updates.
 //
-// Usage: magus-utils verify <file> <sigfile>
+// Usage:
+//
+//	magus-utils verify <file> <sigfile>
 func runVerify(args []string) error {
 	if len(args) != 2 {
 		return fmt.Errorf("usage: magus-utils verify <file> <sigfile>")

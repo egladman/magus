@@ -140,28 +140,31 @@ func TestChildEnvReportsWithheldDaemonVars(t *testing.T) {
 	assert.Equal(t, []string{"MAGUS_DAEMON_ADDRESS"}, withheld, "re-injected var is not reported withheld")
 }
 
-func TestRunSuccess(t *testing.T) {
+func TestExecSuccess(t *testing.T) {
 	t.Parallel()
 	if _, err := exec.LookPath("true"); err != nil {
 		t.Skip("'true' not available")
 	}
-	assert.NoError(t, Run(context.Background(), t.TempDir(), "true"))
+	_, err := Exec(context.Background(), "true", nil, ExecOptions{Dir: t.TempDir(), Quiet: true})
+	assert.NoError(t, err)
 }
 
-func TestRunFailure(t *testing.T) {
+func TestExecFailure(t *testing.T) {
 	t.Parallel()
 	if _, err := exec.LookPath("false"); err != nil {
 		t.Skip("'false' not available")
 	}
-	assert.Error(t, Run(context.Background(), t.TempDir(), "false"), "want non-nil exit error")
+	_, err := Exec(context.Background(), "false", nil, ExecOptions{Dir: t.TempDir(), Quiet: true})
+	assert.Error(t, err, "want non-nil exit error")
 }
 
-func TestRunContextCancel(t *testing.T) {
+func TestExecContextCancel(t *testing.T) {
 	t.Parallel()
 	if _, err := exec.LookPath("sleep"); err != nil {
 		t.Skip("'sleep' not available")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	assert.Error(t, Run(ctx, t.TempDir(), "sleep", "60"), "Run with cancelled context should return an error")
+	_, err := Exec(ctx, "sleep", []string{"60"}, ExecOptions{Dir: t.TempDir(), Quiet: true})
+	assert.Error(t, err, "a cancelled context should surface an error")
 }

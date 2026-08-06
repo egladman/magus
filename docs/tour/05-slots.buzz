@@ -1,3 +1,7 @@
+// title: Slots: taming a greedy target
+// desc: A target starts with one slot; reserve more so a parallel tool cannot starve the rest.
+// doc: concepts/operations|Operations
+//
 // Slots: keeping a greedy target from eating the machine. magus runs targets in
 // parallel, and every target starts with ONE slot - it counts as a single unit
 // of a fixed budget (roughly your core count). That default is a lie for a tool

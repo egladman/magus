@@ -611,50 +611,35 @@ func TestPrettyHandlerRendersStatusGatesEmission(t *testing.T) {
 		"a terminal-backed handler does")
 }
 
-// TestPrettyHandlerSuppressesInspectHintOnCI covers the friction an output
-// ref creates in a job log: it addresses a blob in the local cache of an
-// ephemeral runner, so the command can never work for the person reading
-// it, while the failing output is already dumped inline above.
-func TestPrettyHandlerSuppressesInspectHintOnCI(t *testing.T) {
-	t.Setenv("CI", "true")
+// TestPrettyHandlerPrintsInspectHintEverywhere pins the reversal portable refs
+// earned. The hint used to be suppressed on CI because a ref addressed a blob in
+// the local cache of the machine that minted it, so pasting the command off an
+// ephemeral runner could only fail. A ref is now a truncation of the cache key,
+// so it means the same thing on every machine, and a reader who cannot resolve
+// it gets the target that would produce it or a --publish route to the bytes.
+// CI is where a ref is most often read, so CI is where the hint matters most.
+func TestPrettyHandlerPrintsInspectHintEverywhere(t *testing.T) {
+	for name, ci := range map[string]string{"on CI": "true", "off CI": ""} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("CI", ci)
 
-	var buf bytes.Buffer
-	h := newPrettyHandler(&buf, slog.LevelInfo, plainProbe{})
-	require.True(t, h.onCI, "the handler must notice it is on CI")
+			var buf bytes.Buffer
+			h := newPrettyHandler(&buf, slog.LevelInfo, plainProbe{})
+			require.NoError(t, h.Handle(context.Background(), buildRecord(
+				"cache.error",
+				slog.String("project", "api"),
+				slog.String("target", "build"),
+				slog.Int64("duration", int64(5*time.Millisecond)),
+				slog.String("error", "boom"),
+				slog.String("ref", "outdeadbeef"),
+			)))
 
-	require.NoError(t, h.Handle(context.Background(), buildRecord(
-		"cache.error",
-		slog.String("project", "api"),
-		slog.String("target", "build"),
-		slog.Int64("duration", int64(5*time.Millisecond)),
-		slog.String("error", "boom"),
-		slog.String("ref", "outdeadbeef"),
-	)))
-
-	out := buf.String()
-	assert.Contains(t, out, "output: outdeadbeef", "the ref stays: it correlates with the journal")
-	assert.NotContains(t, out, "magus query output",
-		"a command that cannot work here must not be printed")
-	assert.Contains(t, out, "reproduce: magus run build api",
-		"reproduce still works anywhere, so it stays")
-}
-
-func TestPrettyHandlerKeepsInspectHintOffCI(t *testing.T) {
-	t.Setenv("CI", "")
-
-	var buf bytes.Buffer
-	h := newPrettyHandler(&buf, slog.LevelInfo, plainProbe{})
-	require.False(t, h.onCI)
-
-	require.NoError(t, h.Handle(context.Background(), buildRecord(
-		"cache.error",
-		slog.String("project", "api"),
-		slog.String("target", "build"),
-		slog.Int64("duration", int64(5*time.Millisecond)),
-		slog.String("error", "boom"),
-		slog.String("ref", "outdeadbeef"),
-	)))
-	assert.Contains(t, buf.String(), "inspect: magus query output outdeadbeef")
+			out := buf.String()
+			assert.Contains(t, out, "output: outdeadbeef", "the ref correlates with the journal")
+			assert.Contains(t, out, "inspect: magus query output outdeadbeef")
+			assert.Contains(t, out, "reproduce: magus run build api")
+		})
+	}
 }
 
 // remoteSuffix decides whether a step's line gains a "remote" qualifier. The whole value

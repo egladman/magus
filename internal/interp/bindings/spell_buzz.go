@@ -61,7 +61,7 @@ func loadBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells
 	// it, and NewSpell takes options rather than a descriptor.
 	//
 	// Omitting them was a silent, three-way capability loss for every
-	// workspace-local spell: the descriptor carried mgs_getVersionCommand,
+	// workspace-local spell: the descriptor carried mgs_getVersionProbe,
 	// mgs_getLanguage and mgs_isOpaque faithfully, and none of them reached the
 	// registered spell. A declared version probe therefore never ran and never
 	// entered the cache key, so a local spell's toolchain could drift with nothing
@@ -70,12 +70,7 @@ func loadBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells
 	// all of this, which is why built-in spells were unaffected and the gap stayed
 	// invisible.
 	var extra []spells.Option
-	if len(spec.VersionCmd) > 0 {
-		extra = append(extra, spells.WithVersionProbe(newVersionProbe(spec.VersionCmd)))
-	}
-	for tool, argv := range spec.VersionCmds {
-		extra = append(extra, spells.WithVersionProbeNamed(tool, newVersionProbe(argv)))
-	}
+	extra = append(extra, spells.WithTools(spec.Tools), spells.WithVersionProber(versionProber))
 	if spec.Language != "" {
 		extra = append(extra, spells.WithLanguage(spec.Language))
 	}
@@ -140,7 +135,7 @@ func spellSearchPaths(roots ...string) []string {
 func newBuzzSpellInvoker(spec spells.Descriptor, src string) func(context.Context, spells.InvokeRequest) (any, error) {
 	return func(ctx context.Context, req spells.InvokeRequest) (any, error) {
 		if _, ok := spec.Ops[req.Target]; ok {
-			return dispatchOp(ctx, spec.Ops, req)
+			return dispatchOp(ctx, spec.Ops, spec.Tools, req)
 		}
 		return callBuzzSpellFunc(ctx, src, req.Target, req)
 	}

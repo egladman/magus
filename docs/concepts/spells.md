@@ -213,7 +213,7 @@ The full-command convention is enforced even for streamlined toolchains like Go,
 > For the full contract - every `mgs_` function, the built-in versus workspace-local
 > constraint, and the provider variants - see [Writing a spell](../guides/authoring-spells.md).
 
-A spell file exposes the spell contract as `mgs_`-prefixed functions: the required `mgs_getName`, plus optional `mgs_listRequiredGlobs`, `mgs_listProvidedGlobs`, `mgs_listClaimedGlobs`, `mgs_listIgnoreDirs`, `mgs_getVersionCommand`, `mgs_isOpaque`, and `mgs_listTargets`.
+A spell file exposes the spell contract as `mgs_`-prefixed functions: the required `mgs_getName`, plus optional `mgs_listRequiredGlobs`, `mgs_listProvidedGlobs`, `mgs_listClaimedGlobs`, `mgs_listIgnoreDirs`, `mgs_getVersionProbe`, `mgs_isOpaque`, and `mgs_listTargets`.
 
 MGS functions are discovery-time declarations: they take no arguments and must be
 pure, because Magus calls them before it has selected a target or started an

@@ -9,6 +9,7 @@
 //
 // Each subcommand reads a Go or Buzz source of truth and emits its mirror; none
 // is ever linked into the magus binary.
+
 package main
 
 import (
@@ -20,6 +21,8 @@ import (
 // and writes the derived artifact; see the per-subcommand file for the details.
 var scribes = map[string]func(args []string) error{
 	"types":              runTypes,
+	"enums":              runEnums,
+	"boundarylist":       runBoundaryList,
 	"buzzobjects":        runBuzzObjects,
 	"moduledecls":        runModuleDecls,
 	"bindings":           runBindings,

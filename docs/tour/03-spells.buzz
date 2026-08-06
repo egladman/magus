@@ -1,3 +1,7 @@
+// title: Spells: bind a real toolchain
+// desc: Bind a real toolchain (Go, TypeScript, Docker) as cached, kebab-case ops.
+// doc: concepts/spells|Spells
+//
 // Spells bind a real toolchain to magus. Importing one gives you a handle whose
 // ops are cached, kebab-case targets: go-build, go-test, go-vet. Call an op by
 // indexing the handle with its name (the same name `magus run go-build` uses)

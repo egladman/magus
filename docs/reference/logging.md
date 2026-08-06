@@ -59,9 +59,13 @@ A failure prints more, because more is actionable:
   reproduce: magus run generate:rw docs
 ```
 
-The `inspect:` hint is omitted on CI. A reference addresses your local cache, so
-a command that cannot work where the log is read is worse than no hint; the
-reference itself stays, since it still correlates the failure with the run.
+The `inspect:` hint is omitted on CI. Refs are portable (the same inputs mint
+the same ref anywhere), but the ephemeral runner that printed one is usually
+gone by the time anyone reads the log, and its full output is already inline
+above the hint - a command that cannot work where the log is read is worse than
+no hint. The reference itself stays, since it still correlates the failure with
+the run, and `magus query output <ref>` still resolves it later from any
+machine whose cache holds a run of those exact inputs.
 
 Warnings surface here too, because they are things magus wants you to reconsider
 before they become failures: a charm no target declares (usually a typo), a

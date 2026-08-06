@@ -1,7 +1,20 @@
 ---
 title: GitHub Actions
-description: Wiring magus into GitHub Actions - the three actions magus publishes, a workflow that shards by affected project, remote caching over the Actions cache service, and the annotations and pull request advice that come with it.
-tags: [ci, github, actions, cache, remote-cache, sharding, affected, annotations]
+description: Wiring magus into GitHub Actions - the three actions magus publishes, how much belongs in YAML and how little, a workflow that shards by affected project, remote caching over the Actions cache service, and the annotations and pull request advice that come with it.
+tags:
+  [
+    ci,
+    github,
+    actions,
+    cache,
+    remote-cache,
+    sharding,
+    affected,
+    annotations,
+    workflow design,
+    permissions,
+    path filters,
+  ]
 ---
 
 # GitHub Actions
@@ -48,6 +61,67 @@ jobs:
 clone has none; `filter: blob:none` keeps the full history affordable by fetching file
 contents only when something reads them. See [CI checkout](ci.md) for why that pairing is
 the right default and what a shallow clone costs you instead.
+
+## What belongs in YAML
+
+That workflow is not a starting point you outgrow. It is the shape, and a repository ten
+times the size should still look close to it. The reason is the whole point of running a
+task orchestrator: the build graph already knows what to run, in what order, and what can
+be skipped. Every one of those decisions re-expressed in YAML is a second copy of
+something magus computes, and the second copy is the one that goes stale.
+
+So the rule is a short one. **A workflow contributes a trigger, a checkout, and
+credentials. Everything after that is a `magus run`.** When you find yourself adding a
+job, a matrix, an `if:`, or a path filter, check whether a target could carry it instead.
+
+### One trigger, one promise
+
+Give each workflow exactly one reason to run and one thing it is responsible for
+producing. The test is mechanical: if a job needs `if: github.event_name == ...` to work
+out which situation it is in, that file is two workflows wearing one hat, and every reader
+after you pays to disentangle them.
+
+magus's own repository settles on four, and the name says which is which:
+
+| file | runs on | ships |
+| --- | --- | --- |
+| `ci.yaml` | pull request, and main push | nothing |
+| `cd.yaml` | main push | docs site, per-commit container image |
+| `release.yaml` | `v*` tag | binaries and release images |
+| `nightly.yaml` | cron, manual | nothing |
+
+A tag build is a deliberate release, not continuous delivery, so it is not called `cd`.
+Name a workflow for what it promises, never for the ceremony around it.
+
+### Four ways this goes wrong
+
+These are the specific mistakes, in the order they are usually made.
+
+**Splitting a workflow to get a permission boundary.** This is the most tempting one,
+because it feels like security. It is not: `permissions:` is valid per job, so one file
+can hold a job with `packages: write` next to one with only `contents: read`. Splitting
+the file buys no isolation and costs you a duplicated checkout, toolchain install, and
+magus install in every copy. Scope permissions at the job. Split files by trigger.
+
+**A path filter instead of `affected`.** A filter is a hand-maintained list of every input
+to a build, and it fails silently: the day someone adds an input the list does not
+mention, the job stops running and nothing reports it. `magus affected` derives that set
+from declared sources, so it cannot fall behind the tree. Prefer paying a few minutes per
+push over a filter nobody will remember to update.
+
+**Pinning a released magus to build the repository that defines it.** A workflow that runs
+the last published release against this commit's magusfile cannot survive the window
+between a magusfile change and the release carrying it. magus's own docs deploy sat red on
+every push to main for two days for exactly this reason: the workspace renamed a built-in
+spell, and no published release knew the new name, so the deploy could not load the
+workspace at all. Build from the checkout with `source-path: .` when the repository is the
+one that defines magus. Pin a release when you are a consumer, and then only where a
+version skew is the thing you are deliberately measuring.
+
+**A non-blocking check on the pull request path.** If a job never blocks a merge and its
+answer does not change with the diff, running it per pull request pays repeatedly for
+information that only moves when something outside the branch does. Put it on a schedule,
+where a failure is a signal instead of a row everyone has learned to scroll past.
 
 ## Installing magus
 

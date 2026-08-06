@@ -9,30 +9,37 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestSpellVersionProbe covers the toolchain version-probe accessor: a spell
-// with no probe reports false and returns ("", nil); a spell with a probe
-// surfaces its result (and error) verbatim.
+// TestSpellVersionProbe covers the per-tool version accessor: a spell with no tools
+// reports false and returns ("", nil); a declared tool surfaces its probe result and
+// error verbatim, and one the spell never declared is simply absent.
 func TestSpellVersionProbe(t *testing.T) {
 	none := NewSpell("none")
-	assert.False(t, none.HasVersionProbe(), "HasVersionProbe should be false for a spell with no probe")
-	v, err := none.ProbeVersion(context.Background(), "/dir")
+	assert.False(t, none.HasVersionProbe(), "a spell with no tools declares no probe")
+	v, err := none.ProbeVersion(context.Background(), "go", "/dir")
 	assert.NoError(t, err)
 	assert.Empty(t, v)
 
-	probed := NewSpell("go", WithVersionProbe(func(_ context.Context, dir string) (string, error) {
-		return "ver@" + dir, nil
-	}))
-	assert.True(t, probed.HasVersionProbe(), "HasVersionProbe should be true for a spell with a probe")
-	v, err = probed.ProbeVersion(context.Background(), "/d")
+	probed := NewSpell("go",
+		WithTools(map[string]Tool{"go": {Probe: Command{Bin: "go", Args: []string{"version"}}}}),
+		WithVersionProber(func(_ context.Context, c Command, dir string) (string, error) {
+			return c.Bin + "@" + dir, nil
+		}))
+	assert.True(t, probed.HasVersionProbe())
+	v, err = probed.ProbeVersion(context.Background(), "go", "/d")
 	assert.NoError(t, err)
-	assert.Equal(t, "ver@/d", v)
+	assert.Equal(t, "go@/d", v)
+
+	// A tool the spell never declared spawns nothing rather than erroring.
+	v, err = probed.ProbeVersion(context.Background(), "rustc", "/d")
+	assert.NoError(t, err)
+	assert.Empty(t, v)
 
 	boom := errors.New("boom")
-	failing := NewSpell("rs", WithVersionProbe(func(_ context.Context, _ string) (string, error) {
-		return "", boom
-	}))
-	_, err = failing.ProbeVersion(context.Background(), "/d")
-	assert.ErrorIs(t, err, boom)
+	failing := NewSpell("rs",
+		WithTools(map[string]Tool{"rustc": {Probe: Command{Bin: "rustc", Args: []string{"--version"}}}}),
+		WithVersionProber(func(context.Context, Command, string) (string, error) { return "", boom }))
+	_, err = failing.ProbeVersion(context.Background(), "rustc", "/d")
+	assert.ErrorIs(t, err, boom, "a prober's error must propagate, not be swallowed")
 }
 
 func TestNewSpellAccessors(t *testing.T) {

@@ -1,3 +1,7 @@
+// title: Services: when two services are the same service
+// desc: Whether your test suite gets one Postgres or four comes down to what magus considers the same config.
+// doc: concepts/services|Services
+//
 // When two services are the same service. Step 9 said magus shares one instance across
 // everything that needs "the same config". Here is what that means, because the
 // answer decides whether your test suite gets one Postgres or four.
