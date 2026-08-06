@@ -61,6 +61,24 @@ enough; for shared vocabulary, author a spell whose handler returns a `Command` 
 a `Service` for a long-running process). `magus init spell` scaffolds one. See
 [spells.md](../concepts/spells.md) and the [authoring editor setup](../guides/editor.md).
 
+## What's the difference between "Diagnostics" and "Tool diagnostics"?
+
+[Diagnostics](diagnostics.md) (`MGSxxxx`) are magus's own coded errors - a magusfile
+that will not load, a sandbox violation. [Tool diagnostics](../concepts/tool-diagnostics.md)
+is a spell op declaring the format its tool prints findings in (`golangci-lint`,
+`cargo clippy`, ...), so a *tool's* failure reads as file/line/message instead of prose.
+Same underlying premise - errors are for humans - two different sources of them.
+
+## My op declares `diagnostics` but nothing shows up. What's wrong?
+
+Most likely the pattern (built-in `gnu`, or a `diagnosticPattern` regex) does not
+actually match what the tool prints, or a charm changed the tool's real output format
+without you knowing `diagnostics` still claims the old one. This degrades safely, not
+loudly: zero extracted findings falls back to the same prose excerpt magus always
+showed before this feature existed. Verify the pattern against real captured output
+(`spells/diagnostics_test.go`'s cases are all verbatim tool output, for exactly this
+reason) - see [Tool diagnostics](../concepts/tool-diagnostics.md#the-nuances).
+
 ## Why did two charms give me a warning about one being "overridden"?
 
 Two active charms edited the same argument, so one silently wins (by alphabetical

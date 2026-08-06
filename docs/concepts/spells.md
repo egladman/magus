@@ -91,7 +91,7 @@ Binding a spell contributes its `needs`/`claims`/`provides` to that project's ca
 
 An op is one of two declarative shapes, and the shape it returns is its **kind**:
 
-- A **command op** returns a `Command`: a `{bin, args, charms}` object naming a program on PATH, its argument vector, and any charm modifiers. magus forks it directly (no shell, no variable expansion) and runs it to completion. This is the default and the vast majority of ops.
+- A **command op** returns a `Command`: a `{bin, args, charms}` object naming a program on PATH, its argument vector, and any charm modifiers. magus forks it directly (no shell, no variable expansion) and runs it to completion. This is the default and the vast majority of ops. A `Command` can also declare `diagnostics`, the convention its tool prints findings in, so a failure reads as file/line/message instead of a wall of text - see [Tool diagnostics](tool-diagnostics.md).
 - A **service op** returns a `Service`, a long-running process. `command` (required) is the process; `readiness` (a probe polled until it exits 0, the Kubernetes exec-probe model) and `stop` (a graceful-shutdown command) are **optional**, as are `distinct` and `idle` (see [services.md](services.md)). A service run **directly** (`magus run dev`) is forked in the **foreground** and blocked on (Ctrl-C signals it). A service reached as a **dependency** (via `magus\needs`) is instead **supervised in the background**: started, gated on its readiness probe, and shared by configuration fingerprint so several dependents run one instance, and, when a daemon is running, kept warm across invocations. (`Service` is a distinct return type so the op's kind is inferred from what it returns.) A service op's target is **uncached**: magus never replays or snapshots it, so a re-run restarts the process instead of a cache hit doing nothing.
 
 Either way the op is declarative _data_, so its argv is charm-patchable, hashes into the cache key, and previews under `magus describe` without executing. The kind lives on the **op**, not the spell: one spell freely mixes command ops and service ops under one name (a `node` spell builds _and_ serves). Both shapes are static data, unlike the imperative two-op-kinds split magus removed; they differ only in lifecycle (run-to-completion vs long-running).
@@ -372,6 +372,7 @@ Read these spells under [`spells/`](https://github.com/egladman/magus/tree/HEAD/
 - [Operations](operations.md): the formal definition of an op and the Spell → Operation → Target work hierarchy.
 - [Anatomy of a magus Target](targets.md): the unit you _run_, and the CLI grammar for addressing it.
 - [Charms](charms.md): execution modifiers that spell ops and targets both honor.
+- [Tool diagnostics](tool-diagnostics.md): declaring the format a tool prints findings in, so a failure carries file/line instead of prose.
 - [Engines](engines.md): how a magusfile runs on the embedded Buzz VM and the `mgs_` spell contract.
 - [Spells (README)](../../README.md#spells): built-ins list, extending a built-in, and custom-spell best practices.
 - [`magus` module API](../reference/buzz/magus.md): `magus\project.register`, `magus\cache.remote`.

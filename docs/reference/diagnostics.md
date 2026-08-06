@@ -12,6 +12,10 @@ reasoning as the tool's job, not yours. Every diagnostic magus emits is a **poin
 coded error** with a name, a cause, and a resolution - designed for a human to act on,
 not for a machine to parse.
 
+This page is about magus's *own* errors. For the findings inside a *tool's* own output
+- what `golangci-lint` or `cargo clippy` printed when your code was wrong, not magus
+itself - see [Tool diagnostics](../concepts/tool-diagnostics.md).
+
 ## Anatomy of a diagnostic
 
 ```text
