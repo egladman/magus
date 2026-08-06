@@ -315,7 +315,7 @@ func CharmMove(_ context.Context, argv []string, anchor, to string) (map[string]
 	if err := destPointer(to); err != nil {
 		return nil, err
 	}
-	return charmResult(map[string]any{"op": spells.OpMove, "from": ptr(i), "path": to}), nil
+	return charmResult(map[string]any{"op": spells.OpMove, "fromPtr": ptr(i), "path": to}), nil
 }
 
 // CharmMoveFunc implements charm.move_func.
@@ -339,7 +339,7 @@ func CharmCopy(_ context.Context, argv []string, anchor, to string) (map[string]
 	if err := destPointer(to); err != nil {
 		return nil, err
 	}
-	return charmResult(map[string]any{"op": spells.OpCopy, "from": ptr(i), "path": to}), nil
+	return charmResult(map[string]any{"op": spells.OpCopy, "fromPtr": ptr(i), "path": to}), nil
 }
 
 // CharmCopyFunc implements charm.copy_func.

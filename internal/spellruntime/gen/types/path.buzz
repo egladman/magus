@@ -7,5 +7,6 @@
 
 export object Path {
     value: str = "",
+    base: str = "",
     isDir: bool = false,
 }

@@ -60,15 +60,15 @@ func TestCharmConstructors(t *testing.T) {
 	})
 	t.Run("move to front", func(t *testing.T) {
 		got, err := CharmMove(ctx, argv, "check", "/0")
-		assertCharm(wantCharm(map[string]any{"op": "move", "from": "/2", "path": "/0"}), got, err)
+		assertCharm(wantCharm(map[string]any{"op": "move", "fromPtr": "/2", "path": "/0"}), got, err)
 	})
 	t.Run("move to end", func(t *testing.T) {
 		got, err := CharmMove(ctx, argv, "run", "/-")
-		assertCharm(wantCharm(map[string]any{"op": "move", "from": "/0", "path": "/-"}), got, err)
+		assertCharm(wantCharm(map[string]any{"op": "move", "fromPtr": "/0", "path": "/-"}), got, err)
 	})
 	t.Run("copy to end", func(t *testing.T) {
 		got, err := CharmCopy(ctx, argv, "check", "/-")
-		assertCharm(wantCharm(map[string]any{"op": "copy", "from": "/2", "path": "/-"}), got, err)
+		assertCharm(wantCharm(map[string]any{"op": "copy", "fromPtr": "/2", "path": "/-"}), got, err)
 	})
 	t.Run("test guard", func(t *testing.T) {
 		got, err := CharmTest(ctx, argv, "check")
@@ -102,4 +102,25 @@ func TestCharmPath(t *testing.T) {
 	got, err = CharmPath(ctx, argv, "run")
 	require.NoError(t, err)
 	assert.Equal(t, "/0", got)
+}
+
+// The charm constructors, the decoder that reads them back, and the generated PatchOp
+// mirror must all spell the move/copy source the same way. They did not: the
+// constructors emitted "from" (the RFC 6902 / JSON name) while the mirror declared
+// fromPtr, because `from` is a reserved word in Buzz and no mirror can use it. Nothing
+// noticed, because nothing referenced the Buzz name - so a magusfile annotating a charm
+// would have read an empty field forever.
+func TestCharmMoveUsesTheBuzzFieldName(t *testing.T) {
+	got, err := CharmMove(context.Background(), []string{"a", "b", "c"}, "c", "/0")
+	require.NoError(t, err)
+
+	ops, ok := got["ops"].([]any)
+	require.True(t, ok, "a charm is {ops: [...]}")
+	require.Len(t, ops, 1)
+	op, ok := ops[0].(map[string]any)
+	require.True(t, ok)
+
+	assert.Equal(t, "/2", op["fromPtr"], "the source pointer is under the Buzz field name")
+	assert.NotContains(t, op, "from",
+		"`from` is reserved in Buzz, so a mirror can never declare it - emitting it means nothing can read it")
 }

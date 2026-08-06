@@ -10,9 +10,12 @@ type PatchOp struct {
 	Path  string `json:"path"`
 	Value string `json:"value,omitempty"`
 	// From is the move/copy source JSON Pointer. The Buzz field is named fromPtr
-	// because `from` is a reserved word in Buzz; the JSON stays "from" (RFC 6902).
-	// Only the host charm.move/copy constructors set it — the pure-Buzz core never
-	// does — so nothing references the Buzz name.
+	// because `from` is a reserved word in Buzz, so no mirror can declare it; the JSON
+	// stays "from" (RFC 6902). Everything on the Buzz side of the boundary - the charm
+	// constructors that emit it, the decoder that reads it back, and the mirror - uses
+	// fromPtr. They did not always agree: the constructors emitted "from", which the
+	// mirror said was called fromPtr, so an annotated charm would have read an empty
+	// field. Nothing caught it because nothing referenced the Buzz name.
 	From string `json:"from,omitempty" buzz:"fromPtr"`
 }
 
