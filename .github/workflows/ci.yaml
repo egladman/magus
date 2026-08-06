@@ -173,8 +173,12 @@ jobs:
       # assertion that actually failed. The full text is on disk in the run log, and
       # an ephemeral runner takes it to the grave unless it is uploaded. Without this
       # a red shard can only be diagnosed by guessing and re-running.
+      # failure() alone is not enough: a shard that is CANCELLED - the runner dying, an
+      # OOM kill, a superseded run - skips this step and takes the only explanation with
+      # it. That is exactly the case where the console said nothing useful, so the logs
+      # matter most precisely when the job did not fail in the ordinary way.
       - name: Upload magus run logs on failure
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: magus-logs-${{ matrix.shard }}
