@@ -253,7 +253,13 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	default:
 		scopeLabel = "0 projects"
 	}
-	m.LogScope(ctx, scopeLabel, source)
+	// The base goes on its own line rather than in the projects suffix. It is the third
+	// input that decides what runs - the same command against a different base is a
+	// different build - and burying it in parentheses after a project list made it the
+	// one header fact nobody read. source already names the VCS that produced it
+	// ("git diff vs origin/main"), which is what distinguishes a git base from a jj one.
+	m.LogScope(ctx, scopeLabel, "")
+	m.LogBase(ctx, source, "")
 	// Merge magus.yaml default_charms with any explicit charm on the target - the same
 	// as `magus run` does. Previously `affected` used only the explicit charms, so
 	// default_charms (e.g. rw) silently did NOT apply to `affected`, unlike `run`.

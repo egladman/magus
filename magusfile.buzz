@@ -838,7 +838,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
         var detail = "";
         if (changed.len() > 0) { detail = ": " + changed.join(", "); }
         throw "generate: regeneration changed generated files; re-run "
-            + "`magus run generate:rw` and commit" + detail;
+            + "`magus run generate:rw .` and commit" + detail;
     }
 }
 
@@ -1223,7 +1223,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     fs\writeFile(fs\join("assets", "coverage.svg"), badge\coverage("go coverage", percent: pct, radius: 3));
     if (ctx.has_charm("rw")) { return; }
     if (clean_before and vcs\isDirty([fs\join("assets", "coverage.svg")])) {
-        throw "test: assets/coverage.svg is stale; re-run `magus run test:rw` and commit the badge";
+        throw "test: assets/coverage.svg is stale; re-run `magus run test:rw .` and commit the badge";
     }
 }
 

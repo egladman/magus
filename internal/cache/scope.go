@@ -55,15 +55,14 @@ func (c *Cache) LogCache(ctx context.Context) {
 		slog.String("tier", tier), slog.String("mode", mode))
 }
 
-// LogBase emits the VCS comparison base a run's affected set was computed against, with
-// the VCS that produced it. It sits beside the projects and charms headers because it is
-// the third input that changes what runs: the same command against a different base is a
-// different build, and nothing in the output said which one you got.
+// LogBase emits what a run's affected set was compared against, beside the projects and
+// charms headers, because it is the third input that decides what runs: the same command
+// against a different base is a different build.
 //
-// The VCS name is parenthesised rather than encoded into the ref (a git:// URI or
-// similar) because no such scheme is standard across git, Mercurial and jj, and inventing
-// one would put a magus-only string where a reader expects a ref they can paste back into
-// their own VCS.
+// base already reads "git diff vs origin/main" - the VCS name in front of the ref, rather
+// than a git:// URI, because no such scheme is standard across git, Mercurial and jj and
+// inventing one would put a magus-only string where a reader expects a ref they can paste
+// straight back into their own VCS. vcs is accepted for a caller that has the two apart.
 func (c *Cache) LogBase(ctx context.Context, base, vcs string) {
 	if base == "" {
 		return
