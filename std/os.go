@@ -337,12 +337,20 @@ func runResult(ctx context.Context, name string, args []string, dir, label, cmd 
 			}
 			return types.ExecResult{}, fmt.Errorf("%s %s: %w", label, cmd, err)
 		}
-		// A cancelled run kills its in-flight children (run.KillGroup), and a process
-		// killed by a signal reports ExitCode() == -1. Rendering that as "exit -1" hides
-		// the cause and makes one real failure look like several: every sibling still
-		// running when the errgroup cancelled reports a bare exit -1 of its own, and the
-		// project that actually failed is buried among them.
-		if err != nil && errors.Is(err, context.Canceled) {
+		// ExitCode() is -1 for a process killed by a SIGNAL, never a real status, so
+		// "exit -1" is the one message here that tells a reader nothing. Go already put
+		// the reason in err ("signal: killed", or the cancellation) and this used to
+		// discard it, which is how one real failure surfaced as several mystery ones.
+		if res.Code == -1 && err != nil {
+			// SIGKILL is uncatchable, so the process itself can never explain this. On
+			// CI it is nearly always the OOM killer picking the largest RSS in the job,
+			// and the job then disappears with no other trace - name the suspicion here
+			// or nobody gets one.
+			if strings.Contains(err.Error(), "signal: killed") && !errors.Is(err, context.Canceled) {
+				return types.ExecResult{}, fmt.Errorf(
+					"%s %s: %w (SIGKILL: nothing in the process asked for this - on CI it is usually the OOM killer)",
+					label, cmd, err)
+			}
 			return types.ExecResult{}, fmt.Errorf("%s %s: %w", label, cmd, err)
 		}
 		return types.ExecResult{}, fmt.Errorf("%s %s: exit %d", label, cmd, res.Code)
