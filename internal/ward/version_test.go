@@ -62,3 +62,30 @@ func TestRequiredVersion(t *testing.T) {
 		assert.Contains(t, d.Error(), "not a valid semver constraint")
 	})
 }
+
+// A source build must satisfy any floor, including one naming a release that does not
+// exist yet. This is what makes a floor armable the moment the feature lands rather than
+// only after it ships - and shipping is exactly when the floor stops mattering.
+func TestRequiredVersion_SourceBuildIsNotBlocked(t *testing.T) {
+	for _, running := range []string{
+		"v0.3.0-286-ga899daa3",       // git describe: 286 commits past v0.3.0
+		"v0.3.0-286-ga899daa3-dirty", // ... with uncommitted changes
+		"unknown",                    // unstamped
+		"",                           // no version supplied at all
+	} {
+		t.Run(running, func(t *testing.T) {
+			assert.Nil(t, RequiredVersion(">= 99.0.0", running),
+				"a dev build is compiled from the workspace it runs, so it cannot lack a feature that workspace uses")
+		})
+	}
+}
+
+// The binary a floor exists to catch: a real release, built elsewhere and shipped, that
+// predates the feature the magusfile needs. Without the floor this is the build that
+// fails somewhere unrelated - or, for a silently-ignored argument, hangs.
+func TestRequiredVersion_ShippedReleaseBelowTheFloorIsRefused(t *testing.T) {
+	err := RequiredVersion(">= 0.4.0", "v0.3.1")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, types.WorkspaceNeedsNewerMagus)
+	assert.Contains(t, err.Error(), "v0.3.1", "the message names the build that is too old")
+}

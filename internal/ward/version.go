@@ -31,15 +31,31 @@ import (
 //     nothing to compare and the check passes. Same escape hatch the daemon
 //     adoption gate uses.
 //
-// An unstamped dev build (devVersionSentinel, "unknown") also passes: it is
-// typically NEWER than any release, and blocking local development against a floor
-// the working tree itself just raised would be exactly backwards.
+// A DEV BUILD also passes, in either spelling: the unstamped sentinel ("unknown") and
+// the git-describe form a source build carries ("v0.3.0-286-gabc123"). Both are newer
+// than the release they name, and blocking one against a floor the working tree itself
+// just raised is exactly backwards.
+//
+// The describe form used to be compared, and that made a floor for an UNRELEASED feature
+// unarmable. `git describe` says "286 commits past v0.3.0", but semver parses that as the
+// prerelease 0.3.0-286-gabc123, which orders BELOW 0.3.0 - the opposite of what the
+// string means. Stripping the prerelease recovers 0.3.0, so a floor naming the release
+// that will first carry the feature rejected every build made before that release was
+// tagged, including the source-path builds CI uses to exercise a magusfile change at the
+// commit that introduces it. The floor could only be raised AFTER the release, which is
+// precisely when it is no longer the thing anyone needed protecting from.
+//
+// Exempting it is not a hole. A source build is compiled FROM the workspace it then runs,
+// so it cannot lack a feature that workspace's magusfile uses - they are the same commit.
+// The binary a floor exists to catch is one built somewhere else and shipped: a release.
+// types.IsDevMagusVersion is the same test the drift classifier uses, so "what counts as
+// a dev build" has one answer.
 //
 // A malformed constraint is an error rather than a silent pass. A floor nobody can
 // parse protects nobody, and failing loudly on it is what keeps a typo from
 // reading as "no floor declared".
 func RequiredVersion(constraint, running string) *types.DiagnosticError {
-	if constraint == "" || running == "" || running == DevVersion {
+	if constraint == "" || running == "" || types.IsDevMagusVersion(running) {
 		return nil
 	}
 	c, err := semver.NewConstraint(constraint)
