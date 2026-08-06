@@ -700,9 +700,15 @@ func nameConvention(name string) string {
 // their own: static analysis or formatting a lesser model might carve out as its
 // own target. typecheck and type-check are both listed because they normalize to
 // different kebab forms (no word boundary vs. an explicit hyphen).
+// `security` is deliberately NOT here. It looks like a lint fragment and was listed as
+// one, which had magus advising against a target three of its own projects declare. A
+// scanner reads an advisory database that changes independently of the tree, so it needs
+// skip_cache; composing it into lint would spread that to every op lint runs and cost the
+// whole phase its caching. Different cache contract is a real phase boundary, which is
+// criterion 2 (Distinctness) in targets.md, not a naming preference.
 var bespokePhaseFragmentNames = map[string]bool{
 	"typecheck": true, "type-check": true, "vet": true,
-	"audit": true, "security": true, "style": true, "prettify": true,
+	"audit": true, "style": true, "prettify": true,
 }
 
 // checkBespokePhaseFragmentTargets is MGS1003: a target whose normalized name

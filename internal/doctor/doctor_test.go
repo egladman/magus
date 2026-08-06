@@ -222,14 +222,21 @@ func TestCheckBespokePhaseFragmentTargets(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun typeCheck(ctx: magus\\Context, _a: [str]) > void {}\n"})
 		require.Equal(t, types.DoctorAdvice, got.Status, got.Message)
 	})
-	t.Run("vet audit security style prettify all flagged", func(t *testing.T) {
+	t.Run("vet audit style prettify all flagged", func(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun vet(ctx: magus\\Context, _a: [str]) > void {}\n" +
 			"export fun audit(ctx: magus\\Context, _a: [str]) > void {}\n" +
-			"export fun security(ctx: magus\\Context, _a: [str]) > void {}\n" +
 			"export fun style(ctx: magus\\Context, _a: [str]) > void {}\n" +
 			"export fun prettify(ctx: magus\\Context, _a: [str]) > void {}\n"})
 		require.Equal(t, types.DoctorAdvice, got.Status, got.Message)
-		assert.Len(t, got.Details, 5)
+		assert.Len(t, got.Details, 4)
+	})
+
+	// security is NOT a fragment: a scanner reads an advisory database that changes
+	// independently of the tree, so it carries skip_cache, and composing it into lint
+	// would cost that whole phase its caching. magus's own projects declare one.
+	t.Run("security is not flagged", func(t *testing.T) {
+		got := run(map[string]string{"magusfile.buzz": "export fun security(ctx: magus\\Context, _a: [str]) > void {}\n"})
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 
 	// Two projects naming the same target are two separate decisions. Reporting
@@ -240,7 +247,7 @@ func TestCheckBespokePhaseFragmentTargets(t *testing.T) {
 		for _, dir := range []string{"web", "docs"} {
 			require.NoError(t, os.MkdirAll(filepath.Join(root, dir), 0o755))
 			require.NoError(t, os.WriteFile(filepath.Join(root, dir, "magusfile.buzz"),
-				[]byte("export fun security(ctx: magus\\Context, _a: [str]) > void {}\n"), 0o644))
+				[]byte("export fun vet(ctx: magus\\Context, _a: [str]) > void {}\n"), 0o644))
 		}
 		r := &runner{root: root}
 		got := r.checkBespokePhaseFragmentTargets([]*types.Project{
@@ -258,7 +265,7 @@ func TestCheckBespokePhaseFragmentTargets(t *testing.T) {
 	t.Run("an empty root still names the file", func(t *testing.T) {
 		root := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-			[]byte("export fun security(ctx: magus\\Context, _a: [str]) > void {}\n"), 0o644))
+			[]byte("export fun vet(ctx: magus\\Context, _a: [str]) > void {}\n"), 0o644))
 		r := &runner{} // no root, no workspace
 		got := r.checkBespokePhaseFragmentTargets([]*types.Project{{Path: ".", Dir: root}})
 		require.Equal(t, types.DoctorAdvice, got.Status, got.Message)
