@@ -239,29 +239,6 @@ func decodeCommand(spellName, opName string, o Obj) (spells.Command, error) {
 	return c, nil
 }
 
-// decodeVersionKey reads one cache-key declaration: what a probed tool's version
-// contributes to the key. Absent yields the zero value, which keys on the whole
-// version - so a spell that says nothing keeps the conservative default.
-//
-// An unrecognized `upTo` is NOT silently dropped. A spell claiming "major" and
-// getting exact keying would just look like a cache that never hits, with nothing
-// naming the typo; validation happens in Decode's caller so the error carries the
-// spell name.
-func decodeVersionKey(src Obj, key string) spells.VersionKey {
-	rec, ok := src.Obj(key)
-	if !ok {
-		return spells.VersionKey{}
-	}
-	out := spells.VersionKey{}
-	if c, ok := rec.Str("const"); ok {
-		out.Const = c
-	}
-	if u, ok := rec.Str("upTo"); ok {
-		out.UpTo = spells.VersionComponent(u)
-	}
-	return out
-}
-
 // validateTools reports the first unusable declaration in a decoded descriptor.
 // Separate from decoding so the error can name the spell, and so a caller that only
 // reads a descriptor (docs, graph extraction) is not forced to handle it.
@@ -272,7 +249,7 @@ func validateTools(m spells.Descriptor) error {
 		// required_version applies to its own floor.
 		if f := m.Tools[tool].Floor; f != "" {
 			if _, err := semver.NewConstraint(f); err != nil {
-				return fmt.Errorf("spell %q: tools[%q].floor %q is not a valid semver constraint: %v",
+				return fmt.Errorf("spell %q: tools[%q].floor %q is not a valid semver constraint: %w",
 					m.Name, tool, f, err)
 			}
 		}

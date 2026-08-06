@@ -261,7 +261,8 @@ func checkReady(ctx context.Context, tools map[string]spells.Tool, op spells.Op,
 		if cached == nil {
 			return nil
 		}
-		return cached.(error)
+		err, _ := cached.(error)
+		return err
 	}
 	out := probeUntilReady(ctx, probe, op.Bin, dir)
 	readinessMemo.Store(key, out)
@@ -660,7 +661,8 @@ func checkFloor(ctx context.Context, tools map[string]spells.Tool, op spells.Op,
 		if cached == nil {
 			return nil
 		}
-		return cached.(error)
+		err, _ := cached.(error)
+		return err
 	}
 	out := floorVerdict(ctx, t, op.Bin, dir)
 	readinessMemo.Store(key, out)
@@ -670,9 +672,12 @@ func checkFloor(ctx context.Context, tools map[string]spells.Tool, op spells.Op,
 func floorVerdict(ctx context.Context, t spells.Tool, tool, dir string) error {
 	raw, err := versionProber(ctx, t.Probe, dir)
 	if err != nil {
-		// Unprobeable is not too old. Failing here would turn a floor into a second
-		// way for a missing tool to break, with a worse message than MGS3003's.
-		return nil
+		// Unprobeable is not too old - those are different failures and this function
+		// answers only the second. A tool that is genuinely missing or broken still
+		// fails when dispatchOp forks it for real, right after this check; swallowing
+		// the error here only stops floorVerdict from mislabeling that failure as a
+		// version problem before the op gets a chance to report its own, accurate one.
+		return nil //nolint:nilerr // probe failure is not a floor violation; the real op exec still fails on a missing tool
 	}
 	got, ok := spells.ExtractVersion(raw)
 	if !ok {
@@ -680,27 +685,13 @@ func floorVerdict(ctx context.Context, t spells.Tool, tool, dir string) error {
 	}
 	c, err := semver.NewConstraint(t.Floor)
 	if err != nil {
-		return nil // validated at decode; a bad constraint gates nothing
+		return nil //nolint:nilerr // validated at decode; a bad constraint gates nothing
 	}
 	v, err := semver.NewVersion(got)
 	if err != nil || c.Check(v) {
-		return nil
+		return nil //nolint:nilerr // an unparseable probed version gates nothing rather than blocking the op
 	}
 	return types.DiagnosticErrorf(types.ToolTooOld,
 		"%s %s is older than this spell supports (%s). The op %q needs a newer one",
 		tool, got, t.Floor, tool)
-}
-
-func readinessOf(m spells.Descriptor) map[string]spells.Command {
-	var out map[string]spells.Command
-	for name, t := range m.Tools {
-		if t.Ready.Bin == "" {
-			continue
-		}
-		if out == nil {
-			out = map[string]spells.Command{}
-		}
-		out[name] = t.Ready
-	}
-	return out
 }

@@ -39,7 +39,7 @@ func TestSpellVersionProbe(t *testing.T) {
 		WithTools(map[string]Tool{"rustc": {Probe: Command{Bin: "rustc", Args: []string{"--version"}}}}),
 		WithVersionProber(func(context.Context, Command, string) (string, error) { return "", boom }))
 	_, err = failing.ProbeVersion(context.Background(), "rustc", "/d")
-
+	assert.ErrorIs(t, err, boom, "a prober's error must propagate, not be swallowed")
 }
 
 func TestNewSpellAccessors(t *testing.T) {

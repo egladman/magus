@@ -14,6 +14,7 @@
 // what IS magus's: which types cross (boundaryTypes), which named-string types are
 // registered enums (boundaryEnums), and what each is called on the far side
 // (buzzNameFor), handed over as the Namer and EnumType.
+
 package main
 
 import (

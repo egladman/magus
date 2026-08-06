@@ -33,7 +33,7 @@ func TestReadinessResolvesThroughOpBin(t *testing.T) {
 	d := spellruntime.Builtins()["docker"]
 	for name, op := range d.Ops {
 		gated := d.Tools[op.Command.Bin].Ready.Bin != ""
-		if op.Command.Bin == "docker" {
+		if op.Bin == "docker" {
 			assert.True(t, gated, "op %q runs docker and should be gated", name)
 		}
 	}

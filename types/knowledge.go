@@ -316,9 +316,6 @@ type KnowledgeQueryOutput struct {
 	Links   []KnowledgeEdge  `json:"links"          yaml:"links"`
 }
 
-// KnowledgeEdgeRef is one edge seen from a focus node: the relation, the node on
-// the other end (with kind + label for readability), the direction relative to
-// the focus, and the edge's provenance.
 // EdgeDirection says which end of an edge the focus node sits on. Distinct from
 // types.Direction, the iota used for graph RENDERING order: this one is serialized,
 // so it is string-backed and its values are what a reader sees.
@@ -330,6 +327,9 @@ const (
 	EdgeIn  EdgeDirection = "in"
 )
 
+// KnowledgeEdgeRef is one edge seen from a focus node: the relation, the node on
+// the other end (with kind + label for readability), the direction relative to
+// the focus, and the edge's provenance.
 type KnowledgeEdgeRef struct {
 	Relation   string        `json:"relation"             yaml:"relation"`
 	Direction  EdgeDirection `json:"direction"            yaml:"direction"`

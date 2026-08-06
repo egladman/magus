@@ -154,9 +154,6 @@ type StatusConfig struct {
 	Sandbox bool `json:"sandbox" yaml:"sandbox"`
 }
 
-// StatusService is one long-running shared service the daemon is hosting, surfaced on
-// the status wire so a dashboard can show what is running and how many targets depend
-// on it. It mirrors service.ServiceStatus (the registry's introspection view).
 // ServiceState is where a supervised service sits in its lifecycle. Deliberately NOT
 // TargetRunState: the two share only "running" and "failed", and describe different
 // things - a service is idle when nothing needs it, a target run is cached when its
@@ -171,6 +168,9 @@ const (
 	ServiceFailed   ServiceState = "failed"
 )
 
+// StatusService is one long-running shared service the daemon is hosting, surfaced on
+// the status wire so a dashboard can show what is running and how many targets depend
+// on it. It mirrors service.ServiceStatus (the registry's introspection view).
 type StatusService struct {
 	ID         string       `json:"id" yaml:"id"`
 	Label      string       `json:"label,omitempty" yaml:"label,omitempty"`

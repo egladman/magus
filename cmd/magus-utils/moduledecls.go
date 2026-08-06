@@ -7,6 +7,7 @@
 // Without it every host call typed as Unknown, so a magusfile could read a field
 // no return carries and only find out at run time - which is the gap Ret.Object was
 // added to close and, until now, only the docs consumed.
+
 package main
 
 import (
