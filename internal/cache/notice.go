@@ -49,6 +49,15 @@ func extractNotices(path string) []string {
 // so a tail alone is often not actionable. Each matching line keeps one line of
 // context either side; windows are merged and capped. If no diagnostic is recognized,
 // fall back to the final lines, which still include the tool's terminal outcome.
+//
+// A canonicalFailureLine match is PINNED: it survives budget pressure that would
+// otherwise evict it. Without this, internal/cache's own test suite - which verifies
+// magus's failure reporting, so it is unusually dense with lines like "[fail]" and
+// "cause:" as EXPECTED, passing output - could produce enough incidental
+// diagnosticLine matches after the one real "--- FAIL: TestX" to push it out of a
+// 24-line budget entirely. That happened for real: a genuine race-condition bug in
+// RunAll's dependency barrier was invisible in the console excerpt for exactly this
+// reason, and was only found by pulling the full uploaded log.
 func failureExcerpt(data []byte, limit int) (excerpt []byte, omitted int) {
 	if limit <= 0 {
 		return data, 0
@@ -59,35 +68,71 @@ func failureExcerpt(data []byte, limit int) (excerpt []byte, omitted int) {
 	}
 
 	selected := make([]bool, len(lines))
-	count := 0
-	for i, line := range lines {
-		if !diagnosticLine.MatchString(line) {
-			continue
-		}
+	pinned := make([]bool, len(lines))
+	mark := func(i int, pin bool) {
 		for j := max(0, i-1); j <= min(len(lines)-1, i+1); j++ {
-			if !selected[j] {
-				selected[j] = true
-				count++
+			selected[j] = true
+			if pin {
+				pinned[j] = true
 			}
 		}
 	}
-	if count == 0 {
+	anyMatch := false
+	for i, line := range lines {
+		switch {
+		case canonicalFailureLine.MatchString(line):
+			mark(i, true)
+			anyMatch = true
+		case diagnosticLine.MatchString(line):
+			mark(i, false)
+			anyMatch = true
+		}
+	}
+	if !anyMatch {
 		start := max(0, len(lines)-limit)
 		return []byte(strings.Join(lines[start:], "\n") + "\n"), start
 	}
 
-	// Over budget, keep the LAST matches rather than the first. A tool prints its
-	// setup before it prints what went wrong, so filling the budget from the top
-	// spends it on whatever merely looked diagnostic early on and drops the actual
-	// failure - the one line the reader opened the output for.
-	var out []string
-	for i, line := range lines {
-		if selected[i] {
-			out = append(out, line)
+	// Budget goes to pinned lines first, unconditionally - a log with more pinned
+	// (structurally real) failures than the limit prints all of them rather than
+	// silently cutting some; that case is rare, and dropping a confirmed failure to
+	// stay under a display budget is the exact bug this exists to prevent. Whatever
+	// remains of the budget goes to the loosely matched lines, keeping the LAST ones:
+	// a tool prints its setup before it prints what went wrong, so filling the
+	// budget from the top spends it on whatever merely looked diagnostic early on.
+	pinnedCount, unpinnedCount := 0, 0
+	for i := range lines {
+		switch {
+		case pinned[i]:
+			pinnedCount++
+		case selected[i]:
+			unpinnedCount++
 		}
 	}
-	if len(out) > limit {
-		out = out[len(out)-limit:]
+	budget := limit - pinnedCount
+	if budget < 0 {
+		budget = 0
+	}
+	drop := unpinnedCount - budget
+
+	kept := make([]bool, len(lines))
+	skipped := 0
+	for i := range lines {
+		switch {
+		case pinned[i]:
+			kept[i] = true
+		case selected[i] && skipped < drop:
+			skipped++
+		case selected[i]:
+			kept[i] = true
+		}
+	}
+
+	var out []string
+	for i, line := range lines {
+		if kept[i] {
+			out = append(out, line)
+		}
 	}
 	return []byte(strings.Join(out, "\n") + "\n"), len(lines) - len(out)
 }
@@ -109,3 +154,13 @@ func failureExcerpt(data []byte, limit int) (excerpt []byte, omitted int) {
 // "2 errors occurred", "error:" and "--- FAIL:".
 var diagnosticLine = regexp.MustCompile(
 	`(?i)(^|[^\w/.\-])(errors?|fatal|panics?|fail(s|ed|ure|ures)?|mismatch|undefined|not found|cannot)($|[^\w/.\-])`)
+
+// canonicalFailureLine matches a test tool's own STRUCTURAL failure marker, as
+// opposed to diagnosticLine's loose keyword match. `go test` writes these for
+// exactly this purpose - "this is the one that failed" - so unlike an incidental
+// "fail"/"cause" elsewhere in the log, a match here is never budget-evicted; see
+// failureExcerpt. Anchored to (indented) line start so it cannot fire mid-sentence,
+// and covers a top-level or nested subtest ("--- FAIL: ", indented under its
+// parent), a panic, and go test's own terminal "FAIL" line (bare, or the
+// package-and-duration summary "FAIL\t<pkg>\t<dur>").
+var canonicalFailureLine = regexp.MustCompile(`^\s*(--- FAIL: |panic: |FAIL(\s|$))`)

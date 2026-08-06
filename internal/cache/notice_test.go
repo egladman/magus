@@ -1,6 +1,8 @@
 package cache
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -85,4 +87,33 @@ func TestFailureExcerptPrefersTheLastMatches(t *testing.T) {
 
 	assert.Contains(t, string(excerpt), "the real failure")
 	assert.NotContains(t, string(excerpt), "early noise")
+}
+
+// TestFailureExcerptPinsRealTestFailureAgainstLaterNoise is the real regression:
+// internal/cache's own test suite exercises magus's failure reporting, so it prints
+// many EXPECTED "[fail]"/"cause:" lines as part of passing tests. Every one of those
+// matches diagnosticLine exactly as well as a genuine "--- FAIL: TestX" does, and
+// they are not rare - a suite this size produces far more of them than the display
+// budget. Before canonicalFailureLine existed, whichever incidental matches
+// happened to come LAST evicted the one real failure, and that hid an actual
+// race-condition bug in RunAll's dependency barrier from the CI console entirely -
+// the bug was only found by pulling the full uploaded log. This reproduces that
+// shape (one real failure, far more than `limit` incidental matches after it) and
+// requires the real failure to survive regardless.
+func TestFailureExcerptPinsRealTestFailureAgainstLaterNoise(t *testing.T) {
+	t.Parallel()
+	var b strings.Builder
+	b.WriteString("--- FAIL: TestRunAllDependencyFailureCancelsDependents (0.00s)\n")
+	b.WriteString("    dep_barrier_test.go:283: Error Trace: B's fn ran even though its dependency A failed\n")
+	for i := 0; i < 40; i++ {
+		fmt.Fprintf(&b, "[fail] fixture%d (ran, 1ms)\n  cause: fixture%d boom\n", i, i)
+	}
+	b.WriteString("FAIL\n")
+
+	excerpt, omitted := failureExcerpt([]byte(b.String()), maxFailureExcerptLines)
+
+	assert.Positive(t, omitted, "the fixture noise alone is well over budget")
+	assert.Contains(t, string(excerpt), "TestRunAllDependencyFailureCancelsDependents",
+		"the real failure must survive even though 40 later matches would otherwise evict it")
+	assert.Contains(t, string(excerpt), "B's fn ran even though its dependency A failed")
 }
