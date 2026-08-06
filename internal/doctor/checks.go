@@ -1679,3 +1679,52 @@ func isHexByte(data []byte, i int) bool {
 	c := data[i]
 	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
 }
+
+// ciProviderCharms maps a CI provider's unmistakable env var to the charm whose reporter
+// speaks that provider's annotation format. GITHUB_ACTIONS is the only one magus ships a
+// charm for today; the others are listed so adding one is a single line here rather than
+// a new check, and so the message can stay silent about a provider magus cannot help yet.
+var ciProviderCharms = []struct{ env, provider, charm string }{
+	{"GITHUB_ACTIONS", "GitHub Actions", "gha"},
+}
+
+// checkCIProviderCharm is advice: a run inside a CI provider that magus ships a reporter
+// charm for should name it, or every tool reports in plain text the provider cannot
+// attach to a line of the diff.
+//
+// This exists because magus's own workflow forgot it. A failing lint scrolled past in a
+// log that magus then truncated, and the annotation that would have put it on the pull
+// request was never requested. The charm is opt-in by design - magus does not sniff the
+// environment and change a tool's output behind your back - so the cost of that choice is
+// a check that notices when you meant to opt in.
+//
+// ADVICE, never a gate: a workspace may deliberately want plain output (a log it parses
+// itself, a provider whose annotations it finds noisy), and a run that is merely
+// EXERCISING CI locally has the env var unset and is not doing anything wrong either.
+func (r *runner) checkCIProviderCharm(active []string) types.DoctorCheck {
+	const name = "CI provider charm"
+	for _, p := range ciProviderCharms {
+		if os.Getenv(p.env) == "" {
+			continue
+		}
+		if slices.Contains(active, p.charm) {
+			return types.DoctorCheck{
+				Name:    name,
+				Status:  types.DoctorOK,
+				Message: fmt.Sprintf("running on %s with the %s charm", p.provider, p.charm),
+			}
+		}
+		return types.DoctorCheck{
+			Name:   name,
+			Status: types.DoctorAdvice,
+			Message: fmt.Sprintf(
+				"running on %s without the %s charm; tool findings stay plain text instead of inline annotations - run `magus run ci:%s`",
+				p.provider, p.charm, p.charm),
+		}
+	}
+	return types.DoctorCheck{
+		Name:    name,
+		Status:  types.DoctorOK,
+		Message: "not running on a CI provider magus ships a reporter charm for",
+	}
+}

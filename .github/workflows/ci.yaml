@@ -164,7 +164,12 @@ jobs:
       - name: Run CI for shard
         uses: ./.github/actions/magus
         with:
-          command:  run ci --no-default-charms ${{ matrix.projects }}
+          # ci:gha, not bare ci. The gha charm swaps a tool's reporter to GitHub's
+          # inline annotation format, so a lint or test failure lands on the diff instead
+          # of scrolling past in a log magus then truncates. It survives the ci gate (only
+          # rw is stripped), and --no-default-charms drops the workspace default without
+          # touching an explicitly named one.
+          command:  run ci:gha --no-default-charms ${{ matrix.projects }}
           shard:    ${{ matrix.shard }}
           n-shards: ${{ needs.preflight.outputs.count }}
 

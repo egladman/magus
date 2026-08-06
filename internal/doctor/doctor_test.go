@@ -801,3 +801,27 @@ func TestCheckGraphBounds(t *testing.T) {
 		assert.Equal(t, types.DoctorFail, got.Status)
 	})
 }
+
+// TestCheckCIProviderCharm covers the gap that made magus's own CI output unreadable:
+// the run was on GitHub Actions and never asked for the annotation reporter.
+func TestCheckCIProviderCharm(t *testing.T) {
+	t.Run("advises when on a provider without its charm", func(t *testing.T) {
+		t.Setenv("GITHUB_ACTIONS", "true")
+		got := (&runner{}).checkCIProviderCharm(nil)
+		require.Equal(t, types.DoctorAdvice, got.Status, got.Message)
+		assert.Contains(t, got.Message, "ci:gha", "the message has to carry the fix")
+	})
+
+	t.Run("silent when the charm is active", func(t *testing.T) {
+		t.Setenv("GITHUB_ACTIONS", "true")
+		got := (&runner{}).checkCIProviderCharm([]string{"rw", "gha"})
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+	})
+
+	// A local run is not doing anything wrong, so it must not be nagged.
+	t.Run("silent off CI", func(t *testing.T) {
+		t.Setenv("GITHUB_ACTIONS", "")
+		got := (&runner{}).checkCIProviderCharm(nil)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+	})
+}
