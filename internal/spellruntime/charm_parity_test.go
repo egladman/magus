@@ -54,14 +54,17 @@ func TestCharmBuzzParityWithHost(t *testing.T) {
 		require.NoError(t, s.Exec(ctx, "final __r = "+expr+";"), "eval %s", expr)
 		return bindinggen.ValueToAny(s.GetGlobal("__r"))
 	}
-	ok := func(v map[string]any, err error) any {
+	// spells.Charm now, not map[string]any: the host constructors return the typed value
+	// the Buzz side already mirrored. norm marshals both sides through spells.Charm
+	// anyway, so the comparison is unchanged.
+	ok := func(v spells.Charm, err error) any {
 		t.Helper()
 		require.NoError(t, err)
 		return v
 	}
-	// norm collapses both shapes — the host's map[string]any and the Buzz Charm
-	// object's field map — through spells.Charm, so the comparison ignores whether an
-	// empty value/from key is present (the object carries all fields; the host omits
+	// norm collapses both shapes - the host's spells.Charm and the Buzz Charm object's
+	// field map - through spells.Charm, so the comparison ignores whether an empty
+	// value/fromPtr key is present (the object carries all fields; the host omits
 	// empties) and pins only the RFC 6902 content.
 	norm := func(v any) spells.Charm {
 		t.Helper()

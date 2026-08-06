@@ -2,34 +2,34 @@ package std
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
+	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// op builds the expected op map a constructor emits.
-func op(fields ...string) map[string]any {
-	m := map[string]any{"op": fields[0], "path": fields[1]}
+// op builds the expected op a constructor emits. Typed, like what it compares against:
+// the constructors return spells.Charm rather than hand-built maps, so a field the test
+// misspells is now a compile error instead of a silently-absent key.
+func op(fields ...string) spells.PatchOp {
+	o := spells.PatchOp{Op: fields[0], Path: fields[1]}
 	if len(fields) > 2 {
-		m["value"] = fields[2]
+		o.Value = fields[2]
 	}
-	return m
+	return o
 }
 
-func wantCharm(ops ...map[string]any) map[string]any {
-	arr := make([]any, len(ops))
-	for i := range ops {
-		arr[i] = ops[i]
-	}
-	return map[string]any{"ops": arr}
+func wantCharm(ops ...spells.PatchOp) spells.Charm {
+	return spells.Charm{Ops: ops}
 }
 
 func TestCharmConstructors(t *testing.T) {
 	ctx := context.Background()
 	argv := []string{"run", "ruff", "check", "."}
 
-	assertCharm := func(want map[string]any, got map[string]any, err error) {
+	assertCharm := func(want spells.Charm, got spells.Charm, err error) {
 		require.NoError(t, err)
 		assert.Equal(t, want, got)
 	}
@@ -56,23 +56,23 @@ func TestCharmConstructors(t *testing.T) {
 	})
 	t.Run("drop", func(t *testing.T) {
 		got, err := CharmDrop(ctx, argv, "check")
-		assertCharm(wantCharm(map[string]any{"op": "remove", "path": "/2"}), got, err)
+		assertCharm(wantCharm(spells.PatchOp{Op: "remove", Path: "/2"}), got, err)
 	})
 	t.Run("move to front", func(t *testing.T) {
 		got, err := CharmMove(ctx, argv, "check", "/0")
-		assertCharm(wantCharm(map[string]any{"op": "move", "fromPtr": "/2", "path": "/0"}), got, err)
+		assertCharm(wantCharm(spells.PatchOp{Op: "move", From: "/2", Path: "/0"}), got, err)
 	})
 	t.Run("move to end", func(t *testing.T) {
 		got, err := CharmMove(ctx, argv, "run", "/-")
-		assertCharm(wantCharm(map[string]any{"op": "move", "fromPtr": "/0", "path": "/-"}), got, err)
+		assertCharm(wantCharm(spells.PatchOp{Op: "move", From: "/0", Path: "/-"}), got, err)
 	})
 	t.Run("copy to end", func(t *testing.T) {
 		got, err := CharmCopy(ctx, argv, "check", "/-")
-		assertCharm(wantCharm(map[string]any{"op": "copy", "fromPtr": "/2", "path": "/-"}), got, err)
+		assertCharm(wantCharm(spells.PatchOp{Op: "copy", From: "/2", Path: "/-"}), got, err)
 	})
 	t.Run("test guard", func(t *testing.T) {
 		got, err := CharmTest(ctx, argv, "check")
-		assertCharm(wantCharm(map[string]any{"op": "test", "path": "/2", "value": "check"}), got, err)
+		assertCharm(wantCharm(spells.PatchOp{Op: "test", Path: "/2", Value: "check"}), got, err)
 	})
 }
 
@@ -113,14 +113,17 @@ func TestCharmPath(t *testing.T) {
 func TestCharmMoveUsesTheBuzzFieldName(t *testing.T) {
 	got, err := CharmMove(context.Background(), []string{"a", "b", "c"}, "c", "/0")
 	require.NoError(t, err)
+	require.Len(t, got.Ops, 1)
+	assert.Equal(t, "/2", got.Ops[0].From, "the move source is the anchor's index")
 
-	ops, ok := got["ops"].([]any)
-	require.True(t, ok, "a charm is {ops: [...]}")
-	require.Len(t, ops, 1)
-	op, ok := ops[0].(map[string]any)
+	// The name the Buzz side sees comes from the struct tag, which is the point of
+	// returning spells.Charm rather than a hand-built map: the constructors used to emit
+	// "from" while the generated mirror declared fromPtr, and nothing reconciled them.
+	// A tag cannot drift from the field it is written on.
+	f, ok := reflect.TypeFor[spells.PatchOp]().FieldByName("From")
 	require.True(t, ok)
-
-	assert.Equal(t, "/2", op["fromPtr"], "the source pointer is under the Buzz field name")
-	assert.NotContains(t, op, "from",
-		"`from` is reserved in Buzz, so a mirror can never declare it - emitting it means nothing can read it")
+	assert.Equal(t, "fromPtr", f.Tag.Get("buzz"),
+		"`from` is reserved in Buzz, so the mirror and the encoder must both say fromPtr")
+	assert.Equal(t, "from,omitempty", f.Tag.Get("json"),
+		"the wire form stays RFC 6902's `from`")
 }
