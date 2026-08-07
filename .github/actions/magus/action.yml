@@ -88,6 +88,39 @@ runs:
         case "$INPUT_COMMAND" in
           *[\;\&\|\`\$\(\)\<\>\!\\]*) echo "::error::magus action: command contains shell metacharacters: $INPUT_COMMAND"; exit 1 ;;
         esac
+        # Headroom trace, backgrounded INSIDE this step on purpose.
+        #
+        # A shard has repeatedly ended as CANCELLED with "The runner has received a
+        # shutdown signal" and no diagnostics whatsoever - the runner going away
+        # mid-run, not a target failing. Nothing outlives that: every later step
+        # reports conclusion=skipped, so an artifact upload cannot collect anything
+        # however its `if:` is written, and magus never reaches the end of the
+        # invocation where it prints the failure summary. The only channel that
+        # survives is this log, because Actions streams it live - so the trace goes
+        # to stdout, and it has to be started here rather than in its own step,
+        # because a background writer loses its pipe once the step that spawned it
+        # returns.
+        #
+        # It watches what a concurrency limit cannot. magus sizes itself
+        # min(NumCPU,8) and `go test -p` follows GOMAXPROCS, so both scale on CORES,
+        # while the two plausible killers scale on neither: the race detector's
+        # shadow memory, and gopherbuzz's string intern table, which has no eviction
+        # anywhere in the tree and grows for the life of the process. Disk is here
+        # too, since a full disk takes a runner down just as quietly.
+        # Plain stdout, not ::debug::, deliberately: a debug line is invisible unless
+        # someone re-runs with debug logging on, and the whole point is to catch the
+        # NEXT occurrence rather than ask for one. One line per 30s is ~14 lines on a
+        # 7-minute shard.
+        ( while true; do
+            printf '[headroom] %s mem_avail=%sMB disk_avail=%sMB\n' \
+              "$(date -u +%H:%M:%S)" \
+              "$(free -m 2>/dev/null | awk '/^Mem:/{print $7}')" \
+              "$(df -m --output=avail / 2>/dev/null | tail -1 | tr -d ' ')"
+            sleep 30
+          done ) &
+        headroom=$!
+        trap 'kill "$headroom" 2>/dev/null || true' EXIT
+
         # Word-split is intentional here: INPUT_COMMAND is a space-separated argv.
         # shellcheck disable=SC2086
         magus $INPUT_COMMAND
