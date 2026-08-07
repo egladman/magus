@@ -85,6 +85,26 @@ func stripFragment(rawURL string) string {
 // Spaces are encoded as %20 (via url.PathEscape) rather than '+' (QueryEscape)
 // because the browser decodes the fragment with decodeURIComponent, which turns
 // %20 back into a space but leaves '+' as a literal plus character.
+// magnitude renders a count rounded down to its leading digit ("50+", "200+"), so a
+// routing index conveys real size without churning on every increment.
+//
+// Leading digit rather than bare order of magnitude: collapsing 273 to "100+" reads the
+// same as 136 and under-states it, which loses the thing the column exists to convey.
+// Rounding to 200+ keeps that while still absorbing nine increments out of ten - the
+// count moves constantly, the bucket only when it crosses a ten (or a hundred, or a
+// thousand, since the step scales with the number). Under 10 it prints exactly: that
+// range is stable and is where precision actually reads differently.
+func magnitude(n int) string {
+	if n < 10 {
+		return strconv.Itoa(n)
+	}
+	step := 10
+	for n/step >= 10 {
+		step *= 10
+	}
+	return strconv.Itoa((n / step) * step) + "+"
+}
+
 func queryCell(query, explorerURL string) string {
 	if explorerURL == "" {
 		return md.Code(query)
@@ -224,13 +244,20 @@ func writeRouting(b *md.Builder, r types.KnowledgeRouting, explorerURL string) {
 		{Code: "magus graph export -o json", Note: "the whole graph (MCP: magus_query, magus_explain, magus_path)"},
 	})
 
+	// Magnitude, not an exact count. An exact count moved whenever any node was added
+	// anywhere, which churned this file constantly and buried real changes; it also
+	// contradicted the header two lines above, which tells the reader to trust `magus
+	// query` over this file. Magnitude keeps the one thing worth reading - whether a kind
+	// holds ten things or a thousand - while its boundaries are exponentially spaced, so
+	// crossings are exponentially rarer than increments. Empty kinds are already omitted
+	// upstream, so a row's presence is the "is there anything here" signal.
 	kindRows := make([][]string, 0, len(r.Kinds))
 	for _, k := range r.Kinds {
 		kindRows = append(kindRows, []string{
-			k.Kind, strconv.Itoa(k.Count), queryCell("magus query kind:"+k.Kind, explorerURL), md.Codes(k.Anchors),
+			k.Kind, magnitude(k.Count), queryCell("magus query kind:"+k.Kind, explorerURL), md.Codes(k.Anchors),
 		})
 	}
-	b.Table([]string{"Kind", "Count", "List them", "Anchors (most connected)"},
+	b.Table([]string{"Kind", "Size", "List them", "Anchors (most connected)"},
 		[]md.Align{md.Left, md.Right}, kindRows)
 
 	projectRows := make([][]string, 0, len(r.Projects))

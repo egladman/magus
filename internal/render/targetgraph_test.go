@@ -402,3 +402,22 @@ func TestWriteTargetGraphMarkdownRenderDeterministic(t *testing.T) {
 	require.NoError(t, WriteTargetGraphMarkdown(&second, out, routing, explorerURL, []string{"rw"}))
 	assert.Equal(t, first.String(), second.String(), "WriteTargetGraphMarkdown output is not deterministic")
 }
+
+// TestMagnitude pins the bucketing MAGUS.md's Size column depends on. The column exists
+// to convey rough size without churning: an exact count moved on every node added
+// anywhere, which buried real changes in the diff. Leading-digit rounding absorbs nine
+// increments out of ten while keeping 273 distinguishable from 136 - a bare order of
+// magnitude would collapse both to "100+" and under-state the larger.
+func TestMagnitude(t *testing.T) {
+	for _, c := range []struct {
+		in   int
+		want string
+	}{
+		{0, "0"}, {9, "9"}, // under ten prints exactly
+		{10, "10+"}, {57, "50+"}, {59, "50+"}, {92, "90+"}, {99, "90+"},
+		{136, "100+"}, {273, "200+"}, {999, "900+"},
+		{1000, "1000+"}, {2461, "2000+"},
+	} {
+		assert.Equalf(t, c.want, magnitude(c.in), "magnitude(%d)", c.in)
+	}
+}
