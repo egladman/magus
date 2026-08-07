@@ -1,5 +1,5 @@
 {
-  "//": "Type-check gate for the agent-hook templates (the OpenCode plugin). Same shape as the console/docs/textsearch TS gates: nothing is compiled here, the plugin ships as source that OpenCode loads, so this only drives `tsc --noEmit`. @opencode-ai/plugin supplies the Plugin type; Bun.spawn comes from bun-types, which the plugin's runtime is.",
+  "//": "Type-check gate for the agent-hook templates (the OpenCode plugin). Same shape as the console/docs/textsearch TS gates: nothing is compiled here, the plugin ships as source that OpenCode loads, so this only drives `tsc --noEmit`. @opencode-ai/plugin supplies the Plugin type; Bun.spawn comes from bun-types, which the plugin's runtime is. allowImportingTsExtensions is on because opencode-plugin.test.ts imports ./opencode-plugin.ts by its real extension, which is what node's type stripping needs to run the test with no build step; it is safe under noEmit, since nothing is rewritten.",
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
@@ -11,6 +11,7 @@
     "checkJs": false,
     "skipLibCheck": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "forceConsistentCasingInFileNames": true,
     "types": ["bun-types"]
   },

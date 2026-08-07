@@ -3,7 +3,7 @@ title: magus-vcs
 description: "Safe git operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs]
 skill_full_bytes: 6635
-skill_simple_bytes: 4527
+skill_simple_bytes: 4856
 ---
 
 # magus-vcs
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `23` |
+| `agent-skill-version` | `26` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `ace009cb3627` |
+| `skill-content` | `50e5cf282e9c` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -87,8 +87,8 @@ CORRECT: note that `docs/gen/**` is a declared output of
   whose outputs were not committed fails there.
 - On merge conflicts, run `magus vcs resolve`. It settles every conflicted
   generated file at once, regenerates ONCE, and records the result, leaving only
-  the conflicts magus cannot settle for you. Never merge generated hunks by
-  hand. Do not reach for the merge driver instead: a VCS invokes a driver once per
+  the conflicts magus cannot settle for you. Never merge generated hunks by hand.
+  Do not reach for the merge driver instead: a VCS invokes a driver once per
   conflicted path and never invokes one at all for a file one side deleted, so the
   driver alone cannot finish the job.
 - `magus clean` removes declared outputs when you want a provably fresh
@@ -195,7 +195,8 @@ project and a role:
 - `source` - matches a declared sources glob: it feeds cache keys and the
   affected set. This is the diff worth reading.
 - `unclaimed` - no project declares it: it affects no target. Check the VCS
-  ignore rules (`git check-ignore -v <path>`).
+  ignore rules (`git check-ignore -v <path>`) - an unclaimed
+  un-ignored file is at risk of being lost.
 
 ## Rules for generated files
 
@@ -210,7 +211,9 @@ project and a role:
   them.
 - On merge conflicts, run `magus vcs resolve`. It settles every conflicted
   generated file at once, regenerates ONCE, and records the result, leaving only
-  the conflicts magus cannot settle for you.
+  the conflicts magus cannot settle for you. Never merge generated hunks by hand.
+  A merge driver alone cannot finish the job:
+  a VCS never invokes one for a file that one side deleted.
 - `magus clean` removes declared outputs when you want a provably fresh
   regeneration.
 
@@ -261,7 +264,9 @@ not another everyday CLI surface.
    everything (stray artifacts ride along); a hand-typed path list is not safer,
    since the first non-matching pathspec aborts the whole call. Confirm with
    `git diff --cached --stat`: every intended edit, renames included.
-5. Run `magus affected ci` before calling the work done.
+5. Run `magus affected ci` before calling the work done: it reaches projects you
+   never edited, and confirms HEAD builds - a partial commit that drops a rename
+   leaves HEAD broken.
 
 Never `git stash`, `git reset`, `git checkout .`, or `git clean` to "verify a
 build without committing." Build in place; a

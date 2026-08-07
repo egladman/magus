@@ -2,13 +2,13 @@
 title: magus-delegate-ultra
 description: "Plan and execute potentially expensive multi-agent work in a magus workspace as an acceptance-criteria loop, using affected shard plans and knowledge-graph evidence to assign collision-resistant edit units, coordinate nested delegation, and choose cost-appropriate effort tiers."
 tags: [agents, skills, magus-delegate-ultra]
-skill_full_bytes: 8447
-skill_simple_bytes: 6404
+skill_full_bytes: 8469
+skill_simple_bytes: 6526
 ---
 
 # magus-delegate-ultra
 
-Plan and execute potentially expensive multi-agent work in a magus workspace as an acceptance-criteria loop, using affected shard plans and knowledge-graph evidence to assign collision-resistant edit units, coordinate nested delegation, and choose cost-appropriate effort tiers. Use ONLY when the user explicitly names magus-delegate-ultra or explicitly requests graph-planned parallel delegation; never auto-trigger it for ordinary implementation or a vague request to work faster.
+Plan and execute potentially expensive multi-agent work in a magus workspace as an acceptance-criteria loop, using affected shard plans and knowledge-graph evidence to assign collision-resistant edit units, coordinate nested delegation, and choose cost-appropriate effort tiers. Use ONLY when the user names this skill, or asks in their own words for the work to be SPLIT ACROSS AGENTS - "fan this out", "run these in parallel", "use several subagents", "spin up an agent per package". Wanting the work faster, sooner, or more thorough is NOT that request: those are asks about the outcome, and this skill is a choice about the method, with a real cost. Never auto-trigger it on ordinary implementation.
 
 Install it, rather than copying from this page:
 
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `23` |
+| `agent-skill-version` | `26` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `ace009cb3627` |
+| `skill-content` | `50e5cf282e9c` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -44,9 +44,10 @@ The default: the steps plus the rationale for each.
 
 This skill is an explicit opt-in to potentially expensive multi-agent work.
 Its fan-out can consume substantially more model time than a single-agent session,
-especially when workers are allowed to delegate again. Do not activate it
-from a vague request to "work faster". Use it only when the user names
-`magus-delegate-ultra` or explicitly requests graph-planned parallel delegation.
+especially when workers are allowed to delegate again. Use it only when the user
+names it or asks for the work to be split across agents. Wanting it faster or more
+thorough is not that request: those ask about the outcome, this chooses the
+method.
 
 The root agent owns the goal, global budget, delegation topology, integration,
 and final verification. If the graph supports only one coherent edit unit, keep
@@ -102,8 +103,8 @@ descendants, their parent, effort tier, criteria, and owned paths. Descendants
 inherit the ancestor's forbidden paths and may subdivide only the ancestor's
 owned paths. Apply worker and cost caps globally, not once per parent.
 
-Keep one integration owner at the root even when the delegation tree
-is deep. A child may coordinate its descendants, but it may not accept changes
+Keep one integration owner at the root even when the delegation tree is deep.
+A child may coordinate its descendants, but it may not accept changes
 outside its own unit, relax top-level acceptance criteria, or hide additional
 fan-out from the root. Prefer a shallow tree unless a child has a genuinely
 separable area and enough context to partition it better than the root.
@@ -233,9 +234,9 @@ The same steps with the rationale withheld; the bar under the heading above show
 ````markdown
 # Cost-aware graph delegation
 
-This skill is an explicit opt-in to potentially expensive multi-agent work. Do not activate it
-from a vague request to "work faster". Use it only when the user names
-`magus-delegate-ultra` or explicitly requests graph-planned parallel delegation.
+This skill is an explicit opt-in to potentially expensive multi-agent work. Use it only when the user
+names it or asks for the work to be split across agents. Wanting it faster or more
+thorough is not that request.
 
 The root agent owns the goal, global budget, delegation topology, integration,
 and final verification. If the graph supports only one coherent edit unit, keep
@@ -274,6 +275,9 @@ report the proposed units to its parent. The root ledger must then record those
 descendants, their parent, effort tier, criteria, and owned paths. Descendants
 inherit the ancestor's forbidden paths and may subdivide only the ancestor's
 owned paths. Apply worker and cost caps globally, not once per parent.
+
+Keep one integration owner at the root even when the delegation tree is deep.
+A child coordinates its descendants but may not relax the root's criteria.
 
 ## Seed the partition with Magus
 

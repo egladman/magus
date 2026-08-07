@@ -22,7 +22,8 @@ project and a role:
   affected set. This is the diff worth reading.
 - `unclaimed` - no project declares it: it affects no target. Check the VCS
   ignore rules (`git check-ignore -v <path>`){{if .Full}} - build residue should be
-  ignored, and an unclaimed un-ignored file is at risk of being lost{{end}}.
+  ignored, and an unclaimed un-ignored file is at risk of being lost{{else}} - an unclaimed
+  un-ignored file is at risk of being lost{{end}}.
 
 {{if .Full}}WRONG: reading a 3000-line diff of `docs/gen/` to understand a change.
 CORRECT: note that `docs/gen/**` is a declared output of
@@ -47,10 +48,11 @@ CORRECT: note that `docs/gen/**` is a declared output of
   whose outputs were not committed fails there.{{end}}
 - On merge conflicts, run `magus vcs resolve`. It settles every conflicted
   generated file at once, regenerates ONCE, and records the result, leaving only
-  the conflicts magus cannot settle for you.{{if .Full}} Never merge generated hunks by
-  hand. Do not reach for the merge driver instead: a VCS invokes a driver once per
+  the conflicts magus cannot settle for you. Never merge generated hunks by hand.
+{{if .Full}}  Do not reach for the merge driver instead: a VCS invokes a driver once per
   conflicted path and never invokes one at all for a file one side deleted, so the
-  driver alone cannot finish the job.{{end}}
+  driver alone cannot finish the job.{{else}}  A merge driver alone cannot finish the job:
+  a VCS never invokes one for a file that one side deleted.{{end}}
 - `magus clean` removes declared outputs when you want a provably fresh
   regeneration.
 
@@ -114,7 +116,9 @@ not another everyday CLI surface.
 5. Run `magus affected ci` before calling the work done{{if .Full}}: it runs the full
    pipeline over every project the diff reaches, including ones you never edited,
    and after committing confirms HEAD builds - a partial commit that drops a
-   rename or an importer update leaves HEAD non-building{{end}}.
+   rename or an importer update leaves HEAD non-building{{else}}: it reaches projects you
+   never edited, and confirms HEAD builds - a partial commit that drops a rename
+   leaves HEAD broken{{end}}.
 
 Never `git stash`, `git reset`, `git checkout .`, or `git clean` to "verify a
 build without committing."{{if .Full}} The working tree is ALREADY what you want to verify,
