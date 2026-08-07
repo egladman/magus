@@ -733,6 +733,14 @@ export fun image_scan(ctx: magus\Context, args: [str]) > void {
 // The baseline when this landed was 265 findings, all `notice` or `unencumbered` and none
 // forbidden or restricted, so this gate starts green and only speaks up on a regression.
 export fun security(ctx: magus\Context, args: [str]) > void {
+    // Both halves of Software Composition Analysis over one dependency inventory:
+    // govulncheck asks whether a dependency has a known flaw, trivy whether its terms may
+    // legally be here at all. They share this target because they share that input and a
+    // cache contract - each reads data that lives outside the tree, so neither is cacheable
+    // against sources. govulncheck sat in `lint` for a while, which spread that uncacheable
+    // answer across every op lint runs. GOEXPERIMENT is threaded through so the sandboxed
+    // child builds with the same fingerprint as the rest of the workspace.
+    go["govulncheck"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}));
     os\exec("trivy", ["fs", "--scanners", "license",
         "--severity", "HIGH,CRITICAL",
         "--ignored-licenses", "AGPL-3.0,AGPL-3.0-only,AGPL-3.0-or-later,"
@@ -1495,10 +1503,12 @@ export fun build(ctx: magus\Context, args: [str])  > void {
         ctx.needs(go_build);
     }
 }
-// Formats first, then golangci-lint, go vet, govulncheck, markdownlint, and shellcheck.
-// golangci-lint and govulncheck go through the go spell's ops rather than a raw os\exec, so
-// the spell's version probes (mgs_getVersionProbes) reach the cache key - without them a
-// linter upgrade changes which code passes while every cache entry replays the old verdict.
+// Formats first, then golangci-lint, go vet, markdownlint, and shellcheck. STATIC ANALYSIS
+// only - govulncheck lives in `security` with the other scanners, because a scanner's answer
+// changes when its advisory database does, with no edit to this tree.
+// golangci-lint goes through the go spell's ops rather than a raw os\exec, so the spell's
+// version probes (mgs_getVersionProbes) reach the cache key - without them a linter upgrade
+// changes which code passes while every cache entry replays the old verdict.
 // Neither runs through `go tool`: that COMPILES the tool with whichever go leads PATH, which
 // is how CI built the linter with a different toolchain than it analyzed with, and panicked.
 // shellcheck covers the shell magus SHIPS - the completion script users source into their
@@ -1510,7 +1520,6 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
     go["golangci-lint"](ctx);
     go["go-vet"](ctx);
-    go["govulncheck"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}));
     markdown.markdownlint(ctx);
     // NOT markdown.typos here, deliberately. The op walks the whole project directory,
     // and this project is the Go tree - 487 of its hits are code comments using British

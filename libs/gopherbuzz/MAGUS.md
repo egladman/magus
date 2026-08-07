@@ -94,7 +94,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `watch` | Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive. |
 | `test` | Tests with race detection, coverage, and a drift-gated coverage badge. |
 | `build` | Compiles one artifact: the host binary, or the container image under the `container` charm. |
-| `lint` | Formats first, then golangci-lint, go vet, govulncheck, markdownlint, and shellcheck. |
+| `lint` | Formats first, then golangci-lint, go vet, markdownlint, and shellcheck. |
 | `format` | Regenerates, then formats Go and tidies `go.mod`. |
 | `ci` | Runs the CI gates through their declared dependencies. |
 | `ci-shard` | Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed. |

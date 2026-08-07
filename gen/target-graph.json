@@ -116,7 +116,18 @@
         },
         {
           "name": "security",
-          "doc": "Gates on dependency LICENSE terms, which is a separate question from image_scan's vulnerability pass even though both drive trivy."
+          "doc": "Gates on dependency LICENSE terms, which is a separate question from image_scan's vulnerability pass even though both drive trivy.",
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "govulncheck"
+              ]
+            }
+          ],
+          "exec_overrides": [
+            "env:GOEXPERIMENT=jsonv2"
+          ]
         },
         {
           "name": "man-generate",
@@ -479,7 +490,7 @@
         },
         {
           "name": "lint",
-          "doc": "Formats first, then golangci-lint, go vet, govulncheck, markdownlint, and shellcheck.",
+          "doc": "Formats first, then golangci-lint, go vet, markdownlint, and shellcheck.",
           "dependencies": [
             "format"
           ],
@@ -488,8 +499,7 @@
               "spell": "go",
               "ops": [
                 "golangci-lint",
-                "go-vet",
-                "govulncheck"
+                "go-vet"
               ]
             },
             {
@@ -504,9 +514,6 @@
                 "shellcheck"
               ]
             }
-          ],
-          "exec_overrides": [
-            "env:GOEXPERIMENT=jsonv2"
           ]
         },
         {
