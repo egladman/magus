@@ -59,6 +59,7 @@ func BindFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.DurationVar(&cfg.Secret.Unattended, "secret-unattended-timeout", cfg.Secret.Unattended, "MAGUS_SECRET_UNATTENDED_TIMEOUT: Unattended bounds a provider read with no terminal to prompt on. Default 10s.")
 	fs.IntVar(&cfg.Concurrency, "concurrency", cfg.Concurrency, "MAGUS_CONCURRENCY: Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Defaults to min(NumCPU, 8).")
 	fs.IntVar(&cfg.Concurrency, "j", cfg.Concurrency, "Short for --concurrency")
+	fs.IntVar(&cfg.MaxFailures, "max-failures", cfg.MaxFailures, "MAGUS_MAX_FAILURES: MaxFailures bounds how many projects may fail before a run stops starting")
 	fs.DurationVar(&cfg.TargetTimeout, "target-timeout", cfg.TargetTimeout, "MAGUS_TARGET_TIMEOUT: TargetTimeout bounds how long any single target may run before magus")
 	fs.StringVar(&cfg.HistoryPath, "history-path", cfg.HistoryPath, "MAGUS_HISTORY_PATH: HistoryPath is the path to the runtime-history JSON used by volatility detection,")
 	fs.BoolVar(&cfg.DryRun, "dry-run", cfg.DryRun, "MAGUS_DRY_RUN: DryRun prints what would run without executing. Equivalent to MAGUS_DRY_RUN=1.")

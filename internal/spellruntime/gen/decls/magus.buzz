@@ -94,6 +94,7 @@ export object DoctorCheck {
     status: DoctorCheckStatus = DoctorCheckStatus.none,
     message: str = "",
     details: [str] = [],
+    fix: [str] = [],
 }
 
 export object DoctorSummary {
