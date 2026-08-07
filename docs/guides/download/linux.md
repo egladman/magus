@@ -43,14 +43,18 @@ No 32-bit ARM archive is published. The build works, but nothing has run it end 
 on 32-bit hardware or under emulation, and an untested binary is worse than an absent
 one. If you need one, build from source.
 
-`${VERSION}` above is the current release. The `_static` archive is the installer
-default and what `magus self update` fetches; it links nothing, so it runs on musl and
-glibc alike. The UNSUFFIXED archive on each
-[GitHub release](https://github.com/egladman/magus/releases) is the dynamically linked
-glibc build - take it if a magusfile calls Buzz FFI (`zdef()`), which the static build
-compiles out. It needs `libzstd.so.1` and `liblzma.so.5` present on the machine; both
-ship in the base package set of every mainstream distro, but a container or a musl host
-may not have them.
+`${VERSION}` above is the current release. Releases ship the `_static` archive only: it
+links nothing, so it runs on musl and glibc alike, and it is what the installer and
+`magus self update` fetch.
+
+A dynamically linked build is still supported, just not published - it needs
+`libzstd.so.1` and `liblzma.so.5` on the running machine, which holds on a mainstream
+distro but not in a slim container or on musl. Build it from source when a magusfile calls
+Buzz FFI (`zdef()`), which the static build compiles out:
+
+```sh
+magus run release-build:dynamic
+```
 
 ## Verify the download
 

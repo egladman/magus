@@ -38,9 +38,11 @@ curl --proto '=https' --tlsv1.2 -sSf https://eli.gladman.cc/magus/install | sh
 
 ## Platform support
 
-Every platform below gets a signed release archive built by the same pipeline. They
-do not all get the same amount of testing, and it is more useful to say so than to
-imply otherwise.
+Every platform below gets a signed release archive built by the same pipeline, and every
+published archive is the STATIC build - it links nothing, so it runs wherever its platform
+runs. A dynamically linked build is supported but not published; see the per-platform
+guides. They do not all get the same amount of testing, and it is more useful to say so
+than to imply otherwise.
 
 CI runs the full test suite on **linux/amd64 only**. Every other platform is built
 by the release pipeline but not tested by it.
@@ -50,8 +52,8 @@ by the release pipeline but not tested by it.
 | linux/amd64 | Full test suite on every CI run. The only continuously tested platform. |
 | darwin/arm64 | Not covered by CI, but it is the primary development platform, so the suite runs against it constantly by hand. |
 | linux/arm64 | Not covered by CI. Built natively by the release pipeline; the release binary and the test suites have been executed on real arm64 hardware. |
-| darwin/amd64 | Not covered by CI. Built natively by the release pipeline on an Intel runner (so it compiles and links, including the cgo variant), but **never executed**. |
-| windows/amd64 | Not covered by CI. Built natively by the release pipeline (so it compiles and links, including the cgo variant), but **never executed**. |
+| darwin/amd64 | Not covered by CI. Built natively by the release pipeline on an Intel runner, so it compiles and links, but **never executed**. |
+| windows/amd64 | Not covered by CI. Built natively by the release pipeline, so it compiles and links, but **never executed**. |
 | windows/arm64 | Not covered by CI. Cross-compiled, static only, **never executed** - the newest and least proven target. |
 
 Two consequences worth knowing before you pick a build:

@@ -3,6 +3,19 @@ name: Release
 # Releases the BINARIES: cross-compiled archives, container images, and their
 # signatures, on a v* tag. Everything a main push publishes is in cd.yaml.
 #
+# STATIC ONLY by default. `magus run release-build:dynamic` still produces the
+# dynamically linked build and is fully supported for anyone who wants it - it is simply
+# not published unless someone asks, via the `dynamic` dispatch input below. The reason is
+# that a dynamic archive is only useful where its libraries resolve: on darwin the linker
+# bakes in the build machine's Homebrew prefix (/opt/homebrew/...), which no other Mac has,
+# and Windows has the same shape through MSYS2. Only Linux resolves them by SONAME. Rather
+# than publish an artifact that works on one platform of three, the whole cgo toolchain
+# here - MSYS2, mingw packages, the codec dev headers - is gated behind that input.
+#
+# The cost of the default is Buzz FFI: the static build takes `-tags noffi`, because
+# purego's cgo_import_dynamic would otherwise give a "static" binary a PT_INTERP. A
+# magusfile calling zdef() needs a dynamic build, built from source.
+#
 # Renamed from cd.yaml, because a v* tag is a deliberate release and not continuous
 # delivery - cd.yaml now holds the thing that actually is. The rename is not free:
 # cosign pins the workflow PATH as the certificate identity, so every image published
@@ -22,6 +35,11 @@ on:
   # real release path rather than a special-cased rehearsal of it - which is the point,
   # since what breaks a release is the platform-specific last mile, not the trigger.
   workflow_dispatch:
+    inputs:
+      dynamic:
+        description: 'Also build the dynamically linked archives (needs system libzstd/liblzma on the RUNNING machine)'
+        type: boolean
+        default: false
 
 # One live CD run per tag. Re-pushing a tag (e.g. to pick up a CD fix before the
 # release publishes) cancels the previous run so duplicate release jobs never race
@@ -65,6 +83,7 @@ jobs:
           installation-strategy: source
           git-ref: ${{ github.ref_name }}
       - name: Install codec build dependencies
+        if: ${{ inputs.dynamic }}
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
       # No remote-cache env is set in CD on purpose: a release builds clean off the
       # cache. magusfile.buzz leaves the backend unbound without it, so there is zero
@@ -76,10 +95,12 @@ jobs:
       # recently, and a cross-compile proves only that the linker ran. Publishing an
       # archive nobody has run is what this omission avoids. Re-add these once the
       # 32-bit plan has an executed test suite behind it.
-      - name: Build release artifacts (static + dynamic)
-        run: |
-          magus run release-build --no-default-charms
-          magus run release-build:dynamic --no-default-charms
+      - name: Build release artifacts (static)
+        run: magus run release-build --no-default-charms
+
+      - name: Build release artifacts (dynamic)
+        if: ${{ inputs.dynamic }}
+        run: magus run release-build:dynamic --no-default-charms
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dist-linux-amd64
@@ -104,11 +125,14 @@ jobs:
           installation-strategy: source
           git-ref: ${{ github.ref_name }}
       - name: Install codec build dependencies
+        if: ${{ inputs.dynamic }}
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
-      - name: Build release artifacts (static + dynamic)
-        run: |
-          magus run release-build --no-default-charms
-          magus run release-build:dynamic --no-default-charms
+      - name: Build release artifacts (static)
+        run: magus run release-build --no-default-charms
+
+      - name: Build release artifacts (dynamic)
+        if: ${{ inputs.dynamic }}
+        run: magus run release-build:dynamic --no-default-charms
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dist-linux-arm64
@@ -135,11 +159,14 @@ jobs:
           installation-strategy: source
           git-ref: ${{ github.ref_name }}
       - name: Install codec build dependencies
+        if: ${{ inputs.dynamic }}
         run: brew install zstd xz
-      - name: Build release artifacts (static + dynamic)
-        run: |
-          magus run release-build --no-default-charms
-          magus run release-build:dynamic --no-default-charms
+      - name: Build release artifacts (static)
+        run: magus run release-build --no-default-charms
+
+      - name: Build release artifacts (dynamic)
+        if: ${{ inputs.dynamic }}
+        run: magus run release-build:dynamic --no-default-charms
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dist-darwin-arm64
@@ -176,11 +203,14 @@ jobs:
           installation-strategy: source
           git-ref: ${{ github.ref_name }}
       - name: Install codec build dependencies
+        if: ${{ inputs.dynamic }}
         run: brew install zstd xz
-      - name: Build release artifacts (static + dynamic)
-        run: |
-          magus run release-build --no-default-charms
-          magus run release-build:dynamic --no-default-charms
+      - name: Build release artifacts (static)
+        run: magus run release-build --no-default-charms
+
+      - name: Build release artifacts (dynamic)
+        if: ${{ inputs.dynamic }}
+        run: magus run release-build:dynamic --no-default-charms
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dist-darwin-amd64
@@ -209,18 +239,21 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
-      # MSYS2 ships prebuilt mingw-w64 zstd/xz packages so internal/codec's cgo path
-      # links without building those C libs from source. pkgconf is REQUIRED in the
-      # install set: without a mingw pkg-config, cgo's `pkg-config --cflags` grabs
-      # Strawberry Perl's broken pkg-config.bat off the runner PATH and fails. We also
-      # pin the exact binary via PKG_CONFIG below, so PATH order can never reselect it.
+      # MSYS2 exists in this job ONLY for the cgo build, so it is gated with it. It ships
+      # prebuilt mingw-w64 zstd/xz packages so internal/codec's cgo path links without
+      # building those C libs from source. pkgconf is REQUIRED in the install set: without a
+      # mingw pkg-config, cgo's `pkg-config --cflags` grabs Strawberry Perl's broken
+      # pkg-config.bat off the runner PATH and fails. PKG_CONFIG below pins the exact binary
+      # so PATH order can never reselect it.
       - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0
+        if: ${{ inputs.dynamic }}
         with:
           msystem: MINGW64
           install: mingw-w64-x86_64-gcc mingw-w64-x86_64-pkgconf mingw-w64-x86_64-zstd mingw-w64-x86_64-xz
           path-type: inherit
 
       - name: Point go build at the MSYS2 mingw toolchain
+        if: ${{ inputs.dynamic }}
         shell: msys2 {0}
         run: |
           echo "MAGUS_CGO_CC=$(cygpath -m /mingw64/bin/gcc.exe)" >> "$GITHUB_ENV"
@@ -232,14 +265,20 @@ jobs:
           installation-strategy: source
           git-ref: ${{ github.ref_name }}
 
-      # the static build doesn't need MAGUS_CGO_CC/PKG_CONFIG_PATH (CGO_ENABLED=0
-      # ignores them), so running it here too is harmless: same runner, same shell.
-      - name: Build release artifacts (amd64 static + dynamic, arm64 static)
-        shell: msys2 {0}
+      # shell: bash, not msys2 - the static builds must not depend on a toolchain that is
+      # only installed when `dynamic` is set. bash rather than the default pwsh because
+      # setup-magus installs an EXTENSIONLESS `magus` (go build -o does not append .exe),
+      # which pwsh will not resolve through PATHEXT.
+      - name: Build release artifacts (amd64 + arm64, static)
+        shell: bash
         run: |
           magus run release-build --no-default-charms
-          magus run release-build:dynamic --no-default-charms
           GOOS=windows GOARCH=arm64 magus run release-build --no-default-charms
+
+      - name: Build release artifacts (amd64 dynamic)
+        if: ${{ inputs.dynamic }}
+        shell: msys2 {0}
+        run: magus run release-build:dynamic --no-default-charms
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

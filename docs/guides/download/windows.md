@@ -55,7 +55,7 @@ very useful thing to report. See [Platform support](../download.md#platform-supp
 
 ## Which archive
 
-The `_static` archive above is what both architectures ship, and it is what `magus self update` fetches. amd64 additionally has an unsuffixed, dynamically linked archive on each [GitHub release](https://github.com/egladman/magus/releases): that is the build to take if a magusfile calls Buzz FFI (`zdef()`), which the static build compiles out. There is no arm64 dynamic archive, so Buzz FFI is unavailable on Windows on ARM.
+The `_static` archive above is what both architectures ship, and it is what `magus self update` fetches. No dynamically linked archive is published: on Windows it would link the MSYS2 mingw copies of libzstd/liblzma, which a user's machine has no reason to carry. Buzz FFI (`zdef()`) is therefore unavailable in the published Windows builds; `magus run release-build:dynamic` produces one from source if you need it.
 
 ## Verify the download
 
