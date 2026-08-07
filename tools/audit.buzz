@@ -51,7 +51,7 @@ fun isBlockingSeverity(severity: str) > bool {
 // `pnpm view <pkg> time --json` returns a version -> ISO-8601 map plus the non-version
 // keys "created" and "modified", which are skipped. A version that fails to parse is
 // skipped rather than fatal: an odd tag upstream must not take a build down.
-fun hasInstallablePatch(pkg: str, patched: str) > bool {
+fun hasInstallablePatch(pkg: str, patched: str, installed: str) > bool {
     // "<0.0.0" is the advisory database's way of saying no patch has been published.
     if (patched == "" or patched == "<0.0.0") {
         return false;
@@ -66,6 +66,25 @@ fun hasInstallablePatch(pkg: str, patched: str) > bool {
     final cutoff = time\add(now, duration: coolingHours);
     final floor = patched.replace(">=", with: "").trim();
 
+    // A candidate must be reachable from where the tree actually sits, which means
+    // the SAME MAJOR as the installed version.
+    //
+    // Without this the gate fails over patches nothing can install. nanoid is the
+    // worked example: the advisory patches at ">=3.3.17", the tree is on 3.3.16
+    // via stylelint -> postcss, and 3.3.17 was four days old against a ten-day
+    // cooling period - so pnpm refused it outright. But ">=3.3.17" also matches
+    // nanoid 4, 5 and 6, majors published long enough ago to clear cooling, so the
+    // check found one and reported a fix "this policy would install today". It
+    // would not: postcss pins the 3.x range, and no override can move a transitive
+    // dependency across a major its dependent does not accept.
+    //
+    // A major bump is therefore deferred, deliberately and permanently. It is not
+    // a thing this gate can be right about: it needs the dependent to widen its
+    // range, which is a human change, and the gate's contract is to fail only on
+    // what is actionable TODAY. It stays printed loudly on every run.
+    final installedMajor = std\parseInt(installed.split(".")[0]) ?? 0;
+    final nextMajor = "" + (installedMajor + 1) + ".0.0";
+
     foreach (version, published in json\parse(res.stdout)) {
         if (version == "created" or version == "modified") {
             continue;
@@ -73,6 +92,9 @@ fun hasInstallablePatch(pkg: str, patched: str) > bool {
         try {
             if (!semver\satisfies(version, constraint: ">= " + floor)) {
                 continue;
+            }
+            if (installedMajor > 0 and !semver\satisfies(version, constraint: "< " + nextMajor)) {
+                continue; // a different major: not reachable without a dependent change
             }
             if (time\parse("2006-01-02T15:04:05.000Z", value: published) <= cutoff) {
                 return true; // a fix exists and our own policy would let it in
@@ -109,13 +131,21 @@ export fun audit() > void {
         final patched = adv["patched_versions"] ?? "";
         final where = pkg + " (" + severity + "): " + (adv["title"] ?? "");
 
+        // The version the tree is actually on, which bounds what a fix could be.
+        // Absent (an advisory with no findings) leaves it empty and the major
+        // check off, which is the old behavior.
+        var installed = "";
+        if (adv["findings"] != null and adv["findings"].len() > 0) {
+            installed = adv["findings"][0]["version"] ?? "";
+        }
+
         if (!isBlockingSeverity(severity)) {
             deferred.append(where + " - below the failing threshold");
-        } else if (hasInstallablePatch(pkg, patched)) {
+        } else if (hasInstallablePatch(pkg, patched, installed)) {
             blocking.append(where + " - fix available: upgrade to " + patched);
         } else {
-            deferred.append(where + " - patched " + patched
-                + " is newer than the cooling period, or unpublished");
+            deferred.append(where + " - patched " + patched + " is inside the cooling"
+                + " period, unpublished, or only on a major this tree cannot reach");
         }
     }
 

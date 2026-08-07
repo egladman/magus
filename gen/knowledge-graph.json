@@ -8965,7 +8965,7 @@
       "kind": "function",
       "label": "decodeEntities",
       "doc": "decodeEntities turns HTML entities back into characters for a plain-text description. &amp; decodes LAST so \"&amp;lt;\" is not double-decoded into \"<\".",
-      "source": "docs/lib/text.buzz:132",
+      "source": "docs/lib/text.buzz:145",
       "attrs": {
         "exported": "true"
       }
@@ -9065,7 +9065,7 @@
       "kind": "function",
       "label": "truncateWords",
       "doc": "truncateWords caps s at about n characters, cutting on a word boundary so it never ends mid-word. Short paragraphs pass through.",
-      "source": "docs/lib/text.buzz:139",
+      "source": "docs/lib/text.buzz:152",
       "attrs": {
         "exported": "true"
       }
@@ -18212,7 +18212,7 @@
       "kind": "function",
       "label": "audit",
       "doc": "audit scans the current project and fails ONLY on findings that are actionable today. Everything else is printed and carried. Throws to fail the calling target.",
-      "source": "tools/audit.buzz:89",
+      "source": "tools/audit.buzz:111",
       "attrs": {
         "exported": "true"
       }

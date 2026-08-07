@@ -33,7 +33,16 @@ env:
   MAGUS_CACHE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}
   MAGUS_CACHE_REMOTE_INSECURE: 'true'
   MAGUS_CACHE_REMOTE_TRUSTED_KEYS: ${{ vars.MAGUS_CACHE_PUBLIC_KEY }}
-  MAGUS_CI_MAX_SHARDS: '2'
+  # A CEILING, not a target: the forecaster still picks the count, and now also
+  # splits a shard whose projects are predicted to exceed the runner's memory.
+  # Pinned at 2 this could not do that - the memory constraint may only raise the
+  # count, and there was nowhere to raise it to, which is how docs and the root
+  # project kept landing on one 16GB runner and killing it.
+  #
+  # Shard count is not runner spend: ci.runner_pool_budget caps how many run at
+  # once, so a higher ceiling buys smaller shards in waves rather than more
+  # machines. Left at magus's own default (8) rather than a number invented here.
+  MAGUS_CI_MAX_SHARDS: '8'
 
 jobs:
   preflight:
@@ -146,11 +155,19 @@ jobs:
       - name: Install native build dependencies (webkit, codec)
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev liblzma-dev libzstd-dev
 
+      # `describe <noun> [name]` - the noun comes FIRST, and the template fields
+      # are the -o json names. This previously read `describe -o template=... $p`
+      # with {{.Project}} and {{.Base}}: the flag was parsed as the noun, so every
+      # invocation died on `unknown noun "-o"`, and neither field exists on any
+      # describe output anyway. It annotated nothing for as long as it has been
+      # here, silently, because usage errors exited 0 and continue-on-error hid
+      # what was left. Exit codes became meaningful in #22, which is what finally
+      # made a step that never worked start saying so.
       - name: Annotate affected projects
         continue-on-error: true
         run: |
           for p in ${{ matrix.projects }}; do
-            magus describe -o 'template=::notice title=affected::{{.Project}} (base: {{.Base}})' "$p"
+            magus describe project "$p" -o 'template={{range .projects}}::notice title=affected::{{.path}}{{end}}'
           done
 
       - name: Restore magus run history
