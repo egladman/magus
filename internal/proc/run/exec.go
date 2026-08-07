@@ -152,6 +152,12 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		res.Started = true
 		res.Code = c.ProcessState.ExitCode()
 		res.MaxRSSBytes = maxRSSBytes(c.ProcessState)
+		// Report it upward as well as returning it. The caller that wants this
+		// number is the shard planner, which is several layers away and has no
+		// path to an individual ExecResult; the context collector is what
+		// carries a target's high-water mark to it. A no-op when nothing
+		// installed a collector, which is every call outside a target run.
+		types.RecordPeakRSS(ctx, res.MaxRSSBytes)
 	} else {
 		res.Code = -1 // process never started (binary not found, permission denied, etc.)
 	}

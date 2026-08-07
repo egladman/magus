@@ -118,6 +118,15 @@ type Outcome struct {
 	DurationMs     int64     `json:"duration_ms"`
 	At             time.Time `json:"at"`
 	Attempts       int       `json:"attempts,omitempty"`
+	// MaxRSSBytes is the target's peak resident memory, the maximum over every
+	// process it ran. Omitted when unknown, and unknown is the honest default:
+	// the platforms that cannot report it and every history file written before
+	// this field existed both decode to zero.
+	//
+	// Zero therefore means UNMEASURED, never "used nothing". A consumer that
+	// treats it as a small number will read the targets it knows least about as
+	// the cheapest ones to co-schedule, which is precisely backwards.
+	MaxRSSBytes int64 `json:"max_rss_bytes,omitempty"`
 }
 
 // PredictDuration returns the predicted runtime for (project, target, tags), scaled by cache-hit probability.

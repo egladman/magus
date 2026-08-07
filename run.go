@@ -1214,6 +1214,11 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 	volatileTarget := s.Name() + "/" + name
 	affected := rt.IsAffected(p.Path)
 	start := time.Now()
+	// Collect the peak resident memory of every process this target runs, so the
+	// outcome recorded below carries a memory figure alongside its duration. The
+	// collector is installed here rather than higher up because the unit that
+	// has to fit on one runner is the target, not the invocation.
+	ctx = types.WithPeakRSS(ctx)
 	resp, err := s.Invoke(ctx, req)
 	// Only a SUCCESSFUL invocation's value is recorded. A failed attempt is not
 	// snapshotted, so its value has no consumer, and recording it would survive
@@ -1246,12 +1251,17 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 		}
 	}
 
+	// Reported only when a process actually reported one: an unmeasured target
+	// must stay zero in the record so a reader can tell it apart from a
+	// measured-and-tiny one.
+	peakRSS, _ := types.PeakRSS(ctx)
 	rt.Record(p.Path, volatileTarget, forecast.Outcome{
 		Result:         result,
 		AffectedByDiff: affected,
 		DurationMs:     time.Since(start).Milliseconds(),
 		At:             time.Now(),
 		Attempts:       attempts,
+		MaxRSSBytes:    peakRSS,
 	})
 
 	if decision.Retry {
