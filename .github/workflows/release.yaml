@@ -9,9 +9,9 @@ name: Release
 # below. The reason is that a dynamic archive is only useful where its libraries resolve:
 # on darwin the linker bakes in the build machine's Homebrew prefix (/opt/homebrew/...),
 # which no other Mac has, and Windows has the same shape through MSYS2. Only Linux
-# resolves them by SONAME. Rather
-# than publish an artifact that works on one platform of three, the whole cgo toolchain
-# here - MSYS2, mingw packages, the codec dev headers - is gated behind that input.
+# resolves them by SONAME. Rather than publish an artifact that works on one platform of
+# three, the whole cgo toolchain here - MSYS2, mingw packages, the codec dev headers - is
+# gated behind that input.
 #
 # The static build takes `-tags noffi`, and that is not optional: purego's
 # cgo_import_dynamic would otherwise give a "static" binary a PT_INTERP and a libc
@@ -54,13 +54,11 @@ permissions:
   contents: read  # default; publish overrides to write
 
 jobs:
-  # One job per native runner: each builds BOTH its own platform's static and
-  # dynamically-linked (cgo) binary, back to back on the same runner. Static
-  # cross-compiles trivially (no C toolchain needed), so there's no reason to
-  # farm it out to a separate job. cgo needs a real C toolchain plus
-  # libzstd/liblzma for that exact platform; each job installs those itself
-  # (setup-magus doesn't - its own bootstrap build is CGO_ENABLED=0), via an
-  # "Install codec build dependencies" step, or MSYS2 packages on Windows.
+  # One job per native runner. Each builds its own platform's static binary, and the
+  # dynamically-linked one too when include_dynamic_builds is set. Static cross-compiles
+  # trivially (no C toolchain needed), so there's no reason to farm it out to a separate
+  # job. cgo needs a real C toolchain plus libzstd/liblzma for that exact platform, which
+  # is why every step supplying those is gated on the same input.
   # contents: read only; none of these see MAGUS_SIGNING_KEY.
   release-linux-amd64:
     name: Build release artifacts (linux/amd64)
