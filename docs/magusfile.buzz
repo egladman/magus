@@ -106,6 +106,19 @@ magus\project({
     // every target snapshot the entire site tree, defeating the cache boundary below.
     "targets": {
         "security": {"skip_cache": "reads the npm advisory database, which changes independently of this tree"},
+        // md-generate renders `magus describe graph -o markdown`, so its output is a
+        // function of the WHOLE knowledge graph - every source file in the workspace and
+        // the binary that walks them. Its declared inputs are the magusfiles, which is
+        // the only part of that a glob can name, so any other change leaves the key
+        // unmoved: a cache hit then replays a MAGUS.md built before it and REVERTS the
+        // committed one, which the drift gate correctly reports as drift. That is why a
+        // branch adding Go files fails this gate in CI (where the shared cache is
+        // restored) while passing on a clean checkout that has nothing to hit.
+        //
+        // Skipping the cache is the honest fix rather than widening readsFiles to the
+        // whole tree: the input set really is everything, and a key that claimed
+        // otherwise would go on being wrong in a way nobody could see.
+        "md-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
         // generate is the cheap orchestration and drift gate. Its actual work lives in
         // cacheable *-generate stages below, so unchanged docs do not rebuild the site.
         "generate": {"skip_cache": "is the drift gate itself; a replay would skip the check it exists to make", "exclusive": true},
