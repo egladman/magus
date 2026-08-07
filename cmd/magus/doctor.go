@@ -151,6 +151,15 @@ func buildDaemonInfo(ctx context.Context) doctor.DaemonInfo {
 	di.MCPAddr = mcpAddrString()
 	di.BridgeEnabled = globalCfg.Console.Enabled == nil || *globalCfg.Console.Enabled
 
+	// daemon.enabled=false means this invocation is self-contained, so there is nothing
+	// to ask. Without this check the probe still discovers and dials whatever daemon the
+	// host happens to be running: doctor then reports on a process the caller opted out
+	// of, and the testscript suite - which sets MAGUS_DAEMON_ENABLED=false precisely to
+	// stay hermetic - reaches the real socket and fails wherever a daemon is up.
+	if !globalCfg.Daemon.Enabled {
+		return di
+	}
+
 	addr, err := resolveDaemonAddr(ctx, "")
 	if err != nil {
 		return di
