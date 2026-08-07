@@ -38,7 +38,7 @@ on:
   workflow_dispatch:
     inputs:
       include_dynamic_builds:
-        description: 'Also build and publish the dynamically linked archives (they need system libzstd/liblzma present on whatever machine RUNS them)'
+        description: 'Include dynamically linked archives'
         type: boolean
         default: false
 
