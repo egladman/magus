@@ -38,7 +38,7 @@ on:
   workflow_dispatch:
     inputs:
       include_dynamic_builds:
-        description: 'Include dynamically linked archives'
+        description: 'Include dynamically linked prebuilt binaries'
         type: boolean
         default: false
 
