@@ -282,7 +282,18 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     // site_generate owns the full render, bundle, and manifest artifact.
     if (ctx.has_charm("rw")) { return; }
     if (clean_before and vcs\isDirty(GENERATED)) {
-        throw "generate: MAGUS.md or CHANGELOG.md or generated docs Markdown drifted; re-run `magus run generate:rw docs` and commit";
+        // Name the paths. "MAGUS.md or CHANGELOG.md or generated docs Markdown
+        // drifted" describes the whole GENERATED set, so a reader learns only that
+        // one of nine things moved - and this gate is INERT in a git worktree
+        // (vcs\isDirty does not report these paths there), so the one place it fires
+        // is CI, where nobody can poke at the tree afterwards. Guessing which file
+        // moved, from a machine where the check cannot fail, costs a push per guess.
+        var moved = mut [<str>];
+        foreach (path in GENERATED) {
+            if (vcs\isDirty([path])) { moved.append(path); }
+        }
+        throw "generate: regeneration changed " + moved.join(", ")
+            + "; re-run `magus run generate:rw docs` and commit";
     }
 }
 
