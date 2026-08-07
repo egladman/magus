@@ -45,7 +45,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 9 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 96 | `magus query kind:target` | `content-generate`, `site-generate`, `generate` |
+| target | 97 | `magus query kind:target` | `content-generate`, `site-generate`, `generate` |
 | spell | 12 | `magus query kind:spell` | `go`, `markdown`, `typescript` |
 | op | 57 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-edit` |
 | tool | 15 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
@@ -56,13 +56,13 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | doc | 273 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 136 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
 | file | 233 | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 1245 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| function | 1246 | `magus query kind:function` | `sel`, `sendObject`, `send` |
 | import | 124 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 36 | `magus query project:.` | `generate`, `image-build`, `lint` |
+| . | 37 | `magus query project:.` | `generate`, `image-build`, `lint` |
 | console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 3 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
@@ -103,6 +103,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `serve` | serve is the workspace-root dev loop for BOTH deployables. |
 | `go-build` | Compiles the version-stamped magus binary. |
 | `image-build` | Two axes, one charm each. |
+| `security` | Gates on dependency LICENSE terms, which is a separate question from image_scan's vulnerability pass even though both drive trivy. |
 | `man-generate` | Renders the roff man pages into manpage/ (repo root). |
 | `changelog-generate` | CHANGELOG.md is a root artifact. |
 | `types-generate` | Regenerates the runtime BuzzObject maps before anything imports a host binding. |

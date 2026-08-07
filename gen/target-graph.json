@@ -115,6 +115,10 @@
           ]
         },
         {
+          "name": "security",
+          "doc": "Gates on dependency LICENSE terms, which is a separate question from image_scan's vulnerability pass even though both drive trivy."
+        },
+        {
           "name": "man-generate",
           "declared": "man_generate",
           "doc": "Renders the roff man pages into manpage/ (repo root).",
@@ -532,7 +536,8 @@
             "lint",
             "build",
             "test",
-            "completion-test"
+            "completion-test",
+            "security"
           ]
         },
         {

@@ -101,6 +101,10 @@ magus\project({
             "skip_cache": "rewrites assets/coverage.svg; a hit would skip the write",
             "memory_mb": 10240,
         },
+        // The verdict depends on trivy's license classifier, which is not a declared tool
+        // version and so is invisible to the cache key: a trivy upgrade that reclassifies a
+        // dependency would replay the OLD verdict against unchanged sources.
+        "security": {"skip_cache": "depends on trivy's license classifier version, which no cache key can see"},
 		// Preserves the hand-authored Unreleased section in place; caching a prior
 		// file would overwrite a later edit that is intentionally outside releases/.
 		"changelog-generate": {"skip_cache": "preserves a hand-authored Unreleased section; a replay would overwrite a later edit"},
@@ -698,6 +702,31 @@ export fun image_scan(ctx: magus\Context, args: [str]) > void {
     } else {
         os\exec("trivy", ["image", image_tag()]);
     }
+}
+
+// Gates on dependency LICENSE terms, which is a separate question from image_scan's
+// vulnerability pass even though both drive trivy. magus is GPL-3.0-or-later, so the
+// failure worth catching is a dependency whose terms cannot be combined with that - and
+// the moment to catch it is the pull request that adds it, not the release that ships it.
+//
+// Gates on trivy's CATEGORY rather than a license allowlist. An allowlist has to be
+// edited every time a permissive dependency with an unfamiliar SPDX id appears, so it
+// grows stale and starts failing on licenses nobody objects to; the category is trivy's
+// own reading of what the terms REQUIRE. --severity HIGH,CRITICAL is how those categories
+// surface: forbidden and restricted, and nothing below them. That mirrors image_scan's
+// threshold rather than inventing a second convention.
+//
+// The whole tree is scanned, npm subtrees included. That is not duplicated effort: the
+// per-project `security` targets in console/, docs/ and evals/ run pnpm's ADVISORY audit,
+// which says nothing about licensing.
+//
+// The baseline when this landed was 265 findings, all `notice` or `unencumbered` and none
+// forbidden or restricted, so this gate starts green and only speaks up on a regression.
+export fun security(ctx: magus\Context, args: [str]) > void {
+    os\exec("trivy", ["fs", "--scanners", "license",
+        "--severity", "HIGH,CRITICAL",
+        "--exit-code", "1",
+        "."], ".", {});
 }
 
 // Renders the roff man pages into manpage/ (repo root). These are a DISTRIBUTION
@@ -1477,7 +1506,7 @@ export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate);
 
 // Runs the CI gates through their declared dependencies.
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(lint, build, test, completion_test);
+    ctx.needs(lint, build, test, completion_test, security);
 }
 
 // Exercises the completion scripts magus SHIPS, each inside the official image for its
