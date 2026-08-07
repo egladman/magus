@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2460,
-  "edge_count": 5585,
+  "node_count": 2461,
+  "edge_count": 5586,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -423,6 +423,14 @@
       "label": "MGS5003",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/services/MGS5003/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS5004",
+      "kind": "diagnostic",
+      "label": "MGS5004",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/services/MGS5004/"
       }
     },
     {
@@ -4237,12 +4245,10 @@
       "label": "docs/reference/codes/services/MGS5004.md",
       "source": "docs/reference/codes/services/MGS5004.md",
       "attrs": {
-        "diagnostic": "MGS7002",
         "role": "doc",
         "section": "reference",
         "tags": "MGS5004,services,daemon,detach,background",
-        "title": "MGS5004: this needs the persistent daemon",
-        "unknown_codes": "MGS5004"
+        "title": "MGS5004: this needs the persistent daemon"
       }
     },
     {
@@ -35002,6 +35008,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/services/MGS5003.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/services/MGS5004.md",
+      "target": "diagnostic:MGS5004",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/services/MGS5004.md"
     },
     {
       "source": "doc:docs/reference/codes/services/README.md",
