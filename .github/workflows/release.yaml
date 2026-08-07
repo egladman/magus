@@ -12,9 +12,9 @@ name: Release
 # than publish an artifact that works on one platform of three, the whole cgo toolchain
 # here - MSYS2, mingw packages, the codec dev headers - is gated behind that input.
 #
-# The cost of the default is Buzz FFI: the static build takes `-tags noffi`, because
-# purego's cgo_import_dynamic would otherwise give a "static" binary a PT_INTERP. A
-# magusfile calling zdef() needs a dynamic build, built from source.
+# The static build takes `-tags noffi`, and that is not optional: purego's
+# cgo_import_dynamic would otherwise give a "static" binary a PT_INTERP and a libc
+# dependency, so the archive would not run on a musl or scratch host.
 #
 # Renamed from cd.yaml, because a v* tag is a deliberate release and not continuous
 # delivery - cd.yaml now holds the thing that actually is. The rename is not free:

@@ -49,8 +49,7 @@ links nothing, so it runs on musl and glibc alike, and it is what the installer 
 
 A dynamically linked build is still supported, just not published - it needs
 `libzstd.so.1` and `liblzma.so.5` on the running machine, which holds on a mainstream
-distro but not in a slim container or on musl. Build it from source when a magusfile calls
-Buzz FFI (`zdef()`), which the static build compiles out:
+distro but not in a slim container or on musl. Build one from source if you want it:
 
 ```sh
 magus run release-build:dynamic
