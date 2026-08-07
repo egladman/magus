@@ -1,0 +1,63 @@
+// Report whether a release tag names a PRERELEASE, for the GitHub Release's prerelease flag.
+//
+// Parsed as semver rather than sniffed for a hyphen. `contains(github.ref_name, '-')` in a
+// workflow expression calls v1.2.3+build-1 a prerelease, because it cannot tell a prerelease
+// component from build metadata - and semver says build metadata is not one. Getting that
+// wrong marks an ordinary release as a prerelease, which hides it from everyone following
+// the repo's latest.
+//
+// This is the same parser the magusfile's channel() uses to pick an image's floating tag, so
+// the release flag and the image tag read one tag the same way rather than disagreeing.
+//
+// Reads TAG. Prints "true" or "false" for $GITHUB_OUTPUT.
+import "os";
+import "semver";
+import "std";
+
+// isPrerelease reports whether tag carries a semver prerelease component. Pure, so every
+// tag shape below is testable - which the one-line shell it replaced was not.
+export fun isPrerelease(tag: str) > bool {
+    return semver\parse(tag).prerelease.len() > 0;
+}
+
+fun env(name: str) > str {
+    final v = os\env(name);
+    if (v == null) { return ""; }
+    return "" + v;
+}
+
+fun main() > void {
+    final tag = env("TAG");
+    if (tag == "") {
+        // Under Actions an empty TAG is a wiring bug, and staying quiet would emit an empty
+        // output that GitHub reads as false - marking a release candidate as a full release.
+        // Outside Actions this is just `magus buzz -t` running the file, so it no-ops the
+        // way every script in this directory does.
+        if (env("GITHUB_OUTPUT") != "") {
+            throw "prerelease: TAG is empty under GitHub Actions; the step must pass the tag";
+        }
+        std\print("prerelease: no TAG; nothing to classify");
+        return;
+    }
+    std\print("{isPrerelease(tag)}");
+}
+
+main();
+
+test "a plain version is not a prerelease" {
+    std\assert(isPrerelease("v0.4.0") == false, message: "v0.4.0 is a release");
+}
+
+test "an rc tag is a prerelease" {
+    std\assert(isPrerelease("v0.5.0-rc.1"), message: "v0.5.0-rc.1 is a prerelease");
+    std\assert(isPrerelease("v1.0.0-beta"), message: "v1.0.0-beta is a prerelease");
+}
+
+// The case a hyphen check gets wrong, and the reason this parses instead.
+test "build metadata containing a hyphen is not a prerelease" {
+    std\assert(isPrerelease("v1.2.3+build-1") == false, message: "+build-1 is metadata, not a prerelease");
+}
+
+test "a prerelease alongside build metadata is still a prerelease" {
+    std\assert(isPrerelease("v1.2.3-rc.1+build-9"), message: "the rc.1 component still counts");
+}

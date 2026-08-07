@@ -329,21 +329,21 @@ jobs:
           MAGUS_SIGNING_KEY: ${{ secrets.MAGUS_SIGNING_KEY }}
         run: magus run release-sign --no-default-charms
 
-      # Whether this tag is a prerelease, parsed as SEMVER rather than sniffed for a
-      # hyphen. `contains(github.ref_name, '-')` would call v1.2.3+build-1 a prerelease -
-      # the hyphen is in the build metadata, which semver says is not a prerelease at all.
-      # Buzz's semver module is the same parser the magusfile's channel() uses, so the flag
-      # below and the image's floating tag read the tag the same way.
+      # Whether this tag is a prerelease, decided by .github/actions/magus/prerelease.buzz
+      # rather than by a workflow expression. `contains(github.ref_name, '-')` would call
+      # v1.2.3+build-1 a prerelease - the hyphen is build metadata, which semver says is not
+      # one. The script parses instead, using the same semver module the magusfile's
+      # channel() uses for the image's floating tag, and its cases are covered by tests that
+      # `magus run test` runs (via advice-test) - which a one-line shell expression here
+      # could never be.
       #
-      # The tag arrives through the environment, never interpolated into the expression:
-      # a ref name is attacker-influenceable on some triggers, and `${{ }}` inside code
-      # would be a straight injection.
+      # The tag arrives through the environment, never interpolated into the command: a ref
+      # name is attacker-influenceable on some triggers.
       - id: release
         name: Resolve prerelease from the tag
         env:
           TAG: ${{ github.ref_name }}
-        run: |
-          echo "prerelease=$(magus buzz -e 'import "std"; import "os"; import "semver"; fun main() > void { std\print("{semver\parse(os\env("TAG")).prerelease.len() > 0}"); } main();')" >> "$GITHUB_OUTPUT"
+        run: echo "prerelease=$(magus buzz .github/actions/magus/prerelease.buzz)" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
