@@ -79,11 +79,6 @@ magus\project({
         // per invocation.
         "release-build": {"skip_cache": "a release must never replay a cached artifact; each invocation produces the bytes that ship"},
         "release-sign": {"skip_cache": "signs the manifest per invocation; a replayed signature would cover different bytes"},
-        // Its whole answer is read from the VCS tag namespace, which no source glob
-        // covers and so no cache key can see: moving the tag leaves the key identical
-        // and a hit would report the PREVIOUS tag's channel. That is the exact mistake
-        // the target exists to catch, so it must never replay.
-        "release-channel": {"skip_cache": "derives its answer from VCS tag state, which is not an input any cache key can see"},
         // Mutates go.mod and creates VCS tags (with the cd charm) - a real,
         // order-sensitive side effect, never a cache replay. exclusive: nothing
         // else should be touching go.mod or the tag namespace while it runs.
@@ -1322,18 +1317,6 @@ export fun release_sign(ctx: magus\Context, args: [str]) > void {
 // developer. magus supplies the mechanism and stops there.
 //
 // Neither path ever pushes - a human reviews the tags and pushes deliberately.
-
-// Prints the channel `magus run image-build` under the SAME charms resolves to - one bare
-// word, `stable` or `unstable`, on stdout so a workflow can capture it.
-//
-// The release workflow reads it to decide whether the GitHub Release is marked prerelease.
-// That flag and the image's floating tag are then the SAME computation rather than two
-// independent readings of a tag name, which is the failure this exists to prevent: a
-// release marked stable whose images went to unstable, or the reverse, is not a discrepancy
-// anyone notices until `latest` points somewhere wrong.
-export fun release_channel(ctx: magus\Context, args: [str]) > void {
-    std\print(channel(ctx));
-}
 
 export fun release(ctx: magus\Context, args: [str]) > void {
     // `cd` alone, and no `versioned`: cd is the deliver switch, meaning the same

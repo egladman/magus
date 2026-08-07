@@ -45,7 +45,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 9 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 96 | `magus query kind:target` | `content-generate`, `site-generate`, `generate` |
+| target | 95 | `magus query kind:target` | `content-generate`, `site-generate`, `generate` |
 | spell | 12 | `magus query kind:spell` | `go`, `markdown`, `typescript` |
 | op | 57 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-edit` |
 | tool | 15 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
@@ -56,13 +56,13 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | doc | 273 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 136 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
 | file | 233 | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 1248 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| function | 1247 | `magus query kind:function` | `sel`, `sendObject`, `send` |
 | import | 124 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 36 | `magus query project:.` | `generate`, `image-build`, `lint` |
+| . | 35 | `magus query project:.` | `generate`, `image-build`, `lint` |
 | console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 3 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
@@ -89,7 +89,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `tapes` | Records every VHS tape in tapes/ into assets/gen/. |
 | `release-build` | Builds one release binary for one platform. |
 | `release-sign` | Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos). |
-| `release-channel` | Prints the channel `magus run image-build` under the SAME charms resolves to - one bare word, `stable` or `unstable`, on stdout so a workflow can capture it. |
 | `release` |  |
 | `watch` | Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive. |
 | `test` | Tests with race detection, coverage, and a drift-gated coverage badge. |
