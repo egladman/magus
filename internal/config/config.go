@@ -32,6 +32,25 @@ type Config struct {
 	// Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Defaults to min(NumCPU, 8).
 	Concurrency int `json:"concurrency" yaml:"concurrency" validate:"gte=0" cli:"short=j"`
 
+	// MaxFailures bounds how many projects may fail before a run stops starting
+	// more. Zero, the default, is unlimited: a batch runs everything it can and
+	// reports every failure at once.
+	//
+	// A budget rather than a boolean, so one setting covers what other tools split
+	// across a pair of flags: 1 is fail-fast, 3 tolerates three before giving up.
+	//
+	// Keeping going is the default because the alternative answers a different
+	// question than the one being asked. A gate over many projects is asked "what is
+	// broken", and stopping at the first failure answers "something is" - so a run
+	// reports one failure per invocation however many there really are, and each fix
+	// costs another full run to discover the next one. It also let an UNRELATED
+	// project's failure cancel its peers mid-flight, since nothing about a failure in
+	// one project invalidates the work of another.
+	//
+	// Projects that depended on a failure still stop; that is not this setting's
+	// doing, and cannot be turned off. Their work is genuinely invalid.
+	MaxFailures int `json:"max_failures" yaml:"max_failures" validate:"gte=0"`
+
 	// TargetTimeout bounds how long any single target may run before magus
 	// cancels it. Zero, the default, means no limit.
 	//

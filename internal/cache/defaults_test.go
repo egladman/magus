@@ -57,3 +57,23 @@ func TestDefaultConcurrency_LocalDefault(t *testing.T) {
 	}
 	assert.Equal(t, want, DefaultConcurrency())
 }
+
+// TestClampConcurrency pins the ceiling. A configured concurrency travels in the repo, so
+// a number chosen on a big machine lands on a small one and thrashes it - which does not
+// fail, it just makes everything slower, so nothing gets attributed to it.
+func TestClampConcurrency(t *testing.T) {
+	ceiling := MachineCeiling()
+	assert.GreaterOrEqual(t, ceiling, 1, "a machine always has at least one usable cpu")
+
+	n, clamped := ClampConcurrency(ceiling * 4)
+	assert.True(t, clamped)
+	assert.Equal(t, ceiling, n, "a request above the machine is capped to it")
+
+	n, clamped = ClampConcurrency(1)
+	assert.False(t, clamped, "a request the machine can serve is left alone")
+	assert.Equal(t, 1, n)
+
+	n, clamped = ClampConcurrency(ceiling)
+	assert.False(t, clamped, "exactly the ceiling is not over it")
+	assert.Equal(t, ceiling, n)
+}
