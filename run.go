@@ -893,9 +893,17 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		)
 	}
 
+	// Installed whenever history is enabled, NOT only when a target opted into
+	// retries. The history this writes is the same store the shard forecaster
+	// reads, so gating installation on RetryOnVolatile meant a workspace where no
+	// target opts in - which is this one - recorded nothing at all, and the
+	// forecaster predicted DefaultDurationMs for every project forever. Retrying
+	// stays gated: the flag rides on the runtime and Decide honours it, so a
+	// target that never asked for a retry still never gets one.
 	var volatilityRT *volatility.Runtime
-	if trackVolatile && m.cfg.Volatility.Enabled && !opts.NoVolatilityRetry {
-		volatilityRT = m.buildVolatilityRuntime(ctx)
+	if m.cfg.Volatility.Enabled {
+		retry := trackVolatile && !opts.NoVolatilityRetry
+		volatilityRT = m.buildVolatilityRuntime(ctx, retry)
 		if volatilityRT != nil {
 			ctx = volatility.WithRuntime(ctx, volatilityRT)
 		}
@@ -1178,7 +1186,7 @@ func checkOutputOverlap(steps []cache.Step, target string, w *report.Writer) {
 }
 
 // buildVolatilityRuntime returns a volatility.Runtime for the current run, or nil when history cannot be loaded.
-func (m *Magus) buildVolatilityRuntime(ctx context.Context) *volatility.Runtime {
+func (m *Magus) buildVolatilityRuntime(ctx context.Context, retry bool) *volatility.Runtime {
 	var h forecast.History
 	if err := h.Load(ctx, m.cfg.HistoryPath); err != nil {
 		return nil
@@ -1187,7 +1195,7 @@ func (m *Magus) buildVolatilityRuntime(ctx context.Context) *volatility.Runtime 
 	if res, err := m.Affected(ctx, ""); err == nil {
 		affected = res.Affected
 	}
-	return volatility.NewRuntime(&h, m.cfg.HistoryPath, m.volatilityConfig(), affected)
+	return volatility.NewRuntime(&h, m.cfg.HistoryPath, m.volatilityConfig(), affected, retry)
 }
 
 // runTarget executes name on every spell in p and rejects writes into descendant projects.

@@ -27,7 +27,7 @@ const (
 // buildRuntime constructs a Runtime with n recorded outcomes.
 func buildRuntime(results []string, affected bool) *Runtime {
 	h := &forecast.History{}
-	rt := NewRuntime(h, "", testCfg, nil)
+	rt := NewRuntime(h, "", testCfg, nil, true)
 	now := time.Now()
 	for i, r := range results {
 		rt.Record(testProject, testTarget, forecast.Outcome{
@@ -125,7 +125,7 @@ func TestIsSuspectedRegression_FalsePositive(t *testing.T) {
 func TestIsSuspectedRegression_UnaffectedFails(t *testing.T) {
 	t.Parallel()
 	h := &forecast.History{}
-	rt := NewRuntime(h, "", testCfg, nil)
+	rt := NewRuntime(h, "", testCfg, nil, true)
 	results := []string{"pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "fail", "fail"}
 	now := time.Now()
 	for i, r := range results {
@@ -149,7 +149,7 @@ func TestIsSuspectedRegression_UnaffectedFails(t *testing.T) {
 func TestRecordOutcome_Eviction(t *testing.T) {
 	t.Parallel()
 	h := &forecast.History{}
-	rt := NewRuntime(h, "", testCfg, nil)
+	rt := NewRuntime(h, "", testCfg, nil, true)
 	now := time.Now()
 	total := forecast.OutcomeWindow + 10
 	for i := range total {
@@ -174,7 +174,7 @@ func TestLastPassTime(t *testing.T) {
 	t.Parallel()
 	now := time.Now().Truncate(time.Second)
 	h := &forecast.History{}
-	rt := NewRuntime(h, "", testCfg, nil)
+	rt := NewRuntime(h, "", testCfg, nil, true)
 	for i, r := range []string{"pass", "pass", "fail", "fail"} {
 		rt.Record(testProject, testTarget, forecast.Outcome{
 			Result: r, At: now.Add(time.Duration(i) * time.Minute),
@@ -237,4 +237,37 @@ func TestBuildReport(t *testing.T) {
 	assert.Equal(t, now.Add(-1*time.Hour), got.LastPass)
 	assert.Greater(t, got.Score, 0.0, "4 samples at MinSamples=4 produce a non-zero Wilson score")
 	assert.True(t, got.Volatile, "score exceeds the 0.01 threshold")
+}
+
+// TestRuntimeRecordsWithoutRetryingWhenNotOptedIn pins the separation this type
+// was given when recording stopped being gated on the retry policy.
+//
+// Recording has to be unconditional: the history it writes is the same store the
+// shard forecaster reads, and gating it on RetryOnVolatile meant a workspace
+// where no target opts in recorded nothing, leaving the forecaster to predict a
+// flat default for every project. Retrying must stay opted-in, or widening the
+// recorder would silently turn auto-retry on for every target in every
+// workspace - a behaviour change nobody asked for, hidden inside a metrics fix.
+func TestRuntimeRecordsWithoutRetryingWhenNotOptedIn(t *testing.T) {
+	t.Parallel()
+	h := &forecast.History{}
+	rt := NewRuntime(h, "", DefaultConfig(), nil, false)
+
+	// Bootstrap conditions: with no history at all, shouldRetry would return
+	// Retry=true for an opted-in target. This one did not opt in.
+	d := rt.Decide("svc/api", "go/test", true)
+	assert.False(t, d.Retry, "a target that never opted into RetryOnVolatile must never be retried")
+	assert.Equal(t, ReasonDisabled, d.Reason)
+
+	// ...and yet the outcome is still recorded, because the forecaster needs it.
+	rt.Record("svc/api", "go/test", forecast.Outcome{
+		Result: "pass", DurationMs: 1200, MaxRSSBytes: 512 << 20, At: time.Now(),
+	})
+	got := rt.Stats("svc/api", "go/test")
+	require.Len(t, got.RecentOutcomes, 1, "recording must not depend on the retry policy")
+	assert.Equal(t, int64(512<<20), got.RecentOutcomes[0].MaxRSSBytes)
+
+	// The same runtime WITH the opt-in does retry, so the gate is the flag and
+	// nothing else.
+	assert.True(t, NewRuntime(h, "", DefaultConfig(), nil, true).Decide("svc/api", "go/test", true).Retry)
 }

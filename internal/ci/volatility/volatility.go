@@ -158,10 +158,23 @@ type Runtime struct {
 	path     string
 	cfg      Config
 	affected map[string]bool
+	// retry gates ONLY the retry decision, never recording; see NewRuntime.
+	retry    bool
 }
 
 // NewRuntime constructs a Runtime; empty affectedProjects means all projects are affected.
-func NewRuntime(history *forecast.History, path string, cfg Config, affectedProjects []string) *Runtime {
+//
+// retry separates the two jobs this type does, which used to be fused at the
+// call site and are not the same question. RECORDING is unconditional: the
+// history it writes is the same store the shard forecaster reads, so a run that
+// records nothing leaves the forecaster predicting DefaultDurationMs for every
+// project and unable to tell a heavy one from a light one. RETRYING is a target
+// policy (RetryOnVolatile), opted into per target, and must stay off for the
+// targets that never asked for it.
+//
+// Fusing them meant history only ever filled for targets that wanted retries -
+// in a workspace where none do, the forecaster had no data at all.
+func NewRuntime(history *forecast.History, path string, cfg Config, affectedProjects []string, retry bool) *Runtime {
 	af := make(map[string]bool, len(affectedProjects))
 	for _, p := range affectedProjects {
 		af[p] = true
@@ -171,6 +184,7 @@ func NewRuntime(history *forecast.History, path string, cfg Config, affectedProj
 		path:     path,
 		cfg:      cfg,
 		affected: af,
+		retry:    retry,
 	}
 }
 
@@ -184,7 +198,7 @@ func (rt *Runtime) IsAffected(projectPath string) bool {
 
 // Decide returns a retry Decision for a just-failed (projectPath, target).
 func (rt *Runtime) Decide(projectPath, target string, affected bool) Decision {
-	if !rt.cfg.Enabled {
+	if !rt.cfg.Enabled || !rt.retry {
 		return Decision{Retry: false, Reason: ReasonDisabled}
 	}
 	rt.mu.Lock()
@@ -295,7 +309,7 @@ func BuildReport(ctx context.Context, path string, cfg Config) (types.Volatility
 	if err := hist.Load(ctx, path); err != nil {
 		return types.VolatilityReport{}, err
 	}
-	rt := NewRuntime(&hist, path, cfg, nil)
+	rt := NewRuntime(&hist, path, cfg, nil, false) // report-only: reads history, never retries
 	for project, targets := range hist.Projects {
 		for target := range targets {
 			st := rt.Stats(project, target)
