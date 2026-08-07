@@ -56,7 +56,7 @@ func newTestFixture(t *testing.T, tag string, manifestVersion ...string) *testFi
 	}
 
 	tarball := makeFakeTarball(t)
-	assetName := fmt.Sprintf("magus_%s_%s_%s.tar.gz", tag, runtime.GOOS, releaseArch())
+	assetName := fmt.Sprintf("magus_%s_%s_%s_static.tar.gz", tag, runtime.GOOS, releaseArch())
 	sum := sha256.Sum256(tarball)
 	sumHex := hex.EncodeToString(sum[:])
 
@@ -144,7 +144,7 @@ func (fx *testFixture) activate(t *testing.T) {
 
 	// Build a client that redirects GitHub release asset fetches to the artifact server.
 	artifactBase := fx.artifactSrv.URL
-	assetName := fmt.Sprintf("magus_%s_%s_%s.tar.gz", fx.tag, runtime.GOOS, releaseArch())
+	assetName := fmt.Sprintf("magus_%s_%s_%s_static.tar.gz", fx.tag, runtime.GOOS, releaseArch())
 	ghPrefix := fmt.Sprintf("https://github.com/egladman/magus/releases/download/%s/", fx.tag)
 	transport := &redirectTransport{
 		base:        http.DefaultTransport,

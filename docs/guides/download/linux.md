@@ -13,9 +13,9 @@ magus ships as a single self-contained binary. Download it with `curl`, extract 
 ```sh
 VERSION=__MAGUS_VERSION__
 ARCH=amd64            # or arm64 - see below
-curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/magus_${VERSION}_linux_${ARCH}.tar.gz"
+curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/magus_${VERSION}_linux_${ARCH}_static.tar.gz"
 mkdir -p ~/.local/bin
-tar -xzf "magus_${VERSION}_linux_${ARCH}.tar.gz"
+tar -xzf "magus_${VERSION}_linux_${ARCH}_static.tar.gz"
 mv magus ~/.local/bin/
 magus version
 ```
@@ -37,11 +37,14 @@ No 32-bit ARM archive is published. The build works, but nothing has run it end 
 on 32-bit hardware or under emulation, and an untested binary is worse than an absent
 one. If you need one, build from source.
 
-`${VERSION}` above is the current release. The unsuffixed archive is the static build
-and the installer default; it links nothing, so it runs on musl and glibc alike. The
-`_dynamic` archive attached to each [GitHub release](https://github.com/egladman/magus/releases)
-is the glibc build, and it is the one to take if a magusfile calls Buzz FFI (`zdef()`),
-which the static build compiles out.
+`${VERSION}` above is the current release. The `_static` archive is the installer
+default and what `magus self update` fetches; it links nothing, so it runs on musl and
+glibc alike. The UNSUFFIXED archive on each
+[GitHub release](https://github.com/egladman/magus/releases) is the dynamically linked
+glibc build - take it if a magusfile calls Buzz FFI (`zdef()`), which the static build
+compiles out. It needs `libzstd.so.1` and `liblzma.so.5` present on the machine; both
+ship in the base package set of every mainstream distro, but a container or a musl host
+may not have them.
 
 ## Verify the download
 

@@ -240,6 +240,10 @@ func TestPlatformFromName(t *testing.T) {
 		{"magus_v0.2.0_darwin_arm64.tar.gz", "darwin/arm64"},
 		{"magus_v0.2.0_windows_amd64.tar.gz", "windows/amd64"},
 		{"magus_v0.2.0_windows_arm64.tar.gz", "windows/arm64"},
+		// Both variants of one platform resolve to that platform: the variant token is
+		// not part of the platform, and leaving it on yielded "linux/amd64_static".
+		{"magus_v0.2.0_linux_amd64_static.tar.gz", "linux/amd64"},
+		{"magus_v0.2.0_darwin_arm64_static.tar.gz", "darwin/arm64"},
 		{"SHA256SUMS", ""},
 		{"SHA256SUMS.sig", ""},
 		{"magus-release.pem", ""},

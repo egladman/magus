@@ -1092,22 +1092,28 @@ export fun release_build(ctx: magus\Context, args: [str]) > void {
         throw "release-build: got one argument; pass both goos and goarch, e.g. -- linux armv7";
     }
     if (args.len() >= 2) { goos = args[0]; goarch = args[1]; }
-    // The UNSUFFIXED archive is the static one; the other carries "_dynamic". Static keeps
-    // the bare name because it is the build that runs anywhere - no loader, no glibc, no
-    // system libzstd - so the asset someone grabs without reading is the one that cannot
-    // fail on them. Opting into the dynamic build is a deliberate act, and the suffix is
-    // what makes it deliberate.
+    // The STATIC archive carries "_static" and the dynamic one takes the bare name, which
+    // is Linux packaging practice: `busybox` is the ordinary dynamically-linked build and
+    // `busybox-static` is the marked exception. Go has no convention to conflict with here
+    // - projects shipping both variants are rare enough that none formed, and goreleaser
+    // documents no variant naming for multi-build projects either.
     //
-    // The suffix names the PROPERTY, not the mechanism. It used to be "-cgo", which told a
-    // downloader how the binary was compiled rather than what it needs at runtime; nobody
-    // reading a releases page maps "cgo" to "wants a dynamic loader and system liblzma".
-    // It is also a "_" field rather than "-" so the scheme stays splittable: the old
-    // `magus_v0.4.0_darwin_arm64-cgo.tar.gz` parsed its arch as `arm64-cgo`.
+    // Note this makes the archive name and the CHARM default disagree on purpose: the bare
+    // command produces the marked archive. That is tolerable only because both archives are
+    // now labelled at the point it matters - `_static` says what it is, and nothing has to
+    // be inferred from a name's absence. Everything that fetches an archive by name asks
+    // for `_static` EXPLICITLY (cmd/magus/selfupdate.go, every download guide), so no
+    // consumer depends on which variant happens to hold the bare name.
+    //
+    // The suffix names the PROPERTY, not the mechanism, and is a "_" field rather than "-"
+    // so the scheme stays splittable: the old `magus_v0.4.0_darwin_arm64-cgo.tar.gz` parsed
+    // its arch as `arm64-cgo`. platformFromName in cmd/magus-utils strips it before
+    // splitting, for the same reason.
     final p = release_target_platform(goos, goarch);
     if (ctx.has_charm("dynamic")) {
-        build_release_variant(ctx, p[0], p[1], true, "_dynamic");
+        build_release_variant(ctx, p[0], p[1], true, "");
     } else {
-        build_release_variant(ctx, p[0], p[1], false, "");
+        build_release_variant(ctx, p[0], p[1], false, "_static");
     }
 }
 

@@ -215,7 +215,7 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 		}
 	}
 
-	assetName := fmt.Sprintf("magus_%s_%s_%s.tar.gz", rel.Version, runtime.GOOS, releaseArch())
+	assetName := fmt.Sprintf("magus_%s_%s_%s_static.tar.gz", rel.Version, runtime.GOOS, releaseArch())
 	assets, err := selfupdate.FindAssets(rel, assetName)
 	if err != nil {
 		return err

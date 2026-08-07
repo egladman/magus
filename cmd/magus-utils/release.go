@@ -662,7 +662,12 @@ func platformFromName(name, version string) string {
 		return ""
 	}
 	mid := name[len(prefix) : len(name)-len(".tar.gz")]
-	// mid is e.g. "linux_amd64"
+	// mid is e.g. "linux_amd64", or "linux_amd64_static" for the marked variant. Strip a
+	// trailing variant token first: both variants describe the SAME platform, and without
+	// this the SplitN below yields "linux/amd64_static" as the platform string.
+	for _, variant := range []string{"_static", "_dynamic"} {
+		mid = strings.TrimSuffix(mid, variant)
+	}
 	parts := strings.SplitN(mid, "_", 2)
 	if len(parts) == 2 {
 		return parts[0] + "/" + parts[1]

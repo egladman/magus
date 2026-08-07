@@ -64,7 +64,7 @@ image, and both follow from the static image carrying no shared libraries at all
 
 - **`magus watch` / `fs\watch`** need `inotify-tools`, which only the cgo image ships.
 - **Buzz FFI (`zdef()`) is unavailable in every static build.** That means this image and
-  the unsuffixed release archives, so it applies equally to a binary you extract with
+  the `_static` release archives, so it applies equally to a binary you extract with
   `docker cp` below. FFI opens a shared library at runtime, which is what made those builds
   need a dynamic loader; they are compiled with `-tags noffi`, and `zdef()` reports FFI as
   unsupported rather than failing at the call. Keeping it would have cost the static
@@ -149,7 +149,7 @@ than `latest`, so what you extract is reproducible.
 
 This only works with the static image. The binary in the `-dynamic` image is linked
 against that image's glibc and will not run on an arbitrary host. What you extract is
-the same static build the unsuffixed release archives ship, so it has no Buzz FFI
+the same static build the `_static` release archives ship, so it has no Buzz FFI
 either (see Variants).
 
 ## Verify the signature

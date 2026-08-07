@@ -81,9 +81,9 @@ magus run release-build:dynamic   # opts into the loader and the system librarie
 ```
 
 This target really did read `has_charm("static")`, and the cost was not
-theoretical: the bare `magus run release-build` produced the dynamic build while
-the bare archive `magus_<version>_<os>_<arch>.tar.gz` was the static one, so a
-single release named its default two opposite ways.
+theoretical: the bare `magus run release-build` produced the dynamic build, the
+one that needs a loader and system libraries, so the command someone runs without
+reading handed back the artifact most likely to fail on their machine.
 
 Two tests, both mechanical:
 
@@ -159,8 +159,8 @@ magus run release-build:dynamic
 
 The same rule governs the artifacts a charm produces, because the name outlives
 the command that made it. This workspace publishes
-`magus_<version>_<os>_<arch>_dynamic.tar.gz` and `:latest-dynamic`, not `-cgo`,
-for exactly that reason.
+`magus_<version>_<os>_<arch>_static.tar.gz` and `:latest-dynamic`, not `-cgo`, for
+exactly that reason - each name states a runtime property rather than a build flag.
 
 ## A rubric for a new charm name
 
