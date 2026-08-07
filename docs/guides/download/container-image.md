@@ -59,18 +59,9 @@ test.
 | `ghcr.io/egladman/magus:latest`     | distroless/static     | linux/amd64, linux/arm64 | Fully static, no libc. The default; use this unless you need something below.                      |
 | `ghcr.io/egladman/magus:latest-dynamic` | distroless/cc (glibc) | linux/amd64              | glibc build that bundles `inotify-tools`, so `magus watch` / `fs\watch` work inside the container. |
 
-Use `latest` unless you know you need the other one. Two things differ beyond the base
-image, and both follow from the static image carrying no shared libraries at all:
-
-- **`magus watch` / `fs\watch`** need `inotify-tools`, which only the cgo image ships.
-- **Buzz FFI (`zdef()`) is unavailable in every static build.** That means this image and
-  the `_static` release archives, so it applies equally to a binary you extract with
-  `docker cp` below. FFI opens a shared library at runtime, which is what made those builds
-  need a dynamic loader; they are compiled with `-tags noffi`, and `zdef()` reports FFI as
-  unsupported rather than failing at the call. Keeping it would have cost the static
-  property itself: the loader it pulls in is exactly what `distroless/static`, a scratch
-  image, and a musl host do not provide. Use the dynamic image, or a `_dynamic` archive, if a
-  magusfile calls `zdef()`.
+Use `latest` unless you know you need the other one. The difference that matters follows
+from the static image carrying no shared libraries at all: **`magus watch` / `fs\watch`**
+need `inotify-tools`, which only the dynamic image ships.
 
 ## Tags
 
@@ -149,8 +140,7 @@ than `latest`, so what you extract is reproducible.
 
 This only works with the static image. The binary in the `-dynamic` image is linked
 against that image's glibc and will not run on an arbitrary host. What you extract is
-the same static build the `_static` release archives ship, so it has no Buzz FFI
-either (see Variants).
+the same static build the `_static` release archives ship.
 
 ## Verify the signature
 
