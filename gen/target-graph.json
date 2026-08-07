@@ -57,8 +57,8 @@
             "amd64",
             "arm64",
             "cd",
+            "dynamic",
             "stable",
-            "static",
             "tagged",
             "unstable"
           ],
@@ -356,7 +356,7 @@
           "declared": "release_build",
           "doc": "Builds one release binary for one platform.",
           "charms": [
-            "static"
+            "dynamic"
           ],
           "spells": [
             {

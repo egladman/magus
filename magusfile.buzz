@@ -415,7 +415,7 @@ fun load_variant(ctx: magus\Context, dockerfile: str) > void {
 // release.yaml's, which is what makes the documented release verify command reject one.
 //
 // A local build is single-architecture - see load_platform(). Stack `:amd64` or `:arm64`
-// to cross-build through emulation (`magus run image-build:static,arm64`).
+// to cross-build through emulation (`magus run image-build:arm64`).
 export fun image_build(ctx: magus\Context, args: [str]) > void {
     final registries = publish_registries(ctx);
     var pushed = mut [<str>];
@@ -428,21 +428,26 @@ export fun image_build(ctx: magus\Context, args: [str]) > void {
             // Only stable moves a floating tag: `latest` would hand an opted-into
             // prerelease to every consumer who never asked for it.
             var staticTags = [version()];
-            var cgoTags = [version() + "-cgo"];
+            var dynamicTags = [version() + "-dynamic"];
             if (ch == "stable") {
                 staticTags = [version(), "latest"];
-                cgoTags = [version() + "-cgo", "latest-cgo"];
+                dynamicTags = [version() + "-dynamic", "latest-dynamic"];
             }
             foreach (r in publish_variant(ctx, "Dockerfile.static", "linux/amd64,linux/arm64",
                 registries, staticTags, "static-meta.json")) { pushed.append(r); }
             foreach (r in publish_variant(ctx, "Dockerfile", "linux/amd64",
-                registries, cgoTags, "cgo-meta.json")) { pushed.append(r); }
+                registries, dynamicTags, "dynamic-meta.json")) { pushed.append(r); }
         }
         write_image_summary(pushed);
-    } else if (ctx.has_charm("static")) {
-        load_variant(ctx, "Dockerfile.static");
-    } else {
+    } else if (ctx.has_charm("dynamic")) {
         load_variant(ctx, "Dockerfile");
+    } else {
+        // Static is the DEFAULT, so it gets no charm - a charm names a departure from
+        // the usual, and the usual here is the image that runs anywhere. `dynamic` is
+        // the departure, and it is named for what it is rather than for cgo, the
+        // mechanism that produces it. Same word, same meaning, as the `_dynamic`
+        // release asset and the `-dynamic` image tag.
+        load_variant(ctx, "Dockerfile.static");
     }
 }
 
@@ -997,8 +1002,17 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     // dynamic loader, and would not run on a musl or scratch host. zdef() reports FFI
     // unsupported in that build; the default (cgo) archives keep it. Same reasoning and the
     // same tag as Dockerfile.static.
+    // codec_cgo is OPT-IN, and only the dynamic release asset opts in. internal/codec's
+    // cgo path declares `#cgo pkg-config: liblzma` and `libzstd`, and CGO_ENABLED defaults
+    // to 1 wherever a C compiler exists - so gating that path on `cgo` alone made
+    // `go install github.com/egladman/magus/cmd/magus@latest` fail on any machine without
+    // those DEV HEADERS, which is most of them. It never showed up here because this
+    // workspace has both installed. The pure-Go fallback (klauspost/compress, ulikunitz/xz)
+    // is a real implementation, so the default build loses speed, not capability, and the
+    // CD runners that build this variant apt-get the headers explicitly.
     var build_args = mut ["-trimpath"];
-    if (!cgo) { build_args.append("-tags"); build_args.append("noffi"); }
+    if (cgo) { build_args.append("-tags"); build_args.append("codec_cgo"); }
+    else { build_args.append("-tags"); build_args.append("noffi"); }
     build_args.append("-ldflags"); build_args.append(ld_flags());
     build_args.append("-o"); build_args.append(fs\join(stage, binary));
     build_args.append("./cmd/magus");
@@ -1020,7 +1034,7 @@ fun release_target_platform(goos: str, goarch: str) > [str] {
     if (goos != null and goos != "") { return [goos, goarch]; }
     // GOOS/GOARCH in the environment cross-target this build (the standard Go convention), so CD can
     // ask one runner for another platform's binary - e.g. the arm64 macOS job cross-builds darwin/amd64
-    // static via `GOOS=darwin GOARCH=amd64 magus run release-build:static`. Empty env falls to native.
+    // static via `GOOS=darwin GOARCH=amd64 magus run release-build`. Empty env falls to native.
     final envos = os\env("GOOS");
     final envarch = os\env("GOARCH");
     if (envos != null and envos != "" and envarch != null and envarch != "") { return [envos, envarch]; }
@@ -1028,16 +1042,23 @@ fun release_target_platform(goos: str, goarch: str) > [str] {
     return [p[0], p[1]];
 }
 
-// Builds one release binary for one platform. Default is dynamically-linked (cgo):
-// internal/codec's zstd/xz fast path needs a real C toolchain + libzstd/liblzma for
-// whatever (goos, goarch) you ask for, so cross-compiling this variant only works if
-// you already have that toolchain around — CD never does, sticking to each native
-// job's own platform. The `static` charm (`magus run release-build:static`) switches
-// to a CGO_ENABLED=0 build instead: pure Go cross-compiles trivially, so unlike the
-// cgo default it's cheap to run for every platform from one machine — CD's
-// release-static job loops `release-build:static` once per platform with explicit
-// args. Reads has_charm directly (see docs/charms.md's function-target pattern, e.g.
-// build:container): this is a magusfile function target with no spell, so :static
+// Builds one release binary for one platform. Default is STATIC (CGO_ENABLED=0), and
+// the `dynamic` charm (`magus run release-build:dynamic`) opts into the cgo build.
+//
+// The default is static so that every layer says the same thing: the bare command
+// produces the bare asset, and that asset is the one that runs anywhere - no loader,
+// no glibc, no system libzstd. It used to be inverted, with the bare command producing
+// the cgo build while the bare ARCHIVE was the static one, so `release-build` and
+// `magus_<v>_<os>_<arch>.tar.gz` meant opposite things in the same release.
+//
+// The charm is named for the property it selects, matching the `_dynamic` asset suffix -
+// not for cgo, which is the mechanism that happens to produce it. Static also
+// cross-compiles trivially (pure Go), where the dynamic build needs a real C toolchain
+// plus libzstd/liblzma for the exact (goos, goarch) asked for, which is why CD only
+// builds it on each platform's native runner.
+//
+// Reads has_charm directly (see docs/charms.md's function-target pattern, e.g.
+// build:container): this is a magusfile function target with no spell, so :dynamic
 // trips the soft undeclared-charm typo-guard warning — expected here, same as that
 // example.
 // Takes the platform as positional ARGS, not as declared parameters: a target's second
@@ -1058,18 +1079,22 @@ export fun release_build(ctx: magus\Context, args: [str]) > void {
         throw "release-build: got one argument; pass both goos and goarch, e.g. -- linux armv7";
     }
     if (args.len() >= 2) { goos = args[0]; goarch = args[1]; }
-    // The UNSUFFIXED archive is the static one, and the cgo build carries "-cgo". That is
-    // the same convention as the image tags (`latest` static, `latest-cgo` cgo), and it was
-    // inverted here: the archives spelled static with a suffix and gave the bare name to
-    // cgo, so the identical default was named two opposite ways across one release. The
-    // installer has always defaulted to VARIANT=static and the download guides have always
-    // linked the static asset, so this renames what people already take, rather than
-    // changing which build they get.
+    // The UNSUFFIXED archive is the static one; the other carries "_dynamic". Static keeps
+    // the bare name because it is the build that runs anywhere - no loader, no glibc, no
+    // system libzstd - so the asset someone grabs without reading is the one that cannot
+    // fail on them. Opting into the dynamic build is a deliberate act, and the suffix is
+    // what makes it deliberate.
+    //
+    // The suffix names the PROPERTY, not the mechanism. It used to be "-cgo", which told a
+    // downloader how the binary was compiled rather than what it needs at runtime; nobody
+    // reading a releases page maps "cgo" to "wants a dynamic loader and system liblzma".
+    // It is also a "_" field rather than "-" so the scheme stays splittable: the old
+    // `magus_v0.4.0_darwin_arm64-cgo.tar.gz` parsed its arch as `arm64-cgo`.
     final p = release_target_platform(goos, goarch);
-    if (ctx.has_charm("static")) {
-        build_release_variant(ctx, p[0], p[1], false, "");
+    if (ctx.has_charm("dynamic")) {
+        build_release_variant(ctx, p[0], p[1], true, "_dynamic");
     } else {
-        build_release_variant(ctx, p[0], p[1], true, "-cgo");
+        build_release_variant(ctx, p[0], p[1], false, "");
     }
 }
 

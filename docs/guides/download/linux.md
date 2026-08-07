@@ -39,7 +39,7 @@ one. If you need one, build from source.
 
 `${VERSION}` above is the current release. The unsuffixed archive is the static build
 and the installer default; it links nothing, so it runs on musl and glibc alike. The
-`-cgo` archive attached to each [GitHub release](https://github.com/egladman/magus/releases)
+`_dynamic` archive attached to each [GitHub release](https://github.com/egladman/magus/releases)
 is the glibc build, and it is the one to take if a magusfile calls Buzz FFI (`zdef()`),
 which the static build compiles out.
 

@@ -78,8 +78,8 @@ jobs:
       # 32-bit plan has an executed test suite behind it.
       - name: Build release artifacts (static + dynamic)
         run: |
-          magus run release-build:static --no-default-charms
           magus run release-build --no-default-charms
+          magus run release-build:dynamic --no-default-charms
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dist-linux-amd64
@@ -107,8 +107,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
       - name: Build release artifacts (static + dynamic)
         run: |
-          magus run release-build:static --no-default-charms
           magus run release-build --no-default-charms
+          magus run release-build:dynamic --no-default-charms
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dist-linux-arm64
@@ -138,8 +138,8 @@ jobs:
         run: brew install zstd xz
       - name: Build release artifacts (static + dynamic)
         run: |
-          magus run release-build:static --no-default-charms
           magus run release-build --no-default-charms
+          magus run release-build:dynamic --no-default-charms
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dist-darwin-arm64
@@ -179,8 +179,8 @@ jobs:
         run: brew install zstd xz
       - name: Build release artifacts (static + dynamic)
         run: |
-          magus run release-build:static --no-default-charms
           magus run release-build --no-default-charms
+          magus run release-build:dynamic --no-default-charms
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dist-darwin-amd64
@@ -232,14 +232,14 @@ jobs:
           installation-strategy: source
           git-ref: ${{ github.ref_name }}
 
-      # release-build:static doesn't need MAGUS_CGO_CC/PKG_CONFIG_PATH (CGO_ENABLED=0
+      # the static build doesn't need MAGUS_CGO_CC/PKG_CONFIG_PATH (CGO_ENABLED=0
       # ignores them), so running it here too is harmless: same runner, same shell.
       - name: Build release artifacts (amd64 static + dynamic, arm64 static)
         shell: msys2 {0}
         run: |
-          magus run release-build:static --no-default-charms
           magus run release-build --no-default-charms
-          GOOS=windows GOARCH=arm64 magus run release-build:static --no-default-charms
+          magus run release-build:dynamic --no-default-charms
+          GOOS=windows GOARCH=arm64 magus run release-build --no-default-charms
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

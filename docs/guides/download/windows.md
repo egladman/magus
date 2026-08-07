@@ -49,7 +49,7 @@ very useful thing to report. See [Platform support](../download.md#platform-supp
 
 ## Which archive
 
-The unsuffixed archive above is the static build, and it is what both architectures ship. amd64 additionally has a `-cgo` archive on each [GitHub release](https://github.com/egladman/magus/releases): that is the build to take if a magusfile calls Buzz FFI (`zdef()`), which the static build compiles out. There is no arm64 `-cgo` archive, so Buzz FFI is unavailable on Windows on ARM.
+The unsuffixed archive above is the static build, and it is what both architectures ship. amd64 additionally has a `_dynamic` archive on each [GitHub release](https://github.com/egladman/magus/releases): that is the build to take if a magusfile calls Buzz FFI (`zdef()`), which the static build compiles out. There is no arm64 `_dynamic` archive, so Buzz FFI is unavailable on Windows on ARM.
 
 ## Verify the download
 

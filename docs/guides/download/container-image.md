@@ -57,7 +57,7 @@ test.
 | Image                               | Base                  | Platforms                | Notes                                                                                              |
 | ----------------------------------- | --------------------- | ------------------------ | -------------------------------------------------------------------------------------------------- |
 | `ghcr.io/egladman/magus:latest`     | distroless/static     | linux/amd64, linux/arm64 | Fully static, no libc. The default; use this unless you need something below.                      |
-| `ghcr.io/egladman/magus:latest-cgo` | distroless/cc (glibc) | linux/amd64              | glibc build that bundles `inotify-tools`, so `magus watch` / `fs\watch` work inside the container. |
+| `ghcr.io/egladman/magus:latest-dynamic` | distroless/cc (glibc) | linux/amd64              | glibc build that bundles `inotify-tools`, so `magus watch` / `fs\watch` work inside the container. |
 
 Use `latest` unless you know you need the other one. Two things differ beyond the base
 image, and both follow from the static image carrying no shared libraries at all:
@@ -69,14 +69,14 @@ image, and both follow from the static image carrying no shared libraries at all
   need a dynamic loader; they are compiled with `-tags noffi`, and `zdef()` reports FFI as
   unsupported rather than failing at the call. Keeping it would have cost the static
   property itself: the loader it pulls in is exactly what `distroless/static`, a scratch
-  image, and a musl host do not provide. Use the cgo image, or a `-cgo` archive, if a
+  image, and a musl host do not provide. Use the dynamic image, or a `_dynamic` archive, if a
   magusfile calls `zdef()`.
 
 ## Tags
 
-- `latest` / `latest-cgo` follows the most recent release.
-- `<version>` / `<version>-cgo` pins one release, for example `__MAGUS_VERSION__` or
-  `__MAGUS_VERSION__-cgo`. Pin a version in CI so a run stays reproducible.
+- `latest` / `latest-dynamic` follows the most recent release.
+- `<version>` / `<version>-dynamic` pins one release, for example `__MAGUS_VERSION__` or
+  `__MAGUS_VERSION__-dynamic`. Pin a version in CI so a run stays reproducible.
 
 ```sh
 docker pull ghcr.io/egladman/magus:__MAGUS_VERSION__
@@ -92,7 +92,7 @@ docker run --rm -v "$PWD":/workspace ghcr.io/egladman/magus:a1b2c3d ls
 ```
 
 These are **not releases**. They are GHCR-only (never Docker Hub), static-only (no
-`-cgo` variant), have no moving tag to follow, are not pruned on any schedule, and
+`-dynamic` variant), have no moving tag to follow, are not pruned on any schedule, and
 carry no compatibility promise. They are signed, but by `cd.yaml` rather than the
 release workflow, so the verify command below deliberately rejects them - see
 [Verify the signature](#verify-the-signature).
@@ -117,8 +117,9 @@ so an Apple Silicon machine builds and runs `linux/arm64` natively.
 | Command | Builds |
 | --- | --- |
 | `magus run image-build` | cgo variant, host architecture |
-| `magus run image-build:static` | static variant, host architecture |
-| `magus run image-build:static,arm64` | static variant, forced `linux/arm64` |
+| `magus run image-build` | static variant (the default), host architecture |
+| `magus run image-build:arm64` | static variant, forced `linux/arm64` |
+| `magus run image-build:dynamic` | dynamic (glibc) variant, host architecture |
 | `magus run image-build:amd64` | cgo variant, forced `linux/amd64` |
 
 The `amd64` and `arm64` charms exist for reproducing a failure that only happens on
@@ -146,7 +147,7 @@ docker rm "$id"
 `podman` works the same way with `podman create` / `podman cp`. Pin a version rather
 than `latest`, so what you extract is reproducible.
 
-This only works with the static image. The binary in the `-cgo` image is linked
+This only works with the static image. The binary in the `-dynamic` image is linked
 against that image's glibc and will not run on an arbitrary host. What you extract is
 the same static build the unsuffixed release archives ship, so it has no Buzz FFI
 either (see Variants).
@@ -219,7 +220,7 @@ grype sbom:magus.spdx.json
 ```
 
 The static image is a single Go binary on an empty base, so expect its SBOM to be
-short: the Go module graph and essentially nothing else. The `-cgo` image also lists
+short: the Go module graph and essentially nothing else. The `-dynamic` image also lists
 its distroless/cc glibc layer and `inotify-tools`.
 
 ## Next steps
