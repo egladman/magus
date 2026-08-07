@@ -29,7 +29,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://eli.gladman.cc/magus/install | sh
 
 | Route                                              | When                                                       |
 | -------------------------------------------------- | ---------------------------------------------------------- |
-| [Linux](download/linux.md)                          | manual install, amd64, arm64, or 32-bit ARM (armv6/armv7)   |
+| [Linux](download/linux.md)                          | manual install, amd64 or arm64                              |
 | [macOS](download/macos.md)                          | manual install, Apple Silicon or Intel                      |
 | [Windows](download/windows.md)                      | manual install, amd64 or arm64                              |
 | [Container image](download/container-image.md)      | run from an OCI image, or extract the binary from one       |
@@ -50,7 +50,6 @@ by the release pipeline but not tested by it.
 | linux/amd64 | Full test suite on every CI run. The only continuously tested platform. |
 | darwin/arm64 | Not covered by CI, but it is the primary development platform, so the suite runs against it constantly by hand. |
 | linux/arm64 | Not covered by CI. Built natively by the release pipeline; the release binary and the test suites have been executed on real arm64 hardware. |
-| linux/armv7, linux/armv6 | Not covered by CI. Cross-compiled; binaries executed under emulation (`version`, a Buzz workload, and the interpreter test suites) but **never on physical hardware**. |
 | darwin/amd64 | Not covered by CI. Built natively by the release pipeline on an Intel runner (so it compiles and links, including the cgo variant), but **never executed**. |
 | windows/amd64 | Not covered by CI. Built natively by the release pipeline (so it compiles and links, including the cgo variant), but **never executed**. |
 | windows/arm64 | Not covered by CI. Cross-compiled, static only, **never executed** - the newest and least proven target. |
@@ -68,9 +67,6 @@ Two consequences worth knowing before you pick a build:
   valuable report. See the [gopherbuzz JIT
   notes](https://github.com/egladman/magus/blob/main/libs/gopherbuzz/README.md#which-platforms-this-has-actually-run-on)
   for the full matrix.
-
-The 32-bit ARM builds run the interpreter rather than the JIT, which is 64-bit
-only, so they are slower on numeric workloads but do not carry that risk.
 
 ## Next steps
 

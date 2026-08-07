@@ -44,7 +44,7 @@ jobs:
   # "Install codec build dependencies" step, or MSYS2 packages on Windows.
   # contents: read only; none of these see MAGUS_SIGNING_KEY.
   release-linux-amd64:
-    name: Build release artifacts (linux amd64 + armv6/armv7-static)
+    name: Build release artifacts (linux/amd64)
     runs-on: ubuntu-latest
     permissions:
       contents: read  # publish is the only job that creates the Release/uploads assets
@@ -69,22 +69,17 @@ jobs:
       # No remote-cache env is set in CD on purpose: a release builds clean off the
       # cache. magusfile.buzz leaves the backend unbound without it, so there is zero
       # chance of replaying a cached (unsigned) artifact into a release.
-      # The 32-bit ARM archives ride along here rather than getting their own runner:
-      # they are CGO_ENABLED=0 pure-Go cross-compiles, so any host builds them. They are
-      # passed as explicit ARGS, not as GOOS/GOARCH env like the darwin and windows
-      # cross-builds above, because armv6/armv7 are ASSET names rather than real GOARCH
-      # values - putting them in GOARCH would be a lie to every other tool reading the
-      # environment. The magusfile folds them back to GOARCH=arm plus a GOARM level.
-      # Two assets and not one: an ARMv7 binary traps on ARMv6 hardware, so the older
-      # boards need their own build. Both are hardware-float (GOARM=6 is VFPv1, GOARM=7
-      # is VFPv3; softfloat would be GOARM=5, which is not built here) - the v6 asset
-      # gives up the newer VFP, not floating point. No -cgo variant for either.
-      - name: Build release artifacts (amd64 static + dynamic, armv6/armv7 static)
+      # No 32-bit ARM assets here yet, deliberately. release-build CAN produce them by
+      # hand (`-- linux armv7`), and the magusfile folds those asset names back to
+      # GOARCH=arm plus a GOARM level, but nothing has ever EXECUTED a 32-bit build of
+      # this codebase - gopherbuzz did not even compile where `int` is 32 bits until
+      # recently, and a cross-compile proves only that the linker ran. Publishing an
+      # archive nobody has run is what this omission avoids. Re-add these once the
+      # 32-bit plan has an executed test suite behind it.
+      - name: Build release artifacts (static + dynamic)
         run: |
           magus run release-build:static --no-default-charms
           magus run release-build --no-default-charms
-          magus run release-build:static --no-default-charms -- linux armv6
-          magus run release-build:static --no-default-charms -- linux armv7
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dist-linux-amd64
