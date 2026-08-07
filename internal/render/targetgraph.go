@@ -85,15 +85,21 @@ func stripFragment(rawURL string) string {
 // Spaces are encoded as %20 (via url.PathEscape) rather than '+' (QueryEscape)
 // because the browser decodes the fragment with decodeURIComponent, which turns
 // %20 back into a space but leaves '+' as a literal plus character.
+func queryCell(query, explorerURL string) string {
+	if explorerURL == "" {
+		return md.Code(query)
+	}
+	base := stripFragment(explorerURL)
+	return md.Link(md.Code(query), strings.TrimRight(base, "/")+"/#q="+url.PathEscape(query))
+}
+
 // magnitude renders a count rounded down to its leading digit ("50+", "200+"), so a
 // routing index conveys real size without churning on every increment.
 //
 // Leading digit rather than bare order of magnitude: collapsing 273 to "100+" reads the
-// same as 136 and under-states it, which loses the thing the column exists to convey.
-// Rounding to 200+ keeps that while still absorbing nine increments out of ten - the
-// count moves constantly, the bucket only when it crosses a ten (or a hundred, or a
-// thousand, since the step scales with the number). Under 10 it prints exactly: that
-// range is stable and is where precision actually reads differently.
+// same as 136 and under-states it, losing the thing the column exists to convey. Rounding
+// to 200+ keeps that while still absorbing nine increments out of ten. Under 10 it prints
+// exactly: that range is stable and is where precision actually reads differently.
 func magnitude(n int) string {
 	if n < 10 {
 		return strconv.Itoa(n)
@@ -102,15 +108,7 @@ func magnitude(n int) string {
 	for n/step >= 10 {
 		step *= 10
 	}
-	return strconv.Itoa((n / step) * step) + "+"
-}
-
-func queryCell(query, explorerURL string) string {
-	if explorerURL == "" {
-		return md.Code(query)
-	}
-	base := stripFragment(explorerURL)
-	return md.Link(md.Code(query), strings.TrimRight(base, "/")+"/#q="+url.PathEscape(query))
+	return strconv.Itoa((n/step)*step) + "+"
 }
 
 // WriteTargetGraphMarkdown renders a workspace's MAGUS.md: a routing index, not a

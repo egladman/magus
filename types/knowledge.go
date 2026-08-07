@@ -446,8 +446,8 @@ type KnowledgeRouting struct {
 	CatalogFingerprint string                    `json:"catalog_fingerprint,omitempty" yaml:"catalog_fingerprint,omitempty"`
 	NodeCount          int                       `json:"node_count"     yaml:"node_count"`
 	EdgeCount          int                       `json:"edge_count"     yaml:"edge_count"`
-	Kinds         []KnowledgeRoutingKind    `json:"kinds"          yaml:"kinds"`
-	Projects      []KnowledgeRoutingProject `json:"projects"       yaml:"projects"`
+	Kinds              []KnowledgeRoutingKind    `json:"kinds"          yaml:"kinds"`
+	Projects           []KnowledgeRoutingProject `json:"projects"       yaml:"projects"`
 }
 
 // KnowledgeRoutingKind is one row of the domain routing table: a node kind, how
