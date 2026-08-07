@@ -544,7 +544,22 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	if len(pos) == 0 {
 		outputs, unexplained = types.SplitExplainedOutputs(files, sourcesChangedSinceBase(ctx, ws, res, root))
 	}
+	// Naming a path is an explicit statement of intent about that path, so an undeclared
+	// one the caller ASKED for is staged rather than reported as skipped. Without this,
+	// `magus vcs add .gitattributes` refused the very file its own message had just told
+	// you to name ("name them explicitly or pass --untracked"), and the only way to stage
+	// it was the flag - or plain git, which is what the command exists to replace.
+	//
+	// --untracked stays the whole-tree form of the same permission: it says yes to every
+	// undeclared path at once, which is the one that needs a flag because nobody named
+	// them one by one.
+	explicit := len(pos) > 0
 	maintained, unclaimed := splitMaintained(undeclared)
+	if explicit {
+		// They were asked for by name, so they are not "skipped" and must not be
+		// reported as if they were.
+		maintained, unclaimed = nil, nil
+	}
 
 	verdict := types.StagingVerdict{
 		Sources:     sources,
@@ -563,7 +578,7 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	}
 
 	stage := slices.Concat(sources, outputs)
-	if untracked {
+	if untracked || explicit {
 		stage = append(stage, undeclared...)
 	}
 	slices.Sort(stage)
