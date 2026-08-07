@@ -292,6 +292,20 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
         foreach (path in GENERATED) {
             if (vcs\isDirty([path])) { moved.append(path); }
         }
+        // Print the diff, not just the names. This gate cannot fire on a developer
+        // machine (it is inert in a worktree), so CI is the only place it runs and
+        // the log is the only artifact anyone gets - and a name alone still leaves
+        // the reader guessing WHY a file they regenerated locally came out
+        // different on a runner. git only: hg and jj take different arguments, and
+        // a diagnostic must never be the thing that fails the build, so a backend
+        // that cannot answer just prints nothing.
+        if (vcs\name() == "git") {
+            final d = vcs\cmd(["diff", "--unified=1", "--"] + moved,
+                {"allow_failure": true, "quiet": true});
+            if (d.stdout != "") {
+                magus\info("generate: what changed on this runner:\n" + d.stdout);
+            }
+        }
         throw "generate: regeneration changed " + moved.join(", ")
             + "; re-run `magus run generate:rw docs` and commit";
     }
