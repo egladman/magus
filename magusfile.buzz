@@ -1011,6 +1011,88 @@ fun goarm_level(goos: str, goarch: str) > str {
     return "7";
 }
 
+// Writes THIRD-PARTY-NOTICES beside the staged binary, reading the module list OUT OF THAT
+// BINARY rather than out of go.mod.
+//
+// That distinction is the whole point. The two variants link different modules - the dynamic
+// build carries ebitengine/purego for FFI, the static build carries ulikunitz/xz for pure-Go
+// compression, and no shipped artifact contains both. A notices file resolved from go.mod
+// would name modules that are not in the archive it sits in, which is the precise inaccuracy
+// this file exists to prevent.
+//
+// `go version -m` is the reader: Go embeds the module table in every binary and prints it
+// without executing anything, so this works on a cross-compiled artifact too. The license
+// TEXTS come from the module cache, where the module zips already put them - no classifier,
+// no network, no extra tool to pin.
+fun write_notices(stage: str, binary: str) > void {
+    final modcache = os\exec("go", ["env", "GOMODCACHE"], ".", {}).stdout.split(separator: "\n")[0];
+    final listing = os\exec("go", ["version", "-m", fs\join(stage, binary)], ".", {}).stdout;
+
+    var body = "THIRD-PARTY NOTICES\n\n"
+        + "magus is licensed under the terms in the accompanying LICENSE file. It links the\n"
+        + "modules below, each under its own terms, reproduced here in full. This list is read\n"
+        + "from the shipped binary, so it describes THIS artifact rather than the module graph\n"
+        + "in general.\n\n";
+    var missing = mut [<str>];
+    var count = 0;
+
+    foreach (line in listing.split(separator: "\n")) {
+        final f = line.split(separator: "\t");
+        // Every dep row is "\tdep\t<path>\t<version>\t<hash>", so index 1 is the marker.
+        if (f.len() < 4) { continue; }
+        if (f[1] != "dep") { continue; }
+        // First-party modules are covered by the LICENSE next to this file. They are local
+        // replaces, so they also carry no cache entry to read a license from.
+        if (f[2].startsWith("github.com/egladman/magus")) { continue; }
+
+        final text = read_module_license(modcache, f[2], f[3]);
+        if (text == "") { missing.append(f[2] + "@" + f[3]); continue; }
+        body = body + "==============================================================================\n"
+            + f[2] + " " + f[3] + "\n"
+            + "==============================================================================\n\n"
+            + text + "\n\n";
+        count = count + 1;
+    }
+
+    // A dependency whose license cannot be found is a REPORTED failure, never a silent
+    // omission. A notices document that quietly drops an entry is worse than none, because it
+    // reads as complete to anyone auditing it.
+    if (missing.len() > 0) {
+        throw "release-build: no license found for " + "{missing.len()}"
+            + " module(s), refusing to write an incomplete THIRD-PARTY-NOTICES: "
+            + missing.join(separator: ", ");
+    }
+    fs\writeFile(fs\join(stage, "THIRD-PARTY-NOTICES"), body);
+    magus\info("notices: documented {count} third-party modules");
+}
+
+// Reads one module's license text from the module cache, or "" when none is present.
+fun read_module_license(modcache: str, path: str, version: str) > str {
+    final dir = fs\join(modcache, escape_module_path(path) + "@" + version);
+    foreach (name in ["LICENSE", "LICENSE.md", "LICENSE.txt", "LICENCE", "LICENCE.txt",
+                      "COPYING", "COPYING.md", "COPYING.txt"]) {
+        final p = fs\join(dir, name);
+        if (fs\exists(p)) { return fs\readFile(p); }
+    }
+    return "";
+}
+
+// Applies the module cache's case encoding: an uppercase letter becomes "!" plus its
+// lowercase form, so github.com/Masterminds/sprig is stored at github.com/!masterminds/sprig.
+// Without this every capitalised module path looks unlicensed - a false "missing license"
+// that would abort a release for no reason.
+fun escape_module_path(path: str) > str {
+    var escaped = "";
+    var i = 0;
+    while (i < path.len()) {
+        final ch = path.sub(i, len: 1);
+        final lower = ch.lower();
+        if (lower != ch) { escaped = escaped + "!" + lower; } else { escaped = escaped + ch; }
+        i = i + 1;
+    }
+    return escaped;
+}
+
 fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool, suffix: str) > void {
     // Resolved BEFORE anything is written: goarm_level rejects a platform this project
     // does not ship, and a rejected request should leave no trace. Creating the staging
@@ -1081,6 +1163,31 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     build_args.append("-o"); build_args.append(fs\join(stage, binary));
     build_args.append("./cmd/magus");
     go["go-build"](ctx.withEnv(env), {"args": build_args});
+
+    // What ships BESIDE the binary. GPL-3.0 section 4 asks that a copy of the License travel
+    // with the Program, and the ~70 MIT/BSD/Apache dependencies each require their notice
+    // reproduced in a binary redistribution - neither obligation is met by an archive
+    // holding one executable. The notices are generated FROM THIS BINARY rather than from
+    // go.mod, because the two variants link different modules and a document naming both
+    // would describe neither (see cmd/magus-utils/notices.go).
+    fs\copyFile("LICENSE", fs\join(stage, "LICENSE"));
+    fs\copyFile("README.md", fs\join(stage, "README.md"));
+    write_notices(stage, binary);
+
+    // Readable WITHOUT running the binary, which is the point: a dynamically linked build on
+    // a host missing libzstd or liblzma fails in the loader before main() ever runs, so
+    // `magus version` is unavailable exactly when someone most needs to know what they have.
+    var variant = "static";
+    if (cgo) { variant = "dynamic"; }
+    var platform = goos + "/" + goarch;
+    if (goarm != "") { platform = platform + " (GOARM=" + goarm + ")"; }
+    fs\writeFile(fs\join(stage, "BUILDINFO"),
+        "magus " + v + "\n"
+        + "commit:   " + commit() + "\n"
+        + "built:    " + build_date() + "\n"
+        + "platform: " + platform + "\n"
+        + "variant:  " + variant + "\n"
+        + "\nRun `go version -m magus` for the full module list and build settings.\n");
 
     final asset = fs\join("dist", "magus_" + v + "_" + goos + "_" + goarch + suffix + ".tar.gz");
     archive\compress(stage, asset, {});
