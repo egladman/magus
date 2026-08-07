@@ -48,7 +48,10 @@ func TestNoRescanningStringLoops(t *testing.T) {
 
 	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			return nil // unreadable trees are not this test's business
+			// An unreadable subtree is not this gate's business: it scans the
+			// sources that ARE readable and says nothing about the rest, rather
+			// than failing a lint over a permissions quirk.
+			return nil //nolint:nilerr // deliberate: skip, do not abort the walk
 		}
 		if d.IsDir() {
 			switch d.Name() {
@@ -62,7 +65,7 @@ func TestNoRescanningStringLoops(t *testing.T) {
 		}
 		body, err := os.ReadFile(path)
 		if err != nil {
-			return nil
+			return nil //nolint:nilerr // same: an unreadable file is skipped, not fatal
 		}
 		lines := strings.Split(string(body), "\n")
 		for i, line := range lines {
