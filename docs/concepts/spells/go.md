@@ -129,6 +129,8 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 
 ## go-mod-edit
 
+Edit is offline: it "reads only go.mod; it does not look up information about the modules involved" (go help mod edit), so the same tree always yields the same bytes. The write charm is therefore rw, not relock.
+
 **Command:** `go mod edit -print`
 
 ### rw
@@ -157,9 +159,11 @@ Captures Go's structured module view for the spell's higher-level Buzz helper. T
 
 ## go-mod-tidy
 
+Tidy resolves against the module proxy, and an import go.mod does not require yet arrives at latest, so its result turns on what upstream serves today rather than on this tree alone. The write charm is therefore relock, not rw.
+
 **Command:** `go mod tidy --diff`
 
-### rw
+### relock
 
 Drops `--diff`.
 

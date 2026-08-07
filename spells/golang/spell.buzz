@@ -75,12 +75,18 @@ fun goTest(target: Target) > Command {
         "cd": append(["-covermode=atomic", "-coverprofile=coverage.out"]),
     }};
 }
+// Tidy resolves against the module proxy, and an import go.mod does not require yet
+// arrives at latest, so its result turns on what upstream serves today rather than on
+// this tree alone. The write charm is therefore relock, not rw.
 fun goModTidy(target: Target) > Command {
     final args = ["mod", "tidy", "--diff"];
     return Command{bin = "go", args = args, charms = {
-        "rw": drop(args, "--diff"),
+        "relock": drop(args, "--diff"),
     }};
 }
+// Edit is offline: it "reads only go.mod; it does not look up information about the
+// modules involved" (go help mod edit), so the same tree always yields the same bytes.
+// The write charm is therefore rw, not relock.
 fun goModEdit(target: Target) > Command {
     final args = ["mod", "edit", "-print"];
     return Command{bin = "go", args = args, capture = true, charms = {
