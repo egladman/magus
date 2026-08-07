@@ -63,6 +63,41 @@ Almost every provider is workspace-local, because reaching a backend means `os\e
 `http`. That is expected, not a downgrade: `spells/github/actions` backs this repo's own
 remote cache that way.
 
+## Reaching magus from a spell: fork, do not read
+
+A spell can `import "magus"`, and `magus\Context` is nameable as a type, so a shared spell
+helper can be typed rather than taking `any`. But only part of that namespace works, and
+the split is not arbitrary:
+
+> **A spell is loaded WHILE the workspace is being constructed.** `magus\project({...})`
+> resolves its spells as the magusfile is evaluated, so when your spell's code runs there
+> is no finished workspace to ask about yet.
+
+That single fact decides which members you may call:
+
+| | members | in a spell |
+| --- | --- | --- |
+| in-process | `ls`, `targets`, `affected`, `graph`, `where` | **raise [MGS1022](../reference/codes/magusfile/MGS1022.md)** - they read the workspace already open on the context, and there is not one |
+| declaring | `project`, `cache.remote`, `ci.provider` | **raise MGS1022** - only a magusfile evaluation has the registry to declare into |
+| forking | `cmd`, `run`, `describe`, `insight`, `doctor`, `describeFile`, `impact`, `targetGraph`, `insightReport` | **work** - each spawns a nested magus that discovers and loads its own workspace |
+
+So the rule is: from a spell, fork. `magus\cmd("ls", args: ["-o", "json"])` answers what
+`magus\ls()` would have, at the cost of a subprocess.
+
+Two things that follow, and neither is guessable:
+
+**A file under `spells/` is loaded twice.** Once as a discovered spell (a spell session, no
+workspace) and once if a magusfile imports it by path (the magusfile session, workspace
+present). A helper called FROM a magusfile therefore runs on the magusfile surface, where
+the in-process members do work - the same call inside a handler op does not. If you are
+writing a helper for a magusfile to call, you have the full surface; if you are writing an
+op body, assume you do not.
+
+**A spell cannot import another spell.** `import "magus/spell/<name>"` does not resolve in
+a spell file, deliberately: spells importing spells invites circular loads. Pass the other
+spell in as a parameter instead, the way `spells/golang/gomod.buzz` takes the `go` handle
+from its caller.
+
 ## The `mgs_` contract
 
 Every function is optional except `mgs_getName`. magus looks each one up by name and uses

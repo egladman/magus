@@ -232,7 +232,7 @@ func buildMagusNS(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserv
 func magusfileOnly(obs buzz.DirectObserver, member string) vm.Value {
 	return directVal(obs, member, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.Null, types.DiagnosticErrorf(types.MagusfileOnlyMember,
-			"%s: only callable from a magusfile, not a magus buzz script - it declares into the workspace magus is loading, and a script has none", member)
+			"%s: only callable from a magusfile, not from a spell or a `magus buzz` script - it declares into the workspace magus is loading, and neither has one to declare into", member)
 	})
 }
 

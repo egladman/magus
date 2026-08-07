@@ -26,6 +26,14 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz"
 )
 
+// workspaceLocalSpells names the spell source dirs that deliberately import host modules
+// and therefore ship as source rather than compiled into the binary. Every other dir under
+// spells/ is expected to compile; see the check in runSpells for why the distinction has
+// to be declared rather than inferred.
+var workspaceLocalSpells = map[string]bool{
+	"onepassword": true, // reaches the `op` CLI, so it imports os
+}
+
 func runSpells(args []string) error {
 	// Defaults assume invocation from the spell package dir via go:generate.
 	fs := flag.NewFlagSet("spells", flag.ExitOnError)
@@ -62,7 +70,18 @@ func runSpells(args []string) error {
 		// bare-compiled built-in and is skipped.
 		combined, ok := spellruntime.SelfContainedBuiltinSource(string(src))
 		if !ok {
-			continue
+			// Skipping is right for a spell that is MEANT to ship as source, and wrong
+			// for a built-in that just grew a host import. The two are indistinguishable
+			// from the source alone, and getting it wrong is silent in the worst way: the
+			// .bo is never written, the spell vanishes from the registry, and this
+			// generator still exits 0. Naming the intended-source spells makes an
+			// accidental demotion an error instead, and adding a new one a deliberate,
+			// reviewable edit here.
+			if workspaceLocalSpells[dir] {
+				continue
+			}
+			return fmt.Errorf("spell %q imports a host module, so it cannot be compiled into the binary: "+
+				"drop the import to keep it built-in, or add %q to workspaceLocalSpells to ship it as source", srcPath, dir)
 		}
 		sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 		chunk, err := sess.Compile(combined)
