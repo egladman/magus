@@ -299,12 +299,10 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
         // different on a runner. git only: hg and jj take different arguments, and
         // a diagnostic must never be the thing that fails the build, so a backend
         // that cannot answer just prints nothing.
-        if (vcs\name() == "git") {
-            final d = vcs\cmd(["diff", "--unified=1", "--"] + moved,
-                {"allow_failure": true, "quiet": true});
-            if (d.stdout != "") {
-                magus\info("generate: what changed on this runner:\n" + d.stdout);
-            }
+        if (vcs\name == "git") {
+            magus\info("generate: what changed on this runner:");
+            vcs\cmd(["diff", "--unified=1", "--"] + moved,
+                opts: {"allow_failure": true});
         }
         throw "generate: regeneration changed " + moved.join(", ")
             + "; re-run `magus run generate:rw docs` and commit";
