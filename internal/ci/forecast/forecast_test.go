@@ -296,7 +296,11 @@ func TestPlan_memoryBudgetSplitsAShardThatWouldNotFit(t *testing.T) {
 	seedPeak(&h, ".", "ci", 6<<30)
 	ps := projects("docs", ".")
 
-	unbudgeted := Forecaster{History: h, Target: "ci"}.Plan(ps, 8)
+	// An effectively infinite budget, NOT a zero one: zero means "derive from this
+	// host", so a bare Forecaster asserts something different on a 16GB CI runner
+	// than on a workstation - which is precisely how this test passed locally and
+	// failed in CI. Pin the budget whenever the assertion is about the time model.
+	unbudgeted := Forecaster{History: h, Target: "ci", MemoryBudgetBytes: 1 << 62}.Plan(ps, 8)
 	require.Len(t, unbudgeted, 1, "precondition: the time model consolidates these")
 
 	// The budget is USABLE memory, not the runner's nameplate: a 16GB runner also
@@ -327,7 +331,9 @@ func TestPlan_unmeasuredProjectsPlanExactlyAsBefore(t *testing.T) {
 	h := History{}
 	ps := projects("a", "b", "c", "d")
 
-	before := Forecaster{History: h, Target: "ci"}.Plan(ps, 8)
+	// Pinned, not derived: a bare Forecaster reads this machine's memory, which
+	// would make the comparison mean different things on different hosts.
+	before := Forecaster{History: h, Target: "ci", MemoryBudgetBytes: 1 << 62}.Plan(ps, 8)
 	after := Forecaster{History: h, Target: "ci", MemoryBudgetBytes: 1 << 30}.Plan(ps, 8)
 	assert.Equal(t, len(before), len(after), "no recorded peaks must mean no change in plan")
 }
@@ -341,7 +347,7 @@ func TestPlan_neverPlansFewerShardsThanTheTimeModelAsked(t *testing.T) {
 	seedPeak(&h, "b", "ci", 1<<20)
 	ps := projects("a", "b")
 
-	base := Forecaster{History: h, Target: "ci"}.Plan(ps, 8)
+	base := Forecaster{History: h, Target: "ci", MemoryBudgetBytes: 1 << 62}.Plan(ps, 8)
 	withBudget := Forecaster{History: h, Target: "ci", MemoryBudgetBytes: 64 << 30}.Plan(ps, 8)
 	assert.GreaterOrEqual(t, len(withBudget), len(base))
 }
