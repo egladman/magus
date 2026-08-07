@@ -15,10 +15,16 @@ VERSION=__MAGUS_VERSION__
 ARCH=amd64            # or arm64 - see below
 curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/magus_${VERSION}_linux_${ARCH}_static.tar.gz"
 mkdir -p ~/.local/bin
-tar -xzf "magus_${VERSION}_linux_${ARCH}_static.tar.gz"
+tar -xzf "magus_${VERSION}_linux_${ARCH}_static.tar.gz" magus
 mv magus ~/.local/bin/
 magus version
 ```
+
+The archive also carries `LICENSE`, `THIRD-PARTY-NOTICES`, `README.md`, and a
+`BUILDINFO` file naming the exact version, commit, platform, and variant. Naming
+`magus` on the `tar` line above extracts just the binary; drop it to unpack all of
+them. `BUILDINFO` is readable without running anything, which is the point if a
+dynamically linked build will not start.
 
 ## Which `ARCH`
 

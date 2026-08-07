@@ -15,10 +15,16 @@ $VERSION = "__MAGUS_VERSION__"
 $ARCH = "amd64"       # or arm64 on Windows on ARM
 curl.exe -fLO "https://github.com/egladman/magus/releases/download/$VERSION/magus_${VERSION}_windows_${ARCH}_static.tar.gz"
 mkdir -Force $Env:USERPROFILE\bin | Out-Null
-tar -xzf "magus_${VERSION}_windows_${ARCH}_static.tar.gz"
+tar -xzf "magus_${VERSION}_windows_${ARCH}_static.tar.gz" magus.exe
 Move-Item -Force magus.exe $Env:USERPROFILE\bin\magus.exe
 magus version
 ```
+
+The archive also carries `LICENSE`, `THIRD-PARTY-NOTICES`, `README.md`, and a
+`BUILDINFO` file naming the exact version, commit, platform, and variant. Naming
+`magus.exe` on the `tar` line above extracts just the binary; drop it to unpack all of
+them. `BUILDINFO` is readable without running anything, which is the point if a
+dynamically linked build will not start.
 
 Both `curl.exe` and `tar` ship with Windows 10 (1803+) and Windows 11, so no extra tooling is needed. `$VERSION` above is the current release; [GitHub Releases](https://github.com/egladman/magus/releases) lists every build.
 

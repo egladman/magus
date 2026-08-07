@@ -17,10 +17,16 @@ ASSET=magus_${VERSION}_darwin_arm64_static.tar.gz       # Apple Silicon
 #   ASSET=magus_${VERSION}_darwin_amd64_static.tar.gz
 curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/${ASSET}"
 mkdir -p ~/.local/bin
-tar -xzf "${ASSET}"
+tar -xzf "${ASSET}" magus
 mv magus ~/.local/bin/
 magus version
 ```
+
+The archive also carries `LICENSE`, `THIRD-PARTY-NOTICES`, `README.md`, and a
+`BUILDINFO` file naming the exact version, commit, platform, and variant. Naming
+`magus` on the `tar` line above extracts just the binary; drop it to unpack all of
+them. `BUILDINFO` is readable without running anything, which is the point if a
+dynamically linked build will not start.
 
 `${VERSION}` above is the current release. The `_static` archive is the installer
 default and what `magus self update` fetches.
