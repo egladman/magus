@@ -5,6 +5,8 @@
 import "path";
 import "serialize";
 import "std";
+import "magus";
+import "fs";
 
 fun module_json(mod: any) > str {
     return serialize\Boxed.init(mod).q("json").stringValue();
@@ -48,7 +50,7 @@ export fun replaceArgs(currentJSON: str, modules: [any]) > [str] {
         byPath[name] = mod;
         if (name == currentName) { current = mod; }
     }
-    if (current == null) { throw "go-mod-sync: no workspace Go module named " + currentName; }
+    if (current == null) { throw "gomod.replaceArgs: no workspace Go module named " + currentName; }
 
     final parsed = serialize\jsonDecode(module_json(current));
     var desired: {str: str} = mut {};
@@ -85,6 +87,40 @@ export fun replaceArgs(currentJSON: str, modules: [any]) > [str] {
         if (wanted != null and correct == false) { replacements.append("-replace=" + name + "=" + wanted); }
     }
     return drops + replacements;
+}
+
+// The go spell arrives as a parameter because a spell file cannot import another spell
+// (`magus/spell/go` is bound only for magusfiles), which is also why this file's header
+// says the caller supplies the two ops it needs.
+fun workspace_go_mods(ctx: magus\Context, go: any) > [any] {
+    final projects: Projects = magus\ls();
+    var modules: [any] = mut [<any>];
+    foreach (project in projects.projects) {
+        if (fs\exists(project.dir + "/go.mod")) {
+            final result = go["go-mod-json"](ctx.withCwd(project.dir));
+            modules.append({"dir": project.dir, "json": result.stdout});
+        }
+    }
+    return modules;
+}
+
+// replaceWorkspaceModules points every workspace-local requirement in this project's
+// go.mod at its relative path, standing in for the go.work this repo does not have.
+// Without rw it verifies and raises MGS1016; with rw the edit lands. `project` names the
+// magus project in that remediation, which the context cannot supply.
+//
+// modifiesExistingFiles, not writesFiles: as an output go.mod would be snapshotted and
+// replayable, so a cache hit could restore a pre-release go.mod over the version bump
+// `release` had just written - the two-owner hazard MGS1020 reports.
+export fun replaceWorkspaceModules(ctx: magus\Context, go: any, project: str) > void {
+    ctx.modifiesExistingFiles("go.mod");
+    final flags = replaceArgs(go["go-mod-json"](ctx).stdout, modules: workspace_go_mods(ctx, go));
+    if (flags.len() == 0) { return; }
+    final edited = go["go-mod-edit"](ctx, {"args": flags});
+    if (ctx.has_charm("rw")) { return; }
+    if (edited.stdout != fs\readFile("go.mod")) {
+        throw "MGS1016: go.mod has workspace-local replace drift; run `magus run generate:rw " + project + "` to apply the derived replacements";
+    }
 }
 
 test "derives a replacement and removes a stale workspace replacement" {
