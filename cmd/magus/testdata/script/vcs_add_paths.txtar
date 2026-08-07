@@ -1,0 +1,125 @@
+# `magus vcs add` stages what the workspace DECLARES, and has to work when you name a
+# path - including from a subdirectory, which is the whole reason workspaceRelPaths
+# exists.
+#
+# Naming a path never worked. vcsAddCmd was handed the --root OVERRIDE, which is empty
+# unless you passed --root, and used it as the workspace root for the path math - so
+# every named path resolved as outside a workspace whose name it could not even print
+# ("is outside the workspace at " with nothing after "at"). The whole-tree form only
+# appeared to work because an empty dir sends the VCS calls to the process cwd. The
+# command's own message tells you to name a path explicitly, so the advice pointed at
+# the one thing that was broken.
+#
+# Asserted on the index, not on stdout: whether the file is actually staged.
+
+exec git init
+exec git config user.email test@example.com
+exec git config user.name Test
+exec git checkout -b main
+exec git add magus.yaml magusfile.buzz src/a.txt out/gen.txt
+exec git commit -m initial
+
+# A source edit with the generated output it produced: both belong in one commit.
+cp src/a.new.txt src/a.txt
+cp out/gen.new.txt out/gen.txt
+exec magus vcs add
+exec git diff --cached --name-only
+stdout '^src/a\.txt$'
+stdout '^out/gen\.txt$'
+
+exec git commit -m source-and-output
+exec git status --porcelain
+! stdout .
+
+# A generated output that moved with NO source change behind it is not swept in: nothing
+# in this change produces it, so committing it would commit someone else's regeneration.
+cp out/gen.newer.txt out/gen.txt
+exec magus vcs add
+stdout 'no source change here accounts for'
+exec git diff --cached --name-only
+! stdout '^out/gen\.txt$'
+
+# Naming it explicitly is the documented override, and it has to actually work.
+exec magus vcs add out/gen.txt
+exec git diff --cached --name-only
+stdout '^out/gen\.txt$'
+
+exec git commit -m explicit-output
+
+# And from a SUBDIRECTORY, with a path relative to where you are standing - the case
+# workspaceRelPaths was written for.
+cp src/a.newer.txt src/a.txt
+cd src
+exec magus vcs add a.txt
+cd $WORK
+exec git diff --cached --name-only
+stdout '^src/a\.txt$'
+exec git commit -m subdir-add
+
+# -o json answers with the verdict itself. It used to be ACCEPTED here and silently
+# answer in text, because every arm printed prose regardless of the requested format -
+# the same defect the where command had. The classification rides along, so a caller
+# gets the coded reason without re-deriving it from a sentence.
+cp out/gen.newest.txt out/gen.txt
+exec magus vcs add --dry-run -o json
+stdout '"unexplained":'
+stdout '"out/gen.txt"'
+stdout '"code": "MGS4'
+stdout '"url":'
+
+# An UNDECLARED file that the caller names is staged. It used to be refused: undeclared
+# paths were staged only under --untracked, however they arrived, so `magus vcs add
+# scratch.txt` printed "name them explicitly or pass --untracked" and then declined the
+# file just named. The advice described behaviour the command did not have, and the only
+# way through was plain git - which is the thing vcs add exists to replace.
+cp src/a.newer.txt notes.txt
+exec magus vcs add notes.txt
+exec git diff --cached --name-only
+stdout '^notes\.txt$'
+! stdout 'no target claims them'
+
+exec git commit -m explicit-undeclared
+
+# The whole-tree form still requires the flag: nobody named those paths one by one, so
+# saying yes to all of them at once is the part that needs asking for.
+cp src/a.new.txt loose.txt
+exec magus vcs add
+stdout 'no target claims them'
+exec git diff --cached --name-only
+! stdout '^loose\.txt$'
+
+exec magus vcs add --untracked
+exec git diff --cached --name-only
+stdout '^loose\.txt$'
+
+-- magus.yaml --
+default_charms: [rw]
+-- .gitignore --
+.magus/
+.gitignore
+*.new.txt
+*.newer.txt
+*.newest.txt
+-- magusfile.buzz --
+import "magus";
+magus\project({
+    "name": "acme-root",
+    "sources": ["magusfile.buzz", "src/**"],
+});
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("out/gen.txt");
+}
+-- src/a.txt --
+source one
+-- src/a.new.txt --
+source two
+-- src/a.newer.txt --
+source three
+-- out/gen.txt --
+generated one
+-- out/gen.new.txt --
+generated two
+-- out/gen.newer.txt --
+generated three
+-- out/gen.newest.txt --
+generated four

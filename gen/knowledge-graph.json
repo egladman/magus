@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2458,
-  "edge_count": 5582,
+  "node_count": 2461,
+  "edge_count": 5586,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -423,6 +423,14 @@
       "label": "MGS5003",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/services/MGS5003/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS5004",
+      "kind": "diagnostic",
+      "label": "MGS5004",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/services/MGS5004/"
       }
     },
     {
@@ -858,7 +866,7 @@
       "source": "docs/guides",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "24",
+        "dir_files": "25",
         "dir_languages": "markdown"
       }
     },
@@ -880,7 +888,7 @@
       "source": "docs/guides/integrations",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "7",
+        "dir_files": "8",
         "dir_languages": "markdown"
       }
     },
@@ -913,7 +921,7 @@
       "source": "docs/reference",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "149",
+        "dir_files": "150",
         "dir_languages": "markdown"
       }
     },
@@ -946,7 +954,7 @@
       "source": "docs/reference/codes",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "73",
+        "dir_files": "74",
         "dir_languages": "markdown"
       }
     },
@@ -1034,7 +1042,7 @@
       "source": "docs/reference/codes/services",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "4",
+        "dir_files": "5",
         "dir_languages": "markdown"
       }
     },
@@ -2937,6 +2945,18 @@
       }
     },
     {
+      "id": "doc:docs/guides/integrations/git.md",
+      "kind": "doc",
+      "label": "docs/guides/integrations/git.md",
+      "source": "docs/guides/integrations/git.md",
+      "attrs": {
+        "role": "doc",
+        "section": "guides",
+        "tags": "git,vcs,hooks,gitattributes,merge-driver,generated-files,conflicts",
+        "title": "Git integration"
+      }
+    },
+    {
       "id": "doc:docs/guides/integrations/github-actions.md",
       "kind": "doc",
       "label": "docs/guides/integrations/github-actions.md",
@@ -4217,6 +4237,18 @@
         "section": "reference",
         "tags": "MGS5003,services,command op,watch,ward",
         "title": "MGS5003: command op never exits"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/services/MGS5004.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/services/MGS5004.md",
+      "source": "docs/reference/codes/services/MGS5004.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS5004,services,daemon,detach,background",
+        "title": "MGS5004: this needs the persistent daemon"
       }
     },
     {
@@ -23739,6 +23771,14 @@
     },
     {
       "source": "dir:docs/guides/integrations",
+      "target": "doc:docs/guides/integrations/git.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/git.md"
+    },
+    {
+      "source": "dir:docs/guides/integrations",
       "target": "doc:docs/guides/integrations/github-actions.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -24784,6 +24824,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/services/MGS5003.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/services",
+      "target": "doc:docs/reference/codes/services/MGS5004.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/services/MGS5004.md"
     },
     {
       "source": "dir:docs/reference/codes/services",
@@ -31946,6 +31994,14 @@
       "provenance": "docs/guides/integrations/editor.md"
     },
     {
+      "source": "doc:docs/guides/integrations/git.md",
+      "target": "spell:python",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/guides/integrations/git.md"
+    },
+    {
       "source": "doc:docs/guides/integrations/github-actions.md",
       "target": "doc:docs/concepts/cache/remote.md",
       "relation": "references",
@@ -34952,6 +35008,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/services/MGS5003.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/services/MGS5004.md",
+      "target": "diagnostic:MGS5004",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/services/MGS5004.md"
     },
     {
       "source": "doc:docs/reference/codes/services/README.md",

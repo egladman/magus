@@ -83,6 +83,7 @@ Once the basics click, these cover running magus at scale and in CI.
 - [Concurrency](concepts/concurrency.md) - the two scopes of parallel work: the scheduler within a run, and the cross-process workspace lock between separate `magus` invocations (with `MAGUS_NO_WAIT`).
 - [Remote caching](concepts/cache/remote.md) - share the build cache across machines and CI, with a signing-based trust model.
 - [Editor setup](guides/editor.md) - wire your editor to `magus buzz lsp` for magusfile completion, hover, and signature help.
+- [Git integration](guides/git.md) - the generated-file merge driver and what no forge will run, settling conflicts with `magus vcs resolve`, and the rule every magus hook obeys: a hook hands off work, it never does work.
 - [Debugging](guides/debugging.md) - the interactive REPL, `magus\pry()` breakpoints, and stepping through a target.
 - [Tips and tricks](guides/tips.md) - non-obvious ways to combine subcommands.
 - [MCP](guides/mcp.md) - drive magus from agents over the Model Context Protocol.

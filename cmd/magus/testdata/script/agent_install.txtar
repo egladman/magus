@@ -39,12 +39,15 @@ stdout 'magus-query/SKILL.md'
 ! exec magus agent install
 stderr 'destination directory'
 
-# the hook evaluates a command from a host event and renders any dialect
+# the hook evaluates a command from a host event and renders any dialect.
+# A deny EXITS NON-ZERO as well as rendering: a host that reads only the status must
+# block, and one that reads the payload gets the same verdict either way. Exiting 0 on a
+# deny is what made the guard look installed while enforcing nothing.
 stdin command.txt
-exec magus hook -o name
+! exec magus hook -o name
 stdout 'deny'
 stdin command.txt
-exec magus hook -o 'template={{if eq .decision "deny"}}{"permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}{{end}}'
+! exec magus hook -o 'template={{if eq .decision "deny"}}{"permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}{{end}}'
 stdout 'permissionDecision'
 
 # arguments work without stdin, and a benign command passes

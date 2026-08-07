@@ -65,6 +65,7 @@ var (
 	ServerStart      = cmd("server", "start")
 	ServerStop       = cmd("server", "stop")
 	ServerJob        = cmd("server", "job")
+	ServerReload     = cmd("server", "reload")
 	Status           = cmd("status")
 	Watch            = cmd("watch")
 	Affected         = cmd("affected")

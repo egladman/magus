@@ -362,6 +362,7 @@ func (v DoctorCheck) BuzzObject() BuzzObject {
 		"status":  string(v.Status),
 		"message": v.Message,
 		"details": v.Details,
+		"fix":     v.Fix,
 	}
 }
 

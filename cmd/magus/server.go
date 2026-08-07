@@ -28,7 +28,7 @@ import (
 func serverCmd(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 {
 		serverUsage()
-		return usagef("magus server: target required (want start, stop, or job)")
+		return usagef("magus server: target required (want start, stop, reload, or job)")
 	}
 	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		serverUsage()
@@ -42,21 +42,24 @@ func serverCmd(ctx context.Context, root string, args []string) error {
 		return serverStop(ctx, rest)
 	case clihint.ServerJob.Leaf():
 		return serverJob(ctx, rest)
+	case clihint.ServerReload.Leaf():
+		return serverReload(ctx, rest)
 	case jobs.NameRotateActivities:
 		return serverRotateActivities(ctx, root, rest)
 	case jobs.NameRotateLogs:
 		return serverRotateLogs(ctx, root, rest)
 	default:
-		return usagef("magus server: unknown target %q (want start, stop, or job); use `%s` to inspect daemon state", sub, clihint.Status)
+		return usagef("magus server: unknown target %q (want start, stop, reload, or job); use `%s` to inspect daemon state", sub, clihint.Status)
 	}
 }
 
 func serverUsage() {
-	fmt.Fprintln(os.Stderr, "usage: magus server <start|stop|job> [flags]")
+	fmt.Fprintln(os.Stderr, "usage: magus server <start|stop|reload|job> [flags]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Targets:")
 	fmt.Fprintln(os.Stderr, "  start   start a persistent daemon and block until stopped")
 	fmt.Fprintln(os.Stderr, "  stop    send a graceful shutdown request to a running daemon")
+	fmt.Fprintln(os.Stderr, "  reload  re-read configuration without restarting: drop the daemon's open workspaces")
 	fmt.Fprintln(os.Stderr, "  job     submit a background maintenance job to a running daemon (run `magus server job` to list)")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintf(os.Stderr, "Use `%s` to inspect daemon pool state and check reachability.\n", clihint.Status)
@@ -527,4 +530,62 @@ func installRefreshHooks(ctx context.Context) {
 	if len(installed) > 0 {
 		fmt.Fprintf(os.Stderr, "magus: installed %s refresh hook(s) [%s]; history changes now reconcile the graph automatically\n", res.Name, strings.Join(installed, ", "))
 	}
+}
+
+// serverReload drops the workspaces a running daemon holds open, so the next command
+// against each reopens it and re-reads its config.
+//
+// It exists because editing magus.yaml otherwise meant restarting the daemon: the daemon
+// keeps a workspace warm across invocations, and each one captured its config when it
+// loaded. Nothing was stale in a way that looked broken - the setting simply had no
+// effect until something evicted the workspace, which is a TTL away and invisible.
+//
+// Deliberately not a `server job`: a job is dispatched against a workspace, so it would
+// acquire the very entry it is meant to drop and then have to exempt itself. This is a
+// control operation on the daemon, like `stop --services`, and sits beside it.
+func serverReload(ctx context.Context, args []string) error {
+	var socket string
+	_, err := cmdParse("server reload", args, func(fs *flag.FlagSet) {
+		fs.StringVar(&socket, "socket", "", "daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)")
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "usage: magus server reload [flags]")
+			fmt.Fprintln(os.Stderr, "\nRe-read configuration without restarting the daemon. Drops the workspaces")
+			fmt.Fprintln(os.Stderr, "the daemon is holding open, so the next command against each reopens it and")
+			fmt.Fprintln(os.Stderr, "picks up magus.yaml as it now stands.")
+			fmt.Fprintln(os.Stderr, "\nA workspace with a run in flight is left alone: it keeps the config it")
+			fmt.Fprintln(os.Stderr, "started with, and is reported so you know to re-run this once it finishes.")
+			fmt.Fprintln(os.Stderr, "\nFlags (global flags also accepted):")
+			fs.PrintDefaults()
+		}
+	})
+	if err != nil {
+		return err
+	}
+
+	addr, err := resolveDaemonAddr(ctx, socket)
+	if err != nil {
+		// No daemon means nothing is holding a stale config: every one-shot command reads
+		// magus.yaml as it runs. Saying so and exiting 0 is the honest answer - this is
+		// "make sure nothing is holding an old config", and nothing is.
+		fmt.Fprintln(os.Stderr, "magus: no running daemon; every command already reads the current config")
+		return nil //nolint:nilerr // no daemon is the success case here: nothing is holding an old config
+	}
+	if _, qerr := proc.QueryStatus(ctx, addr); qerr != nil {
+		fmt.Fprintln(os.Stderr, "magus: no running daemon; every command already reads the current config")
+		return nil //nolint:nilerr // see above: a resolved address with no live daemon is still "nothing to reload"
+	}
+
+	dropped, busy, err := proc.ReloadConfig(ctx, addr)
+	if err != nil {
+		return fmt.Errorf("server reload: %w", err)
+	}
+	switch {
+	case dropped == 0 && busy == 0:
+		fmt.Fprintln(os.Stderr, "magus: daemon held no open workspaces; the next command reads the current config")
+	case busy > 0:
+		fmt.Fprintf(os.Stderr, "magus: reloaded %d workspace(s); %d still running and kept the config they started with, so re-run this when they finish\n", dropped, busy)
+	default:
+		fmt.Fprintf(os.Stderr, "magus: reloaded %d workspace(s); the next command against each reads the current config\n", dropped)
+	}
+	return nil
 }

@@ -589,6 +589,14 @@ func (m *Magus) limiter() *cache.Limiter {
 		if n <= 0 {
 			n = cache.DefaultConcurrency()
 		}
+		// Announced, never silent: a run quietly narrower than asked for is as hard to
+		// attribute as one that thrashes. Said once, at the moment it takes effect.
+		if clamped, was := cache.ClampConcurrency(n); was {
+			slog.WarnContext(context.Background(), "magus: concurrency capped to this machine",
+				slog.Int("requested", n), slog.Int("running_with", clamped),
+				slog.Int("cpus", cache.MachineCeiling()))
+			n = clamped
+		}
 		m.lim = cache.NewLimiter(n)
 	})
 	return m.lim

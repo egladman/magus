@@ -38,6 +38,7 @@ config log.format
 config log.level
 config log.silent
 config log.stream
+config max_failures
 config mcp.address
 config mcp.enabled
 config report.filter

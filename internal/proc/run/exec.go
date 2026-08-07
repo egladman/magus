@@ -50,6 +50,17 @@ type ExecResult struct {
 	Stderr  string // captured stderr, empty unless ExecOptions.Capture; not trimmed
 	Code    int    // exit code; -1 when the process was signaled or never started
 	Started bool   // whether the process actually started; distinguishes a -1 exit from a start failure
+	// MaxRSSBytes is the PEAK resident memory this process reached, in bytes, or 0 when
+	// the host cannot report it (windows, wasm) or the process never ran. Zero means
+	// UNKNOWN rather than "used nothing".
+	//
+	// The high-water mark, not the memory held at exit: a compile that sits at 200MB and
+	// spikes to 4GB while linking is a 4GB process for the purpose of deciding what can
+	// run alongside it, and the spike is the part that takes a machine down.
+	//
+	// The kernel already counted it - this is read off the same ProcessState the exit
+	// code comes from, so it costs no sampling, no timer, and no extra syscall.
+	MaxRSSBytes int64
 }
 
 // BuzzObject renders the shared exec result shape.
@@ -140,6 +151,7 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 	if c.ProcessState != nil {
 		res.Started = true
 		res.Code = c.ProcessState.ExitCode()
+		res.MaxRSSBytes = maxRSSBytes(c.ProcessState)
 	} else {
 		res.Code = -1 // process never started (binary not found, permission denied, etc.)
 	}

@@ -339,3 +339,44 @@ func RunChildSync(ctx context.Context, lim *cache.Limiter, fn func() error) erro
 	}
 	return lim.Yield(ctx, fn)
 }
+
+// ReloadConfig asks the daemon to drop the workspaces it holds open, so the next command
+// against each reopens it and re-reads its config. It reports how many were dropped and
+// how many were left alone because a run was in flight.
+//
+// The counterpart of StopAllServices: a partial reset that leaves the daemon running,
+// for the case where editing magus.yaml would otherwise mean restarting it.
+func ReloadConfig(ctx context.Context, addr string) (dropped, busy int, err error) {
+	ep, err := endpoint.ParseEndpoint(addr)
+	if err != nil {
+		return 0, 0, fmt.Errorf("proc: config.reload: invalid address: %w", err)
+	}
+	conn, err := ep.Dial(ctx)
+	if err != nil {
+		return 0, 0, fmt.Errorf("proc: config.reload: dial %s: %w", ep, err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	if err := writeFrame(conn, typeConfigReload, ConfigReloadRequest{Protocol: ProtocolV2}); err != nil {
+		return 0, 0, fmt.Errorf("proc: config.reload: write: %w", err)
+	}
+	typ, line, err := readFrame(conn)
+	if err != nil {
+		return 0, 0, fmt.Errorf("proc: config.reload: read: %w", err)
+	}
+	if typ == typeError {
+		var er ErrorReply
+		if e := json.Unmarshal(line, &er); e == nil && er.Message != "" {
+			return 0, 0, fmt.Errorf("proc: config.reload: server error: %s", er.Message)
+		}
+		return 0, 0, fmt.Errorf("proc: config.reload: server error (undecodable)")
+	}
+	if typ != typeConfigReloadReply {
+		return 0, 0, fmt.Errorf("proc: config.reload: unexpected reply type %q", typ)
+	}
+	var reply ConfigReloadReply
+	if err := json.Unmarshal(line, &reply); err != nil {
+		return 0, 0, fmt.Errorf("proc: config.reload: decode reply: %w", err)
+	}
+	return reply.Dropped, reply.Busy, nil
+}

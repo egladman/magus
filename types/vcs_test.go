@@ -98,3 +98,29 @@ func TestVCSResolution_ZeroValue(t *testing.T) {
 	assert.Nil(t, r.VCS)
 	assert.Empty(t, r.Name)
 }
+
+// TestClassifyDrift pins the fork that `magus vcs add` and the generate gate now share.
+// They used to answer the same question in two places, so the same condition could be
+// reported two different ways depending on which surface you met it on.
+func TestClassifyDrift(t *testing.T) {
+	// An input moved too: regeneration is expected, and the output belongs in the commit.
+	code, msg := ClassifyDrift(true, "v0.3.0")
+	assert.Equal(t, StaleGeneratedOutput, code)
+	assert.Contains(t, msg, "commit")
+
+	// Inputs unchanged on a DEV build: version skew, not the developer's change. The
+	// version is named so the reader can see which build produced it.
+	code, msg = ClassifyDrift(false, "v0.3.0-288-ga103255f")
+	assert.Equal(t, EnvironmentalDrift, code)
+	assert.Contains(t, msg, "v0.3.0-288-ga103255f")
+	assert.Contains(t, msg, "do not commit")
+
+	// An unknown version is a dev build too, and says so rather than printing an empty
+	// pair of parentheses.
+	_, msg = ClassifyDrift(false, "")
+	assert.Contains(t, msg, "(unknown)")
+
+	// Inputs unchanged on a RELEASE build: same inputs, same generator, different bytes.
+	code, _ = ClassifyDrift(false, "v0.3.0")
+	assert.Equal(t, NondeterministicOutput, code)
+}

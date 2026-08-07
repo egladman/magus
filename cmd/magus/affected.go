@@ -29,6 +29,8 @@ import (
 
 // affected dispatches `magus affected <target>`; project set is determined by VCS diff.
 func affected(ctx context.Context, root string, _ runConfig, args []string) error {
+	// Kept before anything reshapes them: --detach re-submits this invocation verbatim.
+	origArgs := args
 	// Same grammar as `magus run`: the chain is split off the RAW args, before
 	// anything partitions or reorders them. affected is the CI-facing twin, and CI
 	// is exactly where "what did this produce" needs answering.
@@ -114,6 +116,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		noDefaultCharms *bool
 		live            *bool
 		noCache         *bool
+		detach          *bool
 	)
 	_, err := cmdParse("affected "+target, flagArgs, func(fs *flag.FlagSet) {
 		// affected-only: VCS diff base ref; `magus run` has no diff. See run_affected_parity_test.go.
@@ -133,6 +136,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		noDefaultCharms = fs.Bool("no-default-charms", false, "Ignore magus.yaml default_charms for this run")
 		live = fs.Bool("live", false, "Print a local log-viewer link and stream this run's output to it live over an ephemeral loopback server (127.0.0.1); the link and data never leave your machine")
 		noCache = fs.Bool("no-cache", false, "Force a fresh run even on a cache hit; still refreshes the entry (unlike a skip_cache target, which never snapshots)")
+		detach = fs.Bool("detach", false, "Hand this run to the daemon and return immediately; watch it with magus status --watch")
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus affected %s [flags] [-- <extra args>]\n", target)
 			fmt.Fprintln(os.Stderr, "")
@@ -145,6 +149,9 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	})
 	if err != nil {
 		return err
+	}
+	if detach != nil && *detach {
+		return detachToDaemon(ctx, append([]string{"affected"}, withoutDetachFlag(origArgs)...))
 	}
 
 	if *step && *stdin {

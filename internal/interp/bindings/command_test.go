@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/spells"
@@ -71,4 +72,35 @@ func TestRunCommandForegroundsDirectService(t *testing.T) {
 	_, err := runCommand(ctx, serviceOp(), commandOpts{})
 	require.NoError(t, err) // `true` exits 0
 	assert.Equal(t, 0, rr.started, "directly-run service must foreground, not be supervised")
+}
+
+// TestExecCommandReportsCancellationNotExitCode proves a child killed because the
+// RUN was cancelled reports the cancellation, not a verdict on the tool. A killed
+// process has no exit code of its own - ExitCode() is -1 - so synthesizing "exited
+// 1" for it is indistinguishable from the tool genuinely failing, and is printed
+// with a `reproduce:` line that does not reproduce. That is the shape that made a
+// sibling project's failure surface as `docs content-generate: go exited 1` with no
+// stderr, in a batch where docs alone passes.
+func TestExecCommandReportsCancellationNotExitCode(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	time.AfterFunc(50*time.Millisecond, cancel)
+
+	_, err := execCommand(ctx, t.TempDir(), "sh", []string{"-c", "sleep 30"}, nil, "", true)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled,
+		"a child killed by the run's cancellation must report the cancellation")
+	assert.NotContains(t, err.Error(), "exited",
+		"a killed child has no exit code of its own to report")
+}
+
+// TestExecCommandReportsRealExitCode is the other half: a tool that fails on its own
+// still reports its own exit code, so the cancellation check above cannot swallow a
+// genuine failure.
+func TestExecCommandReportsRealExitCode(t *testing.T) {
+	_, err := execCommand(context.Background(), t.TempDir(), "sh", []string{"-c", "exit 3"}, nil, "", true)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "sh exited 3")
 }

@@ -174,6 +174,10 @@ type runCtx struct {
 	// deferMtimeFlush suppresses the per-Run mtime flush so a RunAll batch can
 	// flush once after all steps complete instead of once per step.
 	deferMtimeFlush bool
+	// maxFailures bounds how many steps may fail before RunAll stops starting more.
+	// Zero is unlimited: every step that can run, runs, and the batch reports all of
+	// them. See RunAll for why that is the default.
+	maxFailures int
 }
 
 // fireResults notifies every registered result observer, in registration order.
@@ -731,14 +735,61 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			slog.String("target", dead[0].Target))
 	}
 
+	// A failing step does NOT cancel its peers by default. errgroup cancels the group
+	// on the first non-nil error a goroutine returns, which is fail-fast for the whole
+	// batch - so one project's failure killed every INDEPENDENT project mid-flight, and
+	// a run reported one failure per invocation no matter how many were really there.
+	// Dependents are a different matter and are already handled without any of this:
+	// waitForDeps reads the upstream's recorded error from the barrier, so the things
+	// that genuinely could not proceed still stop.
+	//
+	// So step errors are collected here instead of returned to the group, and only a
+	// spent WithMaxFailures budget returns one (which cancels, deliberately). Indexed by
+	// step so the joined error reads in batch order rather than completion order.
+	var failMu sync.Mutex
+	stepErrs := make([]error, len(steps))
+	failedCount := 0
+	// recordFailure stores e and reports whether the budget is now spent.
+	recordFailure := func(i int, e error) bool {
+		failMu.Lock()
+		defer failMu.Unlock()
+		stepErrs[i] = e
+		failedCount++
+		return rc.maxFailures > 0 && failedCount >= rc.maxFailures
+	}
+
 	results := make([]Result, len(steps))
 	g, gctx := errgroup.WithContext(ctx)
 	for i, s := range steps {
-		g.Go(func() (err error) {
-			// markDone on every exit so a failing upstream cascades cancellation,
+		g.Go(func() error {
+			// stepErr is this step's REAL verdict and markDone always gets it, even when
+			// nil is returned to the group. The two must not be the same value: the group
+			// learns of a failure only to cancel, while a dependent asks the barrier
+			// whether its upstream succeeded. Collapsing them (the named-return form this
+			// replaced) would tell every dependent its upstream passed.
+			var stepErr error
+			// ran distinguishes a step that reached fn from one that never started - a
+			// dependency failed, or the batch was already cancelled. Only the first kind
+			// is an independent finding, so only it spends the failure budget and only it
+			// appears in the joined error; the rest are consequences already explained by
+			// the failure that caused them.
+			ran := false
+			// markDone on every exit so a failing upstream cascades to its dependents,
 			// carrying this step's own result so a dependent's wait can tell success
 			// from failure rather than just "done" (see waitForDeps).
-			defer func() { barrier.markDone(stepKey(s), err) }()
+			defer func() { barrier.markDone(stepKey(s), stepErr) }()
+			// fail routes a step's outcome: the barrier always hears it, the group only
+			// when the budget is spent (returning non-nil is what cancels the batch).
+			fail := func(e error) error {
+				stepErr = e
+				if e == nil || !ran || gctx.Err() != nil {
+					return nil //nolint:nilerr // swallowing here is the point: the barrier has the real error (stepErr), and returning it would cancel every peer
+				}
+				if recordFailure(i, e) {
+					return e
+				}
+				return nil
+			}
 
 			// Trace the DAG progression (blocked-on-deps, then admitted) so a
 			// "why is this serialized / what is it waiting on?" question can be read
@@ -751,7 +802,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			// Wait for upstreams before acquiring a slot: holding a slot while
 			// blocked on a dep would deadlock a saturated limiter.
 			if err := barrier.waitForDeps(gctx, s); err != nil {
-				return err
+				return fail(err)
 			}
 			defer acquireIsolation(s.Exclusive)()
 			// acquireIsolation's Lock/RLock is not ctx-aware, so a goroutine can
@@ -760,7 +811,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			// cancelled gctx too, except on an unlimited limiter, where it returns
 			// nil without consulting ctx.
 			if err := gctx.Err(); err != nil {
-				return err
+				return fail(err)
 			}
 			// A heavy step can request extra slots (Step.Slots) to throttle parallel
 			// work around itself. Clamp to [1, budget]: 0 means one slot, and a
@@ -778,7 +829,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 				slots = budget
 			}
 			if err := lim.AcquireN(gctx, slots); err != nil {
-				return err
+				return fail(err)
 			}
 			// Report occupancy as it changes, so an interactive run can show
 			// a live pool counter. Emitted on both edges of the slot's life:
@@ -817,6 +868,18 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 				}
 			}
 
+			// Re-check after the slot, not just before it. A step that is failing releases
+			// its slot in a DEFER, and that defer runs strictly before errgroup observes
+			// its error and cancels the group - so a waiter can be admitted in the window
+			// between those two moments and would otherwise start work the batch has
+			// already given up on. At concurrency 1 that window is every time: the waiter
+			// is always parked on exactly the slot the failing step is about to release.
+			if err := gctx.Err(); err != nil {
+				return fail(err)
+			}
+			// Past every gate: from here a failure is this step's own, not a consequence
+			// of someone else's, so it counts against the budget and is worth reporting.
+			ran = true
 			r, err := c.Run(gctx, s, func(ctx context.Context) error {
 				ctx = ContextWithLimiter(ctx, lim)
 				ctx = WithSlotsHeld(ctx, slots)
@@ -830,15 +893,22 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 				keysMu.Unlock()
 			}
 			results[i] = r
-			return err
+			return fail(err)
 		})
 	}
-	err := g.Wait()
+	waitErr := g.Wait()
 	// Flush the shared mtime memo once for the whole batch. WithoutCancel so a
 	// cancelled run still persists the hashing already done (the per-step flush this
 	// replaced also persisted completed steps before cancellation).
 	c.mtimes.flush(context.WithoutCancel(ctx))
-	return results, err
+	// The steps' own failures are the answer when there are any: every one of them, in
+	// batch order, rather than whichever happened to be first. waitErr is what is left
+	// for the cases the tally deliberately does not hold - the parent context being
+	// cancelled (a Ctrl-C, a timeout), which is not a step's verdict about anything.
+	if joined := errors.Join(stepErrs...); joined != nil {
+		return results, joined
+	}
+	return results, waitErr
 }
 
 // Delete removes cached manifests for the given project paths (all if none given).

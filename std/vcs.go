@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
-	"strings"
 	"sync"
 
 	"github.com/egladman/magus/types"
@@ -305,37 +304,10 @@ func VcsStatus(ctx context.Context, paths []string) (types.Status, error) {
 	return types.Status{Clean: len(files) == 0, Files: files}, nil
 }
 
-// statusPaths strips each backend's status prefix, leaving the path.
-//
-//	git  "XY path"      porcelain: two status columns and a space
-//	hg   "X path"       one status column and a space
-//	jj   "path"         diff --name-only reports no status at all
-//
-// A git rename reads "R  old -> new"; the new path is the one that exists, so that is
-// what is kept. git quotes paths outside ASCII unless core.quotePath is off, which
-// gitEnviron disables, so no unquoting is needed here.
+// statusPaths delegates to vcs.StatusPaths, which lives beside the drivers that produce
+// these lines. Kept as a local alias so the call sites in this file stay short.
 func statusPaths(vcsName string, lines []string) []string {
-	out := make([]string, 0, len(lines))
-	for _, line := range lines {
-		p := line
-		switch vcsName {
-		case "git":
-			if len(p) > 3 {
-				p = p[3:]
-			}
-			if _, after, found := strings.Cut(p, " -> "); found {
-				p = after
-			}
-		case "hg":
-			if len(p) > 2 {
-				p = p[2:]
-			}
-		}
-		if p = strings.TrimSpace(p); p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
+	return vcs.StatusPaths(vcsName, lines)
 }
 
 // VcsIsDirty reports whether the working tree has uncommitted changes.

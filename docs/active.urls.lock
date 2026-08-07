@@ -184,6 +184,7 @@ guides/integrations/agents/
 guides/integrations/ci/
 guides/integrations/daemon/
 guides/integrations/editor/
+guides/integrations/git/
 guides/integrations/github-actions/
 guides/integrations/mcp/
 guides/integrations/pr-advice/
@@ -351,6 +352,7 @@ reference/codes/services/
 reference/codes/services/MGS5001/
 reference/codes/services/MGS5002/
 reference/codes/services/MGS5003/
+reference/codes/services/MGS5004/
 reference/config/
 reference/console/
 reference/diagnostics/
@@ -451,6 +453,7 @@ tags/dependency-graph/
 tags/depends-on/
 tags/depends/
 tags/describe/
+tags/detach/
 tags/determinism/
 tags/diagnostics/
 tags/discovery/
@@ -474,6 +477,7 @@ tags/fish/
 tags/flags/
 tags/formatter/
 tags/fs/
+tags/generated-files/
 tags/generated/
 tags/getting-started/
 tags/git/
@@ -485,6 +489,7 @@ tags/go/
 tags/graph/
 tags/graphml/
 tags/grpc/
+tags/hooks/
 tags/host-modules/
 tags/hotspots/
 tags/http/

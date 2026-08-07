@@ -453,6 +453,14 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_CONCURRENCY: Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Defaults to min(NumCPU, 8).",
 	},
 	{
+		GoPath:   "MaxFailures",
+		YamlPath: "max_failures",
+		EnvVar:   "MAGUS_MAX_FAILURES",
+		Flag:     fieldtype.FlagNames{Long: "max-failures"},
+		Kind:     fieldtype.KindInt,
+		Usage:    "MAGUS_MAX_FAILURES: MaxFailures bounds how many projects may fail before a run stops starting",
+	},
+	{
 		GoPath:   "TargetTimeout",
 		YamlPath: "target_timeout",
 		EnvVar:   "MAGUS_TARGET_TIMEOUT",

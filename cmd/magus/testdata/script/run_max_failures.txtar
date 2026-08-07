@@ -1,0 +1,77 @@
+# A failing project must not cancel the projects that do not depend on it.
+#
+# errgroup cancels its group the moment any goroutine returns an error, which made the
+# whole batch fail-fast: one project's failure killed every INDEPENDENT project
+# mid-flight, so a run reported one failure per invocation however many were really
+# there, and each fix cost another full run to find the next one. An unrelated npm
+# advisory in `console` took `docs` down exactly this way, and the killed subprocess
+# surfaced as `go exited 1` with no stderr, which read as a real generator failure.
+#
+# --max-failures is the opt-in the other direction, as a budget rather than a boolean:
+# 1 is fail-fast, 0 (the default) is unlimited.
+#
+# Asserted on the EFFECT - whether each project's target actually ran, via the marker
+# file it writes - not on what the run printed. The bug this file exists for lived one
+# step past where a stdout assertion would have stopped looking.
+#
+# `a` throws immediately while `b` and `c` sit in a subprocess for a few seconds, so the
+# outcome does not depend on which goroutine wins the scheduler: `a` has always failed
+# long before the other two reach their write. --concurrency 4 so all three are admitted
+# at once rather than queueing behind one slot.
+
+# Default is keep-going: a fails, and b and c still run to completion.
+! exec magus run check:rw a b c --concurrency 4
+exists b/ran.txt
+exists c/ran.txt
+
+# The failure is still reported - keeping going is not the same as passing.
+stderr 'boom'
+
+rm b/ran.txt
+rm c/ran.txt
+
+# --max-failures 1 spends the budget on a's failure, which cancels the batch: b and c
+# are killed inside their subprocess and never reach the write.
+! exec magus run check:rw a b c --concurrency 4 --max-failures 1
+! exists b/ran.txt
+! exists c/ran.txt
+
+-- magus.yaml --
+{}
+-- .gitignore --
+.magus/
+-- magusfile.buzz --
+import "magus";
+magus\project({"name": "acme-root"});
+-- a/magusfile.buzz --
+import "magus";
+magus\project({
+    "targets": {"check": {"skip_cache": "must re-run on every invocation, not replay"}},
+});
+export fun check(ctx: magus\Context, args: [str]) > void {
+    throw "boom";
+}
+-- b/magusfile.buzz --
+import "magus";
+import "fs";
+import "os";
+magus\project({
+    "targets": {"check": {"skip_cache": "must re-run on every invocation, not replay"}},
+});
+export fun check(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("ran.txt");
+    os\exec("sleep", args: ["4"], dir: ".", opts: {});
+    fs\writeFile("ran.txt", "ran\n");
+}
+-- c/magusfile.buzz --
+import "magus";
+import "fs";
+import "os";
+magus\project({
+    "targets": {"check": {"skip_cache": "must re-run on every invocation, not replay"}},
+});
+export fun check(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("ran.txt");
+    os\exec("sleep", args: ["4"], dir: ".", opts: {});
+    fs\writeFile("ran.txt", "ran\n");
+}

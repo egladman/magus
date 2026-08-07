@@ -97,6 +97,11 @@ type Options struct {
 	// ctx still carries Root/Cwd. The daemon uses it to record a KIND_JOB activity event; proc
 	// stays decoupled from the trail and cache layout.
 	OnJobDone func(ctx context.Context, args []string, dur time.Duration, err error)
+	// ConfigReloader, if set, drops the workspaces the daemon is holding open so the next
+	// command against each reopens it and re-reads its config. It reports how many were
+	// dropped and how many were left alone as busy. Only the daemon sets it; a per-process
+	// proc server holds one workspace for one invocation and has nothing to reload.
+	ConfigReloader func() (dropped, busy int)
 }
 
 // Server listens on a Unix-domain socket and accepts forwarded RPC requests from child processes.
@@ -210,6 +215,7 @@ func New(opts Options) (*Server, error) {
 	svc := &service{
 		handler:         opts.Handler,
 		serviceHost:     opts.ServiceHost,
+		configReloader:  opts.ConfigReloader,
 		parentCtx:       serverCtx,
 		lim:             lim,
 		version:         opts.Version,
@@ -395,6 +401,19 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 		}
 		_ = writeFrame(conn, typeServiceStopAllReply, ServiceStopAllReply{Count: count})
 
+	case typeConfigReload:
+		var req ConfigReloadRequest
+		if err := json.Unmarshal(line, &req); err != nil {
+			writeErr(conn, "proc: decode config.reload request: "+err.Error())
+			return
+		}
+		_ = req
+		var dropped, busy int
+		if svc.configReloader != nil {
+			dropped, busy = svc.configReloader()
+		}
+		_ = writeFrame(conn, typeConfigReloadReply, ConfigReloadReply{Dropped: dropped, Busy: busy})
+
 	default:
 		writeErr(conn, fmt.Sprintf("proc: unknown frame type %q", typ))
 	}
@@ -439,6 +458,7 @@ type service struct {
 	workspaceLister func() []Workspace
 	serviceLister   func() []types.StatusService
 	serviceHost     ServiceHost
+	configReloader  func() (dropped, busy int)
 	onJobDone       func(ctx context.Context, args []string, dur time.Duration, err error)
 	inflight        sync.Map // cycleKey → struct{}, for cycle detection
 	calls           sync.Map // uint64 id → *activeCall, for Status reporting

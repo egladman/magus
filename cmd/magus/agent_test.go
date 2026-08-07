@@ -249,8 +249,21 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git stash", deny: true},
 		{command: "git stash push -u", deny: true},
 		{command: "cd /repo && git stash", deny: true},
-		{command: "git stash pop"},
+		// Restoring a stash used to be treated as safe. It is not, in a repository with
+		// more than one worktree: the stash stack is per-REPOSITORY, so an unqualified
+		// pop takes whatever sits at stash@{0} - often another checkout's work - and
+		// drops the entry once it applies. Naming the entry is the deliberate form.
+		{command: "git stash pop", deny: true},
+		{command: "git stash apply", deny: true},
+		{command: "git stash drop", deny: true},
+		{command: "git stash pop stash@{2}"},
+		{command: "git stash apply stash@{0}"},
 		{command: "git stash list"},
+		{command: "git stash show"},
+		// Deleting a worktree takes its uncommitted work with it, and in this repo that
+		// work routinely belongs to another session.
+		{command: "git worktree remove ../wt", deny: true},
+		{command: "git worktree list"},
 		{command: "git reset --hard origin/main", deny: true},
 		{command: "git reset HEAD~1"},
 		{command: "git reset && tool --hard-mode"},
@@ -693,9 +706,9 @@ func TestGuardAdversarial(t *testing.T) {
 		{"clean named in a commit message", `git commit -m "document why git clean -fd is banned"`},
 		{"reset --hard as documentation", "echo 'git reset --hard destroys untracked work'"},
 		{"checkout dot inside a quoted string", `printf '%s' "git checkout . is denied"`},
-		// Safe stash subcommands stay safe.
+		// Reading a stash stays safe, and so does restoring one you NAMED.
 		{"stash list", "git stash list"},
-		{"stash pop", "git stash pop"},
+		{"stash pop by ref", "git stash pop stash@{1}"},
 		// A branch checkout is not a revert.
 		{"checkout a branch", "git checkout main"},
 		{"checkout -b", "git checkout -b feat/x"},
@@ -822,7 +835,14 @@ func TestHookCmd(t *testing.T) {
 		// local output flag, which is what the command used to have.
 		global = globalFlags{}
 		ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: auditDir, workspace: "/repo/magus"})
-		require.NoError(t, hookCmd(ctx, strings.NewReader(stdin), &out, args))
+		// A deny now exits non-zero, which is the whole point of the guard: the
+		// rendered verdict on stdout is unchanged, and the error is the blocking
+		// signal a host reads. Anything OTHER than that is a real failure.
+		if err := hookCmd(ctx, strings.NewReader(stdin), &out, args); err != nil {
+			var silent errSilent
+			require.ErrorAs(t, err, &silent)
+			require.Equal(t, guardDenyExitCode, silent.exitCode)
+		}
 		return out.String()
 	}
 
@@ -854,7 +874,12 @@ func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
 	var out bytes.Buffer
-	require.NoError(t, hookCmd(ctx, strings.NewReader("git stash"), &out, []string{"-o", "name"}))
+	// git stash is denied, so hookCmd reports it by exiting non-zero while still
+	// rendering the verdict in the requested format.
+	err := hookCmd(ctx, strings.NewReader("git stash"), &out, []string{"-o", "name"})
+	var silent errSilent
+	require.ErrorAs(t, err, &silent)
+	require.Equal(t, guardDenyExitCode, silent.exitCode)
 	assert.Equal(t, "deny\n", out.String())
 
 	events, err := trail.ReadRecent(dir, 1)
@@ -1070,4 +1095,51 @@ func TestEveryEmbeddedSkillHasBothPermutations(t *testing.T) {
 		assert.Less(t, len(s.Body), len(f.Body),
 			"%s marks no rationale, so --simple installs the same bytes; curate it or drop the claim", f.Name)
 	}
+}
+
+// TestDecodeHookEnvelope pins reading a host's hook payload directly. Without it, wiring
+// the guard means `jq -r .tool_input.command | magus hook` - an extra dependency on the
+// critical path of every tool call, in the one place that must not fail.
+func TestDecodeHookEnvelope(t *testing.T) {
+	cmdPayload := `{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"Bash",` +
+		`"tool_input":{"command":"magus run ci | tail"}}`
+	req, ok := decodeHookEnvelope(cmdPayload)
+	require.True(t, ok)
+	assert.Equal(t, "magus run ci | tail", req.Value)
+	assert.False(t, req.IsPath)
+	assert.Equal(t, "s1", req.Who.Session)
+	assert.Equal(t, "PreToolUse", req.Who.Event)
+
+	// A file_path payload is a WRITE, so the envelope decides the --path question too.
+	writePayload := `{"hook_event_name":"PreToolUse","tool_input":{"file_path":"MAGUS.md"}}`
+	req, ok = decodeHookEnvelope(writePayload)
+	require.True(t, ok)
+	assert.Equal(t, "MAGUS.md", req.Value)
+	assert.True(t, req.IsPath, "a file_path payload must be judged as a path, not as a command")
+
+	// Anything that is not a usable envelope is left alone for the bare-command form.
+	for _, raw := range []string{
+		"magus run ci | tail",           // a plain command
+		`{"tool_input":{}}`,             // an envelope with nothing to judge
+		`{not json`,                     // malformed
+		`{"tool_input":{"command":""}}`, // explicitly empty
+	} {
+		_, ok := decodeHookEnvelope(raw)
+		assert.False(t, ok, "must fall through to the literal form: %q", raw)
+	}
+}
+
+// TestEnforceVerdictBlocksOnlyDeny pins the half that makes the guard real. Every rule was
+// reachable and correct while the process exited 0, so a host read success and ran the
+// command anyway: the guard looked installed and enforced nothing.
+func TestEnforceVerdictBlocksOnlyDeny(t *testing.T) {
+	err := enforceVerdict(guardVerdict{Decision: "deny", Reason: "no"})
+	require.Error(t, err, "a deny must exit non-zero or it blocks nothing")
+	var silent errSilent
+	require.ErrorAs(t, err, &silent)
+	assert.Equal(t, guardDenyExitCode, silent.exitCode)
+
+	assert.NoError(t, enforceVerdict(guardVerdict{Decision: "advise", Context: "fyi"}),
+		"advice teaches and must never block")
+	assert.NoError(t, enforceVerdict(guardVerdict{Decision: "pass"}))
 }

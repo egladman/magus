@@ -21,14 +21,15 @@
 # -h, asserted further down, is the way to ask "what can I do here" and exits 0.
 ! exec magus server
 stderr 'target required'
-stderr 'usage: magus server <start\|stop\|job> \[flags\]'
+stderr 'usage: magus server <start\|stop\|reload\|job> \[flags\]'
 stderr 'start   start a persistent daemon'
 stderr 'stop    send a graceful shutdown request'
+stderr 'reload  re-read configuration without restarting'
 stderr 'job     submit a background maintenance job'
 stderr 'Use `magus status` to inspect daemon pool state'
 
 exec magus server -h
-stderr 'usage: magus server <start\|stop\|job> \[flags\]'
+stderr 'usage: magus server <start\|stop\|reload\|job> \[flags\]'
 
 # `status` looks like a plausible target - it is not one, it is a top-level
 # command. The error is unusually good: it names the three real targets AND
@@ -36,7 +37,7 @@ stderr 'usage: magus server <start\|stop\|job> \[flags\]'
 # contract worth pinning; a plain "unknown target" would still be correct
 # but would send the user hunting for `magus status` on their own.
 ! exec magus server status
-stderr 'unknown target "status" \(want start, stop, or job\); use `magus status` to inspect daemon state'
+stderr 'unknown target "status" \(want start, stop, reload, or job\); use `magus status` to inspect daemon state'
 
 # `server stop` with no daemon running must fail loudly rather than
 # silently succeed - a silent success would hide that the developer's
@@ -95,3 +96,14 @@ fun lint(target: Target) > Command {
     return Command{bin = "acme", args = ["lint", "."]};
 }
 export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }
+
+# `server reload` re-reads config without restarting the daemon. With no daemon running
+# there is nothing holding an old config - every one-shot command reads magus.yaml as it
+# runs - so it says so and exits 0. Exiting non-zero here would make it unusable in a
+# script that just wants to be sure nothing stale is cached.
+exec magus server reload
+stderr 'no running daemon'
+
+exec magus server reload -h
+stderr 'usage: magus server reload'
+stderr 'without restarting the daemon'

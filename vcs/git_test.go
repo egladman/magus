@@ -437,3 +437,75 @@ func TestGitEnvironStripsRedirectsAndKeepsTransport(t *testing.T) {
 		assert.Equal(t, value, got[name], "%s governs how git works, not where, and must survive", name)
 	}
 }
+
+// mergeRepo builds a repo whose branch `other` and HEAD both changed the same file, so a
+// merge of `other` conflicts. Returns the repo dir.
+func mergeRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
+		require.NoErrorf(t, err, "git %v: %s", args, out)
+	}
+	if out, err := exec.Command("git", "-C", dir, "init", "-b", "main").CombinedOutput(); err != nil {
+		t.Skipf("git init failed: %v\n%s", err, out)
+	}
+	git("config", "user.email", "test@example.com")
+	git("config", "user.name", "test")
+	write := func(body string) {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "gen.txt"), []byte(body), 0o644))
+	}
+	write("base\n")
+	git("add", "gen.txt")
+	git("commit", "-m", "base")
+	git("checkout", "-b", "other")
+	write("theirs\n")
+	git("commit", "-am", "theirs")
+	git("checkout", "main")
+	write("ours\n")
+	git("commit", "-am", "ours")
+	return dir
+}
+
+// TestStartMergeReportsConflictsRatherThanFailing pins the contract vcs resolve --against
+// depends on: a merge that CONFLICTS has still started, and the conflicts are the payload.
+// Treating git's non-zero exit as failure would refuse exactly the case this exists for.
+func TestStartMergeReportsConflictsRatherThanFailing(t *testing.T) {
+	dir := mergeRepo(t)
+	ctx := context.Background()
+
+	require.NoError(t, gitVCS{}.StartMerge(ctx, dir, "other"),
+		"a conflicting merge has begun; the conflicts are the result, not an error")
+
+	conflicts, err := gitVCS{}.Conflicts(ctx, dir)
+	require.NoError(t, err)
+	require.Len(t, conflicts, 1)
+	assert.Equal(t, "gen.txt", conflicts[0].Path)
+
+	// AbortMerge restores the pre-merge tree, which is what makes --dry-run honest.
+	require.NoError(t, gitVCS{}.AbortMerge(ctx, dir))
+	after, err := gitVCS{}.Conflicts(ctx, dir)
+	require.NoError(t, err)
+	assert.Empty(t, after, "aborting leaves nothing in progress")
+	body, err := os.ReadFile(filepath.Join(dir, "gen.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "ours\n", string(body), "the pre-merge content is back")
+}
+
+// TestStartMergeRejectsFlagLikeRef guards argument injection: `git merge` has no `--`
+// separator for its ref, so a ref beginning with "-" would be read as a flag.
+func TestStartMergeRejectsFlagLikeRef(t *testing.T) {
+	err := gitVCS{}.StartMerge(context.Background(), t.TempDir(), "--exec=touch pwned")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "looks like a flag")
+}
+
+// TestStartMergeFailsOnUnknownRef proves a merge that never began IS an error, so
+// --against cannot silently proceed to "no conflicts" on a typo'd ref.
+func TestStartMergeFailsOnUnknownRef(t *testing.T) {
+	err := gitVCS{}.StartMerge(context.Background(), mergeRepo(t), "no-such-branch")
+
+	require.Error(t, err)
+}

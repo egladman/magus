@@ -415,3 +415,120 @@ func TestRunAllNoDependencies(t *testing.T) {
 		assert.Equalf(t, steps[i].ProjectPath, r.ProjectPath, "results[%d].ProjectPath", i)
 	}
 }
+
+// TestRunAllKeepsGoingPastAnIndependentFailure pins the default: a failing step does
+// not cancel peers that do not depend on it. Before this, errgroup cancelled the whole
+// group on the first error, so one project's failure killed every unrelated project
+// mid-flight and a run could only ever report one failure - which is how a broken npm
+// advisory in `console` took down `docs` and hid what `docs` would have said.
+func TestRunAllKeepsGoingPastAnIndependentFailure(t *testing.T) {
+	root, c := openCache(t)
+	boom := errors.New("A boom")
+
+	var mu sync.Mutex
+	ran := map[string]bool{}
+	steps := []Step{depStep(root, "A"), depStep(root, "B"), depStep(root, "C")}
+
+	_, err := c.RunAll(t.Context(), steps, func(_ context.Context, s Step) error {
+		mu.Lock()
+		ran[s.ProjectPath] = true
+		mu.Unlock()
+		if s.ProjectPath == "A" {
+			return boom
+		}
+		return nil
+	}, WithConcurrency(1)) // serialized, so A finishes (and would have cancelled) first
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, boom, "the failure is still reported")
+	mu.Lock()
+	defer mu.Unlock()
+	assert.True(t, ran["B"], "B does not depend on A and must still run")
+	assert.True(t, ran["C"], "C does not depend on A and must still run")
+}
+
+// TestRunAllReportsEveryFailure proves the batch answers with all of its failures
+// rather than whichever finished first, so one run tells you everything to fix.
+func TestRunAllReportsEveryFailure(t *testing.T) {
+	root, c := openCache(t)
+	aBoom, cBoom := errors.New("A boom"), errors.New("C boom")
+
+	steps := []Step{depStep(root, "A"), depStep(root, "B"), depStep(root, "C")}
+	_, err := c.RunAll(t.Context(), steps, func(_ context.Context, s Step) error {
+		switch s.ProjectPath {
+		case "A":
+			return aBoom
+		case "C":
+			return cBoom
+		}
+		return nil
+	}, WithConcurrency(4))
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, aBoom)
+	assert.ErrorIs(t, err, cBoom, "the second failure must survive too, not be replaced by the first")
+}
+
+// TestRunAllMaxFailuresStops is the opt-in half: a spent budget cancels the batch, so
+// --max-failures 1 is fail-fast.
+func TestRunAllMaxFailuresStops(t *testing.T) {
+	root, c := openCache(t)
+	boom := errors.New("A boom")
+
+	var mu sync.Mutex
+	started := 0
+	release := make(chan struct{})
+	steps := []Step{depStep(root, "A"), depStep(root, "B"), depStep(root, "C")}
+
+	_, err := c.RunAll(t.Context(), steps, func(ctx context.Context, s Step) error {
+		if s.ProjectPath == "A" {
+			return boom
+		}
+		mu.Lock()
+		started++
+		mu.Unlock()
+		// Block until the batch is torn down, so a peer cannot finish before the
+		// budget is spent and make this pass for the wrong reason.
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-release:
+			return nil
+		}
+	}, WithConcurrency(4), WithMaxFailures(1))
+	close(release)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, boom)
+}
+
+// TestRunAllDependentFailureDoesNotSpendTheBudget proves a cascade victim is not
+// counted: only a step that actually ran and failed on its own account spends the
+// budget, so --max-failures 1 stops at the first REAL failure rather than at whichever
+// dependent reported first.
+func TestRunAllDependentFailureDoesNotSpendTheBudget(t *testing.T) {
+	root, c := openCache(t)
+	boom := errors.New("A boom")
+
+	var mu sync.Mutex
+	ran := map[string]bool{}
+	// B depends on A (which fails); C is independent and must still run under a
+	// budget of 2, which only A's failure spends.
+	steps := []Step{depStep(root, "B", "A"), depStep(root, "A"), depStep(root, "C")}
+
+	_, err := c.RunAll(t.Context(), steps, func(_ context.Context, s Step) error {
+		mu.Lock()
+		ran[s.ProjectPath] = true
+		mu.Unlock()
+		if s.ProjectPath == "A" {
+			return boom
+		}
+		return nil
+	}, WithConcurrency(1), WithMaxFailures(2))
+
+	require.Error(t, err)
+	mu.Lock()
+	defer mu.Unlock()
+	assert.False(t, ran["B"], "B's dependency failed, so it must not run")
+	assert.True(t, ran["C"], "C is independent and B's cascade must not have spent the budget")
+}

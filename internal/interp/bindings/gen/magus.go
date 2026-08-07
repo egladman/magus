@@ -777,6 +777,11 @@ func buzzValueMagusDoctorCheck(v types.DoctorCheck) vm.Value {
 		itemsDetails[indexDetails] = vm.StrValue(v.Details[indexDetails])
 	}
 	out.MapSet("details", vm.ListValue(itemsDetails))
+	itemsFix := make([]vm.Value, len(v.Fix))
+	for indexFix := range v.Fix {
+		itemsFix[indexFix] = vm.StrValue(v.Fix[indexFix])
+	}
+	out.MapSet("fix", vm.ListValue(itemsFix))
 	return out
 }
 

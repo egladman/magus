@@ -259,6 +259,11 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 			cfg.Concurrency = n
 		}
 	}
+	if v := getenv("MAGUS_MAX_FAILURES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.MaxFailures = n
+		}
+	}
 	if v := getenv("MAGUS_TARGET_TIMEOUT"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			cfg.TargetTimeout = d

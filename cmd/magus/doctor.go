@@ -6,17 +6,20 @@ import (
 	"fmt"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"os"
+	"strings"
 
 	"github.com/egladman/magus/internal/doctor"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 )
 
-func doctorCmd(ctx context.Context, root string, args []string) error {
-	var probe bool
+func doctorCmd(ctx context.Context, root string, rc runConfig, args []string) error {
+	var probe, fix bool
 	_, err := cmdParse("doctor", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&probe, "probe", false,
 			"Run each declared tool-readiness probe instead of only listing it (forks a process per gated tool)")
+		fs.BoolVar(&fix, "fix", false,
+			"Run the remedy each finding names, where one exists (see --dry-run to list them first)")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus doctor [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -58,6 +61,15 @@ func doctorCmd(ctx context.Context, root string, args []string) error {
 
 	if err := emitDoctor(opts, out); err != nil {
 		return err
+	}
+	if fix {
+		if err := applyDoctorFixes(ctx, root, rc, out); err != nil {
+			return err
+		}
+		// The report above described the workspace BEFORE the remedies ran, so its
+		// summary is no longer what is true. Re-run doctor to see the result rather
+		// than trusting a count that predates the fixes.
+		return nil
 	}
 	if out.Summary.Fail > 0 {
 		return fmt.Errorf("magus doctor: %d check(s) failed", out.Summary.Fail)
@@ -139,6 +151,15 @@ func buildDaemonInfo(ctx context.Context) doctor.DaemonInfo {
 	di.MCPAddr = mcpAddrString()
 	di.BridgeEnabled = globalCfg.Console.Enabled == nil || *globalCfg.Console.Enabled
 
+	// daemon.enabled=false means this invocation is self-contained, so there is nothing
+	// to ask. Without this check the probe still discovers and dials whatever daemon the
+	// host happens to be running: doctor then reports on a process the caller opted out
+	// of, and the testscript suite - which sets MAGUS_DAEMON_ENABLED=false precisely to
+	// stay hermetic - reaches the real socket and fails wherever a daemon is up.
+	if !globalCfg.Daemon.Enabled {
+		return di
+	}
+
 	addr, err := resolveDaemonAddr(ctx, "")
 	if err != nil {
 		return di
@@ -163,4 +184,51 @@ func buildDaemonInfo(ctx context.Context) doctor.DaemonInfo {
 		})
 	}
 	return di
+}
+
+// applyDoctorFixes runs the remedy each non-OK finding names.
+//
+// It dispatches EXISTING magus subcommands, never a private repair routine, and that is
+// the safety property rather than an implementation detail: --fix can only do things you
+// could have typed yourself and can inspect afterwards. A finding whose remedy needs
+// judgement - narrow this over-wide glob, or accept that the key is deliberately volatile?
+// - declares no Fix and stays a report, which is why this can be blunt about running what
+// it is given.
+//
+// Nothing here writes config directly either. A config-shaped remedy is spelled `config
+// set ...`, so the one thing in magus that edits config stays the one thing that edits
+// config.
+//
+// Failures are reported and do not stop the rest: the findings are independent, and a
+// remedy that cannot run is a thing to say, not a reason to leave the others unapplied.
+func applyDoctorFixes(ctx context.Context, root string, rc runConfig, out types.DoctorReport) error {
+	var ran, failed int
+	for _, c := range out.Checks {
+		if c.Status == types.DoctorOK || len(c.Fix) == 0 {
+			continue
+		}
+		cmdline := "magus " + strings.Join(c.Fix, " ")
+		if globalCfg.DryRun {
+			fmt.Printf("would fix %s: %s\n", c.Name, cmdline)
+			continue
+		}
+		fmt.Printf("fixing %s: %s\n", c.Name, cmdline)
+		if err := dispatchSub(ctx, root, rc, c.Fix[0], c.Fix[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "magus doctor --fix: %s: %v\n", c.Name, err)
+			failed++
+			continue
+		}
+		ran++
+	}
+	switch {
+	case globalCfg.DryRun:
+		return nil
+	case ran == 0 && failed == 0:
+		fmt.Println("nothing to fix: no finding named a remedy magus can run")
+	case failed > 0:
+		return fmt.Errorf("magus doctor --fix: %d of %d remedy/remedies failed", failed, ran+failed)
+	default:
+		fmt.Printf("\napplied %d remedy/remedies; re-run `magus doctor` to confirm\n", ran)
+	}
+	return nil
 }

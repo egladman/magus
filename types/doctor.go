@@ -52,6 +52,18 @@ type DoctorCheck struct {
 	Status  DoctorCheckStatus `json:"status" yaml:"status"`
 	Message string            `json:"message,omitempty" yaml:"message,omitempty"`
 	Details []string          `json:"details,omitempty" yaml:"details,omitempty"`
+	// Fix is the magus command that remedies this finding, as argv without the leading
+	// "magus" - nil when there is nothing mechanical to run. `doctor --fix` runs it; with
+	// no --fix it is printed, so the report always names the cure even when it is not
+	// applying it.
+	//
+	// An EXISTING first-class command, never a private repair routine. That is the whole
+	// safety property: --fix can only do things you could have typed yourself and can
+	// inspect afterwards, and a check whose remedy needs judgement (narrow this glob, or
+	// accept the volatility?) simply declares no Fix and stays a report. It is also why a
+	// config remedy is `config set ...` rather than a writer of its own - there is exactly
+	// one thing in magus that edits config, and this is not a second one.
+	Fix []string `json:"fix,omitempty" yaml:"fix,omitempty"`
 }
 
 // DoctorSummary counts check outcomes.

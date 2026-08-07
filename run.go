@@ -928,7 +928,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		slog.InfoContext(ctx, "magus: --step forces Concurrency=1")
 		lim = cache.NewLimiter(1)
 	}
-	cacheOpts := []cache.RunOption{cache.WithLimiter(lim)}
+	cacheOpts := []cache.RunOption{cache.WithLimiter(lim), cache.WithMaxFailures(m.cfg.MaxFailures)}
 	cacheOpts = append(cacheOpts, observability.CacheRunOptions(ctx, m.tel)...)
 	spellsOf := func(projectPath string) []string {
 		p, ok := byPath[projectPath]

@@ -143,3 +143,35 @@ func BenchmarkRegistryAcquireParallel(b *testing.B) {
 		}
 	})
 }
+
+// TestEvictAllDropsIdleKeepsBusy pins `magus server reload`. The daemon keeps a workspace
+// warm across invocations and each one captured its config when it loaded, so editing
+// magus.yaml had no effect until something evicted the entry - a TTL away, and invisible.
+// Reload drops them so the next command reopens and re-reads.
+//
+// A workspace with a run in flight is deliberately kept: swapping a running build's config
+// halfway is a race, not a reload. It is reported instead, so the caller knows to re-run.
+func TestEvictAllDropsIdleKeepsBusy(t *testing.T) {
+	r := newTestRegistry()
+	idleA, idleB, busy := t.TempDir(), t.TempDir(), t.TempDir()
+	r.entries[idleA] = &wsEntry{root: idleA, m: &magus.Magus{}}
+	r.entries[idleB] = &wsEntry{root: idleB, m: &magus.Magus{}}
+	r.entries[busy] = &wsEntry{root: busy, m: &magus.Magus{}, inflight: 1}
+
+	dropped, stillBusy := r.evictAll()
+
+	assert.Equal(t, 2, dropped, "both idle workspaces are dropped so they reload")
+	assert.Equal(t, 1, stillBusy, "the in-flight one is kept and reported")
+	assert.NotContains(t, r.entries, idleA)
+	assert.NotContains(t, r.entries, idleB)
+	assert.Contains(t, r.entries, busy, "a running workspace keeps the config it started with")
+}
+
+// TestEvictAllOnEmptyRegistry proves reload is a clean no-op when the daemon holds nothing,
+// which is what `magus server reload` reports rather than treating as a failure.
+func TestEvictAllOnEmptyRegistry(t *testing.T) {
+	dropped, busy := newTestRegistry().evictAll()
+
+	assert.Zero(t, dropped)
+	assert.Zero(t, busy)
+}

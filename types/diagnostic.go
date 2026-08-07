@@ -133,6 +133,7 @@ const (
 	NearDuplicateServices     DiagnosticCode = "MGS5001"
 	ServiceOpDetached         DiagnosticCode = "MGS5002"
 	CommandOpNeverExits       DiagnosticCode = "MGS5003"
+	DaemonRequired            DiagnosticCode = "MGS5004"
 	CharmPatchInvalid         DiagnosticCode = "MGS6001"
 	UnresolvableBuzzImport    DiagnosticCode = "MGS7001"
 	DanglingDocReference      DiagnosticCode = "MGS7002"
@@ -165,7 +166,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput,
-	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits,
+	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits, DaemonRequired,
 	CharmPatchInvalid,
 	UnresolvableBuzzImport, DanglingDocReference,
 	OutputRefMissing, OutputRefAmbiguous, OutputRefMalformed,
