@@ -1,0 +1,40 @@
+# A generated config flag must take effect wherever it is written. The usage text
+# promises "Global flags (work before or after the subcommand)", and after it is where
+# people naturally put them - `magus run build --concurrency 4`.
+#
+# After the subcommand, they did nothing at all. The startup parse stops at the
+# subcommand, so those flags were still unread when startup snapshots the config: into
+# the loadMagus singleton, and into the bootstrap limiter whose width is the run's
+# concurrency. The subcommand's own cmdParse does read them, but that happens after both
+# snapshots, so the value landed in a config nothing consulted again. Every generated
+# config flag was affected, not one - `--concurrency` included, which is why this is
+# asserted on concurrency rather than on the flag that exposed it.
+#
+# `config view` prints the EFFECTIVE configuration, which is the cheapest honest
+# observable: it is the same globalCfg the workspace preload reads.
+
+# Baseline: nothing set, so the built-in default is reported rather than a number.
+exec magus config view
+stdout 'concurrency: \(default'
+
+# Before the subcommand - this position always worked.
+exec magus --concurrency 3 config view
+stdout 'concurrency: 3'
+
+# After the subcommand - this is the position that silently did nothing.
+exec magus config view --concurrency 5
+stdout 'concurrency: 5'
+
+# The equals form too, since it takes a different path through the scan.
+exec magus config view --concurrency=6
+stdout 'concurrency: 6'
+
+# A flag past `--` belongs to whatever is being forwarded to, not to magus.
+exec magus config view -- --concurrency 7
+stdout 'concurrency: \(default'
+
+-- magus.yaml --
+{}
+-- magusfile.buzz --
+import "magus";
+magus\project({"name": "acme-root"});

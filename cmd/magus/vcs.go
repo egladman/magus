@@ -92,13 +92,18 @@ func vcsResolveUsage(w io.Writer) {
 	fmt.Fprintln(w, "settle a file one side deleted, which no VCS calls a merge driver for.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Flags:")
-	fmt.Fprintln(w, "  --dry-run   classify and report; touch nothing (global flag)")
+	fmt.Fprintln(w, "  --against <ref>  merge <ref> first, then settle what it conflicts with.")
+	fmt.Fprintln(w, "                   Needs a clean tree. Leaves the merge in progress to")
+	fmt.Fprintln(w, "                   commit; with --dry-run it is backed out again.")
+	fmt.Fprintln(w, "  --dry-run        classify and report; touch nothing (global flag)")
 }
 
 // vcsResolveCmd classifies every conflicted path, settles the generated ones in bulk,
 // regenerates once, and records the result.
 func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string) error {
+	var against string
 	pos, err := cmdParse("vcs resolve", args, func(fs *flag.FlagSet) {
+		fs.StringVar(&against, "against", "", "merge `ref` first, then settle what it conflicts with")
 		fs.Usage = func() { vcsResolveUsage(os.Stderr) }
 	})
 	if err != nil {
@@ -127,11 +132,23 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 		return fmt.Errorf("vcs resolve: %s cannot report conflicts; resolve this merge by hand", res.Name)
 	}
 
+	if against != "" {
+		undo, err := startMergeAgainst(ctx, m.Root(), res, against)
+		if err != nil {
+			return err
+		}
+		defer undo()
+	}
+
 	conflicts, err := resolver.Conflicts(ctx, m.Root())
 	if err != nil {
 		return fmt.Errorf("vcs resolve: %w", err)
 	}
 	if len(conflicts) == 0 {
+		if against != "" {
+			fmt.Printf("vcs resolve: %s merged with no conflicts; conclude it with `git commit`\n", against)
+			return nil
+		}
 		fmt.Println("vcs resolve: nothing to resolve; no conflicted paths")
 		return nil
 	}
@@ -145,6 +162,48 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 		return unresolvedError(plan)
 	}
 	return applyResolution(ctx, root, rc, m, res.VCS, resolver, plan)
+}
+
+// startMergeAgainst begins the merge that --against settles, and returns the function that
+// backs it out again - a no-op unless this is a dry run, since otherwise the merge is the
+// whole point and stays in progress for the caller to commit.
+//
+// Why a real merge rather than `git merge-tree` in memory: merge-tree reports conflicted
+// PATHS and nothing else, and planResolution decides on the conflict KIND - a path one
+// side deleted is settled differently from one both sides edited, and a modify/delete is
+// the shape no merge driver is ever invoked for. Planning off names alone would silently
+// mis-sort exactly the conflicts this command exists for. (The read-only PR advisor uses
+// merge-tree precisely because it only needs the names.)
+//
+// So a dry run merges for real and then aborts, which is why a clean tree is required
+// up front: `git merge --abort` restores the pre-merge state, and anything uncommitted
+// sitting in the tree when it runs is not guaranteed to survive that.
+func startMergeAgainst(ctx context.Context, root string, res types.VCSResolution, ref string) (undo func(), err error) {
+	starter, ok := res.VCS.(types.MergeStarter)
+	if !ok {
+		return nil, fmt.Errorf("vcs resolve: %s cannot start a merge through magus; merge %q yourself, then run `magus vcs resolve`", res.Name, ref)
+	}
+	dirty, err := res.VCS.DirtyFiles(ctx, root, nil)
+	if err != nil {
+		return nil, fmt.Errorf("vcs resolve: read tree status: %w", err)
+	}
+	if len(dirty) > 0 {
+		return nil, fmt.Errorf("vcs resolve: --against needs a clean tree, and %d path(s) are uncommitted; commit or stash them first so backing the merge out cannot lose them", len(dirty))
+	}
+	if err := starter.StartMerge(ctx, root, ref); err != nil {
+		return nil, fmt.Errorf("vcs resolve: %w", err)
+	}
+	if !globalCfg.DryRun {
+		// The merge is the point: leave it in progress for the caller to commit.
+		return func() {}, nil
+	}
+	return func() {
+		if err := starter.AbortMerge(ctx, root); err != nil {
+			// Reported, never swallowed: the tree is NOT as this dry run found it, and a
+			// caller told "nothing was touched" would go on to do something else in it.
+			fmt.Fprintf(os.Stderr, "vcs resolve: could not back out the merge --dry-run started; the tree still has it in progress (git merge --abort): %v\n", err)
+		}
+	}, nil
 }
 
 // applyResolution performs the plan: clear markers, record deletions, regenerate once,
@@ -205,15 +264,37 @@ type resolutionPlan struct {
 	rebuild map[string][]string
 }
 
-// rebuiltProjects returns every project label any rebuild target will run over.
+// rebuiltProjects returns every project any rebuild target will run over, keyed by
+// projectKey.
 func (p resolutionPlan) rebuiltProjects() map[string]bool {
 	out := map[string]bool{}
 	for _, projects := range p.rebuild {
-		for _, label := range projects {
-			out[label] = true
+		for _, key := range projects {
+			out[key] = true
 		}
 	}
 	return out
+}
+
+// projectKey is the one spelling of a project used to key the rebuild set, on BOTH the
+// filling and the reading side.
+//
+// The PATH, never the label. These strings become arguments to `magus run <target>
+// <project>`, and they are also how settledPaths asks whether a regenerated file belongs
+// to a project that just ran. Those two sides used to spell it differently - filled with
+// paths, read back with types.ProjectLabel - and for every nested project the two agree,
+// so it looked correct. For the ROOT they never can: ProjectLabel routes to Display, whose
+// first branch rejects both "" and ".", so the root resolves to its DIRECTORY BASENAME
+// ("magus", or in a linked worktree that worktree's own directory name) while the set
+// holds ".". The lookup missed every time, and every root-owned output the regeneration
+// rewrote was left modified and unstaged - the dirty tree that makes `git rebase
+// --continue` refuse, which is the thing settledPaths exists to prevent. One helper on
+// both sides is what makes that divergence unrepresentable.
+func projectKey(p *types.Project) string {
+	if p.Path == "" {
+		return "."
+	}
+	return p.Path
 }
 
 // planResolution classifies every conflict without touching the tree.
@@ -277,10 +358,7 @@ func planResolution(ctx context.Context, m *magus.Magus, resolver types.Conflict
 		// project any workspace knows - so resolve regenerated nothing and died with
 		// `unknown project: "<worktree-dir>"`. Display's own doc draws this line: labels
 		// for reading, the path for anything the user (or this code) feeds back to magus.
-		proj := p.Path
-		if proj == "" {
-			proj = "."
-		}
+		proj := projectKey(p)
 		if !slices.Contains(plan.rebuild[target], proj) {
 			plan.rebuild[target] = append(plan.rebuild[target], proj)
 		}
@@ -331,7 +409,7 @@ func settledPaths(ctx context.Context, m *magus.Magus, driver types.VCSDriver, p
 			continue
 		}
 		producer := m.FindOutputProducer(filepath.Join(m.Root(), filepath.FromSlash(path)))
-		if producer == nil || !rebuilt[types.ProjectLabel(producer.Path, producer.Dir)] {
+		if producer == nil || !rebuilt[projectKey(producer)] {
 			continue
 		}
 		settled[path] = true
@@ -417,6 +495,14 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	// The resolved workspace root, not the --root OVERRIDE this was handed. The override
+	// is empty unless the user passed --root, and everything below is workspace-relative:
+	// with "" the path math produced `vcs add: "x" is outside the workspace at ` - naming
+	// no workspace at all - so naming a path explicitly, which this command's own
+	// undeclared-file message tells you to do, could never work. The whole-tree form only
+	// appeared to work because an empty dir sends every VCS call to the process cwd.
+	// vcsResolveCmd already goes through m.Root() for the same reason.
+	root = ws.Root()
 	res, err := vcs.Resolve(ctx, root, "", ws.VCSOptions())
 	if err != nil || res.VCS == nil {
 		return fmt.Errorf("vcs add: no VCS resolved for this workspace")
@@ -452,17 +538,45 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	}
 	sources, outputs, undeclared := classifyForStaging(files)
 
+	// Only when classifying the whole dirty tree. Naming a path is an explicit statement
+	// of intent about that path, and this check is an inference about paths nobody named.
+	var unexplained []string
+	if len(pos) == 0 {
+		outputs, unexplained = types.SplitExplainedOutputs(files)
+	}
+	maintained, unclaimed := splitMaintained(undeclared)
+
+	verdict := types.StagingVerdict{
+		Sources:     sources,
+		Outputs:     outputs,
+		Unexplained: unexplained,
+		Undeclared:  unclaimed,
+		Maintained:  maintained,
+		Staged:      []string{},
+	}
+	if len(unexplained) > 0 {
+		// inputDirty is false by construction: an output is only unexplained BECAUSE no
+		// declared input of its project moved. So this is ClassifyDrift's second fork -
+		// skew against a differently-versioned magus, or a non-deterministic generator.
+		code, msg := types.ClassifyDrift(false, version)
+		verdict.Code, verdict.Message, verdict.URL = string(code), msg, types.CodeURL(code)
+	}
+
 	stage := slices.Concat(sources, outputs)
 	if untracked {
 		stage = append(stage, undeclared...)
 	}
 	slices.Sort(stage)
 
-	reportStaging(sources, outputs, undeclared, untracked, globalCfg.DryRun)
-	if globalCfg.DryRun || len(stage) == 0 {
-		return nil
+	var dropped []string
+	if !globalCfg.DryRun && len(stage) > 0 {
+		staged, gone, err := stagePaths(ctx, root, res.Name, recorder, stage)
+		if err != nil {
+			return err
+		}
+		verdict.Staged, dropped = staged, gone
 	}
-	return stagePaths(ctx, root, res.Name, recorder, stage)
+	return emitStaging(verdict, dropped, untracked, globalCfg.DryRun)
 }
 
 // workspaceRelPaths turns the paths you typed into workspace-relative ones.
@@ -474,6 +588,12 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 func workspaceRelPaths(root string, paths []string) ([]string, error) {
 	if len(paths) == 0 {
 		return nil, nil
+	}
+	// An empty root is a CALLER bug, not a path the user typed wrong. Left to run, it
+	// reports every path as "outside the workspace at " with nothing after "at", which
+	// blames the argument for a mistake it did not make.
+	if root == "" {
+		return nil, fmt.Errorf("vcs add: no workspace root resolved; cannot place %q", paths[0])
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -595,48 +715,55 @@ func classifyForStaging(out []types.FileEntry) (sources, outputs, undeclared []s
 	return sources, outputs, undeclared
 }
 
-func reportStaging(sources, outputs, undeclared []string, untracked, dryRun bool) {
+// reportStaging renders the verdict as prose. It reads the value and prints; it decides
+// nothing, so the terminal and `-o json` cannot disagree about what happened.
+func reportStaging(v types.StagingVerdict, dropped []string, untracked, dryRun bool) {
 	verb := "staged"
 	if dryRun {
 		verb = "would stage"
 	}
-	if len(sources) > 0 {
-		fmt.Printf("%s %d source file(s):\n", verb, len(sources))
-		for _, p := range sources {
-			fmt.Printf("  %s\n", p)
-		}
+	for _, p := range dropped {
+		fmt.Printf("skipping %s: declared but missing from disk and not tracked\n", p)
 	}
-	if len(outputs) > 0 {
-		fmt.Printf("%s %d generated output(s), which belong with the source change that produced them:\n", verb, len(outputs))
-		for _, p := range outputs {
-			fmt.Printf("  %s\n", p)
-		}
+	if len(v.Sources) > 0 {
+		fmt.Printf("%s %d source file(s):\n", verb, len(v.Sources))
+		printPaths(v.Sources)
 	}
-	if len(undeclared) == 0 {
-		return
+	if len(v.Outputs) > 0 {
+		fmt.Printf("%s %d generated output(s), which belong with the source change that produced them:\n", verb, len(v.Outputs))
+		printPaths(v.Outputs)
+	}
+	if len(v.Unexplained) > 0 {
+		fmt.Printf("skipped %d generated output(s) no source change here accounts for:\n", len(v.Unexplained))
+		printPaths(v.Unexplained)
+		// The classification, not a second hand-written telling of it: the same code and
+		// sentence the generate gate reports for this condition (types.ClassifyDrift).
+		fmt.Printf("  %s: %s\n", v.Code, v.Message)
+		fmt.Printf("  %s\n", v.URL)
+		fmt.Println("  name a path explicitly to stage it anyway")
 	}
 	if untracked {
-		fmt.Printf("%s %d undeclared file(s) (--untracked):\n", verb, len(undeclared))
-		for _, p := range undeclared {
-			fmt.Printf("  %s\n", p)
+		all := slices.Concat(v.Undeclared, v.Maintained)
+		if len(all) > 0 {
+			slices.Sort(all)
+			fmt.Printf("%s %d undeclared file(s) (--untracked):\n", verb, len(all))
+			printPaths(all)
 		}
-		return
+	} else {
+		if len(v.Undeclared) > 0 {
+			fmt.Printf("skipped %d undeclared file(s) - no target claims them:\n", len(v.Undeclared))
+			printPaths(v.Undeclared)
+			fmt.Println("  if one is a new source file, name it explicitly or pass --untracked;")
+			fmt.Println("  if it is build residue, add it to your VCS ignore rules")
+		}
+		if len(v.Maintained) > 0 {
+			fmt.Printf("skipped %d file(s) magus itself maintains outside any target's declared outputs:\n", len(v.Maintained))
+			printPaths(v.Maintained)
+			fmt.Println("  these are not residue - name them explicitly or pass --untracked to stage them")
+		}
 	}
-	maintained, unclaimed := splitMaintained(undeclared)
-	if len(unclaimed) > 0 {
-		fmt.Printf("skipped %d undeclared file(s) - no target claims them:\n", len(unclaimed))
-		for _, p := range unclaimed {
-			fmt.Printf("  %s\n", p)
-		}
-		fmt.Println("  if one is a new source file, name it explicitly or pass --untracked;")
-		fmt.Println("  if it is build residue, add it to your VCS ignore rules")
-	}
-	if len(maintained) > 0 {
-		fmt.Printf("skipped %d file(s) magus itself maintains outside any target's declared outputs:\n", len(maintained))
-		for _, p := range maintained {
-			fmt.Printf("  %s\n", p)
-		}
-		fmt.Println("  these are not residue - name them explicitly or pass --untracked to stage them")
+	if len(v.Staged) > 0 {
+		fmt.Println("\nreview before committing: git diff --cached --stat")
 	}
 }
 
@@ -685,23 +812,38 @@ func splitMaintained(undeclared []string) (maintained, unclaimed []string) {
 //
 // Paths are passed after `--` so one that begins with a dash, or collides with a
 // revision name, is unambiguously a path.
-func stagePaths(ctx context.Context, root, vcsName string, recorder types.ConflictResolver, paths []string) error {
+// It returns what it staged and what it dropped rather than printing either: the caller
+// owns rendering, so `-o json` gets the same answer the terminal does instead of a second
+// hand-written version of it.
+func stagePaths(ctx context.Context, root, vcsName string, recorder types.ConflictResolver, paths []string) (staged, dropped []string, err error) {
 	stageable, dropped, err := filterStageable(ctx, root, vcsName, paths)
 	if err != nil {
-		return err
-	}
-	for _, p := range dropped {
-		fmt.Printf("skipping %s: declared but missing from disk and not tracked\n", p)
+		return nil, nil, err
 	}
 	if len(stageable) == 0 {
-		return nil
+		return []string{}, dropped, nil
 	}
 	// MarkResolved batches the pathspecs, which matters here: `vcs add` over a whole
 	// dirty tree is the largest path list these commands hand to the VCS.
 	if err := recorder.MarkResolved(ctx, root, stageable); err != nil {
-		return fmt.Errorf("vcs add: %w", err)
+		return nil, nil, fmt.Errorf("vcs add: %w", err)
 	}
-	fmt.Println("\nreview before committing: git diff --cached --stat")
+	return stageable, dropped, nil
+}
+
+// emitStaging renders the verdict: the structured formats get the value itself, and the
+// terminal gets the prose. One decision, several audiences - which is the whole reason
+// the verdict is a value. `-o json` used to be accepted here and answer in text.
+func emitStaging(v types.StagingVerdict, dropped []string, untracked, dryRun bool) error {
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(opts, v)
+	}
+	reportStaging(v, dropped, untracked, dryRun)
 	return nil
 }
 

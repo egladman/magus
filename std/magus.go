@@ -702,23 +702,9 @@ func MagusDiagnoseDrift(ctx context.Context, outputs, inputs []string) (types.Dr
 		inDirty, _ = v.Dirty(ctx, dir, inputs)
 	}
 
-	var code types.DiagnosticCode
-	var msg string
-	switch {
-	case inDirty:
-		code = types.StaleGeneratedOutput
-		msg = "generated output drifted and a declared input changed; re-run `magus run generate:rw` and commit"
-	case types.IsDevMagusVersion(types.MagusVersionFromContext(ctx)):
-		ver := types.MagusVersionFromContext(ctx)
-		if ver == "" {
-			ver = "unknown"
-		}
-		code = types.EnvironmentalDrift
-		msg = fmt.Sprintf("generated output drifted but its declared inputs are unchanged; the committed form is produced by the pinned release and you are running a dev build (%s) - not your change, do not commit", ver)
-	default:
-		code = types.NondeterministicOutput
-		msg = "generated output drifted but its declared inputs and the generator version are unchanged - a non-deterministic generator"
-	}
+	// Shared with `magus vcs add`, which asks the same question at staging time: see
+	// types.ClassifyDrift for why the fork lives there rather than here.
+	code, msg := types.ClassifyDrift(inDirty, types.MagusVersionFromContext(ctx))
 	root, err := v.Root(ctx, dir)
 	if err != nil {
 		root = dir

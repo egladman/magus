@@ -179,6 +179,19 @@ func execCommand(ctx context.Context, dir, cmd string, args []string, env map[st
 	if err != nil && errors.Is(err, types.ExecDenied) {
 		return res, err // sandbox exec denial: surface the diagnostic verbatim
 	}
+	// A cancelled run kills this child, and a killed process has no verdict of its
+	// own: ExitCode() reports -1, which the floor below would turn into "<cmd> exited
+	// 1" - indistinguishable from the tool genuinely failing, printed with a
+	// `reproduce:` line that does not reproduce it and (because a killed child writes
+	// no stderr) no diagnostic to explain it. run.Exec already joins ctx.Err() for
+	// exactly this; propagate it instead of blaming the tool. A child that reached a
+	// real exit code before the kill landed still reports that code.
+	if ctx.Err() != nil && (!res.Started || res.Code <= 0) {
+		if err != nil {
+			return res, err // already carries ctx.Err(), joined by run.Exec
+		}
+		return res, ctx.Err()
+	}
 	if !res.Started || res.Code != 0 {
 		code := res.Code
 		if code <= 0 {

@@ -210,8 +210,10 @@ func TestStagePathsSurvivesStalePath(t *testing.T) {
 	dir := initGitRepo(t)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "present.txt"), []byte("y"), 0o644))
 
-	err := stagePaths(context.Background(), dir, "git", gitConflictResolver(t, dir), []string{"present.txt", "stale.txt"})
+	staged, dropped, err := stagePaths(context.Background(), dir, "git", gitConflictResolver(t, dir), []string{"present.txt", "stale.txt"})
 	require.NoError(t, err)
+	assert.Equal(t, []string{"present.txt"}, staged)
+	assert.Equal(t, []string{"stale.txt"}, dropped, "the stale path is reported, not silently discarded")
 
 	out, err := exec.Command("git", "-C", dir, "diff", "--cached", "--name-only").Output()
 	require.NoError(t, err)
@@ -227,6 +229,85 @@ func gitConflictResolver(t *testing.T, dir string) types.ConflictResolver {
 	cr, ok := res.VCS.(types.ConflictResolver)
 	require.True(t, ok, "the git driver must implement types.ConflictResolver")
 	return cr
+}
+
+// TestWorkspaceRelPathsRejectsEmptyRoot pins the guard on a caller bug that read as a user
+// error: vcsAddCmd passed the --root OVERRIDE (empty unless given) instead of the resolved
+// workspace root, so `magus vcs add <path>` answered `is outside the workspace at ` with
+// nothing after "at", blaming the path.
+func TestWorkspaceRelPathsRejectsEmptyRoot(t *testing.T) {
+	_, err := workspaceRelPaths("", []string{"docs/foo.md"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no workspace root resolved")
+	assert.NotContains(t, err.Error(), "outside the workspace",
+		"an unresolved root must not be reported as a bad path")
+}
+
+// TestSplitExplainedOutputs proves vcs add can tell a regenerated output apart from one
+// nothing in this change accounts for. Classifying by glob alone made those identical.
+func TestSplitExplainedOutputs(t *testing.T) {
+	files := []types.FileEntry{
+		{Path: "internal/foo.go", Role: "source", SourceOf: []string{"."}},
+		{Path: "MAGUS.md", Role: "output", OutputOf: []string{"."}},
+		{Path: "docs/gen/index.html", Role: "output", OutputOf: []string{"docs"}},
+	}
+
+	explained, unexplained := types.SplitExplainedOutputs(files)
+
+	assert.Equal(t, []string{"MAGUS.md"}, explained,
+		"a root source moved, so the root's regenerated output belongs in the same commit")
+	assert.Equal(t, []string{"docs/gen/index.html"}, unexplained,
+		"nothing in this change feeds docs, so its output moved for some other reason")
+}
+
+// TestSplitExplainedOutputsGeneratedFileCannotExplainItself guards the trap that makes the
+// naive version useless here: docs declares `**/*.md` as sources AND generates
+// `reference/**/*.md` into that same tree, so a generated page matches both globs. Reading
+// SourceOf off it anyway would let the docs tree account for its own regeneration, and
+// every output would be "explained" forever.
+func TestSplitExplainedOutputsGeneratedFileCannotExplainItself(t *testing.T) {
+	files := []types.FileEntry{
+		{Path: "docs/reference/cli.md", Role: "output", OutputOf: []string{"docs"}, SourceOf: []string{"docs"}},
+		{Path: "docs/gen/index.html", Role: "output", OutputOf: []string{"docs"}},
+	}
+
+	explained, unexplained := types.SplitExplainedOutputs(files)
+
+	assert.Empty(t, explained, "a generated file is not a source change")
+	assert.Equal(t, []string{"docs/reference/cli.md", "docs/gen/index.html"}, unexplained)
+}
+
+// TestProjectKeyIsPathNotLabel pins the contract settledPaths depends on: the rebuild set
+// is keyed by project PATH, and for the ROOT that key is "." - never the display label,
+// which Display renders as the directory basename. Keying one side by label was a real
+// bug: the set held "." while the lookup asked for "magus" (or a worktree's own directory
+// name), so it missed every time and every root-owned regenerated output was left
+// modified and unstaged, which is what makes `git rebase --continue` refuse.
+func TestProjectKeyIsPathNotLabel(t *testing.T) {
+	root := &types.Project{Path: "", Dir: "/repos/magus"}
+	dotted := &types.Project{Path: ".", Dir: "/repos/magus"}
+	nested := &types.Project{Path: "docs", Dir: "/repos/magus/docs"}
+
+	assert.Equal(t, ".", projectKey(root), "the root keys as \".\", whatever its directory is called")
+	assert.Equal(t, ".", projectKey(dotted), "a root spelled \".\" keys the same as one spelled \"\"")
+	assert.Equal(t, "docs", projectKey(nested))
+
+	// The label is what this must NOT be, and only the root can tell the two apart.
+	assert.NotEqual(t, types.ProjectLabel(root.Path, root.Dir), projectKey(root),
+		"keying the root by its label is the bug; Display gives the directory basename")
+	assert.Equal(t, types.ProjectLabel(nested.Path, nested.Dir), projectKey(nested),
+		"a nested project's label and path agree, which is why the bug hid")
+}
+
+// TestRebuiltProjectsFindsRoot proves the two sides now meet: a plan filled the way
+// planResolution fills it is readable the way settledPaths reads it, for the root project.
+func TestRebuiltProjectsFindsRoot(t *testing.T) {
+	root := &types.Project{Path: "", Dir: "/repos/magus"}
+	plan := resolutionPlan{rebuild: map[string][]string{"generate": {projectKey(root)}}}
+
+	assert.True(t, plan.rebuiltProjects()[projectKey(root)],
+		"a root-owned regenerated output must be recognized as covered by the rebuild")
 }
 
 // initGitRepo creates a temp git repo with an identity, so a commit can be made in it.

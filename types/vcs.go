@@ -3,6 +3,8 @@ package types
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"time"
 )
 
@@ -411,6 +413,27 @@ type RevisionExporter interface {
 	ExportRevision(ctx context.Context, dir, rev, dstDir string) error
 }
 
+// MergeStarter is an optional capability for VCSDriver implementations that can BEGIN a
+// merge against a ref without committing it, and abandon one they began. Callers
+// type-assert for it and degrade gracefully when a backend lacks it.
+//
+// It exists because conflict resolution was reactive-only: ConflictResolver.Conflicts
+// reads an operation already in progress, so settling a branch against its base meant the
+// caller ran the merge itself first. That put the tricky half - which merge, with what
+// flags, and how to back out - in whatever shell script was driving, which is exactly
+// where CI has no good place to put it.
+type MergeStarter interface {
+	// StartMerge begins a merge of ref into the working tree WITHOUT committing it,
+	// leaving any conflicts recorded for ConflictResolver.Conflicts to report. A merge
+	// that completes cleanly is not an error, and neither is one that conflicts: both
+	// leave an operation in progress for the caller to conclude. A merge that could not
+	// be started at all (an unknown ref, an operation already underway) is.
+	StartMerge(ctx context.Context, root, ref string) error
+	// AbortMerge abandons the in-progress merge, restoring the tree to its pre-merge
+	// state. Callers start from a clean tree so this cannot discard uncommitted work.
+	AbortMerge(ctx context.Context, root string) error
+}
+
 // Status is the working tree's uncommitted state: whether it is clean, and which paths
 // changed. It replaces the pair of vcs.is_dirty / vcs.dirty_files at the Buzz boundary,
 // where the two answered the same question in two shapes - a bool and a list of the
@@ -478,6 +501,114 @@ func (d DriftVerdict) BuzzObject() BuzzObject {
 		files = append(files, f.BuzzObject())
 	}
 	return BuzzObject{"drifted": d.Drifted, "code": d.Code, "message": d.Message, "url": d.URL, "files": files}
+}
+
+// ClassifyDrift names the cause of a declared output that moved, and the sentence to
+// show for it. It is the one place that fork is decided, so the generate gate and
+// `magus vcs add` cannot describe the same condition two different ways.
+//
+// The fork is on WHY, not on how bad it is:
+//
+//   - a declared input moved too (MGS4006): regeneration is expected, and the output
+//     belongs in the same commit as the source that moved it;
+//   - inputs unchanged, running a DEV build (MGS4005): the committed form is produced by
+//     the pinned release, so this is version skew and not the developer's change;
+//   - inputs unchanged, running a RELEASE build (MGS4003): same inputs, same generator
+//     version, different bytes - a reproducibility bug.
+//
+// magusVersion is the running binary's version, empty when unknown.
+func ClassifyDrift(inputDirty bool, magusVersion string) (DiagnosticCode, string) {
+	switch {
+	case inputDirty:
+		return StaleGeneratedOutput,
+			"generated output drifted and a declared input changed; re-run `magus run generate:rw` and commit"
+	case IsDevMagusVersion(magusVersion):
+		ver := magusVersion
+		if ver == "" {
+			ver = "unknown"
+		}
+		return EnvironmentalDrift, fmt.Sprintf("generated output drifted but its declared inputs are unchanged; "+
+			"the committed form is produced by the pinned release and you are running a dev build (%s) - "+
+			"not your change, do not commit", ver)
+	default:
+		return NondeterministicOutput,
+			"generated output drifted but its declared inputs and the generator version are unchanged - a non-deterministic generator"
+	}
+}
+
+// SplitExplainedOutputs divides the dirty declared outputs into the ones this change
+// accounts for and the ones it does not.
+//
+// It backs both `magus vcs add` and doctor's generated-drift check, which ask the same
+// question at different moments - staging time and any time. `vcs add` classifies by declared GLOB, which answers "is this path generated" and
+// nothing else - so it stages whatever bytes sit at an output path while claiming, in its
+// own help text, to be staging "the generated outputs a source change produced". That is a
+// causal claim it never checked. Stale output from an abandoned experiment, or from a
+// generator run by a DIFFERENT magus build, staged identically to fresh output.
+//
+// The check is the one magus.diagnoseDrift (std/magus.go) already codifies for the
+// generate gate, read off the classification this command has already computed rather
+// than re-probing the VCS: an output is EXPLAINED when some project whose declared output
+// glob claims it also has a dirty declared SOURCE in this same change. That is
+// MGS4006's shape - an input moved, so regeneration is expected and the two belong in one
+// commit. An output with no dirty input behind it is the other branch: either it was
+// produced by a different magus version than the committed form (MGS4005) or a generator
+// here is not deterministic (MGS4003). Neither is something to sweep into a commit.
+//
+// Role, not the raw glob sets, decides what counts as a dirty input. A committed
+// generated file frequently ALSO matches its own project's source globs (docs declares
+// `**/*.md` as sources and generates `reference/**/*.md` into that same tree), and letting
+// it count would make every such file explain itself. FileEntry.Role already reports
+// "output" whenever both match, for exactly this reason: the regeneration rule dominates.
+func SplitExplainedOutputs(files []FileEntry) (explained, unexplained []string) {
+	dirtyInputOf := map[string]bool{}
+	for _, f := range files {
+		if f.Role != "source" {
+			continue
+		}
+		for _, p := range f.SourceOf {
+			dirtyInputOf[p] = true
+		}
+	}
+	for _, f := range files {
+		if f.Role != "output" {
+			continue
+		}
+		if slices.ContainsFunc(f.OutputOf, func(p string) bool { return dirtyInputOf[p] }) {
+			explained = append(explained, f.Path)
+			continue
+		}
+		unexplained = append(unexplained, f.Path)
+	}
+	return explained, unexplained
+}
+
+// StagingVerdict is what `magus vcs add` decided about a working tree, as a value.
+//
+// A value rather than a pile of Printlns because the same decision has several
+// audiences: the terminal, `-o json`, and (next) a pre-commit hook that needs the
+// verdict as an exit status rather than as prose. Every one of those used to mean
+// another hand-written rendering of the same four groups, which is how `-o json` came to
+// be accepted and silently answer in text.
+type StagingVerdict struct {
+	// Sources and Outputs are what staging claimed: declared sources, and the declared
+	// outputs a source change in this same set accounts for.
+	Sources []string `json:"sources,omitempty" yaml:"sources,omitempty"`
+	Outputs []string `json:"outputs,omitempty" yaml:"outputs,omitempty"`
+	// Unexplained are declared outputs that moved with no dirty declared input behind
+	// them. Skipped unless named explicitly; Code says why they are suspect.
+	Unexplained []string `json:"unexplained,omitempty" yaml:"unexplained,omitempty"`
+	// Undeclared is what no project claims, and Maintained the subset magus's own core
+	// writes outside any target's globs (.gitattributes).
+	Undeclared []string `json:"undeclared,omitempty" yaml:"undeclared,omitempty"`
+	Maintained []string `json:"maintained,omitempty" yaml:"maintained,omitempty"`
+	// Staged is what actually reached the index, empty on a dry run.
+	Staged []string `json:"staged" yaml:"staged"`
+	// Code, Message and URL classify Unexplained via ClassifyDrift, and are empty when
+	// nothing is unexplained.
+	Code    string `json:"code,omitempty" yaml:"code,omitempty"`
+	Message string `json:"message,omitempty" yaml:"message,omitempty"`
+	URL     string `json:"url,omitempty" yaml:"url,omitempty"`
 }
 
 // DriftVerdictRecord is the boundary mirror cmd/magus-utils types reflects over; see

@@ -917,6 +917,40 @@ func parseConflicts(out, prefix string) []types.Conflict {
 // pathspecs (a path with no stage 3 fails the invocation and writes nothing), so the
 // per-path fallback cannot find a half-applied side. A path resolving from neither stage
 // errors rather than being skipped; callers send both-deleted paths to RemoveConflicts.
+// StartMerge begins a merge of ref without committing it. See types.MergeStarter.
+//
+// --no-ff as well as --no-commit: a fast-forwardable branch would otherwise MOVE rather
+// than merge, leaving no operation in progress, no conflicts, and a caller that thinks it
+// settled something. --no-ff makes the outcome one shape regardless of topology.
+//
+// A ref beginning with "-" is refused rather than passed through, where git would read it
+// as a flag. `git merge` has no `--` separator for its ref argument, so rejecting it is
+// the only guard available.
+func (v gitVCS) StartMerge(ctx context.Context, root, ref string) error {
+	if err := checkRef(ref); err != nil {
+		return err
+	}
+	out, err := gitExec(ctx, "-C", root, "merge", "--no-commit", "--no-ff", ref).CombinedOutput()
+	if err == nil {
+		return nil
+	}
+	// A merge that CONFLICTS exits non-zero, and that is the case this exists to set up -
+	// the conflicts are the payload, reported by Conflicts. Only a merge that never began
+	// is an error. git leaves MERGE_HEAD behind exactly when one is underway.
+	if _, statErr := os.Stat(filepath.Join(root, ".git", "MERGE_HEAD")); statErr == nil {
+		return nil
+	}
+	return fmt.Errorf("git merge %s: %w\n%s", ref, err, strings.TrimSpace(string(out)))
+}
+
+// AbortMerge abandons the in-progress merge. See types.MergeStarter.
+func (v gitVCS) AbortMerge(ctx context.Context, root string) error {
+	if out, err := gitExec(ctx, "-C", root, "merge", "--abort").CombinedOutput(); err != nil {
+		return fmt.Errorf("git merge --abort: %w\n%s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
 func (v gitVCS) KeepIncoming(ctx context.Context, root string, paths []string) error {
 	if len(paths) == 0 {
 		return nil

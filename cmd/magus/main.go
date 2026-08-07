@@ -224,6 +224,56 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	}
 }
 
+// bindGlobalsAfterSubcommand reads the generated config flags out of the args that
+// FOLLOW the subcommand and applies them to globalCfg, so the value is present before
+// the workspace preload snapshots it. See the call site for why that ordering matters.
+//
+// It filters to KNOWN config flags rather than parsing the whole tail: everything after
+// the subcommand is a mix of that subcommand's own flags, its positionals, and these, and
+// stdlib flag stops dead at the first name it does not recognize. Filtering first means an
+// unknown local flag is skipped instead of hiding every global flag behind it.
+//
+// Scanning stops at "--". Past that the tokens belong to the tool being forwarded to, and
+// a `-- --concurrency 4` meant for a child is not magus's to read.
+//
+// The subcommand parses these again later through cmdParse. Binding twice is harmless -
+// the second parse writes the same values into the same fields.
+func bindGlobalsAfterSubcommand(subArgs []string) {
+	if len(subArgs) == 0 {
+		return
+	}
+	fs := flag.NewFlagSet("globals-after-subcommand", flag.ContinueOnError)
+	bindDisplayFlags(fs)
+	fs.SetOutput(io.Discard)
+	gen.BindFlags(fs, &globalCfg)
+	takesValue := map[string]bool{}
+	fs.VisitAll(func(f *flag.Flag) { takesValue[f.Name] = !flagIsBool(f) })
+
+	var keep []string
+	for i := 0; i < len(subArgs); i++ {
+		a := subArgs[i]
+		if a == "--" {
+			break
+		}
+		if !strings.HasPrefix(a, "-") {
+			continue
+		}
+		name, _, hasInline := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		wantsValue, known := takesValue[name]
+		if !known {
+			continue
+		}
+		keep = append(keep, a)
+		if wantsValue && !hasInline && i+1 < len(subArgs) {
+			keep = append(keep, subArgs[i+1])
+			i++
+		}
+	}
+	// Errors are not actionable here: this is a best-effort pre-read, and the
+	// subcommand's own parse reports anything genuinely malformed with better context.
+	_ = fs.Parse(keep)
+}
+
 // globalValueFlags is the set of "-name"/"--name" tokens for every value-taking
 // global flag, derived once from the real bindings (the config-generated
 // gen.BindFlags plus the display flags) rather than hand-listed, so peekSub can
@@ -434,6 +484,22 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	}
 	applyDisplay()
 	rest := fs.Args()
+	// The parse above stops at the subcommand, so a global config flag written AFTER it
+	// - which the usage text promises works, and which is where people naturally put it
+	// - had not been read yet when the workspace preload below snapshots globalCfg into
+	// the loadMagus singleton. The subcommand's own cmdParse does read it, but that runs
+	// after the snapshot, so the value landed in a config nothing consulted again:
+	// `magus run build --concurrency 4` silently ran at the default width, and every
+	// other generated config flag was dead in that position too.
+	bindGlobalsAfterSubcommand(rest)
+	// globalCfg is the one the flags were bound into; cfg is the copy taken before any
+	// of them were parsed, and the startup path below still reads it - for the watch
+	// ignores, the daemon address, and (worst) the bootstrap limiter's width. That
+	// limiter is INJECTED into the workspace and wins over m.cfg.Concurrency via
+	// limOnce, so sizing it from the pre-flag copy meant `--concurrency` never governed
+	// the pool from the command line in either position; only magus.yaml and
+	// MAGUS_CONCURRENCY ever reached it. Re-syncing here is what makes the flag real.
+	cfg = globalCfg
 	stopFlags()
 
 	if len(rest) == 0 {
@@ -475,6 +541,16 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		concurrency := cfg.Concurrency
 		if concurrency <= 0 {
 			concurrency = cache.DefaultConcurrency()
+		}
+		// THE site that governs: this limiter is injected into the workspace and wins over
+		// m.cfg.Concurrency via limOnce, so a cap applied only in Magus.limiter never runs.
+		// Announced rather than silent - a run quietly narrower than requested is as hard
+		// to attribute as one that thrashes.
+		if clamped, was := cache.ClampConcurrency(concurrency); was {
+			slog.Warn("magus: concurrency capped to this machine",
+				slog.Int("requested", concurrency), slog.Int("running_with", clamped),
+				slog.Int("cpus", cache.MachineCeiling()))
+			concurrency = clamped
 		}
 		lim := cache.NewLimiter(concurrency)
 		// Host our own proc server only when there's no live daemon to forward to.
@@ -565,7 +641,7 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 	case "vcs":
 		return vcsCmd(ctx, root, rc, subArgs)
 	case "doctor":
-		return doctorCmd(ctx, root, subArgs)
+		return doctorCmd(ctx, root, rc, subArgs)
 	case "config":
 		return configCmd(ctx, root, globalCfg, subArgs)
 	case "memory":
@@ -813,6 +889,7 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 		WorkspaceLister: reg.status,
 		ServiceLister:   func() []types.StatusService { return serviceStatuses(svcReg) },
 		ServiceHost:     serviceHost{svcReg},
+		ConfigReloader:  reg.evictAll,
 		Context:         ctx,
 		Limiter:         lim,
 		Version:         version,

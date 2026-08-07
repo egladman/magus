@@ -8,6 +8,19 @@
 # worktree (or any clone not named after the project) resolve regenerated nothing and
 # died with `unknown project: "<checkout-dir>"`. A testscript workdir has a generated
 # name, so this reproduces the condition without needing a worktree.
+#
+# The SAME path/label confusion existed on the reading side and survived here for months,
+# because this script asserted only what resolve PRINTED and stopped one step short of
+# whether it worked. settledPaths fills the rebuild set with project PATHS and used to
+# look it up with the LABEL, so for the root it never matched: every output the
+# regeneration rewrote that was not itself conflicted was left modified-but-unstaged -
+# the dirty tree that makes `git rebase --continue` refuse, which is the thing
+# settledPaths exists to prevent.
+#
+# SIDE.txt is what makes that reachable. The conflicted path is staged unconditionally
+# (it is in the plan), so a fixture whose target writes only the conflicted file cannot
+# see the bug at all. SIDE.txt is a second declared output, tracked and NOT conflicted,
+# that regeneration rewrites - so it can only be staged via the lookup that was broken.
 
 exec git init
 exec git config user.email test@example.com
@@ -18,7 +31,7 @@ exec git config merge.magus.driver false
 exec git checkout -b main
 
 # Baseline: the generated output committed alongside its source, on main.
-exec git add magus.yaml magusfile.buzz OUT.txt
+exec git add magus.yaml magusfile.buzz OUT.txt SIDE.txt
 exec git commit -m initial
 
 # Two branches that both rewrite the generated file, so merging them conflicts on a
@@ -44,23 +57,39 @@ exec magus vcs resolve
 stdout 'regenerating: magus run generate \.'
 ! stderr 'unknown project'
 
+# Everything above asserts what resolve PRINTED. These assert what it DID.
+# Both the conflicted output and the collateral one regeneration rewrote must be staged.
+exec git diff --cached --name-only
+stdout '^OUT\.txt$'
+stdout '^SIDE\.txt$'
+
+# And nothing regeneration touched may be left dirty, or the rebase cannot continue.
+exec git status --porcelain
+! stdout '^ M '
+! stdout '^UU '
+
 -- magus.yaml --
-{}
+default_charms: [rw]
 -- .gitignore --
 .magus/
 -- magusfile.buzz --
 import "magus";
+import "fs";
 magus\project({
     "name": "acme-root",
     "targets": {
-        "generate": {"skip_cache": "writes OUT.txt on every run; a replay would skip the write"},
+        "generate": {"skip_cache": "writes on every run; a replay would skip the write"},
     },
 });
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("OUT.txt");
+    ctx.writesFiles("OUT.txt", "SIDE.txt");
+    fs\writeFile("OUT.txt", "generated: regenerated\n");
+    fs\writeFile("SIDE.txt", "generated: side-regenerated\n");
 }
 -- OUT.txt --
 generated: base
+-- SIDE.txt --
+generated: side-base
 -- OUT.local.txt --
 generated: local
 -- OUT.other.txt --
