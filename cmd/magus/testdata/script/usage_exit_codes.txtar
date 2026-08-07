@@ -35,7 +35,7 @@ stderr 'want view, set, history, cache, or mcp'
 
 ! exec magus server
 stderr 'target required'
-stderr 'want start, stop, or job'
+stderr 'want start, stop, reload, or job'
 
 ! exec magus man
 stderr 'subcommand required'

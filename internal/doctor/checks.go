@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -1678,4 +1679,107 @@ func isHexByte(data []byte, i int) bool {
 	}
 	c := data[i]
 	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+}
+
+// checkGeneratedDrift reports declared outputs that moved with nothing in the working
+// tree accounting for them: no declared INPUT of the producing project is dirty.
+//
+// It is the "your generated content went stale and nobody told you" check. Until now the
+// first thing to notice was CI's drift gate, which is the worst place to learn it - the
+// least context, the longest feedback loop, and usually on someone else's change. The
+// same condition is visible locally in milliseconds, because it needs only the VCS status
+// magus already reads and the classification `magus describe file` already computes.
+//
+// Advice, never fail. An output moving without an input is legitimate mid-work: you may
+// be about to change the source, or you may have deliberately run a generator. It is
+// worth SAYING and never worth blocking a workspace over.
+//
+// It runs no generator, so it cannot see the third case - a generator that would produce
+// different bytes from unchanged inputs while the committed output is untouched. That is
+// the drift gate's job, and needs the generator to actually run.
+func (r *runner) checkGeneratedDrift() types.DoctorCheck {
+	const name = "generated output"
+	ctx := r.runCtx()
+	res, err := vcs.Resolve(ctx, r.root, "", r.ws.VCSOptions())
+	if err != nil || res.VCS == nil {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no vcs resolved; skipped"}
+	}
+	lines, err := res.VCS.DirtyFiles(ctx, r.root, nil)
+	if err != nil {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "could not read tree status; skipped"}
+	}
+	paths := vcs.StatusPaths(res.Name, lines)
+	if len(paths) == 0 {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "tree is clean"}
+	}
+	// Inspector, not the narrower WorkspaceReader doctor holds: classification is an
+	// Inspector role, and a reader that does not implement it simply skips this check.
+	insp, ok := r.ws.(types.Inspector)
+	if !ok {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "workspace cannot classify paths; skipped"}
+	}
+	files, err := insp.ClassifyFiles(ctx, paths)
+	if err != nil {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "could not classify changed paths; skipped"}
+	}
+	// Sources committed since the base ref explain their outputs too; see
+	// sourcesChangedSinceBase in cmd/magus/vcs.go for why the working tree alone is wrong.
+	var sinceBase map[string]bool
+	if changed, derr := res.VCS.Diff(ctx, r.root, res.Base); derr == nil && len(changed) > 0 {
+		if cf, cerr := insp.ClassifyFiles(ctx, changed); cerr == nil {
+			sinceBase = types.SourceProjects(cf)
+		}
+	}
+	_, unexplained := types.SplitExplainedOutputs(files, sinceBase)
+	if len(unexplained) == 0 {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "every changed output has a source change behind it"}
+	}
+	code, msg := types.ClassifyDrift(false, types.MagusVersionFromContext(ctx))
+	return types.DoctorCheck{
+		Name:    name,
+		Status:  types.DoctorAdvice,
+		Message: fmt.Sprintf("[%s] %d generated file(s) changed with no source change behind them; %s", code, len(unexplained), msg),
+		Details: unexplained,
+	}
+}
+
+// checkConcurrencySizing reports a configured concurrency that does not fit this machine.
+//
+// The default already fits (NumCPU, capped at 8), so this only ever fires on an explicit
+// setting - which is exactly the one nobody revisits. A number chosen on a laptop follows
+// the repo onto a 32-core workstation and leaves it mostly idle; the same number carried
+// onto a small CI runner oversubscribes it, and oversubscription is the worse direction
+// because the work still completes, just slower, so nothing ever points at the cause.
+//
+// Advice, not fail: a deliberately small value is a legitimate choice (leaving headroom
+// for something else on the box), and magus has no way to tell that apart from a stale
+// one. It says what it sees and offers the command.
+func (r *runner) checkConcurrencySizing() types.DoctorCheck {
+	const name = "concurrency sizing"
+	fit := cache.DefaultConcurrency()
+	set := r.opts.cfg.Concurrency
+	if set <= 0 {
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorOK,
+			Message: fmt.Sprintf("unset; sized to this machine (%d)", fit),
+		}
+	}
+	if set == fit {
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorOK,
+			Message: fmt.Sprintf("%d, which is what this machine sizes to", set),
+		}
+	}
+	shape := "undersized"
+	detail := fmt.Sprintf("%d of the %d this machine sizes to, so a fan-out leaves capacity idle", set, fit)
+	if set > fit {
+		shape = "oversized"
+		detail = fmt.Sprintf("%d against the %d this machine sizes to, so parallel targets contend rather than finish sooner", set, fit)
+	}
+	return types.DoctorCheck{
+		Name: name, Status: types.DoctorAdvice,
+		Message: fmt.Sprintf("concurrency is %s: %s", shape, detail),
+		Details: []string{fmt.Sprintf("%d cpu(s) detected", runtime.NumCPU())},
+		Fix:     []string{"config", "set", fmt.Sprintf("key=concurrency,value=%d", fit)},
+	}
 }

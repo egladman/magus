@@ -27,6 +27,15 @@ func TestResolveProfileRunAffectedUsageSkipsForward(t *testing.T) {
 		{"run help", "run", []string{"help"}, usageOnly},
 		{"run target still forwards", "run", []string{"build"}, full},
 		{"run flag-then-target still forwards", "run", []string{"-v", "build"}, full},
+		// --detach SUBMITS to the daemon and reports the job id, so it is the client's
+		// job for the same reason usage is. Forwarding it had the daemon submit to
+		// itself and print the id onto its own log, leaving the caller silent at exit 0.
+		{"run --detach stays local", "run", []string{"build", "--detach"}, usageOnly},
+		{"run -detach stays local", "run", []string{"-detach", "build"}, usageOnly},
+		{"run --detach=true stays local", "run", []string{"build", "--detach=true"}, usageOnly},
+		{"a longer flag is a different flag", "run", []string{"build", "--detach-me"}, full},
+		// Past "--" the tokens belong to the forwarded tool, not to magus.
+		{"detach past the separator is the tool's", "run", []string{"go::go-test", ".", "--", "--detach"}, full},
 		{"affected bare", "affected", nil, usageOnly},
 		{"affected -h", "affected", []string{"-h"}, usageOnly},
 		{"affected --help", "affected", []string{"--help"}, usageOnly},

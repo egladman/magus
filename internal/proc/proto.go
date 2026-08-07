@@ -32,6 +32,9 @@ const (
 	typeServiceStopAll      = "service.stopall"
 	typeServiceStopAllReply = "service.stopall.reply"
 
+	typeConfigReload      = "config.reload"
+	typeConfigReloadReply = "config.reload.reply"
+
 	typeJob      = "job"
 	typeJobReply = "job.reply"
 )
@@ -173,6 +176,27 @@ type ServiceStopAllRequest struct {
 // ServiceStopAllReply reports how many services were stopped.
 type ServiceStopAllReply struct {
 	Count int `json:"count"`
+}
+
+// ConfigReloadRequest asks the daemon to drop the workspaces it is holding open, so the
+// next command against each one reopens it and re-reads magus.yaml. It is the config
+// counterpart of ServiceStopAllRequest: a partial reset that leaves the daemon up.
+//
+// There is no "apply this config" payload, and deliberately so - the daemon does not hold
+// a config to patch, it holds OPEN WORKSPACES that each captured one when they loaded.
+// Dropping them is the reload; the config is then read from disk the ordinary way,
+// through exactly the path a cold start uses. Nothing here can disagree with that path
+// because nothing here duplicates it.
+type ConfigReloadRequest struct {
+	Protocol string `json:"protocol"`
+}
+
+// ConfigReloadReply reports how many workspaces were dropped and how many were left
+// alone because a run was in flight. Busy is not an error: those keep the config they
+// started with, which is what a run in progress should do.
+type ConfigReloadReply struct {
+	Dropped int `json:"dropped"`
+	Busy    int `json:"busy"`
 }
 
 // ServiceHost hosts long-running shared services on behalf of adopted magus

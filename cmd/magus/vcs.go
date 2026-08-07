@@ -542,7 +542,7 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	// of intent about that path, and this check is an inference about paths nobody named.
 	var unexplained []string
 	if len(pos) == 0 {
-		outputs, unexplained = types.SplitExplainedOutputs(files)
+		outputs, unexplained = types.SplitExplainedOutputs(files, sourcesChangedSinceBase(ctx, ws, res, root))
 	}
 	maintained, unclaimed := splitMaintained(undeclared)
 
@@ -909,3 +909,31 @@ func gitTrackedPaths(ctx context.Context, root string, paths []string) (map[stri
 
 // gitLsFilesChunk bounds pathspecs per `git ls-files` call; see gitTrackedPaths.
 const gitLsFilesChunk = 256
+
+// sourcesChangedSinceBase returns the projects whose declared sources changed between the
+// base ref and HEAD, so an output whose source change is already COMMITTED still counts as
+// accounted for.
+//
+// Without it the check only saw the working tree, and reported drift on the two ordinary
+// workflows that commit the source first: "commit the source, then commit the generated
+// output", and "pull, then regenerate". Both are exactly when a reader most needs the
+// check to be right, and being wrong there taught people to pass the path explicitly and
+// stop reading it.
+//
+// Best effort: a VCS that cannot answer, or no base ref, yields nothing rather than an
+// error. The check is advisory, and degrading to the working-tree-only answer is the old
+// behaviour, not a new failure.
+func sourcesChangedSinceBase(ctx context.Context, ws types.WorkspaceRepository, res types.VCSResolution, root string) map[string]bool {
+	if res.VCS == nil || res.Base == "" {
+		return nil
+	}
+	paths, err := res.VCS.Diff(ctx, root, res.Base)
+	if err != nil || len(paths) == 0 {
+		return nil
+	}
+	files, err := ws.ClassifyFiles(ctx, paths)
+	if err != nil {
+		return nil
+	}
+	return types.SourceProjects(files)
+}

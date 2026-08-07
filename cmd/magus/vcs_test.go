@@ -246,6 +246,9 @@ func TestWorkspaceRelPathsRejectsEmptyRoot(t *testing.T) {
 
 // TestSplitExplainedOutputs proves vcs add can tell a regenerated output apart from one
 // nothing in this change accounts for. Classifying by glob alone made those identical.
+//
+// nil for the second argument is the working-tree-only case; the committed half is
+// covered by TestSplitExplainedOutputsCountsCommittedSources.
 func TestSplitExplainedOutputs(t *testing.T) {
 	files := []types.FileEntry{
 		{Path: "internal/foo.go", Role: "source", SourceOf: []string{"."}},
@@ -253,7 +256,7 @@ func TestSplitExplainedOutputs(t *testing.T) {
 		{Path: "docs/gen/index.html", Role: "output", OutputOf: []string{"docs"}},
 	}
 
-	explained, unexplained := types.SplitExplainedOutputs(files)
+	explained, unexplained := types.SplitExplainedOutputs(files, nil)
 
 	assert.Equal(t, []string{"MAGUS.md"}, explained,
 		"a root source moved, so the root's regenerated output belongs in the same commit")
@@ -272,7 +275,7 @@ func TestSplitExplainedOutputsGeneratedFileCannotExplainItself(t *testing.T) {
 		{Path: "docs/gen/index.html", Role: "output", OutputOf: []string{"docs"}},
 	}
 
-	explained, unexplained := types.SplitExplainedOutputs(files)
+	explained, unexplained := types.SplitExplainedOutputs(files, nil)
 
 	assert.Empty(t, explained, "a generated file is not a source change")
 	assert.Equal(t, []string{"docs/reference/cli.md", "docs/gen/index.html"}, unexplained)
@@ -327,4 +330,25 @@ func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
 	require.NoErrorf(t, err, "git %v: %s", args, out)
+}
+
+// TestSplitExplainedOutputsCountsCommittedSources pins the fix for a false positive that
+// fired on the two most ordinary workflows: committing the source and then the generated
+// output, and pulling and then regenerating. In both, the source change is already in a
+// commit, so a check that reads only the working tree calls the output unaccounted for
+// and refuses to stage it - on a commit that is entirely correct.
+func TestSplitExplainedOutputsCountsCommittedSources(t *testing.T) {
+	// Only the output is dirty; the source that produced it is already committed.
+	files := []types.FileEntry{
+		{Path: "MAGUS.md", Role: "output", OutputOf: []string{"."}},
+	}
+
+	_, unexplained := types.SplitExplainedOutputs(files, nil)
+	assert.Equal(t, []string{"MAGUS.md"}, unexplained,
+		"with nothing but the working tree to go on, it looks unaccounted for")
+
+	explained, unexplained := types.SplitExplainedOutputs(files, map[string]bool{".": true})
+	assert.Equal(t, []string{"MAGUS.md"}, explained,
+		"a source change committed since the base ref accounts for it just as well")
+	assert.Empty(t, unexplained)
 }

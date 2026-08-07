@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service/console"
@@ -26,6 +27,9 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		return targetUsage()
 	}
+	// Kept before anything reshapes them: --detach re-submits this invocation verbatim,
+	// so it needs the args as the user wrote them, chain and all.
+	origArgs := args
 
 	// The chain is split off the RAW args, before anything else touches them.
 	// splitTargetFromArgs partitions flags from positionals and reorders them
@@ -35,6 +39,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 
 	// Parsed before the run, not after it: a typo'd verb used to build the whole
 	// project and only then exit 2 on something checkable up front.
+	var detach *bool
 	var chain chainPlan
 	if chained {
 		var proceed bool
@@ -96,6 +101,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		noDefaultCharms = fs.Bool("no-default-charms", false, "Ignore magus.yaml default_charms for this run")
 		live = fs.Bool("live", false, "Print a local log-viewer link and stream this run's output to it live over an ephemeral loopback server (127.0.0.1); the link and data never leave your machine")
 		noCache = fs.Bool("no-cache", false, "Force a fresh run even on a cache hit; still refreshes the entry (unlike a skip_cache target, which never snapshots)")
+		detach = fs.Bool("detach", false, "Hand this run to the daemon and return immediately; watch it with magus status --watch")
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus run %s [flags] [project...] [-- <extra args>]\n", rawTarget)
 			fmt.Fprintln(os.Stderr, "")
@@ -112,6 +118,9 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	})
 	if err != nil {
 		return err
+	}
+	if detach != nil && *detach {
+		return detachToDaemon(ctx, append([]string{"run"}, withoutDetachFlag(origArgs)...))
 	}
 	// -s deliberately suppresses the usual target progress. That is useful to an
 	// agent, but a person otherwise has no positive signal that a slow invocation
@@ -601,4 +610,57 @@ func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, targ
 		})
 	}
 	return emitFormatted(opts, out)
+}
+
+// detachFlagName is the one flag these helpers act on; it is named once so the two that
+// add and remove it cannot disagree.
+const detachFlagName = "detach"
+
+// withoutDetachFlag drops --detach from an argv, in every spelling the flag package
+// accepts: -name, --name, and either with an inline =value.
+//
+// The argv is re-submitted verbatim to the daemon, so leaving the flag in would make the
+// daemon detach again - handing the work to itself, forever.
+func withoutDetachFlag(args []string) []string {
+	out := make([]string, 0, len(args))
+	for _, a := range args {
+		trimmed := strings.TrimLeft(a, "-")
+		if key, _, _ := strings.Cut(trimmed, "="); key == detachFlagName && strings.HasPrefix(a, "-") {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
+// detachToDaemon hands this invocation to the daemon and returns as soon as it is queued,
+// so a caller can watch it instead of blocking or sleeping.
+//
+// It requires a PERSISTENT daemon (`magus server start`), and says so rather than falling
+// back. A per-process proc server - which magus starts for ordinary commands - dies when
+// this invocation exits, so submitting there would queue work that is silently dropped:
+// the caller would be told it detached, and nothing would ever run. Refusing is the only
+// honest answer, and the remedy is one command.
+func detachToDaemon(ctx context.Context, argv []string) error {
+	addr, err := resolveDaemonAddr(ctx, "")
+	if err != nil || addr == "" {
+		return types.WrapDiagnostic(types.DaemonRequired, nil,
+			"--detach hands the work to the daemon, and none is running; start one with `%s`", clihint.ServerStart)
+	}
+	st, serr := proc.QueryStatus(ctx, addr)
+	if serr != nil || st == nil || st.Mode != "daemon" {
+		return types.WrapDiagnostic(types.DaemonRequired, nil,
+			"--detach needs the persistent daemon, and %s is not one: a per-process server exits with this command, so the work would be queued and silently dropped. Start it with `%s`",
+			addr, clihint.ServerStart)
+	}
+	inv, err := proc.SubmitJob(ctx, addr, argv, version)
+	if err != nil {
+		return fmt.Errorf("--detach: %w", err)
+	}
+	if inv == "" {
+		fmt.Fprintln(os.Stderr, "magus: the daemon is already running this exact command; not queued twice")
+		return nil
+	}
+	fmt.Fprintf(os.Stderr, "magus: detached (job %s); watch it with `%s`\n", inv, clihint.Status.With("--watch 15s"))
+	return nil
 }

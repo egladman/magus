@@ -399,6 +399,36 @@ func (r *wsRegistry) janitor(ctx context.Context) {
 	}
 }
 
+// evictAll drops every workspace not currently serving a dispatch, so the next command
+// against each reopens it and re-reads its config. It returns how many were dropped and
+// how many were left because a run was in flight.
+//
+// This is `magus server reload`. It is eviction rather than a config PATCH on purpose:
+// the daemon holds open workspaces that each captured a config when they loaded, not a
+// config object to overwrite - so dropping them makes the next load read magus.yaml
+// through exactly the path a cold start uses, and there is no second code path that could
+// disagree with it about what the file means.
+//
+// A busy workspace is skipped, not waited for. A run that is already underway keeps the
+// config it started with, which is the correct answer rather than a limitation: swapping
+// a running build's config halfway is not a reload, it is a race.
+func (r *wsRegistry) evictAll() (dropped, busy int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for root, e := range r.entries {
+		if e.inflight > 0 {
+			busy++
+			continue
+		}
+		if e.m != nil {
+			_ = e.m.Close()
+		}
+		delete(r.entries, root)
+		dropped++
+	}
+	return dropped, busy
+}
+
 func (r *wsRegistry) evictIdle() {
 	cutoff := r.now().Add(-r.ttl).UnixNano()
 	r.mu.Lock()

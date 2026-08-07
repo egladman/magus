@@ -318,3 +318,15 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 	assert.ErrorIs(t, err, types.CrossOutputNotProduced)
 	assert.NoFileExists(t, filepath.Join(m.Root(), "site", "generated.txt"))
 }
+
+// TestWithoutDetachFlagStripsEverySpelling pins the loop guard on --detach. The argv is
+// re-submitted to the daemon verbatim, so a --detach left in it would make the daemon
+// detach again, handing the work to itself indefinitely.
+func TestWithoutDetachFlagStripsEverySpelling(t *testing.T) {
+	got := withoutDetachFlag([]string{"ci", "-detach", "docs", "--detach", "--detach=true", "--detach-me"})
+	assert.Equal(t, []string{"ci", "docs", "--detach-me"}, got,
+		"every spelling the flag package accepts is dropped; a different flag that merely starts the same is not")
+
+	assert.Equal(t, []string{"ci", "."}, withoutDetachFlag([]string{"ci", "."}),
+		"an argv without the flag is unchanged")
+}

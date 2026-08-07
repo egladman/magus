@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -326,6 +327,21 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 
 	input, hasInput := readGuardInput(in)
 	who := hookAttribution{Host: *host, Session: *session, Event: *event}
+	// A host that writes its hook payload as JSON needs no jq and no --path: the envelope
+	// says what is about to run and whether it is a write. Explicit flags still win, since
+	// a wrapper that passed them meant them.
+	if req, isEnvelope := decodeHookEnvelope(input.Value); isEnvelope {
+		input.Value = req.Value
+		if req.IsPath {
+			*asPath = true
+		}
+		if who.Session == "" {
+			who.Session = req.Who.Session
+		}
+		if who.Event == "" {
+			who.Event = req.Who.Event
+		}
+	}
 	verdict := guardVerdict{SchemaVersion: guardSchemaVersion, Decision: "pass"}
 	if *asPath {
 		if hasInput {
@@ -342,7 +358,10 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 			}
 		}
 		appendHookActivity(ctx, input, who, true, verdict)
-		return writeGuardVerdict(out, opts, verdict)
+		if err := writeGuardVerdict(out, opts, verdict); err != nil {
+			return err
+		}
+		return enforceVerdict(verdict)
 	}
 	if hasInput {
 		switch v := evaluateBashGuard(input.Value); {
@@ -355,7 +374,38 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		}
 	}
 	appendHookActivity(ctx, input, who, false, verdict)
-	return writeGuardVerdict(out, opts, verdict)
+	if err := writeGuardVerdict(out, opts, verdict); err != nil {
+		return err
+	}
+	return enforceVerdict(verdict)
+}
+
+// guardDenyExitCode is what a denied command exits with.
+//
+// A hook that reports a deny and then exits 0 blocks NOTHING: the host reads the status,
+// sees success, and runs the command anyway - so the guard looks installed, the rules look
+// enforced, and neither is true. That is worse than leaving it unwired, because it is
+// believed. Every rule in this guard was reachable and correct while exiting 0, which is
+// exactly how it went unnoticed.
+//
+// 2 rather than 1 because it is what the dominant host reads as "block and show the reason
+// to the model"; hosts that only test for non-zero block on it just the same. It collides
+// with the usage exit code, and that is harmless: a guard that could not parse its input
+// has not judged the command either, so refusing to run it is the same right answer.
+const guardDenyExitCode = 2
+
+// enforceVerdict turns a deny into a blocking exit, with the reason on STDERR where a host
+// forwards it to the model. Stdout still carries the rendered verdict, in whatever format
+// was asked for, so a structured consumer reads the same answer it always did - the exit
+// code is added information, not a replacement. It applies to EVERY format: a deny is a
+// deny however it is rendered, and an `-o json` caller that got a zero status would be
+// told the same lie in a different shape.
+func enforceVerdict(verdict guardVerdict) error {
+	if verdict.Decision != "deny" {
+		return nil
+	}
+	fmt.Fprintln(os.Stderr, verdict.Reason)
+	return errSilent{exitCode: guardDenyExitCode}
 }
 
 // writeGuardVerdict renders a verdict through the standard output arm.
@@ -459,6 +509,61 @@ func readGuardInput(in io.Reader) (guardInput, bool) {
 		return guardInput{}, false
 	}
 	return guardInput{Value: value}, true
+}
+
+// hookEnvelope is the JSON an agent host writes to a hook's stdin: which tool is about to
+// run and with what. Only the fields the guard needs are modeled; everything else in the
+// payload is ignored rather than rejected, since a host is free to add to it.
+type hookEnvelope struct {
+	HookEventName string `json:"hook_event_name"`
+	SessionID     string `json:"session_id"`
+	ToolInput     struct {
+		Command  string `json:"command"`
+		FilePath string `json:"file_path"`
+	} `json:"tool_input"`
+}
+
+// decodeHookEnvelope pulls the thing to judge out of a host's hook payload, reporting
+// whether the input was an envelope at all.
+//
+// Without this, wiring the guard into a host means `jq -r .tool_input.command | magus
+// hook` - an extra dependency in the one place that must never fail, sitting on the
+// critical path of every tool call. Reading the envelope directly makes the config a
+// single command, and lets the attribution (session, event) come from the payload that
+// already carries it instead of from flags the wrapper has to remember.
+//
+// A payload with a file_path rather than a command is a WRITE, which is the --path
+// question, so the envelope decides that too: a caller that pipes real JSON should not
+// also have to know which flag its shape implies.
+//
+// Anything that is not an object with a usable tool_input is left alone and judged as the
+// literal text it is - the bare-command form keeps working exactly as before.
+func decodeHookEnvelope(raw string) (hookRequest, bool) {
+	if !strings.HasPrefix(raw, "{") {
+		return hookRequest{}, false
+	}
+	var env hookEnvelope
+	if err := json.Unmarshal([]byte(raw), &env); err != nil {
+		return hookRequest{}, false
+	}
+	req := hookRequest{Who: hookAttribution{Session: env.SessionID, Event: env.HookEventName}}
+	switch {
+	case env.ToolInput.Command != "":
+		req.Value = env.ToolInput.Command
+	case env.ToolInput.FilePath != "":
+		req.Value, req.IsPath = env.ToolInput.FilePath, true
+	default:
+		return hookRequest{}, false
+	}
+	return req, true
+}
+
+// hookRequest is what a host's payload asked the guard to judge: the text, whether it is a
+// path rather than a command, and who reported it.
+type hookRequest struct {
+	Value  string
+	IsPath bool
+	Who    hookAttribution
 }
 
 // hookAttribution is what the host wrapper knows about itself and cannot be
@@ -1079,11 +1184,26 @@ func gitGuard(cmds []guardCommand) (bashGuardVerdict, bool) {
 		sub, rest := c.Args[0], c.Args[1:]
 		switch sub {
 		case "stash":
-			// Reading and restoring a stash is safe; creating one moves the tree.
-			if len(rest) > 0 && slices.Contains([]string{"list", "show", "pop", "apply", "drop", "branch"}, rest[0]) {
+			// Reading a stash is safe. RESTORING one is not, which this rule used to
+			// assume it was: the stash stack is per-REPOSITORY, shared by every linked
+			// worktree, so `git stash pop` with no ref applies whatever is at stash@{0} -
+			// routinely a stranger's work from another worktree - into your tree, and
+			// drops the entry if it applies cleanly. Naming the entry after reading
+			// `git stash list` is the deliberate form and stays allowed.
+			if len(rest) > 0 && slices.Contains([]string{"list", "show"}, rest[0]) {
 				continue
 			}
+			if len(rest) > 1 && slices.Contains([]string{"pop", "apply", "drop", "branch"}, rest[0]) {
+				continue // an explicit stash@{N}: the caller chose which entry
+			}
+			if len(rest) > 0 && slices.Contains([]string{"pop", "apply", "drop"}, rest[0]) {
+				return bashGuardVerdict{Deny: denySharedStash(rest[0])}, true
+			}
 			return bashGuardVerdict{Deny: denyWholeTree("git stash")}, true
+		case "worktree":
+			if len(rest) > 0 && rest[0] == "remove" {
+				return bashGuardVerdict{Deny: "git worktree remove deletes that worktree's working tree, including uncommitted and untracked work in it - which in a repo running several worktrees is routinely someone else's, and is not in any commit to recover from. Check it is clean first (git -C <path> status), and remove it from a session that owns it."}, true
+			}
 		case "reset":
 			if slices.Contains(rest, "--hard") {
 				return bashGuardVerdict{Deny: denyWholeTree("git reset --hard")}, true
@@ -1334,6 +1454,11 @@ const (
 		"Run the command from the workspace itself, and name the project rather than moving: `magus run <target> <project>`. If you genuinely mean a DIFFERENT workspace, say so explicitly with `--root <path>` - that keeps one cache and one account of what was verified. To compare against a pristine tree, use a throwaway `git worktree`, which is a real checkout rather than a copy."
 	outputGuardTail = "The one command you MAY pipe or redirect is `magus query output <ref>`: it returns a target's raw captured tool log, which has no schema for magus to project, so searching it is a real need. Every other verb emits a structured record that -o already shapes exactly."
 )
+
+// denySharedStash explains why an unqualified stash restore is refused.
+func denySharedStash(verb string) string {
+	return "git stash " + verb + " with no entry named acts on stash@{0}, and the stash stack belongs to the REPOSITORY, not to your worktree - so the top entry is often work another checkout (or another agent) shelved, and " + verb + " applies or destroys it. Read `git stash list` first, then name the one you meant: git stash " + verb + " stash@{N}."
+}
 
 func denyWholeTree(op string) string {
 	return "whole-tree " + op + " destroys uncommitted and untracked work, including a concurrent agent's. Verify builds in place (magus run build / magus affected ci); building never requires a clean tree. If you truly need a pristine tree, use a throwaway git worktree. See the magus-vcs skill."

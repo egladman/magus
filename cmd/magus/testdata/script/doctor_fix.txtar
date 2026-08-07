@@ -1,0 +1,48 @@
+# `magus doctor --fix` runs the remedy each finding names.
+#
+# The rule that makes it safe: a Fix is an EXISTING magus subcommand, never a private
+# repair routine. So --fix can only do what you could have typed yourself and can inspect
+# afterwards, and a finding whose remedy needs judgement (narrow this over-wide glob, or
+# accept that the key is deliberately volatile?) declares none and stays a report.
+#
+# Nothing writes config directly either: a config-shaped remedy is spelled `config set`,
+# so the one thing in magus that edits config stays the one thing that edits config. That
+# is what this asserts - not that a field changed, but that it changed THROUGH that path.
+#
+# The sizing is pinned rather than left to the host: DefaultConcurrency reads
+# MAGUS_CONCURRENCY, so the machine's fit is 6 here whatever the runner has, while
+# --concurrency 2 supplies a smaller CONFIGURED value (a flag outranks the env in the
+# resolved config). Without that the expected number would differ per machine.
+env MAGUS_CONCURRENCY=6
+# The fixture is a workspace, not a repo, and doctor is thorough: without these it fails
+# on a missing base ref and reports on things this test is not about. Disabling VCS keeps
+# the concurrency finding the only variable.
+env MAGUS_VCS_ENABLED=false
+
+# The finding itself: configured below what the machine sizes to.
+exec magus --concurrency 2 doctor
+stdout 'concurrency sizing: concurrency is undersized'
+stdout '2 of the 6'
+
+# --dry-run names the remedy and runs nothing.
+exec magus --concurrency 2 doctor --fix --dry-run
+stdout 'would fix concurrency sizing: magus config set key=concurrency,value=6'
+! stdout 'applied'
+! grep 'concurrency' magus.yaml
+
+# --fix applies it, through `config set`.
+exec magus --concurrency 2 doctor --fix
+stdout 'fixing concurrency sizing: magus config set key=concurrency,value=6'
+grep 'concurrency: 6' magus.yaml
+
+# And with the value now fitting, the finding is gone.
+exec magus doctor
+stdout 'concurrency sizing: 6, which is what this machine sizes to'
+
+-- magus.yaml --
+{}
+-- magusfile.buzz --
+import "magus";
+magus\project({"name": "acme-root"});
+// doctor fails a workspace with no ci target, which would mask the finding under test.
+export fun ci(ctx: magus\Context, args: [str]) > void {}

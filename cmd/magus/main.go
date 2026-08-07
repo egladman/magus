@@ -156,6 +156,24 @@ func isUsageOnlyInvocation(subArgs []string) bool {
 	return false
 }
 
+// hasDetachFlag reports whether argv carries --detach, in every spelling the flag
+// package accepts. Scanning stops at "--", past which the tokens belong to a forwarded
+// tool rather than to magus.
+func hasDetachFlag(args []string) bool {
+	for _, a := range args {
+		if a == "--" {
+			return false
+		}
+		if !strings.HasPrefix(a, "-") {
+			continue
+		}
+		if key, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "="); key == detachFlagName {
+			return true
+		}
+	}
+	return false
+}
+
 // resolveProfile returns the work profile for a subcommand; defaults to "needs everything".
 func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	switch sub {
@@ -207,6 +225,14 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// here) and the client is left with a bare, silent non-zero exit. Skip both the
 		// forward and the workspace load so the local dispatch prints usage directly.
 		if isUsageOnlyInvocation(subArgs) {
+			return dispatchProfile{needsConfig: true}
+		}
+		// --detach is the client's job for exactly the reason usage above is. It SUBMITS
+		// the run to the daemon and reports the job id; forwarding it would have the
+		// daemon submit to itself, print the id onto its own log, and leave the caller
+		// with silence and exit 0 - observed before this guard existed. It needs no
+		// workspace either: it hands off an argv and returns.
+		if hasDetachFlag(subArgs) {
 			return dispatchProfile{needsConfig: true}
 		}
 		return dispatchProfile{needsConfig: true, needsDaemonFwd: true, needsWorkspace: true}

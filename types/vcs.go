@@ -560,27 +560,44 @@ func ClassifyDrift(inputDirty bool, magusVersion string) (DiagnosticCode, string
 // `**/*.md` as sources and generates `reference/**/*.md` into that same tree), and letting
 // it count would make every such file explain itself. FileEntry.Role already reports
 // "output" whenever both match, for exactly this reason: the regeneration rule dominates.
-func SplitExplainedOutputs(files []FileEntry) (explained, unexplained []string) {
-	dirtyInputOf := map[string]bool{}
-	for _, f := range files {
-		if f.Role != "source" {
-			continue
-		}
-		for _, p := range f.SourceOf {
-			dirtyInputOf[p] = true
-		}
+func SplitExplainedOutputs(files []FileEntry, alsoChangedIn map[string]bool) (explained, unexplained []string) {
+	inputMoved := SourceProjects(files)
+	// A source change that is already COMMITTED explains its output just as well as a
+	// dirty one. Reading only the working tree missed both of the ordinary ways this
+	// happens - committing the source and then the generated output, and pulling and then
+	// regenerating - so magus reported drift it had itself just accounted for, and the
+	// only way past it was to override the check on a legitimate commit. A check people
+	// learn to override has stopped working.
+	for p := range alsoChangedIn {
+		inputMoved[p] = true
 	}
 	for _, f := range files {
 		if f.Role != "output" {
 			continue
 		}
-		if slices.ContainsFunc(f.OutputOf, func(p string) bool { return dirtyInputOf[p] }) {
+		if slices.ContainsFunc(f.OutputOf, func(p string) bool { return inputMoved[p] }) {
 			explained = append(explained, f.Path)
 			continue
 		}
 		unexplained = append(unexplained, f.Path)
 	}
 	return explained, unexplained
+}
+
+// SourceProjects returns every project whose declared SOURCE glob claims one of these
+// paths. It is how both halves of the explained/unexplained question are computed - the
+// dirty set and the changed-since-base set - so the two cannot answer it differently.
+func SourceProjects(files []FileEntry) map[string]bool {
+	out := map[string]bool{}
+	for _, f := range files {
+		if f.Role != "source" {
+			continue
+		}
+		for _, p := range f.SourceOf {
+			out[p] = true
+		}
+	}
+	return out
 }
 
 // StagingVerdict is what `magus vcs add` decided about a working tree, as a value.
