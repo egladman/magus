@@ -3,7 +3,7 @@ title: magus-query
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
 skill_full_bytes: 7785
-skill_simple_bytes: 5576
+skill_simple_bytes: 5668
 ---
 
 # magus-query
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `23` |
+| `agent-skill-version` | `26` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `ace009cb3627` |
+| `skill-content` | `50e5cf282e9c` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -189,7 +189,7 @@ find and relate entities instead of grepping source.
 FAST PATH: in a magus workspace (a magusfile.buzz at the root), any question
 shaped like "what exists / what depends on X / where is Y used / how do A and B
 relate" is a graph query FIRST - do not open Grep or Glob for it. If the graph cannot answer,
-say so and then fall back.
+say so and then fall back - falling back silently hides the gap.
 
 `MAGUS.md` IS NOT YOUR SOURCE. It is a
 generated index for humans, true only as of its last regeneration. Last resort
@@ -246,7 +246,8 @@ A query returns ranked matches plus their neighborhood, bounded by `--budget`
 - Reading as a machine? Add `-o json`: every verb returns a stable,
   `schema_version`-stamped OBJECT with a top-level wrapper - key into the
   plural (`.matches`, `.targets`), it is never a bare array. `-o name` prints
-  bare IDs for piping.
+  bare IDs for piping. Do not scrape the human text or trim it with `head`.
+
 - Node IDs are stable and structured: `<kind>:<qualified-name>`, e.g.
   `target:pkg/foo:build`, `spell:go`, `diagnostic:MGS2001`. Key on them.
 - Edges are directed and carry a `confidence` - `extracted` (read directly off a

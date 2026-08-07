@@ -94,7 +94,19 @@ this:
 Getting it wrong is a loud failure at install (a parse error for an unknown
 function, an execute error for an unknown field), never a silently mangled file.
 
-### Which rules may lose their why
+### Who simple is FOR, and therefore what it cuts
+
+Simple is not the beginner permutation. It is installed for the most capable
+readers - the models that can re-derive an imperative from the tool surface and
+do not need it spelled out. That inverts the obvious instinct, so state the
+consequence plainly: **simple sheds ENUMERATION and keeps JUDGMENT.** It is not
+"the steps without the why". A permutation that keeps the steps and drops the
+why hands its strongest reader the half it could have reconstructed and takes
+away the half it could not.
+
+Ask of every branch: could a capable reader work this out from `magus describe`,
+`-h`, or the docs? Then it is enumeration, and simple can lose it. Could they
+only learn it by making the mistake? Then it is judgment, and it stays.
 
 Not every rule tolerates losing its rationale, and the split is not stylistic.
 
@@ -107,13 +119,19 @@ Not every rule tolerates losing its rationale, and the split is not stylistic.
   rule never listed. Keep a short form of the why in simple via an `{{else}}`
   arm rather than dropping it.
 
+The sharpest test is silence. A failure that ANNOUNCES itself teaches the reader
+on its own and needs no rationale in simple; a failure that is silent - an edit
+that stops existing, a guard that fails open, a pipe that turns a failing gate
+into exit 0 - can only arrive as text, because nothing in the session will ever
+say it.
+
 The evidence, for the record: an ablation of repository context files
 (arXiv:2602.11988) found imperative instructions are followed well while
-background and overview prose is not worth its tokens, which is the case for
-cutting hard. Against that, short-context compression studies (arXiv:2505.00019,
-arXiv:2502.14255) found terse rewrites degrade short instruction text and hurt
-smaller models most. So cut whole rationale blocks, but do not crush the grammar
-of what survives.
+background and overview prose is not worth its tokens. That licenses cutting
+BACKGROUND - what magus is, why it exists - and it is not a license to cut the
+why of a judgment rule. Short-context compression studies (arXiv:2505.00019,
+arXiv:2502.14255) found terse rewrites degrade short instruction text, so do not
+crush the grammar of what survives.
 
 ### Do not de-grammar the core
 
@@ -123,10 +141,18 @@ less, not by writing badly. Plain sentences, ordinary punctuation, in both arms.
 
 Rules:
 
-- Never put a step, a command, a flag, a path, or a WRONG/CORRECT pair whose
-  CORRECT half carries the instruction inside `{{if .Full}}`. Put failure modes,
-  war stories, "otherwise X" clauses, and worked examples that only illustrate
-  there.
+- Never put the LOAD-BEARING instruction inside `{{if .Full}}` - the one command
+  or path without which simple cannot act, or the CORRECT half of a
+  WRONG/CORRECT pair. Simple must still be able to do the thing.
+- An EXHAUSTIVE enumeration is different, and it is exactly what simple sheds:
+  every flag of a command, every kind in a table, every variant of a form. Put
+  it in `{{if .Full}}` and have simple name where to get it (`-h`, `magus
+  describe <thing>`, a docs URL) rather than carrying the list. That is
+  progressive disclosure, and it is the intended shape - a capable reader
+  fetches an enumeration far more cheaply than it recovers a judgment.
+- War stories, "otherwise X" clauses, and examples that only illustrate go in
+  `{{if .Full}}`. The why of a judgment rule does NOT: shorten it into an
+  `{{else}}` arm instead.
 - Keep the imperative grammatical after the cut. `foo{{if .Full}} - because
   bar{{end}}.` reads as `foo.` in simple; a mid-clause cut reads as damage.
 - A malformed template is a parse or execute error at install, which also catches

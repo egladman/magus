@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "biome": "biome check ."
+    "biome": "biome check .",
+    "test": "node --test *.test.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.3",

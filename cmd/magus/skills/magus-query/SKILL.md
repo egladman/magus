@@ -12,7 +12,7 @@ relate" is a graph query FIRST - do not open Grep or Glob for it.{{if .Full}} Un
 grep hit, a graph answer is verified: every edge is extracted from a declared
 source or scored by a rubric, and says which.{{end}} If the graph cannot answer,
 say so and then fall back{{if .Full}} - a silent fallback hides the gap that should be
-reported{{end}}.
+reported{{else}} - falling back silently hides the gap{{end}}.
 
 `MAGUS.md` IS NOT YOUR SOURCE.{{if .Full}} It is a generated routing index written for a
 HUMAN reading the repo, and it is only as true as its last regeneration - a
@@ -85,8 +85,8 @@ A query returns ranked matches plus their neighborhood, bounded by `--budget`
 - Reading as a machine? Add `-o json`: every verb returns a stable,
   `schema_version`-stamped OBJECT with a top-level wrapper - key into the
   plural (`.matches`, `.targets`), it is never a bare array. `-o name` prints
-  bare IDs for piping.{{if .Full}} Do not scrape the human text or trim it with `head`.
-  Over MCP the tools already return structured content; nothing to shape.{{end}}
+  bare IDs for piping. Do not scrape the human text or trim it with `head`.
+{{if .Full}}  Over MCP the tools already return structured content; nothing to shape.{{end}}
 - Node IDs are stable and structured: `<kind>:<qualified-name>`, e.g.
   `target:pkg/foo:build`, `spell:go`, `diagnostic:MGS2001`. Key on them{{if .Full}}; a rename
   is a delete plus an add{{end}}.

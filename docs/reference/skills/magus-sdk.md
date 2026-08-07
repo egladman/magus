@@ -3,7 +3,7 @@ title: magus-sdk
 description: "Help a Go developer consume magus as a library (import \"github.com/egladman/magus\") instead of shelling out to the CLI, and audit whether the SDK actually serves them."
 tags: [agents, skills, magus-sdk]
 skill_full_bytes: 13316
-skill_simple_bytes: 12650
+skill_simple_bytes: 12879
 ---
 
 # magus-sdk
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `23` |
+| `agent-skill-version` | `26` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `ace009cb3627` |
+| `skill-content` | `50e5cf282e9c` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -159,11 +159,11 @@ canceled"`), and wraps `ctx.Err()`, so `errors.Is(err, context.Canceled)` and
 before calling `ListProjects` on a one-project workspace produces exactly
 that message and `errors.Is` returns true.
 
-The reason is stated directly in describe.go: a partial inventory
-reporting `Count: 3` is indistinguishable from a workspace that genuinely has
-three projects, so silently truncating would be a wrong answer wearing a
-right answer's shape. Never treat an empty or short `List*`/`Evaluate*`
-result as "the workspace has nothing" without checking the error first.
+Never treat an empty or short `List*`/`Evaluate*` result as "the workspace has
+nothing" without checking the error first. The reason is stated directly in
+describe.go: a partial inventory reporting `Count: 3` is indistinguishable from a
+workspace that genuinely has three projects, so silently truncating would be a
+wrong answer wearing a right answer's shape.
 
 ## Two different graphs, easy to conflate
 
@@ -392,6 +392,10 @@ canceled"`), and wraps `ctx.Err()`, so `errors.Is(err, context.Canceled)` and
 `errors.Is(err, context.DeadlineExceeded)` both hold. VERIFIED: cancelling
 before calling `ListProjects` on a one-project workspace produces exactly
 that message and `errors.Is` returns true.
+
+Never treat an empty or short `List*`/`Evaluate*` result as "the workspace has
+nothing" without checking the error first. A partial inventory is
+indistinguishable from a small one: a wrong answer wearing a right answer's shape.
 
 ## Two different graphs, easy to conflate
 

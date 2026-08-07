@@ -31,6 +31,15 @@
 # Both calls pass --host cursor so the observation magus records says which host
 # produced it. Neither Cursor event carries a session id, so none is sent; that
 # is attribution missing, not a verdict changing.
+#
+# Coverage declarations, machine-read by the host-parity gate - see the longer
+# note in magus-guard-command.sh. Cursor is the host that loses the most, and
+# the two lines say exactly where: an advise on a shell command is delivered
+# nowhere (Cursor sends nothing on an allow), and an advise on a file write
+# reaches the person via stderr but never the model.
+# magus-guard-template: 1
+# magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=none pass=none
+# magus-guard-coverage: schema=1 host=cursor surface=path deny=none advise=human pass=none
 
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 
@@ -66,5 +75,13 @@ if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
 	exit 0
 fi
 
-printf '%s' "$event" | jq -r '.command' | "$GUARD_MAGUS_BIN" hook --host cursor \
-	-o 'template={{if eq .decision "deny"}}{"permission":"deny","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}'
+# Captured and printed rather than piped straight through, because `magus hook` exits
+# non-zero on a deny and Cursor reads a non-zero hook as a CRASH - which it fails open on,
+# unless failClosed is set. Letting that status escape would turn every block into an
+# allow, silently, which is the one outcome worse than not installing the guard. Cursor's
+# channel is the JSON on stdout; this exits 0 so that JSON is what it acts on.
+verdict=$(printf '%s' "$event" | jq -r '.command' | "$GUARD_MAGUS_BIN" hook --host cursor \
+	-o 'template={{if eq .decision "deny"}}{"permission":"deny","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}' 2>/dev/null)
+[ -n "$verdict" ] || verdict='{"permission":"allow"}'
+printf '%s' "$verdict"
+exit 0

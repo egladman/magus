@@ -14,6 +14,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestLocalSkillNameIsReserved keeps magus out of the one name a workspace is
+// told it owns.
+//
+// The magus-adapt skill teaches workspaces to put their own rules in a skill
+// magus does not ship, and names magus-local as the convention. Shipping a
+// skill by that name later would not conflict loudly: install --force writes
+// the shipped body straight over the workspace's file, on every machine, at
+// once. Someone would have to reconstruct the rules from git history, if they
+// were committed at all.
+func TestLocalSkillNameIsReserved(t *testing.T) {
+	for _, source := range skillSources {
+		assert.NotEqual(t, LocalSkillName, source.name,
+			"%q is reserved for a workspace's own rules; magus shipping a skill by that name would overwrite them on the next install --force", LocalSkillName)
+	}
+}
+
 func testCatalog(t *testing.T) *Catalog {
 	t.Helper()
 	files := make(fstest.MapFS, len(skillSources))
