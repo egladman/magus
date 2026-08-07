@@ -109,6 +109,23 @@ jobs:
           restore-keys: |
             ${{ github.workflow }}-magus-history-v1-
 
+      # Fails the run before a single shard starts. Uncommitted generated output is the
+      # most common way CI breaks here, and without this it is found INSIDE a shard -
+      # after setup-magus has built magus from source, mise has installed the toolchain,
+      # and the build has already run. This job has all of that in hand already, so the
+      # check costs seconds and reports the exact command to fix it.
+      #
+      # Scoped to the two fast projects rather than `magus affected generate`, deliberately.
+      # The docs project's generate renders the whole site, which is minutes and which the
+      # docs shard runs anyway - hoisting it here would duplicate the expensive half to
+      # accelerate feedback on the cheap half. These two cover MAGUS.md, the knowledge
+      # graph, and the target graph, which is where the drift actually shows up.
+      #
+      # No `rw`: without it generate writes nothing and simply reports a dirty tree, which
+      # is the whole gate. See docs/concepts/targets.md on generate's drift behaviour.
+      - name: Fail fast on uncommitted generated output
+        run: magus run generate . libs/gopherbuzz --no-default-charms
+
       - id: plan
         name: Compute shard matrix
         run: magus affected ci --plan | magus run ci-shard:gha --no-default-charms
