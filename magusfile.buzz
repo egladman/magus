@@ -1002,7 +1002,13 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     // dynamic loader, and would not run on a musl or scratch host. zdef() reports FFI
     // unsupported in that build; the default (cgo) archives keep it. Same reasoning and the
     // same tag as Dockerfile.static.
-    // codec_cgo is OPT-IN, and only the dynamic release asset opts in. internal/codec's
+    // The native codec tags are OPT-IN, one per system library, and only the dynamic
+    // release asset opts in. They are named for the exact pkg-config module each file
+    // requires - `liblzma` for xz_cgo.go, `libzstd` for zstd_cgo.go - and deliberately NOT
+    // for the charm that happens to set them. A build tag describes what a FILE links, so
+    // it stays meaningful to anyone running `go build` directly, and keeping them separate
+    // means a host with only one of the two libraries can still take that one fast path.
+    // internal/codec's
     // cgo path declares `#cgo pkg-config: liblzma` and `libzstd`, and CGO_ENABLED defaults
     // to 1 wherever a C compiler exists - so gating that path on `cgo` alone made
     // `go install github.com/egladman/magus/cmd/magus@latest` fail on any machine without
@@ -1010,8 +1016,15 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     // workspace has both installed. The pure-Go fallback (klauspost/compress, ulikunitz/xz)
     // is a real implementation, so the default build loses speed, not capability, and the
     // CD runners that build this variant apt-get the headers explicitly.
+    //
+    // Note the two tags have OPPOSITE polarity, which is forced rather than arbitrary: a
+    // build with NO tags is what `go install` produces, so it has to be the configuration
+    // that works anywhere. FFI is pure Go and safe on by default, so static OPTS OUT with
+    // `noffi` (purego's cgo_import_dynamic would otherwise give a "static" binary a
+    // PT_INTERP). The native codec needs system libraries, so it can only ever be OPTED
+    // INTO.
     var build_args = mut ["-trimpath"];
-    if (cgo) { build_args.append("-tags"); build_args.append("codec_cgo"); }
+    if (cgo) { build_args.append("-tags"); build_args.append("liblzma,libzstd"); }
     else { build_args.append("-tags"); build_args.append("noffi"); }
     build_args.append("-ldflags"); build_args.append(ld_flags());
     build_args.append("-o"); build_args.append(fs\join(stage, binary));
