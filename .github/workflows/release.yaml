@@ -5,10 +5,11 @@ name: Release
 #
 # STATIC ONLY by default. `magus run release-build:dynamic` still produces the
 # dynamically linked build and is fully supported for anyone who wants it - it is simply
-# not published unless someone asks, via the `dynamic` dispatch input below. The reason is
-# that a dynamic archive is only useful where its libraries resolve: on darwin the linker
-# bakes in the build machine's Homebrew prefix (/opt/homebrew/...), which no other Mac has,
-# and Windows has the same shape through MSYS2. Only Linux resolves them by SONAME. Rather
+# not published unless someone asks, via the `include_dynamic_builds` dispatch input
+# below. The reason is that a dynamic archive is only useful where its libraries resolve:
+# on darwin the linker bakes in the build machine's Homebrew prefix (/opt/homebrew/...),
+# which no other Mac has, and Windows has the same shape through MSYS2. Only Linux
+# resolves them by SONAME. Rather
 # than publish an artifact that works on one platform of three, the whole cgo toolchain
 # here - MSYS2, mingw packages, the codec dev headers - is gated behind that input.
 #
@@ -36,8 +37,8 @@ on:
   # since what breaks a release is the platform-specific last mile, not the trigger.
   workflow_dispatch:
     inputs:
-      dynamic:
-        description: 'Also build the dynamically linked archives (needs system libzstd/liblzma on the RUNNING machine)'
+      include_dynamic_builds:
+        description: 'Also build and publish the dynamically linked archives (they need system libzstd/liblzma present on whatever machine RUNS them)'
         type: boolean
         default: false
 
@@ -83,7 +84,7 @@ jobs:
           installation-strategy: source
           git-ref: ${{ github.ref_name }}
       - name: Install codec build dependencies
-        if: ${{ inputs.dynamic }}
+        if: ${{ inputs.include_dynamic_builds }}
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
       # No remote-cache env is set in CD on purpose: a release builds clean off the
       # cache. magusfile.buzz leaves the backend unbound without it, so there is zero
@@ -99,7 +100,7 @@ jobs:
         run: magus run release-build --no-default-charms
 
       - name: Build release artifacts (dynamic)
-        if: ${{ inputs.dynamic }}
+        if: ${{ inputs.include_dynamic_builds }}
         run: magus run release-build:dynamic --no-default-charms
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -125,13 +126,13 @@ jobs:
           installation-strategy: source
           git-ref: ${{ github.ref_name }}
       - name: Install codec build dependencies
-        if: ${{ inputs.dynamic }}
+        if: ${{ inputs.include_dynamic_builds }}
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
       - name: Build release artifacts (static)
         run: magus run release-build --no-default-charms
 
       - name: Build release artifacts (dynamic)
-        if: ${{ inputs.dynamic }}
+        if: ${{ inputs.include_dynamic_builds }}
         run: magus run release-build:dynamic --no-default-charms
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -159,13 +160,13 @@ jobs:
           installation-strategy: source
           git-ref: ${{ github.ref_name }}
       - name: Install codec build dependencies
-        if: ${{ inputs.dynamic }}
+        if: ${{ inputs.include_dynamic_builds }}
         run: brew install zstd xz
       - name: Build release artifacts (static)
         run: magus run release-build --no-default-charms
 
       - name: Build release artifacts (dynamic)
-        if: ${{ inputs.dynamic }}
+        if: ${{ inputs.include_dynamic_builds }}
         run: magus run release-build:dynamic --no-default-charms
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -203,13 +204,13 @@ jobs:
           installation-strategy: source
           git-ref: ${{ github.ref_name }}
       - name: Install codec build dependencies
-        if: ${{ inputs.dynamic }}
+        if: ${{ inputs.include_dynamic_builds }}
         run: brew install zstd xz
       - name: Build release artifacts (static)
         run: magus run release-build --no-default-charms
 
       - name: Build release artifacts (dynamic)
-        if: ${{ inputs.dynamic }}
+        if: ${{ inputs.include_dynamic_builds }}
         run: magus run release-build:dynamic --no-default-charms
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -246,14 +247,14 @@ jobs:
       # pkg-config.bat off the runner PATH and fails. PKG_CONFIG below pins the exact binary
       # so PATH order can never reselect it.
       - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0
-        if: ${{ inputs.dynamic }}
+        if: ${{ inputs.include_dynamic_builds }}
         with:
           msystem: MINGW64
           install: mingw-w64-x86_64-gcc mingw-w64-x86_64-pkgconf mingw-w64-x86_64-zstd mingw-w64-x86_64-xz
           path-type: inherit
 
       - name: Point go build at the MSYS2 mingw toolchain
-        if: ${{ inputs.dynamic }}
+        if: ${{ inputs.include_dynamic_builds }}
         shell: msys2 {0}
         run: |
           echo "MAGUS_CGO_CC=$(cygpath -m /mingw64/bin/gcc.exe)" >> "$GITHUB_ENV"
@@ -266,7 +267,7 @@ jobs:
           git-ref: ${{ github.ref_name }}
 
       # shell: bash, not msys2 - the static builds must not depend on a toolchain that is
-      # only installed when `dynamic` is set. bash rather than the default pwsh because
+      # only installed when `include_dynamic_builds` is set. bash rather than the default pwsh because
       # setup-magus installs an EXTENSIONLESS `magus` (go build -o does not append .exe),
       # which pwsh will not resolve through PATHEXT.
       - name: Build release artifacts (amd64 + arm64, static)
@@ -276,7 +277,7 @@ jobs:
           GOOS=windows GOARCH=arm64 magus run release-build --no-default-charms
 
       - name: Build release artifacts (amd64 dynamic)
-        if: ${{ inputs.dynamic }}
+        if: ${{ inputs.include_dynamic_builds }}
         shell: msys2 {0}
         run: magus run release-build:dynamic --no-default-charms
 
