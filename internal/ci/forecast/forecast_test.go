@@ -365,3 +365,26 @@ func TestPlan_oneProjectOverBudgetDoesNotSpin(t *testing.T) {
 	}
 	assert.Equal(t, map[string]int{"huge": 1, "small": 1}, seen, "never drop or duplicate work")
 }
+
+func TestMemoryBudget_derivedFromTheHostWithNoKnob(t *testing.T) {
+	t.Parallel()
+	// The default path: no caller sets anything, and a budget still appears on any
+	// host magus can ask. This is the whole point of not exposing a config key -
+	// the protection has to be on for people who never heard of it.
+	f := Forecaster{Target: "ci"}
+	got := f.memoryBudget()
+	if hostMemoryBytes() == 0 {
+		assert.Zero(t, got, "an unmeasurable host must plan exactly as before, never on a guess")
+		return
+	}
+	assert.Positive(t, got, "a measurable host must get a budget without being configured")
+	assert.Less(t, got, hostMemoryBytes(), "the budget must leave headroom for the agent, caches and toolchains")
+}
+
+func TestMemoryBudget_explicitSettingWins(t *testing.T) {
+	t.Parallel()
+	// Settable only so a test can pin behavior independently of the machine
+	// running it; no config key reaches this.
+	f := Forecaster{Target: "ci", MemoryBudgetBytes: 7 << 30}
+	assert.Equal(t, int64(7<<30), f.memoryBudget())
+}

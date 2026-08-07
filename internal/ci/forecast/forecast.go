@@ -16,10 +16,38 @@ type Forecaster struct {
 	History       History
 	Target        string
 	TagsByProject map[string][]string
-	// MemoryBudgetBytes caps a shard's predicted peak. Zero means unlimited, and
-	// unlimited is the default on purpose: a workspace that has recorded no peaks
-	// must plan exactly as it did before this existed.
+	// MemoryBudgetBytes caps a shard's predicted peak. Leave it zero: the
+	// forecaster then derives a budget from the machine it is planning for, which
+	// is what every caller should want and nobody can pick better by hand.
+	//
+	// It stays settable only because a test has to pin behavior without depending
+	// on the memory of whatever runs the suite. There is deliberately no config
+	// key and no flag behind it: the number a user would have to invent is a
+	// fraction of a runner's RAM they cannot see, and a knob defaulting to "off"
+	// would protect nobody while implying it did.
 	MemoryBudgetBytes int64
+}
+
+// usableMemoryFraction is the share of the machine's memory the projects on one
+// shard may be predicted to need.
+//
+// Not 1.0, because a runner is never only running the build: the CI agent, the
+// Go build cache, node, and the toolchains all sit in the same memory, and the
+// measured peaks this is compared against are the projects alone. Three quarters
+// leaves that headroom without buying runners for work that would have fit.
+const usableMemoryFraction = 3
+
+// memoryBudget returns the byte budget for one shard: the explicit setting when
+// a caller pinned one, otherwise three quarters of the host's memory, otherwise
+// zero for "unknown, plan as before".
+func (f Forecaster) memoryBudget() int64 {
+	if f.MemoryBudgetBytes > 0 {
+		return f.MemoryBudgetBytes
+	}
+	if total := hostMemoryBytes(); total > 0 {
+		return total / 4 * usableMemoryFraction
+	}
+	return 0
 }
 
 // Plan partitions projects into at most maxShards shards using USL-optimal N* = sqrt(W/α) and LPT packing.
@@ -68,7 +96,8 @@ func (f Forecaster) Plan(projects []*types.Project, maxShards int) [][]*types.Pr
 // keeps today's behavior for what has never been measured, and tightens as
 // history accumulates.
 func (f Forecaster) fitMemory(projects []*types.Project, durations []int64, n, limit int) [][]*types.Project {
-	if f.MemoryBudgetBytes <= 0 {
+	budget := f.memoryBudget()
+	if budget <= 0 {
 		return lpt(projects, durations, n)
 	}
 	peaks := make([]int64, len(projects))
@@ -79,7 +108,7 @@ func (f Forecaster) fitMemory(projects []*types.Project, durations []int64, n, l
 	}
 	for {
 		assignments := lpt(projects, durations, n)
-		if n >= limit || f.fits(assignments, projects, peaks) {
+		if n >= limit || f.fits(assignments, projects, peaks, budget) {
 			return assignments
 		}
 		n++
@@ -99,7 +128,7 @@ func (f Forecaster) fitMemory(projects []*types.Project, durations []int64, n, l
 // projects does not fall when the shard is halved, so a max-based test could
 // never be satisfied by adding runners, and the loop above would spin to the
 // limit without ever improving anything.
-func (f Forecaster) fits(assignments [][]*types.Project, projects []*types.Project, peaks []int64) bool {
+func (f Forecaster) fits(assignments [][]*types.Project, projects []*types.Project, peaks []int64, budget int64) bool {
 	index := make(map[string]int, len(projects))
 	for i, p := range projects {
 		index[p.Path] = i
@@ -109,7 +138,7 @@ func (f Forecaster) fits(assignments [][]*types.Project, projects []*types.Proje
 		for _, p := range shard {
 			total += peaks[index[p.Path]]
 		}
-		if total > f.MemoryBudgetBytes {
+		if total > budget {
 			return false
 		}
 	}
