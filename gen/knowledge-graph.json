@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2461,
-  "edge_count": 5586,
+  "node_count": 2463,
+  "edge_count": 5588,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -9154,7 +9154,7 @@
       "id": "function:docs/magusfile.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "docs/magusfile.buzz:348",
+      "source": "docs/magusfile.buzz:358",
       "attrs": {
         "exported": "true"
       }
@@ -9164,7 +9164,7 @@
       "kind": "function",
       "label": "build_hljs",
       "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js. syntax-highlight.js imports it same-origin so syntax highlighting works offline without any CDN. Bump the version in package.json and the next generate picks it up; gen/ is not committed, so generate runs this as one of its stages.",
-      "source": "docs/magusfile.buzz:418",
+      "source": "docs/magusfile.buzz:428",
       "attrs": {
         "exported": "true"
       }
@@ -9174,7 +9174,7 @@
       "kind": "function",
       "label": "build_mermaid",
       "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into gen/assets/mermaid.js. mermaid.js (the runtime init script) imports it same-origin so diagrams and page styling work offline without any CDN. Bump the mermaid version in package.json and the next generate picks it up; gen/ is not committed, so there is no artifact to commit and generate runs this as one of its stages.",
-      "source": "docs/magusfile.buzz:405",
+      "source": "docs/magusfile.buzz:415",
       "attrs": {
         "exported": "true"
       }
@@ -9184,7 +9184,7 @@
       "kind": "function",
       "label": "build_playground",
       "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground into vendor/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it. Run after changing the interpreter (../gopherbuzz) or the playground host (../internal/playground), then commit. TinyGo >= 0.40; the glue must come from the same TinyGo that built the wasm.  vendor/, not gen/. These two are the only published bytes CI cannot reproduce - it has no TinyGo, deliberately - so",
-      "source": "docs/magusfile.buzz:384",
+      "source": "docs/magusfile.buzz:394",
       "attrs": {
         "exported": "true"
       }
@@ -9194,7 +9194,7 @@
       "kind": "function",
       "label": "build_playground_editor",
       "doc": "build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js. It existed only as a pnpm script before, because the artifact was committed and a human ran it after a version bump. gen/ is no longer committed, so every published byte needs a target CI can run - a script nothing invokes would have shipped a playground with no editor.",
-      "source": "docs/magusfile.buzz:431",
+      "source": "docs/magusfile.buzz:441",
       "attrs": {
         "exported": "true"
       }
@@ -9204,7 +9204,7 @@
       "kind": "function",
       "label": "buzz_test",
       "doc": "buzz-test runs render's in-file `test \"...\" {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve. magus.cmd raises on a non-zero exit, so a failing assertion fails this target.",
-      "source": "docs/magusfile.buzz:353",
+      "source": "docs/magusfile.buzz:363",
       "attrs": {
         "exported": "true"
       }
@@ -9213,7 +9213,7 @@
       "id": "function:docs/magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
-      "source": "docs/magusfile.buzz:369",
+      "source": "docs/magusfile.buzz:379",
       "attrs": {
         "exported": "true"
       }
@@ -9233,7 +9233,7 @@
       "kind": "function",
       "label": "conventions",
       "doc": "conventions holds the prose corpus to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved. See docs/conventions.md for what each rule means.  Its OWN target, not a line inside lint, and it deliberately depends on nothing. A prose nit should name the thing that is wrong; folding it into lint would report a stale path in the README as \"docs lint failed\", and a target that fails for reasons unrelated to",
-      "source": "docs/magusfile.buzz:325",
+      "source": "docs/magusfile.buzz:335",
       "attrs": {
         "exported": "true"
       }
@@ -9242,7 +9242,7 @@
       "id": "function:docs/magusfile.buzz:format",
       "kind": "function",
       "label": "format",
-      "source": "docs/magusfile.buzz:314",
+      "source": "docs/magusfile.buzz:324",
       "attrs": {
         "exported": "true"
       }
@@ -9269,7 +9269,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). Both TS tools need node_modules, which it reaches through format -> generate -> preflight; os.exec raises on a non-zero exit, so either gate fails lint.",
-      "source": "docs/magusfile.buzz:334",
+      "source": "docs/magusfile.buzz:344",
       "attrs": {
         "exported": "true"
       }
@@ -9298,7 +9298,7 @@
       "kind": "function",
       "label": "render",
       "doc": "render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.",
-      "source": "docs/magusfile.buzz:439",
+      "source": "docs/magusfile.buzz:449",
       "attrs": {
         "exported": "true"
       }
@@ -9308,7 +9308,7 @@
       "kind": "function",
       "label": "security",
       "doc": "security audits what actually ships against the npm advisory database. See console/magusfile.buzz for why it is --prod, why it is not folded into lint, and why the .npmrc cooling period is the stronger half of this.",
-      "source": "docs/magusfile.buzz:364",
+      "source": "docs/magusfile.buzz:374",
       "attrs": {
         "exported": "true"
       }
@@ -9327,7 +9327,7 @@
       "id": "function:docs/magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "docs/magusfile.buzz:357",
+      "source": "docs/magusfile.buzz:367",
       "attrs": {
         "exported": "true"
       }
@@ -20514,6 +20514,15 @@
       }
     },
     {
+      "id": "method:vcs.base",
+      "kind": "method",
+      "label": "vcs.base",
+      "doc": "Resolved base ref for diffs.",
+      "attrs": {
+        "buzz": "vcs\\base() → string"
+      }
+    },
+    {
       "id": "method:vcs.cmd",
       "kind": "method",
       "label": "vcs.cmd",
@@ -20565,6 +20574,15 @@
       "doc": "True if the working tree has uncommitted changes. Pass paths to scope the check to those files/dirs (relative to the project), e.g. is_dirty([\"MAGUS.md\"]) - the right way to gate generated outputs without shelling out to git or parsing porcelain.",
       "attrs": {
         "buzz": "vcs\\isDirty([paths]) → bool"
+      }
+    },
+    {
+      "id": "method:vcs.name",
+      "kind": "method",
+      "label": "vcs.name",
+      "doc": "VCS short name (e.g. \"git\"). Empty if unresolved, which is how a caller tests for a VCS without catching.",
+      "attrs": {
+        "buzz": "vcs\\name() → string"
       }
     },
     {
@@ -62003,6 +62021,13 @@
     },
     {
       "source": "module:vcs",
+      "target": "method:vcs.base",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:vcs",
       "target": "method:vcs.cmd",
       "relation": "contains",
       "confidence": "extracted",
@@ -62039,6 +62064,13 @@
     {
       "source": "module:vcs",
       "target": "method:vcs.is_dirty",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:vcs",
+      "target": "method:vcs.name",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1

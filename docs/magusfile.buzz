@@ -299,7 +299,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
         // different on a runner. git only: hg and jj take different arguments, and
         // a diagnostic must never be the thing that fails the build, so a backend
         // that cannot answer just prints nothing.
-        if (vcs\name == "git") {
+        if (vcs\name() == "git") {
             // magus\info, NOT the command's own streamed output: a tool's stdout
             // goes to the run log and the console shows only "likely diagnostics",
             // which dropped this diff entirely on the first attempt. What a
