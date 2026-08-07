@@ -45,15 +45,15 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 9 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 95 | `magus query kind:target` | `content-generate`, `site-generate`, `generate` |
+| target | 95 | `magus query kind:target` | `content-generate`, `site-generate`, `image-build` |
 | spell | 12 | `magus query kind:spell` | `go`, `markdown`, `typescript` |
 | op | 57 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-edit` |
 | tool | 15 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
 | charm | 11 | `magus query kind:charm` | `rw`, `cd`, `stable` |
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `magus` |
-| method | 167 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
+| method | 171 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 59 | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS4001` |
-| doc | 273 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
+| doc | 274 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 136 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
 | file | 233 | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
 | function | 1247 | `magus query kind:function` | `sel`, `sendObject`, `send` |
@@ -62,7 +62,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 35 | `magus query project:.` | `generate`, `image-build`, `lint` |
+| . | 35 | `magus query project:.` | `image-build`, `generate`, `lint` |
 | console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 3 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |

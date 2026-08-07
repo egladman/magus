@@ -9,8 +9,19 @@ export fun mgs_getName() > str { return "go"; }
 // Without it a .txtar was unclaimed - editing one invalidated no cache key and pulled
 // no project into the affected set, so a CI run keyed on `magus affected` could not
 // see a behavior test change at all, and a stale pass would replay from cache.
+//
+// The assembly and cgo globs are here for the SAME reason, found the same way: `go build`
+// compiles .s/.S/.c/.h as part of a package, so they are Go source in every sense that
+// matters, but nothing claimed them. In this workspace that left gopherbuzz's JIT entry
+// trampolines and its AArch64 flushICache - hand-written machine code, the most
+// timing-sensitive thing here - invisible to the cache and the affected set. Editing the
+// instruction-cache maintenance sequence would have replayed a cached pass over changed
+// machine code.
 export fun mgs_listRequiredGlobs() > [Path] {
-    return [Path{value = "**/*.go"}, Path{value = "**/*.txtar"}, Path{value = "go.mod"}, Path{value = "go.sum"}, Path{value = "go.work"}, Path{value = "go.work.sum"}];
+    return [Path{value = "**/*.go"}, Path{value = "**/*.txtar"},
+        Path{value = "**/*.s"}, Path{value = "**/*.S"},
+        Path{value = "**/*.c"}, Path{value = "**/*.h"},
+        Path{value = "go.mod"}, Path{value = "go.sum"}, Path{value = "go.work"}, Path{value = "go.work.sum"}];
 }
 
 
