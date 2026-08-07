@@ -15,6 +15,13 @@ on:
   push:
     tags:
       - 'v*'
+  # Run the whole pipeline on demand. Pick a TAG in the ref dropdown, not a branch: every
+  # job passes `git-ref: ${{ github.ref_name }}` to setup-magus, whose reachable-from-main
+  # gate rejects a feature branch, and version() is `git describe`, so an untagged ref would
+  # name every asset after its distance past the last tag. Dispatching a tag exercises the
+  # real release path rather than a special-cased rehearsal of it - which is the point,
+  # since what breaks a release is the platform-specific last mile, not the trigger.
+  workflow_dispatch:
 
 # One live CD run per tag. Re-pushing a tag (e.g. to pick up a CD fix before the
 # release publishes) cancels the previous run so duplicate release jobs never race
@@ -289,9 +296,24 @@ jobs:
           MAGUS_SIGNING_KEY: ${{ secrets.MAGUS_SIGNING_KEY }}
         run: magus run release-sign --no-default-charms
 
+      # Ask the magusfile which channel this tag is, rather than reading its shape again
+      # here. The image job resolves the same channel() for its floating tag, so deriving
+      # it twice would create two answers that can disagree - and the disagreement is
+      # invisible until `latest` points at a release candidate. `tagged` also refuses an
+      # untagged ref outright, so a dispatch against a branch fails here rather than
+      # publishing something named after its distance past the last tag.
+      - id: channel
+        name: Resolve the release channel
+        run: echo "name=$(magus run release-channel:tagged --no-default-charms -s)" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
+          # This action does NOT infer prerelease from the tag name; left unset it defaults
+          # to false, which would publish v0.5.0-rc.1 as an ordinary release and hand it the
+          # repo's `latest` pointer - the one `gh release view` resolves for CI's compat job
+          # and `magus self update` follows.
+          prerelease: ${{ steps.channel.outputs.name == 'unstable' }}
           files: |
             dist/magus_*.tar.gz
             dist/SHA256SUMS
@@ -373,11 +395,12 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: magus run image-login:cd,stable --no-default-charms
+        run: magus run image-login:cd,tagged --no-default-charms
 
       - name: Build, push, and sign images
-        # :cd,stable asserts the tag is a stable semver, so a v0.5.0-rc.1 tag fails here
-        # rather than shipping a prerelease as `latest`. Cutting one deliberately means
-        # swapping the charm to :cd,unstable - an explicit edit, not a tag-shape guess in
-        # YAML that nobody reviews.
-        run: magus run image-build:cd,stable --no-default-charms
+        # :cd,tagged reads the channel off the tag itself: a stable semver takes `latest`,
+        # a v0.5.0-rc.1 goes to the version tag alone, and an UNTAGGED commit is refused
+        # outright rather than guessed at. The derivation lives in the magusfile's channel(),
+        # not in YAML, so this step and the prerelease flag on the release below cannot
+        # disagree about what is being shipped.
+        run: magus run image-build:cd,tagged --no-default-charms

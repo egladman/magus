@@ -79,6 +79,11 @@ magus\project({
         // per invocation.
         "release-build": {"skip_cache": "a release must never replay a cached artifact; each invocation produces the bytes that ship"},
         "release-sign": {"skip_cache": "signs the manifest per invocation; a replayed signature would cover different bytes"},
+        // Its whole answer is read from the VCS tag namespace, which no source glob
+        // covers and so no cache key can see: moving the tag leaves the key identical
+        // and a hit would report the PREVIOUS tag's channel. That is the exact mistake
+        // the target exists to catch, so it must never replay.
+        "release-channel": {"skip_cache": "derives its answer from VCS tag state, which is not an input any cache key can see"},
         // Mutates go.mod and creates VCS tags (with the cd charm) - a real,
         // order-sensitive side effect, never a cache replay. exclusive: nothing
         // else should be touching go.mod or the tag namespace while it runs.
@@ -453,15 +458,44 @@ fun publish_registries(ctx: magus\Context) > [Registry] {
     return REGISTRIES;
 }
 
+// The release tag HEAD sits EXACTLY on, or "" when HEAD is not itself tagged.
+//
+// version() cannot answer this and must not be asked to. describe() renders an untagged
+// commit as v0.4.0-3-gabc123, whose prerelease component is `3-gabc123`, so a version
+// string alone cannot tell a genuine prerelease (`rc.1`) from mere distance past a stable
+// tag - and reading it as the former would file an ordinary mid-development commit under a
+// published channel. Comparing revision ids is exact and says nothing it cannot know.
+fun exact_release_tag() > str {
+    final head = vcs\commit().id;
+    foreach (t in vcs\tags("v*")) {
+        if (t.id == head) { return t.name; }
+    }
+    return "";
+}
+
 // The active channel: "commit", "unstable", or "stable".
 //
 // Naming both channels is rejected up front by exclusive_charms rather than left to the
 // assertions below, which would fail too but report the version rather than the mistake.
+//
+// `tagged` is the third answer: derive the channel from the release tag instead of naming
+// it. It exists so cutting a release candidate is a tag and nothing else - the alternative
+// was hand-editing `:cd,stable` to `:cd,unstable` in the workflow before every RC and back
+// afterwards, an edit whose omission publishes a prerelease as `latest`. Deriving is safe
+// in the direction that matters: it can only ever withhold a floating tag, never grant one
+// a prerelease has not earned.
 fun channel(ctx: magus\Context) > str {
     exclusive_charms(ctx, "stable", "unstable", "WS1002", "which channel to publish to");
+    final wantTagged = ctx.has_charm("tagged");
     final wantStable = ctx.has_charm("stable");
     final wantUnstable = ctx.has_charm("unstable");
-    if (!wantStable and !wantUnstable) { return "commit"; }
+    if (wantTagged and (wantStable or wantUnstable)) {
+        magus\raise("WS1002", message: "the `tagged` charm reads which channel to publish "
+            + "to off the release tag, so naming `stable` or `unstable` beside it answers "
+            + "that question twice - name one",
+            opts: {"url": "https://eli.gladman.cc/magus/recommendations/#one-charm-answers-one-question"});
+    }
+    if (!wantStable and !wantUnstable and !wantTagged) { return "commit"; }
 
     final v = version();
     if (v == "unknown") {
@@ -469,6 +503,17 @@ fun channel(ctx: magus\Context) > str {
             + "reads it from `git describe`, so a shallow clone with no tags cannot supply "
             + "one. Fetch tags, or drop the charm to publish to the commit channel.";
     }
+    if (wantTagged) {
+        final tag = exact_release_tag();
+        if (tag == "") {
+            throw "image: `tagged` reads the channel off the release tag HEAD sits on, and "
+                + "HEAD is not tagged - `" + v + "` describes distance past the nearest tag "
+                + "rather than a release. Tag the release first, or name `stable`/`unstable`.";
+        }
+        if (semver\parse(tag).prerelease == "") { return "stable"; }
+        return "unstable";
+    }
+
     // describe() renders an untagged commit as v0.4.0-3-gabc123, whose prerelease
     // component is 3-gabc123. One field therefore answers both "is this a prerelease" and
     // "is this even a tagged build", and stable has to reject both.
@@ -1059,6 +1104,18 @@ export fun release_sign(ctx: magus\Context, args: [str]) > void {
 // developer. magus supplies the mechanism and stops there.
 //
 // Neither path ever pushes - a human reviews the tags and pushes deliberately.
+
+// Prints the channel `magus run image-build` under the SAME charms resolves to - one bare
+// word, `stable` or `unstable`, on stdout so a workflow can capture it.
+//
+// The release workflow reads it to decide whether the GitHub Release is marked prerelease.
+// That flag and the image's floating tag are then the SAME computation rather than two
+// independent readings of a tag name, which is the failure this exists to prevent: a
+// release marked stable whose images went to unstable, or the reverse, is not a discrepancy
+// anyone notices until `latest` points somewhere wrong.
+export fun release_channel(ctx: magus\Context, args: [str]) > void {
+    std\print(channel(ctx));
+}
 
 export fun release(ctx: magus\Context, args: [str]) > void {
     // `cd` alone, and no `versioned`: cd is the deliver switch, meaning the same
