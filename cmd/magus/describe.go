@@ -184,6 +184,9 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 			r := g.Routing()
 			routing = &r
 		}
+		if routing != nil {
+			routing.CatalogFingerprint = magus.CatalogFingerprint()
+		}
 		return render.WriteTargetGraphMarkdown(os.Stdout, out, routing, graphExplorerLink(ctx, root), globalCfg.DefaultCharms)
 	}
 
