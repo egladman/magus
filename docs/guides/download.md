@@ -51,7 +51,7 @@ by the release pipeline but not tested by it.
 | darwin/arm64 | Not covered by CI, but it is the primary development platform, so the suite runs against it constantly by hand. |
 | linux/arm64 | Not covered by CI. Built natively by the release pipeline; the release binary and the test suites have been executed on real arm64 hardware. |
 | linux/armv7, linux/armv6 | Not covered by CI. Cross-compiled; binaries executed under emulation (`version`, a Buzz workload, and the interpreter test suites) but **never on physical hardware**. |
-| darwin/amd64 | Not covered by CI. Cross-compiled from the arm64 runner, static only - no Intel Mac is in the loop anywhere. |
+| darwin/amd64 | Not covered by CI. Built natively by the release pipeline on an Intel runner (so it compiles and links, including the cgo variant), but **never executed**. |
 | windows/amd64 | Not covered by CI. Built natively by the release pipeline (so it compiles and links, including the cgo variant), but **never executed**. |
 | windows/arm64 | Not covered by CI. Cross-compiled, static only, **never executed** - the newest and least proven target. |
 
