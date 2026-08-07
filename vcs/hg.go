@@ -383,3 +383,214 @@ func (v hgVCS) InstallRefreshHook(_ context.Context, root, command string) ([]st
 	}
 	return []string{"update"}, nil
 }
+
+// ConflictResolver (below) is implemented for hg so `magus vcs resolve` is not a
+// git-only command. The mapping is close because Mercurial models resolution
+// explicitly - it keeps a resolve state per path, which is exactly the
+// mark-resolved step the interface names.
+//
+// The assertion is compile-time on purpose: the interface is reached by type assertion
+// at the call site, so dropping a method would not fail the build, it would silently
+// demote hg back to "resolve this merge by hand".
+var _ types.ConflictResolver = hgVCS{}
+
+// hgPathChunks splits paths so a long conflict list cannot overflow the argv limit.
+// Mercurial takes pathspecs the same way git does, so it needs the same guard.
+func hgPathChunks(paths []string) [][]string {
+	var chunks [][]string
+	for start := 0; start < len(paths); start += gitArgChunkSize {
+		chunks = append(chunks, paths[start:min(start+gitArgChunkSize, len(paths))])
+	}
+	return chunks
+}
+
+func runHgBatched(ctx context.Context, root string, args []string, paths []string) error {
+	for _, chunk := range hgPathChunks(paths) {
+		argv := append([]string{}, args...)
+		argv = append(argv, "--")
+		argv = append(argv, chunk...)
+		cmd := exec.CommandContext(ctx, "hg", argv...)
+		cmd.Dir = root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("hg %s: %w\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	return nil
+}
+
+// parseHgConflicts turns `hg resolve --list` output into unresolved paths.
+//
+// The format is one "<status> <path>" line per file: U unresolved, R resolved. Only U
+// is a conflict; R lines are paths this command (or the user) already settled and must
+// not be re-resolved.
+//
+// Every U is reported as ConflictKindContent, and that is a real limitation rather than
+// a simplification: `resolve --list` does not distinguish a content conflict from a
+// modify/delete, so the kind a caller needs to settle ConflictKindDeleted is not in this
+// output. hgConflictKinds refines it from `hg status` afterwards.
+func parseHgConflicts(out string) []types.Conflict {
+	var conflicts []types.Conflict
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if len(line) < 3 || line[1] != ' ' {
+			continue
+		}
+		if line[0] != 'U' {
+			continue
+		}
+		if p := strings.TrimSpace(line[2:]); p != "" {
+			conflicts = append(conflicts, types.Conflict{Path: p, Kind: types.ConflictKindContent})
+		}
+	}
+	return conflicts
+}
+
+// parseHgRemovalCandidates reads `hg debugmergestate` and returns the conflicted paths
+// whose OTHER side carries no content - Mercurial's modify/delete, the shape a
+// regeneration cannot settle and no merge tool is invoked for.
+//
+// `hg resolve --list` cannot answer this: it reports every unresolved path as plain "U",
+// with no arity or deletion clause (jj's list, by contrast, says "including 1 deletion").
+// The merge state is the only place the distinction is recorded:
+//
+//	file: gone.txt (state "u")
+//	  other path: gone.txt (node 0000000000000000000000000000000000000000)
+//	  extra: merge-removal-candidate = yes
+//
+// Keyed on merge-removal-candidate rather than the null node id because it is the
+// explicit statement of the same fact and survives a hash-length change.
+//
+// debugmergestate is a DEBUG command, so its output is not a stability promise. A parse
+// that finds nothing therefore degrades to "no deletions", leaving every path a content
+// conflict - the same answer this code gave before the probe existed, and the safe one:
+// a content conflict that is really a delete fails loudly at resolution, where treating a
+// content conflict as a delete would remove a file nobody asked to remove.
+func parseHgRemovalCandidates(out string) map[string]bool {
+	removal := map[string]bool{}
+	var current string
+	for _, line := range strings.Split(out, "\n") {
+		if rest, ok := strings.CutPrefix(line, "file: "); ok {
+			if i := strings.Index(rest, " (state"); i > 0 {
+				current = rest[:i]
+			} else {
+				current = strings.TrimSpace(rest)
+			}
+			continue
+		}
+		if current != "" && strings.Contains(line, "merge-removal-candidate = yes") {
+			removal[current] = true
+		}
+	}
+	return removal
+}
+
+// hgDeletedPaths reports which of paths the merge left without content on the other side.
+func hgDeletedPaths(ctx context.Context, root string, paths []string) map[string]bool {
+	out, err := vcsOutputRaw(ctx, root, "hg", "debugmergestate")
+	if err != nil {
+		return map[string]bool{} // best effort: every path stays ConflictKindContent
+	}
+	removal := parseHgRemovalCandidates(out)
+	deleted := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		if removal[p] {
+			deleted[p] = true
+		}
+	}
+	return deleted
+}
+
+// Conflicts implements types.ConflictResolver. No merge in progress is not an error:
+// `resolve --list` simply prints nothing, which parses to no conflicts.
+func (v hgVCS) Conflicts(ctx context.Context, root string) ([]types.Conflict, error) {
+	out, err := vcsOutputRaw(ctx, root, "hg", "resolve", "--list")
+	if err != nil {
+		return nil, fmt.Errorf("hg resolve --list: %w", err)
+	}
+	conflicts := parseHgConflicts(out)
+	if len(conflicts) == 0 {
+		return nil, nil
+	}
+	paths := make([]string, 0, len(conflicts))
+	for _, c := range conflicts {
+		paths = append(paths, c.Path)
+	}
+	deleted := hgDeletedPaths(ctx, root, paths)
+	for i := range conflicts {
+		if deleted[conflicts[i].Path] {
+			conflicts[i].Kind = types.ConflictKindDeleted
+		}
+	}
+	return conflicts, nil
+}
+
+// KeepIncoming implements types.ConflictResolver. `:other` is Mercurial's merge tool
+// that takes the incoming side wholesale, the counterpart of git's `checkout --theirs`.
+// `--tool` with an internal tool re-runs resolution for the named paths without opening
+// anything interactive.
+//
+// It deliberately does NOT mark anything resolved: `resolve --tool` leaves the path
+// unresolved so the caller can regenerate first and record that instead. Mercurial marks
+// on `resolve --mark`, which is MarkResolved's job.
+func (v hgVCS) KeepIncoming(ctx context.Context, root string, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	if err := runHgBatched(ctx, root, []string{"resolve", "--tool", ":other"}, paths); err == nil {
+		return nil
+	}
+	// A path the incoming side deleted has no other-side content to take; fall back to
+	// the surviving side, matching git's ours-after-theirs ordering.
+	for _, p := range paths {
+		if err := runHgBatched(ctx, root, []string{"resolve", "--tool", ":other"}, []string{p}); err == nil {
+			continue
+		}
+		if err := runHgBatched(ctx, root, []string{"resolve", "--tool", ":local"}, []string{p}); err != nil {
+			return fmt.Errorf("hg resolve %q: the merge left content on neither side; resolve it by hand: %w", p, err)
+		}
+	}
+	return nil
+}
+
+// MarkResolved implements types.ConflictResolver, recording the working-tree content as
+// the resolution. Mercurial has no index, so unlike git's `add` this only clears the
+// resolve state; the content is already in the working copy.
+func (v hgVCS) MarkResolved(ctx context.Context, root string, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	return runHgBatched(ctx, root, []string{"resolve", "--mark"}, paths)
+}
+
+// RemoveConflicts implements types.ConflictResolver. `--mark` runs first because
+// Mercurial refuses to forget a path that is still unresolved, and the removal is the
+// resolution here.
+func (v hgVCS) RemoveConflicts(ctx context.Context, root string, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	if err := runHgBatched(ctx, root, []string{"resolve", "--mark"}, paths); err != nil {
+		return err
+	}
+	return runHgBatched(ctx, root, []string{"remove", "--force"}, paths)
+}
+
+// IgnoredPaths implements types.ConflictResolver. It asks about the RULES, not about
+// tracking: `hg debugignore <path>` answers for a path whether or not it is tracked,
+// which is the question a conflicted-but-now-ignored generated file poses. A tracked
+// path is never reported by `status --ignored`, so that command cannot answer it.
+func (v hgVCS) IgnoredPaths(ctx context.Context, root string, paths []string) (map[string]bool, error) {
+	ignored := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		out, err := vcsOutputRaw(ctx, root, "hg", "debugignore", p)
+		if err != nil {
+			// debugignore exits non-zero when no rule matches on some versions; that is
+			// the "not ignored" answer, not a failure to report.
+			continue
+		}
+		if strings.Contains(out, "is ignored") {
+			ignored[p] = true
+		}
+	}
+	return ignored, nil
+}
