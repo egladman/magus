@@ -938,13 +938,31 @@ export fun tapes(ctx: magus\Context, args: [str]) > void {
 // softfloat would be GOARM=5, which is not built). GOARCH stays "arm" for both; only
 // GOARM and the asset name differ. Go records GOARM in the binary's build info, which is
 // how `magus self update` picks the matching asset back out (see cmd/magus/selfupdate.go).
-fun goarm_level(goarch: str) > str {
+// 32-bit ARM is a LINUX-ONLY asset here, and refused elsewhere rather than left merely
+// uninvoked. Go can target windows/arm, so without this the fold below would cheerfully
+// build `windows armv7` and name an archive after a platform nothing tests and no
+// download page lists; darwin has no 32-bit ARM port at all and would fail further in,
+// with a message about the toolchain instead of about the request. The workflow only ever
+// passes `linux`, so this guards the hand-run form - which is exactly where a typo goes
+// unnoticed.
+fun goarm_level(goos: str, goarch: str) > str {
+    if (goarch != "armv6" and goarch != "armv7") { return ""; }
+    if (goos != "linux") {
+        throw "release-build: " + goarch + " is a linux-only asset, so `" + goos + " "
+            + goarch + "` is not a platform this project ships - use `linux " + goarch + "`.";
+    }
     if (goarch == "armv6") { return "6"; }
-    if (goarch == "armv7") { return "7"; }
-    return "";
+    return "7";
 }
 
 fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool, suffix: str) > void {
+    // Resolved BEFORE anything is written: goarm_level rejects a platform this project
+    // does not ship, and a rejected request should leave no trace. Creating the staging
+    // directory first left an empty dist/windows-armv7 behind on every refusal, which
+    // reads like a half-finished build rather than a request that never started.
+    // armv6/armv7 are asset names, not GOARCHes: fold them back to GOARCH=arm + GOARM.
+    final goarm = goarm_level(goos, goarch);
+
     fs\makeDirectory("dist");
     final v = version();
     var binary = "magus";
@@ -954,8 +972,6 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     fs\makeDirectory(stage);
 
     var env = mut {"GOOS": goos, "GOARCH": goarch, "GOEXPERIMENT": "jsonv2"};
-    // armv6/armv7 are asset names, not GOARCHes: fold them back to GOARCH=arm + GOARM.
-    final goarm = goarm_level(goarch);
     if (goarm != "") { env["GOARCH"] = "arm"; env["GOARM"] = goarm; }
     if (cgo) {
         env["CGO_ENABLED"] = "1";
