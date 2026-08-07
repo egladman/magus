@@ -104,6 +104,33 @@ Tool operations compose **into** these targets; they are not targets of their ow
 
 `security` is the exception that proves the rule, and magus's own workspace declares one. A scanner reads an advisory database that changes independently of your tree, so it needs `skip_cache` - and composing it into `lint` would spread that to every op `lint` runs, costing the whole phase its caching. A different cache contract is a real phase boundary, which is criterion 2 below rather than a naming preference. [MGS1003](../reference/codes/magusfile/MGS1003.md) does not flag it.
 
+What belongs under `security` is analysis of the DEPENDENCY INVENTORY - what the industry
+calls Software Composition Analysis - and that is two questions, not one:
+
+- **Vulnerabilities.** Advisory scanners over the dependency graph: `govulncheck`, `pnpm
+  audit`, `trivy image`. Answers "does a dependency have a known flaw".
+- **License compliance.** Whether a dependency's terms can be combined with the project's
+  own license. Answers "may this dependency legally be here at all".
+
+They belong in one target because they share an input and a cache contract. Both read the
+same inventory, and both depend on data that lives OUTSIDE the tree - an advisory database,
+a license classifier - so neither can be cached against sources alone. That is the same
+`skip_cache` argument above, arriving twice.
+
+They do not share a vocabulary, and the distinction is worth keeping. A license violation is
+a legal exposure, not a vulnerability, and the two are remediated differently: a
+vulnerability by upgrading, a license by dropping the dependency or relicensing your own
+work. Group them in the target; keep them distinct in the finding.
+
+One trap when adding a license gate: a scanner's built-in license CATEGORIES assume a
+proprietary consumer. trivy classifies AGPL as `forbidden` and GPL/LGPL as `restricted`,
+which is correct advice for someone shipping closed source and wrong for a copyleft project,
+where those are the ordinary case. Calibrate the gate against your OWN license before
+turning it on - magus is GPL-3.0-or-later and ignores the compatible copyleft licenses
+explicitly, while still failing on the genuinely incompatible ones (GPL-2.0-only, which
+cannot be upgraded to v3, plus CDDL, EPL, and MPL-1.1). A gate that reports dependencies you
+are perfectly entitled to use is a gate someone will switch off.
+
 Custom target names must use the target-name charset: letters, digits, `-`, `_` (`types.ValidateTargetName`). `:`, `@`, and `/` are reserved for the grammar above.
 
 ### When does a name earn canonical status?

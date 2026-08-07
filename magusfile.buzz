@@ -709,12 +709,22 @@ export fun image_scan(ctx: magus\Context, args: [str]) > void {
 // failure worth catching is a dependency whose terms cannot be combined with that - and
 // the moment to catch it is the pull request that adds it, not the release that ships it.
 //
-// Gates on trivy's CATEGORY rather than a license allowlist. An allowlist has to be
-// edited every time a permissive dependency with an unfamiliar SPDX id appears, so it
-// grows stale and starts failing on licenses nobody objects to; the category is trivy's
-// own reading of what the terms REQUIRE. --severity HIGH,CRITICAL is how those categories
-// surface: forbidden and restricted, and nothing below them. That mirrors image_scan's
-// threshold rather than inventing a second convention.
+// Gates on trivy's CATEGORY, corrected for the fact that its categories assume a
+// PROPRIETARY consumer. Out of the box trivy calls AGPL `forbidden` and GPL/LGPL
+// `restricted`, which is right for someone shipping closed source and wrong here: magus is
+// GPL-3.0-or-later, so copyleft is the ordinary case, not a finding. Left uncorrected this
+// gate would fail on dependencies that are perfectly usable, and a gate that cries wolf
+// gets switched off.
+//
+// So the compatible copyleft licenses are ignored explicitly and everything else at
+// HIGH/CRITICAL still fails. That direction matters: an unrecognised copyleft license is
+// NOT on the ignore list, so it fails loudly and someone looks at it. A denylist of
+// known-bad licenses would do the opposite and stay silent on anything unanticipated.
+//
+// What is deliberately NOT ignored, because it is genuinely incompatible with GPL-3.0:
+// GPL-2.0-ONLY (no "or later" - it cannot be upgraded to v3), CDDL, EPL, MPL-1.1, and
+// BSD-4-Clause with its advertising clause. GPL-2.0-or-later IS fine, since it permits
+// the upgrade. --severity HIGH,CRITICAL mirrors image_scan's threshold.
 //
 // The whole tree is scanned, npm subtrees included. That is not duplicated effort: the
 // per-project `security` targets in console/, docs/ and evals/ run pnpm's ADVISORY audit,
@@ -725,6 +735,10 @@ export fun image_scan(ctx: magus\Context, args: [str]) > void {
 export fun security(ctx: magus\Context, args: [str]) > void {
     os\exec("trivy", ["fs", "--scanners", "license",
         "--severity", "HIGH,CRITICAL",
+        "--ignored-licenses", "AGPL-3.0,AGPL-3.0-only,AGPL-3.0-or-later,"
+            + "GPL-3.0,GPL-3.0-only,GPL-3.0-or-later,GPL-2.0-or-later,"
+            + "LGPL-2.1,LGPL-2.1-only,LGPL-2.1-or-later,"
+            + "LGPL-3.0,LGPL-3.0-only,LGPL-3.0-or-later",
         "--exit-code", "1",
         "."], ".", {});
 }
