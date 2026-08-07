@@ -86,7 +86,7 @@ Two consequences:
 
 ## The target name
 
-A target name is typically one of the seven canonical operations (see below); custom names are allowed for work with no canonical home. The type is `project.Target` (a `string` alias).
+`ci` is the only target magus requires. Every other name below is a CONVENTION - a shared vocabulary for phases that recur across toolchains, not a set you must declare. A project that defines only `ci` is complete and correct. The type is `project.Target` (a `string` alias).
 
 | Name        | Meaning                                          |
 | ----------- | ------------------------------------------------ |
@@ -98,11 +98,11 @@ A target name is typically one of the seven canonical operations (see below); cu
 | `clean`     | remove local build artifacts                     |
 | `generate`  | run code generators                              |
 
-There is also `ci`: an ordinary magusfile-defined target, not a hardcoded chain - you compose its stages yourself with `magus\needs`. `Magus.RunCI` treats it specially in exactly three ways: it strips the `rw` charm (ci always runs read-only), it is the anchor `magus affected ci` and `magus affected --plan` key off, and it must not silently no-op - a selected scope with no project declaring `ci` is a load error (see [dependencies.md](dependencies.md)), not a quiet success.
+`ci` itself is an ordinary magusfile-defined target, not a hardcoded chain - you compose its stages yourself with `magus\needs`. What makes it the one required name is that `Magus.RunCI` treats it specially in exactly three ways: it strips the `rw` charm (ci always runs read-only), it is the anchor `magus affected ci` and `magus affected --plan` key off, and it must not silently no-op - a selected scope with no project declaring `ci` is a load error (see [dependencies.md](dependencies.md)), not a quiet success.
 
-Tool operations compose **into** these targets; they are not targets of their own. All static analysis - `go-vet`, `golangci-lint`, `cargo-clippy`, type-checks - belongs under `lint` (its definition is "static analysis, type-check"), not a bespoke `vet`, `audit`, or `typecheck` target. Reserve custom target names for genuinely distinct work with no canonical home (a `deploy` or `release`), not for fragmenting a canonical phase.
+Tool operations compose **into** these targets; they are not targets of their own. All static analysis - `go-vet`, `golangci-lint`, `cargo-clippy`, type-checks - belongs under `lint` (its definition is "static analysis, type-check"), not a bespoke `vet`, `audit`, or `typecheck` target. That is advice about keeping a vocabulary legible, not a constraint the engine enforces: reserve new names for genuinely distinct work (a `deploy`, `release`, or `security`) rather than fragmenting a phase that already has a name.
 
-`security` is the exception that proves the rule, and magus's own workspace declares one. A scanner reads an advisory database that changes independently of your tree, so it needs `skip_cache` - and composing it into `lint` would spread that to every op `lint` runs, costing the whole phase its caching. A different cache contract is a real phase boundary, which is criterion 2 below rather than a naming preference. [MGS1003](../reference/codes/magusfile/MGS1003.md) does not flag it.
+`security` is a worked example of a name worth adding, and magus's own workspace declares one. A scanner reads an advisory database that changes independently of your tree, so it needs `skip_cache` - and composing it into `lint` would spread that to every op `lint` runs, costing the whole phase its caching. A different cache contract is a real phase boundary rather than a naming preference. [MGS1003](../reference/codes/magusfile/MGS1003.md) does not flag it.
 
 What belongs under `security` is analysis of the DEPENDENCY INVENTORY - what the industry
 calls Software Composition Analysis - and that is two questions, not one:
@@ -133,15 +133,17 @@ are perfectly entitled to use is a gate someone will switch off.
 
 Custom target names must use the target-name charset: letters, digits, `-`, `_` (`types.ValidateTargetName`). `:`, `@`, and `/` are reserved for the grammar above.
 
-### When does a name earn canonical status?
+### When is a new name worth adding?
 
-The seven names above are a closed, deliberate set, not a starting point. A new
-name earns a place in it only if it passes all four:
+The names above are the recommended vocabulary, not a closed set - nothing stops
+you declaring any name the charset allows. The questions below are the ones worth
+asking before you do, because a name that fails them usually describes something
+that already has a home:
 
 1. **Universality** - the phase must mean something in every toolchain magus
    adapts. A phase that only makes sense for one language fails this test:
    `typecheck` is universal-sounding but Go and Rust type-check as part of
-   `build`, not as a separate phase, so it does not earn a canonical slot.
+   `build`, not as a separate phase, so it does not earn a slot of its own.
 2. **Distinctness** - it must be a genuine phase, not a subset of an existing
    one. `vet`, `audit`, and `typecheck` are all static analysis or formatting
    fragments of `lint`/`format` (see [MGS1003](../reference/codes/magusfile/MGS1003.md)),
@@ -149,13 +151,15 @@ name earns a place in it only if it passes all four:
    what separates `security` from the fragments it otherwise resembles.
 3. **Pipeline membership** - `ci` must need to order it against the other
    phases. A step nobody's `ci` ever sequences against `build`/`test`/`lint`
-   has no claim on the canonical vocabulary.
-4. **Tooling weight** - a canonical name can carry engine semantics beyond
-   "a bucket of ops": `preflight`/`generate` get drift-gating (see
-   [operations.md](operations.md)) precisely because they are canonical, not
-   custom.
+   has weak claim on a name of its own.
+4. **Tooling weight** - some names carry engine semantics beyond "a bucket of
+   ops": `preflight` and `generate` get drift-gating (see
+   [operations.md](operations.md)) when you declare them. That is a reason to
+   reuse an existing name rather than invent a near-synonym, since the behaviour
+   attaches to the name.
 
-The v1 decision: this set is frozen at the seven above plus `ci`. `deploy`,
+The recommended vocabulary is deliberately small, and `ci` is the only member the
+engine requires. `deploy`,
 `release`, and `serve` stay custom by design - they are real, common phases,
 but they are workspace-specific enough (which environment, which registry,
 which port) that forcing one shape on them would be more prescriptive than
