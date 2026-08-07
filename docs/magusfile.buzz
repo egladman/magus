@@ -300,9 +300,21 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
         // a diagnostic must never be the thing that fails the build, so a backend
         // that cannot answer just prints nothing.
         if (vcs\name == "git") {
-            magus\info("generate: what changed on this runner:");
-            vcs\cmd(["diff", "--unified=1", "--"] + moved,
+            // magus\info, NOT the command's own streamed output: a tool's stdout
+            // goes to the run log and the console shows only "likely diagnostics",
+            // which dropped this diff entirely on the first attempt. What a
+            // magusfile prints itself is what a reader actually sees.
+            final d = vcs\cmd(["diff", "--unified=1", "--"] + moved,
                 opts: {"allow_failure": true});
+            var body = d.stdout;
+            // A generated JSON file is one enormous line; bound it so the useful
+            // case (a small markdown drift) is not buried by the useless one.
+            if (body.len() > 4000) {
+                body = body.sub(0, len: 4000) + "\n... truncated; `magus query output <ref>` has it all";
+            }
+            if (body != "") {
+                magus\info("generate: what changed on this runner:\n" + body);
+            }
         }
         throw "generate: regeneration changed " + moved.join(", ")
             + "; re-run `magus run generate:rw docs` and commit";
