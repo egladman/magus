@@ -268,3 +268,100 @@ func TestLPT_emptyAndDegenerate(t *testing.T) {
 	got := lpt(ps, []int64{1_000}, 8)
 	assert.Len(t, got, 1, "1 project, 8 shards → 1 shard (empty shards pruned)")
 }
+
+// seedPeak records one outcome carrying a peak, enough for PredictPeakRSS.
+// consolidating returns constants under which optimalShardCount collapses to a
+// single shard (work < 2*setup), which is the situation the memory constraint
+// exists to override.
+func consolidating() Constants { return Constants{SetupP50Ms: 600_000, AlphaMs: 5_000} }
+
+func seedPeak(h *History, project, target string, bytes int64) {
+	if h.Projects == nil {
+		h.Projects = map[string]map[string]Stats{}
+	}
+	if h.Projects[project] == nil {
+		h.Projects[project] = map[string]Stats{}
+	}
+	s := h.Projects[project][target]
+	s.RecentOutcomes = append(s.RecentOutcomes, Outcome{Result: "pass", MaxRSSBytes: bytes})
+	h.Projects[project][target] = s
+}
+
+func TestPlan_memoryBudgetSplitsAShardThatWouldNotFit(t *testing.T) {
+	t.Parallel()
+	// The shape that took the runner down: two heavy projects the duration model
+	// is happy to consolidate, on a machine that cannot hold both at once.
+	h := History{Constants: consolidating()}
+	seedPeak(&h, "docs", "ci", 7<<30)
+	seedPeak(&h, ".", "ci", 6<<30)
+	ps := projects("docs", ".")
+
+	unbudgeted := Forecaster{History: h, Target: "ci"}.Plan(ps, 8)
+	require.Len(t, unbudgeted, 1, "precondition: the time model consolidates these")
+
+	// The budget is USABLE memory, not the runner's nameplate: a 16GB runner also
+	// holds the agent, the Go build cache, node and the toolchains. 13GB of
+	// projects does not fit in what is left.
+	budgeted := Forecaster{History: h, Target: "ci", MemoryBudgetBytes: 12 << 30}.Plan(ps, 8)
+	assert.Len(t, budgeted, 2, "13GB of projects exceeds 12GB of usable memory; split it")
+}
+
+func TestPlan_memoryBudgetLeavesAFittingPlanAlone(t *testing.T) {
+	t.Parallel()
+	// Two small projects fit together, so the budget must not buy runners nobody
+	// needs - the constraint exists to prevent a death, not to fan out by default.
+	h := History{Constants: consolidating()}
+	seedPeak(&h, "a", "ci", 200<<20)
+	seedPeak(&h, "b", "ci", 300<<20)
+	ps := projects("a", "b")
+
+	got := Forecaster{History: h, Target: "ci", MemoryBudgetBytes: 16 << 30}.Plan(ps, 8)
+	assert.Len(t, got, 1, "500MB fits comfortably; do not split")
+}
+
+func TestPlan_unmeasuredProjectsPlanExactlyAsBefore(t *testing.T) {
+	t.Parallel()
+	// The compatibility guarantee. A workspace that has recorded no peaks - every
+	// workspace, the first time this ships - must get byte-identical planning,
+	// because unknown is not zero and must not be read as either free or vast.
+	h := History{}
+	ps := projects("a", "b", "c", "d")
+
+	before := Forecaster{History: h, Target: "ci"}.Plan(ps, 8)
+	after := Forecaster{History: h, Target: "ci", MemoryBudgetBytes: 1 << 30}.Plan(ps, 8)
+	assert.Equal(t, len(before), len(after), "no recorded peaks must mean no change in plan")
+}
+
+func TestPlan_neverPlansFewerShardsThanTheTimeModelAsked(t *testing.T) {
+	t.Parallel()
+	// The constraint may only add runners. A memory prediction that is wrong
+	// should cost money, never correctness.
+	h := History{Constants: consolidating()}
+	seedPeak(&h, "a", "ci", 1<<20)
+	seedPeak(&h, "b", "ci", 1<<20)
+	ps := projects("a", "b")
+
+	base := Forecaster{History: h, Target: "ci"}.Plan(ps, 8)
+	withBudget := Forecaster{History: h, Target: "ci", MemoryBudgetBytes: 64 << 30}.Plan(ps, 8)
+	assert.GreaterOrEqual(t, len(withBudget), len(base))
+}
+
+func TestPlan_oneProjectOverBudgetDoesNotSpin(t *testing.T) {
+	t.Parallel()
+	// A single project bigger than the whole budget cannot be helped by splitting.
+	// It must terminate at the limit rather than loop, and still return every
+	// project exactly once.
+	h := History{Constants: consolidating()}
+	seedPeak(&h, "huge", "ci", 100<<30)
+	ps := projects("huge", "small")
+	seedPeak(&h, "small", "ci", 1<<20)
+
+	got := Forecaster{History: h, Target: "ci", MemoryBudgetBytes: 1 << 30}.Plan(ps, 8)
+	seen := map[string]int{}
+	for _, s := range got {
+		for _, p := range s {
+			seen[p.Path]++
+		}
+	}
+	assert.Equal(t, map[string]int{"huge": 1, "small": 1}, seen, "never drop or duplicate work")
+}

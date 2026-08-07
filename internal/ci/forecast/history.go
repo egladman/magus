@@ -461,3 +461,35 @@ func (h *History) Save(ctx context.Context, path string) error {
 	}
 	return nil
 }
+
+// PredictPeakRSS returns the highest peak resident memory recorded for
+// (project, target), and whether anything was recorded at all.
+//
+// The MAXIMUM of the samples, not a percentile. A p75 answers "how long does
+// this usually take", which is the right question for scheduling time, because
+// a slow run costs you the difference. Memory is not like that: a run that
+// exceeds what the machine has does not cost you the difference, it takes the
+// machine down. The only figure that protects a runner is the worst this target
+// has actually been seen to need.
+//
+// The bool is load-bearing. Every history written before peaks were recorded,
+// every platform that cannot report them, and every target that has never run
+// all decode to zero, and a planner that reads zero as "needs nothing" would
+// pack precisely the targets it knows least about onto one machine.
+func (h *History) PredictPeakRSS(project, target string) (int64, bool) {
+	targets, ok := h.Projects[project]
+	if !ok {
+		return 0, false
+	}
+	s, ok := targets[target]
+	if !ok {
+		return 0, false
+	}
+	var max int64
+	for _, o := range s.RecentOutcomes {
+		if o.MaxRSSBytes > max {
+			max = o.MaxRSSBytes
+		}
+	}
+	return max, max > 0
+}
