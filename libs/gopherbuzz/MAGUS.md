@@ -93,7 +93,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `release` |  |
 | `watch` | Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive. |
 | `test` | Tests with race detection, coverage, and a drift-gated coverage badge. |
-| `preflight` | No gate of its own: doctor USED to run here and fail the build on a finding, which made workspace conventions a blocker for everyone downstream. |
 | `build` | Compiles one artifact: the host binary, or the container image under the `container` charm. |
 | `lint` | Formats first, then golangci-lint, go vet, govulncheck, markdownlint, and shellcheck. |
 | `format` | Regenerates, then formats Go and tidies `go.mod`. |
@@ -103,6 +102,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `serve` | serve is the workspace-root dev loop for BOTH deployables. |
 | `go-build` | Compiles the version-stamped magus binary. |
 | `image-build` | Two axes, one charm each. |
+| `security` | Gates on dependency LICENSE terms, which is a separate question from image_scan's vulnerability pass even though both drive trivy. |
 | `man-generate` | Renders the roff man pages into manpage/ (repo root). |
 | `changelog-generate` | CHANGELOG.md is a root artifact. |
 | `types-generate` | Regenerates the runtime BuzzObject maps before anything imports a host binding. |

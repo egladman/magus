@@ -55,8 +55,8 @@ env:
   MAGUS_LOG_STREAM: '1'
 
 jobs:
-  preflight:
-    name: magus preflight
+  plan:
+    name: magus plan
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -115,8 +115,8 @@ jobs:
 
   ci:
     name: magus shard ${{ matrix.shard }}
-    needs: preflight
-    if: fromJSON(needs.preflight.outputs.count) > 0
+    needs: plan
+    if: fromJSON(needs.plan.outputs.count) > 0
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -125,8 +125,8 @@ jobs:
       MAGUS_CACHE_SIGNING_KEY: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && secrets.MAGUS_CACHE_SIGNING_KEY || '' }}
     strategy:
       fail-fast: false
-      max-parallel: ${{ fromJSON(needs.preflight.outputs.max_parallel) }}
-      matrix: ${{ fromJSON(needs.preflight.outputs.matrix) }}
+      max-parallel: ${{ fromJSON(needs.plan.outputs.max_parallel) }}
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
@@ -198,7 +198,7 @@ jobs:
           # touching an explicitly named one.
           command:  run ci:gha --no-default-charms ${{ matrix.projects }}
           shard:    ${{ matrix.shard }}
-          n-shards: ${{ needs.preflight.outputs.count }}
+          n-shards: ${{ needs.plan.outputs.count }}
 
       # magus truncates a failing target's captured output to "likely diagnostics"
       # in the console, which drops thousands of lines - including, repeatedly, the
@@ -234,7 +234,7 @@ jobs:
     # variable MAGUS_PR_COMMENTS=false.
     name: magus advisor
     if: github.event_name == 'pull_request' && vars.MAGUS_PR_COMMENTS != 'false'
-    needs: [preflight]
+    needs: [plan]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -272,7 +272,7 @@ jobs:
 
   site-build:
     name: magus site build
-    needs: [preflight]
+    needs: [plan]
     # Separate from `magus affected ci` on purpose: affected ci shards per-project
     # correctness, and the deploy is a workspace-level composition no single project owns.
     #
@@ -285,7 +285,7 @@ jobs:
     # console trees, root Markdown, assets, releases, embedded skills, and the Go packages
     # the content generators read. A stale filter would skip the smoke test silently,
     # which is the hole this closes.
-    if: needs.preflight.result == 'success'
+    if: needs.plan.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -343,8 +343,8 @@ jobs:
     # install, and a trigger condition; two jobs meant two of each and two rows in the
     # checks list for one idea.
     name: magus report
-    needs: [preflight, ci]
-    if: always() && needs.preflight.result == 'success'
+    needs: [plan, ci]
+    if: always() && needs.plan.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -367,5 +367,5 @@ jobs:
         with:
           report: 'true'
           ci-result: ${{ needs.ci.result }}
-          shard-count: ${{ needs.preflight.outputs.count }}
+          shard-count: ${{ needs.plan.outputs.count }}
           merge-history: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}

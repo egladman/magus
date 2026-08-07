@@ -1474,11 +1474,17 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void {
     }
 }
 
-// No gate of its own: doctor USED to run here and fail the build on a finding, which
-// made workspace conventions a blocker for everyone downstream. The advice action now
-// reports the same findings on the pull request, non-blocking - and unlike a preflight
-// gate, that works for a consumer who never wired doctor into their own pipeline.
-export fun preflight(ctx: magus\Context, args: [str]) > void {}
+// This project deliberately declares NO preflight, and the reason is worth keeping: doctor
+// used to run in one and fail the build on a finding, which made workspace conventions a
+// blocker for everyone downstream. The advice action now reports the same findings on the
+// pull request, non-blocking - and unlike a preflight gate, that works for a consumer who
+// never wired doctor into their own pipeline.
+//
+// What was left behind was an EMPTY preflight with no callers, which reported `[pass]` for
+// doing nothing. The TypeScript projects keep theirs because it does real work there (an
+// unconditional pnpm install), but a target that cannot fail and that nothing depends on
+// is not a phase - it is a name. `preflight` is a convention, not a requirement; only `ci`
+// is required (see docs/concepts/targets.md).
 
 // Compiles one artifact: the host binary, or the container image under the `container` charm.
 export fun build(ctx: magus\Context, args: [str])  > void {

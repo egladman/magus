@@ -466,10 +466,6 @@
           ]
         },
         {
-          "name": "preflight",
-          "doc": "No gate of its own: doctor USED to run here and fail the build on a finding, which made workspace conventions a blocker for everyone downstream."
-        },
-        {
           "name": "build",
           "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
           "dependencies": [
