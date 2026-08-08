@@ -258,8 +258,8 @@
           ]
         },
         {
-          "name": "md-generate",
-          "declared": "md_generate",
+          "name": "index-generate",
+          "declared": "index_generate",
           "doc": "Renders MAGUS.md via `magus describe graph`.",
           "writes_files": [
             {
@@ -289,8 +289,8 @@
             "changelog-generate",
             "config-generate",
             "graph-generate",
+            "index-generate",
             "man-generate",
-            "md-generate",
             "mocks-generate",
             "skills-generate",
             "spells-generate",
@@ -623,9 +623,9 @@
           "name": "preflight"
         },
         {
-          "name": "md-generate",
-          "declared": "md_generate",
-          "doc": "md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.",
+          "name": "index-generate",
+          "declared": "index_generate",
+          "doc": "index-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.",
           "reads_files": [
             {
               "project": "docs",
@@ -867,7 +867,7 @@
           "dependencies": [
             "preflight",
             "content-generate",
-            "md-generate",
+            "index-generate",
             "build-mermaid",
             "build-hljs",
             "build-playground-editor",
@@ -1109,15 +1109,15 @@
           "doc": "Regenerates MAGUS.md and fails on drift.",
           "dependencies": [
             "preflight",
-            "md-generate"
+            "index-generate"
           ],
           "charms": [
             "rw"
           ]
         },
         {
-          "name": "md-generate",
-          "declared": "md_generate",
+          "name": "index-generate",
+          "declared": "index_generate",
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
         },
         {
@@ -1201,15 +1201,15 @@
           "doc": "Regenerates MAGUS.md and fails on drift.",
           "dependencies": [
             "preflight",
-            "md-generate"
+            "index-generate"
           ],
           "charms": [
             "rw"
           ]
         },
         {
-          "name": "md-generate",
-          "declared": "md_generate",
+          "name": "index-generate",
+          "declared": "index_generate",
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
         },
         {
@@ -1316,15 +1316,15 @@
           "doc": "Regenerates MAGUS.md and fails on drift.",
           "dependencies": [
             "preflight",
-            "md-generate"
+            "index-generate"
           ],
           "charms": [
             "rw"
           ]
         },
         {
-          "name": "md-generate",
-          "declared": "md_generate",
+          "name": "index-generate",
+          "declared": "index_generate",
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
         },
         {

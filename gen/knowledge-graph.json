@@ -9271,6 +9271,16 @@
       }
     },
     {
+      "id": "function:docs/magusfile.buzz:index_generate",
+      "kind": "function",
+      "label": "index_generate",
+      "doc": "index-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets. generate calls it; run standalone after editing targets: `magus run index-generate docs`.",
+      "source": "docs/magusfile.buzz:170",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:docs/magusfile.buzz:install",
       "kind": "function",
       "label": "install",
@@ -9283,16 +9293,6 @@
       "label": "lint",
       "doc": "lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). Both TS tools need node_modules, which it reaches through format -> generate -> preflight; os.exec raises on a non-zero exit, so either gate fails lint.",
       "source": "docs/magusfile.buzz:351",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:docs/magusfile.buzz:md_generate",
-      "kind": "function",
-      "label": "md_generate",
-      "doc": "md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets. generate calls it; run standalone after editing targets: `magus run md-generate docs`.",
-      "source": "docs/magusfile.buzz:170",
       "attrs": {
         "exported": "true"
       }
@@ -10671,20 +10671,20 @@
       }
     },
     {
-      "id": "function:libs/diagnostics/magusfile.buzz:lint",
+      "id": "function:libs/diagnostics/magusfile.buzz:index_generate",
       "kind": "function",
-      "label": "lint",
-      "source": "libs/diagnostics/magusfile.buzz:67",
+      "label": "index_generate",
+      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
+      "source": "libs/diagnostics/magusfile.buzz:61",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:libs/diagnostics/magusfile.buzz:md_generate",
+      "id": "function:libs/diagnostics/magusfile.buzz:lint",
       "kind": "function",
-      "label": "md_generate",
-      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/diagnostics/magusfile.buzz:61",
+      "label": "lint",
+      "source": "libs/diagnostics/magusfile.buzz:67",
       "attrs": {
         "exported": "true"
       }
@@ -15506,20 +15506,20 @@
       }
     },
     {
-      "id": "function:libs/gopherbuzz/magusfile.buzz:lint",
+      "id": "function:libs/gopherbuzz/magusfile.buzz:index_generate",
       "kind": "function",
-      "label": "lint",
-      "source": "libs/gopherbuzz/magusfile.buzz:74",
+      "label": "index_generate",
+      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
+      "source": "libs/gopherbuzz/magusfile.buzz:68",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:libs/gopherbuzz/magusfile.buzz:md_generate",
+      "id": "function:libs/gopherbuzz/magusfile.buzz:lint",
       "kind": "function",
-      "label": "md_generate",
-      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/gopherbuzz/magusfile.buzz:68",
+      "label": "lint",
+      "source": "libs/gopherbuzz/magusfile.buzz:74",
       "attrs": {
         "exported": "true"
       }
@@ -15823,6 +15823,16 @@
       }
     },
     {
+      "id": "function:libs/textsearch/magusfile.buzz:index_generate",
+      "kind": "function",
+      "label": "index_generate",
+      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
+      "source": "libs/textsearch/magusfile.buzz:94",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:libs/textsearch/magusfile.buzz:install",
       "kind": "function",
       "label": "install",
@@ -15835,16 +15845,6 @@
       "label": "lint",
       "doc": "lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json). os.exec raises on a non-zero exit, so either gate fails lint.",
       "source": "libs/textsearch/magusfile.buzz:102",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:libs/textsearch/magusfile.buzz:md_generate",
-      "kind": "function",
-      "label": "md_generate",
-      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/textsearch/magusfile.buzz:94",
       "attrs": {
         "exported": "true"
       }
@@ -16111,6 +16111,16 @@
       "source": "magusfile.buzz:266"
     },
     {
+      "id": "function:magusfile.buzz:index_generate",
+      "kind": "function",
+      "label": "index_generate",
+      "doc": "Renders MAGUS.md via `magus describe graph`.",
+      "source": "magusfile.buzz:760",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:magusfile.buzz:ld_flags",
       "kind": "function",
       "label": "ld_flags",
@@ -16146,16 +16156,6 @@
       "label": "man_generate",
       "doc": "Renders the roff man pages into manpage/ (repo root). These are a DISTRIBUTION artifact - the .1 source the `man` command reads, shipped with releases - so they stay owned here at the root, NOT in the docs project. The docs project owns the Markdown manpages (docs/manpage/*.md) instead; both flavors are serialized from the same internal/manpage registry by cmd/magus-manpage (see its -format flag).  It also refreshes api.lock, the drift-gated snapshot of the public CLI surface, because that is serialized fro",
       "source": "magusfile.buzz:664",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:magusfile.buzz:md_generate",
-      "kind": "function",
-      "label": "md_generate",
-      "doc": "Renders MAGUS.md via `magus describe graph`.",
-      "source": "magusfile.buzz:760",
       "attrs": {
         "exported": "true"
       }
@@ -21724,6 +21724,17 @@
       }
     },
     {
+      "id": "target:.:index-generate",
+      "kind": "target",
+      "label": "index-generate",
+      "doc": "Renders MAGUS.md via `magus describe graph`.",
+      "source": ".",
+      "attrs": {
+        "declared_as": "index_generate",
+        "engine": "buzz"
+      }
+    },
+    {
       "id": "target:.:lint",
       "kind": "target",
       "label": "lint",
@@ -21741,17 +21752,6 @@
       "source": ".",
       "attrs": {
         "declared_as": "man_generate",
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:.:md-generate",
-      "kind": "target",
-      "label": "md-generate",
-      "doc": "Renders MAGUS.md via `magus describe graph`.",
-      "source": ".",
-      "attrs": {
-        "declared_as": "md_generate",
         "engine": "buzz"
       }
     },
@@ -22092,23 +22092,23 @@
       }
     },
     {
+      "id": "target:docs:index-generate",
+      "kind": "target",
+      "label": "index-generate",
+      "doc": "index-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.",
+      "source": "docs",
+      "attrs": {
+        "declared_as": "index_generate",
+        "engine": "buzz"
+      }
+    },
+    {
       "id": "target:docs:lint",
       "kind": "target",
       "label": "lint",
       "doc": "lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json).",
       "source": "docs",
       "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:docs:md-generate",
-      "kind": "target",
-      "label": "md-generate",
-      "doc": "md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.",
-      "source": "docs",
-      "attrs": {
-        "declared_as": "md_generate",
         "engine": "buzz"
       }
     },
@@ -22239,22 +22239,22 @@
       }
     },
     {
+      "id": "target:libs/diagnostics:index-generate",
+      "kind": "target",
+      "label": "index-generate",
+      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
+      "source": "libs/diagnostics",
+      "attrs": {
+        "declared_as": "index_generate",
+        "engine": "buzz"
+      }
+    },
+    {
       "id": "target:libs/diagnostics:lint",
       "kind": "target",
       "label": "lint",
       "source": "libs/diagnostics",
       "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:libs/diagnostics:md-generate",
-      "kind": "target",
-      "label": "md-generate",
-      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/diagnostics",
-      "attrs": {
-        "declared_as": "md_generate",
         "engine": "buzz"
       }
     },
@@ -22336,22 +22336,22 @@
       }
     },
     {
+      "id": "target:libs/gopherbuzz:index-generate",
+      "kind": "target",
+      "label": "index-generate",
+      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
+      "source": "libs/gopherbuzz",
+      "attrs": {
+        "declared_as": "index_generate",
+        "engine": "buzz"
+      }
+    },
+    {
       "id": "target:libs/gopherbuzz:lint",
       "kind": "target",
       "label": "lint",
       "source": "libs/gopherbuzz",
       "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:libs/gopherbuzz:md-generate",
-      "kind": "target",
-      "label": "md-generate",
-      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/gopherbuzz",
-      "attrs": {
-        "declared_as": "md_generate",
         "engine": "buzz"
       }
     },
@@ -22394,23 +22394,23 @@
       }
     },
     {
+      "id": "target:libs/textsearch:index-generate",
+      "kind": "target",
+      "label": "index-generate",
+      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
+      "source": "libs/textsearch",
+      "attrs": {
+        "declared_as": "index_generate",
+        "engine": "buzz"
+      }
+    },
+    {
       "id": "target:libs/textsearch:lint",
       "kind": "target",
       "label": "lint",
       "doc": "lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json).",
       "source": "libs/textsearch",
       "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:libs/textsearch:md-generate",
-      "kind": "target",
-      "label": "md-generate",
-      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/textsearch",
-      "attrs": {
-        "declared_as": "md_generate",
         "engine": "buzz"
       }
     },
@@ -41657,6 +41657,14 @@
     },
     {
       "source": "file:docs/magusfile.buzz",
+      "target": "function:docs/magusfile.buzz:index_generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/magusfile.buzz"
+    },
+    {
+      "source": "file:docs/magusfile.buzz",
       "target": "function:docs/magusfile.buzz:install",
       "relation": "contains",
       "confidence": "extracted",
@@ -41666,14 +41674,6 @@
     {
       "source": "file:docs/magusfile.buzz",
       "target": "function:docs/magusfile.buzz:lint",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/magusfile.buzz"
-    },
-    {
-      "source": "file:docs/magusfile.buzz",
-      "target": "function:docs/magusfile.buzz:md_generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -44129,7 +44129,7 @@
     },
     {
       "source": "file:libs/diagnostics/magusfile.buzz",
-      "target": "function:libs/diagnostics/magusfile.buzz:lint",
+      "target": "function:libs/diagnostics/magusfile.buzz:index_generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -44137,7 +44137,7 @@
     },
     {
       "source": "file:libs/diagnostics/magusfile.buzz",
-      "target": "function:libs/diagnostics/magusfile.buzz:md_generate",
+      "target": "function:libs/diagnostics/magusfile.buzz:lint",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -50849,7 +50849,7 @@
     },
     {
       "source": "file:libs/gopherbuzz/magusfile.buzz",
-      "target": "function:libs/gopherbuzz/magusfile.buzz:lint",
+      "target": "function:libs/gopherbuzz/magusfile.buzz:index_generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -50857,7 +50857,7 @@
     },
     {
       "source": "file:libs/gopherbuzz/magusfile.buzz",
-      "target": "function:libs/gopherbuzz/magusfile.buzz:md_generate",
+      "target": "function:libs/gopherbuzz/magusfile.buzz:lint",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -51273,6 +51273,14 @@
     },
     {
       "source": "file:libs/textsearch/magusfile.buzz",
+      "target": "function:libs/textsearch/magusfile.buzz:index_generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/textsearch/magusfile.buzz"
+    },
+    {
+      "source": "file:libs/textsearch/magusfile.buzz",
       "target": "function:libs/textsearch/magusfile.buzz:install",
       "relation": "contains",
       "confidence": "extracted",
@@ -51282,14 +51290,6 @@
     {
       "source": "file:libs/textsearch/magusfile.buzz",
       "target": "function:libs/textsearch/magusfile.buzz:lint",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/textsearch/magusfile.buzz"
-    },
-    {
-      "source": "file:libs/textsearch/magusfile.buzz",
-      "target": "function:libs/textsearch/magusfile.buzz:md_generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -51625,6 +51625,14 @@
     },
     {
       "source": "file:magusfile.buzz",
+      "target": "function:magusfile.buzz:index_generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:ld_flags",
       "relation": "contains",
       "confidence": "extracted",
@@ -51658,14 +51666,6 @@
     {
       "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:man_generate",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "magusfile.buzz"
-    },
-    {
-      "source": "file:magusfile.buzz",
-      "target": "function:magusfile.buzz:md_generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -62839,6 +62839,14 @@
     },
     {
       "source": "project:.",
+      "target": "target:.:index-generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
       "target": "target:.:lint",
       "relation": "contains",
       "confidence": "extracted",
@@ -62848,14 +62856,6 @@
     {
       "source": "project:.",
       "target": "target:.:man-generate",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "project:.",
-      "target": "target:.:md-generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -63295,7 +63295,7 @@
     },
     {
       "source": "project:docs",
-      "target": "target:docs:lint",
+      "target": "target:docs:index-generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -63303,7 +63303,7 @@
     },
     {
       "source": "project:docs",
-      "target": "target:docs:md-generate",
+      "target": "target:docs:lint",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -63487,7 +63487,7 @@
     },
     {
       "source": "project:libs/diagnostics",
-      "target": "target:libs/diagnostics:lint",
+      "target": "target:libs/diagnostics:index-generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -63495,7 +63495,7 @@
     },
     {
       "source": "project:libs/diagnostics",
-      "target": "target:libs/diagnostics:md-generate",
+      "target": "target:libs/diagnostics:lint",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -63615,7 +63615,7 @@
     },
     {
       "source": "project:libs/gopherbuzz",
-      "target": "target:libs/gopherbuzz:lint",
+      "target": "target:libs/gopherbuzz:index-generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -63623,7 +63623,7 @@
     },
     {
       "source": "project:libs/gopherbuzz",
-      "target": "target:libs/gopherbuzz:md-generate",
+      "target": "target:libs/gopherbuzz:lint",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -63671,7 +63671,7 @@
     },
     {
       "source": "project:libs/textsearch",
-      "target": "target:libs/textsearch:lint",
+      "target": "target:libs/textsearch:index-generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -63679,7 +63679,7 @@
     },
     {
       "source": "project:libs/textsearch",
-      "target": "target:libs/textsearch:md-generate",
+      "target": "target:libs/textsearch:lint",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -64507,7 +64507,7 @@
     },
     {
       "source": "target:.:generate",
-      "target": "target:.:man-generate",
+      "target": "target:.:index-generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
@@ -64515,7 +64515,7 @@
     },
     {
       "source": "target:.:generate",
-      "target": "target:.:md-generate",
+      "target": "target:.:man-generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
@@ -65819,7 +65819,7 @@
     },
     {
       "source": "target:docs:generate",
-      "target": "target:docs:md-generate",
+      "target": "target:docs:index-generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
@@ -65837,6 +65837,78 @@
       "source": "target:docs:generate",
       "target": "target:docs:site-generate",
       "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:index-generate",
+      "target": "file:console/magusfile.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:index-generate",
+      "target": "file:docs/guides/integrations/agents/magusfile.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:index-generate",
+      "target": "file:docs/magusfile.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:index-generate",
+      "target": "file:evals/magusfile.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:index-generate",
+      "target": "file:libs/diagnostics/magusfile.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:index-generate",
+      "target": "file:libs/gopherbuzz/magusfile.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:index-generate",
+      "target": "file:libs/textsearch/magusfile.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:index-generate",
+      "target": "file:magusfile.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:index-generate",
+      "target": "file:proto/magusfile.buzz",
+      "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs"
@@ -65885,78 +65957,6 @@
       "source": "target:docs:lint",
       "target": "target:libs/textsearch:lint",
       "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:md-generate",
-      "target": "file:console/magusfile.buzz",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:md-generate",
-      "target": "file:docs/guides/integrations/agents/magusfile.buzz",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:md-generate",
-      "target": "file:docs/magusfile.buzz",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:md-generate",
-      "target": "file:evals/magusfile.buzz",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:md-generate",
-      "target": "file:libs/diagnostics/magusfile.buzz",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:md-generate",
-      "target": "file:libs/gopherbuzz/magusfile.buzz",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:md-generate",
-      "target": "file:libs/textsearch/magusfile.buzz",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:md-generate",
-      "target": "file:magusfile.buzz",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:md-generate",
-      "target": "file:proto/magusfile.buzz",
-      "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs"
@@ -66539,7 +66539,7 @@
     },
     {
       "source": "target:libs/diagnostics:generate",
-      "target": "target:libs/diagnostics:md-generate",
+      "target": "target:libs/diagnostics:index-generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
@@ -66715,7 +66715,7 @@
     },
     {
       "source": "target:libs/gopherbuzz:generate",
-      "target": "target:libs/gopherbuzz:md-generate",
+      "target": "target:libs/gopherbuzz:index-generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
@@ -66795,7 +66795,7 @@
     },
     {
       "source": "target:libs/textsearch:generate",
-      "target": "target:libs/textsearch:md-generate",
+      "target": "target:libs/textsearch:index-generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,

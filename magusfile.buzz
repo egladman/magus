@@ -757,7 +757,7 @@ export fun config_generate(ctx: magus\Context, args: [str]) > void {
 // (man-generate above), which are a distribution artifact rather than site content.
 
 // Renders MAGUS.md via `magus describe graph`.
-export fun md_generate(ctx: magus\Context, args: [str]) > void {
+export fun index_generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("MAGUS.md");
     final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs\writeFile("MAGUS.md", doc + "\n");

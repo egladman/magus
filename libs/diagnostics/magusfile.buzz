@@ -25,7 +25,7 @@ magus\project({
     "targets": {
         // Drift-gates MAGUS.md via git status: run alone, every time.
         "generate": {"skip_cache": "drift-gates MAGUS.md via git status; a replay would skip the check", "exclusive": true},
-        // md-generate renders `magus describe graph -o markdown`, so its output is a
+        // index-generate renders `magus describe graph -o markdown`, so its output is a
         // function of the WHOLE knowledge graph. Its declared inputs are the magusfiles,
         // which is the only part of that a glob can name, so any other change leaves the
         // key unmoved: a cache hit then replays a MAGUS.md built before it and REVERTS the
@@ -33,13 +33,13 @@ magus\project({
         // a branch touching the graph fails this gate in CI, where the shared cache is
         // restored, while passing on a clean checkout that has nothing to hit. The docs
         // project carries the same opt-out for the same reason.
-        "md-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
+        "index-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
     },
 });
 
-// A pure library, so the pipeline is the Go lifecycle plus md-generate. Each target
+// A pure library, so the pipeline is the Go lifecycle plus index-generate. Each target
 // delegates to the go spell's ops. The Go-lifecycle targets take a magus\Context and
-// declare their dependencies through it (ctx.needs); generate/md_generate keep the
+// declare their dependencies through it (ctx.needs); generate/index_generate keep the
 // old global-magus form (per-target policy and fs/vcs side effects).
 
 export fun preflight(ctx: magus\Context, args: [str]) > void {}
@@ -49,7 +49,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     gomod\replaceWorkspaceModules(ctx, go, "libs/diagnostics");
     final clean_before = vcs\isDirty(["MAGUS.md"]) == false;
-    ctx.needs(md_generate);
+    ctx.needs(index_generate);
     if (ctx.has_charm("rw")) { return; }
 
     if (clean_before and vcs\isDirty(["MAGUS.md"])) {
@@ -58,7 +58,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 }
 
 // Renders MAGUS.md (target catalog plus graph) from this magusfile.
-export fun md_generate(ctx: magus\Context, args: [str]) > void {
+export fun index_generate(ctx: magus\Context, args: [str]) > void {
     final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs\writeFile("MAGUS.md", doc + "\n");
 }

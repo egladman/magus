@@ -107,7 +107,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `changelog-generate` | CHANGELOG.md is a root artifact. |
 | `types-generate` | Regenerates the runtime BuzzObject maps before anything imports a host binding. |
 | `skills-generate` | Reinstalls the agent skills from their embedded sources in cmd/magus/skills. |
-| `md-generate` | Renders MAGUS.md via `magus describe graph`. |
+| `index-generate` | Renders MAGUS.md via `magus describe graph`. |
 | `graph-generate` | Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects. |
 | `advice-test` | Runs the PR advisors' `test "..." {}` blocks. |
 | `completion-test` | Exercises the completion scripts magus SHIPS, each inside the official image for its shell. |
@@ -140,7 +140,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `build-playground-editor` | build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js. |
 | `render` | render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks. |
 | `preflight` |  |
-| `md-generate` | md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets. |
+| `index-generate` | index-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets. |
 | `content-generate` | content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). |
 | `site-generate` | site-generate owns publication. |
 | `conventions` | conventions holds the prose corpus to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved. |
@@ -174,7 +174,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `test` |  |
 | `ci` | The anchor `magus affected ci` keys off; fans out lint/build/test after format. |
 | `preflight` |  |
-| `md-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
+| `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
 
 ## Project: libs/gopherbuzz
 
@@ -189,7 +189,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `ci` | The anchor `magus affected ci` keys off; fans out lint/build/test after format. |
 | `conformance` | Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go). |
 | `preflight` |  |
-| `md-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
+| `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
 
 ## Project: libs/textsearch
 
@@ -200,7 +200,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `test` | test runs the node:test suite over the bundled *.test.ts and renders a line- coverage badge from the run. |
 | `ci` | 'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests. |
 | `preflight` |  |
-| `md-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
+| `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
 
 ## Project: proto
 
