@@ -222,7 +222,7 @@ stripped-var notice in the log - rather than silently behaving differently.
 **The op relies on Nx inferring the project from the working directory.** magus
 runs an op in the project's own directory and an op's argv is fixed before any
 project is chosen, so `nx build` in `libs/foo` is what stands in for
-`nx run libs/foo:build`. That inference is Nx behaviour, not magus's: verify it
+`nx run libs/foo:build`. That inference is Nx behavior, not magus's: verify it
 on your repo before trusting the mapping, and if a target of yours does not
 infer, have the op run a small wrapper script that resolves the project from
 `$PWD` and calls `nx run` itself.
