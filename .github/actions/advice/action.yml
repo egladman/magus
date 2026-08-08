@@ -72,6 +72,26 @@ inputs:
       magus requires for it.
     required: false
     default: 'true'
+  conformance:
+    description: >
+      Comment when the pull request adds a target whose name diverges from what the rest
+      of the workspace already calls the same work, derived by grouping targets on the
+      ops they invoke. Silent unless a large cohort agrees overwhelmingly, so a workspace
+      with no convention produces nothing.
+    required: false
+    default: 'true'
+  conformance-min-cohort:
+    description: >
+      How many targets must share an op set before their naming counts as a convention.
+      Below this, agreement is a coincidence rather than a norm.
+    required: false
+    default: '5'
+  conformance-min-share:
+    description: >
+      Share of a cohort that must agree on a name before a divergence is worth raising.
+      A near-even split is a workspace that has not decided, not a violation.
+    required: false
+    default: '0.8'
   first-contribution:
     description: >
       Welcome someone opening their first pull request here, with the two repository
@@ -227,6 +247,21 @@ runs:
         PR_BASE: ${{ inputs.base-ref }}
         PR_HEAD_SHA: ${{ inputs.head-sha }}
       run: magus buzz "$GITHUB_ACTION_PATH/skip-cache.buzz"
+
+    - name: Advise on a target name that diverges from the workspace
+      if: inputs.conformance == 'true'
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_BASE: ${{ inputs.base-ref }}
+        PR_HEAD_SHA: ${{ inputs.head-sha }}
+        MIN_COHORT: ${{ inputs.conformance-min-cohort }}
+        MIN_SHARE: ${{ inputs.conformance-min-share }}
+      run: magus buzz "$GITHUB_ACTION_PATH/conformance.buzz"
 
     - name: Welcome a first-time contributor
       if: inputs.first-contribution == 'true'
