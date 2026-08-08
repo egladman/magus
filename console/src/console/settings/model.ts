@@ -378,5 +378,9 @@ export function createDraftCell<T>(initial: T, onChange: () => void): Persisted<
       listeners.add(fn);
       return () => listeners.delete(fn);
     },
+    // A draft never writes to storage, so there is nothing to wait for. Resolved rather
+    // than rejecting or throwing: a caller awaiting durability should not have to know
+    // whether the cell behind the interface is durable.
+    flushed: () => Promise.resolve(),
   };
 }
