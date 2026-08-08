@@ -111,7 +111,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `md-generate` | Renders MAGUS.md via `magus describe graph`. |
 | `graph-generate` | Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects. |
 | `advice-test` | Runs the PR advisors' `test "..." {}` blocks. |
-| `lint-build` | Builds ./custom-gcl, the golangci-lint carrying this repo's own linters (see .custom-gcl.yml). |
+| `lint-build` | Builds ./custom-gcl, the golangci-lint carrying this repo's own linters. |
 | `completion-test` | Exercises the completion scripts magus SHIPS, each inside the official image for its shell. |
 
 ## Project: console
