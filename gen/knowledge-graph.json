@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2695,
-  "edge_count": 5861,
+  "edge_count": 5864,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "catalog_fingerprint": "3e64891912aad41b",
   "nodes": [
@@ -35129,6 +35129,30 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "docs/guides/tips.md"
+    },
+    {
+      "source": "doc:docs/migrating/breaking-changes.md",
+      "target": "diagnostic:MGS1025",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/migrating/breaking-changes.md"
+    },
+    {
+      "source": "doc:docs/migrating/breaking-changes.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1025.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/migrating/breaking-changes.md"
+    },
+    {
+      "source": "doc:docs/migrating/breaking-changes.md",
+      "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/migrating/breaking-changes.md"
     },
     {
       "source": "doc:docs/migrating/breaking-changes.md",

@@ -77,6 +77,17 @@ var removedMagusfileAPI = []struct {
 	{[]string{"glob"}, `call ctx.glob("<pattern>")`},
 }
 
+// RemovedAPINames returns the dotted member path of every removed call, without the
+// `magus.` root (e.g. "project.register"). The surface lock test uses it to assert the
+// table never names something the namespace still binds.
+func RemovedAPINames() []string {
+	out := make([]string, 0, len(removedMagusfileAPI))
+	for _, r := range removedMagusfileAPI {
+		out = append(out, strings.Join(r.path, "."))
+	}
+	return out
+}
+
 // RemovedAPICall reports the first removed magusfile API call in src, with the call
 // that replaced it. ok is false when src uses none of them.
 //
