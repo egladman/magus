@@ -258,8 +258,8 @@
           ]
         },
         {
-          "name": "md-generate",
-          "declared": "md_generate",
+          "name": "index-generate",
+          "declared": "index_generate",
           "doc": "Renders MAGUS.md via `magus describe graph`.",
           "writes_files": [
             {
@@ -278,34 +278,6 @@
           ]
         },
         {
-          "name": "mod-sync",
-          "declared": "mod_sync",
-          "doc": "The Go spell's Buzz companion derives the flags; go-mod-edit alone renders or writes go.mod.",
-          "charms": [
-            "rw"
-          ],
-          "spells": [
-            {
-              "spell": "go",
-              "ops": [
-                "go-mod-json",
-                "go-mod-edit"
-              ]
-            },
-            {
-              "spell": "gomod",
-              "ops": [
-                "replaceArgs"
-              ]
-            }
-          ],
-          "modifies_existing_files": [
-            {
-              "glob": "go.mod"
-            }
-          ]
-        },
-        {
           "name": "postflight",
           "doc": "Renders the insight report (hotspots, affinity, ownership, trend) to stdout."
         },
@@ -313,13 +285,12 @@
           "name": "generate",
           "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).",
           "dependencies": [
-            "mod-sync",
             "bindings-generate",
             "changelog-generate",
             "config-generate",
             "graph-generate",
+            "index-generate",
             "man-generate",
-            "md-generate",
             "mocks-generate",
             "skills-generate",
             "spells-generate",
@@ -327,6 +298,14 @@
           ],
           "charms": [
             "rw"
+          ],
+          "spells": [
+            {
+              "spell": "gomod",
+              "ops": [
+                "replaceWorkspaceModules"
+              ]
+            }
           ]
         },
         {
@@ -426,7 +405,8 @@
           "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
           "dependencies": [
             "advice-test",
-            "format"
+            "format",
+            "buzz-test"
           ],
           "charms": [
             "rw"
@@ -447,6 +427,11 @@
           "exec_overrides": [
             "env:GOEXPERIMENT=jsonv2"
           ]
+        },
+        {
+          "name": "buzz-test",
+          "declared": "buzz_test",
+          "doc": "Runs the in-file `test \"...\" {}` blocks in this repo's own root Buzz modules, through magus's embedded engine."
         },
         {
           "name": "preflight",
@@ -564,7 +549,8 @@
         }
       ],
       "depends_on": [
-        "libs/gopherbuzz"
+        "libs/gopherbuzz",
+        "libs/textsearch"
       ]
     },
     {
@@ -577,9 +563,17 @@
         },
         {
           "name": "test",
-          "doc": "test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests).",
+          "doc": "test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests) and renders a line-coverage badge from the run.",
           "dependencies": [
             "preflight"
+          ],
+          "charms": [
+            "rw"
+          ],
+          "writes_files": [
+            {
+              "glob": "coverage.svg"
+            }
           ]
         },
         {
@@ -644,9 +638,9 @@
           "name": "preflight"
         },
         {
-          "name": "md-generate",
-          "declared": "md_generate",
-          "doc": "md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.",
+          "name": "index-generate",
+          "declared": "index_generate",
+          "doc": "index-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.",
           "reads_files": [
             {
               "project": "docs",
@@ -888,7 +882,7 @@
           "dependencies": [
             "preflight",
             "content-generate",
-            "md-generate",
+            "index-generate",
             "build-mermaid",
             "build-hljs",
             "build-playground-editor",
@@ -1130,44 +1124,21 @@
           "doc": "Regenerates MAGUS.md and fails on drift.",
           "dependencies": [
             "preflight",
-            "mod-sync",
-            "md-generate"
+            "index-generate"
           ],
           "charms": [
             "rw"
           ]
         },
         {
-          "name": "md-generate",
-          "declared": "md_generate",
+          "name": "index-generate",
+          "declared": "index_generate",
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
-        },
-        {
-          "name": "mod-sync",
-          "declared": "mod_sync",
-          "charms": [
-            "rw"
-          ],
-          "spells": [
-            {
-              "spell": "go",
-              "ops": [
-                "go-mod-json",
-                "go-mod-edit"
-              ]
-            }
-          ],
-          "modifies_existing_files": [
-            {
-              "glob": "go.mod"
-            }
-          ]
         },
         {
           "name": "format",
           "dependencies": [
-            "generate",
-            "mod-sync"
+            "generate"
           ],
           "spells": [
             {
@@ -1245,44 +1216,21 @@
           "doc": "Regenerates MAGUS.md and fails on drift.",
           "dependencies": [
             "preflight",
-            "mod-sync",
-            "md-generate"
+            "index-generate"
           ],
           "charms": [
             "rw"
           ]
         },
         {
-          "name": "md-generate",
-          "declared": "md_generate",
+          "name": "index-generate",
+          "declared": "index_generate",
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
-        },
-        {
-          "name": "mod-sync",
-          "declared": "mod_sync",
-          "charms": [
-            "rw"
-          ],
-          "spells": [
-            {
-              "spell": "go",
-              "ops": [
-                "go-mod-json",
-                "go-mod-edit"
-              ]
-            }
-          ],
-          "modifies_existing_files": [
-            {
-              "glob": "go.mod"
-            }
-          ]
         },
         {
           "name": "format",
           "dependencies": [
-            "generate",
-            "mod-sync"
+            "generate"
           ],
           "spells": [
             {
@@ -1383,15 +1331,15 @@
           "doc": "Regenerates MAGUS.md and fails on drift.",
           "dependencies": [
             "preflight",
-            "md-generate"
+            "index-generate"
           ],
           "charms": [
             "rw"
           ]
         },
         {
-          "name": "md-generate",
-          "declared": "md_generate",
+          "name": "index-generate",
+          "declared": "index_generate",
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
         },
         {
@@ -1412,7 +1360,8 @@
           ],
           "writes_files": [
             {
-              "glob": "coverage.svg"
+              "project": "../..",
+              "glob": "assets/textsearch-coverage.svg"
             }
           ]
         },
