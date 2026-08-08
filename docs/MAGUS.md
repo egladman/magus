@@ -49,7 +49,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | target | 90+ | `magus query kind:target` | `content-generate`, `site-generate`, `bindings-generate` |
 | spell | 10+ | `magus query kind:spell` | `go`, `typescript`, `markdown` |
 | op | 50+ | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-tidy` |
-| tool | 20+ | `magus query kind:tool` | `pnpm`, `go`, `sh` |
+| tool | 10+ | `magus query kind:tool` | `sh`, `go`, `pnpm` |
 | charm | 10+ | `magus query kind:charm` | `rw`, `cd`, `stable` |
 | module | 20+ | `magus query kind:module` | `fs`, `charm`, `magus` |
 | method | 100+ | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
@@ -64,13 +64,13 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
 | . | 35 | `magus query project:.` | `bindings-generate`, `changelog-generate`, `generate` |
-| console | 6 | `magus query project:console` | `preflight`, `build`, `ci` |
+| console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
-| docs/guides/integrations/agents | 3 | `magus query project:docs/guides/integrations/agents` | `lint`, `preflight`, `ci` |
+| docs/guides/integrations/agents | 3 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
 | evals | 4 | `magus query project:evals` | `lint`, `preflight`, `ci` |
 | libs/diagnostics | 8 | `magus query project:libs/diagnostics` | `format`, `build`, `generate` |
 | libs/gopherbuzz | 10 | `magus query project:libs/gopherbuzz` | `build`, `format`, `generate` |
-| libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `test`, `preflight` |
+| libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `generate`, `preflight` |
 | proto | 3 | `magus query project:proto` | `generate`, `lint`, `ci` |
 
 ## Project: docs
