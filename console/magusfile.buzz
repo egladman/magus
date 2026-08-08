@@ -106,7 +106,10 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     fs\writeFile("coverage.svg", badge\coverage("console coverage", percent: pct, radius: 3));
     if (ctx.has_charm("rw")) { return; }
     if (clean_before and vcs\isDirty(["coverage.svg"])) {
-        throw "test: console/coverage.svg is stale; re-run `magus run test:rw console` and commit the badge";
+        // Names the figure this run measured. Node's line coverage differs by a fraction
+        // of a point between platforms, so a badge committed from a developer machine can
+        // be stale on CI by a rounding step nobody can see from the message alone.
+        throw "test: console/coverage.svg is stale; this run measured {pct}%; re-run `magus run test:rw console` and commit the badge";
     }
 }
 

@@ -3,9 +3,10 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2473,
-  "edge_count": 5610,
+  "node_count": 2466,
+  "edge_count": 5590,
   "source_base": "https://github.com/egladman/magus/blob/main",
+  "catalog_fingerprint": "5b4f242646b68b32",
   "nodes": [
     {
       "id": "charm:amd64",
@@ -7430,7 +7431,7 @@
       "kind": "function",
       "label": "build",
       "doc": "build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed. The `rw` charm (`build:rw`) keeps the result instead of gating. esbuild is pinned (mise), so the output is byte-stable and the gate holds.",
-      "source": "console/magusfile.buzz:117",
+      "source": "console/magusfile.buzz:120",
       "attrs": {
         "exported": "true"
       }
@@ -7440,7 +7441,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the build-plus-drift-gate, and the advisory audit, all first-class ci steps.",
-      "source": "console/magusfile.buzz:162",
+      "source": "console/magusfile.buzz:165",
       "attrs": {
         "exported": "true"
       }
@@ -7457,7 +7458,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.",
-      "source": "console/magusfile.buzz:131",
+      "source": "console/magusfile.buzz:134",
       "attrs": {
         "exported": "true"
       }
@@ -7476,7 +7477,7 @@
       "kind": "function",
       "label": "security",
       "doc": "security audits the dependency tree against the npm advisory database.  --prod, not the whole tree, and that is the whole design. An unscoped audit reports the dev toolchain too - today a stylelint -> table -> ajv -> fast-uri advisory - which never reaches a browser and cannot be fixed from here. A gate that fails on something you cannot act on is a gate that gets muted, which is how six stale skip_cache workarounds happened. This fails only on what actually ships.  It is NOT folded into lint: lint is cache",
-      "source": "console/magusfile.buzz:155",
+      "source": "console/magusfile.buzz:158",
       "attrs": {
         "exported": "true"
       }
@@ -9286,6 +9287,16 @@
       }
     },
     {
+      "id": "function:docs/magusfile.buzz:index_generate",
+      "kind": "function",
+      "label": "index_generate",
+      "doc": "index-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets. generate calls it; run standalone after editing targets: `magus run index-generate docs`.",
+      "source": "docs/magusfile.buzz:178",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:docs/magusfile.buzz:install",
       "kind": "function",
       "label": "install",
@@ -9298,16 +9309,6 @@
       "label": "lint",
       "doc": "lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). Both TS tools need node_modules, which it reaches through format -> generate -> preflight; os.exec raises on a non-zero exit, so either gate fails lint.",
       "source": "docs/magusfile.buzz:359",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:docs/magusfile.buzz:md_generate",
-      "kind": "function",
-      "label": "md_generate",
-      "doc": "md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets. generate calls it; run standalone after editing targets: `magus run md-generate docs`.",
-      "source": "docs/magusfile.buzz:178",
       "attrs": {
         "exported": "true"
       }
@@ -10651,7 +10652,7 @@
       "id": "function:libs/diagnostics/magusfile.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "libs/diagnostics/magusfile.buzz:87",
+      "source": "libs/diagnostics/magusfile.buzz:68",
       "attrs": {
         "exported": "true"
       }
@@ -10661,7 +10662,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
-      "source": "libs/diagnostics/magusfile.buzz:91",
+      "source": "libs/diagnostics/magusfile.buzz:72",
       "attrs": {
         "exported": "true"
       }
@@ -10670,7 +10671,7 @@
       "id": "function:libs/diagnostics/magusfile.buzz:format",
       "kind": "function",
       "label": "format",
-      "source": "libs/diagnostics/magusfile.buzz:85",
+      "source": "libs/diagnostics/magusfile.buzz:66",
       "attrs": {
         "exported": "true"
       }
@@ -10680,7 +10681,17 @@
       "kind": "function",
       "label": "generate",
       "doc": "Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.",
-      "source": "libs/diagnostics/magusfile.buzz:39",
+      "source": "libs/diagnostics/magusfile.buzz:48",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:libs/diagnostics/magusfile.buzz:index_generate",
+      "kind": "function",
+      "label": "index_generate",
+      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
+      "source": "libs/diagnostics/magusfile.buzz:61",
       "attrs": {
         "exported": "true"
       }
@@ -10689,26 +10700,7 @@
       "id": "function:libs/diagnostics/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
-      "source": "libs/diagnostics/magusfile.buzz:86",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:libs/diagnostics/magusfile.buzz:md_generate",
-      "kind": "function",
-      "label": "md_generate",
-      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/diagnostics/magusfile.buzz:52",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:libs/diagnostics/magusfile.buzz:mod_sync",
-      "kind": "function",
-      "label": "mod_sync",
-      "source": "libs/diagnostics/magusfile.buzz:69",
+      "source": "libs/diagnostics/magusfile.buzz:67",
       "attrs": {
         "exported": "true"
       }
@@ -10717,7 +10709,7 @@
       "id": "function:libs/diagnostics/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "libs/diagnostics/magusfile.buzz:36",
+      "source": "libs/diagnostics/magusfile.buzz:45",
       "attrs": {
         "exported": "true"
       }
@@ -10726,16 +10718,10 @@
       "id": "function:libs/diagnostics/magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "libs/diagnostics/magusfile.buzz:88",
+      "source": "libs/diagnostics/magusfile.buzz:69",
       "attrs": {
         "exported": "true"
       }
-    },
-    {
-      "id": "function:libs/diagnostics/magusfile.buzz:workspace_go_mods",
-      "kind": "function",
-      "label": "workspace_go_mods",
-      "source": "libs/diagnostics/magusfile.buzz:57"
     },
     {
       "id": "function:libs/gopherbuzz/examples/bubblegum/bubblegum.buzz:main",
@@ -15475,7 +15461,7 @@
       "id": "function:libs/gopherbuzz/magusfile.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "libs/gopherbuzz/magusfile.buzz:93",
+      "source": "libs/gopherbuzz/magusfile.buzz:75",
       "attrs": {
         "exported": "true"
       }
@@ -15485,7 +15471,7 @@
       "kind": "function",
       "label": "buzz_build",
       "doc": "Compiles the standalone buzz CLI with the version of this nested module, rather than the root magus module's version.",
-      "source": "libs/gopherbuzz/magusfile.buzz:127",
+      "source": "libs/gopherbuzz/magusfile.buzz:109",
       "attrs": {
         "exported": "true"
       }
@@ -15494,14 +15480,14 @@
       "id": "function:libs/gopherbuzz/magusfile.buzz:buzz_ld_flags",
       "kind": "function",
       "label": "buzz_ld_flags",
-      "source": "libs/gopherbuzz/magusfile.buzz:106"
+      "source": "libs/gopherbuzz/magusfile.buzz:88"
     },
     {
       "id": "function:libs/gopherbuzz/magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
       "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
-      "source": "libs/gopherbuzz/magusfile.buzz:133",
+      "source": "libs/gopherbuzz/magusfile.buzz:115",
       "attrs": {
         "exported": "true"
       }
@@ -15511,7 +15497,7 @@
       "kind": "function",
       "label": "conformance",
       "doc": "Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go). Opt-in (not part of `ci`): it needs network access and a foreign clone, which `magus affected ci` should never require. Never vendors upstream's test files into this repo - it fetches a pinned commit into a cache directory outside the tree instead, so a later re-run reuses (fetches, not re-clones) rather than re-downloading whole history.",
-      "source": "libs/gopherbuzz/magusfile.buzz:157",
+      "source": "libs/gopherbuzz/magusfile.buzz:139",
       "attrs": {
         "exported": "true"
       }
@@ -15520,7 +15506,7 @@
       "id": "function:libs/gopherbuzz/magusfile.buzz:format",
       "kind": "function",
       "label": "format",
-      "source": "libs/gopherbuzz/magusfile.buzz:91",
+      "source": "libs/gopherbuzz/magusfile.buzz:73",
       "attrs": {
         "exported": "true"
       }
@@ -15530,7 +15516,17 @@
       "kind": "function",
       "label": "generate",
       "doc": "Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result. Drift = regeneration dirtied a file that was clean, via vcs.isDirty (not a raw git/porcelain shell-out), so a locally-regenerated MAGUS.md passes whether or not it is committed; only a regeneration that changes a clean file fails.",
-      "source": "libs/gopherbuzz/magusfile.buzz:46",
+      "source": "libs/gopherbuzz/magusfile.buzz:55",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:libs/gopherbuzz/magusfile.buzz:index_generate",
+      "kind": "function",
+      "label": "index_generate",
+      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
+      "source": "libs/gopherbuzz/magusfile.buzz:68",
       "attrs": {
         "exported": "true"
       }
@@ -15539,26 +15535,7 @@
       "id": "function:libs/gopherbuzz/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
-      "source": "libs/gopherbuzz/magusfile.buzz:92",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:libs/gopherbuzz/magusfile.buzz:md_generate",
-      "kind": "function",
-      "label": "md_generate",
-      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/gopherbuzz/magusfile.buzz:59",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:libs/gopherbuzz/magusfile.buzz:mod_sync",
-      "kind": "function",
-      "label": "mod_sync",
-      "source": "libs/gopherbuzz/magusfile.buzz:75",
+      "source": "libs/gopherbuzz/magusfile.buzz:74",
       "attrs": {
         "exported": "true"
       }
@@ -15568,13 +15545,13 @@
       "kind": "function",
       "label": "module_version",
       "doc": "The CLI is independently versioned from the gopherbuzz module tag namespace. A local checkout before its first nested tag stays explicitly \"dev\"; it must never inherit the root magus tag just because both modules share one Git repo.",
-      "source": "libs/gopherbuzz/magusfile.buzz:99"
+      "source": "libs/gopherbuzz/magusfile.buzz:81"
     },
     {
       "id": "function:libs/gopherbuzz/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "libs/gopherbuzz/magusfile.buzz:40",
+      "source": "libs/gopherbuzz/magusfile.buzz:49",
       "attrs": {
         "exported": "true"
       }
@@ -15583,7 +15560,7 @@
       "id": "function:libs/gopherbuzz/magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "libs/gopherbuzz/magusfile.buzz:94",
+      "source": "libs/gopherbuzz/magusfile.buzz:76",
       "attrs": {
         "exported": "true"
       }
@@ -15593,13 +15570,7 @@
       "kind": "function",
       "label": "upstream_pinned_sha",
       "doc": "upstream_pinned_sha extracts the exact commit gopherbuzz was last synced and validated against from version.go's UpstreamRef git-describe string (\"0.5.0-251-ged42f47\" -> \"ed42f47\") - the sha `conformance` checks the upstream clone out to before running the Go test.",
-      "source": "libs/gopherbuzz/magusfile.buzz:141"
-    },
-    {
-      "id": "function:libs/gopherbuzz/magusfile.buzz:workspace_go_mods",
-      "kind": "function",
-      "label": "workspace_go_mods",
-      "source": "libs/gopherbuzz/magusfile.buzz:63"
+      "source": "libs/gopherbuzz/magusfile.buzz:123"
     },
     {
       "id": "function:libs/gopherbuzz/std/crypto.buzz:hash",
@@ -15852,7 +15823,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests.",
-      "source": "libs/textsearch/magusfile.buzz:152",
+      "source": "libs/textsearch/magusfile.buzz:161",
       "attrs": {
         "exported": "true"
       }
@@ -15862,7 +15833,17 @@
       "kind": "function",
       "label": "generate",
       "doc": "Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result. Drift = regeneration dirtied a file that was clean, via vcs.isDirty, so a locally-regenerated MAGUS.md passes whether or not it is committed; only a regeneration that changes a clean file fails.",
-      "source": "libs/textsearch/magusfile.buzz:83",
+      "source": "libs/textsearch/magusfile.buzz:92",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:libs/textsearch/magusfile.buzz:index_generate",
+      "kind": "function",
+      "label": "index_generate",
+      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
+      "source": "libs/textsearch/magusfile.buzz:104",
       "attrs": {
         "exported": "true"
       }
@@ -15872,24 +15853,14 @@
       "kind": "function",
       "label": "install",
       "doc": "pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason. Always let pnpm validate the install. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready, handing the missing packages straight to tsc/esbuild. Reached once per invocation through preflight, which every target below already needs, so the unconditional --frozen-lockfile costs about a second on a warm tree and never races itself.",
-      "source": "libs/textsearch/magusfile.buzz:75"
+      "source": "libs/textsearch/magusfile.buzz:84"
     },
     {
       "id": "function:libs/textsearch/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json). os.exec raises on a non-zero exit, so either gate fails lint.",
-      "source": "libs/textsearch/magusfile.buzz:103",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:libs/textsearch/magusfile.buzz:md_generate",
-      "kind": "function",
-      "label": "md_generate",
-      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/textsearch/magusfile.buzz:95",
+      "source": "libs/textsearch/magusfile.buzz:112",
       "attrs": {
         "exported": "true"
       }
@@ -15898,7 +15869,7 @@
       "id": "function:libs/textsearch/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "libs/textsearch/magusfile.buzz:67",
+      "source": "libs/textsearch/magusfile.buzz:76",
       "attrs": {
         "exported": "true"
       }
@@ -15908,7 +15879,7 @@
       "kind": "function",
       "label": "test",
       "doc": "test runs the node:test suite over the bundled *.test.ts and renders a line- coverage badge from the run.  The bundle is deliberate, not a workaround: this project is authored bundler-first (tsconfig moduleResolution: \"bundler\", extensionless relative imports, consumed as SOURCE through a paths alias rather than as a package), so esbuild is the compiler and tsc is only the type gate. Coverage therefore has to travel back through a sourcemap - hence --sourcemap here - or every record would name a .testcache",
-      "source": "libs/textsearch/magusfile.buzz:118",
+      "source": "libs/textsearch/magusfile.buzz:127",
       "attrs": {
         "exported": "true"
       }
@@ -15918,7 +15889,7 @@
       "kind": "function",
       "label": "advice_test",
       "doc": "Runs the PR advisors' `test \"...\" {}` blocks.  They are the only .buzz sources in this tree that parse standalone: everything else imports magus/magus\\spell and uses embedding-only constructs, which is why the old standalone-Buzz test targets were deleted rather than repointed. The advisors run under a plain `magus buzz` in CI, so upstream-strict is exactly the parse they need checked, and `-t` is the runner.  Run from each script's own directory, not the project root, because they do `import \"advice\"` for",
-      "source": "magusfile.buzz:1229",
+      "source": "magusfile.buzz:1196",
       "attrs": {
         "exported": "true"
       }
@@ -15938,7 +15909,7 @@
       "kind": "function",
       "label": "build",
       "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
-      "source": "magusfile.buzz:1327",
+      "source": "magusfile.buzz:1294",
       "attrs": {
         "exported": "true"
       }
@@ -15955,7 +15926,7 @@
       "kind": "function",
       "label": "build_release_variant",
       "doc": "Builds one (goos, goarch) release binary and archives it into dist/, writing a standard one-line <asset>.sha256 sidecar alongside it (sha256sum-compatible format). No cross-job aggregation needed: CD's publish job later does `cat dist/*.sha256 > dist/SHA256SUMS`, a plain shell one-liner, not a magus target. release-build's cgo and static (charm) modes both call this, differing only in CGO_ENABLED and the asset suffix.",
-      "source": "magusfile.buzz:922"
+      "source": "magusfile.buzz:889"
     },
     {
       "id": "function:magusfile.buzz:built_by",
@@ -15969,7 +15940,7 @@
       "kind": "function",
       "label": "buzz_test",
       "doc": "Runs the in-file `test \"...\" {}` blocks in this repo's own root Buzz modules, through magus's embedded engine.  NOT the buzz spell's buzz-test op: that one forks the UPSTREAM `buzz` toolchain, which is not reliably on PATH, and it globs `find . -name '*.buzz'` from the project root - which here would sweep in magusfile.buzz, releaser.buzz, every spell and every worktree copy, none of which run standalone (they import magus host modules the bare toolchain cannot resolve). `magus buzz -t` is always present an",
-      "source": "magusfile.buzz:1314",
+      "source": "magusfile.buzz:1281",
       "attrs": {
         "exported": "true"
       }
@@ -15996,7 +15967,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "Runs the CI gates through their declared dependencies.",
-      "source": "magusfile.buzz:1365",
+      "source": "magusfile.buzz:1332",
       "attrs": {
         "exported": "true"
       }
@@ -16006,7 +15977,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.",
-      "source": "magusfile.buzz:1411",
+      "source": "magusfile.buzz:1378",
       "attrs": {
         "exported": "true"
       }
@@ -16023,7 +15994,7 @@
       "kind": "function",
       "label": "completion_test",
       "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell. Part of ci, and it REQUIRES a docker daemon rather than skipping without one: a gate that silently skips when a tool is missing is how the zsh recipe stayed broken - it told users to append a script to ~/.zshrc that registers nothing, and nothing ever ran it to find out. Its declared footprint keeps the cost off every run: affected only reaches it when the completion scripts or their checks change.  One image per she",
-      "source": "magusfile.buzz:1386",
+      "source": "magusfile.buzz:1353",
       "attrs": {
         "exported": "true"
       }
@@ -16050,7 +16021,7 @@
       "kind": "function",
       "label": "deploy_generate",
       "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/.  It lives here rather than in the Pages workflow because that workflow is meant to be thin - set up a toolchain, name targets, upload the artifact - and the layout below is portable logic that would otherwise be GitHub-specific shell. It is also what makes the deploy reproducible locally: run the same three commands, then serve gen/site, and what you see is what publishe",
-      "source": "magusfile.buzz:1550",
+      "source": "magusfile.buzz:1517",
       "attrs": {
         "exported": "true"
       }
@@ -16077,7 +16048,7 @@
       "kind": "function",
       "label": "format",
       "doc": "Regenerates, then formats Go and tidies `go.mod`. Markdown is linted (not formatted): markdownlint runs in lint; there is no markdown FORMATTER any more - biome (used for all TypeScript/CSS) has no markdown support, and prettier was dropped rather than kept solely to format markdown.",
-      "source": "magusfile.buzz:1362",
+      "source": "magusfile.buzz:1329",
       "attrs": {
         "exported": "true"
       }
@@ -16087,7 +16058,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd). Drift = regeneration dirtied a previously-clean tree, via vcs.isDirty (not a raw git/porcelain shell-out), so uncommitted-but-current generated files pass; only a regeneration that changes a clean file fails (a generator input changed but its output was not re-run and committed).",
-      "source": "magusfile.buzz:833",
+      "source": "magusfile.buzz:800",
       "attrs": {
         "exported": "true"
       }
@@ -16166,6 +16137,16 @@
       "source": "magusfile.buzz:266"
     },
     {
+      "id": "function:magusfile.buzz:index_generate",
+      "kind": "function",
+      "label": "index_generate",
+      "doc": "Renders MAGUS.md via `magus describe graph`.",
+      "source": "magusfile.buzz:760",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:magusfile.buzz:ld_flags",
       "kind": "function",
       "label": "ld_flags",
@@ -16176,7 +16157,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "Formats first, then golangci-lint, go vet, govulncheck, markdownlint, and shellcheck. golangci-lint and govulncheck go through the go spell's ops rather than a raw os\\exec, so the spell's version probes (mgs_getVersionProbes) reach the cache key - without them a linter upgrade changes which code passes while every cache entry replays the old verdict. Neither runs through `go tool`: that COMPILES the tool with whichever go leads PATH, which is how CI built the linter with a different toolchain than it analyz",
-      "source": "magusfile.buzz:1346",
+      "source": "magusfile.buzz:1313",
       "attrs": {
         "exported": "true"
       }
@@ -16206,21 +16187,11 @@
       }
     },
     {
-      "id": "function:magusfile.buzz:md_generate",
-      "kind": "function",
-      "label": "md_generate",
-      "doc": "Renders MAGUS.md via `magus describe graph`.",
-      "source": "magusfile.buzz:760",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
       "id": "function:magusfile.buzz:missing_input",
       "kind": "function",
       "label": "missing_input",
       "doc": "missing_input phrases a deploy-generate precondition that ANOTHER project owns.  Naming one single-project command teaches the wrong habit: the reader runs it, gets the next precondition, runs another, and learns the set by failing once per producer. So name every producer in one command. `magus run <target> [project...]` takes a LIST - `magus run build docs console` is one dispatch over both - which is the idiom this message teaches.  Deliberately NOT \"magus affected build\" or \"magus run build /\". Both wou",
-      "source": "magusfile.buzz:1511"
+      "source": "magusfile.buzz:1478"
     },
     {
       "id": "function:magusfile.buzz:mocks_generate",
@@ -16228,16 +16199,6 @@
       "label": "mocks_generate",
       "doc": "Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir. Mocks are committed and drift-gated like every other generated tree; mockery is pinned in the go.mod tool block.",
       "source": "magusfile.buzz:715",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:magusfile.buzz:mod_sync",
-      "kind": "function",
-      "label": "mod_sync",
-      "doc": "The Go spell's Buzz companion derives the flags; go-mod-edit alone renders or writes go.mod. Without rw, Go's -print mode must equal the checked-in file.",
-      "source": "magusfile.buzz:803",
       "attrs": {
         "exported": "true"
       }
@@ -16253,7 +16214,7 @@
       "kind": "function",
       "label": "postflight",
       "doc": "Renders the insight report (hotspots, affinity, ownership, trend) to stdout. Local only: no workflow invokes this target, and ci-outcome.buzz's volatility-lens step summary is the CI-facing equivalent now. It used to also append to a host path under the `gha` charm; that branch was unreachable (nothing set MAGUS_INSIGHT_OUTPUT_PATH or ran this target in CI) and was removed.",
-      "source": "magusfile.buzz:824",
+      "source": "magusfile.buzz:791",
       "attrs": {
         "exported": "true"
       }
@@ -16263,7 +16224,7 @@
       "kind": "function",
       "label": "preflight",
       "doc": "No gate of its own: doctor USED to run here and fail the build on a finding, which made workspace conventions a blocker for everyone downstream. The advice action now reports the same findings on the pull request, non-blocking - and unlike a preflight gate, that works for a consumer who never wired doctor into their own pipeline.",
-      "source": "magusfile.buzz:1324",
+      "source": "magusfile.buzz:1291",
       "attrs": {
         "exported": "true"
       }
@@ -16287,13 +16248,13 @@
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json. Always let pnpm validate the install, matching console/magusfile.buzz. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready and handed the missing packages to esbuild. On a warm tree --frozen-lockfile is about a second and",
-      "source": "magusfile.buzz:1473"
+      "source": "magusfile.buzz:1440"
     },
     {
       "id": "function:magusfile.buzz:release",
       "kind": "function",
       "label": "release",
-      "source": "magusfile.buzz:1066",
+      "source": "magusfile.buzz:1033",
       "attrs": {
         "exported": "true"
       }
@@ -16303,7 +16264,7 @@
       "kind": "function",
       "label": "release_build",
       "doc": "Builds one release binary for one platform. Default is dynamically-linked (cgo): internal/codec's zstd/xz fast path needs a real C toolchain + libzstd/liblzma for whatever (goos, goarch) you ask for, so cross-compiling this variant only works if you already have that toolchain around — CD never does, sticking to each native job's own platform. The `static` charm (`magus run release-build:static`) switches to a CGO_ENABLED=0 build instead: pure Go cross-compiles trivially, so unlike the cgo default it's ch",
-      "source": "magusfile.buzz:999",
+      "source": "magusfile.buzz:966",
       "attrs": {
         "exported": "true"
       }
@@ -16313,7 +16274,7 @@
       "kind": "function",
       "label": "release_sign",
       "doc": "Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos).",
-      "source": "magusfile.buzz:1023",
+      "source": "magusfile.buzz:990",
       "attrs": {
         "exported": "true"
       }
@@ -16323,14 +16284,14 @@
       "kind": "function",
       "label": "release_target_platform",
       "doc": "Resolves which platform to build: the explicit (goos, goarch) args when given, else the current runner's own native platform. So a bare `magus run release-build` (with or without the static charm) builds exactly one binary — the one you're standing on — never a silent \"all 5\" surprise.",
-      "source": "magusfile.buzz:975"
+      "source": "magusfile.buzz:942"
     },
     {
       "id": "function:magusfile.buzz:rerender_docs",
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:1485"
+      "source": "magusfile.buzz:1452"
     },
     {
       "id": "function:magusfile.buzz:resolvable",
@@ -16350,7 +16311,7 @@
       "kind": "function",
       "label": "serve",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than",
-      "source": "magusfile.buzz:1599",
+      "source": "magusfile.buzz:1566",
       "attrs": {
         "exported": "true"
       }
@@ -16380,7 +16341,7 @@
       "kind": "function",
       "label": "tapes",
       "doc": "Records every VHS tape in tapes/ into assets/gen/. Each tape drives a real magus binary through a real terminal, so the GIFs are documentation that cannot quietly go stale the way a pasted transcript does - re-record and the drift is visible.  Opt-in, never wired into `generate` or `ci`: a render takes tens of seconds, needs vhs (and the ttyd/ffmpeg it pulls in) on PATH, and produces a different file every time. Run it when the CLI's output actually changes, then commit the result.  The GIFs are declared ou",
-      "source": "magusfile.buzz:896",
+      "source": "magusfile.buzz:863",
       "attrs": {
         "exported": "true"
       }
@@ -16390,7 +16351,7 @@
       "kind": "function",
       "label": "test",
       "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
-      "source": "magusfile.buzz:1239",
+      "source": "magusfile.buzz:1206",
       "attrs": {
         "exported": "true"
       }
@@ -16400,7 +16361,7 @@
       "kind": "function",
       "label": "total_coverage",
       "doc": "Renders a Go coverage badge locally (no third-party service, no network).",
-      "source": "magusfile.buzz:1209"
+      "source": "magusfile.buzz:1176"
     },
     {
       "id": "function:magusfile.buzz:types_generate",
@@ -16423,17 +16384,10 @@
       "kind": "function",
       "label": "watch",
       "doc": "Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.",
-      "source": "magusfile.buzz:1195",
+      "source": "magusfile.buzz:1162",
       "attrs": {
         "exported": "true"
       }
-    },
-    {
-      "id": "function:magusfile.buzz:workspace_go_mods",
-      "kind": "function",
-      "label": "workspace_go_mods",
-      "doc": "workspace_go_mods gathers the Go spell's structured view for every workspace module. The policy that compares those records lives beside that spell in spells/golang/gomod.buzz; Magus core only supplies the typed project inventory.",
-      "source": "magusfile.buzz:789"
     },
     {
       "id": "function:magusfile.buzz:write_image_summary",
@@ -17590,26 +17544,36 @@
       "id": "function:spells/golang/gomod.buzz:module_dir",
       "kind": "function",
       "label": "module_dir",
-      "source": "spells/golang/gomod.buzz:13"
+      "source": "spells/golang/gomod.buzz:15"
     },
     {
       "id": "function:spells/golang/gomod.buzz:module_json",
       "kind": "function",
       "label": "module_json",
-      "source": "spells/golang/gomod.buzz:9"
+      "source": "spells/golang/gomod.buzz:11"
     },
     {
       "id": "function:spells/golang/gomod.buzz:module_path",
       "kind": "function",
       "label": "module_path",
-      "source": "spells/golang/gomod.buzz:17"
+      "source": "spells/golang/gomod.buzz:19"
     },
     {
       "id": "function:spells/golang/gomod.buzz:replaceArgs",
       "kind": "function",
       "label": "replaceArgs",
       "doc": "replaceArgs derives the go mod edit flags for the module described by currentJSON. Each GoMod is the exact `go mod edit -json` result for a workspace module, captured by the go spell in the caller's context. Only replacements whose old path names a workspace module are touched; third-party replacements are deliberately preserved.",
-      "source": "spells/golang/gomod.buzz:41",
+      "source": "spells/golang/gomod.buzz:43",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/golang/gomod.buzz:replaceWorkspaceModules",
+      "kind": "function",
+      "label": "replaceWorkspaceModules",
+      "doc": "replaceWorkspaceModules points every workspace-local requirement in this project's go.mod at its relative path, standing in for the go.work this repo does not have. Without rw it verifies and raises MGS1016; with rw the edit lands. `project` names the magus project in that remediation, which the context cannot supply.  modifiesExistingFiles, not writesFiles: as an output go.mod would be snapshotted and replayable, so a cache hit could restore a pre-release go.mod over the version bump `release` had just wri",
+      "source": "spells/golang/gomod.buzz:115",
       "attrs": {
         "exported": "true"
       }
@@ -17618,19 +17582,26 @@
       "id": "function:spells/golang/gomod.buzz:replace_path",
       "kind": "function",
       "label": "replace_path",
-      "source": "spells/golang/gomod.buzz:21"
+      "source": "spells/golang/gomod.buzz:23"
     },
     {
       "id": "function:spells/golang/gomod.buzz:same_replace_path",
       "kind": "function",
       "label": "same_replace_path",
-      "source": "spells/golang/gomod.buzz:27"
+      "source": "spells/golang/gomod.buzz:29"
     },
     {
       "id": "function:spells/golang/gomod.buzz:sorted_keys",
       "kind": "function",
       "label": "sorted_keys",
-      "source": "spells/golang/gomod.buzz:31"
+      "source": "spells/golang/gomod.buzz:33"
+    },
+    {
+      "id": "function:spells/golang/gomod.buzz:workspace_go_mods",
+      "kind": "function",
+      "label": "workspace_go_mods",
+      "doc": "The go spell arrives as a parameter because a spell file cannot import another spell (`magus/spell/go` is bound only for magusfiles), which is also why this file's header says the caller supplies the two ops it needs.",
+      "source": "spells/golang/gomod.buzz:95"
     },
     {
       "id": "function:spells/golang/spell.buzz:goBuild",
@@ -17660,20 +17631,22 @@
       "id": "function:spells/golang/spell.buzz:goModEdit",
       "kind": "function",
       "label": "goModEdit",
-      "source": "spells/golang/spell.buzz:84"
+      "doc": "Edit is offline: it \"reads only go.mod; it does not look up information about the modules involved\" (go help mod edit), so the same tree always yields the same bytes. The write charm is therefore rw, not relock.",
+      "source": "spells/golang/spell.buzz:90"
     },
     {
       "id": "function:spells/golang/spell.buzz:goModJSON",
       "kind": "function",
       "label": "goModJSON",
       "doc": "Captures Go's structured module view for the spell's higher-level Buzz helper. This is deliberately a separate read-only op: `-json` and `-print` are distinct Go modes, while go-mod-edit remains the one command that applies derived edits.",
-      "source": "spells/golang/spell.buzz:93"
+      "source": "spells/golang/spell.buzz:99"
     },
     {
       "id": "function:spells/golang/spell.buzz:goModTidy",
       "kind": "function",
       "label": "goModTidy",
-      "source": "spells/golang/spell.buzz:78"
+      "doc": "Tidy resolves against the module proxy, and an import go.mod does not require yet arrives at latest, so its result turns on what upstream serves today rather than on this tree alone. The write charm is therefore relock, not rw.",
+      "source": "spells/golang/spell.buzz:81"
     },
     {
       "id": "function:spells/golang/spell.buzz:goRun",
@@ -17691,14 +17664,14 @@
       "id": "function:spells/golang/spell.buzz:goVet",
       "kind": "function",
       "label": "goVet",
-      "source": "spells/golang/spell.buzz:96"
+      "source": "spells/golang/spell.buzz:102"
     },
     {
       "id": "function:spells/golang/spell.buzz:goVulncheck",
       "kind": "function",
       "label": "goVulncheck",
       "doc": "Invoked directly rather than through `go tool`, for the same reason as golangCILint above: `go tool govulncheck` requires the binary in the module's tool block, and a workspace that had not put it there got \"no such tool\" - so the op could not run at all. On PATH it is pinned by whatever the workspace uses, and mgs_getVersionProbes records which.",
-      "source": "spells/golang/spell.buzz:101"
+      "source": "spells/golang/spell.buzz:107"
     },
     {
       "id": "function:spells/golang/spell.buzz:golangCILint",
@@ -17729,7 +17702,7 @@
       "id": "function:spells/golang/spell.buzz:mgs_getTools",
       "kind": "function",
       "label": "mgs_getTools",
-      "doc": "`go version` prints the host platform (`go1.26.0 linux/amd64`) and golangci-lint pads its line with the commit it was built from, the timestamp, and the Go version it was compiled with. Asking for `patch` extracts the version and sheds all of that, so two machines running the same tool agree on a key. It narrows nothing anyone reasons about.  govulncheck declares NO key on purpose. Its verdict comes from the Go vulnerability DATABASE, and `-version` reports that database's last-modified date alongside the G",
+      "doc": "`go version` prints the host platform (`go1.26.0 linux/amd64`) and golangci-lint pads its line with the commit it was built from, the timestamp, and the Go version it was compiled with. Asking for `patch` extracts the version and sheds all of that, so two machines running the same tool agree on a key. It narrows nothing anyone reasons about. Shedding `go version`'s GOOS/GOARCH suffix is only safe because the cache manifest carries its own platform field (see internal/cache/manifest.go) and refuses to replay",
       "source": "spells/golang/spell.buzz:30",
       "attrs": {
         "exported": "true"
@@ -17768,7 +17741,7 @@
       "id": "function:spells/golang/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/golang/spell.buzz:106",
+      "source": "spells/golang/spell.buzz:112",
       "attrs": {
         "exported": "true"
       }
@@ -17777,7 +17750,7 @@
       "id": "function:spells/golang/spell.buzz:scipGo",
       "kind": "function",
       "label": "scipGo",
-      "source": "spells/golang/spell.buzz:102"
+      "source": "spells/golang/spell.buzz:108"
     },
     {
       "id": "function:spells/markdown/spell.buzz:markdownlint",
@@ -21155,9 +21128,9 @@
       }
     },
     {
-      "id": "op:gomod:replaceArgs",
+      "id": "op:gomod:replaceWorkspaceModules",
       "kind": "op",
-      "label": "replaceArgs"
+      "label": "replaceWorkspaceModules"
     },
     {
       "id": "op:markdown:markdownlint",
@@ -21396,7 +21369,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "target_count": "36"
+        "target_count": "35"
       }
     },
     {
@@ -21446,7 +21419,7 @@
       "source": "libs/diagnostics",
       "attrs": {
         "engine": "buzz",
-        "target_count": "9"
+        "target_count": "8"
       }
     },
     {
@@ -21456,7 +21429,7 @@
       "source": "libs/gopherbuzz",
       "attrs": {
         "engine": "buzz",
-        "target_count": "11"
+        "target_count": "10"
       }
     },
     {
@@ -21480,11 +21453,11 @@
       }
     },
     {
-      "id": "rationale:magusfile.buzz:1386:TODO",
+      "id": "rationale:magusfile.buzz:1353:TODO",
       "kind": "rationale",
       "label": "TODO",
       "doc": "zsh is uncovered - it has no official image (zshusers/zsh is community-run), so",
-      "source": "magusfile.buzz:1386"
+      "source": "magusfile.buzz:1353"
     },
     {
       "id": "rationale:spells/aws/s3-cache/spell.buzz:123:NOTE",
@@ -21812,6 +21785,17 @@
       }
     },
     {
+      "id": "target:.:index-generate",
+      "kind": "target",
+      "label": "index-generate",
+      "doc": "Renders MAGUS.md via `magus describe graph`.",
+      "source": ".",
+      "attrs": {
+        "declared_as": "index_generate",
+        "engine": "buzz"
+      }
+    },
+    {
       "id": "target:.:lint",
       "kind": "target",
       "label": "lint",
@@ -21833,17 +21817,6 @@
       }
     },
     {
-      "id": "target:.:md-generate",
-      "kind": "target",
-      "label": "md-generate",
-      "doc": "Renders MAGUS.md via `magus describe graph`.",
-      "source": ".",
-      "attrs": {
-        "declared_as": "md_generate",
-        "engine": "buzz"
-      }
-    },
-    {
       "id": "target:.:mocks-generate",
       "kind": "target",
       "label": "mocks-generate",
@@ -21851,17 +21824,6 @@
       "source": ".",
       "attrs": {
         "declared_as": "mocks_generate",
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:.:mod-sync",
-      "kind": "target",
-      "label": "mod-sync",
-      "doc": "The Go spell's Buzz companion derives the flags; go-mod-edit alone renders or writes go.mod.",
-      "source": ".",
-      "attrs": {
-        "declared_as": "mod_sync",
         "engine": "buzz"
       }
     },
@@ -22191,23 +22153,23 @@
       }
     },
     {
+      "id": "target:docs:index-generate",
+      "kind": "target",
+      "label": "index-generate",
+      "doc": "index-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.",
+      "source": "docs",
+      "attrs": {
+        "declared_as": "index_generate",
+        "engine": "buzz"
+      }
+    },
+    {
       "id": "target:docs:lint",
       "kind": "target",
       "label": "lint",
       "doc": "lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json).",
       "source": "docs",
       "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:docs:md-generate",
-      "kind": "target",
-      "label": "md-generate",
-      "doc": "md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.",
-      "source": "docs",
-      "attrs": {
-        "declared_as": "md_generate",
         "engine": "buzz"
       }
     },
@@ -22338,32 +22300,22 @@
       }
     },
     {
+      "id": "target:libs/diagnostics:index-generate",
+      "kind": "target",
+      "label": "index-generate",
+      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
+      "source": "libs/diagnostics",
+      "attrs": {
+        "declared_as": "index_generate",
+        "engine": "buzz"
+      }
+    },
+    {
       "id": "target:libs/diagnostics:lint",
       "kind": "target",
       "label": "lint",
       "source": "libs/diagnostics",
       "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:libs/diagnostics:md-generate",
-      "kind": "target",
-      "label": "md-generate",
-      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/diagnostics",
-      "attrs": {
-        "declared_as": "md_generate",
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:libs/diagnostics:mod-sync",
-      "kind": "target",
-      "label": "mod-sync",
-      "source": "libs/diagnostics",
-      "attrs": {
-        "declared_as": "mod_sync",
         "engine": "buzz"
       }
     },
@@ -22445,32 +22397,22 @@
       }
     },
     {
+      "id": "target:libs/gopherbuzz:index-generate",
+      "kind": "target",
+      "label": "index-generate",
+      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
+      "source": "libs/gopherbuzz",
+      "attrs": {
+        "declared_as": "index_generate",
+        "engine": "buzz"
+      }
+    },
+    {
       "id": "target:libs/gopherbuzz:lint",
       "kind": "target",
       "label": "lint",
       "source": "libs/gopherbuzz",
       "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:libs/gopherbuzz:md-generate",
-      "kind": "target",
-      "label": "md-generate",
-      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/gopherbuzz",
-      "attrs": {
-        "declared_as": "md_generate",
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:libs/gopherbuzz:mod-sync",
-      "kind": "target",
-      "label": "mod-sync",
-      "source": "libs/gopherbuzz",
-      "attrs": {
-        "declared_as": "mod_sync",
         "engine": "buzz"
       }
     },
@@ -22513,23 +22455,23 @@
       }
     },
     {
+      "id": "target:libs/textsearch:index-generate",
+      "kind": "target",
+      "label": "index-generate",
+      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
+      "source": "libs/textsearch",
+      "attrs": {
+        "declared_as": "index_generate",
+        "engine": "buzz"
+      }
+    },
+    {
       "id": "target:libs/textsearch:lint",
       "kind": "target",
       "label": "lint",
       "doc": "lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json).",
       "source": "libs/textsearch",
       "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:libs/textsearch:md-generate",
-      "kind": "target",
-      "label": "md-generate",
-      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/textsearch",
-      "attrs": {
-        "declared_as": "md_generate",
         "engine": "buzz"
       }
     },
@@ -22784,14 +22726,6 @@
     },
     {
       "source": "charm:rw",
-      "target": "target:.:mod-sync",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "charm:rw",
       "target": "target:.:test",
       "relation": "references",
       "confidence": "extracted",
@@ -22840,23 +22774,7 @@
     },
     {
       "source": "charm:rw",
-      "target": "target:libs/diagnostics:mod-sync",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/diagnostics"
-    },
-    {
-      "source": "charm:rw",
       "target": "target:libs/gopherbuzz:generate",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/gopherbuzz"
-    },
-    {
-      "source": "charm:rw",
-      "target": "target:libs/gopherbuzz:mod-sync",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -31288,6 +31206,14 @@
     },
     {
       "source": "doc:docs/guides/authoring-spells.md",
+      "target": "diagnostic:MGS1022",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/authoring-spells.md"
+    },
+    {
+      "source": "doc:docs/guides/authoring-spells.md",
       "target": "diagnostic:MGS3004",
       "relation": "documents",
       "confidence": "inferred",
@@ -31369,6 +31295,14 @@
     {
       "source": "doc:docs/guides/authoring-spells.md",
       "target": "doc:docs/reference/buzz/index.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/authoring-spells.md"
+    },
+    {
+      "source": "doc:docs/guides/authoring-spells.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1022.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -34378,6 +34312,14 @@
       "source": "doc:docs/reference/codes/magusfile/MGS1022.md",
       "target": "diagnostic:MGS1022",
       "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1022.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1022.md",
+      "target": "doc:docs/guides/authoring-spells.md",
+      "relation": "references",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1022.md"
@@ -41824,6 +41766,14 @@
     },
     {
       "source": "file:docs/magusfile.buzz",
+      "target": "function:docs/magusfile.buzz:index_generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/magusfile.buzz"
+    },
+    {
+      "source": "file:docs/magusfile.buzz",
       "target": "function:docs/magusfile.buzz:install",
       "relation": "contains",
       "confidence": "extracted",
@@ -41833,14 +41783,6 @@
     {
       "source": "file:docs/magusfile.buzz",
       "target": "function:docs/magusfile.buzz:lint",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/magusfile.buzz"
-    },
-    {
-      "source": "file:docs/magusfile.buzz",
-      "target": "function:docs/magusfile.buzz:md_generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -44296,23 +44238,15 @@
     },
     {
       "source": "file:libs/diagnostics/magusfile.buzz",
+      "target": "function:libs/diagnostics/magusfile.buzz:index_generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/diagnostics/magusfile.buzz"
+    },
+    {
+      "source": "file:libs/diagnostics/magusfile.buzz",
       "target": "function:libs/diagnostics/magusfile.buzz:lint",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/diagnostics/magusfile.buzz"
-    },
-    {
-      "source": "file:libs/diagnostics/magusfile.buzz",
-      "target": "function:libs/diagnostics/magusfile.buzz:md_generate",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/diagnostics/magusfile.buzz"
-    },
-    {
-      "source": "file:libs/diagnostics/magusfile.buzz",
-      "target": "function:libs/diagnostics/magusfile.buzz:mod_sync",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -44329,14 +44263,6 @@
     {
       "source": "file:libs/diagnostics/magusfile.buzz",
       "target": "function:libs/diagnostics/magusfile.buzz:test",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/diagnostics/magusfile.buzz"
-    },
-    {
-      "source": "file:libs/diagnostics/magusfile.buzz",
-      "target": "function:libs/diagnostics/magusfile.buzz:workspace_go_mods",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -51032,23 +50958,15 @@
     },
     {
       "source": "file:libs/gopherbuzz/magusfile.buzz",
+      "target": "function:libs/gopherbuzz/magusfile.buzz:index_generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz/magusfile.buzz"
+    },
+    {
+      "source": "file:libs/gopherbuzz/magusfile.buzz",
       "target": "function:libs/gopherbuzz/magusfile.buzz:lint",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/gopherbuzz/magusfile.buzz"
-    },
-    {
-      "source": "file:libs/gopherbuzz/magusfile.buzz",
-      "target": "function:libs/gopherbuzz/magusfile.buzz:md_generate",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/gopherbuzz/magusfile.buzz"
-    },
-    {
-      "source": "file:libs/gopherbuzz/magusfile.buzz",
-      "target": "function:libs/gopherbuzz/magusfile.buzz:mod_sync",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -51081,14 +50999,6 @@
     {
       "source": "file:libs/gopherbuzz/magusfile.buzz",
       "target": "function:libs/gopherbuzz/magusfile.buzz:upstream_pinned_sha",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/gopherbuzz/magusfile.buzz"
-    },
-    {
-      "source": "file:libs/gopherbuzz/magusfile.buzz",
-      "target": "function:libs/gopherbuzz/magusfile.buzz:workspace_go_mods",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -51472,6 +51382,14 @@
     },
     {
       "source": "file:libs/textsearch/magusfile.buzz",
+      "target": "function:libs/textsearch/magusfile.buzz:index_generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/textsearch/magusfile.buzz"
+    },
+    {
+      "source": "file:libs/textsearch/magusfile.buzz",
       "target": "function:libs/textsearch/magusfile.buzz:install",
       "relation": "contains",
       "confidence": "extracted",
@@ -51481,14 +51399,6 @@
     {
       "source": "file:libs/textsearch/magusfile.buzz",
       "target": "function:libs/textsearch/magusfile.buzz:lint",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/textsearch/magusfile.buzz"
-    },
-    {
-      "source": "file:libs/textsearch/magusfile.buzz",
-      "target": "function:libs/textsearch/magusfile.buzz:md_generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -51840,6 +51750,14 @@
     },
     {
       "source": "file:magusfile.buzz",
+      "target": "function:magusfile.buzz:index_generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:ld_flags",
       "relation": "contains",
       "confidence": "extracted",
@@ -51880,14 +51798,6 @@
     },
     {
       "source": "file:magusfile.buzz",
-      "target": "function:magusfile.buzz:md_generate",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "magusfile.buzz"
-    },
-    {
-      "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:missing_input",
       "relation": "contains",
       "confidence": "extracted",
@@ -51897,14 +51807,6 @@
     {
       "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:mocks_generate",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "magusfile.buzz"
-    },
-    {
-      "source": "file:magusfile.buzz",
-      "target": "function:magusfile.buzz:mod_sync",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -52081,14 +51983,6 @@
     {
       "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:watch",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "magusfile.buzz"
-    },
-    {
-      "source": "file:magusfile.buzz",
-      "target": "function:magusfile.buzz:workspace_go_mods",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -54328,6 +54222,14 @@
     },
     {
       "source": "file:spells/golang/gomod.buzz",
+      "target": "function:spells/golang/gomod.buzz:replaceWorkspaceModules",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/golang/gomod.buzz"
+    },
+    {
+      "source": "file:spells/golang/gomod.buzz",
       "target": "function:spells/golang/gomod.buzz:replace_path",
       "relation": "contains",
       "confidence": "extracted",
@@ -54348,6 +54250,30 @@
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "spells/golang/gomod.buzz"
+    },
+    {
+      "source": "file:spells/golang/gomod.buzz",
+      "target": "function:spells/golang/gomod.buzz:workspace_go_mods",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/golang/gomod.buzz"
+    },
+    {
+      "source": "file:spells/golang/gomod.buzz",
+      "target": "import:fs",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "spells/golang/gomod.buzz"
+    },
+    {
+      "source": "file:spells/golang/gomod.buzz",
+      "target": "import:magus",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
       "provenance": "spells/golang/gomod.buzz"
     },
     {
@@ -56997,14 +56923,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "internal/spellruntime/charm.buzz"
-    },
-    {
-      "source": "function:libs/diagnostics/magusfile.buzz:mod_sync",
-      "target": "function:libs/diagnostics/magusfile.buzz:workspace_go_mods",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/diagnostics/magusfile.buzz"
     },
     {
       "source": "function:libs/gopherbuzz/examples/bubblegum/cheatsheet.buzz:sheetShow",
@@ -60087,14 +60005,6 @@
       "provenance": "libs/gopherbuzz/magusfile.buzz"
     },
     {
-      "source": "function:libs/gopherbuzz/magusfile.buzz:mod_sync",
-      "target": "function:libs/gopherbuzz/magusfile.buzz:workspace_go_mods",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/gopherbuzz/magusfile.buzz"
-    },
-    {
       "source": "function:libs/gopherbuzz/std/ext_assert.buzz:contains",
       "target": "function:libs/gopherbuzz/std/ext_assert.buzz:tail",
       "relation": "calls",
@@ -60537,14 +60447,6 @@
     {
       "source": "function:magusfile.buzz:load_variant",
       "target": "function:magusfile.buzz:load_platform",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "magusfile.buzz"
-    },
-    {
-      "source": "function:magusfile.buzz:mod_sync",
-      "target": "function:magusfile.buzz:workspace_go_mods",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -61153,6 +61055,22 @@
     {
       "source": "function:spells/golang/gomod.buzz:replaceArgs",
       "target": "function:spells/golang/gomod.buzz:sorted_keys",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/golang/gomod.buzz"
+    },
+    {
+      "source": "function:spells/golang/gomod.buzz:replaceWorkspaceModules",
+      "target": "function:spells/golang/gomod.buzz:replaceArgs",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/golang/gomod.buzz"
+    },
+    {
+      "source": "function:spells/golang/gomod.buzz:replaceWorkspaceModules",
+      "target": "function:spells/golang/gomod.buzz:workspace_go_mods",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -63094,6 +63012,14 @@
     },
     {
       "source": "project:.",
+      "target": "target:.:index-generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
       "target": "target:.:lint",
       "relation": "contains",
       "confidence": "extracted",
@@ -63110,23 +63036,7 @@
     },
     {
       "source": "project:.",
-      "target": "target:.:md-generate",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "project:.",
       "target": "target:.:mocks-generate",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "project:.",
-      "target": "target:.:mod-sync",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -63558,7 +63468,7 @@
     },
     {
       "source": "project:docs",
-      "target": "target:docs:lint",
+      "target": "target:docs:index-generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -63566,7 +63476,7 @@
     },
     {
       "source": "project:docs",
-      "target": "target:docs:md-generate",
+      "target": "target:docs:lint",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -63750,23 +63660,15 @@
     },
     {
       "source": "project:libs/diagnostics",
+      "target": "target:libs/diagnostics:index-generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/diagnostics"
+    },
+    {
+      "source": "project:libs/diagnostics",
       "target": "target:libs/diagnostics:lint",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/diagnostics"
-    },
-    {
-      "source": "project:libs/diagnostics",
-      "target": "target:libs/diagnostics:md-generate",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/diagnostics"
-    },
-    {
-      "source": "project:libs/diagnostics",
-      "target": "target:libs/diagnostics:mod-sync",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -63886,23 +63788,15 @@
     },
     {
       "source": "project:libs/gopherbuzz",
+      "target": "target:libs/gopherbuzz:index-generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "project:libs/gopherbuzz",
       "target": "target:libs/gopherbuzz:lint",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/gopherbuzz"
-    },
-    {
-      "source": "project:libs/gopherbuzz",
-      "target": "target:libs/gopherbuzz:md-generate",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/gopherbuzz"
-    },
-    {
-      "source": "project:libs/gopherbuzz",
-      "target": "target:libs/gopherbuzz:mod-sync",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -63950,7 +63844,7 @@
     },
     {
       "source": "project:libs/textsearch",
-      "target": "target:libs/textsearch:lint",
+      "target": "target:libs/textsearch:index-generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -63958,7 +63852,7 @@
     },
     {
       "source": "project:libs/textsearch",
-      "target": "target:libs/textsearch:md-generate",
+      "target": "target:libs/textsearch:lint",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -64013,12 +63907,12 @@
       "provenance": "proto"
     },
     {
-      "source": "rationale:magusfile.buzz:1386:TODO",
+      "source": "rationale:magusfile.buzz:1353:TODO",
       "target": "function:magusfile.buzz:completion_test",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "magusfile.buzz:1386"
+      "provenance": "magusfile.buzz:1353"
     },
     {
       "source": "rationale:spells/aws/s3-cache/spell.buzz:123:NOTE",
@@ -64738,6 +64632,22 @@
     },
     {
       "source": "target:.:generate",
+      "target": "op:gomod:replaceWorkspaceModules",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:generate",
+      "target": "spell:gomod",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:generate",
       "target": "target:.:bindings-generate",
       "relation": "depends_on",
       "confidence": "extracted",
@@ -64770,6 +64680,14 @@
     },
     {
       "source": "target:.:generate",
+      "target": "target:.:index-generate",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:generate",
       "target": "target:.:man-generate",
       "relation": "depends_on",
       "confidence": "extracted",
@@ -64778,23 +64696,7 @@
     },
     {
       "source": "target:.:generate",
-      "target": "target:.:md-generate",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:generate",
       "target": "target:.:mocks-generate",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:generate",
-      "target": "target:.:mod-sync",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
@@ -64964,46 +64866,6 @@
       "source": "target:.:mocks-generate",
       "target": "target:.:types-generate",
       "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:mod-sync",
-      "target": "op:go:go-mod-edit",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:mod-sync",
-      "target": "op:go:go-mod-json",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:mod-sync",
-      "target": "op:gomod:replaceArgs",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:mod-sync",
-      "target": "spell:go",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:mod-sync",
-      "target": "spell:gomod",
-      "relation": "uses",
       "confidence": "extracted",
       "score": 1,
       "provenance": "."
@@ -66138,7 +66000,7 @@
     },
     {
       "source": "target:docs:generate",
-      "target": "target:docs:md-generate",
+      "target": "target:docs:index-generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
@@ -66156,6 +66018,78 @@
       "source": "target:docs:generate",
       "target": "target:docs:site-generate",
       "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:index-generate",
+      "target": "file:console/magusfile.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:index-generate",
+      "target": "file:docs/guides/integrations/agents/magusfile.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:index-generate",
+      "target": "file:docs/magusfile.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:index-generate",
+      "target": "file:evals/magusfile.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:index-generate",
+      "target": "file:libs/diagnostics/magusfile.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:index-generate",
+      "target": "file:libs/gopherbuzz/magusfile.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:index-generate",
+      "target": "file:libs/textsearch/magusfile.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:index-generate",
+      "target": "file:magusfile.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:index-generate",
+      "target": "file:proto/magusfile.buzz",
+      "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs"
@@ -66204,78 +66138,6 @@
       "source": "target:docs:lint",
       "target": "target:libs/textsearch:lint",
       "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:md-generate",
-      "target": "file:console/magusfile.buzz",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:md-generate",
-      "target": "file:docs/guides/integrations/agents/magusfile.buzz",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:md-generate",
-      "target": "file:docs/magusfile.buzz",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:md-generate",
-      "target": "file:evals/magusfile.buzz",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:md-generate",
-      "target": "file:libs/diagnostics/magusfile.buzz",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:md-generate",
-      "target": "file:libs/gopherbuzz/magusfile.buzz",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:md-generate",
-      "target": "file:libs/textsearch/magusfile.buzz",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:md-generate",
-      "target": "file:magusfile.buzz",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:md-generate",
-      "target": "file:proto/magusfile.buzz",
-      "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs"
@@ -66857,24 +66719,8 @@
       "provenance": "libs/diagnostics"
     },
     {
-      "source": "target:libs/diagnostics:format",
-      "target": "target:libs/diagnostics:mod-sync",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/diagnostics"
-    },
-    {
       "source": "target:libs/diagnostics:generate",
-      "target": "target:libs/diagnostics:md-generate",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/diagnostics"
-    },
-    {
-      "source": "target:libs/diagnostics:generate",
-      "target": "target:libs/diagnostics:mod-sync",
+      "target": "target:libs/diagnostics:index-generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
@@ -66908,30 +66754,6 @@
       "source": "target:libs/diagnostics:lint",
       "target": "target:libs/diagnostics:format",
       "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/diagnostics"
-    },
-    {
-      "source": "target:libs/diagnostics:mod-sync",
-      "target": "op:go:go-mod-edit",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/diagnostics"
-    },
-    {
-      "source": "target:libs/diagnostics:mod-sync",
-      "target": "op:go:go-mod-json",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/diagnostics"
-    },
-    {
-      "source": "target:libs/diagnostics:mod-sync",
-      "target": "spell:go",
-      "relation": "uses",
       "confidence": "extracted",
       "score": 1,
       "provenance": "libs/diagnostics"
@@ -67073,24 +66895,8 @@
       "provenance": "libs/gopherbuzz"
     },
     {
-      "source": "target:libs/gopherbuzz:format",
-      "target": "target:libs/gopherbuzz:mod-sync",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/gopherbuzz"
-    },
-    {
       "source": "target:libs/gopherbuzz:generate",
-      "target": "target:libs/gopherbuzz:md-generate",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/gopherbuzz"
-    },
-    {
-      "source": "target:libs/gopherbuzz:generate",
-      "target": "target:libs/gopherbuzz:mod-sync",
+      "target": "target:libs/gopherbuzz:index-generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
@@ -67124,30 +66930,6 @@
       "source": "target:libs/gopherbuzz:lint",
       "target": "target:libs/gopherbuzz:format",
       "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/gopherbuzz"
-    },
-    {
-      "source": "target:libs/gopherbuzz:mod-sync",
-      "target": "op:go:go-mod-edit",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/gopherbuzz"
-    },
-    {
-      "source": "target:libs/gopherbuzz:mod-sync",
-      "target": "op:go:go-mod-json",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/gopherbuzz"
-    },
-    {
-      "source": "target:libs/gopherbuzz:mod-sync",
-      "target": "spell:go",
-      "relation": "uses",
       "confidence": "extracted",
       "score": 1,
       "provenance": "libs/gopherbuzz"
@@ -67194,7 +66976,7 @@
     },
     {
       "source": "target:libs/textsearch:generate",
-      "target": "target:libs/textsearch:md-generate",
+      "target": "target:libs/textsearch:index-generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
