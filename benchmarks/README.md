@@ -101,7 +101,8 @@ measured once (`Daemon: off`, since they have no daemon mode).
 - **S4-S7 measure the compiler, not magus.** Cold/incremental builds are dominated by `go build`/`tsc`; magus overhead shows cleanest in S1-S3 and the in-process micro-benchmarks.
 - **Same graph, same edges.** Fixture generators emit one `magusfile.buzz` per project mirroring the edges turbo/nx derive from `package.json`/`go.work` exactly, so affected sets are comparable.
 - **`ts` fixture S4-S7 are broken.** `pnpm install` doesn't reliably symlink `@bench/lib-*`, so `tsc -b` fails for all tools. Only S1-S3 are trustworthy on `ts`; `bench.sh` marks S4-S7 as `n/a`.
-- **What's reliable:** the `go` fixture (magus vs make) runs end-to-end and is what's in CI. `ts`/`polyglot` and `large-monorepo` need JS toolchains and a dedicated host.
+- **What's reliable:** the `go` fixture (magus vs make) runs end-to-end. `ts`/`polyglot` and `large-monorepo` need JS toolchains and a dedicated host.
+- **Nothing here runs in CI, so a fixture can rot without anything failing.** No workflow references `bench.sh` or the fixtures, and there is no `bench` target. That is not a gap to fill (these benchmarks want a quiet dedicated host, which CI is not) but it does mean the generated magusfiles are only exercised when a person runs them. They had gone stale across three separate changes at once - the removed `magus.project.register`/`magus.needs` API, the `ts` -> `typescript` and `py` -> `python` spell renames, and a cross-project import written workspace-relative when magus resolves it dot-relative - so every generated workspace failed to load until 2026-08. Load one before trusting a run: `./fixtures/go/gen.sh 3 && magus --root fixtures/go/gen ls`.
 - **Tooling:** `bazel`/`moon` installs are environment-sensitive (may show `excluded - install failed`). `turbo`/`nx`/`lage` require pnpm global bin on `PATH`.
 
 ---
