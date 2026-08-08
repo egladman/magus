@@ -155,7 +155,7 @@ that already has a home:
 4. **Tooling weight** - some names carry engine semantics beyond "a bucket of
    ops": `preflight` and `generate` get drift-gating (see
    [operations.md](operations.md)) when you declare them. That is a reason to
-   reuse an existing name rather than invent a near-synonym, since the behaviour
+   reuse an existing name rather than invent a near-synonym, since the behavior
    attaches to the name.
 
 The recommended vocabulary is deliberately small, and `ci` is the only member the
