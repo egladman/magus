@@ -106,6 +106,7 @@ const (
 	MagusfileOnlyMember       DiagnosticCode = "MGS1022"
 	ProviderPathRejected      DiagnosticCode = "MGS1023"
 	ProviderProjectShadowed   DiagnosticCode = "MGS1024"
+	MagusfileAPIRemoved       DiagnosticCode = "MGS1025"
 	PathReadDenied            DiagnosticCode = "MGS2001"
 	PathWriteDenied           DiagnosticCode = "MGS2002"
 	EnvStripped               DiagnosticCode = "MGS2003"
@@ -162,6 +163,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	CrossDepOwnerUnknown, GoModReplaceDrift, MagusfileIsNotASpell, DeadOutputGlob,
 	SelfStalingOutput, OutputOwnedByTwoTargets, WorkspaceNeedsNewerMagus,
 	MagusfileOnlyMember, ProviderPathRejected, ProviderProjectShadowed,
+	MagusfileAPIRemoved,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,

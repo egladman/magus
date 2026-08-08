@@ -3,10 +3,10 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2504,
-  "edge_count": 5693,
+  "node_count": 2480,
+  "edge_count": 5647,
   "source_base": "https://github.com/egladman/magus/blob/main",
-  "catalog_fingerprint": "9c2ac7a836e91117",
+  "catalog_fingerprint": "3e64891912aad41b",
   "nodes": [
     {
       "id": "charm:amd64",
@@ -253,6 +253,14 @@
       "label": "MGS1024",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1024/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1025",
+      "kind": "diagnostic",
+      "label": "MGS1025",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1025/"
       }
     },
     {
@@ -888,7 +896,7 @@
       "source": "docs/guides",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "28",
+        "dir_files": "27",
         "dir_languages": "markdown"
       }
     },
@@ -943,7 +951,7 @@
       "source": "docs/reference",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "152",
+        "dir_files": "153",
         "dir_languages": "markdown"
       }
     },
@@ -976,7 +984,7 @@
       "source": "docs/reference/codes",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "76",
+        "dir_files": "77",
         "dir_languages": "markdown"
       }
     },
@@ -1020,7 +1028,7 @@
       "source": "docs/reference/codes/magusfile",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "25",
+        "dir_files": "26",
         "dir_languages": "markdown"
       }
     },
@@ -3063,18 +3071,6 @@
       }
     },
     {
-      "id": "doc:docs/guides/releasing.md",
-      "kind": "doc",
-      "label": "docs/guides/releasing.md",
-      "source": "docs/guides/releasing.md",
-      "attrs": {
-        "role": "doc",
-        "section": "guides",
-        "tags": "release,versioning,tags,go-modules,workflow",
-        "title": "Releasing"
-      }
-    },
-    {
       "id": "doc:docs/guides/testing.md",
       "kind": "doc",
       "label": "docs/guides/testing.md",
@@ -3959,6 +3955,18 @@
         "section": "reference",
         "tags": "MGS1024,magusfile,workspace-providers,projects,precedence",
         "title": "MGS1024: workspace provider project shadowed by a magusfile"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/magusfile/MGS1025.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/magusfile/MGS1025.md",
+      "source": "docs/reference/codes/magusfile/MGS1025.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1025,magusfile,migration,needs,target-graph,compatibility",
+        "title": "MGS1025: magusfile calls an API that was removed"
       }
     },
     {
@@ -5176,15 +5184,6 @@
       }
     },
     {
-      "id": "doc:libs/orphanator/readme.md",
-      "kind": "doc",
-      "label": "libs/orphanator/readme.md",
-      "source": "libs/orphanator/readme.md",
-      "attrs": {
-        "role": "readme"
-      }
-    },
-    {
       "id": "doc:schema/README.md",
       "kind": "doc",
       "label": "schema/README.md",
@@ -6332,15 +6331,6 @@
       "kind": "file",
       "label": "libs/gopherbuzz/std/testing.buzz",
       "source": "libs/gopherbuzz/std/testing.buzz",
-      "attrs": {
-        "language": "buzz"
-      }
-    },
-    {
-      "id": "file:libs/orphanator/magusfile.buzz",
-      "kind": "file",
-      "label": "libs/orphanator/magusfile.buzz",
-      "source": "libs/orphanator/magusfile.buzz",
       "attrs": {
         "language": "buzz"
       }
@@ -8193,7 +8183,7 @@
       "kind": "function",
       "label": "isGeneratorDir",
       "doc": "isGeneratorDir reports whether a docs-ROOT child directory is the SSG's own rather than content. The SSG sits co-located with its markdown, so the content walk shares a tree with node_modules/, gen/, src/, and tour/, whose stray .md (package READMEs, generated index.md) must not be ingested as pages. CRUCIAL: call sites guard on rel == \"\", so only EXACT docs-root children are skipped - a content subdir sharing one of these names at any depth is still walked.",
-      "source": "docs/engine/path.buzz:55",
+      "source": "docs/engine/path.buzz:26",
       "attrs": {
         "exported": "true"
       }
@@ -8203,7 +8193,7 @@
       "kind": "function",
       "label": "isGeneratorFile",
       "doc": "isGeneratorFile reports whether a docs-ROOT .md file is an SSG artifact rather than content. MAGUS.md (the generated target catalog) sits at the docs root but must not render as a doc page; it surfaces instead via renderDevelopment. Like isGeneratorDir, consulted only at the docs root (rel == \"\").",
-      "source": "docs/engine/path.buzz:66",
+      "source": "docs/engine/path.buzz:37",
       "attrs": {
         "exported": "true"
       }
@@ -8213,17 +8203,7 @@
       "kind": "function",
       "label": "isNeverContentDir",
       "doc": "isNeverContentDir reports whether a directory can never hold site content, at ANY depth - as opposed to isGeneratorDir above, which is deliberately root-only.  node_modules is the whole list. A package tree holds thousands of README.md files and none of them are this site's pages. The root-only rule covered docs/node_modules but not a nested one, so the moment a sub-project under docs/ had its dependencies installed - which `magus run ci docs/guides/integrations/agents` does - the walk started rendering eve",
-      "source": "docs/engine/path.buzz:82",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:docs/engine/path.buzz:makeOutputDir",
-      "kind": "function",
-      "label": "makeOutputDir",
-      "doc": "makeOutputDir creates a written page's output directory, naming the conflict when a FILE already occupies that path.  gen/ is not a pure render target: committed static files live in it alongside generated pages. gen/install is the install script the README's curl one-liner fetches, and pruneStaleOutputs lists it under alwaysKeep for exactly that reason. A page whose clean URL is /install/ therefore needs gen/install to be a directory, which it can never be.  Without this guard the render dies inside the mk",
-      "source": "docs/engine/path.buzz:40",
+      "source": "docs/engine/path.buzz:53",
       "attrs": {
         "exported": "true"
       }
@@ -15928,82 +15908,6 @@
       "source": "libs/gopherbuzz/std/testing.buzz:41"
     },
     {
-      "id": "function:libs/orphanator/magusfile.buzz:build",
-      "kind": "function",
-      "label": "build",
-      "source": "libs/orphanator/magusfile.buzz:64",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:libs/orphanator/magusfile.buzz:ci",
-      "kind": "function",
-      "label": "ci",
-      "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
-      "source": "libs/orphanator/magusfile.buzz:68",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:libs/orphanator/magusfile.buzz:format",
-      "kind": "function",
-      "label": "format",
-      "source": "libs/orphanator/magusfile.buzz:59",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:libs/orphanator/magusfile.buzz:generate",
-      "kind": "function",
-      "label": "generate",
-      "doc": "Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.",
-      "source": "libs/orphanator/magusfile.buzz:41",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:libs/orphanator/magusfile.buzz:lint",
-      "kind": "function",
-      "label": "lint",
-      "doc": "go-vet only, as in libs/diagnostics. Deliberately NOT golangci-lint: this module is what a custom golangci-lint binary is built FROM, and linting it with a binary that carries it is a bootstrap nobody needs.",
-      "source": "libs/orphanator/magusfile.buzz:63",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:libs/orphanator/magusfile.buzz:md_generate",
-      "kind": "function",
-      "label": "md_generate",
-      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/orphanator/magusfile.buzz:54",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:libs/orphanator/magusfile.buzz:preflight",
-      "kind": "function",
-      "label": "preflight",
-      "source": "libs/orphanator/magusfile.buzz:38",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:libs/orphanator/magusfile.buzz:test",
-      "kind": "function",
-      "label": "test",
-      "source": "libs/orphanator/magusfile.buzz:65",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
       "id": "function:libs/textsearch/magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
@@ -16074,7 +15978,7 @@
       "kind": "function",
       "label": "advice_test",
       "doc": "Runs the PR advisors' `test \"...\" {}` blocks.  They are the only .buzz sources in this tree that parse standalone: everything else imports magus/magus\\spell and uses embedding-only constructs, which is why the old standalone-Buzz test targets were deleted rather than repointed. The advisors run under a plain `magus buzz` in CI, so upstream-strict is exactly the parse they need checked, and `-t` is the runner.  Run from each script's own directory, not the project root, because they do `import \"advice\"` for",
-      "source": "magusfile.buzz:1527",
+      "source": "magusfile.buzz:1484",
       "attrs": {
         "exported": "true"
       }
@@ -16094,7 +15998,7 @@
       "kind": "function",
       "label": "build",
       "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
-      "source": "magusfile.buzz:1631",
+      "source": "magusfile.buzz:1588",
       "attrs": {
         "exported": "true"
       }
@@ -16124,7 +16028,7 @@
       "kind": "function",
       "label": "buzz_test",
       "doc": "Runs the in-file `test \"...\" {}` blocks in this repo's own root Buzz modules, through magus's embedded engine.  NOT the buzz spell's buzz-test op: that one forks the UPSTREAM `buzz` toolchain, which is not reliably on PATH, and it globs `find . -name '*.buzz'` from the project root - which here would sweep in magusfile.buzz, releaser.buzz, every spell and every worktree copy, none of which run standalone (they import magus host modules the bare toolchain cannot resolve). `magus buzz -t` is always present an",
-      "source": "magusfile.buzz:1612",
+      "source": "magusfile.buzz:1569",
       "attrs": {
         "exported": "true"
       }
@@ -16151,7 +16055,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "Runs the CI gates through their declared dependencies.",
-      "source": "magusfile.buzz:1702",
+      "source": "magusfile.buzz:1627",
       "attrs": {
         "exported": "true"
       }
@@ -16161,7 +16065,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.",
-      "source": "magusfile.buzz:1748",
+      "source": "magusfile.buzz:1673",
       "attrs": {
         "exported": "true"
       }
@@ -16178,7 +16082,7 @@
       "kind": "function",
       "label": "completion_test",
       "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell. Part of ci, and it REQUIRES a docker daemon rather than skipping without one: a gate that silently skips when a tool is missing is how the zsh recipe stayed broken - it told users to append a script to ~/.zshrc that registers nothing, and nothing ever ran it to find out. Its declared footprint keeps the cost off every run: affected only reaches it when the completion scripts or their checks change.  One image per she",
-      "source": "magusfile.buzz:1723",
+      "source": "magusfile.buzz:1648",
       "attrs": {
         "exported": "true"
       }
@@ -16205,7 +16109,7 @@
       "kind": "function",
       "label": "deploy_generate",
       "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/.  It lives here rather than in the Pages workflow because that workflow is meant to be thin - set up a toolchain, name targets, upload the artifact - and the layout below is portable logic that would otherwise be GitHub-specific shell. It is also what makes the deploy reproducible locally: run the same three commands, then serve gen/site, and what you see is what publishe",
-      "source": "magusfile.buzz:1887",
+      "source": "magusfile.buzz:1812",
       "attrs": {
         "exported": "true"
       }
@@ -16246,7 +16150,7 @@
       "kind": "function",
       "label": "format",
       "doc": "Regenerates, then formats Go and tidies `go.mod`. Markdown is linted (not formatted): markdownlint runs in lint; there is no markdown FORMATTER any more - biome (used for all TypeScript/CSS) has no markdown support, and prettier was dropped rather than kept solely to format markdown.",
-      "source": "magusfile.buzz:1699",
+      "source": "magusfile.buzz:1624",
       "attrs": {
         "exported": "true"
       }
@@ -16361,18 +16265,8 @@
       "id": "function:magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
-      "doc": "Formats and builds the linter first, then golangci-lint, go vet, markdownlint, and shellcheck. STATIC ANALYSIS only - govulncheck lives in `security` with the other scanners, because a scanner's answer changes when its advisory database does, with no edit to this tree. golangci-lint USED to go through the go spell's op so the spell's version probe (mgs_getVersionProbes) reached the cache key - without it a linter upgrade changes which code passes while every cache entry replays the old verdict. It no longer",
-      "source": "magusfile.buzz:1677",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:magusfile.buzz:lint_build",
-      "kind": "function",
-      "label": "lint_build",
-      "doc": "Builds ./custom-gcl, the golangci-lint carrying this repo's own linters. golangci-lint compiles plugins in rather than loading them at runtime, so an in-repo rule only runs through a binary built here.  The build runs in libs/orphanator because `golangci-lint custom` reads .custom-gcl.yml from its working directory and takes no config flag. That file lives with the linter it declares; `destination: ../..` puts the binary back at the root, where .golangci.yml and lint expect it.  No declared outputs, for go-",
-      "source": "magusfile.buzz:1652",
+      "doc": "Formats first, then golangci-lint, go vet, markdownlint, and shellcheck. STATIC ANALYSIS only - govulncheck lives in `security` with the other scanners, because a scanner's answer changes when its advisory database does, with no edit to this tree. golangci-lint goes through the go spell's ops rather than a raw os\\exec, so the spell's version probes (mgs_getVersionProbes) reach the cache key - without them a linter upgrade changes which code passes while every cache entry replays the old verdict. Neither run",
+      "source": "magusfile.buzz:1609",
       "attrs": {
         "exported": "true"
       }
@@ -16406,7 +16300,7 @@
       "kind": "function",
       "label": "missing_input",
       "doc": "missing_input phrases a deploy-generate precondition that ANOTHER project owns.  Naming one single-project command teaches the wrong habit: the reader runs it, gets the next precondition, runs another, and learns the set by failing once per producer. So name every producer in one command. `magus run <target> [project...]` takes a LIST - `magus run build docs console` is one dispatch over both - which is the idiom this message teaches.  Deliberately NOT \"magus affected build\" or \"magus run build /\". Both wou",
-      "source": "magusfile.buzz:1848"
+      "source": "magusfile.buzz:1773"
     },
     {
       "id": "function:magusfile.buzz:mocks_generate",
@@ -16460,7 +16354,7 @@
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json. Always let pnpm validate the install, matching console/magusfile.buzz. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready and handed the missing packages to esbuild. On a warm tree --frozen-lockfile is about a second and",
-      "source": "magusfile.buzz:1810"
+      "source": "magusfile.buzz:1735"
     },
     {
       "id": "function:magusfile.buzz:release",
@@ -16503,7 +16397,7 @@
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:1822"
+      "source": "magusfile.buzz:1747"
     },
     {
       "id": "function:magusfile.buzz:resolvable",
@@ -16533,7 +16427,7 @@
       "kind": "function",
       "label": "serve",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than",
-      "source": "magusfile.buzz:1936",
+      "source": "magusfile.buzz:1861",
       "attrs": {
         "exported": "true"
       }
@@ -16573,7 +16467,7 @@
       "kind": "function",
       "label": "test",
       "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
-      "source": "magusfile.buzz:1537",
+      "source": "magusfile.buzz:1494",
       "attrs": {
         "exported": "true"
       }
@@ -16583,7 +16477,7 @@
       "kind": "function",
       "label": "total_coverage",
       "doc": "Renders a Go coverage badge locally (no third-party service, no network).",
-      "source": "magusfile.buzz:1507"
+      "source": "magusfile.buzz:1464"
     },
     {
       "id": "function:magusfile.buzz:types_generate",
@@ -16606,7 +16500,7 @@
       "kind": "function",
       "label": "watch",
       "doc": "Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.",
-      "source": "magusfile.buzz:1493",
+      "source": "magusfile.buzz:1450",
       "attrs": {
         "exported": "true"
       }
@@ -16658,7 +16552,7 @@
       "kind": "function",
       "label": "currentVersion",
       "doc": "currentVersion returns a module's highest STABLE released version, or \"\" when it has never had one. Compared on the PARSED major/minor/patch, not the tag text, because string order puts v0.10.0 before v0.9.0.  Prereleases are skipped: per semver.org item 9 a prerelease has LOWER precedence than the version it anticipates, so v0.4.0-rc1 is emphatically not v0.4.0 released and must not become the base the next version is computed from - otherwise cutting rc1 would silently advance everyone's floor.  Build met",
-      "source": "releaser.buzz:95",
+      "source": "releaser.buzz:94",
       "attrs": {
         "exported": "true"
       }
@@ -16668,27 +16562,7 @@
       "kind": "function",
       "label": "isCandidate",
       "doc": "isCandidate reports whether v is one of the three versions nextFor offers, comparing the RELEASE part only - so v0.4.0-rc1 and v0.4.0+ci both count as the minor candidate. A prerelease of a legal next version is itself legal; that is how you cut an rc without first inventing a version nobody agreed to.",
-      "source": "releaser.buzz:133",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:releaser.buzz:modulePath",
-      "kind": "function",
-      "label": "modulePath",
-      "doc": "rewriteRequire points go.mod's require for module at version, preserving the line's indentation. The `replace` directive names the same module and must NOT be touched: it is the local-development path, ignored by every downstream consumer, and rewriting it would break building inside this repo. modulePath returns the path go.mod declares, or \"\" when it declares none.  Needed for Go's major-version suffix rule, which applies to the path: from v2 on it must end in /vN, so a v2.0.0 tag beside a go.mod still na",
-      "source": "releaser.buzz:154",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:releaser.buzz:needsMajorSuffix",
-      "kind": "function",
-      "label": "needsMajorSuffix",
-      "doc": "needsMajorSuffix reports whether releasing major from the module at path would publish a tag Go cannot resolve.  From v2 on, Go wants the path to end in /vN, and `go get` resolves the path. A v2.0.0 tag beside a go.mod naming the v1 path is uninstallable, and semver has no opinion, so the survey offers that candidate like any other. A non-Go module passes \"\" and never hits the rule.",
-      "source": "releaser.buzz:168",
+      "source": "releaser.buzz:132",
       "attrs": {
         "exported": "true"
       }
@@ -16698,7 +16572,7 @@
       "kind": "function",
       "label": "nextFor",
       "doc": "nextFor returns the three legal next versions for a module currently at cur. An unreleased module is treated as sitting at 0.0.0, so its candidates fall out of the same rule as everyone else's (0.0.1 | 0.1.0 | 1.0.0) rather than being a special case someone has to remember.",
-      "source": "releaser.buzz:124",
+      "source": "releaser.buzz:123",
       "attrs": {
         "exported": "true"
       }
@@ -16708,7 +16582,7 @@
       "kind": "function",
       "label": "releasableModules",
       "doc": "releasableModules enumerates every independently-versioned project: one whose resolved spells declare a manifest (spells.Spell.Manifests, the language's go.mod/package.json/Cargo.toml/pyproject.toml equivalent) that is actually present in its directory - types.ProjectEntry.Manifests, read by the caller via magus\\ls() and passed in as projects, already did the \"does the candidate file exist\" filesystem check. Taking the inventory as a parameter rather than calling magus\\ls() itself keeps this module doing wh",
-      "source": "releaser.buzz:52",
+      "source": "releaser.buzz:51",
       "attrs": {
         "exported": "true"
       }
@@ -16717,7 +16591,8 @@
       "id": "function:releaser.buzz:rewriteRequire",
       "kind": "function",
       "label": "rewriteRequire",
-      "source": "releaser.buzz:188",
+      "doc": "rewriteRequire points go.mod's require for module at version, preserving the line's indentation. The `replace` directive names the same module and must NOT be touched: it is the local-development path, ignored by every downstream consumer, and rewriting it would break building inside this repo.",
+      "source": "releaser.buzz:148",
       "attrs": {
         "exported": "true"
       }
@@ -21376,11 +21251,6 @@
       }
     },
     {
-      "id": "op:gomod:indexOf",
-      "kind": "op",
-      "label": "indexOf"
-    },
-    {
       "id": "op:gomod:replaceWorkspaceModules",
       "kind": "op",
       "label": "replaceWorkspaceModules"
@@ -21622,7 +21492,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "target_count": "36"
+        "target_count": "35"
       }
     },
     {
@@ -21686,16 +21556,6 @@
       }
     },
     {
-      "id": "project:libs/orphanator",
-      "kind": "project",
-      "label": "libs/orphanator",
-      "source": "libs/orphanator",
-      "attrs": {
-        "engine": "buzz",
-        "target_count": "8"
-      }
-    },
-    {
       "id": "project:libs/textsearch",
       "kind": "project",
       "label": "libs/textsearch",
@@ -21716,11 +21576,11 @@
       }
     },
     {
-      "id": "rationale:magusfile.buzz:1723:TODO",
+      "id": "rationale:magusfile.buzz:1648:TODO",
       "kind": "rationale",
       "label": "TODO",
       "doc": "zsh is uncovered - it has no official image (zshusers/zsh is community-run), so",
-      "source": "magusfile.buzz:1723"
+      "source": "magusfile.buzz:1648"
     },
     {
       "id": "rationale:spells/aws/s3-cache/spell.buzz:123:NOTE",
@@ -22062,20 +21922,9 @@
       "id": "target:.:lint",
       "kind": "target",
       "label": "lint",
-      "doc": "Formats and builds the linter first, then golangci-lint, go vet, markdownlint, and shellcheck.",
+      "doc": "Formats first, then golangci-lint, go vet, markdownlint, and shellcheck.",
       "source": ".",
       "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:.:lint-build",
-      "kind": "target",
-      "label": "lint-build",
-      "doc": "Builds ./custom-gcl, the golangci-lint carrying this repo's own linters.",
-      "source": ".",
-      "attrs": {
-        "declared_as": "lint_build",
         "engine": "buzz"
       }
     },
@@ -22709,83 +22558,6 @@
       }
     },
     {
-      "id": "target:libs/orphanator:build",
-      "kind": "target",
-      "label": "build",
-      "source": "libs/orphanator",
-      "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:libs/orphanator:ci",
-      "kind": "target",
-      "label": "ci",
-      "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
-      "source": "libs/orphanator",
-      "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:libs/orphanator:format",
-      "kind": "target",
-      "label": "format",
-      "source": "libs/orphanator",
-      "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:libs/orphanator:generate",
-      "kind": "target",
-      "label": "generate",
-      "doc": "Regenerates MAGUS.md and fails on drift.",
-      "source": "libs/orphanator",
-      "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:libs/orphanator:lint",
-      "kind": "target",
-      "label": "lint",
-      "doc": "go-vet only, as in libs/diagnostics.",
-      "source": "libs/orphanator",
-      "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:libs/orphanator:md-generate",
-      "kind": "target",
-      "label": "md-generate",
-      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/orphanator",
-      "attrs": {
-        "declared_as": "md_generate",
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:libs/orphanator:preflight",
-      "kind": "target",
-      "label": "preflight",
-      "source": "libs/orphanator",
-      "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:libs/orphanator:test",
-      "kind": "target",
-      "label": "test",
-      "source": "libs/orphanator",
-      "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
       "id": "target:libs/textsearch:ci",
       "kind": "target",
       "label": "ci",
@@ -23146,14 +22918,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "libs/gopherbuzz"
-    },
-    {
-      "source": "charm:rw",
-      "target": "target:libs/orphanator:generate",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
     },
     {
       "source": "charm:rw",
@@ -24090,14 +23854,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/guides/quickstart.md"
-    },
-    {
-      "source": "dir:docs/guides",
-      "target": "doc:docs/guides/releasing.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/releasing.md"
     },
     {
       "source": "dir:docs/guides",
@@ -25042,6 +24798,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1024.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/magusfile",
+      "target": "doc:docs/reference/codes/magusfile/MGS1025.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1025.md"
     },
     {
       "source": "dir:docs/reference/codes/magusfile",
@@ -35004,6 +34768,46 @@
       "provenance": "docs/reference/codes/magusfile/MGS1024.md"
     },
     {
+      "source": "doc:docs/reference/codes/magusfile/MGS1025.md",
+      "target": "diagnostic:MGS1008",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1025.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1025.md",
+      "target": "diagnostic:MGS1025",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1025.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1025.md",
+      "target": "doc:docs/concepts/targets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1025.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1025.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1008.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1025.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1025.md",
+      "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1025.md"
+    },
+    {
       "source": "doc:docs/reference/codes/magusfile/README.md",
       "target": "diagnostic:MGS1001",
       "relation": "documents",
@@ -40942,14 +40746,6 @@
     {
       "source": "file:docs/engine/path.buzz",
       "target": "function:docs/engine/path.buzz:isNeverContentDir",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/engine/path.buzz"
-    },
-    {
-      "source": "file:docs/engine/path.buzz",
-      "target": "function:docs/engine/path.buzz:makeOutputDir",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -52036,110 +51832,6 @@
       "provenance": "libs/gopherbuzz/std/testing.buzz"
     },
     {
-      "source": "file:libs/orphanator/magusfile.buzz",
-      "target": "function:libs/orphanator/magusfile.buzz:build",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator/magusfile.buzz"
-    },
-    {
-      "source": "file:libs/orphanator/magusfile.buzz",
-      "target": "function:libs/orphanator/magusfile.buzz:ci",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator/magusfile.buzz"
-    },
-    {
-      "source": "file:libs/orphanator/magusfile.buzz",
-      "target": "function:libs/orphanator/magusfile.buzz:format",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator/magusfile.buzz"
-    },
-    {
-      "source": "file:libs/orphanator/magusfile.buzz",
-      "target": "function:libs/orphanator/magusfile.buzz:generate",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator/magusfile.buzz"
-    },
-    {
-      "source": "file:libs/orphanator/magusfile.buzz",
-      "target": "function:libs/orphanator/magusfile.buzz:lint",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator/magusfile.buzz"
-    },
-    {
-      "source": "file:libs/orphanator/magusfile.buzz",
-      "target": "function:libs/orphanator/magusfile.buzz:md_generate",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator/magusfile.buzz"
-    },
-    {
-      "source": "file:libs/orphanator/magusfile.buzz",
-      "target": "function:libs/orphanator/magusfile.buzz:preflight",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator/magusfile.buzz"
-    },
-    {
-      "source": "file:libs/orphanator/magusfile.buzz",
-      "target": "function:libs/orphanator/magusfile.buzz:test",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator/magusfile.buzz"
-    },
-    {
-      "source": "file:libs/orphanator/magusfile.buzz",
-      "target": "import:../../spells/golang/gomod",
-      "relation": "imports",
-      "confidence": "inferred",
-      "score": 0.7,
-      "provenance": "libs/orphanator/magusfile.buzz"
-    },
-    {
-      "source": "file:libs/orphanator/magusfile.buzz",
-      "target": "import:fs",
-      "relation": "imports",
-      "confidence": "inferred",
-      "score": 0.7,
-      "provenance": "libs/orphanator/magusfile.buzz"
-    },
-    {
-      "source": "file:libs/orphanator/magusfile.buzz",
-      "target": "import:magus",
-      "relation": "imports",
-      "confidence": "inferred",
-      "score": 0.7,
-      "provenance": "libs/orphanator/magusfile.buzz"
-    },
-    {
-      "source": "file:libs/orphanator/magusfile.buzz",
-      "target": "import:magus/spell/go",
-      "relation": "imports",
-      "confidence": "inferred",
-      "score": 0.7,
-      "provenance": "libs/orphanator/magusfile.buzz"
-    },
-    {
-      "source": "file:libs/orphanator/magusfile.buzz",
-      "target": "import:vcs",
-      "relation": "imports",
-      "confidence": "inferred",
-      "score": 0.7,
-      "provenance": "libs/orphanator/magusfile.buzz"
-    },
-    {
       "source": "file:libs/textsearch/magusfile.buzz",
       "target": "function:libs/textsearch/magusfile.buzz:ci",
       "relation": "contains",
@@ -52566,14 +52258,6 @@
     {
       "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:lint",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "magusfile.buzz"
-    },
-    {
-      "source": "file:magusfile.buzz",
-      "target": "function:magusfile.buzz:lint_build",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -53013,22 +52697,6 @@
     },
     {
       "source": "file:releaser.buzz",
-      "target": "function:releaser.buzz:modulePath",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "releaser.buzz"
-    },
-    {
-      "source": "file:releaser.buzz",
-      "target": "function:releaser.buzz:needsMajorSuffix",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "releaser.buzz"
-    },
-    {
-      "source": "file:releaser.buzz",
       "target": "function:releaser.buzz:nextFor",
       "relation": "contains",
       "confidence": "extracted",
@@ -53054,14 +52722,6 @@
     {
       "source": "file:releaser.buzz",
       "target": "import:semver",
-      "relation": "imports",
-      "confidence": "inferred",
-      "score": 0.7,
-      "provenance": "releaser.buzz"
-    },
-    {
-      "source": "file:releaser.buzz",
-      "target": "import:std",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -63931,14 +63591,6 @@
     },
     {
       "source": "project:.",
-      "target": "target:.:lint-build",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "project:.",
       "target": "target:.:man-generate",
       "relation": "contains",
       "confidence": "extracted",
@@ -64730,86 +64382,6 @@
       "provenance": "libs/gopherbuzz"
     },
     {
-      "source": "project:libs/orphanator",
-      "target": "doc:libs/orphanator/readme.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator/readme.md"
-    },
-    {
-      "source": "project:libs/orphanator",
-      "target": "file:libs/orphanator/magusfile.buzz",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator/magusfile.buzz"
-    },
-    {
-      "source": "project:libs/orphanator",
-      "target": "target:libs/orphanator:build",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "project:libs/orphanator",
-      "target": "target:libs/orphanator:ci",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "project:libs/orphanator",
-      "target": "target:libs/orphanator:format",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "project:libs/orphanator",
-      "target": "target:libs/orphanator:generate",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "project:libs/orphanator",
-      "target": "target:libs/orphanator:lint",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "project:libs/orphanator",
-      "target": "target:libs/orphanator:md-generate",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "project:libs/orphanator",
-      "target": "target:libs/orphanator:preflight",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "project:libs/orphanator",
-      "target": "target:libs/orphanator:test",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
       "source": "project:libs/textsearch",
       "target": "file:libs/textsearch/magusfile.buzz",
       "relation": "contains",
@@ -64898,12 +64470,12 @@
       "provenance": "proto"
     },
     {
-      "source": "rationale:magusfile.buzz:1723:TODO",
+      "source": "rationale:magusfile.buzz:1648:TODO",
       "target": "function:magusfile.buzz:completion_test",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "magusfile.buzz:1723"
+      "provenance": "magusfile.buzz:1648"
     },
     {
       "source": "rationale:spells/aws/s3-cache/spell.buzz:123:NOTE",
@@ -65807,6 +65379,14 @@
     },
     {
       "source": "target:.:lint",
+      "target": "op:go:golangci-lint",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:lint",
       "target": "op:markdown:markdownlint",
       "relation": "uses",
       "confidence": "extracted",
@@ -65846,33 +65426,9 @@
       "provenance": "."
     },
     {
-      "source": "target:.:lint",
-      "target": "target:.:lint-build",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
       "source": "target:.:mocks-generate",
       "target": "target:.:types-generate",
       "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:release",
-      "target": "op:gomod:indexOf",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:release",
-      "target": "spell:gomod",
-      "relation": "uses",
       "confidence": "extracted",
       "score": 1,
       "provenance": "."
@@ -67095,14 +66651,6 @@
     },
     {
       "source": "target:docs:index-generate",
-      "target": "file:libs/orphanator/magusfile.buzz",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:index-generate",
       "target": "file:libs/textsearch/magusfile.buzz",
       "relation": "consumes",
       "confidence": "extracted",
@@ -67988,150 +67536,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "libs/gopherbuzz"
-    },
-    {
-      "source": "target:libs/orphanator:build",
-      "target": "op:go:go-build",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "target:libs/orphanator:build",
-      "target": "spell:go",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "target:libs/orphanator:build",
-      "target": "target:libs/orphanator:format",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "target:libs/orphanator:ci",
-      "target": "target:libs/orphanator:build",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "target:libs/orphanator:ci",
-      "target": "target:libs/orphanator:lint",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "target:libs/orphanator:ci",
-      "target": "target:libs/orphanator:test",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "target:libs/orphanator:format",
-      "target": "op:go:go-fmt",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "target:libs/orphanator:format",
-      "target": "op:go:go-mod-tidy",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "target:libs/orphanator:format",
-      "target": "spell:go",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "target:libs/orphanator:format",
-      "target": "target:libs/orphanator:generate",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "target:libs/orphanator:generate",
-      "target": "target:libs/orphanator:md-generate",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "target:libs/orphanator:generate",
-      "target": "target:libs/orphanator:preflight",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "target:libs/orphanator:lint",
-      "target": "op:go:go-vet",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "target:libs/orphanator:lint",
-      "target": "spell:go",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "target:libs/orphanator:lint",
-      "target": "target:libs/orphanator:format",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "target:libs/orphanator:test",
-      "target": "op:go:go-test",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "target:libs/orphanator:test",
-      "target": "spell:go",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
-    },
-    {
-      "source": "target:libs/orphanator:test",
-      "target": "target:libs/orphanator:format",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/orphanator"
     },
     {
       "source": "target:libs/textsearch:ci",
