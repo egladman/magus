@@ -16,4 +16,5 @@ export object Target {
     skip_cache_reason: str = "",
     exclusive: bool = false,
     slots: int = 0,
+    memory_mb: int = 0,
 }

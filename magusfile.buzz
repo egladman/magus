@@ -84,7 +84,18 @@ magus\project({
         // else should be touching go.mod or the tag namespace while it runs.
         "release": {"skip_cache": "mutates go.mod and creates VCS tags, an order-sensitive side effect", "exclusive": true},
         // test rewrites assets/coverage.svg; a cache hit would skip the write.
-        "test": {"skip_cache": "rewrites assets/coverage.svg; a hit would skip the write"},
+        // memory_mb measured, not guessed: on a 16GB CI runner this target took
+        // available memory from 1137MB to 265MB in two seconds and the runner was
+        // killed, leaving no failing target to blame because the MACHINE died rather
+        // than the test. `-race` is why - every concurrent test binary carries the
+        // race detector's shadow memory. Declared in memory rather than slots because
+        // that is the number an author can actually know; magus converts it to slots
+        // per host, so it throttles peers on a 16GB runner and barely registers on a
+        // 64GB workstation without this file naming either machine.
+        "test": {
+            "skip_cache": "rewrites assets/coverage.svg; a hit would skip the write",
+            "memory_mb": 10240,
+        },
 		// Preserves the hand-authored Unreleased section in place; caching a prior
 		// file would overwrite a later edit that is intentionally outside releases/.
 		"changelog-generate": {"skip_cache": "preserves a hand-authored Unreleased section; a replay would overwrite a later edit"},

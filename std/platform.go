@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	goruntime "runtime"
+
+	"github.com/egladman/magus/internal/hostmem"
 	"strings"
 )
 
@@ -107,8 +109,48 @@ var Platform = Module{
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    PlatformOS,
 		},
+		{
+			Name:    "memory",
+			Doc:     "The machine's total physical memory in bytes, or 0 when it cannot be determined (any host other than Linux or macOS). A magusfile sizing work that scales on MEMORY rather than cores needs this: `go test` defaults its package parallelism to the CPU count, which is the wrong axis under -race, where each test binary carries the race detector's shadow memory. Branch on 0 rather than treating it as \"no memory\".",
+			Returns: []Ret{{Type: TypeInt}},
+			Impl:    PlatformMemory,
+		},
+		{
+			Name:    "cpus",
+			Doc:     "How many CPUs this process may use (Go's GOMAXPROCS, which honors a container quota where the OS-visible core count does not). Pair with memory() when sizing parallel work: the smaller of the two limits is the one that matters.",
+			Returns: []Ret{{Type: TypeInt}},
+			Impl:    PlatformCPUs,
+		},
 	},
 }
+
+// PlatformMemory returns the machine's total physical memory in bytes, or 0 when
+// it cannot be determined.
+//
+// Zero is UNKNOWN, not "none". Every caller has to branch on it, which is the
+// honest shape: guessing a size here would make a magusfile's parallelism depend
+// on a number magus invented.
+//
+// The boundary carries a Go int, so a machine with more memory than an int can
+// hold reports UNKNOWN rather than a truncated figure. That is only reachable on
+// a 32-bit host with over 2GB, where a silently wrapped number would size a
+// magusfile's parallelism off nonsense - see the deferred 32-bit plan.
+func PlatformMemory(_ context.Context) (int, error) {
+	b := hostmem.Total()
+	if b <= 0 || b > int64(maxInt) {
+		return 0, nil
+	}
+	return int(b), nil
+}
+
+// maxInt is the largest value the boundary's int can carry on this build.
+const maxInt = int(^uint(0) >> 1)
+
+// PlatformCPUs returns GOMAXPROCS rather than NumCPU: inside a container with a
+// CPU quota the two disagree, and the quota is what actually bounds the work. Go
+// 1.25 derives GOMAXPROCS from the cgroup limit, so this follows the runtime
+// instead of second-guessing it.
+func PlatformCPUs(_ context.Context) (int, error) { return goruntime.GOMAXPROCS(0), nil }
 
 // archCanonical maps a normalized architecture alias to its canonical Go GOARCH.
 var archCanonical = map[string]string{

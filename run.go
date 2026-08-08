@@ -428,7 +428,11 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// is inherent (not an author opt-in), so OR it into the explicit SkipCache policy.
 	step.NoCache = pol.SkipCache || servesTarget(p.ResolvedSpells, target)
 	step.Exclusive = pol.Exclusive
-	step.Slots = pol.Slots
+	// Resolve the two spellings of the same claim into the one number the limiter
+	// understands. A target declaring memory_mb holds however many slots that memory
+	// is worth on THIS host, so an 8GB suite throttles peers on a 16GB runner and
+	// barely registers on a 64GB workstation, without the magusfile naming either.
+	step.Slots = slotsForPolicy(pol.Slots, pol.MemoryMB, m.limiter().Capacity())
 	return step
 }
 
