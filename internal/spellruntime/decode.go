@@ -305,13 +305,23 @@ func decodeCommand(spellName, opName string, o Obj) (spells.Command, error) {
 // reads a descriptor (docs, graph extraction) is not forced to handle it.
 func validateTools(m spells.Descriptor) error {
 	for _, tool := range slices.Sorted(maps.Keys(m.Tools)) {
-		// A malformed constraint is knowable without running anything, and a floor
-		// nobody can parse protects nobody - the same reasoning magus.yaml's
-		// required_version applies to its own floor.
-		if f := m.Tools[tool].Floor; f != "" {
-			if _, err := semver.NewConstraint(f); err != nil {
-				return fmt.Errorf("spell %q: tools[%q].floor %q is not a valid semver constraint: %w",
-					m.Name, tool, f, err)
+		// A malformed bound is knowable without running anything, and a window nobody
+		// can parse protects nobody - the same reasoning magus.yaml's required_version
+		// applies to its own floor. Rejecting here is what keeps Check's VerdictUnknown
+		// a backstop for authored input rather than its normal path.
+		// A slice, not a map: two bad bounds on one tool must always name the same one
+		// first, or the load error moves between runs.
+		for _, b := range []struct{ field, bound string }{
+			{"min", m.Tools[tool].Supported.Min},
+			{"below", m.Tools[tool].Supported.Below},
+		} {
+			field, bound := b.field, b.bound
+			if bound == "" {
+				continue
+			}
+			if _, err := semver.NewVersion(bound); err != nil {
+				return fmt.Errorf("spell %q: tools[%q].supported.%s %q is not a valid version: %w",
+					m.Name, tool, field, bound, err)
 			}
 		}
 		if c := m.Tools[tool].Key.UpTo; !c.Valid() {
@@ -356,8 +366,13 @@ func decodeTools(src Obj) map[string]spells.Tool {
 				t.Key.UpTo = spells.VersionComponent(u)
 			}
 		}
-		if f, ok := o.Str("floor"); ok {
-			t.Floor = f
+		if s, ok := o.Obj("supported"); ok {
+			if m, ok := s.Str("min"); ok {
+				t.Supported.Min = m
+			}
+			if b, ok := s.Str("below"); ok {
+				t.Supported.Below = b
+			}
 		}
 		if r, ok := o.Obj("ready"); ok {
 			cmd, err := decodeCommand("", "", r)
@@ -368,7 +383,7 @@ func decodeTools(src Obj) map[string]spells.Tool {
 		if d, ok := o.Str("diagnostics"); ok {
 			t.Diagnostics = spells.DiagnosticFormat(d)
 		}
-		if t.Probe.Bin == "" && t.Key.IsZero() && t.Ready.Bin == "" && t.Floor == "" &&
+		if t.Probe.Bin == "" && t.Key.IsZero() && t.Ready.Bin == "" && t.Supported.IsZero() &&
 			t.Diagnostics == spells.DiagnosticNone {
 			continue
 		}

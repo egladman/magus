@@ -30,7 +30,7 @@ sh install.sh
 
 The installer verifies a checksum against a signed release. Package managers,
 containers, CI setup actions, and building from source are all on
-[Download](download.md). To pin a version in CI, use the `setup-magus` action
+[Download](../setup.md). To pin a version in CI, use the `setup-magus` action
 rather than curling into a runner.
 
 Check it worked, and check the workspace is sane:
@@ -178,7 +178,7 @@ stale rules while looking perfectly healthy.
 | you want | read |
 | --- | --- |
 | the guided walkthrough | [Getting started](getting-started.md) |
-| every install method | [Download](download.md) |
+| every install method | [Download](../setup.md) |
 | what a target is, really | [Targets](../concepts/targets.md) |
 | how caching decides a hit | [Cache](../concepts/cache.md) |
 | binding a toolchain | [Spells](../concepts/spells.md) |

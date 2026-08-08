@@ -175,7 +175,7 @@ jobs:
       # commit, so it gets neither the CGO variant nor a moving tag, and it is signed
       # under THIS workflow's certificate identity - cd.yaml, not release.yaml - which is
       # what makes the release verify command in
-      # docs/guides/download/container-image.md reject a per-commit image.
+      # docs/setup/container-image.md reject a per-commit image.
       - name: Build, push, and sign the per-commit image
         run: magus run image-build:cd --no-default-charms
 

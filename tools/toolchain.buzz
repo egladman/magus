@@ -1,0 +1,221 @@
+// toolchain.buzz - observe the toolchain versions actually installed against the
+// versions upstream has tagged. It reports. It never installs, never selects, never
+// rewrites a pin.
+//
+// NOTHING HERE IS IN THE MAGUS BINARY, and that is the point. The gate that can fail a
+// build - the `tools` window in a magusfile, checked against the version magus already
+// probes - makes no network calls at all. This file is the optional half that tells you
+// when a declared window has gone stale, and it lives in the workspace so its trust
+// decisions are yours to read and revise.
+//
+// This is not a package manager and must not become one. Two rules:
+//
+//   - NO SELECTION. It answers "here is what you run and here is what upstream tagged",
+//     never "move to this one". Choosing is the reader's job.
+//   - NO STATE. Nothing records when a version was first seen. A first-seen file is a
+//     lockfile with another name, and once it exists it has to be committed, merged, and
+//     conflict-resolved.
+//
+// SOURCING, and why it is git and not an API.
+//
+// The version list comes from `git ls-remote --tags` against each project's OWN
+// repository. That is the most authoritative source available and it introduces no third
+// party: the tags are what the maintainers cut, served by the project's own host, over a
+// protocol already trusted to deliver this repo's source. No API key, no rate-limit
+// contract, no terms-of-service question about a build tool polling someone's endpoint,
+// and no aggregator whose refresh policy and uptime we would be silently depending on.
+//
+// What that costs is real and stated rather than worked around: a tag carries a NAME and
+// nothing else. No publish date, no stability channel, no support window. So there is no
+// grace period here - every newer tag is reported the day it appears. Dates would need
+// the tag objects, which means a fetch rather than a listing, and that trade has not been
+// worth making.
+//
+// END-OF-LIFE IS DELIBERATELY UNIMPLEMENTED. See eolFor() at the bottom.
+
+import "std";
+import "os";
+import "semver";
+
+// remotes maps a probed binary to the upstream repository that tags its releases, and to
+// the prefix its tags carry. Each entry is a deliberate trust decision: this is the host
+// whose answer is treated as authoritative for that tool, so adding one means deciding
+// you trust it as much as you trust the source you already build from.
+final remotes = {
+    "go": {"url": "https://github.com/golang/go", "prefix": "go"},
+    "node": {"url": "https://github.com/nodejs/node", "prefix": "v"},
+};
+
+// tagsOf lists the release tags a remote carries, as bare versions.
+//
+// ONE fork per remote, and the caller holds the result. A remote is a distinct network
+// endpoint so two of them cannot share an invocation, but nothing should ever ask the
+// same remote twice in a run - the parsed list answers every question about that tool.
+//
+// GIT_TERMINAL_PROMPT=0 because ls-remote inherits the caller's git config and credential
+// helpers. That is a supply-chain plus (no new trust, no new secret) and a hang risk: a
+// helper that decides to ask for a password blocks a build with no output. Refusing the
+// prompt turns that into an error.
+//
+// Prerelease and historical tags are dropped. Go's repo still carries `weekly.2012-03-04`
+// and `release.r60`, and both projects tag `beta`/`rc`. A tag that is not a plain release
+// is not something to report as "you are behind".
+fun tagsOf(bin: str) > [str] {
+    final remote = remotes[bin];
+    if (remote == null) {
+        return [<str>];
+    }
+    var versions = mut [<str>];
+    os\withEnv({"GIT_TERMINAL_PROMPT": "0"}, callback: fun () > void {
+        // quiet: this is a 954-line listing being consumed, not a build step being
+        // watched. Capture is unaffected.
+        final res = os\exec("git", args: ["ls-remote", "--tags", "--refs", remote["url"]],
+            dir: ".", opts: {"allow_failure": true, "quiet": true});
+        if (res.code != 0) {
+            return; // unreachable remote: reported as unknown, never as up to date
+        }
+        foreach (line in res.stdout.split("\n")) {
+            final marker = line.indexOf("refs/tags/");
+            if (marker == null) {
+                continue;
+            }
+            final tag = line.sub(marker + 10).trim();
+            if (!tag.startsWith(remote["prefix"])) {
+                continue;
+            }
+            final v = tag.sub(remote["prefix"].len());
+            // isValid rejects the prerelease and historical shapes without a bespoke
+            // pattern per project: `1.9beta1` and `2012-03-04` both fail to parse.
+            if (semver\isValid(v) and v.indexOf("-") == null) {
+                versions.append(v);
+            }
+        }
+    });
+    return versions;
+}
+
+// extract pulls a version out of a probe line.
+//
+// magus already ships exactly this - spells.ExtractVersion, regex-based, and it already
+// handles go's glued `go1.26.5` and golangci-lint's build-identity padding - but no Buzz
+// binding exposes it, so the two cases needed here are hand-rolled. Delete this the day
+// `semver\extract` lands; it is a binding over tested code, not a new concept.
+fun extract(output: str) > str {
+    foreach (word in output.trim().split(" ")) {
+        final candidate = word.replace("go", with: "").replace("v", with: "");
+        if (semver\isValid(candidate)) {
+            return candidate;
+        }
+    }
+    return "";
+}
+
+// probe runs a binary's version command and returns the extracted version, or "" when the
+// tool is absent or says nothing version-shaped. Absent is not a finding: a tool this
+// repo does not install is not out of date.
+fun probe(bin: str, args: [str]) > str {
+    final res = os\exec(bin, args: args, dir: ".", opts: {"allow_failure": true, "quiet": true});
+    if (res.code != 0) {
+        return "";
+    }
+    return extract(res.stdout);
+}
+
+// eolFor is the end-of-life resolver, DELIBERATELY UNIMPLEMENTED. It always answers
+// "unknown", and every caller must treat that as a real answer rather than as "supported".
+//
+// Not built because no source for it clears the bar the version list clears. A tag comes
+// from the project's own repository; a support window does not exist in any repository,
+// so every candidate is a third party restating a policy published as prose:
+//
+//   - endoflife.date is the obvious aggregator and carries exactly the right schema, but
+//     it is a volunteer-maintained intermediary. We would be trusting its accuracy, its
+//     refresh cadence, and its uptime, and it is not clear that a build tool polling it on
+//     every check is a use its maintainers have sanctioned. Depending on an unsanctioned
+//     endpoint is how a tool gets rate-limited into a broken gate.
+//   - a table compiled into magus would freeze third-party claims into a binary and put
+//     us in the business of keeping them fresh.
+//   - hosting our own would make it our aggregator, with the same freshness obligation and
+//     one more thing to keep up.
+//
+// So this reports unknown, on purpose, until there is a first-party machine-readable
+// source or an explicit blessing from one that already exists. Unknown is a useful answer:
+// it says nobody here knows, which is true, instead of implying a check happened.
+//
+// If you implement it: absent must stay distinguishable from "supported". Inferring
+// support from a missing field is the same defect as reading a zero timestamp as an old
+// one.
+fun eolFor(bin: str, version: str) > str {
+    return "unknown";
+}
+
+// observe prints one line about one tool. It never throws.
+//
+// Within-line first, because "3 patches behind on 1.26" is a fact about a release you
+// already chose, while "1.27 exists" is a fact about a decision nobody here is qualified
+// to make for you. Other lines are named, never counted: a count reads as a backlog, and
+// moving lines is one decision however many releases upstream cut on the far side.
+fun observe(name: str, bin: str, args: [str]) > void {
+    final current = probe(bin, args: args);
+    if (current == "") {
+        std\print("toolchain " + name + ": not installed, or its version is unreadable");
+        return;
+    }
+    final tags = tagsOf(bin);
+    if (tags.len() == 0) {
+        std\print("toolchain " + name + " " + current + ": upstream unreachable, currency unknown");
+        return;
+    }
+
+    final line = semver\majorMinor(current);
+    var listed = false;
+    var ahead = 0;
+    var otherLines: {str: bool} = mut {};
+
+    foreach (v in tags) {
+        if (semver\compare(v, b: current) == 0) {
+            listed = true;
+            continue;
+        }
+        if (semver\majorMinor(v) != line) {
+            if (semver\compare(v, b: current) > 0) {
+                otherLines[semver\majorMinor(v)] = true;
+            }
+            continue;
+        }
+        if (semver\compare(v, b: current) > 0) {
+            ahead = ahead + 1;
+        }
+    }
+
+    var note = "";
+    if (!listed) {
+        // Worth saying and deliberately not called "unsupported": it is equally the shape
+        // of a retagged release, a distro build, or a version cut from a branch upstream
+        // does not tag. The observation is that upstream does not carry it.
+        note = "; upstream has no tag for this version";
+    }
+
+    if (ahead == 0) {
+        std\print("toolchain " + name + " " + current + ": nothing newer on " + line + note);
+    } else {
+        std\print("toolchain " + name + " " + current + ": " + "{ahead}" + " newer on " + line + note);
+    }
+    if (otherLines.len() > 0) {
+        var names = mut [<str>];
+        foreach (l, _ in otherLines) {
+            names.append(l);
+        }
+        std\print("toolchain " + name + " " + current + ": newer lines exist upstream ("
+            + names.join(", ") + "); whether to move is not this check's call");
+    }
+    std\print("toolchain " + name + " " + current + ": end of life " + eolFor(bin, version: current));
+}
+
+// report observes every wired toolchain. It prints and never throws: nothing here is a
+// defect in the tree, it is information about the world outside it, and deciding what to
+// do about that belongs to whoever reads it.
+export fun report() > void {
+    observe("go", bin: "go", args: ["version"]);
+    observe("node", bin: "node", args: ["--version"]);
+}

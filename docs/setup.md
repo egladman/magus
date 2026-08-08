@@ -1,11 +1,11 @@
 ---
-title: Download
+title: Setup
 page_type: overview
 description: Install magus from a signed release, verify it, set up your shell, and keep it current with magus self update.
-tags: [download, install, release, self-update, ed25519, verify, signing]
+tags: [install, download, release, self-update, ed25519, verify, signing]
 ---
 
-# Download
+# Setup
 
 magus ships as a single self-contained binary. No runtime, no package manager required.
 
@@ -17,7 +17,7 @@ less install.sh
 sh install.sh
 ```
 
-Read the script before you run it. It downloads the current release, checks the signature, and installs the binary, the man pages, and the [`mgs` shorthand](download/shell-setup.md#mgs-shorthand) under `~/.local`. `--dry-run` prints the whole plan without writing anything.
+Read the script before you run it. It downloads the current release, checks the signature, and installs the binary, the man pages, and the [`mgs` shorthand](setup/shell-setup.md#mgs-shorthand) under `~/.local`. `--dry-run` prints the whole plan without writing anything.
 
 In a hurry, and willing to give a network response your shell? `curl ... | sh` works too:
 
@@ -29,12 +29,12 @@ curl --proto '=https' --tlsv1.2 -sSf https://eli.gladman.cc/magus/install | sh
 
 | Route                                              | When                                                       |
 | -------------------------------------------------- | ---------------------------------------------------------- |
-| [Linux](download/linux.md)                          | manual install, amd64 or arm64                              |
-| [macOS](download/macos.md)                          | manual install, Apple Silicon or Intel                      |
-| [Windows](download/windows.md)                      | manual install, amd64 or arm64                              |
-| [Container image](download/container-image.md)      | run from an OCI image, or extract the binary from one       |
-| [mise](download/package-managers.md)                | you already manage tool versions with mise                  |
-| [Build from source](download/package-managers.md#build-from-source) | you want a local build, or a `noselfupdate` build |
+| [Linux](setup/linux.md)                     | manual install, amd64 or arm64                        |
+| [macOS](setup/macos.md)                     | manual install, Apple Silicon or Intel                |
+| [Windows](setup/windows.md)                 | manual install, amd64 or arm64                        |
+| [Container image](setup/container-image.md) | run from an OCI image, or extract the binary from one |
+| [mise](setup/mise.md)                       | you already manage tool versions with mise            |
+| [Build from source](setup/build-from-source.md) | you want a local build, or a `noselfupdate` build |
 
 ## Platform support
 
@@ -72,9 +72,9 @@ Two consequences worth knowing before you pick a build:
 
 ## Next steps
 
-- **[Verify the release](download/verify.md)** before first run. Every build ships an Ed25519-signed `SHA256SUMS`; on a first install, verify it by hand rather than with the binary you just downloaded.
-- **[Set up your shell](download/shell-setup.md)** for tab-completion (bash, zsh, fish, PowerShell) and the `mgs` shorthand.
-- **[Uninstall](download/uninstall.md)** lists every path to delete: the binary, the man pages, the XDG state and config directories, and the workspace cache.
+- **[Verify the release](setup/verify.md)** before first run. Every build ships an Ed25519-signed `SHA256SUMS`; on a first install, verify it by hand rather than with the binary you just downloaded.
+- **[Set up your shell](setup/shell-setup.md)** for tab-completion (bash, zsh, fish, PowerShell) and the `mgs` shorthand.
+- **[Uninstall](setup/uninstall.md)** lists every path to delete: the binary, the man pages, the XDG state and config directories, and the workspace cache.
 
 ## Update
 

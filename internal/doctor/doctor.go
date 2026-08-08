@@ -156,6 +156,7 @@ func (r *runner) run(wsErr error) types.DoctorReport {
 		r.checkCacheYield(projects),
 		r.checkLanguageCoverage(projects),
 		r.checkCITarget(projects),
+		r.checkSchemaFloor(projects),
 		r.checkNearDuplicateServices(projects),
 		r.checkStaleServiceSuppressions(projects),
 		r.checkMagusfileSyntax(projects),

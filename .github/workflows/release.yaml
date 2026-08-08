@@ -21,7 +21,7 @@ name: Release
 # delivery - cd.yaml now holds the thing that actually is. The rename is not free:
 # cosign pins the workflow PATH as the certificate identity, so every image published
 # before it carries `.github/workflows/cd.yaml` and no longer verifies against the
-# command in docs/guides/download/container-image.md. That was an accepted cost while
+# command in docs/setup/container-image.md. That was an accepted cost while
 # this project has no users; it will not be once it does. Treat this filename as frozen
 # from the first release published under it.
 

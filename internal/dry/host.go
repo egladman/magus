@@ -495,11 +495,10 @@ func captureConfigure(args []vm.Value) (string, vm.Value) {
 // (internal/interp/bindings/project_ns.go), so the playground/dry path rejects
 // the same typos the real engine does instead of silently dropping them.
 var (
-	dryKnownProjectOptionKeys = []string{
-		"name", "depends_on", "outputs", "sources", "exclusive", "spells", "watch_ignore", "targets",
-		"no_language",
-	}
-	dryKnownTargetPolicyKeys = []string{"skip_cache", "exclusive", "slots"}
+	// The SAME list the engine rejects against (types.ProjectOptions), not a copy.
+	// These were two hand-maintained slices and they had already drifted.
+	dryKnownProjectOptionKeys = types.ProjectOptionKeys()
+	dryKnownTargetPolicyKeys  = []string{"skip_cache", "exclusive", "slots"}
 )
 
 // rejectUnknownKeys errors on the first key in m absent from known. context
@@ -517,7 +516,7 @@ func rejectUnknownKeys(m vm.Value, known []string, context string) error {
 		msg := fmt.Sprintf("%s: unknown option %q (known options: %s)",
 			context, k, strings.Join(sortedKnown, ", "))
 		if hint := suggestNearest(k, known); hint != "" {
-			msg = fmt.Sprintf("%s: unknown option %q; did you mean %q? (known options: %s)",
+			return fmt.Errorf("%s: unknown option %q; did you mean %q? (known options: %s)",
 				context, k, hint, strings.Join(sortedKnown, ", "))
 		}
 		return errors.New(msg)

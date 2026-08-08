@@ -23,7 +23,7 @@ started one.
 
 ## The install
 
-The [install script](../download.md#install) writes three things under
+The [install script](../setup.md#install) writes three things under
 `INSTALL_PREFIX`, which defaults to `~/.local`:
 
 | Path                                | What                                                                     |
@@ -33,7 +33,7 @@ The [install script](../download.md#install) writes three things under
 | `~/.local/share/man/man1/magus*.1`  | the man pages: `magus.1`, plus `magus-<subcommand>.1` for each subcommand  |
 
 If you installed with a different `INSTALL_PREFIX`, passed `--bin-dir` to
-[`magus self update`](../download.md#update), or moved the binary by hand, ask the
+[`magus self update`](../setup.md#update), or moved the binary by hand, ask the
 shell where it ended up:
 
 ```sh
@@ -49,7 +49,7 @@ through.
 | Path                     | Default                 | Holds                                                                                                                                                                                                            |
 | ------------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `$XDG_STATE_HOME/magus/` | `~/.local/state/magus/` | `history/v1.json` (run history, read by volatility detection, the CI forecaster, and bisect), `pry_history` (REPL history), `x-state.json` (the `magus x` picker), `memory/` (per-repository agent memory), `mcp_token` and `connectors.json` (secrets) |
-| `$XDG_CONFIG_HOME/magus/` | `~/.config/magus/`      | the user-global `magus.yaml`, the tier under a workspace's own (see [Configuration](../../reference/config.md))                                                                                                    |
+| `$XDG_CONFIG_HOME/magus/` | `~/.config/magus/`      | the user-global `magus.yaml`, the tier under a workspace's own (see [Configuration](../reference/config.md))                                                                                                    |
 | `$XDG_RUNTIME_DIR/magus/` | `$TMPDIR/magus-<uid>/`  | `magus-daemon.sock`, `magus-daemon.log`, and `services/`. Recreated on the next daemon start, and cleared for you at reboot                                                                                        |
 
 State and config are separate on purpose: config is the kind of thing you sync or
@@ -66,9 +66,9 @@ The paths above are user-global. Each repository you ran magus in also holds:
 
 | Path                       | What                                                                                                                             |
 | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `.magus/`                  | the [build cache](../../concepts/cache.md): `cas/`, `manifests/`, `logs/`, and the mtime memo. Lives in the workspace rather than under XDG; override with `MAGUS_CACHE_DIR` |
+| `.magus/`                  | the [build cache](../concepts/cache.md): `cas/`, `manifests/`, `logs/`, and the mtime memo. Lives in the workspace rather than under XDG; override with `MAGUS_CACHE_DIR` |
 | `magus.yaml`, `magusfile.buzz` | written by `magus init`. Your declarations, tracked in git; delete them only if you are removing magus from the repo itself      |
-| `.claude/skills/magus-*`   | present only if you ran [`magus agent install`](../integrations/agents.md)                                                          |
+| `.claude/skills/magus-*`   | present only if you ran [`magus agent install`](../guides/integrations/agents.md)                                                          |
 | `AGENTS.md`                | the file is yours; magus maintains only the section between `# BEGIN magus-generated` and `# END magus-generated`                   |
 
 `magus init` also wires git, in three places a `rm` will not reach:
@@ -99,7 +99,7 @@ nothing else lives there.
 
 ## Other install routes
 
-- **[mise](package-managers.md#mise)**: `mise unuse -g ubi:egladman/magus` drops the
+- **[mise](mise.md)**: `mise unuse -g ubi:egladman/magus` drops the
   entry from the config; `mise uninstall ubi:egladman/magus` deletes the installed
   version. You need both. For a per-repository pin, edit that repo's `mise.toml` or
   pass `--path`. The XDG paths above are still yours to clean up.

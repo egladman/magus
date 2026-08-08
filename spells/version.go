@@ -184,6 +184,161 @@ func VersionToken(output string, key VersionKey) (token string, note string) {
 	return narrowed, ""
 }
 
+// VersionBounds is the window of versions a binary is allowed to report: an
+// inclusive floor and an exclusive ceiling, each a plain version.
+//
+// Two named bounds rather than one constraint string, and that is a deliberate
+// narrowing. A range language - ">= 22, < 25" - is a mini-language in a field: the
+// comma means AND here and `||` means OR, neither is guessable, and `^` and `~` mean
+// materially different things in npm, Composer, and the library this package parses
+// with. A toolchain window needs a floor and sometimes a ceiling. It does not need
+// disjunction, and the cost of offering it is that every author has to know a syntax
+// to write the two cases that matter.
+//
+// The shape also makes a defect unrepresentable. The single-constraint form had
+// exactly one consumer and it reported every failure as ToolTooOld, so a too-NEW
+// binary was told it was too old. Two bounds are two comparisons, so which one failed
+// is structural rather than something the caller has to reconstruct.
+//
+// Below is exclusive because that is the bound people actually mean. "Not the 25 line"
+// written as an inclusive max is `<= 24`, which rejects 24.19.0 - the classic
+// off-by-one. Below 25 cannot be misread.
+//
+// Declared by two owners with different authority, and intersected before use: a spell
+// states what its ops need to function at all, and a workspace states policy. Neither
+// can loosen the other.
+type VersionBounds struct {
+	// Min is the oldest version accepted, inclusive. Empty accepts any.
+	Min string `json:"min,omitempty" yaml:"min,omitempty"`
+	// Below is the first version REJECTED, exclusive. Empty accepts any.
+	Below string `json:"below,omitempty" yaml:"below,omitempty"`
+}
+
+// IsZero reports whether the window constrains nothing.
+func (b VersionBounds) IsZero() bool { return b.Min == "" && b.Below == "" }
+
+// Verdict names how a probed version relates to a window.
+type Verdict int
+
+const (
+	// VerdictInside means the version satisfies every bound that was declared.
+	VerdictInside Verdict = iota
+	// VerdictTooOld means the version is below Min.
+	VerdictTooOld
+	// VerdictTooNew means the version is at or above Below.
+	VerdictTooNew
+	// VerdictUnknown means the comparison could not be made - an unparseable probed
+	// version, or a bound that is not a version. It is never a violation: a window
+	// magus cannot evaluate must not fail a build, the same way an unprobeable tool
+	// is not "too old".
+	VerdictUnknown
+)
+
+// Check reports how version sits in the window.
+//
+// A bound that fails to parse yields VerdictUnknown rather than being skipped. Skipping
+// would let a typo silently widen the window to everything, which is the failure mode a
+// declared bound exists to prevent; callers that can reject at declaration time do so,
+// and this is the backstop for the ones that cannot.
+func (b VersionBounds) Check(version string) Verdict {
+	if b.IsZero() {
+		return VerdictInside
+	}
+	v, ok := normalizeBound(version)
+	if !ok {
+		return VerdictUnknown
+	}
+	if b.Min != "" {
+		min, ok := normalizeBound(b.Min)
+		if !ok {
+			return VerdictUnknown
+		}
+		if semver.Compare(v, min) < 0 {
+			return VerdictTooOld
+		}
+	}
+	if b.Below != "" {
+		ceiling, ok := normalizeBound(b.Below)
+		if !ok {
+			return VerdictUnknown
+		}
+		if semver.Compare(v, ceiling) >= 0 {
+			return VerdictTooNew
+		}
+	}
+	return VerdictInside
+}
+
+// normalizeBound puts an authored version into the form x/mod/semver compares.
+//
+// Authors write "1.21", not "v1.21": the `v` is Go's spelling, not the ecosystem's, and
+// requiring it in a magusfile or magus.yaml would be magus vocabulary leaking into a
+// field about node or python. It is added here rather than at every call site.
+//
+// Partial versions are deliberately left partial. x/mod compares "v1.21" as "v1.21.0",
+// which is what `min = "1.21"` and `below = "25"` both already mean to the person who
+// wrote them.
+func normalizeBound(v string) (string, bool) {
+	if v == "" {
+		return "", false
+	}
+	if v[0] != 'v' {
+		v = "v" + v
+	}
+	if !semver.IsValid(v) {
+		return "", false
+	}
+	return v, true
+}
+
+// Intersect returns the narrower of two windows, bound by bound.
+//
+// Narrower always wins because the two declarations answer different questions and
+// neither may relax the other: a spell says what its ops need to run, a workspace says
+// what it has qualified. An empty bound on either side contributes nothing, so a
+// workspace that sets only a ceiling keeps the spell's floor.
+//
+// An unparseable bound is kept rather than discarded. Dropping it would silently widen
+// the result, and Check turns it into VerdictUnknown where the reader can see it.
+func (b VersionBounds) Intersect(other VersionBounds) VersionBounds {
+	out := b
+	if higher(other.Min, b.Min) {
+		out.Min = other.Min
+	}
+	if lower(other.Below, b.Below) {
+		out.Below = other.Below
+	}
+	return out
+}
+
+// higher reports whether candidate is a tighter floor than current. An empty candidate
+// never wins; an empty current always loses to a real one. An unparseable candidate
+// loses, which leaves the existing bound in place for Check to report as unknown.
+func higher(candidate, current string) bool { return tighter(candidate, current, 1) }
+
+// lower reports whether candidate is a tighter ceiling than current.
+func lower(candidate, current string) bool { return tighter(candidate, current, -1) }
+
+// tighter is higher and lower with the comparison sign as the only difference between
+// them. want is the semver.Compare result that means candidate narrows the window.
+func tighter(candidate, current string, want int) bool {
+	if candidate == "" {
+		return false
+	}
+	if current == "" {
+		return true
+	}
+	c, ok := normalizeBound(candidate)
+	if !ok {
+		return false
+	}
+	cur, ok := normalizeBound(current)
+	if !ok {
+		return false
+	}
+	return semver.Compare(c, cur) == want
+}
+
 // Tool is everything a spell declares about one binary it drives.
 //
 // Keyed by bin name in Descriptor.Tools, which is what lets an op resolve its own
@@ -203,14 +358,18 @@ type Tool struct {
 	// Ready gates an op on this binary being usable, for a client whose server may be
 	// down. Its result is a precondition and never enters a cache key.
 	Ready Command `json:"ready,omitempty"`
-	// Floor is the oldest version of this binary the spell's ops work against, as a
-	// semver constraint (">= 2.0", "^1.4"). Empty accepts any version.
+	// Supported is the version window this spell's ops work against. Empty accepts any
+	// version.
 	//
 	// It is the fourth question about a tool, after does it exist, what version, and is
 	// it usable. Without it a too-old binary fails with whatever that tool says about
 	// an unrecognized flag - the same misleading failure readiness exists to prevent,
 	// one step over. Checked against the extracted version, so it needs Probe.
-	Floor string `json:"floor,omitempty"`
+	//
+	// It states what the OPS need, not what a repo has qualified: "go::test does not
+	// work below 1.21" belongs here, "we have not moved to node 25 yet" belongs in the
+	// workspace's own bounds, which are intersected with this one.
+	Supported VersionBounds `json:"supported,omitempty"`
 	// Diagnostics names the convention this binary prints findings in; empty means
 	// prose. On the tool rather than the op because the format is the binary's:
 	// hadolint reports the same way whichever op invokes it.

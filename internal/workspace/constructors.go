@@ -3,10 +3,15 @@ package workspace
 import (
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
+
+	semver "github.com/Masterminds/semver/v3"
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -76,6 +81,31 @@ func WithWatchIgnore(patterns ...types.IgnorePattern) ProjectOption {
 			}
 		}
 		p.WatchIgnores = append(p.WatchIgnores, patterns...)
+		return nil
+	}
+}
+
+// WithToolBounds sets the project's per-binary version windows, rejecting a bound that
+// is not a version.
+//
+// Rejecting at load is what keeps VersionBounds.Check's unknown verdict a backstop
+// rather than the normal path: a typo here would otherwise widen the window to
+// everything and report nothing, which is the opposite of what declaring one is for.
+func WithToolBounds(bounds map[string]spells.VersionBounds) ProjectOption {
+	return func(p *types.Project) error {
+		for _, bin := range slices.Sorted(maps.Keys(bounds)) {
+			b := bounds[bin]
+			for _, f := range []struct{ field, value string }{{"min", b.Min}, {"below", b.Below}} {
+				if f.value == "" {
+					continue
+				}
+				if _, err := semver.NewVersion(f.value); err != nil {
+					return fmt.Errorf("magus: project %q: tools[%q].%s %q is not a valid version",
+						p.Path, bin, f.field, f.value)
+				}
+			}
+		}
+		p.ToolBounds = bounds
 		return nil
 	}
 }

@@ -33,6 +33,11 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Fixed
 
+- **A too-new tool reported MGS3005, "older than this spell supports".** The version gate
+  took a single constraint string, so one error covered every way of violating it. Two
+  named bounds make the direction structural: below the minimum is MGS3005, at or above
+  the ceiling is MGS3006.
+
 - **A defined type over a basic kind crossed into Buzz as `null`.** Now guarded by a
   test that crosses every runtime boundary type, with the list generated from the same
   registry that emits the Buzz mirrors - so a new boundary type is covered when it is
@@ -45,6 +50,27 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Added
 
+- **A supported version window per tool, checked against the binary that actually ran.**
+  A spell declares what its ops need with `supported = VersionBounds{min = "1.21"}`, a
+  workspace declares its own policy with `magus.project({"tools": {"node": {"min": "22",
+  "below": "25"}}})`, and the two intersect so neither can loosen the other. Outside the
+  window fails before the op forks, as MGS3005 (below the minimum) or MGS3006 (at or
+  above the ceiling). The version already fed the cache key, so the probe was running on
+  every build regardless; this compares its result against something you declared.
+  `min` is inclusive and `below` is exclusive, both plain versions rather than a
+  constraint range, because a range language puts a syntax between you and the two cases
+  that matter. magus never learns which versions exist upstream and never selects one.
+- **`opts.quiet` on `os\exec`, `os\exec_sh`, and `vcs\cmd`.** Captures output without
+  echoing it, matching what `magus\cmd` and friends already accepted. Read in the one
+  path all three share, so they cannot drift into different option sets. A script
+  consuming `git ls-remote --tags` no longer dumps 954 lines into the build log on its
+  way to the answer.
+- **A doctor check that the declared `required_version` covers the magusfile keys in
+  use.** An unknown `magus.project` key aborts workspace load, which takes down every
+  command including the one that would build a binary new enough to read the file.
+  `required_version` converts that into MGS1021, but only if somebody remembers to raise
+  it; this asserts it instead. An unrecognized key with no near match now also suggests
+  `magus self update`, for the binaries too old to evaluate a floor at all.
 - **Tool readiness probes.** A spell can declare `mgs_getReadinessProbes`, keyed by tool,
   and magus checks it before dispatching an op that runs that tool. `docker --version` is
   client-only and succeeds with no daemon, so a stopped daemon used to surface as a build

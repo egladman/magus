@@ -81,4 +81,4 @@ Open a new shell afterward, then re-run `magus version`.
 
 - [Verify the release](verify.md) before first run.
 - Set up [shell completion](shell-setup.md#shell-completion), and add the [`mgs` shorthand](shell-setup.md#mgs-shorthand) with `magus self install-shorthand`.
-- Keep it current with [`magus self update`](../download.md#update).
+- Keep it current with [`magus self update`](../setup.md#update).
