@@ -74,13 +74,19 @@ func main() {
 GOMAIN
 
     # Per-service magusfile: go spell, build = go build. Services are independent.
+    # Current magusfile shape: `magus\project({...})` and a context-threaded
+    # target. The previous form here (magus.project.register with an untyped
+    # callback, and a target taking only args) had rotted past the point of
+    # loading - magus rejected every generated project with "parameter \"p\"
+    # must have a type annotation", so no scenario measuring this fixture could
+    # run at all. A fixture that cannot be loaded measures nothing.
     cat > "$svc/magusfile.buzz" <<'MAGUSFILE'
 import "magus";
 import "magus/spell/go";
 
-magus.project.register(fun(p, cb) > bool { cb({"spells": [go]}); return true; });
+magus\project({"spells": [go]});
 
-export fun build(args: [str]) > void { go["go-build"](); }
+export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx); }
 MAGUSFILE
 done
 
