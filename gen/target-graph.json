@@ -57,8 +57,9 @@
             "amd64",
             "arm64",
             "cd",
+            "dynamic",
             "stable",
-            "static",
+            "tagged",
             "unstable"
           ],
           "spells": [
@@ -86,6 +87,7 @@
           "charms": [
             "cd",
             "stable",
+            "tagged",
             "unstable",
             "verify"
           ]
@@ -97,6 +99,7 @@
           "charms": [
             "cd",
             "stable",
+            "tagged",
             "unstable"
           ]
         },
@@ -109,6 +112,21 @@
           ],
           "charms": [
             "rw"
+          ]
+        },
+        {
+          "name": "security",
+          "doc": "Gates on dependency LICENSE terms, which is a separate question from image_scan's vulnerability pass even though both drive trivy.",
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "govulncheck"
+              ]
+            }
+          ],
+          "exec_overrides": [
+            "env:GOEXPERIMENT=jsonv2"
           ]
         },
         {
@@ -332,7 +350,7 @@
           "declared": "release_build",
           "doc": "Builds one release binary for one platform.",
           "charms": [
-            "static"
+            "dynamic"
           ],
           "spells": [
             {
@@ -434,10 +452,6 @@
           "doc": "Runs the in-file `test \"...\" {}` blocks in this repo's own root Buzz modules, through magus's embedded engine."
         },
         {
-          "name": "preflight",
-          "doc": "No gate of its own: doctor USED to run here and fail the build on a finding, which made workspace conventions a blocker for everyone downstream."
-        },
-        {
           "name": "build",
           "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
           "dependencies": [
@@ -451,7 +465,7 @@
         },
         {
           "name": "lint",
-          "doc": "Formats first, then golangci-lint, go vet, govulncheck, markdownlint, and shellcheck.",
+          "doc": "Formats first, then golangci-lint, go vet, markdownlint, and shellcheck.",
           "dependencies": [
             "format"
           ],
@@ -460,8 +474,7 @@
               "spell": "go",
               "ops": [
                 "golangci-lint",
-                "go-vet",
-                "govulncheck"
+                "go-vet"
               ]
             },
             {
@@ -476,9 +489,6 @@
                 "shellcheck"
               ]
             }
-          ],
-          "exec_overrides": [
-            "env:GOEXPERIMENT=jsonv2"
           ]
         },
         {
@@ -504,7 +514,8 @@
             "lint",
             "build",
             "test",
-            "completion-test"
+            "completion-test",
+            "security"
           ]
         },
         {

@@ -1,4 +1,4 @@
-//go:build !cgo || wasm
+//go:build !cgo || !libzstd || wasm
 
 package codec
 

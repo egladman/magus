@@ -103,7 +103,13 @@ func (o *strObj) runeCursor() (runeIdx, byteOff int) {
 // cursor is a hint that changes how far scanRune walks, never what it returns.
 // Offsets past 4 GiB are not memoized rather than truncated to a wrong value.
 func (o *strObj) setRuneCursor(runeIdx, byteOff int) {
-	if runeIdx < 0 || byteOff < 0 || runeIdx > 0xffffffff || byteOff > 0xffffffff {
+	// Widened to uint64 before comparing, rather than testing against an untyped
+	// 0xffffffff: `int` is 32 bits on linux/armv6, linux/armv7 and 386, where that
+	// constant overflows it and this package does not compile AT ALL. Both operands are
+	// already known non-negative, so the conversion is total. On a 32-bit host the bound
+	// is simply unreachable, which is the correct reading - a >4 GiB offset cannot arise
+	// there in the first place.
+	if runeIdx < 0 || byteOff < 0 || uint64(runeIdx) > math.MaxUint32 || uint64(byteOff) > math.MaxUint32 {
 		return
 	}
 	o.runeCur.Store(uint64(runeIdx)<<32 | uint64(byteOff))

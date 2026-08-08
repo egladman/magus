@@ -1,0 +1,3 @@
+// @expect: {"a":[1,2],"b":"s"}
+import "serialize";
+final __r = serialize.jsonEncode({"a": [1, 2], "b": "s"});

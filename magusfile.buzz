@@ -96,6 +96,10 @@ magus\project({
             "skip_cache": "rewrites assets/coverage.svg; a hit would skip the write",
             "memory_mb": 10240,
         },
+        // The verdict depends on trivy's license classifier, which is not a declared tool
+        // version and so is invisible to the cache key: a trivy upgrade that reclassifies a
+        // dependency would replay the OLD verdict against unchanged sources.
+        "security": {"skip_cache": "depends on trivy's license classifier version, which no cache key can see"},
 		// Preserves the hand-authored Unreleased section in place; caching a prior
 		// file would overwrite a later edit that is intentionally outside releases/.
 		"changelog-generate": {"skip_cache": "preserves a hand-authored Unreleased section; a replay would overwrite a later edit"},
@@ -410,7 +414,7 @@ fun load_variant(ctx: magus\Context, dockerfile: str) > void {
 // release.yaml's, which is what makes the documented release verify command reject one.
 //
 // A local build is single-architecture - see load_platform(). Stack `:amd64` or `:arm64`
-// to cross-build through emulation (`magus run image-build:static,arm64`).
+// to cross-build through emulation (`magus run image-build:arm64`).
 export fun image_build(ctx: magus\Context, args: [str]) > void {
     final registries = publish_registries(ctx);
     var pushed = mut [<str>];
@@ -423,21 +427,26 @@ export fun image_build(ctx: magus\Context, args: [str]) > void {
             // Only stable moves a floating tag: `latest` would hand an opted-into
             // prerelease to every consumer who never asked for it.
             var staticTags = [version()];
-            var cgoTags = [version() + "-cgo"];
+            var dynamicTags = [version() + "-dynamic"];
             if (ch == "stable") {
                 staticTags = [version(), "latest"];
-                cgoTags = [version() + "-cgo", "latest-cgo"];
+                dynamicTags = [version() + "-dynamic", "latest-dynamic"];
             }
             foreach (r in publish_variant(ctx, "Dockerfile.static", "linux/amd64,linux/arm64",
                 registries, staticTags, "static-meta.json")) { pushed.append(r); }
             foreach (r in publish_variant(ctx, "Dockerfile", "linux/amd64",
-                registries, cgoTags, "cgo-meta.json")) { pushed.append(r); }
+                registries, dynamicTags, "dynamic-meta.json")) { pushed.append(r); }
         }
         write_image_summary(pushed);
-    } else if (ctx.has_charm("static")) {
-        load_variant(ctx, "Dockerfile.static");
-    } else {
+    } else if (ctx.has_charm("dynamic")) {
         load_variant(ctx, "Dockerfile");
+    } else {
+        // Static is the DEFAULT, so it gets no charm - a charm names a departure from
+        // the usual, and the usual here is the image that runs anywhere. `dynamic` is
+        // the departure, and it is named for what it is rather than for cgo, the
+        // mechanism that produces it. Same word, same meaning, as the `_dynamic`
+        // release asset and the `-dynamic` image tag.
+        load_variant(ctx, "Dockerfile.static");
     }
 }
 
@@ -453,15 +462,44 @@ fun publish_registries(ctx: magus\Context) > [Registry] {
     return REGISTRIES;
 }
 
+// The release tag HEAD sits EXACTLY on, or "" when HEAD is not itself tagged.
+//
+// version() cannot answer this and must not be asked to. describe() renders an untagged
+// commit as v0.4.0-3-gabc123, whose prerelease component is `3-gabc123`, so a version
+// string alone cannot tell a genuine prerelease (`rc.1`) from mere distance past a stable
+// tag - and reading it as the former would file an ordinary mid-development commit under a
+// published channel. Comparing revision ids is exact and says nothing it cannot know.
+fun exact_release_tag() > str {
+    final head = vcs\commit().id;
+    foreach (t in vcs\tags("v*")) {
+        if (t.id == head) { return t.name; }
+    }
+    return "";
+}
+
 // The active channel: "commit", "unstable", or "stable".
 //
 // Naming both channels is rejected up front by exclusive_charms rather than left to the
 // assertions below, which would fail too but report the version rather than the mistake.
+//
+// `tagged` is the third answer: derive the channel from the release tag instead of naming
+// it. It exists so cutting a release candidate is a tag and nothing else - the alternative
+// was hand-editing `:cd,stable` to `:cd,unstable` in the workflow before every RC and back
+// afterwards, an edit whose omission publishes a prerelease as `latest`. Deriving is safe
+// in the direction that matters: it can only ever withhold a floating tag, never grant one
+// a prerelease has not earned.
 fun channel(ctx: magus\Context) > str {
     exclusive_charms(ctx, "stable", "unstable", "WS1002", "which channel to publish to");
+    final wantTagged = ctx.has_charm("tagged");
     final wantStable = ctx.has_charm("stable");
     final wantUnstable = ctx.has_charm("unstable");
-    if (!wantStable and !wantUnstable) { return "commit"; }
+    if (wantTagged and (wantStable or wantUnstable)) {
+        magus\raise("WS1002", message: "the `tagged` charm reads which channel to publish "
+            + "to off the release tag, so naming `stable` or `unstable` beside it answers "
+            + "that question twice - name one",
+            opts: {"url": "https://eli.gladman.cc/magus/recommendations/#one-charm-answers-one-question"});
+    }
+    if (!wantStable and !wantUnstable and !wantTagged) { return "commit"; }
 
     final v = version();
     if (v == "unknown") {
@@ -469,6 +507,17 @@ fun channel(ctx: magus\Context) > str {
             + "reads it from `git describe`, so a shallow clone with no tags cannot supply "
             + "one. Fetch tags, or drop the charm to publish to the commit channel.";
     }
+    if (wantTagged) {
+        final tag = exact_release_tag();
+        if (tag == "") {
+            throw "image: `tagged` reads the channel off the release tag HEAD sits on, and "
+                + "HEAD is not tagged - `" + v + "` describes distance past the nearest tag "
+                + "rather than a release. Tag the release first, or name `stable`/`unstable`.";
+        }
+        if (semver\parse(tag).prerelease == "") { return "stable"; }
+        return "unstable";
+    }
+
     // describe() renders an untagged commit as v0.4.0-3-gabc123, whose prerelease
     // component is 3-gabc123. One field therefore answers both "is this a prerelease" and
     // "is this even a tagged build", and stable has to reject both.
@@ -648,6 +697,53 @@ export fun image_scan(ctx: magus\Context, args: [str]) > void {
     } else {
         os\exec("trivy", ["image", image_tag()]);
     }
+}
+
+// Gates on dependency LICENSE terms, which is a separate question from image_scan's
+// vulnerability pass even though both drive trivy. magus is GPL-3.0-or-later, so the
+// failure worth catching is a dependency whose terms cannot be combined with that - and
+// the moment to catch it is the pull request that adds it, not the release that ships it.
+//
+// Gates on trivy's CATEGORY, corrected for the fact that its categories assume a
+// PROPRIETARY consumer. Out of the box trivy calls AGPL `forbidden` and GPL/LGPL
+// `restricted`, which is right for someone shipping closed source and wrong here: magus is
+// GPL-3.0-or-later, so copyleft is the ordinary case, not a finding. Left uncorrected this
+// gate would fail on dependencies that are perfectly usable, and a gate that cries wolf
+// gets switched off.
+//
+// So the compatible copyleft licenses are ignored explicitly and everything else at
+// HIGH/CRITICAL still fails. That direction matters: an unrecognised copyleft license is
+// NOT on the ignore list, so it fails loudly and someone looks at it. A denylist of
+// known-bad licenses would do the opposite and stay silent on anything unanticipated.
+//
+// What is deliberately NOT ignored, because it is genuinely incompatible with GPL-3.0:
+// GPL-2.0-ONLY (no "or later" - it cannot be upgraded to v3), CDDL, EPL, MPL-1.1, and
+// BSD-4-Clause with its advertising clause. GPL-2.0-or-later IS fine, since it permits
+// the upgrade. --severity HIGH,CRITICAL mirrors image_scan's threshold.
+//
+// The whole tree is scanned, npm subtrees included. That is not duplicated effort: the
+// per-project `security` targets in console/, docs/ and evals/ run pnpm's ADVISORY audit,
+// which says nothing about licensing.
+//
+// The baseline when this landed was 265 findings, all `notice` or `unencumbered` and none
+// forbidden or restricted, so this gate starts green and only speaks up on a regression.
+export fun security(ctx: magus\Context, args: [str]) > void {
+    // Both halves of Software Composition Analysis over one dependency inventory:
+    // govulncheck asks whether a dependency has a known flaw, trivy whether its terms may
+    // legally be here at all. They share this target because they share that input and a
+    // cache contract - each reads data that lives outside the tree, so neither is cacheable
+    // against sources. govulncheck sat in `lint` for a while, which spread that uncacheable
+    // answer across every op lint runs. GOEXPERIMENT is threaded through so the sandboxed
+    // child builds with the same fingerprint as the rest of the workspace.
+    go["govulncheck"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}));
+    os\exec("trivy", ["fs", "--scanners", "license",
+        "--severity", "HIGH,CRITICAL",
+        "--ignored-licenses", "AGPL-3.0,AGPL-3.0-only,AGPL-3.0-or-later,"
+            + "GPL-3.0,GPL-3.0-only,GPL-3.0-or-later,GPL-2.0-or-later,"
+            + "LGPL-2.1,LGPL-2.1-only,LGPL-2.1-or-later,"
+            + "LGPL-3.0,LGPL-3.0-only,LGPL-3.0-or-later",
+        "--exit-code", "1",
+        "."], ".", {});
 }
 
 // Renders the roff man pages into manpage/ (repo root). These are a DISTRIBUTION
@@ -886,7 +982,120 @@ export fun tapes(ctx: magus\Context, args: [str]) > void {
 // `cat dist/*.sha256 > dist/SHA256SUMS`, a plain shell one-liner, not a magus target.
 // release-build's cgo and static (charm) modes both call this, differing only in
 // CGO_ENABLED and the asset suffix.
+// Maps an ASSET architecture token to the GOARM level it implies, or "" for the arches
+// that carry no variant. The two 32-bit ARM builds ship as separate assets because
+// neither serves the other's hardware: an ARMv7 binary traps on ARMv6, and the ARMv6
+// build is limited to VFPv1 where v7 silicon offers VFPv3 (both are hardware float -
+// softfloat would be GOARM=5, which is not built). GOARCH stays "arm" for both; only
+// GOARM and the asset name differ. Go records GOARM in the binary's build info, which is
+// how `magus self update` picks the matching asset back out (see cmd/magus/selfupdate.go).
+// 32-bit ARM is a LINUX-ONLY asset here, and refused elsewhere rather than left merely
+// uninvoked. Go can target windows/arm, so without this the fold below would cheerfully
+// build `windows armv7` and name an archive after a platform nothing tests and no
+// download page lists; darwin has no 32-bit ARM port at all and would fail further in,
+// with a message about the toolchain instead of about the request. The workflow only ever
+// passes `linux`, so this guards the hand-run form - which is exactly where a typo goes
+// unnoticed.
+fun goarm_level(goos: str, goarch: str) > str {
+    if (goarch != "armv6" and goarch != "armv7") { return ""; }
+    if (goos != "linux") {
+        throw "release-build: " + goarch + " is a linux-only asset, so `" + goos + " "
+            + goarch + "` is not a platform this project ships - use `linux " + goarch + "`.";
+    }
+    if (goarch == "armv6") { return "6"; }
+    return "7";
+}
+
+// Writes THIRD-PARTY-NOTICES beside the staged binary, reading the module list OUT OF THAT
+// BINARY rather than out of go.mod.
+//
+// That distinction is the whole point. The two variants link different modules - the dynamic
+// build carries ebitengine/purego for FFI, the static build carries ulikunitz/xz for pure-Go
+// compression, and no shipped artifact contains both. A notices file resolved from go.mod
+// would name modules that are not in the archive it sits in, which is the precise inaccuracy
+// this file exists to prevent.
+//
+// `go version -m` is the reader: Go embeds the module table in every binary and prints it
+// without executing anything, so this works on a cross-compiled artifact too. The license
+// TEXTS come from the module cache, where the module zips already put them - no classifier,
+// no network, no extra tool to pin.
+fun write_notices(stage: str, binary: str) > void {
+    final modcache = os\exec("go", ["env", "GOMODCACHE"], ".", {}).stdout.split(separator: "\n")[0];
+    final listing = os\exec("go", ["version", "-m", fs\join(stage, binary)], ".", {}).stdout;
+
+    var body = "THIRD-PARTY NOTICES\n\n"
+        + "magus is licensed under the terms in the accompanying LICENSE file. It links the\n"
+        + "modules below, each under its own terms, reproduced here in full. This list is read\n"
+        + "from the shipped binary, so it describes THIS artifact rather than the module graph\n"
+        + "in general.\n\n";
+    var missing = mut [<str>];
+    var count = 0;
+
+    foreach (line in listing.split(separator: "\n")) {
+        final f = line.split(separator: "\t");
+        // Every dep row is "\tdep\t<path>\t<version>\t<hash>", so index 1 is the marker.
+        if (f.len() < 4) { continue; }
+        if (f[1] != "dep") { continue; }
+        // First-party modules are covered by the LICENSE next to this file. They are local
+        // replaces, so they also carry no cache entry to read a license from.
+        if (f[2].startsWith("github.com/egladman/magus")) { continue; }
+
+        final text = read_module_license(modcache, f[2], f[3]);
+        if (text == "") { missing.append(f[2] + "@" + f[3]); continue; }
+        body = body + "==============================================================================\n"
+            + f[2] + " " + f[3] + "\n"
+            + "==============================================================================\n\n"
+            + text + "\n\n";
+        count = count + 1;
+    }
+
+    // A dependency whose license cannot be found is a REPORTED failure, never a silent
+    // omission. A notices document that quietly drops an entry is worse than none, because it
+    // reads as complete to anyone auditing it.
+    if (missing.len() > 0) {
+        throw "release-build: no license found for " + "{missing.len()}"
+            + " module(s), refusing to write an incomplete THIRD-PARTY-NOTICES: "
+            + missing.join(separator: ", ");
+    }
+    fs\writeFile(fs\join(stage, "THIRD-PARTY-NOTICES"), body);
+    magus\info("notices: documented {count} third-party modules");
+}
+
+// Reads one module's license text from the module cache, or "" when none is present.
+fun read_module_license(modcache: str, path: str, version: str) > str {
+    final dir = fs\join(modcache, escape_module_path(path) + "@" + version);
+    foreach (name in ["LICENSE", "LICENSE.md", "LICENSE.txt", "LICENCE", "LICENCE.txt",
+                      "COPYING", "COPYING.md", "COPYING.txt"]) {
+        final p = fs\join(dir, name);
+        if (fs\exists(p)) { return fs\readFile(p); }
+    }
+    return "";
+}
+
+// Applies the module cache's case encoding: an uppercase letter becomes "!" plus its
+// lowercase form, so github.com/Masterminds/sprig is stored at github.com/!masterminds/sprig.
+// Without this every capitalised module path looks unlicensed - a false "missing license"
+// that would abort a release for no reason.
+fun escape_module_path(path: str) > str {
+    var escaped = "";
+    var i = 0;
+    while (i < path.len()) {
+        final ch = path.sub(i, len: 1);
+        final lower = ch.lower();
+        if (lower != ch) { escaped = escaped + "!" + lower; } else { escaped = escaped + ch; }
+        i = i + 1;
+    }
+    return escaped;
+}
+
 fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool, suffix: str) > void {
+    // Resolved BEFORE anything is written: goarm_level rejects a platform this project
+    // does not ship, and a rejected request should leave no trace. Creating the staging
+    // directory first left an empty dist/windows-armv7 behind on every refusal, which
+    // reads like a half-finished build rather than a request that never started.
+    // armv6/armv7 are asset names, not GOARCHes: fold them back to GOARCH=arm + GOARM.
+    final goarm = goarm_level(goos, goarch);
+
     fs\makeDirectory("dist");
     final v = version();
     var binary = "magus";
@@ -896,6 +1105,7 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     fs\makeDirectory(stage);
 
     var env = mut {"GOOS": goos, "GOARCH": goarch, "GOEXPERIMENT": "jsonv2"};
+    if (goarm != "") { env["GOARCH"] = "arm"; env["GOARM"] = goarm; }
     if (cgo) {
         env["CGO_ENABLED"] = "1";
         // CC/PKG_CONFIG_PATH are set by the CD workflow only where the native toolchain
@@ -920,12 +1130,59 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     // dynamic loader, and would not run on a musl or scratch host. zdef() reports FFI
     // unsupported in that build; the default (cgo) archives keep it. Same reasoning and the
     // same tag as Dockerfile.static.
+    // The native codec tags are OPT-IN, one per system library, and only the dynamic
+    // release asset opts in. They are named for the exact pkg-config module each file
+    // requires - `liblzma` for xz_cgo.go, `libzstd` for zstd_cgo.go - and deliberately NOT
+    // for the charm that happens to set them. A build tag describes what a FILE links, so
+    // it stays meaningful to anyone running `go build` directly, and keeping them separate
+    // means a host with only one of the two libraries can still take that one fast path.
+    // internal/codec's
+    // cgo path declares `#cgo pkg-config: liblzma` and `libzstd`, and CGO_ENABLED defaults
+    // to 1 wherever a C compiler exists - so gating that path on `cgo` alone made
+    // `go install github.com/egladman/magus/cmd/magus@latest` fail on any machine without
+    // those DEV HEADERS, which is most of them. It never showed up here because this
+    // workspace has both installed. The pure-Go fallback (klauspost/compress, ulikunitz/xz)
+    // is a real implementation, so the default build loses speed, not capability, and the
+    // CD runners that build this variant apt-get the headers explicitly.
+    //
+    // Note the two tags have OPPOSITE polarity, which is forced rather than arbitrary: a
+    // build with NO tags is what `go install` produces, so it has to be the configuration
+    // that works anywhere. FFI is pure Go and safe on by default, so static OPTS OUT with
+    // `noffi` (purego's cgo_import_dynamic would otherwise give a "static" binary a
+    // PT_INTERP). The native codec needs system libraries, so it can only ever be OPTED
+    // INTO.
     var build_args = mut ["-trimpath"];
-    if (!cgo) { build_args.append("-tags"); build_args.append("noffi"); }
+    if (cgo) { build_args.append("-tags"); build_args.append("liblzma,libzstd"); }
+    else { build_args.append("-tags"); build_args.append("noffi"); }
     build_args.append("-ldflags"); build_args.append(ld_flags());
     build_args.append("-o"); build_args.append(fs\join(stage, binary));
     build_args.append("./cmd/magus");
     go["go-build"](ctx.withEnv(env), {"args": build_args});
+
+    // What ships BESIDE the binary. GPL-3.0 section 4 asks that a copy of the License travel
+    // with the Program, and the ~70 MIT/BSD/Apache dependencies each require their notice
+    // reproduced in a binary redistribution - neither obligation is met by an archive
+    // holding one executable. The notices are generated FROM THIS BINARY rather than from
+    // go.mod, because the two variants link different modules and a document naming both
+    // would describe neither (see cmd/magus-utils/notices.go).
+    fs\copyFile("LICENSE", fs\join(stage, "LICENSE"));
+    fs\copyFile("README.md", fs\join(stage, "README.md"));
+    write_notices(stage, binary);
+
+    // Readable WITHOUT running the binary, which is the point: a dynamically linked build on
+    // a host missing libzstd or liblzma fails in the loader before main() ever runs, so
+    // `magus version` is unavailable exactly when someone most needs to know what they have.
+    var variant = "static";
+    if (cgo) { variant = "dynamic"; }
+    var platform = goos + "/" + goarch;
+    if (goarm != "") { platform = platform + " (GOARM=" + goarm + ")"; }
+    fs\writeFile(fs\join(stage, "BUILDINFO"),
+        "magus " + v + "\n"
+        + "commit:   " + commit() + "\n"
+        + "built:    " + build_date() + "\n"
+        + "platform: " + platform + "\n"
+        + "variant:  " + variant + "\n"
+        + "\nRun `go version -m magus` for the full module list and build settings.\n");
 
     final asset = fs\join("dist", "magus_" + v + "_" + goos + "_" + goarch + suffix + ".tar.gz");
     archive\compress(stage, asset, {});
@@ -943,7 +1200,7 @@ fun release_target_platform(goos: str, goarch: str) > [str] {
     if (goos != null and goos != "") { return [goos, goarch]; }
     // GOOS/GOARCH in the environment cross-target this build (the standard Go convention), so CD can
     // ask one runner for another platform's binary - e.g. the arm64 macOS job cross-builds darwin/amd64
-    // static via `GOOS=darwin GOARCH=amd64 magus run release-build:static`. Empty env falls to native.
+    // static via `GOOS=darwin GOARCH=amd64 magus run release-build`. Empty env falls to native.
     final envos = os\env("GOOS");
     final envarch = os\env("GOARCH");
     if (envos != null and envos != "" and envarch != null and envarch != "") { return [envos, envarch]; }
@@ -951,34 +1208,65 @@ fun release_target_platform(goos: str, goarch: str) > [str] {
     return [p[0], p[1]];
 }
 
-// Builds one release binary for one platform. Default is dynamically-linked (cgo):
-// internal/codec's zstd/xz fast path needs a real C toolchain + libzstd/liblzma for
-// whatever (goos, goarch) you ask for, so cross-compiling this variant only works if
-// you already have that toolchain around — CD never does, sticking to each native
-// job's own platform. The `static` charm (`magus run release-build:static`) switches
-// to a CGO_ENABLED=0 build instead: pure Go cross-compiles trivially, so unlike the
-// cgo default it's cheap to run for every platform from one machine — CD's
-// release-static job loops `release-build:static` once per platform with explicit
-// args. Reads has_charm directly (see docs/charms.md's function-target pattern, e.g.
-// build:container): this is a magusfile function target with no spell, so :static
+// Builds one release binary for one platform. Default is STATIC (CGO_ENABLED=0), and
+// the `dynamic` charm (`magus run release-build:dynamic`) opts into the cgo build.
+//
+// The default is static so that every layer says the same thing: the bare command
+// produces the bare asset, and that asset is the one that runs anywhere - no loader,
+// no glibc, no system libzstd. It used to be inverted, with the bare command producing
+// the cgo build while the bare ARCHIVE was the static one, so `release-build` and
+// `magus_<v>_<os>_<arch>.tar.gz` meant opposite things in the same release.
+//
+// The charm is named for the property it selects, matching the `_dynamic` asset suffix -
+// not for cgo, which is the mechanism that happens to produce it. Static also
+// cross-compiles trivially (pure Go), where the dynamic build needs a real C toolchain
+// plus libzstd/liblzma for the exact (goos, goarch) asked for, which is why CD only
+// builds it on each platform's native runner.
+//
+// Reads has_charm directly (see docs/charms.md's function-target pattern, e.g.
+// build:container): this is a magusfile function target with no spell, so :dynamic
 // trips the soft undeclared-charm typo-guard warning — expected here, same as that
 // example.
-export fun release_build(ctx: magus\Context, goos: str, goarch: str) > void {
+// Takes the platform as positional ARGS, not as declared parameters: a target's second
+// parameter is bound to the whole argument list, whatever it is named, so the earlier
+// `(ctx, goos: str, goarch: str)` signature put that list in goos and null in goarch -
+// which made `goos + "-"` a list+str concatenation and failed EVERY release-build, on
+// every platform, before it reached the compiler.
+export fun release_build(ctx: magus\Context, args: [str]) > void {
     // dist/* is skip_cache (never snapshotted), but declaring it keeps
     // `magus clean --outputs` aware of the release artifacts via AllOutputs.
     ctx.writesFiles("dist/*");
-    // The UNSUFFIXED archive is the static one, and the cgo build carries "-cgo". That is
-    // the same convention as the image tags (`latest` static, `latest-cgo` cgo), and it was
-    // inverted here: the archives spelled static with a suffix and gave the bare name to
-    // cgo, so the identical default was named two opposite ways across one release. The
-    // installer has always defaulted to VARIANT=static and the download guides have always
-    // linked the static asset, so this renames what people already take, rather than
-    // changing which build they get.
+    var goos = "";
+    var goarch = "";
+    if (args.len() == 1) {
+        // Half a platform is always a typo. Falling through would silently build the
+        // runner's OWN platform and name the archive after it, handing back a
+        // plausible asset for the wrong target.
+        throw "release-build: got one argument; pass both goos and goarch, e.g. -- linux armv7";
+    }
+    if (args.len() >= 2) { goos = args[0]; goarch = args[1]; }
+    // The STATIC archive carries "_static" and the dynamic one takes the bare name, which
+    // is Linux packaging practice: `busybox` is the ordinary dynamically-linked build and
+    // `busybox-static` is the marked exception. Go has no convention to conflict with here
+    // - projects shipping both variants are rare enough that none formed, and goreleaser
+    // documents no variant naming for multi-build projects either.
+    //
+    // Note this makes the archive name and the CHARM default disagree on purpose: the bare
+    // command produces the marked archive. That is tolerable only because both archives are
+    // now labelled at the point it matters - `_static` says what it is, and nothing has to
+    // be inferred from a name's absence. Everything that fetches an archive by name asks
+    // for `_static` EXPLICITLY (cmd/magus/selfupdate.go, every download guide), so no
+    // consumer depends on which variant happens to hold the bare name.
+    //
+    // The suffix names the PROPERTY, not the mechanism, and is a "_" field rather than "-"
+    // so the scheme stays splittable: the old `magus_v0.4.0_darwin_arm64-cgo.tar.gz` parsed
+    // its arch as `arm64-cgo`. platformFromName in cmd/magus-utils strips it before
+    // splitting, for the same reason.
     final p = release_target_platform(goos, goarch);
-    if (ctx.has_charm("static")) {
-        build_release_variant(ctx, p[0], p[1], false, "");
+    if (ctx.has_charm("dynamic")) {
+        build_release_variant(ctx, p[0], p[1], true, "");
     } else {
-        build_release_variant(ctx, p[0], p[1], true, "-cgo");
+        build_release_variant(ctx, p[0], p[1], false, "_static");
     }
 }
 
@@ -1284,11 +1572,17 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void {
     }
 }
 
-// No gate of its own: doctor USED to run here and fail the build on a finding, which
-// made workspace conventions a blocker for everyone downstream. The advice action now
-// reports the same findings on the pull request, non-blocking - and unlike a preflight
-// gate, that works for a consumer who never wired doctor into their own pipeline.
-export fun preflight(ctx: magus\Context, args: [str]) > void {}
+// This project deliberately declares NO preflight, and the reason is worth keeping: doctor
+// used to run in one and fail the build on a finding, which made workspace conventions a
+// blocker for everyone downstream. The advice action now reports the same findings on the
+// pull request, non-blocking - and unlike a preflight gate, that works for a consumer who
+// never wired doctor into their own pipeline.
+//
+// What was left behind was an EMPTY preflight with no callers, which reported `[pass]` for
+// doing nothing. The TypeScript projects keep theirs because it does real work there (an
+// unconditional pnpm install), but a target that cannot fail and that nothing depends on
+// is not a phase - it is a name. `preflight` is a convention, not a requirement; only `ci`
+// is required (see docs/concepts/targets.md).
 
 // Compiles one artifact: the host binary, or the container image under the `container` charm.
 export fun build(ctx: magus\Context, args: [str])  > void {
@@ -1299,10 +1593,12 @@ export fun build(ctx: magus\Context, args: [str])  > void {
         ctx.needs(go_build);
     }
 }
-// Formats first, then golangci-lint, go vet, govulncheck, markdownlint, and shellcheck.
-// golangci-lint and govulncheck go through the go spell's ops rather than a raw os\exec, so
-// the spell's version probes (mgs_getVersionProbes) reach the cache key - without them a
-// linter upgrade changes which code passes while every cache entry replays the old verdict.
+// Formats first, then golangci-lint, go vet, markdownlint, and shellcheck. STATIC ANALYSIS
+// only - govulncheck lives in `security` with the other scanners, because a scanner's answer
+// changes when its advisory database does, with no edit to this tree.
+// golangci-lint goes through the go spell's ops rather than a raw os\exec, so the spell's
+// version probes (mgs_getVersionProbes) reach the cache key - without them a linter upgrade
+// changes which code passes while every cache entry replays the old verdict.
 // Neither runs through `go tool`: that COMPILES the tool with whichever go leads PATH, which
 // is how CI built the linter with a different toolchain than it analyzed with, and panicked.
 // shellcheck covers the shell magus SHIPS - the completion script users source into their
@@ -1314,7 +1610,6 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
     go["golangci-lint"](ctx);
     go["go-vet"](ctx);
-    go["govulncheck"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}));
     markdown.markdownlint(ctx);
     // NOT markdown.typos here, deliberately. The op walks the whole project directory,
     // and this project is the Go tree - 487 of its hits are code comments using British
@@ -1330,7 +1625,7 @@ export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate);
 
 // Runs the CI gates through their declared dependencies.
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(lint, build, test, completion_test);
+    ctx.needs(lint, build, test, completion_test, security);
 }
 
 // Exercises the completion scripts magus SHIPS, each inside the official image for its

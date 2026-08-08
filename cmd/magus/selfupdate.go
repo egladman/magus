@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"runtime/debug"
 	"strings"
 
 	"github.com/egladman/magus/internal/selfupdate"
@@ -70,6 +71,42 @@ func selfCmdUsage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "To bootstrap a workspace, use: magus init")
 	fmt.Fprintln(os.Stderr, "Run 'magus self <subcommand> --help' for subcommand flags.")
+}
+
+// releaseArch returns the architecture token release assets are named with. That is
+// runtime.GOARCH everywhere except 32-bit ARM, where the release ships one asset per
+// GOARM level because neither binary serves the other's hardware. Go records GOARM in
+// the build info, so a running binary can name its own asset without the magusfile
+// having to stamp the level in via ldflags.
+func releaseArch() string {
+	var goarm string
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, s := range info.Settings {
+			if s.Key == "GOARM" {
+				goarm = s.Value
+				break
+			}
+		}
+	}
+	return archToken(runtime.GOARCH, goarm)
+}
+
+// archToken is releaseArch's logic over explicit inputs, so the arm cases are testable
+// from any host. goarm is the raw build-info value, which may be empty or carry
+// options ("7,softfloat").
+func archToken(goarch, goarm string) string {
+	if goarch != "arm" {
+		return goarch
+	}
+	// CD publishes exactly two 32-bit ARM assets (.github/workflows/cd.yaml), so only
+	// those two names may be requested. Every other input - no recorded level, or a
+	// level such as 5 that the release does not build - resolves to armv6, which also
+	// runs on ARMv7 hardware. Echoing the level back as "armv5" would name an asset
+	// that does not exist, turning a working update into a download failure.
+	if level, _, _ := strings.Cut(goarm, ","); level == "7" {
+		return "armv7"
+	}
+	return "armv6"
 }
 
 // selfUpdateCmd implements `magus self update`: atomically replaces the running
@@ -178,7 +215,7 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 		}
 	}
 
-	assetName := fmt.Sprintf("magus_%s_%s_%s.tar.gz", rel.Version, runtime.GOOS, runtime.GOARCH)
+	assetName := fmt.Sprintf("magus_%s_%s_%s_static.tar.gz", rel.Version, runtime.GOOS, releaseArch())
 	assets, err := selfupdate.FindAssets(rel, assetName)
 	if err != nil {
 		return err

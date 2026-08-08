@@ -55,8 +55,8 @@ env:
   MAGUS_LOG_STREAM: '1'
 
 jobs:
-  preflight:
-    name: magus preflight
+  plan:
+    name: magus plan
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -109,14 +109,31 @@ jobs:
           restore-keys: |
             ${{ github.workflow }}-magus-history-v1-
 
+      # Fails the run before a single shard starts. Uncommitted generated output is the
+      # most common way CI breaks here, and without this it is found INSIDE a shard -
+      # after setup-magus has built magus from source, mise has installed the toolchain,
+      # and the build has already run. This job has all of that in hand already, so the
+      # check costs seconds and reports the exact command to fix it.
+      #
+      # Scoped to the two fast projects rather than `magus affected generate`, deliberately.
+      # The docs project's generate renders the whole site, which is minutes and which the
+      # docs shard runs anyway - hoisting it here would duplicate the expensive half to
+      # accelerate feedback on the cheap half. These two cover MAGUS.md, the knowledge
+      # graph, and the target graph, which is where the drift actually shows up.
+      #
+      # No `rw`: without it generate writes nothing and simply reports a dirty tree, which
+      # is the whole gate. See docs/concepts/targets.md on generate's drift behaviour.
+      - name: Fail fast on uncommitted generated output
+        run: magus run generate . libs/gopherbuzz --no-default-charms
+
       - id: plan
         name: Compute shard matrix
         run: magus affected ci --plan | magus run ci-shard:gha --no-default-charms
 
   ci:
     name: magus shard ${{ matrix.shard }}
-    needs: preflight
-    if: fromJSON(needs.preflight.outputs.count) > 0
+    needs: plan
+    if: fromJSON(needs.plan.outputs.count) > 0
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -125,8 +142,8 @@ jobs:
       MAGUS_CACHE_SIGNING_KEY: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && secrets.MAGUS_CACHE_SIGNING_KEY || '' }}
     strategy:
       fail-fast: false
-      max-parallel: ${{ fromJSON(needs.preflight.outputs.max_parallel) }}
-      matrix: ${{ fromJSON(needs.preflight.outputs.matrix) }}
+      max-parallel: ${{ fromJSON(needs.plan.outputs.max_parallel) }}
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
@@ -198,7 +215,7 @@ jobs:
           # touching an explicitly named one.
           command:  run ci:gha --no-default-charms ${{ matrix.projects }}
           shard:    ${{ matrix.shard }}
-          n-shards: ${{ needs.preflight.outputs.count }}
+          n-shards: ${{ needs.plan.outputs.count }}
 
       # magus truncates a failing target's captured output to "likely diagnostics"
       # in the console, which drops thousands of lines - including, repeatedly, the
@@ -234,7 +251,7 @@ jobs:
     # variable MAGUS_PR_COMMENTS=false.
     name: magus advisor
     if: github.event_name == 'pull_request' && vars.MAGUS_PR_COMMENTS != 'false'
-    needs: [preflight]
+    needs: [plan]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -272,7 +289,7 @@ jobs:
 
   site-build:
     name: magus site build
-    needs: [preflight]
+    needs: [plan]
     # Separate from `magus affected ci` on purpose: affected ci shards per-project
     # correctness, and the deploy is a workspace-level composition no single project owns.
     #
@@ -285,7 +302,7 @@ jobs:
     # console trees, root Markdown, assets, releases, embedded skills, and the Go packages
     # the content generators read. A stale filter would skip the smoke test silently,
     # which is the hole this closes.
-    if: needs.preflight.result == 'success'
+    if: needs.plan.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -343,8 +360,8 @@ jobs:
     # install, and a trigger condition; two jobs meant two of each and two rows in the
     # checks list for one idea.
     name: magus report
-    needs: [preflight, ci]
-    if: always() && needs.preflight.result == 'success'
+    needs: [plan, ci]
+    if: always() && needs.plan.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -367,5 +384,5 @@ jobs:
         with:
           report: 'true'
           ci-result: ${{ needs.ci.result }}
-          shard-count: ${{ needs.preflight.outputs.count }}
+          shard-count: ${{ needs.plan.outputs.count }}
           merge-history: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
