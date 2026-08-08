@@ -1,27 +1,21 @@
 // Package orphanator defines an analyzer that reports a Go test file whose name
 // narrows the name of a source file in the same directory.
 //
-// The pattern it catches is test sprawl. Instead of adding cases to
-// resolver_test.go, a new file appears whose name reads as a sub-topic of
-// resolver.go - resolver_edge_cases_test.go, resolver_retry_paths_test.go - and
-// the package accumulates test files that no source file accounts for. Nothing
-// in the Go toolchain objects, so the only thing holding the line is whoever is
-// reading the diff.
+// It catches test sprawl: rather than adding cases to resolver_test.go, someone
+// writes resolver_edge_cases_test.go, and the package fills with test files no
+// source file accounts for. The Go toolchain does not object, so only a reviewer
+// catches it.
 //
-// The narrowing is what is reported, not the missing sibling. A test file named
-// after a cross-cutting concern the package has no single source file for is
-// ordinary Go: 34% of the standard library's test files are unpaired that way.
-// Reporting those is available through Options.Unpaired, off by default because
-// it is a house rule rather than a community one.
+// Narrowing is the reported case, not a missing sibling. 34% of the standard
+// library's test files are named after a cross-cutting concern no source file
+// owns, which makes reporting those a house rule. See Options.Unpaired.
 //
-// The analyzer carries no dependency on any particular linter runner: it is a
-// plain [golang.org/x/tools/go/analysis.Analyzer]. The golangci-lint module
-// plugin lives in the plugin subpackage.
+// The analyzer depends on no linter runner. The golangci-lint plugin lives in
+// the plugin subpackage.
 //
-// It is not hermetic. Deciding whether resolver.go exists is a directory read,
-// not a question the pass can answer (see sourceNames), so a driver that caches
-// analyzer results against declared package inputs - go vet's unitchecker does -
-// can replay a stale verdict after a sibling file is added or removed.
+// It is not hermetic: sourceNames reads the directory, so a driver caching
+// results against declared package inputs (go vet's unitchecker) can replay a
+// stale verdict after you add or remove a sibling file.
 package orphanator
 
 import (
@@ -55,18 +49,16 @@ var conventional = []string{
 	"fuzz_test.go", "*_fuzz_test.go", // 15
 }
 
-// buildSuffixes are the trailing filename segments the Go build system reads as a
-// constraint rather than as part of the name, so a test file carrying one still
-// pairs with the source underneath it: rawconn_unix_test.go against rawconn.go.
+// buildSuffixes are trailing segments the Go build system reads as a constraint
+// rather than part of the name, so rawconn_unix_test.go still pairs with
+// rawconn.go.
 //
-// Every entry is a GOOS or GOARCH in `go tool dist list` on Go 1.26, plus `unix`,
-// which go/build honours as a filename constraint without being a platform. That
-// is the whole rule, and it is deliberately narrow: an earlier version carried
-// `generic`, `other`, `stub`, `posix`, and `asm` on the theory that they read as
-// build tags. None of them is one, and each turned an ordinary narrowed name -
-// resolver_generic_test.go beside resolver.go - into a silently exempt file.
-// A false negative here is invisible, because nobody reports a linter for staying
-// quiet, so the bar for adding a suffix is that the toolchain acts on it.
+// Every entry is a GOOS or GOARCH from `go tool dist list` on Go 1.26, plus
+// `unix`, which go/build honours without being a platform. An earlier version
+// also carried `generic`, `other`, `stub`, `posix`, and `asm` because they read
+// like build tags. None is one, and each made resolver_generic_test.go beside
+// resolver.go silently exempt. Nobody reports a linter for staying quiet, so a
+// suffix earns its place only when the toolchain acts on it.
 var buildSuffixes = []string{
 	"aix", "android", "darwin", "dragonfly", "freebsd", "illumos", "ios", "js",
 	"linux", "netbsd", "openbsd", "plan9", "solaris", "wasip1", "windows",
@@ -91,10 +83,9 @@ type Options struct {
 
 // New returns an analyzer configured by opts, erroring on a malformed Allow glob.
 //
-// The globs are checked here rather than where they are used, because there they
-// are reached once per test file per package: a typo in a config file would lint
-// clean until it met a package that happened to contain a non-exempt test file,
-// then fail the run from somewhere unrelated to the mistake.
+// Checked here rather than at the point of use, which runs once per test file per
+// package: a config typo would lint clean until it reached a package holding a
+// non-exempt test file, then fail from somewhere unrelated to the mistake.
 func New(opts Options) (*analysis.Analyzer, error) {
 	for _, pattern := range opts.Allow {
 		if _, err := filepath.Match(pattern, "probe"); err != nil {
@@ -151,11 +142,10 @@ func (l linter) run(pass *analysis.Pass) (any, error) {
 
 		sources, ok := listings[dir]
 		if !ok {
-			// A directory that cannot be listed is one this analyzer has nothing to
-			// say about - a cgo or overlay path resolving outside the module, or a
-			// directory removed between package load and analysis. Returning the
-			// error would fail the whole lint run, which is far out of proportion
-			// for a filename heuristic.
+			// An unlistable directory is one this analyzer has nothing to say about:
+			// a cgo or overlay path outside the module, or a directory removed
+			// between package load and analysis. Returning the error would fail the
+			// whole lint run over a filename heuristic.
 			sources = sourceNames(dir)
 			listings[dir] = sources
 		}
@@ -172,12 +162,10 @@ func (l linter) run(pass *analysis.Pass) (any, error) {
 func (l linter) check(name string, sources map[string]bool) string {
 	base := strings.TrimSuffix(name, "_test.go")
 
-	// The exact pair FIRST. Trimming before this lookup hides a source file that
-	// carries the same build suffix - cipher_gcm_arm64_test.go beside
-	// cipher_gcm_arm64.go - and the trimmed name then falls through to the
-	// narrowing search, which reports it against whatever shorter name exists.
-	// That is a mainstream shape and the rule is on by default, so the wrong
-	// order is a false positive on ordinary code.
+	// Exact pair first. Trimming ahead of this lookup hides a source file carrying
+	// the same suffix (cipher_gcm_arm64_test.go beside cipher_gcm_arm64.go), and
+	// the trimmed name then reaches the narrowing search and matches some shorter
+	// name. The crypto packages are full of that shape.
 	if sources[base] {
 		return ""
 	}

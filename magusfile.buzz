@@ -1117,15 +1117,13 @@ export fun release(ctx: magus\Context, args: [str]) > void {
         }
     }
 
-    // Go's major-version suffix rule, which is about the module PATH and not the tag:
-    // from v2 onward the path must end in /vN. `go get` resolves the path, so a v2.0.0
-    // tag beside a go.mod still declaring the v1 path is uninstallable for every
-    // consumer - and the survey offers that major candidate happily, because semver
-    // alone has no opinion about it.
+    // Go's major-version suffix rule applies to the module PATH, not the tag: from
+    // v2 on, the path must end in /vN. `go get` resolves the path, so a v2.0.0 tag
+    // beside a go.mod declaring the v1 path is uninstallable. Semver has no opinion
+    // here, so the survey offers that candidate happily.
     //
-    // Refused rather than fixed. Renaming a module means rewriting every import of it
-    // across the tree, which is a source change belonging in its own commit, not a
-    // side effect of cutting a tag.
+    // Refused rather than fixed. Renaming a module means rewriting every import,
+    // which belongs in its own commit.
     foreach (m in modules) {
         final v = wanted[m["key"]];
         if (v == null) { continue; }
@@ -1173,13 +1171,12 @@ export fun release(ctx: magus\Context, args: [str]) > void {
         if (deliver) { vcs\cmd(["tag", m["prefix"] + "v" + v]); }
         // Only a Go module is required by the root's go.mod; a library in another
         // language is tag-only, so there is nothing to repoint.
-        // "Go module" used to be a reliable proxy for "the root's go.mod requires
-        // it", and libs/orphanator is the first one where it is not: it is compiled
-        // INTO a golangci-lint binary by `golangci-lint custom`, never imported by
-        // magus, so the root has no require line to repoint. Ask go.mod directly
-        // rather than infer it from the manifest. rewriteRequire still throws on a
-        // missing line, which is the right behaviour for a module the root DOES
-        // require and whose line has moved or been renamed.
+        // "Go module" used to imply "the root's go.mod requires it". libs/orphanator
+        // breaks that: `golangci-lint custom` compiles it into a binary and magus
+        // never imports it, so there is no require line to repoint. Ask go.mod
+        // directly instead of inferring from the manifest. rewriteRequire still
+        // throws on a missing line, which is right for a module the root does
+        // require and whose line moved.
         if (m["gomodule"] != "" and gomod.indexOf(m["gomodule"] + " v") == null) {
             magus\info("release: go.mod  " + m["gomodule"] + "  - not required by the root; tag only");
         } else if (m["gomodule"] != "") {
@@ -1326,14 +1323,13 @@ export fun build(ctx: magus\Context, args: [str])  > void {
     }
 }
 // Builds ./custom-gcl, the golangci-lint carrying this repo's own linters (see
-// .custom-gcl.yml). golangci-lint has NO runtime plugin loading - a plugin is
-// compiled in - so an in-repo rule is only reachable through a binary built here.
+// .custom-gcl.yml). golangci-lint compiles plugins in rather than loading them at
+// runtime, so an in-repo rule only runs through a binary built here.
 //
-// No declared outputs, for the same reason go-build declares none: the
-// declared-output globs are what EnsureMergeDriver writes into .gitattributes, and
-// /custom-gcl is gitignored, so declaring it would name a path that can never be
-// tracked. The consequence is the go-build one - a read-only run does not leave a
-// binary behind, so `magus clean` or a fresh worktree needs this run again.
+// No declared outputs, for go-build's reason: those globs are what
+// EnsureMergeDriver writes into .gitattributes, and /custom-gcl is gitignored, so
+// declaring it would name an untrackable path. Same consequence too - a read-only
+// run leaves no binary, so a fresh worktree needs this again.
 export fun lint_build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(".custom-gcl.yml", "libs/orphanator/go.mod", "libs/orphanator/go.sum",
                    "libs/orphanator/**/*.go");
@@ -1359,11 +1355,11 @@ export fun lint_build(ctx: magus\Context, args: [str]) > void {
 export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format, lint_build);
     // NOT go["golangci-lint"], which runs the stock binary off PATH and cannot see
-    // an in-repo linter. The spell op's job here was to get the linter VERSION into
-    // the cache key; readsFiles does that better for a custom binary, because
-    // .custom-gcl.yml pins the golangci-lint release AND the orphanator globs cover
-    // the rule itself - both by content, where `--version` would report a string
-    // carrying a build timestamp that moves on every rebuild.
+    // an in-repo linter. That op existed to get the linter version into the cache
+    // key; readsFiles does it by content instead. .custom-gcl.yml pins the
+    // golangci-lint release and the orphanator globs cover the rule, while
+    // `--version` on a custom binary carries a build timestamp that moves every
+    // rebuild.
     ctx.readsFiles(".custom-gcl.yml", "libs/orphanator/**/*.go");
     os\exec("./custom-gcl", ["run"]);
     go["go-vet"](ctx);

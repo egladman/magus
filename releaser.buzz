@@ -148,10 +148,9 @@ export fun isCandidate(v: str, cur: str) > bool {
 // consumer, and rewriting it would break building inside this repo.
 // modulePath returns the path go.mod declares, or "" when it declares none.
 //
-// It exists for Go's major-version suffix rule, which is about the PATH and not the
-// tag: from v2 onward the module path has to end in /vN, so a v2.0.0 tag sitting
-// beside a go.mod that still says the v1 path is uninstallable. Reading the
-// declaration is the only way to check that, since the tag alone cannot say.
+// Needed for Go's major-version suffix rule, which applies to the path: from v2 on
+// it must end in /vN, so a v2.0.0 tag beside a go.mod still naming the v1 path is
+// uninstallable. The tag alone cannot tell you that.
 export fun modulePath(gomod: str) > str {
     foreach (line in gomod.split("\n")) {
         if (line.startsWith("module ")) { return line.sub(7); }
@@ -162,11 +161,10 @@ export fun modulePath(gomod: str) > str {
 // needsMajorSuffix reports whether releasing major from the module at path would
 // publish a tag Go cannot resolve.
 //
-// From v2 onward Go requires the module path to end in /vN. `go get` resolves the
-// PATH, so a v2.0.0 tag beside a go.mod still declaring the v1 path is uninstallable
-// for every consumer, and semver alone has no opinion about it - the survey offers
-// that major candidate as readily as any other. A non-Go module passes "" and is
-// never subject to the rule.
+// From v2 on, Go wants the path to end in /vN, and `go get` resolves the path. A
+// v2.0.0 tag beside a go.mod naming the v1 path is uninstallable, and semver has
+// no opinion, so the survey offers that candidate like any other. A non-Go module
+// passes "" and never hits the rule.
 export fun needsMajorSuffix(path: str, major: int) > bool {
     if (path == "" or major < 2) { return false; }
     return !path.endsWith("/v" + major);
