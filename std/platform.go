@@ -119,7 +119,7 @@ var Platform = Module{
 		},
 		{
 			Name:    "cpus",
-			Doc:     "How many CPUs this process may use (Go's GOMAXPROCS, which honors a container quota where the OS-visible core count does not). Pair with memory() when sizing parallel work: the smaller of the two limits is the one that matters.",
+			Doc:     "How many CPUs this process may use (Go's GOMAXPROCS, which honors a container quota where the OS-visible core count does not). Pair with memory_bytes() when sizing parallel work: the smaller of the two limits is the one that matters.",
 			Returns: []Ret{{Type: TypeInt}},
 			Impl:    PlatformCPUs,
 		},

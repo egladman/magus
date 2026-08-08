@@ -41,6 +41,11 @@ fun grow() > int {
 }
 grow();
 `
+	// Both tests here read the same process-global attribution table, and both
+	// programs put their loop on the same line number, so without a reset each
+	// could be satisfied by the other's samples.
+	vm.ResetHeapStats()
+
 	s := buzz.NewSession(context.Background())
 	_, err := s.Eval(context.Background(), src)
 	require.NoError(t, err)
@@ -64,6 +69,8 @@ grow();
 // line data used to surface as "<main>:?" and, on a runner, outranked the real
 // loop - a ranking led by an entry nobody can act on is worse than a shorter one.
 func TestHeapHotSitesNamesOnlyRealLines(t *testing.T) {
+	vm.ResetHeapStats()
+
 	s := buzz.NewSession(context.Background())
 	_, err := s.Eval(context.Background(), `
 fun churn() > int {
