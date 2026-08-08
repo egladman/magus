@@ -16,6 +16,7 @@
 // that belongs to a human. See the `release` target for the policy that uses these.
 import "vcs";
 import "semver";
+import "std"; // assert, for the in-file test blocks below
 
 // releasableModules enumerates every independently-versioned project: one whose
 // resolved spells declare a manifest (spells.Spell.Manifests, the language's
@@ -145,6 +146,45 @@ export fun isCandidate(v: str, cur: str) > bool {
 // line's indentation. The `replace` directive names the same module and must NOT
 // be touched: it is the local-development path, ignored by every downstream
 // consumer, and rewriting it would break building inside this repo.
+// modulePath returns the path go.mod declares, or "" when it declares none.
+//
+// Needed for Go's major-version suffix rule, which applies to the path: from v2 on
+// it must end in /vN, so a v2.0.0 tag beside a go.mod still naming the v1 path is
+// uninstallable. The tag alone cannot tell you that.
+export fun modulePath(gomod: str) > str {
+    foreach (line in gomod.split("\n")) {
+        if (line.startsWith("module ")) { return line.sub(7); }
+    }
+    return "";
+}
+
+// needsMajorSuffix reports whether releasing major from the module at path would
+// publish a tag Go cannot resolve.
+//
+// From v2 on, Go wants the path to end in /vN, and `go get` resolves the path. A
+// v2.0.0 tag beside a go.mod naming the v1 path is uninstallable, and semver has
+// no opinion, so the survey offers that candidate like any other. A non-Go module
+// passes "" and never hits the rule.
+export fun needsMajorSuffix(path: str, major: int) > bool {
+    if (path == "" or major < 2) { return false; }
+    return !path.endsWith("/v" + major);
+}
+
+test "the major suffix rule starts at v2 and only for Go modules" {
+    std\assert(needsMajorSuffix("example.com/m", major: 2), message: "v2 without a suffix is refused");
+    std\assert(!needsMajorSuffix("example.com/m/v2", major: 2), message: "v2 with the suffix is fine");
+    std\assert(needsMajorSuffix("example.com/m/v2", major: 3), message: "a stale suffix is refused");
+    std\assert(!needsMajorSuffix("example.com/m", major: 1), message: "v1 has no suffix rule");
+    std\assert(!needsMajorSuffix("example.com/m", major: 0), message: "v0 has no suffix rule");
+    std\assert(!needsMajorSuffix("", major: 4), message: "a non-Go module is never subject to it");
+}
+
+test "reads the module path and ignores a require of a similar name" {
+    final gomod = "module example.com/root\n\ngo 1.26\n\nrequire (\n\tmodule-ish/x v1.0.0\n)\n";
+    std\assert(modulePath(gomod) == "example.com/root", message: "declared path");
+    std\assert(modulePath("go 1.26\n") == "", message: "no module line");
+}
+
 export fun rewriteRequire(gomod: str, module: str, version: str) > str {
     var kept = mut [];
     var found = false;
