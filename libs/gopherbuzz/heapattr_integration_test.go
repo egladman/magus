@@ -22,10 +22,14 @@ import (
 // binary to a 13.5GB peak and killed a CI shard. That is an absurd price for a
 // test about a diagnostic, and the diagnostic only needs a hot loop that grows.
 //
-// The assertion is on the REGION, not the exact statement. Sampling catches
-// whichever instruction the tick landed on, and a tight loop runs its control as
-// often as its body, so either the `foreach` header or the append inside it is a
-// correct answer. Both put the reader on the same few lines.
+// The assertion is that the loop is SURFACED, not that it ranks first. Sampling
+// catches whichever instruction a tick landed on, so the exact ordering and the
+// exact line vary by machine speed: an earlier version demanded the top slot and
+// passed on macOS while failing on a Linux runner, which is a test asserting a
+// probabilistic property as if it were deterministic.
+//
+// Either line 4 (the foreach) or line 5 (the append) is a correct answer; both put
+// the reader on the same two lines, which is the whole job.
 func TestHeapHotSitesNamesTheGrowingLine(t *testing.T) {
 	const src = `
 fun grow() > int {
@@ -37,21 +41,43 @@ fun grow() > int {
 }
 grow();
 `
-	// Line 4 is the foreach, line 5 the append inside it.
-	wantLines := []string{":4", ":5"}
-
 	s := buzz.NewSession(context.Background())
 	_, err := s.Eval(context.Background(), src)
 	require.NoError(t, err)
 
-	sites, _ := vm.HeapHotSites(5)
+	sites, _ := vm.HeapHotSites(10)
 	require.NotEmpty(t, sites, "a loop of 20000 allocating iterations must have been sampled")
 
-	var named bool
-	for _, want := range wantLines {
-		named = named || strings.HasSuffix(sites[0].Site, want)
+	var found *vm.HeapSite
+	for i, site := range sites {
+		if strings.HasSuffix(site.Site, ":4") || strings.HasSuffix(site.Site, ":5") {
+			found = &sites[i]
+			break
+		}
 	}
-	assert.Truef(t, named,
-		"the hottest site should be the growing loop (line 4 or 5), got %q (top 5: %v)", sites[0].Site, sites)
-	assert.Positive(t, sites[0].Objects, "the hottest site must carry a growth figure")
+	require.NotNilf(t, found,
+		"the growing loop (line 4 or 5) must appear among the hot sites, got %v", sites)
+	assert.Positive(t, found.Objects, "the loop's entry must carry a growth figure")
+}
+
+// Every reported site must name a line a reader can actually open. A chunk with no
+// line data used to surface as "<main>:?" and, on a runner, outranked the real
+// loop - a ranking led by an entry nobody can act on is worse than a shorter one.
+func TestHeapHotSitesNamesOnlyRealLines(t *testing.T) {
+	s := buzz.NewSession(context.Background())
+	_, err := s.Eval(context.Background(), `
+fun churn() > int {
+    var xs = mut [<str>];
+    foreach (i in 0..20000) { xs.append("x"); }
+    return xs.len();
+}
+churn();
+`)
+	require.NoError(t, err)
+
+	sites, _ := vm.HeapHotSites(20)
+	for _, site := range sites {
+		assert.NotContainsf(t, site.Site, ":?",
+			"site %q has no line number and cannot be acted on", site.Site)
+	}
 }

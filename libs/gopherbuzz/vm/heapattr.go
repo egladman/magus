@@ -65,11 +65,19 @@ func sampleHeapGrowth(f *frame, lastLen *int) {
 	if grown <= 0 || f == nil || f.chunk == nil {
 		return
 	}
+	// Drop a sample with no line information. A chunk compiled without line data
+	// yields "<main>:?", which names nothing a reader can open, and on a runner it
+	// outranked the actual growing loop - a ranking led by an unattributable entry
+	// is worse than a shorter honest one.
+	line := f.chunk.lineAt(f.ip - 1)
+	if line <= 0 {
+		return
+	}
 	site := f.chunk.Name
 	if site == "" {
 		site = "<buzz>"
 	}
-	site += ":" + itoa(f.chunk.lineAt(f.ip-1))
+	site += ":" + itoa(line)
 
 	heapAttr.mu.Lock()
 	defer heapAttr.mu.Unlock()
