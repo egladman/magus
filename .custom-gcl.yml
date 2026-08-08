@@ -1,0 +1,17 @@
+# Build configuration for a golangci-lint binary carrying this repo's own
+# linters. Produces ./custom-gcl via `golangci-lint custom`.
+#
+# The version MUST track the `aqua:golangci/golangci-lint` pin in mise.toml.
+# They are two halves of one decision: the stock binary reads .golangci.yml, and
+# a custom binary built against a different release can disagree with it about
+# which linters and settings keys exist.
+version: v2.12.2
+
+plugins:
+  # orphanator reports a test file whose name narrows a source file's name.
+  # Local `path` rather than a proxy `version` on purpose - the module lives in
+  # this repo, so a rule change is exercised by the very commit that makes it,
+  # with no tag-then-consume round trip.
+  - module: github.com/egladman/magus/libs/orphanator
+    import: github.com/egladman/magus/libs/orphanator/plugin
+    path: ./libs/orphanator

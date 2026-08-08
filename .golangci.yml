@@ -65,7 +65,27 @@ linters:
     - nolintlint      # enforce that //nolint directives include a reason
     - whitespace      # flag unnecessary blank lines inside functions/blocks
 
+    # --- In-repo linters (see .custom-gcl.yml) ---
+    # Reports a test file whose name narrows a source file's name -
+    # resolver_edge_cases_test.go beside resolver.go - which is how a package
+    # accumulates test files no source file accounts for. Deliberately NOT the
+    # broader "every _test.go needs an X.go": that rule fails the Go standard
+    # library on 34% of its test files, where this one costs it 1.2%. The reasoning
+    # and the stdlib measurements are in libs/orphanator/readme.md.
+    #
+    # This linter only exists in ./custom-gcl. The stock golangci-lint on PATH
+    # cannot read this config while the line below is present - it exits with
+    # `plugin("orphanator") not found`. That is the price of golangci-lint having
+    # no runtime plugin loading, and it is why `magus run lint` builds the binary.
+    - orphanator
+
   settings:
+    custom:
+      orphanator:
+        type: module
+        description: reports a test file whose name narrows a source file's name
+        original-url: github.com/egladman/magus/libs/orphanator
+
     sloglint:
       # all, not scope: EVERY slog call must take a context. `scope` would only catch a
       # function that already holds one, which leaves the more dangerous case standing -

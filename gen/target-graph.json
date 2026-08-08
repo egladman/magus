@@ -358,6 +358,14 @@
           "charms": [
             "cd"
           ],
+          "spells": [
+            {
+              "spell": "gomod",
+              "ops": [
+                "indexOf"
+              ]
+            }
+          ],
           "modifies_existing_files": [
             {
               "glob": "go.mod"
@@ -444,16 +452,39 @@
           ]
         },
         {
+          "name": "lint-build",
+          "declared": "lint_build",
+          "doc": "Builds ./custom-gcl, the golangci-lint carrying this repo's own linters (see .custom-gcl.yml).",
+          "reads_files": [
+            {
+              "project": ".",
+              "glob": ".custom-gcl.yml"
+            },
+            {
+              "project": ".",
+              "glob": "libs/orphanator/go.mod"
+            },
+            {
+              "project": ".",
+              "glob": "libs/orphanator/go.sum"
+            },
+            {
+              "project": ".",
+              "glob": "libs/orphanator/**/*.go"
+            }
+          ]
+        },
+        {
           "name": "lint",
-          "doc": "Formats first, then golangci-lint, go vet, govulncheck, markdownlint, and shellcheck.",
+          "doc": "Formats and builds the linter first, then golangci-lint, go vet, govulncheck, markdownlint, and shellcheck.",
           "dependencies": [
-            "format"
+            "format",
+            "lint-build"
           ],
           "spells": [
             {
               "spell": "go",
               "ops": [
-                "golangci-lint",
                 "go-vet",
                 "govulncheck"
               ]
@@ -469,6 +500,16 @@
               "ops": [
                 "shellcheck"
               ]
+            }
+          ],
+          "reads_files": [
+            {
+              "project": ".",
+              "glob": ".custom-gcl.yml"
+            },
+            {
+              "project": ".",
+              "glob": "libs/orphanator/**/*.go"
             }
           ],
           "exec_overrides": [
@@ -1299,6 +1340,99 @@
           "doc": "Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go).",
           "dependencies": [
             "preflight"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "libs/orphanator",
+      "name": "libs/orphanator",
+      "engine": "buzz",
+      "nodes": [
+        {
+          "name": "preflight"
+        },
+        {
+          "name": "generate",
+          "doc": "Regenerates MAGUS.md and fails on drift.",
+          "dependencies": [
+            "preflight",
+            "md-generate"
+          ],
+          "charms": [
+            "rw"
+          ]
+        },
+        {
+          "name": "md-generate",
+          "declared": "md_generate",
+          "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
+        },
+        {
+          "name": "format",
+          "dependencies": [
+            "generate"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-fmt",
+                "go-mod-tidy"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "lint",
+          "doc": "go-vet only, as in libs/diagnostics.",
+          "dependencies": [
+            "format"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-vet"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "build",
+          "dependencies": [
+            "format"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-build"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "test",
+          "dependencies": [
+            "format"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-test"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "ci",
+          "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
+          "dependencies": [
+            "lint",
+            "build",
+            "test"
           ]
         }
       ]
