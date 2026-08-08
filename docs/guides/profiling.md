@@ -40,7 +40,7 @@ never reached the point where it prints a summary.
 ## What magus tells you
 
 magus watches host memory for the life of an invocation and streams a warning the
-moment headroom collapses. Streamed, not summarised, because a killed process
+moment headroom collapses. Streamed, not summarized, because a killed process
 never gets to print a summary - only what already reached the log survives.
 
 ```text
@@ -111,7 +111,7 @@ served.
 
 ## The pattern that costs gigabytes
 
-This is the one worth recognising on sight:
+This is the one worth recognizing on sight:
 
 ```buzz
 var kept = "";
