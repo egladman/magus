@@ -15,6 +15,21 @@ on:
   push:
     tags:
       - 'v*'
+  # Manual dispatch exists for ONE reason: publishing a release candidate. The push
+  # path below cannot express it - a tag push carries no inputs, so `channel` is
+  # empty there and the `||` falls through to stable, leaving the normal release
+  # exactly as it was. Dispatch this workflow against the rc tag with `unstable`.
+  #
+  # An input rather than reading the channel off the tag's shape. Inferring it would
+  # make the decision a guess about a string; this keeps it a person choosing, just
+  # through the UI instead of an edit to this file.
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'Image channel. stable tags latest; unstable is for a prerelease tag.'
+        type: choice
+        options: [stable, unstable]
+        default: stable
 
 # One live CD run per tag. Re-pushing a tag (e.g. to pick up a CD fix before the
 # release publishes) cancels the previous run so duplicate release jobs never race
@@ -306,7 +321,7 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: magus run image-registries:cd,stable,verify --no-default-charms
+        run: magus run image-registries:cd,${{ inputs.channel || 'stable' }},verify --no-default-charms
 
       - name: Log in to image registries
         env:
@@ -314,11 +329,11 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: magus run image-login:cd,stable --no-default-charms
+        run: magus run image-login:cd,${{ inputs.channel || 'stable' }} --no-default-charms
 
       - name: Build, push, and sign images
-        # :cd,stable asserts the tag is a stable semver, so a v0.5.0-rc.1 tag fails here
-        # rather than shipping a prerelease as `latest`. Cutting one deliberately means
-        # swapping the charm to :cd,unstable - an explicit edit, not a tag-shape guess in
-        # YAML that nobody reviews.
-        run: magus run image-build:cd,stable --no-default-charms
+        # The charm asserts the tag matches the channel, so a v0.5.0-rc.1 tag fails a
+        # stable build here rather than quietly filing a prerelease under the tag
+        # `latest` follows. A tag push has no inputs, so this is always stable; to
+        # publish an rc, dispatch this workflow against its tag and pick unstable.
+        run: magus run image-build:cd,${{ inputs.channel || 'stable' }} --no-default-charms
