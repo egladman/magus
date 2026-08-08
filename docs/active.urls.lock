@@ -189,6 +189,7 @@ guides/integrations/github-actions/
 guides/integrations/mcp/
 guides/integrations/pr-advice/
 guides/mcp/
+guides/profiling/
 guides/quickstart/
 guides/testing/
 guides/tips/
@@ -516,6 +517,7 @@ tags/magus-yaml/
 tags/magusfile/
 tags/markdown/
 tags/mcp/
+tags/memory/
 tags/mgs-1010/
 tags/mgs-5001/
 tags/mgs-5002/
@@ -548,6 +550,7 @@ tags/projects/
 tags/proto/
 tags/protobuf/
 tags/provider/
+tags/pry/
 tags/pytest/
 tags/python/
 tags/query/

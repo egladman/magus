@@ -281,6 +281,13 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(site_generate);
     // site_generate owns the full render, bundle, and manifest artifact.
     if (ctx.has_charm("rw")) { return; }
+    // Say when the gate did not run. It only fires from a CLEAN tree, so a
+    // developer with any uncommitted work gets exit 0 from a check that never
+    // executed - which reads as "passed" and is why drift kept reaching CI after
+    // a local run said it would not.
+    if (clean_before == false) {
+        magus\info("generate: drift gate skipped - generated files were already dirty when it started; commit, then re-run to actually check");
+    }
     if (clean_before and vcs\isDirty(GENERATED)) {
         // Name the paths. "MAGUS.md or CHANGELOG.md or generated docs Markdown
         // drifted" describes the whole GENERATED set, so a reader learns only that

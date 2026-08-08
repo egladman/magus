@@ -836,6 +836,13 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ctx.glob("*-generate", "!deploy-generate"));
     if (ctx.has_charm("rw")) { return; }
 
+    // Say when the gate did not run. It only fires from a CLEAN tree, so a
+    // developer with any uncommitted work gets exit 0 from a check that never
+    // executed - which reads as "passed" and is why drift kept reaching CI after
+    // a local run said it would not.
+    if (clean_before == false) {
+        magus\info("generate: drift gate skipped - the tree was already dirty when it started; commit, then re-run to actually check");
+    }
     if (clean_before and vcs\isDirty()) {
         // status().files, not a shell-out and not vcs.diff: magus already knows which
         // files moved, and the gate fires exactly when its reader has a CI log instead of
@@ -1263,6 +1270,13 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     fs\writeFile(fs\join("assets", "coverage.svg"),
         badge\coverage("go coverage", percent: pct.split(".")[0], radius: 3));
     if (ctx.has_charm("rw")) { return; }
+    // Say when the gate did not run. It only fires from a CLEAN tree, so a
+    // developer with any uncommitted work gets exit 0 from a check that never
+    // executed - which reads as "passed" and is why drift kept reaching CI after
+    // a local run said it would not.
+    if (clean_before == false) {
+        magus\info("test: badge drift gate skipped - assets/coverage.svg was already dirty when it started");
+    }
     if (clean_before and vcs\isDirty([fs\join("assets", "coverage.svg")])) {
         throw "test: assets/coverage.svg is stale; re-run `magus run test:rw .` and commit the badge";
     }
