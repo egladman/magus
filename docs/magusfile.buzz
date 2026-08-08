@@ -1,4 +1,5 @@
 import "magus";
+import "../tools/toolchain-policy" as policy;
 // The shared advisory gate; see tools/audit.buzz for why an exit code is the wrong question.
 import "../tools/audit" as audit;
 // Modules the targets use: fs (writes MAGUS.md), os (esbuild,
@@ -46,6 +47,9 @@ import "magus/spell/go";
 import "magus/spell/markdown";
 
 magus\project({
+    // The shared node window, by explicit import (tools/toolchain-policy.buzz).
+    // This project drives node; it declares no go window because it drives no Go.
+    "tools": {"node": policy.node},
     "spells": [typescript],
     // ../proto because content-generate reads proto/gen/descriptor.binpb, which the proto
     // project writes. Without the edge the two generate targets are unordered, so a schema

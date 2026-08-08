@@ -13,7 +13,7 @@ export fun magusConfig() > Config {
     nav.append(NavLink{ suffix = "index.html", label = "Home", key = "home" });
     nav.append(NavLink{ suffix = "documentation/", label = "Documentation", key = "documentation" });
     nav.append(NavLink{ suffix = "blog/", label = "Blog", key = "blog" });
-    nav.append(NavLink{ suffix = "guides/download/", label = "Download", key = "download" });
+    nav.append(NavLink{ suffix = "setup/", label = "Setup", key = "setup" });
     nav.append(NavLink{ suffix = "tour/", label = "Tour", key = "tour" });
     nav.append(NavLink{ suffix = "playground/", label = "Playground", key = "playground" });
     // Contributing was two clicks deep under /development/, which is the right depth for a

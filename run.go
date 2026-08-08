@@ -950,6 +950,17 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	ctx = installWorkspaceRegistry(ctx, m.wsReg)
 	ctx = secret.ContextWithResolver(ctx, m.resolver)
 	ctx = types.WithWorkspace(ctx, m)
+	// Per run, not per registration: the spell registry is process-wide and the daemon
+	// serves many workspaces from it, so one project's tool policy must never outlive
+	// its own run. Keyed by project dir because the declaration is per project. See
+	// types.WithToolBounds.
+	toolBounds := map[string]map[string]spells.VersionBounds{}
+	for _, p := range byPath {
+		if len(p.ToolBounds) > 0 {
+			toolBounds[p.Dir] = p.ToolBounds
+		}
+	}
+	ctx = types.WithToolBounds(ctx, toolBounds)
 	// Seeded with the projects this run SELECTED, then marked further by the dispatcher
 	// as cross-project dependencies run. Selection alone was not enough: `magus run
 	// build .` selects only the root, so a nested project reached through a dependency

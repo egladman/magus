@@ -63,9 +63,18 @@ var CommandSource string
 //go:embed gen/types/versionkey.buzz
 var VersionKeySource string
 
+// VersionBoundsSource is the generated mirror of spells.VersionBounds - the window of
+// versions a probed tool is allowed to report, as an inclusive min and an exclusive
+// below. It ships in the magus/spell bundle so a spell can declare what its ops need,
+// and it references nothing, so it has no ordering constraint against the others.
+//
+//go:embed gen/types/versionbounds.buzz
+var VersionBoundsSource string
+
 // ToolSource is the generated mirror of spells.Tool: everything a spell declares about
-// one binary it drives. It must FOLLOW VersionKeySource in the bundle - Tool.key is a
-// VersionKey, and Command is already declared ahead of both.
+// one binary it drives. It must FOLLOW VersionKeySource and VersionBoundsSource in the
+// bundle - Tool.key is a VersionKey and Tool.supported is a VersionBounds - and Command
+// is already declared ahead of all three.
 //
 //go:embed gen/types/tool.buzz
 var ToolSource string
@@ -106,7 +115,7 @@ var CharmModuleSource string
 // Service, each referencing the prior; Target and Project have no cross-references
 // so their position is free). Shared by the runtime registration (modules.go) and
 // the built-in inliner (builtinModuleSources) below, so the two can't drift apart.
-var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, CommandSource, ServiceSource, VersionKeySource, ToolSource, ProjectSource}, "\n")
+var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, CommandSource, ServiceSource, VersionKeySource, VersionBoundsSource, ToolSource, ProjectSource}, "\n")
 
 // builtinModuleSources maps an import path a self-contained built-in may use to
 // the module source prepended in its place (imports emit no bytecode, so an

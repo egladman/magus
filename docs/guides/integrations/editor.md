@@ -22,7 +22,7 @@ document text the editor sends and needs no workspace, config, or daemon.
 
 ## Prerequisites
 
-- `magus` on your `PATH` (see the [Download guide](../download.md)). Confirm with
+- `magus` on your `PATH` (see the [Install guide](../../setup.md)). Confirm with
   `magus version`.
 - Confirm the server starts (it waits for LSP input, so this just checks the
   subcommand resolves):
@@ -111,7 +111,7 @@ spell's test blocks (see [spells.md](../../concepts/spells.md)).
 
 ## See also
 
-- [download.md](../download.md): install and update the `magus` binary.
+- [setup.md](../../setup.md): install and update the `magus` binary.
 - [spells.md](../../concepts/spells.md): authoring spells, and testing them with `magus buzz -t`.
 - [targets.md](../../concepts/targets.md): the magusfile targets the server completes.
 - [playground.html](../../playground.html): the same analysis engine, in the browser.

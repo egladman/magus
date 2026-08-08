@@ -1,4 +1,7 @@
 import "magus";
+// The shared toolchain windows; see tools/toolchain-policy.buzz for why they are a
+// module rather than an export on this file.
+import "./tools/toolchain-policy" as policy;
 
 // Host modules: magus layers its methods onto Buzz's stdlib (camelCase).
 import "os";
@@ -48,6 +51,7 @@ if ((cache_trusted != null and cache_trusted != "") or cache_insecure == "true" 
 // `magus clean --outputs` still sees them all (Project.AllOutputs unions the
 // per-target sets). See docs/cache.md#per-target-inputs-and-outputs.
 magus\project({
+    "tools": policy.all,
     // Declared so the root project's label is stable. Without it the label falls
     // back to the checkout's directory basename, so a worktree, a differently
     // named clone, or a CI checkout each renamed the root project and rewrote

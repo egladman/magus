@@ -51,7 +51,7 @@ magus run <target>
 ```
 
 If the answer changes, that is a JIT bug rather than a magusfile bug, and it is a
-very useful thing to report. See [Platform support](../download.md#platform-support).
+very useful thing to report. See [Platform support](../setup.md#platform-support).
 
 ## Which archive
 
@@ -82,4 +82,4 @@ Open a new PowerShell window afterward, then re-run `magus version`.
 
 - [Verify the release](verify.md) before first run.
 - Set up [shell completion](shell-setup.md#shell-completion) (PowerShell is supported).
-- Keep it current with [`magus self update`](../download.md#update).
+- Keep it current with [`magus self update`](../setup.md#update).

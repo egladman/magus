@@ -87,12 +87,38 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 | `exclusive`    | marks the project as must-not-run-alongside-peers in a batch                                                                                                                                                                                          |
 | `watch_ignore` | appends `glob` / `regex` / `literal` patterns to the project's watch-ignore list                                                                                                                                                                      |
 | `no_language`  | a reason string recording that this project binds no toolchain spell on purpose, exempting it from `magus doctor`'s language-coverage check                                                                                                            |
+| `tools`        | the version window this project requires of each binary its spells drive, keyed by bin name (see below)                                                                                                                                               |
 | `targets`      | a per-target policy table (see below)                                                                                                                                                                                                                 |
 
 Unknown keys in either map (a typo like `depend_on`, or a per-target policy key
 other than `skip_cache`/`exclusive`/`slots`) are a magusfile load error, not a
 silently dropped option - the error names the offending key and suggests the
-nearest known one.
+nearest known one. A key that resembles nothing magus knows is reported as one
+this binary may be too old for, with the upgrade command, because a magusfile
+schema key added upstream fails workspace load for every command at once.
+
+### `tools`: the version window this project requires
+
+```buzz
+magus\project({
+    "spells": [typescript],
+    "tools": { "node": { "min": "22", "below": "25" } },
+});
+```
+
+`min` is an inclusive floor and `below` is an exclusive ceiling, both plain
+versions. `below` names the first version REJECTED, so `below: "25"` accepts
+24.19.0 and rejects 25.0.0 - the off-by-one an inclusive `max` invites.
+
+This states POLICY: what this project has qualified. It is intersected with the
+window the spell declares for its own ops (what those ops need to function at
+all), narrower bound winning on each side, so neither can loosen the other. A
+violation is [MGS3005](../reference/codes/sandbox/MGS3005.md) or
+[MGS3006](../reference/codes/sandbox/MGS3006.md), raised before the op forks.
+
+magus compares against the binary it probed; it never learns which versions
+exist upstream and never selects one. Sharing a window between projects is an
+explicit import of a shared module, never inheritance by position in the tree.
 
 `no_language` takes prose, never `true`. A project with no toolchain spell is
 legal and common, so doctor cannot tell an intentional one (a polyglot harness no

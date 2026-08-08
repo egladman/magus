@@ -92,7 +92,7 @@ var Vcs = Module{
 		},
 		{
 			Name: "cmd",
-			Doc:  "Escape hatch: run the active VCS binary (git/hg/jj) with args, for something no method covers. Mirrors magus.cmd and os.exec - returns {stdout, stderr, code, ok} and raises on a non-zero exit unless opts.allow_failure. opts.dir runs it elsewhere (relative to the target's cwd). This is VCS-AGNOSTIC only in that magus picks the binary; the args are the backend's own, so branch on vcs.name() when they differ. Raises when no VCS is resolved, rather than running nothing and reporting success.",
+			Doc:  "Escape hatch: run the active VCS binary (git/hg/jj) with args, for something no method covers. Mirrors magus.cmd and os.exec - returns {stdout, stderr, code, ok} and raises on a non-zero exit unless opts.allow_failure. opts.dir runs it elsewhere (relative to the target's cwd); opts.quiet captures the output without echoing it to the console. This is VCS-AGNOSTIC only in that magus picks the binary; the args are the backend's own, so branch on vcs.name() when they differ. Raises when no VCS is resolved, rather than running nothing and reporting success.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},

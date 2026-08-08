@@ -1,0 +1,32 @@
+// toolchain-policy.buzz - the version windows this workspace requires of the binaries
+// its spells drive, shared by the projects that opt into them.
+//
+// A module rather than an export on the root magusfile, for two reasons. The practical
+// one: `import "project/.." as root` exposes only a project's `export fun` targets, read
+// statically from the AST so an import can never trigger a VM load and recurse - so an
+// exported VALUE there reads as null and the key is silently skipped. The better one:
+// a policy several projects share is a shared module, which is how tools/audit.buzz is
+// already shared by console, docs, and evals. Nothing here is inherited by position in
+// the tree; a project that wants these writes the import.
+//
+// Each window is an inclusive `min` and an exclusive `below`. Both are plain versions,
+// not a constraint range - see spells.VersionBounds for why the range language was
+// deliberately not offered.
+//
+// magus never learns which versions exist upstream and never selects one. It probes the
+// binary that actually ran and compares against these, so moving a bound is always a
+// person's edit.
+
+// go tracks mise.toml's pin. No ceiling: nothing here is known to break on a newer Go,
+// and a ceiling nobody has verified fails builds for a bound that was never true.
+export final go = {"min": "1.26"};
+
+// node's floor tracks mise.toml (`node = "24"`, so 22 is the oldest still sane) and the
+// ceiling says 25 has not been qualified against this tree - NOT that it cannot work.
+// Raising it is a deliberate act after someone checks.
+export final node = {"min": "22", "below": "25"};
+
+// all is the whole set, for a project that drives several toolchains. A project that
+// drives one should import the one - a node-only project declaring a go window states a
+// requirement it does not have, and would fail on a Go nobody there uses.
+export final all = {"go": go, "node": node};

@@ -12,13 +12,13 @@ If you would rather try magus without installing anything, the [interactive play
 
 ## 1. Install magus
 
-magus ships as a single self-contained binary. Follow the [Download guide](download.md) for your platform, PATH setup, and signature verification, then confirm the binary is on your PATH:
+magus ships as a single self-contained binary. Follow the [Install guide](../setup.md) for your platform, PATH setup, and signature verification, then confirm the binary is on your PATH:
 
 ```sh
 magus version
 ```
 
-The [Download guide](download.md) also covers `magus self update` and shell completion. This page assumes `magus` resolves on your PATH from here on.
+The [Install guide](../setup.md) also covers `magus self update` and shell completion. This page assumes `magus` resolves on your PATH from here on.
 
 ## 2. Bootstrap a workspace with `magus init`
 
