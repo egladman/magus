@@ -1232,7 +1232,17 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 		stdoutTap = col.newLineTap(safeLogF, journal.StreamStdout)
 		stderrTap = col.newLineTap(safeLogF, journal.StreamStderr)
 	} else {
-		stdoutTap = col.newLineTap(io.MultiWriter(os.Stdout, safeLogF), journal.StreamStdout)
+		// Both live copies go to STDERR, including the target's stdout. Stdout
+		// belongs to the structured answer (-o json|yaml|jsonl|template) and to
+		// nothing else - every other thing magus prints, from the status lines to
+		// failure dumps to notices, is already on stderr.
+		//
+		// Streaming a target's stdout to os.Stdout interleaved a subprocess's
+		// chatter into the JSON document, so `magus run <t> -o json` with streaming
+		// on emitted a stdout that no parser would accept. The log file still
+		// receives the verbatim bytes on the original stream, so the journal and
+		// `magus query output <ref>` are unchanged.
+		stdoutTap = col.newLineTap(io.MultiWriter(os.Stderr, safeLogF), journal.StreamStdout)
 		stderrTap = col.newLineTap(io.MultiWriter(os.Stderr, safeLogF), journal.StreamStderr)
 	}
 	captureCtx := runPkg.WithOutputWriters(ctx, stdoutTap, stderrTap)

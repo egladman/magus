@@ -49,7 +49,7 @@ The machine's total physical memory in BYTES, or 0 when it cannot be determined 
 
 ### cpus
 
-How many CPUs this process may use (Go's GOMAXPROCS, which honors a container quota where the OS-visible core count does not). Pair with memory() when sizing parallel work: the smaller of the two limits is the one that matters.
+How many CPUs this process may use (Go's GOMAXPROCS, which honors a container quota where the OS-visible core count does not). Pair with memory_bytes() when sizing parallel work: the smaller of the two limits is the one that matters.
 
 **Signature:** `platform\cpus() → int` · [source](https://github.com/egladman/magus/blob/main/std/platform.go#L152)
 
