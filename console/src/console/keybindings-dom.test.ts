@@ -38,6 +38,7 @@ function cell(): Persisted<Keymap> {
       listeners.add(fn);
       return () => listeners.delete(fn);
     },
+    flushed: () => Promise.resolve(), // nothing durable behind this cell
   };
 }
 
