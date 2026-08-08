@@ -51,6 +51,15 @@ magus\project({
     "targets": {
         // Drift-gates MAGUS.md via git status: run alone, every time.
         "generate": {"skip_cache": "drift-gates MAGUS.md via git status; a replay would skip the check", "exclusive": true},
+        // index-generate renders `magus describe graph -o markdown`, so its output is a
+        // function of the WHOLE knowledge graph. Its declared inputs are the magusfiles,
+        // which is the only part of that a glob can name, so any other change leaves the
+        // key unmoved: a cache hit then replays a MAGUS.md built before it and REVERTS the
+        // committed one, which the drift gate above correctly reports as drift. That is why
+        // a branch touching the graph fails this gate in CI, where the shared cache is
+        // restored, while passing on a clean checkout that has nothing to hit. The docs
+        // project carries the same opt-out for the same reason.
+        "index-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
     },
 });
 
@@ -73,7 +82,7 @@ fun install() > void {
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     final clean_before = vcs\isDirty(["MAGUS.md"]) == false;
-    ctx.needs(md_generate);
+    ctx.needs(index_generate);
     if (ctx.has_charm("rw")) { return; }
 
     if (clean_before and vcs\isDirty(["MAGUS.md"])) {
@@ -82,7 +91,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 }
 
 // Renders MAGUS.md (target catalog plus graph) from this magusfile.
-export fun md_generate(ctx: magus\Context, args: [str]) > void {
+export fun index_generate(ctx: magus\Context, args: [str]) > void {
     final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs\writeFile("MAGUS.md", doc + "\n");
 }

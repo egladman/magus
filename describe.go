@@ -841,7 +841,7 @@ func (m *Magus) EvaluateTarget(ctx context.Context, t types.Target) ([]types.Eva
 		// buildStep, not baseStep: this entry describes ONE target, and baseStep
 		// carries only the project-wide globs. A target's own ctx.writesFiles (and
 		// ctx.readsFiles) were therefore missing from its own description - `magus
-		// describe target md-generate` reported no outputs while the target
+		// describe target index-generate` reported no outputs while the target
 		// declares MAGUS.md - so the described plan disagreed with the plan the
 		// cache actually keys and snapshots.
 		step := m.buildStep(p, et.Name)
