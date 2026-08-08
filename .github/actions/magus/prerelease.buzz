@@ -29,12 +29,15 @@ fun env(name: str) > str {
 fun main() > void {
     final tag = env("TAG");
     if (tag == "") {
-        // Under Actions an empty TAG is a wiring bug, and staying quiet would emit an empty
+        // On a TAG run an empty TAG is a wiring bug, and staying quiet would emit an empty
         // output that GitHub reads as false - marking a release candidate as a full release.
-        // Outside Actions this is just `magus buzz -t` running the file, so it no-ops the
-        // way every script in this directory does.
-        if (env("GITHUB_OUTPUT") != "") {
-            throw "prerelease: TAG is empty under GitHub Actions; the step must pass the tag";
+        //
+        // Keyed on GITHUB_REF_TYPE rather than GITHUB_OUTPUT, which is set for EVERY Actions
+        // step: `magus buzz -t` on this file runs main() before the tests, so the broader
+        // check threw in ci's advice-test job on every pull request - a release guard failing
+        // runs that will never cut a release. Only a tag run can be missing a tag.
+        if (env("GITHUB_REF_TYPE") == "tag") {
+            throw "prerelease: TAG is empty on a tag run; the step must pass the tag";
         }
         std\print("prerelease: no TAG; nothing to classify");
         return;
