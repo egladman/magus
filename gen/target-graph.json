@@ -57,8 +57,9 @@
             "amd64",
             "arm64",
             "cd",
+            "dynamic",
             "stable",
-            "static",
+            "tagged",
             "unstable"
           ],
           "spells": [
@@ -86,6 +87,7 @@
           "charms": [
             "cd",
             "stable",
+            "tagged",
             "unstable",
             "verify"
           ]
@@ -97,6 +99,7 @@
           "charms": [
             "cd",
             "stable",
+            "tagged",
             "unstable"
           ]
         },
@@ -109,6 +112,21 @@
           ],
           "charms": [
             "rw"
+          ]
+        },
+        {
+          "name": "security",
+          "doc": "Gates on dependency LICENSE terms, which is a separate question from image_scan's vulnerability pass even though both drive trivy.",
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "govulncheck"
+              ]
+            }
+          ],
+          "exec_overrides": [
+            "env:GOEXPERIMENT=jsonv2"
           ]
         },
         {
@@ -258,8 +276,8 @@
           ]
         },
         {
-          "name": "md-generate",
-          "declared": "md_generate",
+          "name": "index-generate",
+          "declared": "index_generate",
           "doc": "Renders MAGUS.md via `magus describe graph`.",
           "writes_files": [
             {
@@ -289,8 +307,8 @@
             "changelog-generate",
             "config-generate",
             "graph-generate",
+            "index-generate",
             "man-generate",
-            "md-generate",
             "mocks-generate",
             "skills-generate",
             "spells-generate",
@@ -332,7 +350,7 @@
           "declared": "release_build",
           "doc": "Builds one release binary for one platform.",
           "charms": [
-            "static"
+            "dynamic"
           ],
           "spells": [
             {
@@ -413,7 +431,8 @@
           "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
           "dependencies": [
             "advice-test",
-            "format"
+            "format",
+            "buzz-test"
           ],
           "charms": [
             "rw"
@@ -436,8 +455,9 @@
           ]
         },
         {
-          "name": "preflight",
-          "doc": "No gate of its own: doctor USED to run here and fail the build on a finding, which made workspace conventions a blocker for everyone downstream."
+          "name": "buzz-test",
+          "declared": "buzz_test",
+          "doc": "Runs the in-file `test \"...\" {}` blocks in this repo's own root Buzz modules, through magus's embedded engine."
         },
         {
           "name": "build",
@@ -476,7 +496,7 @@
         },
         {
           "name": "lint",
-          "doc": "Formats and builds the linter first, then golangci-lint, go vet, govulncheck, markdownlint, and shellcheck.",
+          "doc": "Formats and builds the linter first, then golangci-lint, go vet, markdownlint, and shellcheck.",
           "dependencies": [
             "format",
             "lint-build"
@@ -485,8 +505,7 @@
             {
               "spell": "go",
               "ops": [
-                "go-vet",
-                "govulncheck"
+                "go-vet"
               ]
             },
             {
@@ -511,9 +530,6 @@
               "project": ".",
               "glob": "libs/orphanator/**/*.go"
             }
-          ],
-          "exec_overrides": [
-            "env:GOEXPERIMENT=jsonv2"
           ]
         },
         {
@@ -539,7 +555,8 @@
             "lint",
             "build",
             "test",
-            "completion-test"
+            "completion-test",
+            "security"
           ]
         },
         {
@@ -584,7 +601,8 @@
         }
       ],
       "depends_on": [
-        "libs/gopherbuzz"
+        "libs/gopherbuzz",
+        "libs/textsearch"
       ]
     },
     {
@@ -597,9 +615,17 @@
         },
         {
           "name": "test",
-          "doc": "test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests).",
+          "doc": "test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests) and renders a line-coverage badge from the run.",
           "dependencies": [
             "preflight"
+          ],
+          "charms": [
+            "rw"
+          ],
+          "writes_files": [
+            {
+              "glob": "coverage.svg"
+            }
           ]
         },
         {
@@ -664,9 +690,9 @@
           "name": "preflight"
         },
         {
-          "name": "md-generate",
-          "declared": "md_generate",
-          "doc": "md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.",
+          "name": "index-generate",
+          "declared": "index_generate",
+          "doc": "index-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.",
           "reads_files": [
             {
               "project": "docs",
@@ -908,7 +934,7 @@
           "dependencies": [
             "preflight",
             "content-generate",
-            "md-generate",
+            "index-generate",
             "build-mermaid",
             "build-hljs",
             "build-playground-editor",
@@ -1150,15 +1176,15 @@
           "doc": "Regenerates MAGUS.md and fails on drift.",
           "dependencies": [
             "preflight",
-            "md-generate"
+            "index-generate"
           ],
           "charms": [
             "rw"
           ]
         },
         {
-          "name": "md-generate",
-          "declared": "md_generate",
+          "name": "index-generate",
+          "declared": "index_generate",
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
         },
         {
@@ -1242,15 +1268,15 @@
           "doc": "Regenerates MAGUS.md and fails on drift.",
           "dependencies": [
             "preflight",
-            "md-generate"
+            "index-generate"
           ],
           "charms": [
             "rw"
           ]
         },
         {
-          "name": "md-generate",
-          "declared": "md_generate",
+          "name": "index-generate",
+          "declared": "index_generate",
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
         },
         {
@@ -1450,15 +1476,15 @@
           "doc": "Regenerates MAGUS.md and fails on drift.",
           "dependencies": [
             "preflight",
-            "md-generate"
+            "index-generate"
           ],
           "charms": [
             "rw"
           ]
         },
         {
-          "name": "md-generate",
-          "declared": "md_generate",
+          "name": "index-generate",
+          "declared": "index_generate",
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
         },
         {
@@ -1479,7 +1505,8 @@
           ],
           "writes_files": [
             {
-              "glob": "coverage.svg"
+              "project": "../..",
+              "glob": "assets/textsearch-coverage.svg"
             }
           ]
         },

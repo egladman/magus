@@ -8,8 +8,13 @@ import { must } from "../../lib/guards";
 
 import { state } from "./state";
 import { bodyEl, copyToClipboard, el, setToggleGroup, setToggleGroupDisabled } from "./dom";
-import { statusToken, stripAnsi } from "../render/ansi";
-import { renderContent, renderLine as renderSectionLine, toggleSection } from "../render/sections";
+import { stripAnsi } from "../render/ansi";
+import {
+  renderContent,
+  renderLine as renderSectionLine,
+  sectionAccent,
+  toggleSection,
+} from "../render/sections";
 import { matchAllTexts, matchGroup, sectionMeta } from "./filter";
 import { renderWaterfall, timelineAvailable, updateFocusUI } from "./waterfall";
 
@@ -78,11 +83,10 @@ export function render(): void {
     secEl.className = "console-render-section";
 
     // Accent the section by outcome (a colored left rule) so pass/fail/warn read at a
-    // glance, not just from the text. Cached hits are muted (low signal) and fold by default -
-    // recognized from a "[cached]" head (structured) or a "(cached)" note (heuristic text).
-    const st = statusToken(sec.title);
-    const cached = st === "cached" || /\(cached/i.test(stripAnsi(sec.title));
-    const status = cached ? "cached" : st;
+    // glance, not just from the text. Cached hits are muted (low signal) and fold by default.
+    // sectionAccent, not a second copy of the rule: this file had its own inline version and
+    // the two had already drifted apart on what counts as cached.
+    const status = sectionAccent(sec.title);
     if (status) secEl.setAttribute("data-status", status);
 
     const head = document.createElement("button");
@@ -105,8 +109,8 @@ export function render(): void {
 
     // A cached target contributed nothing new this run, so fold it away by default -
     // the fresh work (and any failure) is what a reader came for.
-    if (cached) secEl.setAttribute("data-collapsed", "");
-    head.setAttribute("aria-expanded", cached ? "false" : "true");
+    if (status === "cached") secEl.setAttribute("data-collapsed", "");
+    head.setAttribute("aria-expanded", status === "cached" ? "false" : "true");
     const count = document.createElement("span");
     count.className = "console-render-section__count";
     count.textContent =

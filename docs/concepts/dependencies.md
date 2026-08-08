@@ -147,7 +147,7 @@ Three forms, and they compose in one call:
 | Form | Example | Compiles to | Matches |
 | --- | --- | --- | --- |
 | Suffix shorthand | `"build"` | `^.*-build$` | `go-build`, `docker-build` |
-| Glob | `"*-generate"` | `^.*-generate$` | `md-generate`, `site-generate` |
+| Glob | `"*-generate"` | `^.*-generate$` | `index-generate`, `site-generate` |
 | Negation | `"!site-generate"` | `^site-generate$`, subtracted | everything else the includes matched |
 
 Negation subtracts from the union of the includes, so order never matters:
@@ -165,7 +165,7 @@ below assumes exactly these five targets:
 import "magus";
 magus\project({});
 
-export fun md_generate(ctx: magus\Context, args: [str]) > void {}
+export fun index_generate(ctx: magus\Context, args: [str]) > void {}
 export fun site_generate(ctx: magus\Context, args: [str]) > void {}
 export fun vendor_generate(ctx: magus\Context, args: [str]) > void {}
 export fun go_build(ctx: magus\Context, args: [str]) > void {}
@@ -177,7 +177,7 @@ on each is exactly what `ctx.glob` resolves to.
 
 ```buzz
 // GLOB: the whole -generate family.
-//   -> md-generate, site-generate, vendor-generate
+//   -> index-generate, site-generate, vendor-generate
 export fun all_generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ctx.glob("*-generate"));
 }
@@ -185,32 +185,32 @@ export fun all_generate(ctx: magus\Context, args: [str]) > void {
 // SUFFIX SHORTHAND: identical to the glob above. A bare word means "-word" at
 // the end of a name. Note what is NOT in the result: the target named
 // `generate`. That is what makes this safe to write inside `generate` itself.
-//   -> md-generate, site-generate, vendor-generate
+//   -> index-generate, site-generate, vendor-generate
 export fun all_generate_shorthand(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ctx.glob("generate"));
 }
 
 // NEGATION, one name: the family minus a single member.
-//   -> md-generate, vendor-generate
+//   -> index-generate, vendor-generate
 export fun generate_fast(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ctx.glob("*-generate", "!site-generate"));
 }
 
 // NEGATION, a glob: the family minus a sub-family.
-//   -> md-generate, site-generate
+//   -> index-generate, site-generate
 export fun generate_first_party(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ctx.glob("*-generate", "!vendor-*"));
 }
 
 // ORDER DOES NOT MATTER: the exclusion applies to the union of the includes,
 // so this is the same set as generate_fast above.
-//   -> md-generate, vendor-generate
+//   -> index-generate, vendor-generate
 export fun generate_fast_reordered(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ctx.glob("!site-generate", "*-generate"));
 }
 
 // SEVERAL INCLUDES: unioned, then deduplicated and sorted.
-//   -> go-build, md-generate, site-generate, vendor-generate
+//   -> go-build, index-generate, site-generate, vendor-generate
 export fun everything(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ctx.glob("*-generate", "*-build"));
 }
@@ -233,7 +233,7 @@ export fun nothing_at_all(ctx: magus\Context, args: [str]) > void {
 // NEGATION IS EXACT, NOT SHORTHAND: "!generate" removes the target literally
 // named `generate`, which the include never selected anyway. Nothing is
 // subtracted. To drop the family, write "!*-generate".
-//   -> md-generate, site-generate, vendor-generate
+//   -> index-generate, site-generate, vendor-generate
 export fun negation_is_exact(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ctx.glob("*-generate", "!generate"));
 }
@@ -262,9 +262,9 @@ safe to write _inside_ the `generate` target. Widening the shorthand to also mat
 bare names would turn every umbrella target into a self-dependency. To depend on
 `build` itself, pass the function: `ctx.needs(build)`.
 
-**A negation is a name or a glob, never suffix shorthand.** `"!md-generate"`
-excludes the target actually called `md-generate`. If negation used the include
-rule it would compile to `^.*-md-generate$` and quietly subtract nothing, which is
+**A negation is a name or a glob, never suffix shorthand.** `"!index-generate"`
+excludes the target actually called `index-generate`. If negation used the include
+rule it would compile to `^.*-index-generate$` and quietly subtract nothing, which is
 the one outcome a subtraction must never produce. To exclude a family, spell it
 the way you would include one: `"!*-generate"`.
 

@@ -16,6 +16,18 @@ import { el, emptyEl, scrollEl, setBtnLabel, setRefIdentity } from "./dom";
 import { buildModelMulti } from "./model";
 import { render, updateTimelineControl } from "./render";
 
+// How many live events the tail keeps. The buffer was unbounded, and scheduleLiveRender
+// rebuilds the whole model from every event held and re-appends every node on each animation
+// frame - O(n) per frame over a growing n, so O(n^2) across a stream. A chatty run reached a
+// few thousand lines and the tab stopped responding, which is precisely the surface's job.
+// Capping the retained tail bounds the per-frame cost instead of letting it climb with the run.
+//
+// Dropping the head is the right trade for a TAIL: what is on screen and what is arriving stay
+// responsive, and the complete log is a click away as the run's stored output ref - this view
+// was never the system of record. The remaining half of the fix is rendering incrementally
+// rather than rebuilding, which would lift the cap entirely.
+const LIVE_BUFFER_MAX = 5000;
+
 // The host of the current live stream, stashed so a FAIL notification can deep-link back to the failing
 // ref. A resolved daemon host (loopback, or the LAN-share same-origin host), or null before any
 // live connect.
@@ -95,6 +107,9 @@ function onLiveEvent(type: string, data: string): void {
       notify({ ...marker, key: (marker.important ? "alert:" : "notice:") + marker.message });
   }
   state.liveEvents.push(ev);
+  if (state.liveEvents.length > LIVE_BUFFER_MAX) {
+    state.liveEvents.splice(0, state.liveEvents.length - LIVE_BUFFER_MAX);
+  }
   scheduleLiveRender();
 }
 

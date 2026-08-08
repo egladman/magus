@@ -139,7 +139,7 @@ export function wireDrawerToggle(opts: {
 // persists across tab switches and ignores Escape / outside-click; "unpinned" closes on Escape
 // or a click outside the panel. Cloned example buttons are inert (cloneNode drops listeners), so
 // a click inside the panel on an example carrying a distinguishing data-* (the graph's data-q /
-// data-view / data-lens) is forwarded to the matching live control in the active surface pane.
+// data-view) is forwarded to the matching live control in the active surface pane.
 export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
   const drawer = document.getElementById("console-refdrawer");
   const panel = document.getElementById("console-refpanel");
@@ -231,11 +231,13 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
   // Forward a click on a cloned example to the live control in the active surface. Match by the
   // first distinguishing attribute present; the source control (same attr+value) carries the real
   // listener.
-  const FORWARD_ATTRS = ["data-q", "data-view", "data-lens"] as const;
+  // No data-lens: it was a second hook on the hubs/orphans chips, and those chips carry
+  // data-view like every other question. Nothing in the console or the docs emits it now.
+  const FORWARD_ATTRS = ["data-q", "data-view"] as const;
   bodyEl.addEventListener("click", (e) => {
     const t = e.target;
     if (!(t instanceof Element)) return;
-    const src = t.closest<HTMLElement>("[data-q],[data-view],[data-lens]");
+    const src = t.closest<HTMLElement>("[data-q],[data-view]");
     if (!src) return;
     const pane = activePane();
     if (!pane) return;

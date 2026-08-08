@@ -35,6 +35,7 @@ import { mountNotificationCenter, notify } from "../lib/notifications";
 import { checkLocalStorageAlert, startShellWatch } from "../lib/watch";
 import { openSurfaceWindow } from "../lib/appwindow";
 import { persisted } from "../lib/persist";
+import { splitModeCell } from "./layoutPrefs";
 import {
   parseHash,
   wantsDemo,
@@ -151,7 +152,7 @@ const KEYMAP_PRESET_LIST: { id: string; label: string }[] = [
 // The default direction a plain split takes (mod+\\, and the Panes tray's Horizontal/Vertical picks
 // below): "row" (side by side) or "col" (stacked). Global and persisted - a choice made once, by the
 // keyboard toggle or an explicit pick, sticks across every tab and reload rather than resetting.
-const splitMode = persisted<"row" | "col">("split-mode", "row");
+const splitMode = splitModeCell;
 
 const registry = new Map<string, PageModule<unknown, unknown>>();
 function register(m: PageModule<unknown, unknown>): void {

@@ -121,24 +121,33 @@ git push origin v0.4.0
 ### Prereleases and the image channel
 
 `release` takes no channel charm, because a version tag has only one channel.
-Container images do have channels, picked by `image-build`:
+Container images do have channels, and `release.yaml` picks one with `tagged`:
+
+```bash
+magus run image-build:cd,tagged
+```
+
+`tagged` reads the channel off the release tag HEAD sits on. A stable semver takes
+`latest`; `v0.5.0-rc.1` gets its version tag alone. The derivation lives in the
+magusfile's `channel()`, not in YAML, so the image step and the prerelease flag on
+the GitHub release cannot disagree about what is shipping.
+
+Cutting a release candidate is therefore a tag and nothing else. You can still name
+`stable` or `unstable` directly for a local build, but not beside `tagged`, which
+already answers that question:
 
 ```bash
 magus run image-build:cd,unstable   # version tag only, no floating tag
 magus run image-build:cd,stable     # version tag plus latest
 ```
 
-`release.yaml` defaults to `stable`, which is the channel `latest` follows, so it
-rejects a version carrying a prerelease:
+An untagged HEAD is refused rather than guessed at:
 
 ```text
-image: `v0.5.0-rc.1` carries the prerelease `rc.1`, so it cannot go to the stable
-channel - that is the channel `latest` follows.
+image: `tagged` reads the channel off the release tag HEAD sits on, and HEAD is not
+tagged - `v0.4.0-3-gabc123` describes distance past the nearest tag rather than a
+release.
 ```
-
-To publish a release candidate, dispatch the workflow manually against its tag and
-pick `unstable`. A tag push carries no inputs, so the automatic path stays stable.
-Cutting and pushing the tag needs nothing special; only the image job cares.
 
 ### Which tags the workflow reacts to
 

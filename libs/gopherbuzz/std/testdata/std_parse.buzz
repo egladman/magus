@@ -1,0 +1,11 @@
+// @expect: [42, 2.5, null, null, 3, 3, A]
+import "std";
+final __r = [
+    std.parseInt("42"),
+    std.parseDouble("2.5"),
+    std.parseInt("not a number"),
+    std.parseDouble("nope"),
+    std.toInt(3.9),
+    std.toDouble(3),
+    std.char(65),
+];

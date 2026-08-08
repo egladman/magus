@@ -29,6 +29,12 @@ export interface Persisted<T> {
   // listener will still pick this write up and go live there - acceptable, it matches localStorage semantics.
   persistOnly(value: T): void;
   subscribe(fn: (value: T) => void): () => void; // returns an unsubscribe fn
+  // Resolves once every write enqueued so far has run. set() returns BEFORE its durable
+  // write does - that is the whole point of the chain - so this is the only way to observe
+  // that the write landed. Needed by anything that asserts on the durable side (the unit
+  // tests) or that must not exit before it: without it a test's write is left pending on the
+  // microtask queue and whether it runs at all is down to process-exit timing.
+  flushed(): Promise<void>;
 }
 
 // persisted<boolean> stores a bool, persisted<number> a number, etc. The
@@ -98,5 +104,8 @@ export function persisted<T>(key: string, fallback: T): Persisted<T> {
       listeners.add(fn);
       return () => listeners.delete(fn);
     },
+    // Reads writeChain at call time, so it covers every write enqueued before this call
+    // and none enqueued after - the same ordering guarantee enqueueWrite gives.
+    flushed: (): Promise<void> => writeChain,
   };
 }

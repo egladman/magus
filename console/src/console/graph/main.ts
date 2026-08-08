@@ -49,6 +49,7 @@ import {
   setRemembered,
   wantsDemo,
   createDaemonTransport,
+  parseHash,
 } from "../../lib/daemon";
 import { createClient } from "@connectrpc/connect";
 import { StatusService } from "../../gen/magus/status/v1/status_pb";
@@ -278,6 +279,11 @@ let liveFlavor: string | null = null; // null (knowledge) or "targets"
 let stageResizeObserver: ResizeObserver | null = null;
 let themeObserver: MutationObserver | null = null;
 let lifecycleAbort: AbortController | null = null;
+// installKeybindings' teardown. It adds its own document keydown listener rather than taking
+// the lifecycle signal, so aborting the controller does not reach it: dropping this handle
+// leaves one live matcher per activation, and the console caches surface modules, so every
+// close/reopen adds a generation and each chord fires its command one more time.
+let uninstallKeys: (() => void) | null = null;
 
 // The graph stays gently "alive": the simulation never fully cools, so nodes
 // keep drifting (the Obsidian-like wobble). Disabled under prefers-reduced-motion,
@@ -378,22 +384,12 @@ async function decodeFragment(b64url: string): Promise<GraphPayload> {
   return JSON.parse(text);
 }
 
-function hashParams(): Record<string, string> {
-  const h = location.hash.replace(/^#/, "");
-  const out: Record<string, string> = {};
-  for (const part of h.split("&")) {
-    if (!part) continue;
-    const eq = part.indexOf("=");
-    // Keep a bare token (no "=") with an empty value, matching lib/daemon's parseHash,
-    // so the shared `#demo` fragment (which has no "=") is detected by wantsDemo.
-    if (eq < 0) {
-      out[part] = "";
-      continue;
-    }
-    out[part.slice(0, eq)] = decodeURIComponent(part.slice(eq + 1));
-  }
-  return out;
-}
+// hashParams is lib/daemon's parseHash. It used to be a second implementation here, and the
+// two had drifted on the case that matters: parseHash guards decodeURIComponent, this copy
+// called it bare, so a truncated shared link (a malformed percent-escape) threw a URIError out
+// of the graph explorer's boot path instead of degrading to the raw text. Aliased rather than
+// renamed at ~5 call sites, which keeps this change to the behaviour.
+const hashParams = parseHash;
 
 async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
   const params = hashParams();
@@ -1474,11 +1470,16 @@ function selectNode(id: string | null, center: boolean) {
       // Unfold this project: show its contains neighborhood.
       projectionUnfolded = true;
       projectionSet = null;
-      // Release any nodes that were parked off-screen by the projection.
+      // Release any nodes that were parked off-screen by the projection. x/y must be reset
+      // too, not just fx/fy: a released node keeps the -1e6 parking coordinate until the sim
+      // moves it, and a fitView over a set containing one fits bounds a million units wide -
+      // zoom collapses and the canvas reads as blank. switchLayout gets this right.
       for (const nd of graph.nodes) {
         if (nd.fx === -1e6) {
           nd.fx = null;
           nd.fy = null;
+          nd.x = 0;
+          nd.y = 0;
         }
       }
       const projectNeighborhood = new Set([id]);
@@ -1667,12 +1668,6 @@ function clearFocusOrQuery() {
   } else {
     draw();
   }
-}
-
-// applyLens is the legacy entry point for [data-lens] clicks; now delegates to
-// activateView so the view system handles state/hash/CLI idiom uniformly.
-function applyLens(name: string) {
-  activateView(name === "hubs" ? "hubs" : "orphans");
 }
 
 // syncConditionalViews shows or hides the "What's slow?" (critical) view button
@@ -1959,7 +1954,7 @@ function renderList() {
         escapeHtml(n.id) +
         '"' +
         ' title="' +
-        escapeHtml(n.kind + " · " + n.label) +
+        escapeHtml(n.kind + " - " + n.label) +
         '"' +
         (n.id === selected ? ' aria-current="true"' : "") +
         ">" +
@@ -2378,12 +2373,16 @@ function unfoldProjection() {
   matchSet = null;
   if (searchEl) searchEl.value = "";
   query = "";
-  // Release all parked nodes so the force sim (or layered layout) can place them.
+  // Release all parked nodes so the force sim (or layered layout) can place them. x/y are
+  // reset alongside fx/fy for the same reason switchLayout does it: left at -1e6, a released
+  // node poisons the next fitView's bounds and the canvas comes back blank.
   if (graph) {
     for (const n of graph.nodes) {
       if (n.fx === -1e6) {
         n.fx = null;
         n.fy = null;
+        n.x = 0;
+        n.y = 0;
       }
     }
   }
@@ -4046,7 +4045,11 @@ function bootWireEvents() {
 
   // Debounce typing so a large graph isn't re-filtered + re-rendered on every
   // keystroke; the legend/example/deep-link paths call applyQuery directly (no wait).
-  let queryTimer = 0;
+  // ReturnType<typeof setTimeout>, not number: the browser's setTimeout returns a
+  // number but Node's returns a Timeout object, and the test type-check program pulls
+  // in @types/node - so a bare `number` only compiles as long as nothing checks this
+  // file against Node's lib.
+  let queryTimer: ReturnType<typeof setTimeout> | undefined;
   searchEl.addEventListener("input", () => {
     clearTimeout(queryTimer);
     queryTimer = setTimeout(() => {
@@ -4135,14 +4138,13 @@ function bootWireEvents() {
     });
   }
 
-  // Lenses (magus graph stats parity): hubs / orphans set the match set. The lens
-  // buttons are marked by their data-lens hook (no presentational class of their own).
-  document.querySelectorAll<HTMLElement>("[data-lens]").forEach((b) =>
-    b.addEventListener("click", () => {
-      const lens = b.dataset.lens;
-      if (lens) applyLens(lens);
-    }),
-  );
+  // No separate lens wiring. The hubs/orphans buttons are ordinary view chips - they carry
+  // .console-graph-views__chip and data-view like every other question - so the chip handler
+  // above already dispatches them. A second [data-lens] listener ran on the SAME click and
+  // called activateView unconditionally, which undid the chip handler's clearView the instant
+  // it fired: clicking an active hubs/orphans chip cleared the view and re-applied it, so the
+  // toggle could never be turned off. The data-lens attribute is gone from the scaffold too;
+  // it was only ever a hook for the listener this comment replaces.
 
   // Phase 5: color preset buttons.
   document.querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset").forEach((b) => {
@@ -4218,7 +4220,8 @@ function bootWireEvents() {
     group: "Graph",
     run: () => cycleLayout(),
   });
-  installKeybindings(() => mergeKeymap(GRAPH_KEYMAP, keymapCell.get()));
+  uninstallKeys?.();
+  uninstallKeys = installKeybindings(() => mergeKeymap(GRAPH_KEYMAP, keymapCell.get()));
 
   // Query-syntax reference: each example runs itself in the filter (teach-by-doing).
   // Scope to [data-q] so the lens/add-group buttons (which share .console-graph-help__example for its
@@ -4282,7 +4285,7 @@ function bootWireEvents() {
   }
 
   // Re-read the console tokens and repaint on a theme toggle.
-  let t = 0;
+  let t: ReturnType<typeof setTimeout> | undefined;
   const rerender = () => {
     clearTimeout(t);
     t = setTimeout(() => {
@@ -4584,6 +4587,8 @@ export function deactivate(): void {
     lifecycleAbort.abort();
     lifecycleAbort = null;
   }
+  uninstallKeys?.();
+  uninstallKeys = null;
 }
 
 // Standalone auto-boot: only when the scaffold is already in the document at load. In the console the

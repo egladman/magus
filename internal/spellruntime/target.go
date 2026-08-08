@@ -79,6 +79,14 @@ var ToolSource string
 //go:embed gen/types/service.buzz
 var ServiceSource string
 
+// ProjectSource is the generated Buzz `object Project` mirror of spells.Project: one
+// project a workspace-provider spell's list_projects contract returns. It ships in
+// the magus/spell bundle beside the other shapes a spell AUTHORS; it references no
+// other mirror, so its position in that bundle is free.
+//
+//go:embed gen/types/project.buzz
+var ProjectSource string
+
 // CharmModulePath is the import path of the pure-Buzz charm module.
 const CharmModulePath = "magus/charm"
 
@@ -95,10 +103,10 @@ var CharmModuleSource string
 
 // SpellModuleSource is the magus/spell bundle: the spell-authored value types in
 // their declare-before-use order (PatchOp before Charm before Command before
-// Service, each referencing the prior; Target has no cross-references so its
-// position is free). Shared by the runtime registration (modules.go) and the
-// built-in inliner (builtinModuleSources) below, so the two can't drift apart.
-var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, CommandSource, ServiceSource, VersionKeySource, ToolSource}, "\n")
+// Service, each referencing the prior; Target and Project have no cross-references
+// so their position is free). Shared by the runtime registration (modules.go) and
+// the built-in inliner (builtinModuleSources) below, so the two can't drift apart.
+var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, CommandSource, ServiceSource, VersionKeySource, ToolSource, ProjectSource}, "\n")
 
 // builtinModuleSources maps an import path a self-contained built-in may use to
 // the module source prepended in its place (imports emit no bytecode, so an

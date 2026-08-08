@@ -1,4 +1,4 @@
-//go:build amd64 && !windows && !buzz_safe && !buzz_unsafe
+//go:build amd64 && !buzz_safe && !buzz_unsafe
 
 package vm
 
@@ -8,7 +8,6 @@ import (
 	asm "github.com/twitchyliquid64/golang-asm"
 	"github.com/twitchyliquid64/golang-asm/obj"
 	"github.com/twitchyliquid64/golang-asm/obj/x86"
-	"golang.org/x/sys/unix"
 )
 
 // amd64 backend for the baseline JIT. The arch-independent run/cache/eligibility
@@ -37,6 +36,12 @@ const (
 
 // compileJIT emits native code for the whole chunk, or returns nil if it is not
 // JIT-eligible.
+// flushICache is a no-op on x86: instruction fetch is coherent with data writes,
+// so freshly written bytes are fetched correctly once the page is executable. It
+// exists so jit_mem_unix.go can call it unconditionally rather than branching on
+// the architecture; jit_arm64.go supplies the real sequence.
+func flushICache(*byte, int) {}
+
 func compileJIT(chunk *Chunk) *compiledJIT {
 	entry, maxDepth, ok := depths(chunk)
 	if !ok {
@@ -553,15 +558,8 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 	}
 	// W^X: map writable, copy, then flip to read+execute so the page is never
 	// simultaneously writable and executable (required under strict W^X kernels).
-	mem, err := unix.Mmap(-1, 0, len(buf),
-		unix.PROT_READ|unix.PROT_WRITE,
-		unix.MAP_PRIVATE|unix.MAP_ANONYMOUS)
-	if err != nil {
-		return nil
-	}
-	copy(mem, buf)
-	if err := unix.Mprotect(mem, unix.PROT_READ|unix.PROT_EXEC); err != nil {
-		_ = unix.Munmap(mem)
+	mem := mapExecutable(buf)
+	if mem == nil {
 		return nil
 	}
 	return &compiledJIT{code: mem, entry: &mem[0], maxDepth: maxDepth}

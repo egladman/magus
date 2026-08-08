@@ -8,8 +8,10 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -657,4 +659,98 @@ export fun check(ctx: magus\Context, args: [str]) > void {
 `)
 	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
 	require.NoError(t, runErr)
+}
+
+// TestDispatchOpInjectsDeclaredSecrets proves an op's declared Secrets are resolved
+// through the run's secret resolver and land in the ONE child process's environment
+// - the declarative escape hatch for a command op (static argv, can't call
+// magus\secret.read) and for a "provided" project with no magusfile at all.
+func TestDispatchOpInjectsDeclaredSecrets(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("NPM_TOKEN", "s3cr3t-token")
+
+	r := secret.New()
+	ctx := secret.ContextWithResolver(context.Background(), r)
+
+	ops := map[string]spells.Op{
+		"publish": {Command: spells.Command{
+			Bin:     "sh",
+			Args:    []string{"-c", `printf "$NPM_TOKEN" > out.txt`},
+			Secrets: map[string]string{"NPM_TOKEN": "NPM_TOKEN"},
+		}},
+	}
+
+	_, err := dispatchOp(ctx, ops, nil, spells.InvokeRequest{Target: "publish", Dir: dir})
+	require.NoError(t, err)
+
+	got, err := os.ReadFile(filepath.Join(dir, "out.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "s3cr3t-token", string(got), "the declared secret must reach the child's environment")
+}
+
+// TestDispatchOpSecretsRequireAResolver proves an op that declares Secrets fails
+// loudly - naming the op - when no secret resolver is on the run, rather than
+// silently spawning with the secret unset.
+func TestDispatchOpSecretsRequireAResolver(t *testing.T) {
+	ops := map[string]spells.Op{
+		"publish": {Command: spells.Command{
+			Bin:     "true",
+			Secrets: map[string]string{"NPM_TOKEN": "NPM_TOKEN"},
+		}},
+	}
+	_, err := dispatchOp(context.Background(), ops, nil, spells.InvokeRequest{Target: "publish", Dir: t.TempDir()})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `"publish"`)
+	assert.Contains(t, err.Error(), "no secret resolver is on this run")
+}
+
+// TestDispatchOpSecretsPropagateResolverError proves an unresolvable reference
+// surfaces as a dispatch error naming both the op and the secret, rather than
+// running the command with a missing value.
+func TestDispatchOpSecretsPropagateResolverError(t *testing.T) {
+	r := secret.New() // built-in env provider; NOT_SET_ANYWHERE is deliberately unset
+	ctx := secret.ContextWithResolver(context.Background(), r)
+
+	ops := map[string]spells.Op{
+		"publish": {Command: spells.Command{
+			Bin:     "true",
+			Secrets: map[string]string{"TOKEN": "NOT_SET_ANYWHERE"},
+		}},
+	}
+	_, err := dispatchOp(ctx, ops, nil, spells.InvokeRequest{Target: "publish", Dir: t.TempDir()})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `"publish"`)
+	assert.Contains(t, err.Error(), `"TOKEN"`)
+}
+
+// TestResolveSecretEnvMergesWithoutClobberingReservedEnv proves resolveSecretEnv
+// merges resolved secrets alongside magus-reserved env (e.g. MAGUS_SYMBOL_INDEX, set
+// by symbolIndexEnv for the scip op) without disturbing it - the existing
+// symbolIndexEnv behavior is unaffected by an op that also declares secrets.
+func TestResolveSecretEnvMergesWithoutClobberingReservedEnv(t *testing.T) {
+	t.Setenv("NPM_TOKEN", "s3cr3t-token")
+	r := secret.New()
+	ctx := secret.ContextWithResolver(context.Background(), r)
+
+	base := map[string]string{"MAGUS_SYMBOL_INDEX": "/cache/index.scip"}
+	env, err := resolveSecretEnv(ctx, "scip", map[string]string{"NPM_TOKEN": "NPM_TOKEN"}, base)
+	require.NoError(t, err)
+	assert.Equal(t, "/cache/index.scip", env["MAGUS_SYMBOL_INDEX"], "reserved env must survive the merge")
+	assert.Equal(t, "s3cr3t-token", env["NPM_TOKEN"])
+}
+
+// TestResolveSecretEnvCollisionErrors proves a declared secret whose env var name
+// collides with a magus-reserved env var (MAGUS_SYMBOL_INDEX) is a load-time error
+// naming the op and the colliding name, rather than a silent override or drop in a
+// security-sensitive path.
+func TestResolveSecretEnvCollisionErrors(t *testing.T) {
+	r := secret.New()
+	ctx := secret.ContextWithResolver(context.Background(), r)
+
+	base := map[string]string{"MAGUS_SYMBOL_INDEX": "/cache/index.scip"}
+	_, err := resolveSecretEnv(ctx, "scip", map[string]string{"MAGUS_SYMBOL_INDEX": "MAGUS_SYMBOL_INDEX"}, base)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `"scip"`)
+	assert.Contains(t, err.Error(), "MAGUS_SYMBOL_INDEX")
+	assert.Contains(t, err.Error(), "collides")
 }

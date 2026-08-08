@@ -3,10 +3,16 @@
 // The dashboard shows a lot of magus vocabulary (pool, slot, latency, remote
 // cache, buzz, sandbox, ...). Each such term links to its definition so an operator
 // can learn the model without leaving the surface. The link is SAME-ORIGIN and
-// relative (../glossary/#<slug>, from a depth-1 console app) so ref-drawer.ts can
-// intercept it and open the definition INLINE in the reference panel - you read the
-// term without leaving the page. If the drawer is absent (or the fetch 404s, e.g. a
-// daemon that does not serve /glossary/), the link just navigates normally.
+// relative (../glossary/#<slug>, from a depth-1 console app).
+//
+// It NAVIGATES. Nothing intercepts it: this file, card.ts and dashboard.css each used to
+// claim ref-drawer.ts opened the term inline in the reference panel, but ref-drawer.ts has
+// no such handler (it wires its own toggles and [data-q]/[data-view]/[data-lens] inside its
+// own body, nothing glossary-shaped), and the comments named a `.gloss-link` class the
+// markup does not use either. So a click leaves the SPA, and on a console served without the
+// docs tree beside it the destination 404s. Opening it inline is a real improvement and is
+// still unbuilt - if you build it, intercept `.console-render-glosslink` and fix this comment
+// in the same change rather than describing the intent again.
 //
 // The slug is the lowercased-hyphenated term, matching the id the site generates
 // for a "### Term" heading in docs/glossary.md. Link a term ONCE per tile heading
@@ -27,9 +33,9 @@ export function glossaryUrl(term: string, slug?: string): string {
   return GLOSSARY_BASE + (slug ?? slugify(term));
 }
 
-// glossaryLink returns an <a> for the term's glossary entry. ref-drawer.ts intercepts .gloss-link
-// clicks to open the definition inline in the reference panel (see its page-wide handler); with no
-// drawer it navigates to the glossary page normally.
+// glossaryLink returns an <a> for the term's glossary entry. It navigates to the glossary
+// page; see the note at the top of this file about the inline-panel behaviour that is
+// described in several places but does not exist.
 export function glossaryLink(
   term: string,
   opts: { label?: string; slug?: string } = {},
@@ -38,6 +44,6 @@ export function glossaryLink(
   a.className = "console-render-glosslink";
   a.href = glossaryUrl(term, opts.slug);
   a.textContent = opts.label ?? term;
-  a.title = "Look up " + term + " in the reference panel";
+  a.title = "Look up " + term + " in the glossary";
   return a;
 }

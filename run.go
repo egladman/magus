@@ -205,9 +205,17 @@ func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOp
 	// as "no ci" and abort the gate; let runResolved surface the real read failure.
 	if projects := m.targetProjects(targets); len(projects) > 0 {
 		if has, scanErr := anyProjectDeclaresCI(projects); !has && scanErr == nil {
-			interactive.Emit(os.Stderr, "define a ci target in your magusfile to compose the gate, e.g.  "+
-				"export fun ci(ctx: magus\\Context, args: [str]) > void { ctx.needs(build, test, lint); }  "+
-				"(run 'magus describe targets' to see available stages)")
+			// The hint has to name the fix the scope can actually apply: a provided
+			// project has no magusfile to declare ci in, so telling its user to edit
+			// one sends them somewhere that does not exist.
+			hint := "define a ci target in your magusfile to compose the gate, e.g.  " +
+				"export fun ci(ctx: magus\\Context, args: [str]) > void { ctx.needs(build, test, lint); }  " +
+				"(run 'magus describe targets' to see available stages)"
+			if allProvided(projects) {
+				hint = "these projects come from a workspace provider, so ci lives on the provider spell: " +
+					"expose a \"ci\" op in its mgs_listTargets and the anchor is satisfied"
+			}
+			interactive.Emit(os.Stderr, hint)
 			return types.DiagnosticErrorf(types.NoCITarget,
 				"no %q target defined in the selected project(s); it is the anchor %q and %q key off, "+
 					"so this run would do nothing", types.TargetCI, "magus affected ci", "magus affected --plan")
@@ -217,15 +225,38 @@ func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOp
 }
 
 // anyProjectDeclaresCI reports whether any project in scope declares a ci target.
-// ci lives in the magusfile (composed via magus.needs), never in a spell, so it
-// extracts each project's declared target nodes statically (the same AST extractor
-// TargetGraph uses, never a raw text scan, so `ci` in a comment or string can't
-// false-positive) and short-circuits on the first ci found. The returned error is
+// ci lives in the magusfile (composed via magus.needs), never in a spell - except
+// for a provided project, which has no magusfile at all, so its bound spell's ci
+// op is the only place ci can live. A magusfile project is checked by extracting
+// its declared target nodes statically (the same AST extractor TargetGraph uses,
+// never a raw text scan, so `ci` in a comment or string can't false-positive) and
+// short-circuiting on the first ci found; a spell op named ci must NOT satisfy the
+// anchor there, since the magusfile is the definition. The returned error is
 // non-nil if a source couldn't be located, so a (false, err) result means "couldn't
 // determine", not "definitely no ci" - the caller must not block on it.
+// allProvided reports whether every project in the scope came from a workspace
+// provider, which is the case where the no-ci hint must point at the provider
+// spell rather than at a magusfile none of them have.
+func allProvided(projects []*types.Project) bool {
+	for _, p := range projects {
+		if _, ok := p.Origin.Provider(); !ok {
+			return false
+		}
+	}
+	return true
+}
+
 func anyProjectDeclaresCI(projects []*types.Project) (bool, error) {
 	var scanErr error
 	for _, p := range projects {
+		if _, ok := p.Origin.Provider(); ok {
+			for _, s := range p.ResolvedSpells {
+				if slices.Contains(s.Targets(), types.TargetCI) {
+					return true, nil
+				}
+			}
+			continue
+		}
 		srcs, err := interp.FindAll(p.Dir)
 		if err != nil {
 			scanErr = err

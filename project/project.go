@@ -52,7 +52,7 @@ func Discover(_ context.Context, root string) (*types.Workspace, error) {
 		rel := projectPath(abs, path)
 		if hasDeclaration(path) {
 			mu.Lock()
-			ws.Projects[rel] = &types.Project{Path: rel, Dir: path}
+			ws.Projects[rel] = &types.Project{Path: rel, Dir: path, Origin: types.OriginMagusfile}
 			mu.Unlock()
 		}
 		return nil

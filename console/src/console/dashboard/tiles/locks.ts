@@ -8,7 +8,7 @@
 // remembers starting holds one indefinitely while every other run simply waits with no explanation.
 // Age is the column that separates the two readings: seconds is a peer mid-run, days is abandoned.
 
-import { relTime, tsMillis, type DashboardState, type LockView } from "../state";
+import { relTime, tsMillisOrNow, type DashboardState, type LockView } from "../state";
 import { Card, h, type Tile } from "./card";
 import { fitRows, marqueeOnOverflow } from "./density";
 
@@ -52,7 +52,7 @@ export function locksTile(): Tile {
       // Surfaced next to the holder because a lock with nobody waiting costs nothing;
       // the count is what turns "held" into "blocking".
       if (l.waiters.length) {
-        detail.push(l.waiters.length + (l.waiters.length === 1 ? " waiting" : " waiting"));
+        detail.push(l.waiters.length + (l.waiters.length === 1 ? " waiter" : " waiters"));
       }
       // The text goes in an inner span so the marquee has something to translate that is not the
       // clipping box (density.ts). The holder's directory is the reason: it is the longest value on
@@ -68,7 +68,7 @@ export function locksTile(): Tile {
       // The threshold comes from the daemon, not from a constant here: it was decided
       // in two places once, and a CLI warning sat beside a dashboard row styled healthy.
       const staleAfterMs = l.staleAfterSeconds * 1000;
-      const heldMs = l.acquireTime ? Date.now() - tsMillis(l.acquireTime) : 0;
+      const heldMs = l.acquireTime ? Date.now() - tsMillisOrNow(l.acquireTime) : 0;
       if (staleAfterMs > 0 && heldMs > staleAfterMs) {
         li.dataset.stale = "true";
         tip.push("Held long enough that the holder may be abandoned rather than busy.");

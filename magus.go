@@ -82,6 +82,7 @@ type Magus struct {
 	tel            observability.Provider
 	injectedTel    observability.Provider // shared provider supplied via WithProvider; adopted verbatim in Open
 	metricsCollect bool                   // daemon: build an always-on local metrics collector for the dashboard
+	skipProviders  bool                   // open without running wired workspace providers (see WithoutWorkspaceProviders)
 
 	daemon Daemon
 }
@@ -215,6 +216,19 @@ func (m *Magus) load(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// Workspace providers run HERE, in the one window where both facts they need are
+	// true: the magusfiles have been evaluated (so magus\workspace.provider has named
+	// its spells, and those spells are registered), and the registry has not been
+	// applied yet (so magus\project("libs/foo", {...}) still layers on top of a
+	// provided project rather than being overwritten by it).
+	if !m.skipProviders {
+		if err := workspace.AddProvidedProjects(ctx, m.ws, m.wsReg.Providers(), workspace.ProviderCache{
+			Dir:       resolveCacheDir(m.ws.Root, m.cfg),
+			Immutable: cacheImmutable(m.cfg),
+		}); err != nil {
+			return err
+		}
+	}
 	if err := m.wsReg.Apply(m); err != nil {
 		return err
 	}
@@ -290,6 +304,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	}
 	m.metricsCollect = o.MetricsCollect
 	m.injectedTel = o.Provider
+	m.skipProviders = o.SkipWorkspaceProviders
 	if o.Registry != nil {
 		m.wsReg = o.Registry
 	} else {

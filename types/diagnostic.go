@@ -104,6 +104,8 @@ const (
 	OutputOwnedByTwoTargets   DiagnosticCode = "MGS1020"
 	WorkspaceNeedsNewerMagus  DiagnosticCode = "MGS1021"
 	MagusfileOnlyMember       DiagnosticCode = "MGS1022"
+	ProviderPathRejected      DiagnosticCode = "MGS1023"
+	ProviderProjectShadowed   DiagnosticCode = "MGS1024"
 	PathReadDenied            DiagnosticCode = "MGS2001"
 	PathWriteDenied           DiagnosticCode = "MGS2002"
 	EnvStripped               DiagnosticCode = "MGS2003"
@@ -159,7 +161,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	CrossOutputOwnerUnknown, CrossOutputCycle, CrossOutputGlobEscapes, CrossOutputNotProduced,
 	CrossDepOwnerUnknown, GoModReplaceDrift, MagusfileIsNotASpell, DeadOutputGlob,
 	SelfStalingOutput, OutputOwnedByTwoTargets, WorkspaceNeedsNewerMagus,
-	MagusfileOnlyMember,
+	MagusfileOnlyMember, ProviderPathRejected, ProviderProjectShadowed,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,

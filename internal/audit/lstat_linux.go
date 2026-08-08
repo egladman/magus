@@ -1,3 +1,13 @@
+// On 32-bit Linux (arm, 386, mips, mipsle) the raw syscall does not port: the trap number is
+// SYS_FSTATAT64 rather than SYS_NEWFSTATAT, and Stat_t's Mtim fields are int32, so
+// the nanosecond multiply below overflows. That is two per-arch variants to carry
+// for the targets where the saved allocation is worth least, so 32-bit Linux takes
+// the portable os.Lstat path in lstat_other.go instead. The tag is the exact
+// complement of lstat_other.go's, so a future 64-bit linux port lands here and a
+// future 32-bit one lands there, rather than matching neither file and failing to
+// build on an undefined lstatMtimeSize.
+//go:build !386 && !arm && !mips && !mipsle
+
 package audit
 
 import (

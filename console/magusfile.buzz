@@ -2,7 +2,8 @@ import "magus";
 // The shared advisory gate. See tools/audit.buzz for why an exit code is the wrong
 // question and what this asks instead.
 import "../tools/audit" as audit;
-// Modules the targets use: os (pnpm/esbuild), vcs (drift gate).
+// Modules the targets use: fs (lcov reads, badge write), os (pnpm/esbuild), vcs (drift gate).
+import "fs";
 import "os";
 import "vcs";
 // The shared DOM-free browser client lib (libs/textsearch) holds the search grammar the
@@ -11,6 +12,10 @@ import "vcs";
 // lib edit then marks the console affected and re-checks it through the target graph.
 import "project/../libs/textsearch" as textsearch;
 import "project/.." as root;
+
+// badge renders the coverage SVG; cov merges the per-process lcov reports into one figure.
+import "../badge" as badge;
+import "../coverage" as cov;
 
 // magusfile binds this file's own exported targets (build, typecheck, test, ci); ts adds the
 // TypeScript spell so the app's src/ is symbol-capable - its `scip` op indexes it (via tsconfig.json)
@@ -30,9 +35,10 @@ magus\project({
     // build manifests (package.json + pnpm-lock.yaml, where the esbuild deps are pinned) round it out.
     // pnpm is the package manager - NOT npm; .npmrc's minimum-release-age gate is the reason.
     "sources": ["magusfile.buzz", "*.buzz",
+                "../badge.buzz", "../coverage.buzz",
                 "src/**/*.ts", "src/**/*.css", "src/**/*.html",
                 "index.html", "manifest.webmanifest", "sw.js", "scripts/**/*.mjs",
-                "package.json", "pnpm-lock.yaml", "tsconfig.json",
+                "package.json", "pnpm-lock.yaml", "tsconfig.json", "tsconfig.test.json",
                 "stylelint.config.mjs", "stylelint-control-sizing.mjs",
                 "../gen/knowledge-graph.json", "../gen/target-graph.json"],
     // src/gen/** is written by proto's buf-generate (see proto/buf.gen.yaml), but is
@@ -63,10 +69,48 @@ fun install() > void {
     os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
 }
 
-// test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests).
+// test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests)
+// and renders a line-coverage badge from the run.
+//
+// The suite runs Node THREE times on purpose and that split is load-bearing: happy-dom installs
+// localStorage/sessionStorage as getter-only, and several tests stub them by assignment, so applying
+// the DOM setup globally (one --import for everything) breaks them. Unifying the runs was tried and
+// reverted.
+//
+// Which is why the figure needs cov.lcovMergePercent rather than lcovPercent: three processes means
+// three reports, and each one lists the whole line table of every shared module it imported. Summing
+// their LF/LH would count those files once per process and report a number that is not about
+// anything. The merge unions DA: records instead, so a line is found once and hit if any run hit it.
+//
+// Both --sourcemap (esbuild, in the test script) and --enable-source-maps (node) are required. With
+// only the first, Node reads the sourcemap for stack traces alone and every record stays
+// SF:.testcache/<bundle>.js - a coverage figure about the bundle rather than the source.
+//
+// The badge sits in this project's own tree, NOT in <root>/assets/ beside the Go and textsearch ones,
+// and so is not copied into the docs site (docs/render.buzz copies exactly one directory). It cannot
+// be: `magus describe project console` reports depends_on=[. libs/textsearch], and writing another
+// project's tree makes THAT project depend on this one, which magus rejects as a 2-cycle
+// (MGS8003/CrossOutputCycle) - correctly, since the root would then have to run both before and after
+// the console. Putting it on the site would mean widening render.buzz's asset copy, which is a
+// separate call about the site rather than about this gate.
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
+    ctx.writesFiles("coverage.svg");
+    final clean_before = vcs\isDirty(["coverage.svg"]) == false;
+    install();
     os\exec("pnpm", ["run", "test"], ".", {});
+
+    final pct = cov\lcovMergePercent(
+        [fs\readFile("coverage.plain.lcov"), fs\readFile("coverage.dom.lcov")],
+        keep: "src/");
+    fs\writeFile("coverage.svg", badge\coverage("console coverage", percent: pct, radius: 3));
+    if (ctx.has_charm("rw")) { return; }
+    if (clean_before and vcs\isDirty(["coverage.svg"])) {
+        // Names the figure this run measured. Node's line coverage differs by a fraction
+        // of a point between platforms, so a badge committed from a developer machine can
+        // be stale on CI by a rounding step nobody can see from the message alone.
+        throw "test: console/coverage.svg is stale; this run measured {pct}%; re-run `magus run test:rw console` and commit the badge";
+    }
 }
 
 // build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static

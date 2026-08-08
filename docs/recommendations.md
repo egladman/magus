@@ -36,7 +36,61 @@ A target is the verb. A charm changes how it runs, never what runs:
 `magus run publish`, the target is `build` and the charm is `cd`.
 
 So charm names read as modifiers, not actions. `rw` is
-"read-write", not "write". `static` is "the static one", not "build static".
+"read-write", not "write". `cd` is "in delivery mode", not "deliver".
+
+## A charm names a departure, never the default
+
+The default state does not get a charm. A charm marks a deliberate step away from
+what a target already does, so naming the default gives you two ways to say one
+thing - and forces the bare command to mean something else.
+
+That "something else" is almost always the riskier variant, which is how the
+mistake bites. magus ships two binaries: a static one that runs anywhere, and a
+dynamically linked one that needs a loader and system libzstd/liblzma.
+
+```buzz
+// Wrong: `static` names the default, so the bare target is left meaning the
+// exception - and the exception is the build most likely to fail on a stranger's
+// machine.
+if (ctx.has_charm("static")) {
+    build_release_variant(ctx, goos, goarch, false, "");
+} else {
+    build_release_variant(ctx, goos, goarch, true, "_dynamic");
+}
+
+// Right: the default is the unconditional branch; the charm names the departure.
+if (ctx.has_charm("dynamic")) {
+    build_release_variant(ctx, goos, goarch, true, "_dynamic");
+} else {
+    build_release_variant(ctx, goos, goarch, false, "");
+}
+```
+
+The difference shows up at the command line, where it is what people actually
+copy:
+
+```sh
+# Wrong: the safe artifact needs ceremony, the fragile one is what you get by
+# typing the obvious thing.
+magus run release-build:static    # static
+magus run release-build           # dynamic: needs a loader and system libzstd/liblzma
+
+# Right
+magus run release-build           # static, runs anywhere
+magus run release-build:dynamic   # opts into the loader and the system libraries
+```
+
+This target really did read `has_charm("static")`, and the cost was not
+theoretical: the bare `magus run release-build` produced the dynamic build, the
+one that needs a loader and system libraries, so the command someone runs without
+reading handed back the artifact most likely to fail on their machine.
+
+Two tests, both mechanical:
+
+- If the charm's presence and absence produce the same result, the charm should
+  not exist.
+- If its absence produces the thing you would not recommend, the default is on
+  the wrong side. Swap the branches; do not add a second charm to compensate.
 
 ## One charm answers one question
 
@@ -90,6 +144,23 @@ Avoid `snapshot`. It means opposite things in the two tools that popularized it 
 GoReleaser's `--snapshot` builds and publishes **nothing**, while Maven's
 `-SNAPSHOT` publishes to a different repository. A reader cannot know which you
 meant.
+
+Name the property, not the mechanism that produces it.
+
+```sh
+# Wrong: names how it was compiled. Only a reader who already knows Go's
+# toolchain can tell what it will require at runtime - and they did not need
+# telling.
+magus run release-build:cgo
+
+# Right: names what the build actually needs.
+magus run release-build:dynamic
+```
+
+The same rule governs the artifacts a charm produces, because the name outlives
+the command that made it. This workspace publishes
+`magus_<version>_<os>_<arch>_static.tar.gz` and `:latest-dynamic`, not `-cgo`, for
+exactly that reason - each name states a runtime property rather than a build flag.
 
 ## A rubric for a new charm name
 

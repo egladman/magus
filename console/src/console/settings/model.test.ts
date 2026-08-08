@@ -12,6 +12,7 @@ import {
   importSettings,
   SETTINGS_SCHEMA_VERSION,
   type DiffContext,
+  type LayoutSettings,
   type Settings,
 } from "./model";
 
@@ -23,8 +24,15 @@ const base: Settings = {
   keymap: { "console.tab.close": "mod+w" },
 };
 
+const baseLayout: LayoutSettings = {
+  splitMode: "col",
+  bigPictureSplit: { v: 1, cols: 9 },
+  logsZoom: 1.3,
+  collapsedCards: ["cache", "services"],
+};
+
 test("buildSettingsEnvelope: wraps the snapshot in the versioned envelope", () => {
-  assert.deepEqual(buildSettingsEnvelope(base), {
+  assert.deepEqual(buildSettingsEnvelope(base, baseLayout), {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
     settings: {
       poll: 20000,
@@ -33,13 +41,19 @@ test("buildSettingsEnvelope: wraps the snapshot in the versioned envelope", () =
       focusRing: false,
       keymap: { "console.tab.close": "mod+w" },
     },
+    layout: {
+      splitMode: "col",
+      bigPictureSplit: { v: 1, cols: 9 },
+      logsZoom: 1.3,
+      collapsedCards: ["cache", "services"],
+    },
   });
 });
 
 test("round-trip: import(build(p)) restores every value onto a different current", () => {
-  const raw = JSON.stringify(buildSettingsEnvelope(base));
+  const raw = JSON.stringify(buildSettingsEnvelope(base, baseLayout));
   const current: Settings = { poll: 5000, host: "", theme: "auto", focusRing: true, keymap: {} };
-  const res = importSettings(raw, current);
+  const res = importSettings(raw, current, baseLayout);
   assert.ok(res.ok);
   assert.deepEqual(res.next, base);
   assert.deepEqual(res.applied.sort(), ["focusRing", "host", "keymap", "poll", "theme"]);
@@ -50,7 +64,7 @@ test("import: unknown keys are ignored but reported, known keys still apply", ()
     schemaVersion: 1,
     settings: { poll: 60000, somethingNew: { nested: true }, fontSize: 14 },
   });
-  const res = importSettings(raw, base);
+  const res = importSettings(raw, base, baseLayout);
   assert.ok(res.ok);
   assert.equal(res.next.poll, 60000);
   assert.equal(res.next.host, base.host); // untouched
@@ -64,7 +78,7 @@ test("import: a present-but-wrong-typed known key is reported as skipped, valid 
     schemaVersion: 1,
     settings: { poll: "fast", host: "10.0.0.2:9000" },
   });
-  const res = importSettings(raw, base);
+  const res = importSettings(raw, base, baseLayout);
   assert.ok(res.ok);
   assert.equal(res.next.host, "10.0.0.2:9000");
   assert.equal(res.next.poll, base.poll); // wrong-typed poll kept the current value
@@ -78,7 +92,7 @@ test("import: a malformed keymap is reported as skipped, not partially applied",
     schemaVersion: 1,
     settings: { host: "localhost:1", keymap: { a: 3 } },
   });
-  const res = importSettings(raw, base);
+  const res = importSettings(raw, base, baseLayout);
   assert.ok(res.ok);
   assert.deepEqual(res.next.keymap, base.keymap); // whole keymap kept, not the half-parsed one
   assert.deepEqual(res.skipped, ["keymap"]);
@@ -86,7 +100,7 @@ test("import: a malformed keymap is reported as skipped, not partially applied",
 
 test("import: missing keys keep the current value and are not reported as skipped", () => {
   const raw = JSON.stringify({ schemaVersion: 1, settings: { theme: "light" } });
-  const res = importSettings(raw, base);
+  const res = importSettings(raw, base, baseLayout);
   assert.ok(res.ok);
   assert.equal(res.next.theme, "light");
   assert.equal(res.next.poll, base.poll);
@@ -102,7 +116,7 @@ test("import: a wrong-typed key is skipped, not applied (keeps current)", () => 
     schemaVersion: 1,
     settings: { poll: "fast", theme: "chartreuse", host: 12, keymap: { a: 3 } },
   });
-  const res = importSettings(raw, base);
+  const res = importSettings(raw, base, baseLayout);
   // Every supplied key is malformed, so nothing is recognizable -> hard error rather than a silent no-op.
   assert.equal(res.ok, false);
   if (!res.ok) assert.match(res.error, /No recognizable settings/);
@@ -110,14 +124,14 @@ test("import: a wrong-typed key is skipped, not applied (keeps current)", () => 
 
 test("import: a valid host trims surrounding whitespace", () => {
   const raw = JSON.stringify({ schemaVersion: 1, settings: { host: "  10.0.0.2:9000  " } });
-  const res = importSettings(raw, base);
+  const res = importSettings(raw, base, baseLayout);
   assert.ok(res.ok);
   assert.equal(res.next.host, "10.0.0.2:9000");
 });
 
 test("import: an empty host string is valid (clears the override)", () => {
   const raw = JSON.stringify({ schemaVersion: 1, settings: { host: "" } });
-  const res = importSettings(raw, base);
+  const res = importSettings(raw, base, baseLayout);
   assert.ok(res.ok);
   assert.equal(res.next.host, "");
   assert.deepEqual(res.applied, ["host"]);
@@ -128,7 +142,7 @@ test("import: forward-compat - a newer schemaVersion still applies its known key
     schemaVersion: SETTINGS_SCHEMA_VERSION + 1,
     settings: { host: "localhost:1", futureThing: true },
   });
-  const res = importSettings(raw, base);
+  const res = importSettings(raw, base, baseLayout);
   assert.ok(res.ok);
   assert.equal(res.next.host, "localhost:1"); // never hard-fails on version alone; known keys still land
   assert.deepEqual(res.applied, ["host"]);
@@ -141,20 +155,20 @@ test("import: the current schemaVersion is not flagged as newer", () => {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
     settings: { host: "localhost:1" },
   });
-  const res = importSettings(raw, base);
+  const res = importSettings(raw, base, baseLayout);
   assert.ok(res.ok);
   assert.equal(res.newerSchema, undefined);
 });
 
 test("import: invalid JSON is a hard error", () => {
-  const res = importSettings("{not json", base);
+  const res = importSettings("{not json", base, baseLayout);
   assert.equal(res.ok, false);
   if (!res.ok) assert.match(res.error, /not valid JSON/);
 });
 
 test("import: a non-object / missing settings object is a hard error", () => {
   for (const raw of ["42", '"str"', "null", "[]", "{}", JSON.stringify({ schemaVersion: 1 })]) {
-    const res = importSettings(raw, base);
+    const res = importSettings(raw, base, baseLayout);
     assert.equal(res.ok, false, "expected error for " + raw);
   }
 });
@@ -164,7 +178,7 @@ test("import: a disabled binding (empty-string chord) survives the keymap type c
     schemaVersion: 1,
     settings: { keymap: { "console.pane.split": "" } },
   });
-  const res = importSettings(raw, base);
+  const res = importSettings(raw, base, baseLayout);
   assert.ok(res.ok);
   assert.deepEqual(res.next.keymap, { "console.pane.split": "" });
 });
@@ -282,8 +296,12 @@ test("diffLines: a pure insertion is add-only, a pure deletion is del-only", () 
 });
 
 test("diffLines: reflects a real settings envelope value change", () => {
-  const before = JSON.stringify(buildSettingsEnvelope(base), null, 2);
-  const after = JSON.stringify(buildSettingsEnvelope({ ...base, theme: "light" }), null, 2);
+  const before = JSON.stringify(buildSettingsEnvelope(base, baseLayout), null, 2);
+  const after = JSON.stringify(
+    buildSettingsEnvelope({ ...base, theme: "light" }, baseLayout),
+    null,
+    2,
+  );
   const diff = diffLines(before, after);
   // exactly the theme line flips: one del carrying "dark", one add carrying "light", nothing else changes.
   assert.deepEqual(
@@ -294,4 +312,76 @@ test("diffLines: reflects a real settings envelope value change", () => {
     diff.filter((l) => l.kind === "add").map((l) => l.text.trim()),
     ['"theme": "light",'],
   );
+});
+
+// --- the layout section ------------------------------------------------------------------
+// It carries the preferences a person accumulates by USING the console. The properties that
+// matter are that it round-trips, that a file without it still imports, and that it never
+// half-applies a structured value.
+
+test("layout: round-trips through the envelope onto a different current", () => {
+  const raw = JSON.stringify(buildSettingsEnvelope(base, baseLayout));
+  const other: LayoutSettings = {
+    splitMode: "row",
+    bigPictureSplit: { v: 1, cols: 6 },
+    logsZoom: 1,
+    collapsedCards: [],
+  };
+  const res = importSettings(raw, base, other);
+  assert.ok(res.ok);
+  assert.deepEqual(res.nextLayout, baseLayout);
+  assert.deepEqual(res.appliedLayout.sort(), [
+    "bigPictureSplit",
+    "collapsedCards",
+    "logsZoom",
+    "splitMode",
+  ]);
+});
+
+// A file exported before the layout section existed, or one hand-trimmed to preferences only,
+// must still import - the section is additive, not required.
+test("layout: an envelope with no layout section still imports the settings", () => {
+  const raw = JSON.stringify({ schemaVersion: SETTINGS_SCHEMA_VERSION, settings: { poll: 5000 } });
+  const res = importSettings(raw, base, baseLayout);
+  assert.ok(res.ok);
+  assert.equal(res.next.poll, 5000);
+  assert.deepEqual(res.appliedLayout, []);
+  assert.deepEqual(res.nextLayout, baseLayout, "an absent section keeps every current value");
+});
+
+test("layout: a wrong-typed value is skipped, not coerced", () => {
+  const raw = JSON.stringify({
+    schemaVersion: SETTINGS_SCHEMA_VERSION,
+    settings: {},
+    layout: { splitMode: "diagonal", logsZoom: "big", collapsedCards: ["ok", 7] },
+  });
+  const res = importSettings(raw, base, baseLayout);
+  assert.ok(res.ok === false || res.appliedLayout.length === 0);
+});
+
+// Whole-or-nothing, like the keymap: one bad entry must not leave a pane at a nonsense position.
+test("layout: a split map with one bad entry is skipped entirely", () => {
+  const raw = JSON.stringify({
+    schemaVersion: SETTINGS_SCHEMA_VERSION,
+    settings: {},
+    layout: { bigPictureSplit: { v: 1, cols: "wide" }, logsZoom: 1.5 },
+  });
+  const res = importSettings(raw, base, baseLayout);
+  assert.ok(res.ok);
+  assert.deepEqual(res.nextLayout.bigPictureSplit, baseLayout.bigPictureSplit);
+  assert.equal(res.nextLayout.logsZoom, 1.5, "the good sibling still applies");
+  assert.ok(res.skipped.includes("bigPictureSplit"));
+});
+
+// The exclusions are a decision, not an oversight: carrying the seeding record to a new machine
+// would tell that console the default collapse had already run, so it would come up unfolded.
+test("layout: an unknown layout key is reported, never applied", () => {
+  const raw = JSON.stringify({
+    schemaVersion: SETTINGS_SCHEMA_VERSION,
+    settings: {},
+    layout: { logsZoom: 1.1, "dashboard-collapse-seeded": ["cache"] },
+  });
+  const res = importSettings(raw, base, baseLayout);
+  assert.ok(res.ok);
+  assert.ok(res.unknown.includes("dashboard-collapse-seeded"));
 });

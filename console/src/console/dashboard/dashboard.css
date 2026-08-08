@@ -1468,8 +1468,8 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   .console-dashboard-cols { grid-template-columns: 1fr; }
 }
 
-/* Glossary deep-link: a heading term links to its definition inline in the reference panel
-   (ref-drawer.ts intercepts .console-render-glosslink). The dotted underline marks it as looked-up-able. */
+/* Glossary deep-link: a heading term links to its definition on the glossary page. The dotted
+   underline marks it as looked-up-able. (It navigates; nothing intercepts it - see glossary.ts.) */
 .console-render-glosslink {
   color: inherit; text-decoration: none;
   border-bottom: 1px dotted var(--pf-t--global--border--color--default);

@@ -1,6 +1,6 @@
 ---
 title: Install on Windows
-description: Download, verify, and install the magus binary on Windows (amd64) with PowerShell and put it on your PATH.
+description: Download, verify, and install the magus binary on Windows (amd64 or arm64) with PowerShell and put it on your PATH.
 tags: [download, install, windows, powershell, path]
 ---
 
@@ -12,14 +12,50 @@ magus ships as a single self-contained binary. Download it with `curl.exe`, extr
 
 ```powershell
 $VERSION = "__MAGUS_VERSION__"
-curl.exe -fLO "https://github.com/egladman/magus/releases/download/$VERSION/magus_${VERSION}_windows_amd64.tar.gz"
+$ARCH = "amd64"       # or arm64 on Windows on ARM
+curl.exe -fLO "https://github.com/egladman/magus/releases/download/$VERSION/magus_${VERSION}_windows_${ARCH}_static.tar.gz"
 mkdir -Force $Env:USERPROFILE\bin | Out-Null
-tar -xzf "magus_${VERSION}_windows_amd64.tar.gz"
+tar -xzf "magus_${VERSION}_windows_${ARCH}_static.tar.gz" magus.exe
 Move-Item -Force magus.exe $Env:USERPROFILE\bin\magus.exe
 magus version
 ```
 
+The archive also carries `LICENSE`, `THIRD-PARTY-NOTICES`, `README.md`, and a
+`BUILDINFO` file naming the exact version, commit, platform, and variant. Naming
+`magus.exe` on the `tar` line above extracts just the binary; drop it to unpack all of
+them. `BUILDINFO` is readable without running anything, which is the point if a
+dynamically linked build will not start.
+
 Both `curl.exe` and `tar` ship with Windows 10 (1803+) and Windows 11, so no extra tooling is needed. `$VERSION` above is the current release; [GitHub Releases](https://github.com/egladman/magus/releases) lists every build.
+
+To fill in `$ARCH` from the machine rather than by hand, `$Env:PROCESSOR_ARCHITECTURE` reads `AMD64` or `ARM64`:
+
+```powershell
+$ARCH = if ($Env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "amd64" }
+```
+
+## Testing status
+
+Windows binaries are built by the release pipeline but are **not executed by CI**,
+which runs on Linux only. windows/amd64 has shipped for several releases and has
+field use behind it; **windows/arm64 is new and has never been run end to end**.
+
+The Buzz JIT is also newly enabled on Windows - it was disabled there until this
+release line - and its generated machine code has not executed on any Windows
+machine during development. If a magusfile gives a result that looks wrong, re-run
+with the JIT off:
+
+```powershell
+$Env:BUZZ_JIT = "0"
+magus run <target>
+```
+
+If the answer changes, that is a JIT bug rather than a magusfile bug, and it is a
+very useful thing to report. See [Platform support](../download.md#platform-support).
+
+## Which archive
+
+The `_static` archive above is what both architectures ship, and it is what `magus self update` fetches. No dynamically linked archive is published: on Windows it would link the MSYS2 mingw copies of libzstd/liblzma, which a user's machine has no reason to carry. `magus run release-build:dynamic` produces one from source if you want it.
 
 ## Verify the download
 

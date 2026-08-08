@@ -381,9 +381,14 @@ const REMEMBER_KEY = "magus-live-remember";
 // the URL bar, history, or a copied link.
 export function consumeLiveToken(params: HashParams): void {
   if (!params.token) return;
-  const store = isRemembered() ? localStorage : sessionStorage;
+  const remembered = isRemembered();
   try {
-    store.setItem(TOKEN_KEY, params.token);
+    // Write one store and CLEAR the other. getLiveToken reads sessionStorage first, so a
+    // token left behind there outranks a newer one written to localStorage: open a second
+    // share link while "remember" is on and every request goes out signed with the dead
+    // token, which comes back Unauthenticated and reads to the user as "not available".
+    (remembered ? localStorage : sessionStorage).setItem(TOKEN_KEY, params.token);
+    (remembered ? sessionStorage : localStorage).removeItem(TOKEN_KEY);
   } catch {
     /* storage disabled: token lives only for this call chain */
   }

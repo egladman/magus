@@ -26,6 +26,11 @@ type WorkspaceRegistry struct {
 	// remoteBackend is the spell name a magusfile chose as the remote cache
 	// backend (via magus.cache.remote); empty when none was wired.
 	remoteBackend string
+	// providers are the spell names a magusfile wired as workspace providers (via
+	// magus.workspace.provider), in wiring order. Ordered, not a set, because two
+	// providers that report the same path must resolve deterministically: the first
+	// one wired owns it.
+	providers []string
 }
 
 // NewWorkspaceRegistry returns an empty WorkspaceRegistry.
@@ -87,6 +92,26 @@ func (r *WorkspaceRegistry) RemoteBackend() string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.remoteBackend
+}
+
+// AddProvider records a spell name a magusfile wired as a workspace provider,
+// ignoring a repeat of one already wired so a magusfile that wires the same spell
+// twice does not run it twice. Safe to call concurrently.
+func (r *WorkspaceRegistry) AddProvider(spellName string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if slices.Contains(r.providers, spellName) {
+		return
+	}
+	r.providers = append(r.providers, spellName)
+}
+
+// Providers returns the workspace-provider spell names in wiring order, or nil
+// when none were wired.
+func (r *WorkspaceRegistry) Providers() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.providers)
 }
 
 // ProjectPaths returns the registered project paths in sorted order.

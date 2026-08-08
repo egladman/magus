@@ -81,7 +81,10 @@ func renderBuzzMirror(name string, rt reflect.Type) ([]byte, error) {
 	// rt.Name(), not the registry key: the two differ wherever the Buzz name reads
 	// better than the Go one (Projects/ProjectsOutput, HttpResponse/HTTPResponse),
 	// and a header that names a type the reader cannot find defeats its purpose.
-	fmt.Fprintf(&b, "// Buzz mirror of github.com/egladman/magus/types.%s, bundled into\n", rt.Name())
+	// PkgPath for the same reason: the mirrored types live in types AND in spells,
+	// and hardcoding one package pointed half of them at a type that does not exist
+	// there - Project being the case where the wrong path names a REAL other type.
+	fmt.Fprintf(&b, "// Buzz mirror of %s.%s, bundled into\n", rt.PkgPath(), rt.Name())
 	fmt.Fprintln(&b, "// whichever module owns it (magus/spell, or the host module that returns it -")
 	fmt.Fprintln(&b, "// see internal/spellruntime/target.go and hosttypes.go). Edit the Go struct and rerun")
 	fmt.Fprintln(&b, "// `go generate`, never this file.")

@@ -350,7 +350,8 @@ type TargetGraphOutput struct {
 // ProjectDefinition is the human-readable description of a project shown by "magus describe projects".
 const ProjectDefinition = "A project is a directory the workspace recognized as a " +
 	"unit of work, bound to one or more spells. Projects are " +
-	"discovered by the presence of a magusfile (magusfile.buzz, or a magusfiles/ subdirectory) " +
+	"discovered by the presence of a magusfile (magusfile.buzz, or a magusfiles/ subdirectory), " +
+	"or reported by a workspace provider the magusfile wired, " +
 	"and are the basic unit of caching, scheduling, and dependency tracking."
 
 // ProjectEntry is the structured view of a single project. Its Buzz mirror is
@@ -364,7 +365,16 @@ type ProjectEntry struct {
 	// human label has to prefer it over the directory basename - without it,
 	// `magus ls` printed the checkout directory ("agent-harness-handoff-92f105" in
 	// a worktree) while MAGUS.md, built from the same workspace, printed "magus".
-	Name   string   `json:"name,omitempty"      yaml:"name,omitempty"`
+	Name string `json:"name,omitempty"      yaml:"name,omitempty"`
+	// Origin is what put this project in the workspace: "magusfile", or
+	// "provider:<spell>" for one a workspace provider reported. It is on the boundary
+	// because a provided project has no file to open - without it, `magus describe
+	// project libs/foo` describes a project whose declaration the reader cannot find.
+	//
+	// Plain string, not the ProjectOrigin the engine carries: a boundary record is
+	// data (Buzz and JSON both see a str either way), and the named type exists to
+	// stop a Go caller comparing against a prefix, which no wire consumer can do.
+	Origin string   `json:"origin,omitempty"    yaml:"origin,omitempty"`
 	Dir    string   `json:"dir"                 yaml:"dir"`
 	Spell  string   `json:"spell,omitempty"     yaml:"spell,omitempty"`
 	Spells []string `json:"spells,omitempty"    yaml:"spells,omitempty"`

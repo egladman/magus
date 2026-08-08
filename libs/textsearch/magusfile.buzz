@@ -34,6 +34,16 @@ import "magus/spell/typescript";
 import "../../badge" as badge;
 import "../../coverage" as cov;
 
+// The badge is written into the ROOT project's assets/, not this project's own tree,
+// because the docs SSG copies exactly one directory into the site (docs/render.buzz
+// copies <root>/assets/). A badge sitting at libs/textsearch/coverage.svg is referenced
+// by the root README, never copied, and fails the site's asset-integrity gate - which is
+// how `magus run generate` was left red. Declaring it through the workspace handle rather
+// than writing behind magus's back is what keeps `magus clean`, the watch rebuild guard
+// and ownership lookup able to see it: writing another project's tree makes THAT project
+// depend on this one, so the site is always rendered after the badge exists.
+import "project/../.." as workspace;
+
 magus\project({
     "spells": [typescript],
     // Affected/drift tracks this sources glob, not the import graph, so every input must
@@ -51,6 +61,15 @@ magus\project({
     "targets": {
         // Drift-gates MAGUS.md via git status: run alone, every time.
         "generate": {"skip_cache": "drift-gates MAGUS.md via git status; a replay would skip the check", "exclusive": true},
+        // index-generate renders `magus describe graph -o markdown`, so its output is a
+        // function of the WHOLE knowledge graph. Its declared inputs are the magusfiles,
+        // which is the only part of that a glob can name, so any other change leaves the
+        // key unmoved: a cache hit then replays a MAGUS.md built before it and REVERTS the
+        // committed one, which the drift gate above correctly reports as drift. That is why
+        // a branch touching the graph fails this gate in CI, where the shared cache is
+        // restored, while passing on a clean checkout that has nothing to hit. The docs
+        // project carries the same opt-out for the same reason.
+        "index-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
     },
 });
 
@@ -73,7 +92,7 @@ fun install() > void {
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     final clean_before = vcs\isDirty(["MAGUS.md"]) == false;
-    ctx.needs(md_generate);
+    ctx.needs(index_generate);
     if (ctx.has_charm("rw")) { return; }
 
     if (clean_before and vcs\isDirty(["MAGUS.md"])) {
@@ -82,7 +101,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 }
 
 // Renders MAGUS.md (target catalog plus graph) from this magusfile.
-export fun md_generate(ctx: magus\Context, args: [str]) > void {
+export fun index_generate(ctx: magus\Context, args: [str]) > void {
     final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs\writeFile("MAGUS.md", doc + "\n");
 }
@@ -107,8 +126,10 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 // name a .testcache bundle instead of the src/*.ts someone wrote.
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
-    ctx.writesFiles("coverage.svg");
-    final clean_before = vcs\isDirty(["coverage.svg"]) == false;
+    ctx.writesFiles(workspace.file("assets/textsearch-coverage.svg"));
+    final badge_path = fs\join("..", "..", "assets", "textsearch-coverage.svg");
+    final clean_before = vcs\isDirty([badge_path]) == false;
+    install();
 
     final tests = fs\glob("src/**/*.test.ts");
     var bundle = mut ["exec", "esbuild"];
@@ -129,10 +150,10 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     os\exec("node", run, ".", {});
 
     final pct = cov\lcovPercent(fs\readFile("coverage.lcov"), keep: "src/");
-    fs\writeFile("coverage.svg", badge\coverage("textsearch coverage", percent: pct, radius: 3));
+    fs\writeFile(badge_path, badge\coverage("textsearch coverage", percent: pct, radius: 3));
     if (ctx.has_charm("rw")) { return; }
-    if (clean_before and vcs\isDirty(["coverage.svg"])) {
-        throw "test: libs/textsearch/coverage.svg is stale; re-run `magus run test:rw libs/textsearch` and commit the badge";
+    if (clean_before and vcs\isDirty([badge_path])) {
+        throw "test: assets/textsearch-coverage.svg is stale; re-run `magus run test:rw libs/textsearch` and commit the badge";
     }
 }
 

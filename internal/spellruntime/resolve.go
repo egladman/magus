@@ -101,7 +101,7 @@ func resolveSpell(ctx context.Context, sess *buzz.Session) (spells.Descriptor, e
 				return spells.Descriptor{}, fmt.Errorf("magus/spell: %s: %w", f.Name, err)
 			}
 		}
-		if isPathMetadata(f.Field) {
+		if f.Paths {
 			rv, err = pathValues(f.Name, rv)
 			if err != nil {
 				return spells.Descriptor{}, fmt.Errorf("magus/spell: %w", err)
@@ -259,6 +259,32 @@ func (o buzzSpellObj) Bool(key string) bool {
 
 func (o buzzSpellObj) Strs(key string) []string { return mapStrSlice(o.v, key) }
 
+// StrMap reads key as a string-to-string map. Buzz's map backing store only ever
+// holds string keys (see vm.Value.MapKeys), so the only reachable type error is a
+// wrong-typed VALUE - checked here so a mistyped entry fails loudly at load rather
+// than silently zeroing. Absent-vs-empty is NOT this method's problem: decodeCommand
+// normalizes both to nil once, for every Obj implementation.
+func (o buzzSpellObj) StrMap(key string) (map[string]string, error) {
+	x, ok := o.v.MapGet(key)
+	if !ok {
+		return nil, nil //nolint:nilnil // absent key means "declared nothing"; a nil map is that value, not an error
+	}
+	mv, ok := x.MapView()
+	if !ok {
+		return nil, fmt.Errorf("%q must be a map", key)
+	}
+	keys := mv.MapKeys()
+	out := make(map[string]string, len(keys))
+	for _, k := range keys {
+		v, _ := mv.MapGet(k)
+		if !v.IsStr() {
+			return nil, fmt.Errorf("%q[%q] must be a string", key, k)
+		}
+		out[k] = v.AsString()
+	}
+	return out, nil
+}
+
 func (o buzzSpellObj) Obj(key string) (Obj, bool) {
 	x, ok := o.v.MapGet(key)
 	if !ok {
@@ -322,15 +348,6 @@ func valStrSlice(v vm.Value) []string {
 		}
 	}
 	return out
-}
-
-func isPathMetadata(field string) bool {
-	switch field {
-	case "needs", "provides", "claims", "ignore_dirs", "manifests":
-		return true
-	default:
-		return false
-	}
 }
 
 // pathValues is the sole MGS metadata boundary. Buzz authors use the generated

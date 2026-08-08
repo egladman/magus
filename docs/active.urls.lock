@@ -118,6 +118,7 @@ concepts/targets/ci/
 concepts/telemetry/
 concepts/volatility/
 concepts/wards/
+concepts/workspace-providers/
 concepts/workspace/
 concepts/workspace/affected/
 concurrency/
@@ -188,6 +189,7 @@ guides/integrations/editor/
 guides/integrations/git/
 guides/integrations/github-actions/
 guides/integrations/mcp/
+guides/integrations/nx/
 guides/integrations/pr-advice/
 guides/mcp/
 guides/profiling/
@@ -323,6 +325,8 @@ reference/codes/magusfile/MGS1019/
 reference/codes/magusfile/MGS1020/
 reference/codes/magusfile/MGS1021/
 reference/codes/magusfile/MGS1022/
+reference/codes/magusfile/MGS1023/
+reference/codes/magusfile/MGS1024/
 reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
@@ -410,6 +414,7 @@ spells/py/
 spells/rs/
 spells/ts/
 tags/
+tags/adoption/
 tags/affected/
 tags/agents/
 tags/allowlist/
@@ -473,6 +478,7 @@ tags/error-codes/
 tags/errors/
 tags/eslint/
 tags/exec/
+tags/extension/
 tags/extraction/
 tags/filesystem/
 tags/fingerprint/
@@ -532,6 +538,7 @@ tags/monorepo/
 tags/naming/
 tags/needs/
 tags/node/
+tags/nx/
 tags/oci/
 tags/onboarding/
 tags/operations/
@@ -611,6 +618,8 @@ tags/vitest/
 tags/volatility/
 tags/ward/
 tags/watch/
+tags/workspace-provider/
+tags/workspace-providers/
 tags/workspace/
 tags/zsh/
 targets/

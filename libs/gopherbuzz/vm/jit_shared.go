@@ -1,4 +1,4 @@
-//go:build (amd64 || arm64) && !windows && !buzz_safe && !buzz_unsafe
+//go:build (amd64 || arm64) && !buzz_safe && !buzz_unsafe
 
 package vm
 
@@ -118,6 +118,7 @@ func (vm *VM) jitRun() (Value, bool, error) {
 			default:
 			}
 		default: // jitDeopt
+			jitDeopts.Add(1)
 			vm.stack = vm.stack[:ctx.sp]
 			f.ip = int(ctx.resumeIP)
 			v, err := vm.Exec()

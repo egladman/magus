@@ -213,10 +213,14 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
           link.setAttribute("data-dragging", "");
         }
         if (!dragMoved) return;
+        // Scoped to a tab LINK, not to any [data-tab-id]: main.ts puts that same attribute on
+        // each mounted pane container, so a bare attribute selector treats the whole content
+        // area as a drop target - drag a background tab, release it anywhere over content, and
+        // it adopts into the active tab instead of doing nothing.
         const under =
           document
             .elementFromPoint(ev.clientX, ev.clientY)
-            ?.closest<HTMLElement>("[data-tab-id]") ?? null;
+            ?.closest<HTMLElement>(".pf-v6-c-tabs__link[data-tab-id]") ?? null;
         const next = under && under !== link ? under : null;
         if (next !== dropTarget) {
           clearTabDrop();

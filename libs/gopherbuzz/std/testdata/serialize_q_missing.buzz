@@ -1,0 +1,12 @@
+// A q() path that walks off the data yields a Boxed null; the typed accessors
+// then DEFAULT rather than error - integerValue() of a non-int is 0 and
+// stringValue() is "". That
+// upstream-shaped defaulting is the contract under test here.
+// @expect: [0, 0, ]
+import "serialize";
+final boxed = serialize.jsonDecode(`{"a": [1]}`);
+final __r = [
+    boxed.q(["missing"]).integerValue(),
+    boxed.q(["a", 9]).integerValue(),
+    boxed.q(["missing"]).stringValue(),
+];

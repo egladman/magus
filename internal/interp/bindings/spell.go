@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/internal/interactive/tty"
 	run "github.com/egladman/magus/internal/proc/run"
 	"log/slog"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/internal/symbols"
@@ -357,7 +359,7 @@ func dispatchOp(ctx context.Context, ops map[string]spells.Op, tools map[string]
 	if err := checkFloor(ctx, tools, op, req.Dir); err != nil {
 		return nil, err
 	}
-	opts := commandOpts{cwd: req.Dir, args: project.ExtraArgs(ctx)}
+	opts := commandOpts{op: req.Target, cwd: req.Dir, args: project.ExtraArgs(ctx)}
 	// The reserved `scip` op writes its index into the cache, not the tree: magus
 	// hands it the destination via MAGUS_SYMBOL_INDEX so the spell command
 	// (`... --output "$MAGUS_SYMBOL_INDEX"`) needs no knowledge of where the cache is.
@@ -370,6 +372,47 @@ func dispatchOp(ctx context.Context, ops map[string]spells.Op, tools map[string]
 	}
 	_, err := runCommand(ctx, op, opts)
 	return nil, err
+}
+
+// resolveSecretEnv resolves a command's declared secrets (env var name -> provider
+// reference) through the run's secret resolver and returns base plus the resolved
+// values, as a fresh map - base is never mutated, so a mid-loop provider failure
+// cannot leave already-resolved values behind in a map the caller retains.
+// secret.Resolver.Read is what registers each value for redaction (internal/secret),
+// so a secret reaching a child through this path is masked out of captured output
+// the same as one a magusfile body read directly.
+//
+// Names are resolved in sorted order so resolution - and any provider logging along
+// the way - is deterministic regardless of map iteration order.
+//
+// A name already present in base is an error rather than a silently dropped or
+// overridden value: base is env magus already set for this op (MAGUS_SYMBOL_INDEX on
+// the scip op, a magusfile's withEnv overlay), and a declared secret landing on the
+// same name is an authoring bug in a security-sensitive path, not something to
+// resolve quietly by picking a winner.
+func resolveSecretEnv(ctx context.Context, opName string, refs, base map[string]string) (map[string]string, error) {
+	resolver := secret.ResolverFromContext(ctx)
+	if resolver == nil {
+		return nil, fmt.Errorf("spell: op %q declares secrets but no secret resolver is on this run", opName)
+	}
+	env := make(map[string]string, len(base)+len(refs))
+	maps.Copy(env, base)
+	names := make([]string, 0, len(refs))
+	for name := range refs {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	for _, name := range names {
+		if _, exists := env[name]; exists {
+			return nil, fmt.Errorf("spell: op %q secret env %q collides with env already set for this op", opName, name)
+		}
+		v, err := resolver.Read(ctx, refs[name])
+		if err != nil {
+			return nil, fmt.Errorf("spell: op %q secret %q: %w", opName, name, err)
+		}
+		env[name] = v
+	}
+	return env, nil
 }
 
 // symbolIndexEnv resolves the cache destination for a `scip` op run and returns it as
