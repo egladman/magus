@@ -16047,7 +16047,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "Runs the CI gates through their declared dependencies.",
-      "source": "magusfile.buzz:1381",
+      "source": "magusfile.buzz:1386",
       "attrs": {
         "exported": "true"
       }
@@ -16057,7 +16057,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.",
-      "source": "magusfile.buzz:1427",
+      "source": "magusfile.buzz:1432",
       "attrs": {
         "exported": "true"
       }
@@ -16074,7 +16074,7 @@
       "kind": "function",
       "label": "completion_test",
       "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell. Part of ci, and it REQUIRES a docker daemon rather than skipping without one: a gate that silently skips when a tool is missing is how the zsh recipe stayed broken - it told users to append a script to ~/.zshrc that registers nothing, and nothing ever ran it to find out. Its declared footprint keeps the cost off every run: affected only reaches it when the completion scripts or their checks change.  One image per she",
-      "source": "magusfile.buzz:1402",
+      "source": "magusfile.buzz:1407",
       "attrs": {
         "exported": "true"
       }
@@ -16101,7 +16101,7 @@
       "kind": "function",
       "label": "deploy_generate",
       "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/.  It lives here rather than in the Pages workflow because that workflow is meant to be thin - set up a toolchain, name targets, upload the artifact - and the layout below is portable logic that would otherwise be GitHub-specific shell. It is also what makes the deploy reproducible locally: run the same three commands, then serve gen/site, and what you see is what publishe",
-      "source": "magusfile.buzz:1566",
+      "source": "magusfile.buzz:1571",
       "attrs": {
         "exported": "true"
       }
@@ -16128,7 +16128,7 @@
       "kind": "function",
       "label": "format",
       "doc": "Regenerates, then formats Go and tidies `go.mod`. Markdown is linted (not formatted): markdownlint runs in lint; there is no markdown FORMATTER any more - biome (used for all TypeScript/CSS) has no markdown support, and prettier was dropped rather than kept solely to format markdown.",
-      "source": "magusfile.buzz:1378",
+      "source": "magusfile.buzz:1383",
       "attrs": {
         "exported": "true"
       }
@@ -16227,7 +16227,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "Formats and builds the linter first, then golangci-lint, go vet, govulncheck, markdownlint, and shellcheck. govulncheck goes through the go spell's op rather than a raw os\\exec, so the spell's version probe (mgs_getVersionProbes) reaches the cache key - without it a tool upgrade changes which code passes while every cache entry replays the old verdict. golangci-lint USED to go through its op for the same reason and no longer can: the binary is ./custom-gcl, built by lint_build, and the op runs whatever `gol",
-      "source": "magusfile.buzz:1355",
+      "source": "magusfile.buzz:1360",
       "attrs": {
         "exported": "true"
       }
@@ -16236,8 +16236,8 @@
       "id": "function:magusfile.buzz:lint_build",
       "kind": "function",
       "label": "lint_build",
-      "doc": "Builds ./custom-gcl, the golangci-lint carrying this repo's own linters (see .custom-gcl.yml). golangci-lint compiles plugins in rather than loading them at runtime, so an in-repo rule only runs through a binary built here.  No declared outputs, for go-build's reason: those globs are what EnsureMergeDriver writes into .gitattributes, and /custom-gcl is gitignored, so declaring it would name an untrackable path. Same consequence too - a read-only run leaves no binary, so a fresh worktree needs this again.",
-      "source": "magusfile.buzz:1333",
+      "doc": "Builds ./custom-gcl, the golangci-lint carrying this repo's own linters. golangci-lint compiles plugins in rather than loading them at runtime, so an in-repo rule only runs through a binary built here.  The build runs in libs/orphanator because `golangci-lint custom` reads .custom-gcl.yml from its working directory and takes no config flag. That file lives with the linter it declares; `destination: ../..` puts the binary back at the root, where .golangci.yml and lint expect it.  No declared outputs, for go-",
+      "source": "magusfile.buzz:1338",
       "attrs": {
         "exported": "true"
       }
@@ -16281,7 +16281,7 @@
       "kind": "function",
       "label": "missing_input",
       "doc": "missing_input phrases a deploy-generate precondition that ANOTHER project owns.  Naming one single-project command teaches the wrong habit: the reader runs it, gets the next precondition, runs another, and learns the set by failing once per producer. So name every producer in one command. `magus run <target> [project...]` takes a LIST - `magus run build docs console` is one dispatch over both - which is the idiom this message teaches.  Deliberately NOT \"magus affected build\" or \"magus run build /\". Both wou",
-      "source": "magusfile.buzz:1527"
+      "source": "magusfile.buzz:1532"
     },
     {
       "id": "function:magusfile.buzz:mocks_generate",
@@ -16338,7 +16338,7 @@
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json. Always let pnpm validate the install, matching console/magusfile.buzz. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready and handed the missing packages to esbuild. On a warm tree --frozen-lockfile is about a second and",
-      "source": "magusfile.buzz:1489"
+      "source": "magusfile.buzz:1494"
     },
     {
       "id": "function:magusfile.buzz:release",
@@ -16381,7 +16381,7 @@
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:1501"
+      "source": "magusfile.buzz:1506"
     },
     {
       "id": "function:magusfile.buzz:resolvable",
@@ -16401,7 +16401,7 @@
       "kind": "function",
       "label": "serve",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than",
-      "source": "magusfile.buzz:1615",
+      "source": "magusfile.buzz:1620",
       "attrs": {
         "exported": "true"
       }
@@ -21553,11 +21553,11 @@
       }
     },
     {
-      "id": "rationale:magusfile.buzz:1402:TODO",
+      "id": "rationale:magusfile.buzz:1407:TODO",
       "kind": "rationale",
       "label": "TODO",
       "doc": "zsh is uncovered - it has no official image (zshusers/zsh is community-run), so",
-      "source": "magusfile.buzz:1402"
+      "source": "magusfile.buzz:1407"
     },
     {
       "id": "rationale:spells/aws/s3-cache/spell.buzz:123:NOTE",
@@ -21887,7 +21887,7 @@
       "id": "target:.:lint-build",
       "kind": "target",
       "label": "lint-build",
-      "doc": "Builds ./custom-gcl, the golangci-lint carrying this repo's own linters (see .custom-gcl.yml).",
+      "doc": "Builds ./custom-gcl, the golangci-lint carrying this repo's own linters.",
       "source": ".",
       "attrs": {
         "declared_as": "lint_build",
@@ -64212,12 +64212,12 @@
       "provenance": "proto"
     },
     {
-      "source": "rationale:magusfile.buzz:1402:TODO",
+      "source": "rationale:magusfile.buzz:1407:TODO",
       "target": "function:magusfile.buzz:completion_test",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "magusfile.buzz:1402"
+      "provenance": "magusfile.buzz:1407"
     },
     {
       "source": "rationale:spells/aws/s3-cache/spell.buzz:123:NOTE",

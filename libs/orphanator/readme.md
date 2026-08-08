@@ -91,16 +91,21 @@ linters:
 ## Building the binary
 
 golangci-lint compiles plugins in rather than loading them at runtime, so you
-build a binary that carries this one. `.custom-gcl.yml` at the repo root declares
-it:
+build a binary carrying this one. `.custom-gcl.yml` in this directory declares it,
+and `golangci-lint custom` reads that file from its working directory:
 
 ```bash
-golangci-lint custom
+cd libs/orphanator && golangci-lint custom
 ```
 
-That writes `./custom-gcl`, which reads `.golangci.yml` exactly as the stock
-binary does. Once `orphanator` appears in that config the stock binary can no
-longer read it, so every lint entry point has to move to `./custom-gcl`.
+`destination: ../..` writes `./custom-gcl` at the workspace root, which reads
+`.golangci.yml` exactly as the stock binary does. `magus run lint` does both steps.
+
+Once `orphanator` appears in `.golangci.yml` the stock binary can no longer read
+it, so every lint entry point has to move to `./custom-gcl`.
+
+One binary carries every in-repo plugin, so a second linter is another entry in
+`plugins:` rather than a second config file.
 
 ## Standalone use
 

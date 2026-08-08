@@ -51,8 +51,8 @@ coverage.hand.out
 /langservice-manifest
 /buzz-playground
 
-# golangci-lint binary built from .custom-gcl.yml, carrying the in-repo linters
-# under libs/. Rebuilt from source, never committed.
+# golangci-lint binary built from libs/orphanator/.custom-gcl.yml, carrying the
+# in-repo linters. Rebuilt from source, never committed.
 /custom-gcl
 
 # release output from `magus run release` — cross-compiled tarballs + SHA256SUMS,

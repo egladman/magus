@@ -454,11 +454,11 @@
         {
           "name": "lint-build",
           "declared": "lint_build",
-          "doc": "Builds ./custom-gcl, the golangci-lint carrying this repo's own linters (see .custom-gcl.yml).",
+          "doc": "Builds ./custom-gcl, the golangci-lint carrying this repo's own linters.",
           "reads_files": [
             {
               "project": ".",
-              "glob": ".custom-gcl.yml"
+              "glob": "libs/orphanator/.custom-gcl.yml"
             },
             {
               "project": ".",
@@ -505,7 +505,7 @@
           "reads_files": [
             {
               "project": ".",
-              "glob": ".custom-gcl.yml"
+              "glob": "libs/orphanator/.custom-gcl.yml"
             },
             {
               "project": ".",
