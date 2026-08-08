@@ -57,8 +57,8 @@ write_leaf_magusfile() {
     cat > "$1/magusfile.buzz" <<'LEAFMF'
 import "magus";
 import "spells/tslib" as tslib;
-magus.project.register(fun(p, cb) > bool { cb({"spells": [tslib]}); return true; });
-export fun build(args: [str]) > void { tslib["noop"](); }
+magus\project({"spells": [tslib]});
+export fun build(ctx: magus\Context, args: [str]) > void { tslib["noop"](ctx); }
 LEAFMF
 }
 
@@ -81,30 +81,31 @@ for appdir in "$REPO"/apps/*/; do
         done
     fi
 
-    # App magusfile: edge declared twice (depends_on for affected, magus.needs for
+    # App magusfile: edge declared twice (depends_on for affected, ctx.needs for
     # ordering/caching).
     {
         echo 'import "magus";'
         echo 'import "spells/nextjs" as nextjs;'
         idx=0
         for lib in "${libs[@]}"; do
-            echo "import \"project/$lib\" as f$idx;"
+            # Dot-relative to this magusfile's dir (apps/<app>), not repo-relative.
+            echo "import \"project/../../$lib\" as f$idx;"
             idx=$(( idx + 1 ))
         done
         echo ''
-        printf 'magus.project.register(fun(p, cb) > bool { cb({"spells": [nextjs], "depends_on": ['
+        printf 'magus\\project({"spells": [nextjs], "depends_on": ['
         for k in "${!libs[@]}"; do
             printf '"%s"' "${libs[$k]}"
             [[ $k -lt $(( ${#libs[@]} - 1 )) ]] && printf ', '
         done
-        echo ']}); return true; });'
+        echo ']});'
         echo ''
-        printf 'export fun build(args: [str]) > void { magus.needs('
+        printf 'export fun build(ctx: magus\\Context, args: [str]) > void { ctx.needs('
         for k in "${!libs[@]}"; do
             printf 'f%d.build' "$k"
             [[ $k -lt $(( ${#libs[@]} - 1 )) ]] && printf ', '
         done
-        echo '); nextjs["next-build"](); }'
+        echo '); nextjs["next-build"](ctx); }'
     } > "$appdir/magusfile.buzz"
 done
 

@@ -146,14 +146,14 @@ TS
         done
     } > "$lib/src/index.ts"
 
-    # Leaf library: ts spell, build = tsc -b (a handle apps can magus.needs).
+    # Leaf library: ts spell, build = tsc -b (a handle apps can ctx.needs).
     cat > "$lib/magusfile.buzz" <<'MAGUSFILE'
 import "magus";
-import "magus/spell/ts";
+import "magus/spell/typescript";
 
-magus.project.register(fun(p, cb) > bool { cb({"spells": [ts]}); return true; });
+magus\project({"spells": [typescript]});
 
-export fun build(args: [str]) > void { ts["tsc"]({"args": ["-b"]}); }
+export fun build(ctx: magus\Context, args: [str]) > void { typescript["tsc"](ctx, {"args": ["-b"]}); }
 MAGUSFILE
 done
 
@@ -252,28 +252,29 @@ JSON
     } > "$app/src/index.ts"
 
     # App depends on every lib, declared twice to match what the other tools get
-    # from package.json: depends_on drives affected (S3); magus.needs drives build
+    # from package.json: depends_on drives affected (S3); ctx.needs drives build
     # ordering and the graph.
     {
         echo 'import "magus";'
-        echo 'import "magus/spell/ts";'
+        echo 'import "magus/spell/typescript";'
         for j in $(seq 0 $(( M - 1 ))); do
-            echo "import \"project/libs/lib-$j\" as lib$j;"
+            # Dot-relative to this magusfile's dir (apps/app-N), not workspace-relative.
+            echo "import \"project/../../libs/lib-$j\" as lib$j;"
         done
         echo ''
-        printf 'magus.project.register(fun(p, cb) > bool { cb({"spells": [ts], "depends_on": ['
+        printf 'magus\\project({"spells": [typescript], "depends_on": ['
         for j in $(seq 0 $(( M - 1 ))); do
             printf '"libs/lib-%d"' "$j"
             [[ $j -lt $(( M - 1 )) ]] && printf ', '
         done
-        echo ']}); return true; });'
+        echo ']});'
         echo ''
-        printf 'export fun build(args: [str]) > void { magus.needs('
+        printf 'export fun build(ctx: magus\\Context, args: [str]) > void { ctx.needs('
         for j in $(seq 0 $(( M - 1 ))); do
             printf 'lib%d.build' "$j"
             [[ $j -lt $(( M - 1 )) ]] && printf ', '
         done
-        echo '); ts["tsc"]({"args": ["-b"]}); }'
+        echo '); typescript["tsc"](ctx, {"args": ["-b"]}); }'
     } > "$app/magusfile.buzz"
 done
 
