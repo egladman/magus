@@ -47,7 +47,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 |---|--:|---|---|
 | project | 9 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
 | target | 90+ | `magus query kind:target` | `content-generate`, `site-generate`, `bindings-generate` |
-| spell | 10+ | `magus query kind:spell` | `go`, `markdown`, `typescript` |
+| spell | 10+ | `magus query kind:spell` | `go`, `typescript`, `markdown` |
 | op | 50+ | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-tidy` |
 | tool | 20+ | `magus query kind:tool` | `pnpm`, `go`, `sh` |
 | charm | 10+ | `magus query kind:charm` | `rw`, `cd`, `stable` |

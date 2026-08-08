@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2695,
-  "edge_count": 5864,
+  "edge_count": 5866,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "catalog_fingerprint": "3e64891912aad41b",
   "nodes": [
@@ -30677,6 +30677,22 @@
     {
       "source": "doc:benchmarks/README.md",
       "target": "spell:go",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "benchmarks/README.md"
+    },
+    {
+      "source": "doc:benchmarks/README.md",
+      "target": "spell:python",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "benchmarks/README.md"
+    },
+    {
+      "source": "doc:benchmarks/README.md",
+      "target": "spell:typescript",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.5,
