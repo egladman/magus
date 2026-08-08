@@ -3,10 +3,10 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2501,
-  "edge_count": 5684,
+  "node_count": 2503,
+  "edge_count": 5692,
   "source_base": "https://github.com/egladman/magus/blob/main",
-  "catalog_fingerprint": "5b4f242646b68b32",
+  "catalog_fingerprint": "9c2ac7a836e91117",
   "nodes": [
     {
       "id": "charm:amd64",
@@ -237,6 +237,22 @@
       "label": "MGS1022",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1022/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1023",
+      "kind": "diagnostic",
+      "label": "MGS1023",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1023/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1024",
+      "kind": "diagnostic",
+      "label": "MGS1024",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1024/"
       }
     },
     {
@@ -2707,12 +2723,10 @@
       "label": "docs/concepts/workspace-providers.md",
       "source": "docs/concepts/workspace-providers.md",
       "attrs": {
-        "diagnostic": "MGS7002",
         "role": "doc",
         "section": "concepts",
         "tags": "workspace-provider,projects,discovery,spells,extension,nx,monorepo,adoption",
-        "title": "Workspace providers",
-        "unknown_codes": "MGS1023,MGS1024"
+        "title": "Workspace providers"
       }
     },
     {
@@ -3006,12 +3020,10 @@
       "label": "docs/guides/integrations/nx.md",
       "source": "docs/guides/integrations/nx.md",
       "attrs": {
-        "diagnostic": "MGS7002",
         "role": "doc",
         "section": "guides",
         "tags": "nx,workspace-provider,monorepo,typescript,adoption,integration",
-        "title": "Nx",
-        "unknown_codes": "MGS1023,MGS1024"
+        "title": "Nx"
       }
     },
     {
@@ -3931,12 +3943,10 @@
       "label": "docs/reference/codes/magusfile/MGS1023.md",
       "source": "docs/reference/codes/magusfile/MGS1023.md",
       "attrs": {
-        "diagnostic": "MGS7002",
         "role": "doc",
         "section": "reference",
         "tags": "MGS1023,magusfile,workspace-providers,projects,spells",
-        "title": "MGS1023: workspace provider reported an unusable project path",
-        "unknown_codes": "MGS1023,MGS1024"
+        "title": "MGS1023: workspace provider reported an unusable project path"
       }
     },
     {
@@ -3945,12 +3955,10 @@
       "label": "docs/reference/codes/magusfile/MGS1024.md",
       "source": "docs/reference/codes/magusfile/MGS1024.md",
       "attrs": {
-        "diagnostic": "MGS7002",
         "role": "doc",
         "section": "reference",
         "tags": "MGS1024,magusfile,workspace-providers,projects,precedence",
-        "title": "MGS1024: workspace provider project shadowed by a magusfile",
-        "unknown_codes": "MGS1023,MGS1024"
+        "title": "MGS1024: workspace provider project shadowed by a magusfile"
       }
     },
     {
@@ -30859,6 +30867,22 @@
     },
     {
       "source": "doc:docs/concepts/workspace-providers.md",
+      "target": "diagnostic:MGS1023",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/workspace-providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace-providers.md",
+      "target": "diagnostic:MGS1024",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/workspace-providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace-providers.md",
       "target": "doc:docs/concepts/cache/remote.md",
       "relation": "references",
       "confidence": "extracted",
@@ -32640,6 +32664,22 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "docs/guides/integrations/mcp.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/nx.md",
+      "target": "diagnostic:MGS1023",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/nx.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/nx.md",
+      "target": "diagnostic:MGS1024",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/nx.md"
     },
     {
       "source": "doc:docs/guides/integrations/nx.md",
@@ -34891,6 +34931,22 @@
     },
     {
       "source": "doc:docs/reference/codes/magusfile/MGS1023.md",
+      "target": "diagnostic:MGS1023",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1023.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1023.md",
+      "target": "diagnostic:MGS1024",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1023.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1023.md",
       "target": "doc:docs/concepts/workspace-providers.md",
       "relation": "references",
       "confidence": "extracted",
@@ -34904,6 +34960,22 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1023.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1024.md",
+      "target": "diagnostic:MGS1023",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1024.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1024.md",
+      "target": "diagnostic:MGS1024",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1024.md"
     },
     {
       "source": "doc:docs/reference/codes/magusfile/MGS1024.md",
