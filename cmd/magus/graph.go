@@ -238,6 +238,9 @@ func graphExport(ctx context.Context, root string, args []string) error {
 	if static {
 		stripRuntimeAttrs(&out)
 	}
+	// On every export, not just --static: it identifies the build behind any graph you
+	// are looking at, which is the question when two exports disagree.
+	out.CatalogFingerprint = magus.CatalogFingerprint()
 	// The blob base lets a viewer link a node's relative `source` to the right repo.
 	// A --global union spans many repos, so a single base would be wrong: leave it off.
 	if !globalScope {

@@ -290,9 +290,10 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				}},
 			}}},
 			// tidy checks by default (--diff exits non-zero if go.mod/go.sum need
-			// changes — safe for CI gating); the write charm applies the changes.
+			// changes — safe for CI gating); relock applies the changes. relock rather
+			// than rw because tidy re-resolves against the proxy.
 			"go-mod-tidy": {Command: spells.Command{Bin: "go", Args: []string{"mod", "tidy", "--diff"}, Charms: map[string]spells.Charm{
-				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
+				"relock": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
 			}}},
 			"go-vet":      {Command: spells.Command{Bin: "go", Args: []string{"vet", "./..."}}},
 			"govulncheck": {Command: spells.Command{Bin: "govulncheck", Args: []string{"./..."}}},

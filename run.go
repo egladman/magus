@@ -186,8 +186,12 @@ func (m *Magus) runResolved(ctx context.Context, targets []types.Target, o run) 
 // order via magus.needs.
 func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOption) error {
 	o := applyRunOpts(opts)
+	// Both write-granting charms come off: rw so check-only targets stay check-only,
+	// and relock so a ci run verifies the committed dependency state rather than
+	// re-resolving it against whatever the registry serves today.
 	o.Charms = slices.DeleteFunc(slices.Clone(o.Charms), func(s string) bool {
-		return types.Normalize(s) == types.CharmReadWrite
+		n := types.Normalize(s)
+		return n == types.CharmReadWrite || n == types.CharmRelock
 	})
 
 	// ci is the one target that must not silently no-op when undefined. Ordinary

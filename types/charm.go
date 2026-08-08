@@ -40,11 +40,19 @@ const CharmCD = "cd"
 // does not strip it (unlike rw), so the annotations survive into ci.
 const CharmGHA = "gha"
 
+// CharmRelock is a reserved built-in charm: the grant to rewrite dependency state (a
+// lockfile, or go.mod/go.sum) rather than verify it. Deliberately not part of rw - rw
+// regenerates derived output from this tree and so is reproducible, while a dependency
+// refresh reads a registry and yields different bytes on different days. Folded into rw,
+// a workspace with default_charms: [rw] would re-resolve dependencies during an unrelated
+// build. Stripped from ci alongside rw (see RunCI).
+const CharmRelock = "relock"
+
 // reservedCharms are the built-in charm names magus recognizes without any target
 // declaring them. Listed once here so the typo guard (IsReservedCharm) and the
 // doctor name-collision check (ReservedCharms) cannot drift. The entries are
 // already in canonical (normalized) form.
-var reservedCharms = []string{CharmReadWrite, CharmCD, CharmGHA}
+var reservedCharms = []string{CharmReadWrite, CharmCD, CharmGHA, CharmRelock}
 
 // ReservedCharms returns magus's built-in charm names as a fresh slice.
 func ReservedCharms() []string { return slices.Clone(reservedCharms) }
@@ -66,6 +74,8 @@ func ReservedCharmDoc(name string) string {
 		return "continuous-delivery: a target reads it to publish its artifact; survives into ci"
 	case CharmGHA:
 		return "GitHub Actions output: swap a tool's reporter to inline workflow annotations; survives into ci"
+	case CharmRelock:
+		return "rewrite dependency state (lockfile, go.mod/go.sum) instead of verifying it; stripped from ci"
 	default:
 		return ""
 	}

@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -113,6 +114,30 @@ func resolveCacheDir(root string, cfg config.Config) string {
 // cache.write.enabled / MAGUS_CACHE_WRITE_ENABLED check.
 func cacheImmutable(cfg config.Config) bool {
 	return !cfg.Cache.WriteEnabled()
+}
+
+// CatalogFingerprint identifies the compiled-in catalogs a binary contributes to
+// generated output: diagnostic codes, built-in spells, module surface. Stamped into the
+// exported graph so drift can be attributed to the build that produced it (MGS4005).
+//
+// Hashes the catalogs, not the version: `git describe` moves every commit and would churn
+// the artifact, while these change only when the output would change anyway.
+func CatalogFingerprint() string {
+	h := sha256.New()
+	fmt.Fprint(h, "diagnostics\x00")
+	for _, c := range types.AllDiagnosticCodes() {
+		fmt.Fprintf(h, "%s\x00", c)
+	}
+	fmt.Fprintf(h, "spells\x00%s\x00", spellruntime.BuiltinsHash())
+	fmt.Fprint(h, "modules\x00")
+	for _, m := range allModuleEntries() {
+		for _, meth := range m.Methods {
+			fmt.Fprintf(h, "%s.%s\x00", m.Name, meth.Name)
+		}
+	}
+	// Truncated the way an output ref is: long enough that a collision is not a practical
+	// concern, short enough to read in a diff and quote in an error message.
+	return hex.EncodeToString(h.Sum(nil))[:16]
 }
 
 // allModuleEntries returns every stdlib module with its methods populated. The

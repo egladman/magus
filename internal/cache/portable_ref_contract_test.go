@@ -53,6 +53,31 @@ func TestRefShapeContract(t *testing.T) {
 	assert.True(t, LooksLikeRef(attempts[0].Attempt))
 }
 
+// TestCacheKeyUnaffectedByPlatform pins that Manifest.Platform (the replay-time
+// gate added alongside portable refs) is NOT a key input. The key is what an
+// output ref truncates, and a ref must be identical on every machine - that is
+// the whole portable-ref feature - so platform must only ever be consulted after
+// the key is computed, never folded into hashStepInputs. Two Cache instances that
+// differ ONLY in platform must hash the same step to the same key.
+func TestCacheKeyUnaffectedByPlatform(t *testing.T) {
+	root := t.TempDir()
+	writeMain(t, root, "package main")
+	step := makeStep(root)
+	step.Target = "build"
+
+	cLinux, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), withPlatform("linux/amd64"))
+	require.NoError(t, err)
+	cDarwin, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), withPlatform("darwin/arm64"))
+	require.NoError(t, err)
+
+	hLinux, err := cLinux.hashStep(context.Background(), &step)
+	require.NoError(t, err)
+	hDarwin, err := cDarwin.hashStep(context.Background(), &step)
+	require.NoError(t, err)
+
+	assert.Equal(t, hLinux, hDarwin, "cache key must be byte-identical across platforms")
+}
+
 // TestCacheHitReusesTheSameRef is THE portability contract, and the easiest one to
 // break from far away: a hit must answer with the ref the miss printed. If a hit ever
 // minted a fresh id, every existing test would still pass while two machines - or the

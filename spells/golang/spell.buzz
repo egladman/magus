@@ -14,13 +14,13 @@ export fun mgs_listRequiredGlobs() > [Path] {
 }
 
 
-
-
-
 // `go version` prints the host platform (`go1.26.0 linux/amd64`) and golangci-lint pads
 // its line with the commit it was built from, the timestamp, and the Go version it was
 // compiled with. Asking for `patch` extracts the version and sheds all of that, so two
 // machines running the same tool agree on a key. It narrows nothing anyone reasons about.
+// Shedding `go version`'s GOOS/GOARCH suffix is only safe because the cache manifest
+// carries its own platform field (see internal/cache/manifest.go) and refuses to replay
+// across platforms; that suffix was otherwise the ONLY thing putting platform into the key.
 //
 // govulncheck declares NO key on purpose. Its verdict comes from the Go vulnerability
 // DATABASE, and `-version` reports that database's last-modified date alongside the Go
@@ -75,12 +75,18 @@ fun goTest(target: Target) > Command {
         "cd": append(["-covermode=atomic", "-coverprofile=coverage.out"]),
     }};
 }
+// Tidy resolves against the module proxy, and an import go.mod does not require yet
+// arrives at latest, so its result turns on what upstream serves today rather than on
+// this tree alone. The write charm is therefore relock, not rw.
 fun goModTidy(target: Target) > Command {
     final args = ["mod", "tidy", "--diff"];
     return Command{bin = "go", args = args, charms = {
-        "rw": drop(args, "--diff"),
+        "relock": drop(args, "--diff"),
     }};
 }
+// Edit is offline: it "reads only go.mod; it does not look up information about the
+// modules involved" (go help mod edit), so the same tree always yields the same bytes.
+// The write charm is therefore rw, not relock.
 fun goModEdit(target: Target) > Command {
     final args = ["mod", "edit", "-print"];
     return Command{bin = "go", args = args, capture = true, charms = {

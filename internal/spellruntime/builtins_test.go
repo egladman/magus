@@ -51,10 +51,14 @@ func TestGoSpell_TidyTarget(t *testing.T) {
 	// are needed — safe for CI gating).
 	assert.Equal(t, "go", tidy.Bin)
 	assert.Equal(t, []string{"mod", "tidy", "--diff"}, tidy.Args)
-	// rw charm drops --diff (remove /2) so tidy actually applies the changes.
-	w, ok := tidy.Charms["rw"]
-	require.True(t, ok, "tidy has no rw charm")
+	// relock, not rw: tidy re-resolves against the proxy, so its result depends on what
+	// upstream serves rather than on this tree. The charm drops --diff (remove /2) so
+	// tidy actually applies the changes.
+	w, ok := tidy.Charms["relock"]
+	require.True(t, ok, "tidy has no relock charm")
 	assert.Equal(t, []spells.PatchOp{{Op: "remove", Path: "/2"}}, w.Ops)
+	_, hasRW := tidy.Charms["rw"]
+	assert.False(t, hasRW, "tidy must not carry rw: default_charms: [rw] would re-resolve dependencies on unrelated runs")
 }
 
 // TestBuiltinCharmsUnchanged pins every bundled spell's charm patches after the
@@ -90,7 +94,7 @@ func TestBuiltinCharmsUnchanged(t *testing.T) {
 			{Op: "add", Path: "/-", Value: "-covermode=atomic"},
 			{Op: "add", Path: "/-", Value: "-coverprofile=coverage.out"},
 		}},
-		{"go", "go-mod-tidy", "rw", []spells.PatchOp{{Op: "remove", Path: "/2"}}},
+		{"go", "go-mod-tidy", "relock", []spells.PatchOp{{Op: "remove", Path: "/2"}}},
 		// py
 		{"python", "pytest", "debug", []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 		{"python", "ruff-check", "rw", []spells.PatchOp{{Op: "add", Path: "/3", Value: "--fix"}}},

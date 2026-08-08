@@ -18,6 +18,17 @@ type Manifest struct {
 	Target      string         `json:"target,omitempty"`
 	Outputs     []OutputRecord `json:"outputs"`
 	CreatedAt   time.Time      `json:"createdAt"`
+	// Platform is runtime.GOOS+"/"+runtime.GOARCH at the time this entry was
+	// produced (e.g. "darwin/arm64"). It is NOT part of the cache key - the key
+	// must stay platform-free so an output ref (a truncated key) is identical on
+	// every machine - so it lives here instead, as a replay-time gate. src: lines
+	// are content hashes, so darwin and linux compute the SAME digest for the
+	// same commit; without this field a Linux CI pass could replay on a darwin
+	// laptop as a pass for code darwin never compiled (or vice versa), and worse
+	// for a platform-conditional file like hash_iouring_linux.go, which darwin
+	// never even builds. Empty means "written before this field existed"; see the
+	// mismatch check in readManifest for how that is treated.
+	Platform string `json:"platform,omitempty"`
 	// Return is what the target returned (str or [str]), stored so a cache HIT can
 	// replay it. A hit never invokes the target, so without this a target would
 	// print its result on the first run and nothing on the second. Absent for the
@@ -79,6 +90,21 @@ func (c *Cache) readManifest(projectPath, hash string) (*Manifest, error) {
 	}
 	if m.ProjectPath != "" && m.ProjectPath != projectPath {
 		return nil, fmt.Errorf("magus/cache: manifest %s project mismatch (stored %q, want %q); treating as miss", hash, m.ProjectPath, projectPath)
+	}
+	// Same permissive-on-absence convention as the two checks above: an empty
+	// Platform means "written before this field existed" and is treated as a
+	// match rather than a refusal. The alternative (empty never matches) would
+	// invalidate every entry already on disk the moment this field ships - every
+	// local manifest in existence today has no Platform recorded. A local
+	// manifest empty or not was necessarily built BY this machine (it is only
+	// ever written by snapshot, never copied in except through importArtifact,
+	// which carries its own platform gate below), so treating empty as a match
+	// costs nothing for local entries; it only leaves a narrow hole for a
+	// pre-this-change entry that reached the local cache via remote import
+	// before the import-side gate existed, and that hole closes as those entries
+	// are evicted or rebuilt.
+	if m.Platform != "" && m.Platform != c.platform {
+		return nil, fmt.Errorf("magus/cache: manifest %s platform mismatch (stored %q, running %q); treating as miss", hash, m.Platform, c.platform)
 	}
 	// Blobs shorter than 2 chars would alias to the "00" shard, causing wrong-content reads.
 	for _, out := range m.Outputs {

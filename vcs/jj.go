@@ -167,3 +167,131 @@ func (v jjVCS) DirtyFiles(ctx context.Context, dir string, paths []string) ([]st
 	}
 	return splitStatusLines(out), nil
 }
+
+// ConflictResolver for jj. The mapping is NOT a transliteration of the git one, because
+// jj's conflict model differs at the root: an operation never pauses. `jj rebase` and a
+// merge both complete, recording conflicts INSIDE the resulting commit, and the working
+// copy materializes them with markers. There is no in-progress operation to conclude and
+// no index to stage against.
+//
+// Verified against jj 0.44.0 rather than inferred; each method notes what was observed.
+var _ types.ConflictResolver = jjVCS{}
+
+// parseJJConflicts turns `jj resolve --list` output into conflicted paths.
+//
+// The format is "<path><spaces><description>", where the description names the arity and
+// says so when a side is a deletion:
+//
+//	f.txt       2-sided conflict
+//	gone.txt    2-sided conflict including 1 deletion
+//
+// That trailing clause is why jj needs no second command to classify a conflict, unlike
+// hg (which needs `status -nd`) - the deletion is reported inline.
+//
+// Paths may contain spaces, so the split is on the RUN of whitespace before the
+// description rather than on the first space. The description always begins with a digit
+// ("2-sided"), which is what anchors the split.
+func parseJJConflicts(out string) []types.Conflict {
+	var conflicts []types.Conflict
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimRight(line, "\r")
+		idx := strings.Index(line, "  ")
+		if idx <= 0 {
+			continue
+		}
+		path := strings.TrimSpace(line[:idx])
+		desc := strings.TrimSpace(line[idx:])
+		if path == "" || desc == "" {
+			continue
+		}
+		kind := types.ConflictKindContent
+		if strings.Contains(desc, "deletion") {
+			kind = types.ConflictKindDeleted
+		}
+		conflicts = append(conflicts, types.Conflict{Path: path, Kind: kind})
+	}
+	return conflicts
+}
+
+// Conflicts implements types.ConflictResolver. A revision with no conflicts is an ERROR
+// exit for jj ("No conflicts found at this revision"), not empty output, so the error is
+// swallowed into the empty result the interface asks for.
+func (v jjVCS) Conflicts(ctx context.Context, root string) ([]types.Conflict, error) {
+	out, err := vcsOutputRaw(ctx, root, "jj", "resolve", "--list")
+	if err != nil {
+		// Distinguishing "no conflicts" from a real failure by message is unpleasant, but
+		// the alternative is failing every clean tree.
+		if strings.Contains(out, "No conflicts") || out == "" {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("jj resolve --list: %w", err)
+	}
+	return parseJJConflicts(out), nil
+}
+
+// KeepIncoming implements types.ConflictResolver, with a caveat the interface cannot
+// express: jj has NO incoming side.
+//
+// git's "theirs" is the commit being replayed at a paused rebase. jj never pauses, so a
+// conflicted commit just has parents, and `jj log -r @-` returns them in jj's own sort
+// order rather than the order they were merged - there is no second-parent-is-theirs
+// convention to lean on. Verified: merging sideA then sideB lists sideB first.
+//
+// Restoring from any parent clears the markers, and jj then reports the path resolved
+// with no marking step. That is what this needs to do: the caller regenerates the file
+// before recording it, so which side seeds the content does not survive the operation.
+// The parent is taken deterministically (jj's own ordering) so two runs agree.
+func (v jjVCS) KeepIncoming(ctx context.Context, root string, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	out, err := vcsOutputRaw(ctx, root, "jj", "log", "-r", "@-", "--no-graph", "-T", `commit_id.short() ++ "\n"`)
+	if err != nil {
+		return fmt.Errorf("jj log -r @-: %w", err)
+	}
+	parents := splitStatusLines(out)
+	if len(parents) == 0 {
+		return fmt.Errorf("jj: no parent revision to restore conflicted paths from")
+	}
+	argv := append([]string{"restore", "--from", parents[0], "--"}, paths...)
+	cmd := exec.CommandContext(ctx, "jj", argv...)
+	cmd.Dir = root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("jj restore: %w\n%s", err, out)
+	}
+	return nil
+}
+
+// MarkResolved implements types.ConflictResolver as a NO-OP, and that is correct rather
+// than unimplemented. jj has no index and no resolve state: it snapshots the working copy
+// automatically, and a file that no longer carries conflict markers is simply resolved.
+// Verified - after restoring one side, `jj resolve --list` stopped reporting the path
+// without anything being marked.
+func (v jjVCS) MarkResolved(_ context.Context, _ string, _ []string) error { return nil }
+
+// RemoveConflicts implements types.ConflictResolver by deleting the files. jj snapshots
+// the deletion on its next command, which both resolves the conflict and records the
+// removal; verified by removing a conflicted path and seeing it leave `resolve --list`
+// and appear as D in `jj status`. No untrack step is needed or wanted - `jj file untrack`
+// would stop tracking a path that is supposed to stay deleted.
+func (v jjVCS) RemoveConflicts(_ context.Context, root string, paths []string) error {
+	for _, p := range paths {
+		if err := os.Remove(filepath.Join(root, filepath.FromSlash(p))); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("jj: remove %q: %w", p, err)
+		}
+	}
+	return nil
+}
+
+// IgnoredPaths implements types.ConflictResolver, and is the one method jj cannot answer
+// faithfully. The interface asks whether the ignore RULES cover a path whether or not it
+// is tracked - git needs `check-ignore --no-index` precisely because the default answers
+// "not ignored" for anything tracked. jj exposes no equivalent: `jj file list` reports
+// tracked paths, so it cannot distinguish a tracked file that rules would now ignore.
+//
+// Reporting nothing ignored is the safe direction: a caller uses this to decide whether a
+// generated file that one side deleted should stay deleted, and answering "not ignored"
+// keeps the file, which is recoverable. The opposite error deletes something wanted.
+func (v jjVCS) IgnoredPaths(_ context.Context, _ string, _ []string) (map[string]bool, error) {
+	return map[string]bool{}, nil
+}

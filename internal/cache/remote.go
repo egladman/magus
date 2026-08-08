@@ -519,6 +519,17 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader, wantProject, wa
 		return fmt.Errorf("importArtifact: manifest names %q/%s but was served for %q/%s",
 			m.ProjectPath, shortHash(m.Hash), wantProject, shortHash(wantHash))
 	}
+	// The remote store is shared across machines and CI is Linux while local dev
+	// may not be - src: lines are content hashes, so two platforms compute the
+	// SAME digest for the same commit, and this is the only gate stopping one
+	// platform's pass from being imported and replayed as a pass for code the
+	// importing platform never compiled. Same empty-matches-anything convention
+	// as readManifest, for the same reason: an artifact exported before this
+	// field existed should not be rejected outright.
+	if m.Platform != "" && m.Platform != c.platform {
+		return fmt.Errorf("importArtifact: manifest platform %q does not match running platform %q; refusing import",
+			m.Platform, c.platform)
+	}
 	for _, out := range m.Outputs {
 		if out.Blob == "" {
 			continue // symlink record carries no blob

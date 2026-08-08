@@ -80,6 +80,63 @@ func TestRemoteBackendFSBuiltOnce(t *testing.T) {
 	assert.Equal(t, "built", string(got), "c2: output")
 }
 
+// TestRemoteImportRefusesCrossPlatform is TestRemoteBackendFSBuiltOnce's negative:
+// the same two-workspace, one-remote setup, except workspace 2 runs on a
+// different platform than workspace 1 pushed from. The whole point of
+// Manifest.Platform is that src: lines are content hashes — darwin and linux
+// compute the identical digest for the same commit — so without this gate
+// workspace 2 would import and replay workspace 1's platform-specific result as
+// its own. It must instead fall back to a genuine local rebuild.
+func TestRemoteImportRefusesCrossPlatform(t *testing.T) {
+	remote, err := NewFSRemoteBackend(t.TempDir())
+	require.NoError(t, err, "NewFSRemoteBackend")
+
+	openWithRemote := func(t *testing.T, platform string) (root string, c *Cache) {
+		t.Helper()
+		root = t.TempDir()
+		c, err = Open(t.Context(),
+			filepath.Join(t.TempDir(), ".magus"),
+			WithMutable(true),
+			WithRemoteBackend(remote),
+			WithInsecureRemote(),
+			withPlatform(platform),
+		)
+		require.NoError(t, err, "cache.Open")
+		return root, c
+	}
+
+	// workspace 1: builds on linux/amd64, pushes to the shared remote.
+	root1, c1 := openWithRemote(t, "linux/amd64")
+	writeMain(t, root1, "package main")
+	out1 := touchOut(t, root1)
+	spec1 := makeStep(root1)
+	spec1.Outputs = []string{"test/pkg/out.txt"}
+
+	runs := 0
+	r1, err := c1.Run(context.Background(), spec1, func(_ context.Context) error {
+		runs++
+		return os.WriteFile(out1, []byte("built"), 0o644)
+	})
+	require.NoError(t, err, "Run c1")
+	assert.False(t, r1.Hit, "c1: expected cache miss, got hit")
+	assert.Equal(t, 1, runs, "c1: expected 1 fn call")
+
+	// workspace 2: same sources but darwin/arm64, empty local cache, same remote.
+	root2, c2 := openWithRemote(t, "darwin/arm64")
+	writeMain(t, root2, "package main")
+	out2 := touchOut(t, root2)
+	spec2 := makeStep(root2)
+	spec2.Outputs = []string{"test/pkg/out.txt"}
+
+	r2, err := c2.Run(context.Background(), spec2, func(_ context.Context) error {
+		runs++
+		return os.WriteFile(out2, []byte("built"), 0o644)
+	})
+	require.NoError(t, err, "Run c2")
+	assert.False(t, r2.Hit, "c2: a linux-produced entry must not replay as a darwin hit")
+	assert.Equal(t, 2, runs, "c2: must rebuild locally rather than import the other platform's entry")
+}
+
 // staticBackend serves one pre-built entry for a single (project, hash) and
 // discards pushes. It lets a test feed importArtifact a hand-crafted (here:
 // poisoned) entry through the real fetch-and-replay path.

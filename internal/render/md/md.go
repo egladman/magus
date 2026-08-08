@@ -72,6 +72,20 @@ func (b *Builder) Paragraphf(format string, args ...any) {
 	b.buf.WriteString("\n\n")
 }
 
+// Quote writes a blockquote block, one "> line" per entry. Unlike Comment it renders,
+// so it suits a note the reader is meant to see. No-op when empty.
+func (b *Builder) Quote(lines ...string) {
+	if len(lines) == 0 {
+		return
+	}
+	for _, line := range lines {
+		b.buf.WriteString("> ")
+		b.buf.WriteString(line)
+		b.buf.WriteString("\n")
+	}
+	b.buf.WriteString("\n")
+}
+
 // Comment writes an HTML comment block (e.g. the "generated, do not edit" marker).
 func (b *Builder) Comment(text string) {
 	b.buf.WriteString("<!-- ")

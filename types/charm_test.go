@@ -39,13 +39,13 @@ func TestHasCharmNormalizes(t *testing.T) {
 // the doctor collision check enumerates: recognition is casing/separator-blind,
 // and ReservedCharms hands back an independent copy callers cannot mutate.
 func TestReservedCharms(t *testing.T) {
-	for _, name := range []string{"rw", "cd", "gha", "RW", "CD", "GHA"} {
+	for _, name := range []string{"rw", "cd", "gha", "relock", "RW", "CD", "GHA", "RELOCK"} {
 		assert.Truef(t, IsReservedCharm(name), "IsReservedCharm(%q)", name)
 	}
 	assert.False(t, IsReservedCharm("container"))
 
 	got := ReservedCharms()
-	require.Equal(t, []string{"rw", "cd", "gha"}, got)
+	require.Equal(t, []string{"rw", "cd", "gha", "relock"}, got)
 	got[0] = "mutated"
 	assert.Equal(t, "rw", ReservedCharms()[0], "ReservedCharms() must return an independent copy")
 }
@@ -60,6 +60,9 @@ func TestReservedCharmDoc(t *testing.T) {
 	assert.Equal(t,
 		"GitHub Actions output: swap a tool's reporter to inline workflow annotations; survives into ci",
 		ReservedCharmDoc("gha"))
+	assert.Equal(t,
+		"rewrite dependency state (lockfile, go.mod/go.sum) instead of verifying it; stripped from ci",
+		ReservedCharmDoc("relock"))
 	assert.Empty(t, ReservedCharmDoc("container"), "a non-reserved charm has no built-in doc")
 }
 

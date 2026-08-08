@@ -439,11 +439,15 @@ const KnowledgeStatsDefinition = "Graph stats reads the knowledge graph to show 
 // query, and a few high-degree anchor nodes - and never dumps graph data, so it
 // stays diff-stable across routine edits.
 type KnowledgeRouting struct {
-	SchemaVersion int                       `json:"schema_version" yaml:"schema_version"`
-	NodeCount     int                       `json:"node_count"     yaml:"node_count"`
-	EdgeCount     int                       `json:"edge_count"     yaml:"edge_count"`
-	Kinds         []KnowledgeRoutingKind    `json:"kinds"          yaml:"kinds"`
-	Projects      []KnowledgeRoutingProject `json:"projects"       yaml:"projects"`
+	SchemaVersion int `json:"schema_version" yaml:"schema_version"`
+	// CatalogFingerprint identifies the binary that rendered this index; see the field of
+	// the same name on KnowledgeGraphOutput. Carried here so MAGUS.md can show it without
+	// the renderer taking another parameter. Empty when no graph was available.
+	CatalogFingerprint string                    `json:"catalog_fingerprint,omitempty" yaml:"catalog_fingerprint,omitempty"`
+	NodeCount          int                       `json:"node_count"     yaml:"node_count"`
+	EdgeCount          int                       `json:"edge_count"     yaml:"edge_count"`
+	Kinds              []KnowledgeRoutingKind    `json:"kinds"          yaml:"kinds"`
+	Projects           []KnowledgeRoutingProject `json:"projects"       yaml:"projects"`
 }
 
 // KnowledgeRoutingKind is one row of the domain routing table: a node kind, how
@@ -479,7 +483,12 @@ type KnowledgeGraphOutput struct {
 	// viewer can turn a node's relative `source` path into a link to the RIGHT repo.
 	// Empty when there is no remote or the forge is unrecognized. Additive; omitted
 	// when empty, so it never bumps the schema version.
-	SourceBaseURL string          `json:"source_base,omitempty" yaml:"source_base,omitempty"`
-	Nodes         []KnowledgeNode `json:"nodes"         yaml:"nodes"`
-	Links         []KnowledgeEdge `json:"links"         yaml:"links"`
+	SourceBaseURL string `json:"source_base,omitempty" yaml:"source_base,omitempty"`
+	// CatalogFingerprint identifies the binary that produced this export. Generated output
+	// depends on the binary's catalogs as well as the tree, but only the tree shows in a
+	// diff, so regenerating with a foreign build reads as ordinary drift (MGS4005).
+	// Additive and omitted when empty, so it never bumps the schema version.
+	CatalogFingerprint string          `json:"catalog_fingerprint,omitempty" yaml:"catalog_fingerprint,omitempty"`
+	Nodes              []KnowledgeNode `json:"nodes"         yaml:"nodes"`
+	Links              []KnowledgeEdge `json:"links"         yaml:"links"`
 }

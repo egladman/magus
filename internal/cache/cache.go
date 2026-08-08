@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -72,6 +73,13 @@ type Cache struct {
 	signingSeed    []byte
 	trustedKeys    [][]byte
 	insecureRemote bool // explicit opt-out: allow a remote backend with no trust set
+
+	// platform is runtime.GOOS+"/"+runtime.GOARCH, stamped onto every manifest this
+	// Cache writes and checked against every manifest it reads (readManifest,
+	// importArtifact) - see Manifest.Platform. Set from runtime.* in Open; a test-only
+	// Option overrides it so both branches of the guard are reachable without two
+	// machines.
+	platform string
 }
 
 const defaultMaxImportBytes int64 = 10 << 30
@@ -222,6 +230,7 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 		outputs:  NewOutputStore(dir),
 		// Annotations go to stderr alongside the failure dump they wrap.
 		annotator: annotate.Detect(os.Stderr),
+		platform:  runtime.GOOS + "/" + runtime.GOARCH,
 	}
 	for _, o := range opts {
 		o(c)

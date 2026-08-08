@@ -260,7 +260,7 @@ var typedMagusSubcommands = map[string]bool{
 // bare sentence.
 func errNoWorkspace(member string) error {
 	return types.DiagnosticErrorf(types.MagusfileOnlyMember,
-		"magus\\%s: no workspace on the context - it is callable from a magusfile target, not a magus buzz script; from a script use magus\\describe/magus\\cmd, which run a nested magus and discover the workspace themselves", member)
+		"magus\\%s: no workspace on the context - it is callable from a magusfile target, not from a spell or a `magus buzz` script; reach for magus\\describe/magus\\cmd instead, which fork a nested magus that discovers the workspace itself", member)
 }
 
 // MagusLs lists the workspace's projects from the workspace already open on ctx.

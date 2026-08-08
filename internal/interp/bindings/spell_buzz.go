@@ -102,6 +102,13 @@ func extractDescriptorWithModules(ctx context.Context, src, dir string) (spells.
 	defer sess.Close()
 	interp.AttachSessionObservers(ctx, sess, interp.ModeSpell)
 	registerMagusModules(ctx, sess)
+	// A spell gets the SCRIPT surface, the same one `magus buzz` sees: the members that
+	// declare into a workspace being loaded raise MGS1022, the rest work. Without this
+	// `import "magus"` fails outright with BZZ2001, which reads as "the module does not
+	// exist" - the failure mode buildMagusNS explicitly rejects for the script surface.
+	// Note the in-process readers (ls, targets, graph) still raise here: a spell has no
+	// workspace on its context, so it must reach for the forking members (cmd, describe).
+	RegisterMagusNamespace(ctx, sess)
 	if err := interp.TimeExec(ctx, interp.ModeSpell, func() error { return sess.Exec(ctx, src) }); err != nil {
 		return spells.Descriptor{}, err
 	}
@@ -157,6 +164,9 @@ func callBuzzSpellFunc(ctx context.Context, src, fn string, req spells.InvokeReq
 	defer sess.Close()
 	interp.AttachSessionObservers(ctx, sess, interp.ModeSpell)
 	registerMagusModules(ctx, sess)
+	// Same script surface as the descriptor-extraction session above, so a handler op
+	// body and the spell's top level see one `magus` namespace rather than two.
+	RegisterMagusNamespace(ctx, sess)
 	if err := interp.TimeExec(ctx, interp.ModeSpell, func() error { return sess.Exec(ctx, src) }); err != nil {
 		return nil, fmt.Errorf("spell handler op %q: exec: %w", fn, err)
 	}

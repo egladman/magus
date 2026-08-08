@@ -83,7 +83,36 @@ The project is a **positional** argument, not part of the token. See the full gr
 
 `rw` carries no special flag. Like every other charm, you activate it with a `:rw` suffix (`magus run format:rw`). There is no `-w`/`--write` shortcut and no `--write` flag: the suffix is the one way to ask for it.
 
-**CI is always read-only.** `Magus.RunCI` strips the `rw` charm before dispatch, so the composite `ci` pipeline can never mutate the tree even if a caller requests it (e.g. `ci:rw`). `rw` is the only charm with this strip status; the other built-in (`cd`) and every workspace charm you define are ordinary vocabulary that survive into `ci`.
+**CI is always read-only.** `Magus.RunCI` strips the `rw` charm before dispatch, so the composite `ci` pipeline can never mutate the tree even if a caller requests it (e.g. `ci:rw`). `rw` and `relock` are the two charms with this strip status; the other built-ins (`cd`, `gha`) and every workspace charm you define are ordinary vocabulary that survive into `ci`.
+
+## The `relock` charm
+
+`relock` is the other built-in write grant, and it is deliberately **not** part of `rw`. Both let a run write, but they differ in what kind of write, and that difference is the whole reason there are two:
+
+|                        | `rw`                                                | `relock`                                                     |
+| ---------------------- | --------------------------------------------------- | ------------------------------------------------------------ |
+| what it writes         | derived output, from sources already in this tree    | dependency state: a lockfile, or `go.mod`/`go.sum`            |
+| where the input is     | the tree                                             | the tree **and** a remote registry                            |
+| deterministic?         | yes: same sources, same bytes                        | no: same sources, different bytes on a different day          |
+| discard the result?    | re-run reproduces it exactly                         | re-running gives you whatever upstream serves now             |
+| typical ops            | `go-fmt`, `prettier`, `biome-format`, `golangci-lint --fix`, `generate` | `go-mod-tidy`, `go-mod-edit`                                  |
+
+That last row is the practical test. **If re-running the target from a clean checkout would reproduce the same bytes, it is `rw`. If the answer depends on what a registry serves today, it is `relock`.**
+
+The split exists because `default_charms` makes the distinction expensive. A workspace with `default_charms: [rw]` has granted every local run permission to write, which is fine for formatters: an unwanted `gofmt` is reproducible and reviewable. Granting the same run permission to re-resolve dependencies is not fine, because an unrelated build then rewrites your lockfile, widening both the review diff and the affected set for work that never asked to touch dependencies.
+
+### They stack
+
+Charms are an unordered, additive set, so `rw` and `relock` compose like any other pair. They answer different questions, so neither overrides the other:
+
+```sh
+magus run format              # check only: report formatting, report go.mod drift
+magus run format:rw           # rewrite formatting; go mod tidy still only reports
+magus run format:rw,relock    # also let go mod tidy amend go.mod and go.sum
+magus run generate:rw         # write derived output; touches no dependency versions
+```
+
+The middle two are the pair worth internalizing. `rw` alone already writes a great deal, and it still will not re-resolve your dependencies. Asking for that is a second, deliberate act, and it stays separate even when you are already writing.
 
 ## Defaulting charms per workspace (`default_charms`)
 
@@ -97,7 +126,7 @@ default_charms: [rw] # `magus run format` now writes; no :rw needed
 Per-run charms stack on top, exactly as if you had typed the whole set. Three things keep it safe:
 
 - **`magus affected` does not apply them**, so CI (which runs `magus affected ci`) stays read-only regardless of the workspace default.
-- **`RunCI` still strips `rw`**, so even a local `magus run ci` verifies without writing.
+- **`RunCI` still strips `rw` and `relock`**, so even a local `magus run ci` verifies without writing, and never re-resolves dependencies.
 - **`--no-default-charms`** ignores the defaults for one run (`magus run format --no-default-charms` to check without rewriting).
 
 `MAGUS_DEFAULT_CHARMS` (comma-separated) is the environment equivalent. It only sets the default baseline; it never changes what a charm means, so `has_charm("rw")` in spells and targets is unaffected.

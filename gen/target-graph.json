@@ -278,34 +278,6 @@
           ]
         },
         {
-          "name": "mod-sync",
-          "declared": "mod_sync",
-          "doc": "The Go spell's Buzz companion derives the flags; go-mod-edit alone renders or writes go.mod.",
-          "charms": [
-            "rw"
-          ],
-          "spells": [
-            {
-              "spell": "go",
-              "ops": [
-                "go-mod-json",
-                "go-mod-edit"
-              ]
-            },
-            {
-              "spell": "gomod",
-              "ops": [
-                "replaceArgs"
-              ]
-            }
-          ],
-          "modifies_existing_files": [
-            {
-              "glob": "go.mod"
-            }
-          ]
-        },
-        {
           "name": "postflight",
           "doc": "Renders the insight report (hotspots, affinity, ownership, trend) to stdout."
         },
@@ -313,7 +285,6 @@
           "name": "generate",
           "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).",
           "dependencies": [
-            "mod-sync",
             "bindings-generate",
             "changelog-generate",
             "config-generate",
@@ -327,6 +298,14 @@
           ],
           "charms": [
             "rw"
+          ],
+          "spells": [
+            {
+              "spell": "gomod",
+              "ops": [
+                "replaceWorkspaceModules"
+              ]
+            }
           ]
         },
         {
@@ -1130,7 +1109,6 @@
           "doc": "Regenerates MAGUS.md and fails on drift.",
           "dependencies": [
             "preflight",
-            "mod-sync",
             "md-generate"
           ],
           "charms": [
@@ -1143,31 +1121,9 @@
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
         },
         {
-          "name": "mod-sync",
-          "declared": "mod_sync",
-          "charms": [
-            "rw"
-          ],
-          "spells": [
-            {
-              "spell": "go",
-              "ops": [
-                "go-mod-json",
-                "go-mod-edit"
-              ]
-            }
-          ],
-          "modifies_existing_files": [
-            {
-              "glob": "go.mod"
-            }
-          ]
-        },
-        {
           "name": "format",
           "dependencies": [
-            "generate",
-            "mod-sync"
+            "generate"
           ],
           "spells": [
             {
@@ -1245,7 +1201,6 @@
           "doc": "Regenerates MAGUS.md and fails on drift.",
           "dependencies": [
             "preflight",
-            "mod-sync",
             "md-generate"
           ],
           "charms": [
@@ -1258,31 +1213,9 @@
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
         },
         {
-          "name": "mod-sync",
-          "declared": "mod_sync",
-          "charms": [
-            "rw"
-          ],
-          "spells": [
-            {
-              "spell": "go",
-              "ops": [
-                "go-mod-json",
-                "go-mod-edit"
-              ]
-            }
-          ],
-          "modifies_existing_files": [
-            {
-              "glob": "go.mod"
-            }
-          ]
-        },
-        {
           "name": "format",
           "dependencies": [
-            "generate",
-            "mod-sync"
+            "generate"
           ],
           "spells": [
             {
