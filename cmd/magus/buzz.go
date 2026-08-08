@@ -91,7 +91,7 @@ func buzzCmd(ctx context.Context, args []string) error {
 	// registration keeps `magus buzz` and magusfile execution in lock-step: any
 	// module a script or test imports resolves the same way in both, with no
 	// per-surface module list.
-	bindings.RegisterModuleSurface(ctx, sess)
+	bindings.RegisterModuleSurface(ctx, sess, bindings.WithScriptOutput(os.Stdout))
 	// The magus.* namespace on top, so `import "magus"` resolves here too. The
 	// members that declare into a workspace being loaded (magus\project,
 	// magus\cache.remote, magus\ci.provider) raise MGS1022 on this surface; the rest

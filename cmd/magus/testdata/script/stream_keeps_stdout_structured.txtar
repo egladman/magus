@@ -1,0 +1,46 @@
+# Streaming a target's output must not contaminate the structured answer.
+#
+# Stdout carries the machine-readable result of -o json|yaml|jsonl|template and
+# nothing else. Everything magus says to a human - status lines, notices, failure
+# dumps - is on stderr already.
+#
+# MAGUS_LOG_STREAM=1 (which CI sets, so a green run leaves a record of what it was
+# doing) used to send a target's stdout to os.Stdout as well. A build whose target
+# printed anything then emitted a stdout no JSON parser would accept: the document
+# arrived with pnpm and test chatter in front of it. This asserts the two streams
+# stay separated with streaming ON, which is the configuration that broke.
+
+env MAGUS_LOG_STREAM=1
+
+exec magus run noisy -o json
+stdout '^\{'
+! stdout 'CHATTER_ON_STDOUT'
+stderr 'CHATTER_ON_STDOUT'
+
+# yaml: same rule, different serializer.
+exec magus run noisy -o yaml
+! stdout 'CHATTER_ON_STDOUT'
+
+# template renders one field; anything else on stdout makes it unusable in a
+# shell substitution, which is the documented way to read a single value.
+exec magus run noisy -o 'template={{.target}}'
+stdout '^noisy$'
+
+# And with streaming off, stdout is still only the structured answer.
+env MAGUS_LOG_STREAM=0
+exec magus run noisy -o json
+stdout '^\{'
+! stdout 'CHATTER_ON_STDOUT'
+
+-- magus.yaml --
+concurrency: 1
+-- magusfile.buzz --
+import "magus";
+import "std";
+
+magus\project({});
+
+// Writes to the target's OWN stdout, which is the stream that used to leak.
+export fun noisy(ctx: magus\Context, args: [str]) > void {
+    std\print("CHATTER_ON_STDOUT");
+}
