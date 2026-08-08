@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"time"
 )
 
@@ -150,5 +151,17 @@ func (c *Cache) LogSummary(ctx context.Context, elapsed time.Duration) {
 // Only what was already streamed survives, and this is the one line that explains an
 // otherwise unattributable "the runner has received a shutdown signal".
 func (c *Cache) LogMemoryPressure(ctx context.Context, msg string) {
+	// Name what is RUNNING. A bare "the machine is out of memory" makes the reader
+	// guess which of several concurrent targets did it, and guessing is the thing
+	// the inflight registry exists to end - it already survives a SIGKILL so the
+	// next run can report the same set. Consulting it live means the answer is in
+	// the log of the run that died, not only the one after it.
+	if running := c.inflight.Running(); len(running) > 0 {
+		names := make([]string, 0, len(running))
+		for _, t := range running {
+			names = append(names, t.Project+":"+t.Target)
+		}
+		msg += "; running: " + strings.Join(names, ", ")
+	}
 	c.log.WarnContext(ctx, "cache.warn", slog.String("msg", msg))
 }
