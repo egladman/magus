@@ -42,31 +42,31 @@ YAML
 cat > "$GEN/go-svc/magusfile.buzz" <<'MF'
 import "magus";
 import "magus/spell/go";
-magus.project.register(fun(p, cb) > bool { cb({"spells": [go]}); return true; });
-export fun build(args: [str]) > void { go["go-build"](); }
+magus\project({"spells": [go]});
+export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx); }
 MF
 
 cat > "$GEN/ts-lib/magusfile.buzz" <<'MF'
 import "magus";
-import "magus/spell/ts";
-magus.project.register(fun(p, cb) > bool { cb({"spells": [ts]}); return true; });
-export fun build(args: [str]) > void { ts["tsc"]({"args": ["-b"]}); }
+import "magus/spell/typescript";
+magus\project({"spells": [typescript]});
+export fun build(ctx: magus\Context, args: [str]) > void { typescript["tsc"](ctx, {"args": ["-b"]}); }
 MF
 
 cat > "$GEN/ts-app/magusfile.buzz" <<'MF'
 import "magus";
-import "magus/spell/ts";
-import "project/ts-lib" as tslib;
-magus.project.register(fun(p, cb) > bool { cb({"spells": [ts], "depends_on": ["ts-lib"]}); return true; });
-export fun build(args: [str]) > void { magus.needs(tslib.build); ts["tsc"]({"args": ["-b"]}); }
+import "magus/spell/typescript";
+import "project/../ts-lib" as tslib;
+magus\project({"spells": [typescript], "depends_on": ["ts-lib"]});
+export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(tslib.build); typescript["tsc"](ctx, {"args": ["-b"]}); }
 MF
 
 cat > "$GEN/py-tool/magusfile.buzz" <<'MF'
 import "magus";
-import "magus/spell/py";
+import "magus/spell/python";
 import "os";
-magus.project.register(fun(p, cb) > bool { cb({"spells": [py]}); return true; });
-export fun build(args: [str]) > void { os.exec("python", ["-m", "py_compile", "src/tool.py"]); }
+magus\project({"spells": [python]});
+export fun build(ctx: magus\Context, args: [str]) > void { os.exec("python", ["-m", "py_compile", "src/tool.py"]); }
 MF
 
 # ── Makefile ──────────────────────────────────────────────────────────────────
