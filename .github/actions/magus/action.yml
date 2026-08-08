@@ -109,14 +109,37 @@ runs:
         # too, since a full disk takes a runner down just as quietly.
         # Plain stdout, not ::debug::, deliberately: a debug line is invisible unless
         # someone re-runs with debug logging on, and the whole point is to catch the
-        # NEXT occurrence rather than ask for one. One line per 30s is ~14 lines on a
-        # 7-minute shard.
-        ( while true; do
-            printf '[headroom] %s mem_avail=%sMB disk_avail=%sMB\n' \
-              "$(date -u +%H:%M:%S)" \
-              "$(free -m 2>/dev/null | awk '/^Mem:/{print $7}')" \
-              "$(df -m --output=avail / 2>/dev/null | tail -1 | tr -d ' ')"
-            sleep 30
+        # NEXT occurrence rather than ask for one.
+        #
+        # SAMPLE FAST, PRINT RARELY. This first shipped at one line per 30s, and that
+        # interval cannot answer the question it was built for: a shard died 30s after
+        # a sample that read 13.8GB free, so the trace showed "no pressure" while
+        # saying nothing about the 30 seconds that actually killed the runner. A Go
+        # test binary can allocate its way out of 14GB in well under that. So sample
+        # every 2s and keep a LOW-WATER MARK, printing only when the floor drops by
+        # more than 250MB - dense enough that a spike cannot hide between samples,
+        # quiet enough that a healthy shard still costs a handful of lines. The
+        # heartbeat every 60s distinguishes "nothing got worse" from "the tracer died".
+        ( low=99999999; last_beat=0; beat=0
+          while true; do
+            avail=$(free -m 2>/dev/null | awk '/^Mem:/{print $7}')
+            case "$avail" in ''|*[!0-9]*) avail=$low ;; esac
+            if [ "$avail" -lt $((low - 250)) ]; then
+              low=$avail
+              printf '[headroom] %s NEW LOW mem_avail=%sMB disk_avail=%sMB\n' \
+                "$(date -u +%H:%M:%S)" "$avail" \
+                "$(df -m --output=avail / 2>/dev/null | tail -1 | tr -d ' ')"
+            elif [ "$avail" -lt "$low" ]; then
+              low=$avail
+            fi
+            beat=$((beat + 2))
+            if [ $((beat - last_beat)) -ge 60 ]; then
+              last_beat=$beat
+              printf '[headroom] %s floor=%sMB now=%sMB disk_avail=%sMB\n' \
+                "$(date -u +%H:%M:%S)" "$low" "$avail" \
+                "$(df -m --output=avail / 2>/dev/null | tail -1 | tr -d ' ')"
+            fi
+            sleep 2
           done ) &
         headroom=$!
         trap 'kill "$headroom" 2>/dev/null || true' EXIT
