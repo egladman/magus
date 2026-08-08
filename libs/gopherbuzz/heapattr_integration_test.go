@@ -13,29 +13,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The attribution has to survive the case it was built for: a string grown by
-// reassignment inside a loop, which is what turned 2.1MB of output into 13.1GB of
-// pinned intermediates and killed a CI runner. Reporting a large heap without
-// saying where leaves the reader bisecting a magusfile by hand.
+// The attribution has to name the loop that is growing the heap. Reporting a
+// large heap without saying where leaves the reader bisecting a magusfile by
+// hand, which is the whole reason this exists.
+//
+// The program allocates LINEARLY - one slot per append. An earlier version used
+// the pathological `kept = kept + line` shape instead, which drove this one test
+// binary to a 13.5GB peak and killed a CI shard. That is an absurd price for a
+// test about a diagnostic, and the diagnostic only needs a hot loop that grows.
 //
 // The assertion is on the REGION, not the exact statement. Sampling catches
 // whichever instruction the tick landed on, and a tight loop runs its control as
-// often as its body, so either the `foreach` header or the concatenation inside it
-// is a correct answer. Both put the reader on the same five lines, which is what
-// the diagnostic is for.
+// often as its body, so either the `foreach` header or the append inside it is a
+// correct answer. Both put the reader on the same few lines.
 func TestHeapHotSitesNamesTheGrowingLine(t *testing.T) {
 	const src = `
-fun grow() > str {
-    var kept = "";
-    foreach (i in 0..40000) {
-        kept = kept + "a line of coverage profile text\n";
+fun grow() > int {
+    var parts = mut [<str>];
+    foreach (i in 0..20000) {
+        parts.append("a line of coverage profile text");
     }
-    return kept;
+    return parts.len();
 }
 grow();
 `
-	// Line 4 is the foreach, line 5 the concatenation inside it. Either identifies
-	// the growing loop.
+	// Line 4 is the foreach, line 5 the append inside it.
 	wantLines := []string{":4", ":5"}
 
 	s := buzz.NewSession(context.Background())
@@ -43,7 +45,7 @@ grow();
 	require.NoError(t, err)
 
 	sites, _ := vm.HeapHotSites(5)
-	require.NotEmpty(t, sites, "a loop that allocated its way through 40000 iterations must have been sampled")
+	require.NotEmpty(t, sites, "a loop of 20000 allocating iterations must have been sampled")
 
 	var named bool
 	for _, want := range wantLines {

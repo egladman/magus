@@ -77,7 +77,11 @@ func TestWatcherDetectsFileWrite(t *testing.T) {
 // The warm-up write is on a SEPARATE file so its own debounce batch cannot be
 // mistaken for one of the burst's.
 func TestWatcherDebounceCoalesces(t *testing.T) {
-	t.Parallel()
+	// NOT parallel, deliberately. This is the one test here whose assertion is
+	// about TIMING rather than about which paths arrive, and running it beside
+	// five sibling watcher tests makes it measure contention for the same debounce
+	// windows instead. It passed 15/15 alone and still failed inside the package
+	// run until this came out.
 	dir := t.TempDir()
 
 	warm, err := os.CreateTemp(dir, "warmup-*.go")
@@ -107,7 +111,7 @@ func TestWatcherDebounceCoalesces(t *testing.T) {
 		require.NoError(t, os.WriteFile(f.Name(), []byte{byte(i)}, 0o644))
 	}
 
-	batches := countBatches(t, w, f.Name(), 2*time.Second, 3*debounce)
+	batches := countBatches(t, w, f.Name(), 10*time.Second, 3*debounce)
 	require.NotZero(t, batches, "the watcher was hot and 10 writes landed, so at least one batch must arrive")
 	assert.LessOrEqual(t, batches, 3, "debounce should coalesce 10 rapid writes into <=3 batches")
 }
@@ -128,7 +132,9 @@ func drain(t *testing.T, w *Watcher, settle time.Duration) {
 }
 
 // countBatches counts batches mentioning wantPath, stopping once the channel has
-// been quiet for settle or the overall deadline passes.
+// been quiet for settle or the overall deadline passes. The deadline is generous
+// because it is only reached when something is genuinely wrong; the settle window
+// is what ends a healthy run.
 func countBatches(t *testing.T, w *Watcher, wantPath string, deadline, settle time.Duration) int {
 	t.Helper()
 	var n int

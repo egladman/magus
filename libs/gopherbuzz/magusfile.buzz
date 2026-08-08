@@ -31,18 +31,6 @@ magus\project({
         "generate": {"skip_cache": "drift-gates MAGUS.md via git status; a replay would skip the check", "exclusive": true},
         // Fetches over the network and re-checks upstream out every run.
         "conformance": {"skip_cache": "fetches over the network and re-checks upstream on every run"},
-        // MEASURED at 13.5GB peak for the root package alone, which is most of a
-        // 16GB CI runner. The cause is this VM's own design: the object heap is
-        // append-only (see vm/value_nanbox.go), and these tests run thousands of
-        // Buzz programs in ONE test binary, so every value any of them allocated
-        // stays pinned to the end. Nothing here is leaking; the heap is doing what
-        // it says it does.
-        //
-        // Declared so magus keeps lint and build off the machine while it runs.
-        // That is the whole of what a declaration can do - it cannot shrink a
-        // single target that alone approaches the host, which is why the real fix
-        // is reclaiming the heap between programs rather than a bigger runner.
-        "test": {"memory_mb": 12288},
     },
 });
 

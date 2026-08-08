@@ -55,18 +55,23 @@ type envNameEntry struct {
 	slot int32
 }
 
-// icacheEntry is one slot in the per-VM OpInvoke inline cache for immutable-map
-// method calls (e.g. NBody's math.sqrt(d2)). An immutable map's members never
-// change, so for a fixed (chunk, ip, receiver) the resolved callee is permanent.
+// icacheEntry is one slot in the per-VM OpInvoke inline cache: the member a
+// monomorphic method call site resolved last time, for an immutable-map receiver
+// (NBody's math.sqrt(d2)) or a builtin one (a loop's xs.append(j)).
 // The chunk pointer is part of the key because a different chunk re-using the
 // same ip would name a different member — within one chunk an ip always names
-// the same member, so (chunk, ip) pins the name and recv pins the (immutable)
-// map. recv is the receiver Value itself (a heap index); identical bits ⇒ the
+// the same member, so (chunk, ip) pins the name and recv pins the receiver
+// object. recv is the receiver Value itself (a heap index); identical bits ⇒ the
 // same pinned heap object, so the compare needs no heap dereference.
+//
+// direct and callee are alternatives, never both: direct holds a builtin's
+// callable, which OpInvoke runs without ever building a Value for it (see
+// newDirect), and callee holds a member that had to be materialised.
 type icacheEntry struct {
 	chunk  *Chunk
 	recv   Value
 	callee Value
+	direct *directObj
 }
 
 // mcacheEntry is one slot in the per-VM member-access inline cache.
@@ -213,16 +218,16 @@ func (vm *VM) mcacheLearn(ip int, chunk *Chunk, def *objectDefObj, idx int32) {
 	vm.mcache[ip] = mcacheEntry{def: def, chunk: chunk, idx: idx}
 }
 
-// icacheLearn records (chunk, recv, callee) for the OpInvoke instruction at ip,
-// growing the per-VM cache as needed. Called only for immutable-map receivers,
-// whose resolved member is permanently valid (see icacheEntry).
-func (vm *VM) icacheLearn(ip int, chunk *Chunk, recv, callee Value) {
+// icacheLearn records e for the OpInvoke instruction at ip, growing the per-VM
+// cache as needed. Callers must only pass a resolution that stays valid for
+// e.recv for as long as that object lives (see icacheEntry).
+func (vm *VM) icacheLearn(ip int, e icacheEntry) {
 	if ip >= len(vm.icache) {
 		grown := make([]icacheEntry, ip+1)
 		copy(grown, vm.icache)
 		vm.icache = grown
 	}
-	vm.icache[ip] = icacheEntry{chunk: chunk, recv: recv, callee: callee}
+	vm.icache[ip] = e
 }
 
 // run executes chunk inside env and returns the program's result.
@@ -1102,43 +1107,77 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			// method here (e.g. when recv is a map whose entry is a bound method),
 			// which is the uncommon path this opcode deliberately doesn't optimize.
 			//
-			// optimization: an immutable-map receiver (e.g. the `math` module in
-			//   NBody's math.sqrt(d2)) resolves the same callee every call, so an
-			//   (chunk, ip, receiver) hit skips getMember's mapMethod string-switch
-			//   and map hash lookup — the per-call dispatch the NBody profile spent
-			//   ~3% in (getMember → mapaccess2_faststr). Only immutable maps are
-			//   learned; mutable maps and all other receivers resolve fresh.
+			// optimization: a builtin method resolves to a freshly bound callable on
+			//   every property access, and on the nanbox build every Value takes a
+			//   slot in an append-only object heap that is never reclaimed — so
+			//   `xs.append(j)` in a loop pinned one object per iteration, which no
+			//   amount of better Buzz could avoid. builtinMethod hands back the
+			//   callable itself and this arm invokes it in place, so the Value is
+			//   never built; only a property access that is NOT called
+			//   (`final f = xs.append;`) still allocates one, via getMember.
+			//   measured: direct heap slots for a 10/100/1000-iteration append loop
+			//     went 15/105/1005 to a constant 5.
+			//
+			// optimization: an (chunk, ip, receiver) hit skips resolution entirely —
+			//   mapMethod's string switch and the map hash lookup for an immutable-map
+			//   receiver (the `math` module in NBody's math.sqrt(d2)), which is the
+			//   per-call dispatch the NBody profile spent ~3% in (getMember →
+			//   mapaccess2_faststr), and the builtin string switch for the monomorphic
+			//   `xs.append(j)` / `s.sub(i, k)` loops. A mutable map is never learned:
+			//   only its Mut flag and its keys are read at resolution time, and its keys
+			//   can change under the cache.
 			//   measured: BenchmarkComparison/NBody/Warm/Gopherbuzz (benchstat n=6);
 			//     Mandelbrot/LoopSum unaffected (slot-mode, no OpInvoke).
 			ip := f.ip - 1
-			var callee Value
+			callee := Null        // a materialised member, when one had to be built
+			var direct *directObj // a builtin invoked in place; no Value exists for it
 			cached := false
 			if ip < len(vm.icache) {
 				if e := vm.icache[ip]; e.chunk == f.chunk && e.recv == receiver {
-					callee, cached = e.callee, true
+					callee, direct, cached = e.callee, e.direct, true
 				}
 			}
 			if !cached {
-				c, err := getMember(vm, receiver, name)
-				if err != nil {
-					return Null, err
-				}
-				callee = c
-				// Cache the resolved member when the receiver is immutable, so a
-				// monomorphic call site (same string/immutable-map receiver every
-				// pass, e.g. a loop's `s.sub(i, k)`) skips both getMember's resolution
-				// and the fresh bound-method DirectValue it allocates each call. A
-				// string is always immutable; a map only when it is not Mut. The recv
-				// Value pins the exact heap object (indices are never reused), so the
-				// cached callee can never be served for a different object.
-				if receiver.tag() == tagStr || (receiver.tag() == tagMap && !vm.asMap(receiver).Mut) {
-					vm.icacheLearn(ip, f.chunk, receiver, c)
+				if receiver.tag() == tagMap {
+					// A stored key wins over a like-named builtin, exactly as in
+					// getMember — the rule is repeated here rather than delegated so a
+					// field read costs one map lookup instead of two. Keep the two in step.
+					m := vm.asMap(receiver)
+					if v, ok := m.get(name); ok {
+						callee = v
+						if !m.Mut {
+							vm.icacheLearn(ip, icacheEntry{chunk: f.chunk, recv: receiver, callee: v})
+						}
+					} else if d := mapMethod(vm, receiver, name); d != nil {
+						direct = d
+						if !m.Mut {
+							vm.icacheLearn(ip, icacheEntry{chunk: f.chunk, recv: receiver, direct: d})
+						}
+					}
+					// A name the map holds neither as a key nor as a builtin leaves callee
+					// Null, which errNotCallable reports below.
+				} else if d := builtinMethod(vm, receiver, name); d != nil {
+					direct = d
+					// recv pins the exact receiver object, and every field a builtin
+					// closure reads at build time (a list's or map's Mut) is fixed at
+					// construction, so the built callable stays valid for that object.
+					vm.icacheLearn(ip, icacheEntry{chunk: f.chunk, recv: receiver, direct: d})
+				} else {
+					// Not a builtin receiver: an object field, a static field, an enum
+					// case — resolve it generally and dispatch it as an ordinary call.
+					c, err := getMember(vm, receiver, name)
+					if err != nil {
+						return Null, err
+					}
+					callee = c
 				}
 			}
-			switch callee.tag() {
-			case tagDirect:
-				directFn := vm.asDirect(callee)
-				result, ferr := directFn.Fn(vm.ctx, vm.stack[recvIdx+1:stackLen])
+			if direct == nil && callee.tag() == tagDirect {
+				direct = vm.asDirect(callee)
+			}
+			switch {
+			case direct != nil:
+				result, ferr := direct.Fn(vm.ctx, vm.stack[recvIdx+1:stackLen])
 				if ferr != nil {
 					if vm.raiseHostError(ferr) {
 						f = &vm.frames[len(vm.frames)-1] // refresh f/code: frames unwound
@@ -1149,7 +1188,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				}
 				vm.stack[recvIdx] = result
 				vm.stack = vm.stack[:recvIdx+1]
-			case tagFun:
+			case callee.tag() == tagFun:
 				fn := vm.asFun(callee)
 				if err := vm.enterFun(fn, recvIdx+1, recvIdx, fn.This); err != nil {
 					return Null, err

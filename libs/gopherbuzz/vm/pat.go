@@ -87,13 +87,13 @@ func matchToList(m *regexp2.Match) Value {
 	return ListValue(items)
 }
 
-// patMethod returns a bound DirectValue for the named pat method, or Null if
-// name is not a known method. Mirrors listMethod/mapMethod in operators.go.
-func patMethod(vm *VM, p Value, name string) Value {
+// patMethod returns the callable for the named pat method, or nil if name is not
+// a known method. Mirrors listMethod/mapMethod in operators.go.
+func patMethod(vm *VM, p Value, name string) *directObj {
 	po := vm.asPat(p)
 	switch name {
 	case "match":
-		return DirectValue("pat.match", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("pat.match", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("pat.match: requires a subject string")
 			}
@@ -107,7 +107,7 @@ func patMethod(vm *VM, p Value, name string) Value {
 			return matchToList(m), nil
 		})
 	case "matchAll":
-		return DirectValue("pat.matchAll", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("pat.matchAll", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("pat.matchAll: requires a subject string")
 			}
@@ -133,7 +133,7 @@ func patMethod(vm *VM, p Value, name string) Value {
 	// gopherbuzz superset (they are what its own testdata calls); upstream source
 	// only ever reaches these two.
 	case "matchAgainst":
-		return DirectValue("pat.matchAgainst", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("pat.matchAgainst", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("pat.matchAgainst: requires a subject string")
 			}
@@ -148,7 +148,7 @@ func patMethod(vm *VM, p Value, name string) Value {
 			return vm.matchToRecords(subject, m), nil
 		})
 	case "matchAllAgainst":
-		return DirectValue("pat.matchAllAgainst", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("pat.matchAllAgainst", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("pat.matchAllAgainst: requires a subject string")
 			}
@@ -170,7 +170,7 @@ func patMethod(vm *VM, p Value, name string) Value {
 			return ListValue(all), nil
 		})
 	case "replace":
-		return DirectValue("pat.replace", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("pat.replace", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 2 {
 				return Null, fmt.Errorf("pat.replace: requires subject and replacement strings")
 			}
@@ -182,7 +182,7 @@ func patMethod(vm *VM, p Value, name string) Value {
 			return StrValue(out), nil
 		})
 	case "replaceAll":
-		return DirectValue("pat.replaceAll", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("pat.replaceAll", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 2 {
 				return Null, fmt.Errorf("pat.replaceAll: requires subject and replacement strings")
 			}
@@ -194,5 +194,5 @@ func patMethod(vm *VM, p Value, name string) Value {
 			return StrValue(out), nil
 		})
 	}
-	return Null
+	return nil
 }
