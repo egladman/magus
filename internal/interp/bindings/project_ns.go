@@ -53,7 +53,7 @@ var knownProjectOptionKeys = []string{
 
 // knownTargetPolicyKeys are the recognized per-target policy keys inside
 // magus.project's "targets" map.
-var knownTargetPolicyKeys = []string{"skip_cache", "exclusive", "slots", "cache"}
+var knownTargetPolicyKeys = []string{"skip_cache", "exclusive", "slots", "memory_mb", "cache"}
 
 // rejectUnknownKeys errors on the first key in m absent from known, so a typo
 // like "skip_cache" or "depend_on" is a loud load error instead of a silently
@@ -334,6 +334,21 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 						"magus.project: targets[%q].slots must be >= 1, got %d", name, n)
 				}
 				opts = append(opts, workspace.WithTarget(name, workspace.Slots(n)))
+			}
+			// memory_mb declares a memory budget and is validated like slots above.
+			// magus converts it to slots per host; see types.Target.MemoryMB.
+			if mv, ok := pv.MapGet("memory_mb"); ok {
+				if !mv.IsInt() {
+					return nil, fmt.Errorf(
+						"magus.project: targets[%q].memory_mb must be a whole number of megabytes, got a %s",
+						name, mv.Kind())
+				}
+				n := int(mv.AsInt())
+				if n < 1 {
+					return nil, fmt.Errorf(
+						"magus.project: targets[%q].memory_mb must be >= 1, got %d", name, n)
+				}
+				opts = append(opts, workspace.WithTarget(name, workspace.MemoryMB(n)))
 			}
 		}
 	}

@@ -435,7 +435,18 @@ func ListValue(items []Value) Value {
 
 // DirectValue wraps a Go Callable as a Buzz function value bound to name.
 func DirectValue(name string, fn Callable) Value {
-	return heapValue(tagDirect, &directObj{Name: name, Fn: fn})
+	return heapValue(tagDirect, newDirect(name, fn))
+}
+
+// newDirect builds the callable a builtin method dispatches to WITHOUT giving it
+// a Value. On the nanbox build every Value takes a slot in an append-only object
+// heap that is never reclaimed, so wrapping a bound method per property access
+// pinned one object per call: `xs.append(j)` in a loop leaked a slot an
+// iteration. OpInvoke calls this closure in place; only a property access that is
+// not immediately called (`final f = xs.append;`) still needs a Value, which
+// getMember builds. See builtinMethod.
+func newDirect(name string, fn Callable) *directObj {
+	return &directObj{Name: name, Fn: fn}
 }
 
 // rangeValue constructs a range [lo, hi]. Package-internal; use the .. operator in Buzz.

@@ -20,11 +20,19 @@ func init() { Register(Vcs) }
 var Vcs = Module{
 	Name: "vcs",
 	Doc:  "Version-control queries for the current working tree.",
-	Fields: []Field{
-		{Name: "name", Type: TypeString, Doc: "VCS short name (e.g. \"git\"). Empty if unresolved.", Resolver: VcsName},
-		{Name: "base", Type: TypeString, Doc: "Resolved base ref for diffs.", Resolver: VcsBase},
-	},
 	Methods: []Method{
+		{
+			Name:    "name",
+			Doc:     "VCS short name (e.g. \"git\"). Empty if unresolved, which is how a caller tests for a VCS without catching.",
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    VcsName,
+		},
+		{
+			Name:    "base",
+			Doc:     "Resolved base ref for diffs.",
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    VcsBase,
+		},
 		{
 			Name:    "root",
 			Doc:     "Absolute path of the repository root.",
@@ -143,9 +151,8 @@ func resolveVCS(ctx context.Context) (types.VCSDriver, string) {
 }
 
 // VcsName returns the active VCS short name (e.g. "git"), or "" if unresolved.
-// The Field is resolved once at module registration; the registration ctx is
-// threaded through so resolution honors the run's cancellation rather than a
-// detached background context.
+// Resolution is per call and honors the call's cancellation; resolveVCS caches
+// on cwd, so repeated reads cost a mutex rather than a probe.
 func VcsName(ctx context.Context) (string, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
@@ -154,8 +161,7 @@ func VcsName(ctx context.Context) (string, error) {
 	return v.Name(), nil
 }
 
-// VcsBase returns the resolved base ref used for diffs. Resolved once at module
-// registration with the registration ctx (see VcsName).
+// VcsBase returns the resolved base ref used for diffs (see VcsName).
 func VcsBase(ctx context.Context) (string, error) {
 	_, base := resolveVCS(ctx)
 	return base, nil

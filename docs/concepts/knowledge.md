@@ -110,7 +110,7 @@ used by (10)  op:go:go-build, op:go:go-clean, op:go:go-generate,
               op:go:go-mod-edit, op:go:go-mod-json, op:go:go-mod-tidy,
               op:go:go-run, op:go:go-test, op:go:go-vet, spell:go
 
-View in Graph Explorer: http://127.0.0.1:7391/console/graph/#view=blast&node=tool%3Ago&token=q2lYk8MY_plBI1553QrP9_LU07Z8kem-6N-iYYUmQME
+View in Graph Explorer: http://127.0.0.1:7391/console/graph/#view=blast&node=tool%3Ago
 (start the magus daemon if the graph does not load)
 ```
 <!-- /example -->
@@ -130,7 +130,7 @@ uses (2)    op:go:go-test, spell:go
 depends on  target:.:format
 part of     project:.
 
-View in Graph Explorer: http://127.0.0.1:7391/console/graph/#view=blast&node=target%3A.%3Atest&token=q2lYk8MY_plBI1553QrP9_LU07Z8kem-6N-iYYUmQME
+View in Graph Explorer: http://127.0.0.1:7391/console/graph/#view=blast&node=target%3A.%3Atest
 (start the magus daemon if the graph does not load)
 ```
 <!-- /example -->

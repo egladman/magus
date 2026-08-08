@@ -486,12 +486,12 @@ export fun renderRoot(site: Site) > void {
     final md = "---\ntags: [readme]\n---\n\n" + rawMd;
 
     var html = markdown\toHtml(md);
-    while (html.indexOf("href=\"./docs/") != null) {
-        html = html.replace("href=\"./docs/", "href=\"");
-    }
-    while (html.indexOf("href=\"docs/") != null) {
-        html = html.replace("href=\"docs/", "href=\"");
-    }
+    // split().join() replaces every occurrence in one pass. The loop form this
+    // replaced copied the whole rendered page once per link, and each copy is a
+    // distinct string the VM interns and never frees - across the whole site that
+    // was a dominant share of the render's peak memory.
+    html = html.split("href=\"./docs/").join("href=\"");
+    html = html.split("href=\"docs/").join("href=\"");
     // The home page sits at gen root, so its in-content links are rewritten root-to-root.
     html = renderContentHTML(html, "", "");
 

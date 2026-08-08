@@ -2,6 +2,7 @@ package forecast
 
 import (
 	"context"
+	"github.com/egladman/magus/internal/hostmem"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -267,4 +268,130 @@ func TestLPT_emptyAndDegenerate(t *testing.T) {
 	ps := testProjects("a")
 	got := lpt(ps, []int64{1_000}, 8)
 	assert.Len(t, got, 1, "1 project, 8 shards → 1 shard (empty shards pruned)")
+}
+
+// seedPeak records one outcome carrying a peak, enough for PredictPeakRSS.
+// consolidating returns constants under which optimalShardCount collapses to a
+// single shard (work < 2*setup), which is the situation the memory constraint
+// exists to override.
+func consolidating() Constants { return Constants{SetupP50Ms: 600_000, AlphaMs: 5_000} }
+
+func seedPeak(h *History, project, target string, bytes int64) {
+	if h.Projects == nil {
+		h.Projects = map[string]map[string]Stats{}
+	}
+	if h.Projects[project] == nil {
+		h.Projects[project] = map[string]Stats{}
+	}
+	s := h.Projects[project][target]
+	s.RecentOutcomes = append(s.RecentOutcomes, Outcome{Result: "pass", MaxRSSBytes: bytes})
+	h.Projects[project][target] = s
+}
+
+func TestPlan_memoryBudgetSplitsAShardThatWouldNotFit(t *testing.T) {
+	t.Parallel()
+	// The shape that took the runner down: two heavy projects the duration model
+	// is happy to consolidate, on a machine that cannot hold both at once.
+	h := History{Constants: consolidating()}
+	seedPeak(&h, "docs", "ci", 7<<30)
+	seedPeak(&h, ".", "ci", 6<<30)
+	ps := projects("docs", ".")
+
+	// An effectively infinite budget, NOT a zero one: zero means "derive from this
+	// host", so a bare Forecaster asserts something different on a 16GB CI runner
+	// than on a workstation - which is precisely how this test passed locally and
+	// failed in CI. Pin the budget whenever the assertion is about the time model.
+	unbudgeted := Forecaster{History: h, Target: "ci", MemoryBudgetBytes: 1 << 62}.Plan(ps, 8)
+	require.Len(t, unbudgeted, 1, "precondition: the time model consolidates these")
+
+	// The budget is USABLE memory, not the runner's nameplate: a 16GB runner also
+	// holds the agent, the Go build cache, node and the toolchains. 13GB of
+	// projects does not fit in what is left.
+	budgeted := Forecaster{History: h, Target: "ci", MemoryBudgetBytes: 12 << 30}.Plan(ps, 8)
+	assert.Len(t, budgeted, 2, "13GB of projects exceeds 12GB of usable memory; split it")
+}
+
+func TestPlan_memoryBudgetLeavesAFittingPlanAlone(t *testing.T) {
+	t.Parallel()
+	// Two small projects fit together, so the budget must not buy runners nobody
+	// needs - the constraint exists to prevent a death, not to fan out by default.
+	h := History{Constants: consolidating()}
+	seedPeak(&h, "a", "ci", 200<<20)
+	seedPeak(&h, "b", "ci", 300<<20)
+	ps := projects("a", "b")
+
+	got := Forecaster{History: h, Target: "ci", MemoryBudgetBytes: 16 << 30}.Plan(ps, 8)
+	assert.Len(t, got, 1, "500MB fits comfortably; do not split")
+}
+
+func TestPlan_unmeasuredProjectsPlanExactlyAsBefore(t *testing.T) {
+	t.Parallel()
+	// The compatibility guarantee. A workspace that has recorded no peaks - every
+	// workspace, the first time this ships - must get byte-identical planning,
+	// because unknown is not zero and must not be read as either free or vast.
+	h := History{}
+	ps := projects("a", "b", "c", "d")
+
+	// Pinned, not derived: a bare Forecaster reads this machine's memory, which
+	// would make the comparison mean different things on different hosts.
+	before := Forecaster{History: h, Target: "ci", MemoryBudgetBytes: 1 << 62}.Plan(ps, 8)
+	after := Forecaster{History: h, Target: "ci", MemoryBudgetBytes: 1 << 30}.Plan(ps, 8)
+	assert.Equal(t, len(before), len(after), "no recorded peaks must mean no change in plan")
+}
+
+func TestPlan_neverPlansFewerShardsThanTheTimeModelAsked(t *testing.T) {
+	t.Parallel()
+	// The constraint may only add runners. A memory prediction that is wrong
+	// should cost money, never correctness.
+	h := History{Constants: consolidating()}
+	seedPeak(&h, "a", "ci", 1<<20)
+	seedPeak(&h, "b", "ci", 1<<20)
+	ps := projects("a", "b")
+
+	base := Forecaster{History: h, Target: "ci", MemoryBudgetBytes: 1 << 62}.Plan(ps, 8)
+	withBudget := Forecaster{History: h, Target: "ci", MemoryBudgetBytes: 64 << 30}.Plan(ps, 8)
+	assert.GreaterOrEqual(t, len(withBudget), len(base))
+}
+
+func TestPlan_oneProjectOverBudgetDoesNotSpin(t *testing.T) {
+	t.Parallel()
+	// A single project bigger than the whole budget cannot be helped by splitting.
+	// It must terminate at the limit rather than loop, and still return every
+	// project exactly once.
+	h := History{Constants: consolidating()}
+	seedPeak(&h, "huge", "ci", 100<<30)
+	ps := projects("huge", "small")
+	seedPeak(&h, "small", "ci", 1<<20)
+
+	got := Forecaster{History: h, Target: "ci", MemoryBudgetBytes: 1 << 30}.Plan(ps, 8)
+	seen := map[string]int{}
+	for _, s := range got {
+		for _, p := range s {
+			seen[p.Path]++
+		}
+	}
+	assert.Equal(t, map[string]int{"huge": 1, "small": 1}, seen, "never drop or duplicate work")
+}
+
+func TestMemoryBudget_derivedFromTheHostWithNoKnob(t *testing.T) {
+	t.Parallel()
+	// The default path: no caller sets anything, and a budget still appears on any
+	// host magus can ask. This is the whole point of not exposing a config key -
+	// the protection has to be on for people who never heard of it.
+	f := Forecaster{Target: "ci"}
+	got := f.memoryBudget()
+	if hostmem.TotalBytes(context.Background()) == 0 {
+		assert.Zero(t, got, "an unmeasurable host must plan exactly as before, never on a guess")
+		return
+	}
+	assert.Positive(t, got, "a measurable host must get a budget without being configured")
+	assert.Less(t, got, hostmem.TotalBytes(context.Background()), "the budget must leave headroom for the agent, caches and toolchains")
+}
+
+func TestMemoryBudget_explicitSettingWins(t *testing.T) {
+	t.Parallel()
+	// Settable only so a test can pin behavior independently of the machine
+	// running it; no config key reaches this.
+	f := Forecaster{Target: "ci", MemoryBudgetBytes: 7 << 30}
+	assert.Equal(t, int64(7<<30), f.memoryBudget())
 }

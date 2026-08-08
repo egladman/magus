@@ -106,6 +106,19 @@ magus\project({
     // every target snapshot the entire site tree, defeating the cache boundary below.
     "targets": {
         "security": {"skip_cache": "reads the npm advisory database, which changes independently of this tree"},
+        // md-generate renders `magus describe graph -o markdown`, so its output is a
+        // function of the WHOLE knowledge graph - every source file in the workspace and
+        // the binary that walks them. Its declared inputs are the magusfiles, which is
+        // the only part of that a glob can name, so any other change leaves the key
+        // unmoved: a cache hit then replays a MAGUS.md built before it and REVERTS the
+        // committed one, which the drift gate correctly reports as drift. That is why a
+        // branch adding Go files fails this gate in CI (where the shared cache is
+        // restored) while passing on a clean checkout that has nothing to hit.
+        //
+        // Skipping the cache is the honest fix rather than widening readsFiles to the
+        // whole tree: the input set really is everything, and a key that claimed
+        // otherwise would go on being wrong in a way nobody could see.
+        "md-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
         // generate is the cheap orchestration and drift gate. Its actual work lives in
         // cacheable *-generate stages below, so unchanged docs do not rebuild the site.
         "generate": {"skip_cache": "is the drift gate itself; a replay would skip the check it exists to make", "exclusive": true},
@@ -268,8 +281,50 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(site_generate);
     // site_generate owns the full render, bundle, and manifest artifact.
     if (ctx.has_charm("rw")) { return; }
+    // Say when the gate did not run. It only fires from a CLEAN tree, so a
+    // developer with any uncommitted work gets exit 0 from a check that never
+    // executed - which reads as "passed" and is why drift kept reaching CI after
+    // a local run said it would not.
+    if (clean_before == false) {
+        magus\info("generate: drift gate skipped - generated files were already dirty when it started; commit, then re-run to actually check");
+    }
     if (clean_before and vcs\isDirty(GENERATED)) {
-        throw "generate: MAGUS.md or CHANGELOG.md or generated docs Markdown drifted; re-run `magus run generate:rw docs` and commit";
+        // Name the paths. "MAGUS.md or CHANGELOG.md or generated docs Markdown
+        // drifted" describes the whole GENERATED set, so a reader learns only that
+        // one of nine things moved - and this gate is INERT in a git worktree
+        // (vcs\isDirty does not report these paths there), so the one place it fires
+        // is CI, where nobody can poke at the tree afterwards. Guessing which file
+        // moved, from a machine where the check cannot fail, costs a push per guess.
+        var moved = mut [<str>];
+        foreach (path in GENERATED) {
+            if (vcs\isDirty([path])) { moved.append(path); }
+        }
+        // Print the diff, not just the names. This gate cannot fire on a developer
+        // machine (it is inert in a worktree), so CI is the only place it runs and
+        // the log is the only artifact anyone gets - and a name alone still leaves
+        // the reader guessing WHY a file they regenerated locally came out
+        // different on a runner. git only: hg and jj take different arguments, and
+        // a diagnostic must never be the thing that fails the build, so a backend
+        // that cannot answer just prints nothing.
+        if (vcs\name() == "git") {
+            // magus\info, NOT the command's own streamed output: a tool's stdout
+            // goes to the run log and the console shows only "likely diagnostics",
+            // which dropped this diff entirely on the first attempt. What a
+            // magusfile prints itself is what a reader actually sees.
+            final d = vcs\cmd(["diff", "--unified=1", "--"] + moved,
+                opts: {"allow_failure": true});
+            var body = d.stdout;
+            // A generated JSON file is one enormous line; bound it so the useful
+            // case (a small markdown drift) is not buried by the useless one.
+            if (body.len() > 4000) {
+                body = body.sub(0, len: 4000) + "\n... truncated; `magus query output <ref>` has it all";
+            }
+            if (body != "") {
+                magus\info("generate: what changed on this runner:\n" + body);
+            }
+        }
+        throw "generate: regeneration changed " + moved.join(", ")
+            + "; re-run `magus run generate:rw docs` and commit";
     }
 }
 

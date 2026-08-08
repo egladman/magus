@@ -135,10 +135,20 @@ type Method struct {
 	Impl any
 }
 
-// Field is a static, table-level value on a Module. Unlike a Method, a Field
-// is resolved once at registration time and stored as a plain value on the
-// module's Buzz map - callers read it without function invocation (e.g.
-// `vcs.name`, not `vcs.name()`).
+// Field is a static, table-level value on a Module: resolved once at registration
+// and stored as a plain value on the module's Buzz map, so a caller reads it without
+// invocation.
+//
+// NO MODULE USES THIS, and TestNoModuleDeclaresFields keeps it that way. A Field
+// generates no extern declaration - Buzz has syntax for `extern fun` and none for an
+// extern value - so the checker cannot type it, and a caller who writes the parens
+// gets a runtime "str is not callable" instead of a compile error. vcs.name and
+// vcs.base were Fields and cost exactly that; both are Methods now. Declare a
+// constant as a Method returning it.
+//
+// The type stays because magus-docs, langservice-manifest and the ModuleFieldEntry
+// boundary type all render Fields, and dropping it would change a Buzz-visible
+// introspection shape to delete a branch that already never runs.
 type Field struct {
 	Name string
 	Doc  string

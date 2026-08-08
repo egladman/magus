@@ -56,12 +56,14 @@ export object Tag {
     id: str = "",
 }
 
+export extern fun base() > str;
 export extern fun cmd(args: [str], opts: {str: any} = {<str: any>}) > ExecResult;
 export extern fun commit(rev: str = "") > Commit;
 export extern fun describe() > str;
 export extern fun diff(base: str = "") > [Path];
 export extern fun history(limit: int = 10) > [Commit];
 export extern fun isDirty(paths: [str] = [<str>]) > bool;
+export extern fun name() > str;
 export extern fun ref() > str;
 export extern fun root() > str;
 export extern fun status(paths: [str] = [<str>]) > Status;

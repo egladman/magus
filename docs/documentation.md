@@ -85,6 +85,7 @@ Once the basics click, these cover running magus at scale and in CI.
 - [Editor setup](guides/editor.md) - wire your editor to `magus buzz lsp` for magusfile completion, hover, and signature help.
 - [Git integration](guides/git.md) - the generated-file merge driver and what no forge will run, settling conflicts with `magus vcs resolve`, and the rule every magus hook obeys: a hook hands off work, it never does work.
 - [Debugging](guides/debugging.md) - the interactive REPL, `magus\pry()` breakpoints, and stepping through a target.
+- [Profiling](guides/profiling.md) - find the magusfile line filling memory, read the low-headroom warning, and fix the string-building pattern that costs gigabytes.
 - [Tips and tricks](guides/tips.md) - non-obvious ways to combine subcommands.
 - [MCP](guides/mcp.md) - drive magus from agents over the Model Context Protocol.
 - [Telemetry](concepts/telemetry.md) - OpenTelemetry traces and metrics.

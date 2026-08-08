@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
+	"github.com/egladman/magus/internal/hostmem"
 	"github.com/egladman/magus/internal/interactive"
 	interp "github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
@@ -31,6 +32,7 @@ import (
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/service"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -427,7 +429,11 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// is inherent (not an author opt-in), so OR it into the explicit SkipCache policy.
 	step.NoCache = pol.SkipCache || servesTarget(p.ResolvedSpells, target)
 	step.Exclusive = pol.Exclusive
-	step.Slots = pol.Slots
+	// Resolve the two spellings of the same claim into the one number the limiter
+	// understands. A target declaring memory_mb holds however many slots that memory
+	// is worth on THIS host, so an 8GB suite throttles peers on a 16GB runner and
+	// barely registers on a 64GB workstation, without the magusfile naming either.
+	step.Slots = slotsForPolicy(pol.Slots, pol.MemoryMB, m.limiter().Capacity(), m.hostTotalBytes())
 	return step
 }
 
@@ -686,6 +692,45 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// installs its own first, and this leaves it alone.
 	ctx = types.EnsureReturnCapture(ctx)
 
+	// Watch host memory for the life of the invocation. Every dispatch passes
+	// through here and the machine is what is at risk, so this belongs per-run;
+	// the peak-RSS collector in invokeSpell answers which target was expensive.
+	// Silent unless headroom collapses.
+	//
+	// Not started for a dry run, which executes nothing and so cannot exhaust
+	// anything. Joined rather than merely cancelled: an in-flight report would
+	// otherwise land after the summary footer, or be cut off by process exit.
+	if m.cache != nil && !opts.DryRun {
+		// Rebase the heap peak and attribution: the daemon serves many invocations
+		// from one process against a heap that never shrinks, and without this the
+		// first run's peak is reported against every later one.
+		vm.ResetHeapStats()
+		watchCtx, stopWatch := context.WithCancel(ctx)
+		var watchDone sync.WaitGroup
+		watchDone.Add(1)
+		go func() {
+			defer watchDone.Done()
+			hostmem.Watch(watchCtx, func(available, total int64) {
+				heap := vm.ReadHeapStats()
+				var hot string
+				if sites, _ := vm.HeapHotSites(1); len(sites) > 0 {
+					hot = sites[0].Site
+				}
+				m.cache.LogMemoryPressure(ctx, cache.MemoryPressure{
+					AvailableBytes: available,
+					TotalBytes:     total,
+					BuzzObjects:    heap.Objects,
+					BuzzPeak:       heap.Peak,
+					BuzzHotSite:    hot,
+				})
+			})
+		}()
+		defer func() {
+			stopWatch()
+			watchDone.Wait()
+		}()
+	}
+
 	if opts.DryRun {
 		// Deep dry run: evaluate each target body under a tracing context, so
 		// effectful host ops (exec, fs writes, network, env) record their intent and
@@ -893,9 +938,17 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		)
 	}
 
+	// Installed whenever history is enabled, NOT only when a target opted into
+	// retries. The history this writes is the same store the shard forecaster
+	// reads, so gating installation on RetryOnVolatile meant a workspace where no
+	// target opts in - which is this one - recorded nothing at all, and the
+	// forecaster predicted DefaultDurationMs for every project forever. Retrying
+	// stays gated: the flag rides on the runtime and Decide honours it, so a
+	// target that never asked for a retry still never gets one.
 	var volatilityRT *volatility.Runtime
-	if trackVolatile && m.cfg.Volatility.Enabled && !opts.NoVolatilityRetry {
-		volatilityRT = m.buildVolatilityRuntime(ctx)
+	if m.cfg.Volatility.Enabled {
+		retry := trackVolatile && !opts.NoVolatilityRetry
+		volatilityRT = m.buildVolatilityRuntime(ctx, retry)
 		if volatilityRT != nil {
 			ctx = volatility.WithRuntime(ctx, volatilityRT)
 		}
@@ -1178,16 +1231,21 @@ func checkOutputOverlap(steps []cache.Step, target string, w *report.Writer) {
 }
 
 // buildVolatilityRuntime returns a volatility.Runtime for the current run, or nil when history cannot be loaded.
-func (m *Magus) buildVolatilityRuntime(ctx context.Context) *volatility.Runtime {
+func (m *Magus) buildVolatilityRuntime(ctx context.Context, retry bool) *volatility.Runtime {
 	var h forecast.History
 	if err := h.Load(ctx, m.cfg.HistoryPath); err != nil {
 		return nil
 	}
+	// Only when retrying. affected feeds shouldRetry and nothing else, so computing
+	// it for a run that will never retry buys nothing and costs a full affected
+	// pass - which every invocation now reaches, since recording is unconditional.
 	var affected []string
-	if res, err := m.Affected(ctx, ""); err == nil {
-		affected = res.Affected
+	if retry {
+		if res, err := m.Affected(ctx, ""); err == nil {
+			affected = res.Affected
+		}
 	}
-	return volatility.NewRuntime(&h, m.cfg.HistoryPath, m.volatilityConfig(), affected)
+	return volatility.NewRuntime(&h, m.cfg.HistoryPath, m.volatilityConfig(), affected, retry)
 }
 
 // runTarget executes name on every spell in p and rejects writes into descendant projects.
@@ -1214,6 +1272,11 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 	volatileTarget := s.Name() + "/" + name
 	affected := rt.IsAffected(p.Path)
 	start := time.Now()
+	// Collect the peak resident memory of every process this target runs, so the
+	// outcome recorded below carries a memory figure alongside its duration. The
+	// collector is installed here rather than higher up because the unit that
+	// has to fit on one runner is the target, not the invocation.
+	ctx = types.WithPeakRSS(ctx)
 	resp, err := s.Invoke(ctx, req)
 	// Only a SUCCESSFUL invocation's value is recorded. A failed attempt is not
 	// snapshotted, so its value has no consumer, and recording it would survive
@@ -1246,12 +1309,17 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 		}
 	}
 
+	// Reported only when a process actually reported one: an unmeasured target
+	// must stay zero in the record so a reader can tell it apart from a
+	// measured-and-tiny one.
+	peakRSS := types.PeakRSS(ctx)
 	rt.Record(p.Path, volatileTarget, forecast.Outcome{
 		Result:         result,
 		AffectedByDiff: affected,
 		DurationMs:     time.Since(start).Milliseconds(),
 		At:             time.Now(),
 		Attempts:       attempts,
+		MaxRSSBytes:    peakRSS,
 	})
 
 	if decision.Retry {

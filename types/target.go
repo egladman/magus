@@ -133,10 +133,21 @@ type Target struct {
 	// were once workarounds for a snapshot error that no longer exists, and a bare
 	// bool gave no way to tell them from the real ones.
 	SkipCacheReason string `json:"skip_cache_reason,omitempty" buzz:"skip_cache_reason"`
-	Exclusive       bool   `json:"exclusive,omitempty"`                // run alone: no other target runs concurrently
-	Slots           int    `json:"slots,omitempty"`                    // concurrency slots to hold while running (0 or 1 = one slot); throttles parallel work around a resource-heavy target. Clamped to the run's total slot budget.
-	FailOnDrift     bool   `json:"failOnDrift,omitempty" buzz:"-"`     // fail the run if the working tree is dirty after this target (drift gate)
-	RetryOnVolatile bool   `json:"retryOnVolatile,omitempty" buzz:"-"` // route through volatility detection + auto-retry
+	Exclusive       bool   `json:"exclusive,omitempty"` // run alone: no other target runs concurrently
+	Slots           int    `json:"slots,omitempty"`     // concurrency slots to hold while running (0 or 1 = one slot); throttles parallel work around a resource-heavy target. Clamped to the run's total slot budget.
+	// MemoryMB is the peak resident memory this target needs, in megabytes; 0 means
+	// undeclared. It is a portable way to spell Slots: an author knows a race-enabled
+	// test suite wants 8GB, but nobody can say how many slots that is on a machine
+	// they have never seen, and the answer differs between a 16GB CI runner and a
+	// 64GB workstation. magus converts it against the host's memory-per-slot share
+	// and holds that many slots, so there is ONE admission path rather than two
+	// budgets that can disagree.
+	//
+	// Undeclared (0) and an unmeasurable host both mean "take one slot", which is
+	// exactly the behaviour that existed before this field.
+	MemoryMB        int  `json:"memory_mb,omitempty" buzz:"memory_mb"`
+	FailOnDrift     bool `json:"failOnDrift,omitempty" buzz:"-"`     // fail the run if the working tree is dirty after this target (drift gate)
+	RetryOnVolatile bool `json:"retryOnVolatile,omitempty" buzz:"-"` // route through volatility detection + auto-retry
 	// IncludeOS and IncludeArch override cache.include.*.enabled for this target.
 	// nil inherits the workspace answer, which is what an undeclared target gets.
 	//

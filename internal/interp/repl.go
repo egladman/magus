@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp/engine"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/fatih/color"
 	"golang.org/x/term"
 )
@@ -267,7 +268,7 @@ func commonPrefix(items []string) string {
 // handleReplMeta together.
 func metaCommands(drivers []engine.ReplDriver) []string {
 	_ = drivers
-	out := []string{".exit", ".help", ".load", ".quit"}
+	out := []string{".exit", ".heap", ".help", ".load", ".quit"}
 	slices.Sort(out)
 	return out
 }
@@ -550,6 +551,7 @@ func replHelp(w io.Writer, drivers []engine.ReplDriver) {
 	}
 	fmt.Fprintln(w, "  .load <path>     execute a file")
 	fmt.Fprintln(w, "  .exit / .quit    exit the REPL")
+	fmt.Fprintln(w, "  .heap            heap size and the lines growing it")
 	fmt.Fprintln(w, "  .help            show this message")
 }
 
@@ -731,6 +733,9 @@ func handlePryMeta(ctx context.Context, stdout, stderr io.Writer, line string, s
 		return ResumeFinish, true
 	case ".help":
 		pryHelp(stdout)
+		return pryMetaConsumed, true
+	case ".heap":
+		printHeap(stdout, st.useColor)
 		return pryMetaConsumed, true
 	case ".where", ".backtrace":
 		printBacktrace(stdout, st.debug, st.pctx, st.currentFrame, st.useColor)
@@ -963,4 +968,32 @@ func displaySource(short, full string) string {
 		return short
 	}
 	return strings.TrimPrefix(full, "@")
+}
+
+// printHeap reports the script heap and the lines responsible for its growth.
+//
+// This is the profiler view inside the debugger. The VM's heap is append-only, so
+// a magusfile can exhaust a machine without any single value being large - the one
+// failure mode where a paused stack tells you where you ARE but nothing about what
+// filled memory getting there. Objects rather than bytes: the pathological shape is
+// millions of small strings, which a size reading makes look unremarkable.
+func printHeap(w io.Writer, useColor bool) {
+	st := vm.ReadHeapStats()
+	fmt.Fprintf(w, "%s %d objects live, %d peak this run\n",
+		pryColorize(useColor, "heap:", color.FgCyan), st.Objects, st.Peak)
+
+	sites, partial := vm.HeapHotSites(5)
+	if len(sites) == 0 {
+		fmt.Fprintln(w, "  (no growth sampled yet; the sampler needs a few thousand instructions)")
+		return
+	}
+	fmt.Fprintln(w, "  growth by source position, largest first:")
+	for _, s := range sites {
+		fmt.Fprintf(w, "    %-40s %d\n", s.Site, s.Objects)
+	}
+	if partial {
+		fmt.Fprintln(w, "  (table full: some positions are not listed)")
+	}
+	fmt.Fprintln(w, "  a position that climbs with input size is quadratic in memory;")
+	fmt.Fprintln(w, "  build into a list and join once rather than reassigning a string.")
 }

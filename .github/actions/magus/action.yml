@@ -88,6 +88,17 @@ runs:
         case "$INPUT_COMMAND" in
           *[\;\&\|\`\$\(\)\<\>\!\\]*) echo "::error::magus action: command contains shell metacharacters: $INPUT_COMMAND"; exit 1 ;;
         esac
+        # Host memory is watched by magus itself, not by a loop here. This used to be
+        # a backgrounded shell sampler, and it was the wrong home twice over: it read
+        # `free`/`df`, so it worked on Linux runners and nowhere else, and it was
+        # untestable without stubbing both. internal/hostmem does the same job in Go,
+        # covered by tests, and streams a [warn] line the moment headroom collapses -
+        # which is what has to survive, because a killed runner never lets magus reach
+        # the summary it would otherwise print. See internal/hostmem/watch.go.
+        #
+        # The disk half is gone rather than ported: every sample it ever took reported
+        # 82-85GB free, so it was watching something that was never a candidate. Add it
+        # back when a measurement, not a hunch, says disk is in play.
         # Word-split is intentional here: INPUT_COMMAND is a space-separated argv.
         # shellcheck disable=SC2086
         magus $INPUT_COMMAND

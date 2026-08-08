@@ -20,12 +20,20 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
 	m := vm.NewMap()
-	if v, err := std.VcsName(ctx); err == nil {
-		m.MapSet("name", StrVal(v))
-	}
-	if v, err := std.VcsBase(ctx); err == nil {
-		m.MapSet("base", StrVal(v))
-	}
+	m.MapSet("name", vm.DirectValue("vcs.name", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := std.VcsName(ctx)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrVal(ret0), nil
+	}))
+	m.MapSet("base", vm.DirectValue("vcs.base", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := std.VcsBase(ctx)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrVal(ret0), nil
+	}))
 	m.MapSet("root", vm.DirectValue("vcs.root", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.VcsRoot(ctx)
 		if err != nil {

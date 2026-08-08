@@ -33,7 +33,26 @@ env:
   MAGUS_CACHE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}
   MAGUS_CACHE_REMOTE_INSECURE: 'true'
   MAGUS_CACHE_REMOTE_TRUSTED_KEYS: ${{ vars.MAGUS_CACHE_PUBLIC_KEY }}
+  # A CEILING, not a target: the forecaster picks the count, and may raise it to
+  # split a shard predicted to exceed the runner's memory. Held at 2 deliberately -
+  # shard count is not runner spend, but it is runner *concurrency*, and the OOM
+  # that made this knob interesting turned out to be one magusfile allocating 13GB,
+  # not too much work on one machine. Raise it when a measurement asks for it.
   MAGUS_CI_MAX_SHARDS: '2'
+  # Stream every target's output live instead of withholding it until something
+  # fails. magus collapses on success by default, which is right on a terminal you
+  # are sitting at and wrong in a log nobody reads until it goes red: a green run
+  # printed nothing at all, and a failing one opened with "221 log line(s)
+  # omitted". Neither leaves a record of what the run was DOING when a shard was
+  # killed mid-target - which is the case that sent us looking.
+  #
+  # Set here rather than defaulted inside magus on GITHUB_ACTIONS, so the choice is
+  # visible in the file a reader is already looking at, and magus behaves the same
+  # everywhere. -s/--silent still overrides it.
+  #
+  # The cost is real: output from concurrently running projects interleaves, so
+  # read a shard log by target rather than top to bottom.
+  MAGUS_LOG_STREAM: '1'
 
 jobs:
   preflight:
@@ -146,11 +165,19 @@ jobs:
       - name: Install native build dependencies (webkit, codec)
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev liblzma-dev libzstd-dev
 
+      # `describe <noun> [name]` - the noun comes FIRST, and the template fields
+      # are the -o json names. This previously read `describe -o template=... $p`
+      # with {{.Project}} and {{.Base}}: the flag was parsed as the noun, so every
+      # invocation died on `unknown noun "-o"`, and neither field exists on any
+      # describe output anyway. It annotated nothing for as long as it has been
+      # here, silently, because usage errors exited 0 and continue-on-error hid
+      # what was left. Exit codes became meaningful in #22, which is what finally
+      # made a step that never worked start saying so.
       - name: Annotate affected projects
         continue-on-error: true
         run: |
           for p in ${{ matrix.projects }}; do
-            magus describe -o 'template=::notice title=affected::{{.Project}} (base: {{.Base}})' "$p"
+            magus describe project "$p" -o 'template={{range .projects}}::notice title=affected::{{.path}}{{end}}'
           done
 
       - name: Restore magus run history

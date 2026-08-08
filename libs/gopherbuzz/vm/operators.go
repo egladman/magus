@@ -374,12 +374,38 @@ func setMember(vm *VM, obj Value, name string, val Value) error {
 	}
 }
 
+// builtinMethod resolves a built-in method on a primitive receiver and returns
+// the callable itself rather than a Value for it, so a call site can invoke it
+// without allocating (see newDirect and OpInvoke). nil means name is not a
+// builtin method of obj.
+//
+// A map receiver is deliberately NOT handled here: a stored key of the same name
+// shadows the builtin, and honouring that rule inside this function would cost
+// every record field read a second map lookup. getMember and OpInvoke each apply
+// the priority themselves, against a single map lookup, and call mapMethod
+// directly.
+func builtinMethod(vm *VM, obj Value, name string) *directObj {
+	switch obj.tag() {
+	case tagList:
+		return listMethod(vm, obj, name)
+	case tagStr:
+		return strMethod(vm, obj, name)
+	case tagFib:
+		return fibMethod(vm, obj, name)
+	case tagPat:
+		return patMethod(vm, obj, name)
+	case tagRange:
+		return rngMethod(vm, obj, name)
+	}
+	return nil
+}
+
 // getMember resolves obj.name.
 func getMember(vm *VM, obj Value, name string) (Value, error) {
 	switch obj.tag() {
-	case tagList:
-		if m := listMethod(vm, obj, name); m != Null {
-			return m, nil
+	case tagList, tagStr, tagFib, tagPat, tagRange:
+		if d := builtinMethod(vm, obj, name); d != nil {
+			return heapValue(tagDirect, d), nil
 		}
 		return Null, nil
 	case tagMap:
@@ -391,31 +417,12 @@ func getMember(vm *VM, obj Value, name string) (Value, error) {
 		// the other way, which meant adding any builtin could silently shadow a field:
 		// `obj{ map: {K: V} }` stopped reading its `map` field the moment map.map
 		// existed. A name the map does not hold still resolves to the builtin.
+		// OpInvoke mirrors this ordering; keep the two in step.
 		if v, ok := m.get(name); ok {
 			return v, nil
 		}
-		if bm := mapMethod(vm, obj, name); bm != Null {
-			return bm, nil
-		}
-		return Null, nil
-	case tagStr:
-		if m := strMethod(vm, obj, name); m != Null {
-			return m, nil
-		}
-		return Null, nil
-	case tagFib:
-		if m := fibMethod(vm, obj, name); m != Null {
-			return m, nil
-		}
-		return Null, nil
-	case tagPat:
-		if m := patMethod(vm, obj, name); m != Null {
-			return m, nil
-		}
-		return Null, nil
-	case tagRange:
-		if m := rngMethod(vm, obj, name); m != Null {
-			return m, nil
+		if bm := mapMethod(vm, obj, name); bm != nil {
+			return heapValue(tagDirect, bm), nil
 		}
 		return Null, nil
 	case tagObject:
@@ -462,22 +469,23 @@ func getMember(vm *VM, obj Value, name string) (Value, error) {
 	}
 }
 
-// listMethod returns a bound DirectValue for the named built-in List method,
-// or Null if name is not a known list method.
-func listMethod(vm *VM, list Value, name string) Value {
+// listMethod returns the callable for the named built-in List method, or nil if
+// name is not a known list method. It returns a *directObj rather than a Value
+// so an immediate call never allocates one; see newDirect.
+func listMethod(vm *VM, list Value, name string) *directObj {
 	lo := vm.asList(list)
 	// In-place mutators require a mutable list (immutable by default).
 	switch name {
 	case "append", "insert", "remove", "pop", "fill":
 		if !lo.Mut {
-			return DirectValue("list."+name, func(context.Context, []Value) (Value, error) {
+			return newDirect("list."+name, func(context.Context, []Value) (Value, error) {
 				return Null, errImmutable("list")
 			})
 		}
 	}
 	switch name {
 	case "len":
-		return DirectValue("list.len", func(_ context.Context, _ []Value) (Value, error) {
+		return newDirect("list.len", func(_ context.Context, _ []Value) (Value, error) {
 			return IntValue(int64(len(lo.Items))), nil
 		})
 	case "next":
@@ -485,7 +493,7 @@ func listMethod(vm *VM, list Value, name string) Value {
 		// null meaning "start" and a null result meaning "exhausted". It returns keys
 		// rather than values so a caller can index back into the list, which is what
 		// makes it composable with the subscript.
-		return DirectValue("list.next", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("list.next", func(_ context.Context, args []Value) (Value, error) {
 			if len(lo.Items) == 0 {
 				return Null, nil
 			}
@@ -502,7 +510,7 @@ func listMethod(vm *VM, list Value, name string) Value {
 			return IntValue(i + 1), nil
 		})
 	case "append":
-		return DirectValue("list.append", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("list.append", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("list.append: requires a value argument")
 			}
@@ -510,7 +518,7 @@ func listMethod(vm *VM, list Value, name string) Value {
 			return Null, nil
 		})
 	case "insert":
-		return DirectValue("list.insert", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("list.insert", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 2 || !args[0].IsInt() {
 				return Null, fmt.Errorf("list.insert: requires (int index, T value)")
 			}
@@ -524,7 +532,7 @@ func listMethod(vm *VM, list Value, name string) Value {
 			return args[1], nil
 		})
 	case "remove":
-		return DirectValue("list.remove", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("list.remove", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 1 || !args[0].IsInt() {
 				return Null, fmt.Errorf("list.remove: requires int index")
 			}
@@ -541,7 +549,7 @@ func listMethod(vm *VM, list Value, name string) Value {
 			return removed, nil
 		})
 	case "pop":
-		return DirectValue("list.pop", func(_ context.Context, _ []Value) (Value, error) {
+		return newDirect("list.pop", func(_ context.Context, _ []Value) (Value, error) {
 			if len(lo.Items) == 0 {
 				return Null, nil
 			}
@@ -550,7 +558,7 @@ func listMethod(vm *VM, list Value, name string) Value {
 			return last, nil
 		})
 	case "sub":
-		return DirectValue("list.sub", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("list.sub", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 1 || !args[0].IsInt() {
 				return Null, fmt.Errorf("list.sub: requires (int start, int? len)")
 			}
@@ -576,7 +584,7 @@ func listMethod(vm *VM, list Value, name string) Value {
 			return ListValue(cp), nil
 		})
 	case "indexOf":
-		return DirectValue("list.indexOf", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("list.indexOf", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("list.indexOf: requires a value argument")
 			}
@@ -588,7 +596,7 @@ func listMethod(vm *VM, list Value, name string) Value {
 			return Null, nil
 		})
 	case "join":
-		return DirectValue("list.join", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("list.join", func(_ context.Context, args []Value) (Value, error) {
 			sep := ""
 			if len(args) >= 1 && args[0].IsStr() {
 				sep = args[0].AsString()
@@ -600,7 +608,7 @@ func listMethod(vm *VM, list Value, name string) Value {
 			return StrValue(strings.Join(parts, sep)), nil
 		})
 	case "forEach":
-		return DirectValue("list.forEach", func(ctx context.Context, args []Value) (Value, error) {
+		return newDirect("list.forEach", func(ctx context.Context, args []Value) (Value, error) {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("list.forEach: requires a callback function")
 			}
@@ -613,7 +621,7 @@ func listMethod(vm *VM, list Value, name string) Value {
 			return Null, nil
 		})
 	case "map":
-		return DirectValue("list.map", func(ctx context.Context, args []Value) (Value, error) {
+		return newDirect("list.map", func(ctx context.Context, args []Value) (Value, error) {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("list.map: requires a callback function")
 			}
@@ -630,7 +638,7 @@ func listMethod(vm *VM, list Value, name string) Value {
 			return ListValue(out), nil
 		})
 	case "filter":
-		return DirectValue("list.filter", func(ctx context.Context, args []Value) (Value, error) {
+		return newDirect("list.filter", func(ctx context.Context, args []Value) (Value, error) {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("list.filter: requires a callback function")
 			}
@@ -648,7 +656,7 @@ func listMethod(vm *VM, list Value, name string) Value {
 			return ListValue(out), nil
 		})
 	case "reduce":
-		return DirectValue("list.reduce", func(ctx context.Context, args []Value) (Value, error) {
+		return newDirect("list.reduce", func(ctx context.Context, args []Value) (Value, error) {
 			if len(args) < 2 {
 				return Null, fmt.Errorf("list.reduce: requires (callback, initial)")
 			}
@@ -664,7 +672,7 @@ func listMethod(vm *VM, list Value, name string) Value {
 			return acc, nil
 		})
 	case "sort":
-		return DirectValue("list.sort", func(ctx context.Context, args []Value) (Value, error) {
+		return newDirect("list.sort", func(ctx context.Context, args []Value) (Value, error) {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("list.sort: requires a comparator callback")
 			}
@@ -704,7 +712,7 @@ func listMethod(vm *VM, list Value, name string) Value {
 			return list, nil
 		})
 	case "reverse":
-		return DirectValue("list.reverse", func(_ context.Context, _ []Value) (Value, error) {
+		return newDirect("list.reverse", func(_ context.Context, _ []Value) (Value, error) {
 			cp := make([]Value, len(lo.Items))
 			for i, v := range lo.Items {
 				cp[len(lo.Items)-1-i] = v
@@ -715,7 +723,7 @@ func listMethod(vm *VM, list Value, name string) Value {
 		// fill(value, start: int?, len: int?) - upstream fills a RANGE, defaulting to
 		// the whole list. Ignoring start/len silently filled everything, which passes
 		// the simple case and quietly corrupts the windowed one.
-		return DirectValue("list.fill", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("list.fill", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("list.fill: requires a value argument")
 			}
@@ -747,22 +755,23 @@ func listMethod(vm *VM, list Value, name string) Value {
 		// and copyImmutable are upstream's aliases for the two clone forms (obj.zig
 		// declares them via .aliases), not separate operations.
 		mut := name == "cloneMutable" || name == "copyMutable"
-		return DirectValue("list."+name, func(_ context.Context, _ []Value) (Value, error) {
+		return newDirect("list."+name, func(_ context.Context, _ []Value) (Value, error) {
 			cp := make([]Value, len(lo.Items))
 			copy(cp, lo.Items)
 			return heapValue(tagList, &listObj{Items: cp, Mut: mut}), nil
 		})
 	}
-	return Null
+	return nil
 }
 
-// mapMethod returns a bound DirectValue for the named built-in Map method,
-// or Null if name is not a known map method.
-func mapMethod(vm *VM, m Value, name string) Value {
+// mapMethod returns the callable for the named built-in Map method, or nil if
+// name is not a known map method. Callers must give a stored key of the same
+// name priority over the builtin; see getMember.
+func mapMethod(vm *VM, m Value, name string) *directObj {
 	mp := vm.asMap(m)
 	// In-place mutators require a mutable map (immutable by default).
 	if name == "remove" && !mp.Mut {
-		return DirectValue("map.remove", func(context.Context, []Value) (Value, error) {
+		return newDirect("map.remove", func(context.Context, []Value) (Value, error) {
 			return Null, errImmutable("map")
 		})
 	}
@@ -779,14 +788,14 @@ func mapMethod(vm *VM, m Value, name string) Value {
 		// nothing stores that name.
 		if name == "len" {
 			if _, ok := mp.get("len"); ok {
-				return Null
+				return nil
 			}
 		}
-		return DirectValue("map."+name, func(_ context.Context, _ []Value) (Value, error) {
+		return newDirect("map."+name, func(_ context.Context, _ []Value) (Value, error) {
 			return IntValue(int64(len(mp.Keys))), nil
 		})
 	case "remove":
-		return DirectValue("map.remove", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("map.remove", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 1 || !args[0].IsStr() {
 				return Null, fmt.Errorf("map.remove: requires a str key argument")
 			}
@@ -802,7 +811,7 @@ func mapMethod(vm *VM, m Value, name string) Value {
 			return Null, nil
 		})
 	case "keys":
-		return DirectValue("map.keys", func(_ context.Context, _ []Value) (Value, error) {
+		return newDirect("map.keys", func(_ context.Context, _ []Value) (Value, error) {
 			out := make([]Value, len(mp.Keys))
 			for i, k := range mp.Keys {
 				out[i] = StrValue(k)
@@ -810,13 +819,13 @@ func mapMethod(vm *VM, m Value, name string) Value {
 			return ListValue(out), nil
 		})
 	case "values":
-		return DirectValue("map.values", func(_ context.Context, _ []Value) (Value, error) {
+		return newDirect("map.values", func(_ context.Context, _ []Value) (Value, error) {
 			out := make([]Value, len(mp.Vals))
 			copy(out, mp.Vals)
 			return ListValue(out), nil
 		})
 	case "forEach":
-		return DirectValue("map.forEach", func(ctx context.Context, args []Value) (Value, error) {
+		return newDirect("map.forEach", func(ctx context.Context, args []Value) (Value, error) {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("map.forEach: requires a callback function")
 			}
@@ -834,7 +843,7 @@ func mapMethod(vm *VM, m Value, name string) Value {
 		// members, which an anonymous `.{ key = ..., value = ... }` literal builds - so
 		// the result may arrive as a map or, when it resolved to a named object, as an
 		// instance. Both are read through getMember.
-		return DirectValue("map.map", func(ctx context.Context, args []Value) (Value, error) {
+		return newDirect("map.map", func(ctx context.Context, args []Value) (Value, error) {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("map.map: requires a callback function")
 			}
@@ -858,7 +867,7 @@ func mapMethod(vm *VM, m Value, name string) Value {
 			return out, nil
 		})
 	case "filter":
-		return DirectValue("map.filter", func(ctx context.Context, args []Value) (Value, error) {
+		return newDirect("map.filter", func(ctx context.Context, args []Value) (Value, error) {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("map.filter: requires a callback function")
 			}
@@ -876,7 +885,7 @@ func mapMethod(vm *VM, m Value, name string) Value {
 			return out, nil
 		})
 	case "reduce":
-		return DirectValue("map.reduce", func(ctx context.Context, args []Value) (Value, error) {
+		return newDirect("map.reduce", func(ctx context.Context, args []Value) (Value, error) {
 			if len(args) < 2 {
 				return Null, fmt.Errorf("map.reduce: requires (callback, initial)")
 			}
@@ -892,7 +901,7 @@ func mapMethod(vm *VM, m Value, name string) Value {
 			return acc, nil
 		})
 	case "hasKey":
-		return DirectValue("map.hasKey", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("map.hasKey", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("map.hasKey: requires 1 argument")
 			}
@@ -903,7 +912,7 @@ func mapMethod(vm *VM, m Value, name string) Value {
 		// cloneMutable yields a mutable copy; the rest an immutable one. copyMutable
 		// and copyImmutable are upstream's aliases for the two clone forms.
 		mut := name == "cloneMutable" || name == "copyMutable"
-		return DirectValue("map."+name, func(_ context.Context, _ []Value) (Value, error) {
+		return newDirect("map."+name, func(_ context.Context, _ []Value) (Value, error) {
 			nm := newMapObj()
 			nm.Mut = mut
 			for i, k := range mp.Keys {
@@ -912,7 +921,7 @@ func mapMethod(vm *VM, m Value, name string) Value {
 			return vm.allocMap(nm), nil
 		})
 	case "diff":
-		return DirectValue("map.diff", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("map.diff", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 1 || !args[0].IsMap() {
 				return Null, fmt.Errorf("map.diff: requires a map argument")
 			}
@@ -926,7 +935,7 @@ func mapMethod(vm *VM, m Value, name string) Value {
 			return out, nil
 		})
 	case "intersect":
-		return DirectValue("map.intersect", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("map.intersect", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 1 || !args[0].IsMap() {
 				return Null, fmt.Errorf("map.intersect: requires a map argument")
 			}
@@ -940,7 +949,7 @@ func mapMethod(vm *VM, m Value, name string) Value {
 			return out, nil
 		})
 	case "sort":
-		return DirectValue("map.sort", func(ctx context.Context, args []Value) (Value, error) {
+		return newDirect("map.sort", func(ctx context.Context, args []Value) (Value, error) {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("map.sort: requires a comparator callback")
 			}
@@ -986,33 +995,33 @@ func mapMethod(vm *VM, m Value, name string) Value {
 			return m, nil
 		})
 	}
-	return Null
+	return nil
 }
 
-// strMethod returns a bound DirectValue for the named built-in String method,
-// or Null if name is not a known string method.
-func strMethod(vm *VM, s Value, name string) Value {
+// strMethod returns the callable for the named built-in String method, or nil if
+// name is not a known string method.
+func strMethod(vm *VM, s Value, name string) *directObj {
 	sobj := vm.asStr(s)
 	str := sobj.V
 	switch name {
 	case "len":
-		return DirectValue("str.len", func(_ context.Context, _ []Value) (Value, error) {
+		return newDirect("str.len", func(_ context.Context, _ []Value) (Value, error) {
 			return IntValue(int64(utf8.RuneCountInString(str))), nil
 		})
 	case "upper":
-		return DirectValue("str.upper", func(_ context.Context, _ []Value) (Value, error) {
+		return newDirect("str.upper", func(_ context.Context, _ []Value) (Value, error) {
 			return StrValue(strings.ToUpper(str)), nil
 		})
 	case "lower":
-		return DirectValue("str.lower", func(_ context.Context, _ []Value) (Value, error) {
+		return newDirect("str.lower", func(_ context.Context, _ []Value) (Value, error) {
 			return StrValue(strings.ToLower(str)), nil
 		})
 	case "trim":
-		return DirectValue("str.trim", func(_ context.Context, _ []Value) (Value, error) {
+		return newDirect("str.trim", func(_ context.Context, _ []Value) (Value, error) {
 			return StrValue(strings.TrimSpace(str)), nil
 		})
 	case "byte":
-		return DirectValue("str.byte", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("str.byte", func(_ context.Context, args []Value) (Value, error) {
 			at := 0
 			if len(args) >= 1 && args[0].IsInt() {
 				at = int(args[0].AsInt())
@@ -1040,7 +1049,7 @@ func strMethod(vm *VM, s Value, name string) Value {
 			return IntValue(int64(r)), nil
 		})
 	case "indexOf":
-		return DirectValue("str.indexOf", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("str.indexOf", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 1 || !args[0].IsStr() {
 				return Null, fmt.Errorf("str.indexOf: requires a str needle argument")
 			}
@@ -1104,28 +1113,28 @@ func strMethod(vm *VM, s Value, name string) Value {
 			return IntValue(int64(utf8.RuneCountInString(str[:byteStart+idx]))), nil
 		})
 	case "startsWith":
-		return DirectValue("str.startsWith", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("str.startsWith", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 1 || !args[0].IsStr() {
 				return Null, fmt.Errorf("str.startsWith: requires a str argument")
 			}
 			return BoolValue(strings.HasPrefix(str, args[0].AsString())), nil
 		})
 	case "endsWith":
-		return DirectValue("str.endsWith", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("str.endsWith", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 1 || !args[0].IsStr() {
 				return Null, fmt.Errorf("str.endsWith: requires a str argument")
 			}
 			return BoolValue(strings.HasSuffix(str, args[0].AsString())), nil
 		})
 	case "replace":
-		return DirectValue("str.replace", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("str.replace", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 2 || !args[0].IsStr() || !args[1].IsStr() {
 				return Null, fmt.Errorf("str.replace: requires (str needle, str with)")
 			}
 			return StrValue(strings.Replace(str, args[0].AsString(), args[1].AsString(), 1)), nil
 		})
 	case "split":
-		return DirectValue("str.split", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("str.split", func(_ context.Context, args []Value) (Value, error) {
 			sep := ""
 			if len(args) >= 1 && args[0].IsStr() {
 				sep = args[0].AsString()
@@ -1143,7 +1152,7 @@ func strMethod(vm *VM, s Value, name string) Value {
 			return ListValue(out), nil
 		})
 	case "sub":
-		return DirectValue("str.sub", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("str.sub", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 1 || !args[0].IsInt() {
 				return Null, fmt.Errorf("str.sub: requires (int start, int? len)")
 			}
@@ -1187,7 +1196,7 @@ func strMethod(vm *VM, s Value, name string) Value {
 			return StrValue(string(runes[start:end])), nil
 		})
 	case "repeat":
-		return DirectValue("str.repeat", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("str.repeat", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 1 || !args[0].IsInt() {
 				return Null, fmt.Errorf("str.repeat: requires int n")
 			}
@@ -1198,11 +1207,11 @@ func strMethod(vm *VM, s Value, name string) Value {
 			return StrValue(strings.Repeat(str, n)), nil
 		})
 	case "encodeBase64":
-		return DirectValue("str.encodeBase64", func(_ context.Context, _ []Value) (Value, error) {
+		return newDirect("str.encodeBase64", func(_ context.Context, _ []Value) (Value, error) {
 			return StrValue(base64.StdEncoding.EncodeToString([]byte(str))), nil
 		})
 	case "decodeBase64":
-		return DirectValue("str.decodeBase64", func(_ context.Context, _ []Value) (Value, error) {
+		return newDirect("str.decodeBase64", func(_ context.Context, _ []Value) (Value, error) {
 			b, err := base64.StdEncoding.DecodeString(str)
 			if err != nil {
 				return Null, fmt.Errorf("str.decodeBase64: %w", err)
@@ -1210,11 +1219,11 @@ func strMethod(vm *VM, s Value, name string) Value {
 			return StrValue(string(b)), nil
 		})
 	case "hex":
-		return DirectValue("str.hex", func(_ context.Context, _ []Value) (Value, error) {
+		return newDirect("str.hex", func(_ context.Context, _ []Value) (Value, error) {
 			return StrValue(hex.EncodeToString([]byte(str))), nil
 		})
 	case "bin":
-		return DirectValue("str.bin", func(_ context.Context, _ []Value) (Value, error) {
+		return newDirect("str.bin", func(_ context.Context, _ []Value) (Value, error) {
 			b, err := hex.DecodeString(str)
 			if err != nil {
 				return Null, fmt.Errorf("str.bin: %w", err)
@@ -1222,15 +1231,15 @@ func strMethod(vm *VM, s Value, name string) Value {
 			return StrValue(string(b)), nil
 		})
 	case "utf8Len":
-		return DirectValue("str.utf8Len", func(_ context.Context, _ []Value) (Value, error) {
+		return newDirect("str.utf8Len", func(_ context.Context, _ []Value) (Value, error) {
 			return IntValue(int64(utf8.RuneCountInString(str))), nil
 		})
 	case "utf8Valid":
-		return DirectValue("str.utf8Valid", func(_ context.Context, _ []Value) (Value, error) {
+		return newDirect("str.utf8Valid", func(_ context.Context, _ []Value) (Value, error) {
 			return BoolValue(utf8.ValidString(str)), nil
 		})
 	case "utf8Codepoints":
-		return DirectValue("str.utf8Codepoints", func(_ context.Context, _ []Value) (Value, error) {
+		return newDirect("str.utf8Codepoints", func(_ context.Context, _ []Value) (Value, error) {
 			runes := []rune(str)
 			out := make([]Value, 0, len(runes))
 			for _, r := range runes {
@@ -1241,38 +1250,38 @@ func strMethod(vm *VM, s Value, name string) Value {
 			return ListValue(out), nil
 		})
 	}
-	return Null
+	return nil
 }
 
-// fibMethod returns a bound DirectValue for the named built-in Fiber method,
+// fibMethod returns the callable for the named built-in Fiber method,
 // or Null if name is not a known fiber method.
-// rngMethod returns a bound DirectValue for the named range method, or Null if
-// name is not one. Mirrors listMethod/mapMethod.
+// rngMethod returns the callable for the named range method, or nil if name is
+// not one. Mirrors listMethod/mapMethod.
 //
 // A range runs from Lo TOWARD Hi and stops before it, in either direction, which
 // is what foreach does - so `10..0` yields 10 down to 1 and has length 10. low()
 // and high() report the operands as written, not the smaller and larger of them.
-func rngMethod(vm *VM, r Value, name string) Value {
+func rngMethod(vm *VM, r Value, name string) *directObj {
 	ro := vm.asRange(r)
 	switch name {
 	case "low":
-		return DirectValue("rng.low", func(context.Context, []Value) (Value, error) {
+		return newDirect("rng.low", func(context.Context, []Value) (Value, error) {
 			return IntValue(ro.Lo), nil
 		})
 	case "high":
-		return DirectValue("rng.high", func(context.Context, []Value) (Value, error) {
+		return newDirect("rng.high", func(context.Context, []Value) (Value, error) {
 			return IntValue(ro.Hi), nil
 		})
 	case "len":
-		return DirectValue("rng.len", func(context.Context, []Value) (Value, error) {
+		return newDirect("rng.len", func(context.Context, []Value) (Value, error) {
 			return IntValue(rngLen(ro)), nil
 		})
 	case "invert":
-		return DirectValue("rng.invert", func(context.Context, []Value) (Value, error) {
+		return newDirect("rng.invert", func(context.Context, []Value) (Value, error) {
 			return rangeValue(ro.Hi, ro.Lo), nil
 		})
 	case "toList":
-		return DirectValue("rng.toList", func(context.Context, []Value) (Value, error) {
+		return newDirect("rng.toList", func(context.Context, []Value) (Value, error) {
 			items := make([]Value, 0, rngLen(ro))
 			step := int64(1)
 			if ro.Hi < ro.Lo {
@@ -1284,7 +1293,7 @@ func rngMethod(vm *VM, r Value, name string) Value {
 			return ListValue(items), nil
 		})
 	case "contains":
-		return DirectValue("rng.contains", func(_ context.Context, args []Value) (Value, error) {
+		return newDirect("rng.contains", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("rng.contains: requires a value")
 			}
@@ -1298,7 +1307,7 @@ func rngMethod(vm *VM, r Value, name string) Value {
 			return BoolValue(n >= ro.Lo && n < ro.Hi), nil
 		})
 	}
-	return Null
+	return nil
 }
 
 // rngLen is the number of values a range yields: the distance between its
@@ -1310,24 +1319,24 @@ func rngLen(ro *rangeObj) int64 {
 	return ro.Hi - ro.Lo
 }
 
-func fibMethod(vm *VM, fib Value, name string) Value {
+func fibMethod(vm *VM, fib Value, name string) *directObj {
 	fo := vm.asFib(fib)
 	switch name {
 	case "over":
-		return DirectValue("fib.over", func(_ context.Context, _ []Value) (Value, error) {
+		return newDirect("fib.over", func(_ context.Context, _ []Value) (Value, error) {
 			return BoolValue(fo.status == fibDone), nil
 		})
 	case "cancel":
-		return DirectValue("fib.cancel", func(_ context.Context, _ []Value) (Value, error) {
+		return newDirect("fib.cancel", func(_ context.Context, _ []Value) (Value, error) {
 			fo.status = fibDone
 			return Null, nil
 		})
 	case "isMain":
-		return DirectValue("fib.isMain", func(_ context.Context, _ []Value) (Value, error) {
+		return newDirect("fib.isMain", func(_ context.Context, _ []Value) (Value, error) {
 			return False, nil // host-side fiber objects are never the main fiber
 		})
 	}
-	return Null
+	return nil
 }
 
 // callValue invokes a Buzz callable (direct or fun) with args.

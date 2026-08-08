@@ -84,7 +84,18 @@ magus\project({
         // else should be touching go.mod or the tag namespace while it runs.
         "release": {"skip_cache": "mutates go.mod and creates VCS tags, an order-sensitive side effect", "exclusive": true},
         // test rewrites assets/coverage.svg; a cache hit would skip the write.
-        "test": {"skip_cache": "rewrites assets/coverage.svg; a hit would skip the write"},
+        // memory_mb measured, not guessed: on a 16GB CI runner this target took
+        // available memory from 1137MB to 265MB in two seconds and the runner was
+        // killed, leaving no failing target to blame because the MACHINE died rather
+        // than the test. `-race` is why - every concurrent test binary carries the
+        // race detector's shadow memory. Declared in memory rather than slots because
+        // that is the number an author can actually know; magus converts it to slots
+        // per host, so it throttles peers on a 16GB runner and barely registers on a
+        // 64GB workstation without this file naming either machine.
+        "test": {
+            "skip_cache": "rewrites assets/coverage.svg; a hit would skip the write",
+            "memory_mb": 10240,
+        },
 		// Preserves the hand-authored Unreleased section in place; caching a prior
 		// file would overwrite a later edit that is intentionally outside releases/.
 		"changelog-generate": {"skip_cache": "preserves a hand-authored Unreleased section; a replay would overwrite a later edit"},
@@ -825,6 +836,13 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ctx.glob("*-generate", "!deploy-generate"));
     if (ctx.has_charm("rw")) { return; }
 
+    // Say when the gate did not run. It only fires from a CLEAN tree, so a
+    // developer with any uncommitted work gets exit 0 from a check that never
+    // executed - which reads as "passed" and is why drift kept reaching CI after
+    // a local run said it would not.
+    if (clean_before == false) {
+        magus\info("generate: drift gate skipped - the tree was already dirty when it started; commit, then re-run to actually check");
+    }
     if (clean_before and vcs\isDirty()) {
         // status().files, not a shell-out and not vcs.diff: magus already knows which
         // files moved, and the gate fires exactly when its reader has a CI log instead of
@@ -837,6 +855,28 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
         foreach (f in vcs\status().files) { changed.append(f.value); }
         var detail = "";
         if (changed.len() > 0) { detail = ": " + changed.join(", "); }
+        // Print the diff, not just the names. This gate fires where its reader has a
+        // CI log instead of the tree, and the console keeps only "likely diagnostics"
+        // from a tool's own stdout - so the diff is CAPTURED and printed by the
+        // magusfile, which is what actually survives into the log. A name alone was
+        // not enough twice running: the drift that sent us here turned out to be a
+        // daemon auth token captured into a docs example, invisible from a filename.
+        // git only (hg and jj take different arguments), never fatal - a diagnostic
+        // must not become the failure.
+        if (vcs\name() == "git" and changed.len() > 0) {
+            final d = vcs\cmd(["diff", "--unified=1", "--"] + changed,
+                opts: {"allow_failure": true});
+            var body = d.stdout;
+            // gen/knowledge-graph.json is 2.2MB on one line; bound it so a generated
+            // JSON cannot bury a small, readable drift somewhere else in the list.
+            if (body.len() > 4000) {
+                body = body.sub(0, len: 4000)
+                    + "\n... truncated; `magus query output <ref>` has it all";
+            }
+            if (body != "") {
+                magus\info("generate: what changed on this runner:\n" + body);
+            }
+        }
         throw "generate: regeneration changed generated files; re-run "
             + "`magus run generate:rw .` and commit" + detail;
     }
@@ -1220,8 +1260,23 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     if (std\parseInt(pct.split(".")[0]) < 60) {
         throw "test: coverage " + pct + "% is below the 60% floor; investigate the regression or lower the floor deliberately";
     }
-    fs\writeFile(fs\join("assets", "coverage.svg"), badge\coverage("go coverage", percent: pct, radius: 3));
+    // Whole percent on the BADGE, one decimal for the floor check above. The
+    // module has files that only compile on one platform (hostmem, proc/run), so
+    // the ratio legitimately differs between a macOS laptop and a Linux runner -
+    // 67.4 here, 67.3 there. Committing a tenth of a percent made a generated
+    // artifact gate on the machine that produced it, which no contributor on the
+    // wrong OS could satisfy. A whole number carries the same information and
+    // survives the crossing.
+    fs\writeFile(fs\join("assets", "coverage.svg"),
+        badge\coverage("go coverage", percent: pct.split(".")[0], radius: 3));
     if (ctx.has_charm("rw")) { return; }
+    // Say when the gate did not run. It only fires from a CLEAN tree, so a
+    // developer with any uncommitted work gets exit 0 from a check that never
+    // executed - which reads as "passed" and is why drift kept reaching CI after
+    // a local run said it would not.
+    if (clean_before == false) {
+        magus\info("test: badge drift gate skipped - assets/coverage.svg was already dirty when it started");
+    }
     if (clean_before and vcs\isDirty([fs\join("assets", "coverage.svg")])) {
         throw "test: assets/coverage.svg is stale; re-run `magus run test:rw .` and commit the badge";
     }

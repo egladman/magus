@@ -202,6 +202,12 @@ func Slots(n int) TargetOption {
 	return func(t *types.Target) { t.Slots = n }
 }
 
+// MemoryMB returns a TargetOption setting the target's memory budget in
+// megabytes. See types.Target.MemoryMB.
+func MemoryMB(n int) TargetOption {
+	return func(t *types.Target) { t.MemoryMB = n }
+}
+
 // IncludeOS overrides whether the host OS keys this target's cache entry.
 func IncludeOS(v bool) TargetOption {
 	return func(t *types.Target) { t.IncludeOS = &v }

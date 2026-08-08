@@ -144,13 +144,10 @@ test "computeCSP names every directive exactly once and includes the loopback ho
     final f = io\File.open("playground.html", io\FileMode.read);
     final n = extractInlineScripts(f.readAll()).len();
     f.close();
-    var hashCount = 0;
-    var rest = got;
-    while (rest.indexOf("'sha256-") != null) {
-        final i = rest.indexOf("'sha256-");
-        rest = rest.sub(i + 1);
-        hashCount = hashCount + 1;
-    }
+    // Counting via split, not a sub() walk: splitting on the needle yields one
+    // more part than there are occurrences, in a single pass. The walk it
+    // replaced re-copied the remaining string on every hit.
+    final hashCount = got.split("'sha256-").len() - 1;
     assert\equal(hashCount, n, "one script-src hash per playground.html inline script");
 }
 

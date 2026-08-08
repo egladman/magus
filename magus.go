@@ -75,6 +75,10 @@ type Magus struct {
 	// magus\secret.read costs one provider invocation rather than two.
 	resolver *secret.Resolver
 
+	// hostMemBytes caches the machine's memory for slotsForPolicy; see hostTotalBytes.
+	hostMemOnce  sync.Once
+	hostMemBytes int64
+
 	tel            observability.Provider
 	injectedTel    observability.Provider // shared provider supplied via WithProvider; adopted verbatim in Open
 	metricsCollect bool                   // daemon: build an always-on local metrics collector for the dashboard

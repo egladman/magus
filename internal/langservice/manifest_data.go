@@ -152,6 +152,7 @@ var modules = []Module{
 			{Name: "affected", Doc: "Compute the VCS-affected project set against base (empty uses the configured base ref): {base, changed, seed, filesBySeed, affected}. Served in-process from the workspace on the context - no subprocess. Raises when the diff cannot be computed, rather than reporting an empty set, since an empty set and an uncomputable one mean opposite things to a caller deciding what to build.", Sig: "magus\\affected([base]) → Affected"},
 			{Name: "graph", Doc: "The project dependency DAG as {nodes, dependsOn, blastRadius}. nodes is in TOPOLOGICAL order, so iterating it is already a valid build order; dependsOn gives each node's direct predecessors and blastRadius how many projects it can transitively affect. Served in-process from the workspace on the context - no subprocess.", Sig: "magus\\graph() → Graph"},
 			{Name: "where", Doc: "Return the project path containing dir, or null when dir is inside no project. Served in-process from the workspace on the context - no subprocess.", Sig: "magus\\where(dir) → string"},
+			{Name: "raise", Doc: "Fail with a CODED diagnostic instead of a bare string, so a caller can branch on the code: `catch (e) { if (e.code == \"ACME1001\") ... }`. code is yours to define and namespace - anything but the MGS prefix, which is magus's own. opts.cause is the error being wrapped, usually the value from an inner catch; it is appended to the message the way Go's %w renders one, and the failure it came from stays reachable underneath. opts.url is the page documenting the code, rendered as the `see:` line the CLI prints under its own diagnostics.", Sig: "magus\\raise(code, message, [opts])"},
 			{Name: "run", Doc: "Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like os.exec); opts.quiet captures the output without echoing it to the console.", Sig: "magus\\run(args, [opts]) → ExecResult"},
 			{Name: "describe", Doc: "Run `magus describe <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like os.exec); opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.", Sig: "magus\\describe(args, [opts]) → ExecResult"},
 			{Name: "insight", Doc: "Run `magus insight <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like os.exec); opts.quiet captures the output without echoing it to the console.", Sig: "magus\\insight(args, [opts]) → ExecResult"},
@@ -210,6 +211,8 @@ var modules = []Module{
 		Methods: []Method{
 			{Name: "arch", Doc: "Normalize an architecture identifier (x86_64, aarch64, armv7l, …) to canonical Go GOARCH (amd64, arm64, arm). With style, render that result in a convention (go|uname); raises on an unknown style. Returns \"\" when the identifier is unrecognized.", Sig: "platform\\arch(name, [style]) → string"},
 			{Name: "os", Doc: "Normalize an OS identifier (Darwin, macOS, win, …) to canonical Go GOOS (darwin, windows). With style, render that result in a convention (go|uname); raises on an unknown style. Returns \"\" when the identifier is unrecognized.", Sig: "platform\\os(name, [style]) → string"},
+			{Name: "memory_bytes", Doc: "The machine's total physical memory in BYTES, or 0 when it cannot be determined (any host other than Linux or macOS). Note magus.project targets take memory_mb in MEGABYTES. Size work that scales on memory rather than cores with this: `go test` defaults its package parallelism to the CPU count, which is the wrong axis under -race, where each test binary carries the race detector's shadow memory. Branch on 0 rather than treating it as \"no memory\".", Sig: "platform\\memoryBytes() → int"},
+			{Name: "cpus", Doc: "How many CPUs this process may use (Go's GOMAXPROCS, which honors a container quota where the OS-visible core count does not). Pair with memory() when sizing parallel work: the smaller of the two limits is the one that matters.", Sig: "platform\\cpus() → int"},
 		},
 	},
 	{
@@ -280,11 +283,9 @@ var modules = []Module{
 	{
 		Name: "vcs",
 		Doc:  "Version-control queries for the current working tree.",
-		Fields: []Field{
-			{Name: "name", Type: "string", Doc: "VCS short name (e.g. \"git\"). Empty if unresolved."},
-			{Name: "base", Type: "string", Doc: "Resolved base ref for diffs."},
-		},
 		Methods: []Method{
+			{Name: "name", Doc: "VCS short name (e.g. \"git\"). Empty if unresolved, which is how a caller tests for a VCS without catching.", Sig: "vcs\\name() → string"},
+			{Name: "base", Doc: "Resolved base ref for diffs.", Sig: "vcs\\base() → string"},
 			{Name: "root", Doc: "Absolute path of the repository root.", Sig: "vcs\\root() → string"},
 			{Name: "diff", Doc: "The files changed against the given base (defaults to vcs.base), each a Path carrying the repository root as its base. Empty when no VCS is resolved.", Sig: "vcs\\diff([base]) → [Path]"},
 			{Name: "ref", Doc: "The movable name pointing at the current revision, or \"\" when there is none. Backend-specific by nature: a git branch, a Mercurial named branch, a Jujutsu bookmark. jj's working copy is usually an anonymous change, so \"\" is an ordinary answer there, not a failure. Raises when no VCS is resolved or its metadata cannot be read - use vcs.name() to test for a VCS first.", Sig: "vcs\\ref() → string"},

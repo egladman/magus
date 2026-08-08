@@ -948,6 +948,9 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 				if pol.Slots > 0 {
 					fmt.Printf("  slots=%d", pol.Slots)
 				}
+				if pol.MemoryMB > 0 {
+					fmt.Printf("  memory_mb=%d", pol.MemoryMB)
+				}
 				fmt.Println()
 			}
 			fmt.Println()
@@ -1147,6 +1150,9 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 			}
 			if e.Policy.Slots > 0 {
 				fmt.Printf("  slots=%d", e.Policy.Slots)
+			}
+			if e.Policy.MemoryMB > 0 {
+				fmt.Printf("  memory_mb=%d", e.Policy.MemoryMB)
 			}
 			fmt.Println()
 		}

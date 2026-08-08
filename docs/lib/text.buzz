@@ -122,9 +122,22 @@ export fun stripTags(s: str) > str {
 // collapseWs folds any whitespace run into a single space, so a derived
 // description reads as one clean line.
 export fun collapseWs(s: str) > str {
-    var r = s.replace("\n", " ").replace("\t", " ").replace("\r", " ");
-    while (r.indexOf("  ") != null) { r = r.replace("  ", " "); }
-    return r.trim();
+    // split().join(), not replace(): str.replace substitutes only the FIRST
+    // occurrence, so the chained calls this replaced collapsed just the first
+    // newline, tab and carriage return of a page and left every later one intact.
+    // The `while (indexOf) replace()` that followed did work, at the price of
+    // copying the whole string once per run of spaces - and every copy is a
+    // distinct string the VM interns for the life of the process.
+    final flat = s.split("\n").join(" ").split("\t").join(" ").split("\r").join(" ");
+    // Runs of spaces cannot collapse with one split().join(): splitting on two
+    // spaces leaves the odd one behind, which is why the original had to loop.
+    // Splitting on ONE space and dropping the empties between adjacent
+    // separators collapses any run in a single pass instead.
+    var parts = mut [];
+    foreach (p in flat.split(" ")) {
+        if (p != "") { parts.append(p); }
+    }
+    return parts.join(" ").trim();
 }
 
 // decodeEntities turns HTML entities back into characters for a plain-text
