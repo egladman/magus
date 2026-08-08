@@ -1280,7 +1280,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 // covered cmd/magus/starter/spells - so both files were free to rot while looking covered.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void {
     foreach (mod in ["badge.buzz", "coverage.buzz"]) {
-        magus\cmd(["buzz", "-t", mod]);
+        magus\cmd("buzz", args: ["-t", mod]);
     }
 }
 

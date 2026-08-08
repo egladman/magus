@@ -2,7 +2,8 @@ import "magus";
 // The shared advisory gate. See tools/audit.buzz for why an exit code is the wrong
 // question and what this asks instead.
 import "../tools/audit" as audit;
-// Modules the targets use: os (pnpm/esbuild), vcs (drift gate).
+// Modules the targets use: fs (lcov reads, badge write), os (pnpm/esbuild), vcs (drift gate).
+import "fs";
 import "os";
 import "vcs";
 // The shared DOM-free browser client lib (libs/textsearch) holds the search grammar the
