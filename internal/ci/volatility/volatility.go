@@ -159,7 +159,7 @@ type Runtime struct {
 	cfg      Config
 	affected map[string]bool
 	// retry gates ONLY the retry decision, never recording; see NewRuntime.
-	retry    bool
+	retry bool
 }
 
 // NewRuntime constructs a Runtime; empty affectedProjects means all projects are affected.

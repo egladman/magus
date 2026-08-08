@@ -1253,7 +1253,15 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     if (std\parseInt(pct.split(".")[0]) < 60) {
         throw "test: coverage " + pct + "% is below the 60% floor; investigate the regression or lower the floor deliberately";
     }
-    fs\writeFile(fs\join("assets", "coverage.svg"), badge\coverage("go coverage", percent: pct, radius: 3));
+    // Whole percent on the BADGE, one decimal for the floor check above. The
+    // module has files that only compile on one platform (hostmem, proc/run), so
+    // the ratio legitimately differs between a macOS laptop and a Linux runner -
+    // 67.4 here, 67.3 there. Committing a tenth of a percent made a generated
+    // artifact gate on the machine that produced it, which no contributor on the
+    // wrong OS could satisfy. A whole number carries the same information and
+    // survives the crossing.
+    fs\writeFile(fs\join("assets", "coverage.svg"),
+        badge\coverage("go coverage", percent: pct.split(".")[0], radius: 3));
     if (ctx.has_charm("rw")) { return; }
     if (clean_before and vcs\isDirty([fs\join("assets", "coverage.svg")])) {
         throw "test: assets/coverage.svg is stale; re-run `magus run test:rw .` and commit the badge";
