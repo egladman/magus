@@ -87,6 +87,53 @@ DEBUG: authenticating to ghcr.io with password=***
 Read the same variable with `os\env` and magus has no reason to protect the result. That
 is the seam, and it is deliberate rather than a gap.
 
+## Secrets in a spell op
+
+`magus\secret.read` only works inside a magusfile target body - it is a function call,
+and a command op has no body. A spell op's `Command` is static data (`bin`, `args`,
+`charms`), resolved once and cached, so it can be charm-patched and previewed by `magus
+describe` without running anything. There is no point in that shape for a function call
+to land.
+
+That is a real gap for two cases: a command op that genuinely needs a credential (`npm
+publish`, a signed release upload), and a **provided** project - one a workspace provider
+declared, with no magusfile at all, so there is no target body to call `magus\secret.read`
+from in the first place.
+
+`Command.secrets` closes both. It declares the environment the command needs, as env var
+name to provider reference - the same kind of reference `magus\secret.read` takes, just
+carried as data instead of passed to a function:
+
+```buzz
+export fun mgs_listTargets() > any {
+    return {"publish": Command{
+        bin = "npm",
+        args = ["publish"],
+        secrets = {"NPM_TOKEN": "NPM_TOKEN"},
+    }};
+}
+```
+
+Each reference is resolved through the workspace's selected provider **at spawn**, the
+moment before the command runs, and injected into **that one child process's**
+environment - never into `args`, never into a sibling op's environment, never into the
+declaration itself. The declaration only ever holds the reference; the value never does.
+Resolution goes through the same resolver `magus\secret.read` uses, so the value is
+redacted from captured output exactly the same way, and it is subject to the same
+[limits](#limits) - short values, encodings other than the ones magus knows, output that
+straddles a write boundary.
+
+A charm cannot touch `secrets`. Charms patch `args` - the argv a run prints and a reader
+compares - and a charm silently changing which credential a command receives would be the
+one kind of edit a diff of the command line could never show.
+
+A **service op** cannot declare secrets, and magus refuses the spell at load rather
+than accepting the declaration: a supervised service is started by the daemon's
+supervisor, which does not carry a per-op environment yet, so the same op would get
+its credential when foregrounded and silently lose it when supervised. Refusing at
+load keeps the one rule that matters here: a declared secret is always injected, or
+the load fails saying why.
+
 ## Providers
 
 Where a secret comes from is a provider's job. magus ships one and treats everything

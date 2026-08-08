@@ -213,6 +213,7 @@ func (v ProjectEntry) BuzzObject() BuzzObject {
 	return BuzzObject{
 		"path":      v.Path,
 		"name":      v.Name,
+		"origin":    v.Origin,
 		"dir":       v.Dir,
 		"spell":     v.Spell,
 		"spells":    v.Spells,

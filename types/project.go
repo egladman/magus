@@ -3,6 +3,7 @@ package types
 import (
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/egladman/magus/spells"
 )
@@ -107,6 +108,38 @@ type Binding struct {
 	RemovedClaims []string
 }
 
+// ProjectOrigin is what put a project in the workspace. It is a named type rather
+// than a bare string because its two cases are not interchangeable: OriginMagusfile
+// is a whole value you compare, while a provided project's origin CARRIES the
+// provider's name, so it has no single constant to compare against. Constructing
+// and reading it through ProvidedBy and Provider keeps that asymmetry out of every
+// call site - a hand-written `origin == "provider"` would be a condition that never
+// fires.
+type ProjectOrigin string
+
+// OriginMagusfile is the origin of a directory discovery found a magusfile in.
+const OriginMagusfile ProjectOrigin = "magusfile"
+
+// originProviderPrefix tags an origin with the workspace provider that reported it.
+const originProviderPrefix = "provider:"
+
+// ProvidedBy returns the origin of a project a workspace provider reported. The
+// spell name is part of the value because a workspace can wire more than one
+// provider, and "which tool says this is a project" is the whole question a reader
+// has about a directory with no magusfile in it.
+func ProvidedBy(spellName string) ProjectOrigin {
+	return ProjectOrigin(originProviderPrefix + spellName)
+}
+
+// Provider returns the spell that reported this project, and whether a provider
+// reported it at all. It is the read half of ProvidedBy: the spell name lives inside
+// the value, so a caller comparing against a bare "provider" would be writing a
+// condition that never fires.
+func (o ProjectOrigin) Provider() (string, bool) {
+	name, ok := strings.CutPrefix(string(o), originProviderPrefix)
+	return name, ok
+}
+
 // Project is the record magus maintains for every directory with a marker file.
 type Project struct {
 	Path string // repo-relative directory, forward slashes (e.g. "api", ".")
@@ -116,7 +149,15 @@ type Project struct {
 	// basename - so a worktree, a clone under a different name, or a CI checkout
 	// each renamed the root project and rewrote every generated index that names
 	// it. Declaring the name makes generated output reproducible anywhere.
-	Name      string
+	Name string
+	// Origin is what put this project in the workspace (see ProjectOrigin). It is
+	// PROVENANCE, never identity - nothing dispatches on it - and it exists because a
+	// provided project has no file to point at, so "where did this come from" would
+	// otherwise be unanswerable for exactly the projects a reader has never seen
+	// declared anywhere. Named Origin rather than Source because Sources below is the
+	// unrelated glob list, and one letter is not enough distance between "where this
+	// project came from" and "the files it is built from".
+	Origin    ProjectOrigin
 	Dir       string // absolute filesystem path
 	Spell     string // primary spell name; use Spells for fan-out dispatch
 	Spells    []string

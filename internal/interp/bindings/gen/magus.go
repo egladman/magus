@@ -190,6 +190,7 @@ func buzzValueMagusProjectEntry(v types.ProjectEntry) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StrValue(v.Path))
 	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("origin", vm.StrValue(v.Origin))
 	out.MapSet("dir", vm.StrValue(v.Dir))
 	out.MapSet("spell", vm.StrValue(v.Spell))
 	itemsSpells := make([]vm.Value, len(v.Spells))

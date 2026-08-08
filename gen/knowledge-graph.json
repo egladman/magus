@@ -3,10 +3,10 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2466,
-  "edge_count": 5590,
+  "node_count": 2472,
+  "edge_count": 5624,
   "source_base": "https://github.com/egladman/magus/blob/main",
-  "catalog_fingerprint": "5b4f242646b68b32",
+  "catalog_fingerprint": "d4e3c3354d45f7bf",
   "nodes": [
     {
       "id": "charm:amd64",
@@ -232,6 +232,22 @@
       "label": "MGS1022",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1022/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1023",
+      "kind": "diagnostic",
+      "label": "MGS1023",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1023/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1024",
+      "kind": "diagnostic",
+      "label": "MGS1024",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1024/"
       }
     },
     {
@@ -790,7 +806,7 @@
       "source": "docs/concepts",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "43",
+        "dir_files": "44",
         "dir_languages": "markdown"
       }
     },
@@ -867,7 +883,7 @@
       "source": "docs/guides",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "26",
+        "dir_files": "27",
         "dir_languages": "markdown"
       }
     },
@@ -889,7 +905,7 @@
       "source": "docs/guides/integrations",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "8",
+        "dir_files": "9",
         "dir_languages": "markdown"
       }
     },
@@ -922,7 +938,7 @@
       "source": "docs/reference",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "150",
+        "dir_files": "152",
         "dir_languages": "markdown"
       }
     },
@@ -955,7 +971,7 @@
       "source": "docs/reference/codes",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "74",
+        "dir_files": "76",
         "dir_languages": "markdown"
       }
     },
@@ -999,7 +1015,7 @@
       "source": "docs/reference/codes/magusfile",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "23",
+        "dir_files": "25",
         "dir_languages": "markdown"
       }
     },
@@ -2697,6 +2713,18 @@
       }
     },
     {
+      "id": "doc:docs/concepts/workspace-providers.md",
+      "kind": "doc",
+      "label": "docs/concepts/workspace-providers.md",
+      "source": "docs/concepts/workspace-providers.md",
+      "attrs": {
+        "role": "doc",
+        "section": "concepts",
+        "tags": "workspace-provider,projects,discovery,spells,extension,nx,monorepo,adoption",
+        "title": "Workspace providers"
+      }
+    },
+    {
       "id": "doc:docs/concepts/workspace.md",
       "kind": "doc",
       "label": "docs/concepts/workspace.md",
@@ -2979,6 +3007,18 @@
         "section": "guides",
         "tags": "mcp,model-context-protocol,ai,agents,claude,codex,cursor,daemon,ide",
         "title": "MCP"
+      }
+    },
+    {
+      "id": "doc:docs/guides/integrations/nx.md",
+      "kind": "doc",
+      "label": "docs/guides/integrations/nx.md",
+      "source": "docs/guides/integrations/nx.md",
+      "attrs": {
+        "role": "doc",
+        "section": "guides",
+        "tags": "nx,workspace-provider,monorepo,typescript,adoption,integration",
+        "title": "Nx"
       }
     },
     {
@@ -3878,6 +3918,30 @@
         "section": "reference",
         "tags": "MGS1022,magusfile,buzz,scripts,namespace",
         "title": "MGS1022: member only callable from a magusfile"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/magusfile/MGS1023.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/magusfile/MGS1023.md",
+      "source": "docs/reference/codes/magusfile/MGS1023.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1023,magusfile,workspace-providers,projects,spells",
+        "title": "MGS1023: workspace provider reported an unusable project path"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/magusfile/MGS1024.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/magusfile/MGS1024.md",
+      "source": "docs/reference/codes/magusfile/MGS1024.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1024,magusfile,workspace-providers,projects,precedence",
+        "title": "MGS1024: workspace provider project shadowed by a magusfile"
       }
     },
     {
@@ -23374,6 +23438,14 @@
     },
     {
       "source": "dir:docs/concepts",
+      "target": "doc:docs/concepts/workspace-providers.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace-providers.md"
+    },
+    {
+      "source": "dir:docs/concepts",
       "target": "doc:docs/concepts/workspace.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -23835,6 +23907,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/guides/integrations/mcp.md"
+    },
+    {
+      "source": "dir:docs/guides/integrations",
+      "target": "doc:docs/guides/integrations/nx.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/nx.md"
     },
     {
       "source": "dir:docs/guides/integrations",
@@ -24619,6 +24699,22 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1022.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/magusfile",
+      "target": "doc:docs/reference/codes/magusfile/MGS1023.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1023.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/magusfile",
+      "target": "doc:docs/reference/codes/magusfile/MGS1024.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1024.md"
     },
     {
       "source": "dir:docs/reference/codes/magusfile",
@@ -29878,6 +29974,14 @@
     },
     {
       "source": "doc:docs/concepts/spells.md",
+      "target": "doc:docs/concepts/workspace-providers.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spells.md"
+    },
+    {
+      "source": "doc:docs/concepts/spells.md",
       "target": "doc:docs/guides/authoring-spells.md",
       "relation": "references",
       "confidence": "extracted",
@@ -30445,6 +30549,94 @@
       "provenance": "docs/concepts/wards.md"
     },
     {
+      "source": "doc:docs/concepts/workspace-providers.md",
+      "target": "diagnostic:MGS1023",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/workspace-providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace-providers.md",
+      "target": "diagnostic:MGS1024",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/workspace-providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace-providers.md",
+      "target": "doc:docs/concepts/cache/remote.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace-providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace-providers.md",
+      "target": "doc:docs/concepts/ci-providers.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace-providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace-providers.md",
+      "target": "doc:docs/concepts/secrets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace-providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace-providers.md",
+      "target": "doc:docs/concepts/spells.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace-providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace-providers.md",
+      "target": "doc:docs/concepts/workspace.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace-providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace-providers.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1023.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace-providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace-providers.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1024.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace-providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace-providers.md",
+      "target": "doc:docs/reference/manpage/magus-describe.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/workspace-providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace-providers.md",
+      "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/workspace-providers.md"
+    },
+    {
       "source": "doc:docs/concepts/workspace.md",
       "target": "doc:docs/concepts/cache.md",
       "relation": "references",
@@ -30487,6 +30679,14 @@
     {
       "source": "doc:docs/concepts/workspace.md",
       "target": "doc:docs/concepts/targets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace.md",
+      "target": "doc:docs/concepts/workspace-providers.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32147,6 +32347,78 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "docs/guides/integrations/mcp.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/nx.md",
+      "target": "diagnostic:MGS1023",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/nx.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/nx.md",
+      "target": "diagnostic:MGS1024",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/nx.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/nx.md",
+      "target": "diagnostic:MGS2003",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/nx.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/nx.md",
+      "target": "doc:docs/concepts/sandbox.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/nx.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/nx.md",
+      "target": "doc:docs/concepts/secrets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/nx.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/nx.md",
+      "target": "doc:docs/concepts/workspace-providers.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/nx.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/nx.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1023.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/nx.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/nx.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1024.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/nx.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/nx.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS2003.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/nx.md"
     },
     {
       "source": "doc:docs/guides/integrations/pr-advice.md",
@@ -34339,6 +34611,70 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1022.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1023.md",
+      "target": "diagnostic:MGS1023",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1023.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1023.md",
+      "target": "diagnostic:MGS1024",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1023.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1023.md",
+      "target": "doc:docs/concepts/workspace-providers.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1023.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1023.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1024.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1023.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1024.md",
+      "target": "diagnostic:MGS1023",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1024.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1024.md",
+      "target": "diagnostic:MGS1024",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1024.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1024.md",
+      "target": "doc:docs/concepts/workspace-providers.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1024.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1024.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1023.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1024.md"
     },
     {
       "source": "doc:docs/reference/codes/magusfile/README.md",

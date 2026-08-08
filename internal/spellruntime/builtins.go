@@ -25,6 +25,7 @@ import (
 //go:generate go run ../../cmd/magus-utils types -type Tool -out gen/types/tool.buzz
 //go:generate go run ../../cmd/magus-utils types -type Command -out gen/types/command.buzz
 //go:generate go run ../../cmd/magus-utils types -type Service -out gen/types/service.buzz
+//go:generate go run ../../cmd/magus-utils types -type Project -out gen/types/project.buzz
 //go:generate go run ../../cmd/magus-utils spells -spells ../../spells -out gen
 
 // builtinFS holds the compiled bytecode of every built-in spell, one <name>.bo per

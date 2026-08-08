@@ -67,7 +67,7 @@ func bindBuzzCommandMethod(h vm.Value, target string, tgt spells.Op) {
 		if err != nil {
 			return vm.Null, fmt.Errorf("%s: %w", target, err)
 		}
-		opts.cwd, opts.env = base.cwd, base.env
+		opts.op, opts.cwd, opts.env = target, base.cwd, base.env
 		res, err := runBuzzCommand(ctx, tgt, opts)
 		if err != nil {
 			return vm.Null, err
@@ -196,6 +196,17 @@ func targetsToMap(targets map[string]spells.Op) vm.Value {
 				charms.MapSet(cn, ce)
 			}
 			op.MapSet("charms", charms)
+		}
+		if len(t.Secrets) > 0 {
+			// Every field Decode reads must be written back here, or the by-value
+			// handle round trip (DecodeHandle -> registerLocalSpell) silently drops
+			// it - the exact resolves-nothing-at-spawn failure the decode-side type
+			// errors exist to prevent.
+			secrets := vm.NewMap()
+			for envName, ref := range t.Secrets {
+				secrets.MapSet(envName, vm.StrValue(ref))
+			}
+			op.MapSet("secrets", secrets)
 		}
 		ops.MapSet(name, op)
 	}

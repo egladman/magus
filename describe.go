@@ -743,6 +743,7 @@ func projectEntry(p *types.Project) types.ProjectEntry {
 	return types.ProjectEntry{
 		Path:      p.Path,
 		Name:      p.Name,
+		Origin:    string(p.Origin),
 		Dir:       p.Dir,
 		Spell:     p.Spell,
 		Spells:    p.Spells,

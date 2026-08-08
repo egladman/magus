@@ -1,6 +1,7 @@
 package spellruntime
 
 import (
+	"fmt"
 	"sort"
 	"testing"
 
@@ -39,6 +40,21 @@ func (m mapObj) Strs(key string) []string {
 	}
 	ss, _ := v.([]string)
 	return ss
+}
+
+func (m mapObj) StrMap(key string) (map[string]string, error) {
+	// Returns the map RAW, empty included: absent-vs-empty normalization is
+	// decodeCommand's job, and a double that pre-normalized would test itself
+	// rather than production.
+	v, ok := m[key]
+	if !ok {
+		return nil, nil
+	}
+	sm, ok := v.(map[string]string)
+	if !ok {
+		return nil, fmt.Errorf("%q must be a map[string]string", key)
+	}
+	return sm, nil
 }
 
 func (m mapObj) Obj(key string) (Obj, bool) {
@@ -129,6 +145,73 @@ func TestDecode_CommandOp(t *testing.T) {
 	assert.Equal(t, []string{"build", "./..."}, tgt.Args)
 }
 
+// TestDecode_CommandSecrets verifies a record op's `secrets` map (env var name ->
+// provider reference) decodes onto Op.Secrets untouched  -  no resolution happens at
+// decode time, only at spawn.
+func TestDecode_CommandSecrets(t *testing.T) {
+	src := mapObj{
+		"name": "myspell",
+		"ops": map[string]any{
+			"publish": map[string]any{
+				"bin":     "npm",
+				"args":    []string{"publish"},
+				"secrets": map[string]string{"NPM_TOKEN": "NPM_TOKEN"},
+			},
+		},
+	}
+	m, err := Decode(src)
+	require.NoError(t, err)
+	tgt, ok := m.Ops["publish"]
+	require.True(t, ok, `Ops["publish"] missing`)
+	assert.Equal(t, map[string]string{"NPM_TOKEN": "NPM_TOKEN"}, tgt.Secrets)
+}
+
+// TestDecode_CommandSecretsAbsentOrEmptyIsNil pins that a command with no `secrets`
+// key, and one with an explicitly empty map, both decode Op.Secrets to nil - not an
+// empty non-nil map - so a command with nothing to inject looks identical either way.
+func TestDecode_CommandSecretsAbsentOrEmptyIsNil(t *testing.T) {
+	absent := mapObj{
+		"name": "myspell",
+		"ops": map[string]any{
+			"build": map[string]any{"bin": "go", "args": []string{"build"}},
+		},
+	}
+	m, err := Decode(absent)
+	require.NoError(t, err)
+	assert.Nil(t, m.Ops["build"].Secrets)
+
+	empty := mapObj{
+		"name": "myspell",
+		"ops": map[string]any{
+			"build": map[string]any{"bin": "go", "args": []string{"build"}, "secrets": map[string]string{}},
+		},
+	}
+	m, err = Decode(empty)
+	require.NoError(t, err)
+	assert.Nil(t, m.Ops["build"].Secrets)
+}
+
+// TestDecode_CommandSecretsWrongTypeErrorsLoudly pins that a `secrets` field of the
+// wrong shape is a load-time error naming the spell and op, matching decodeCommand's
+// existing charm error style - not a silently dropped declaration that would leave a
+// spawn with no secret and no signal why.
+func TestDecode_CommandSecretsWrongTypeErrorsLoudly(t *testing.T) {
+	src := mapObj{
+		"name": "myspell",
+		"ops": map[string]any{
+			"publish": map[string]any{
+				"bin":     "npm",
+				"args":    []string{"publish"},
+				"secrets": "not-a-map",
+			},
+		},
+	}
+	_, err := Decode(src)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `spell "myspell"`)
+	assert.Contains(t, err.Error(), `op "publish"`)
+}
+
 // TestDecode_CharmReplaceOp checks that a charm carrying a replace patch op is
 // decoded into the canonical spells.PatchOp.
 func TestDecode_CharmReplaceOp(t *testing.T) {
@@ -184,7 +267,7 @@ func TestDecode_CharmAddOp(t *testing.T) {
 }
 
 // TestDecode_CharmRootRejected checks that a root-path op (whole-argv replace)
-// is rejected — element-level only.
+// is rejected  -  element-level only.
 func TestDecode_CharmRootRejected(t *testing.T) {
 	src := mapObj{
 		"name": "myspell",

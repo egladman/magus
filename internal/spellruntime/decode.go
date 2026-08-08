@@ -23,6 +23,11 @@ type Obj interface {
 	Bool(key string) bool
 	// Strs returns the list-of-strings at key; absent or empty yields nil.
 	Strs(key string) []string
+	// StrMap returns the string-to-string map at key (a Command's `secrets`: env var
+	// name -> provider reference); absent or empty yields (nil, nil). A present value
+	// that is not a string is an error naming key, since a mistyped entry here would
+	// otherwise resolve nothing at spawn with no signal until the run that needed it.
+	StrMap(key string) (map[string]string, error)
 	// Obj returns the nested record at key and whether it was present as one.
 	Obj(key string) (Obj, bool)
 	// Objs returns the list of nested records at key, for a field that is an
@@ -127,11 +132,23 @@ func Decode(src Obj) (spells.Descriptor, error) {
 				if err != nil {
 					return spells.Descriptor{}, err
 				}
+				// Secrets on a service op are rejected here, not silently dropped
+				// later: the supervised path rebuilds the command without its env,
+				// so a declared secret would reach a foregrounded service and
+				// vanish from a supervised one - the same op behaving differently
+				// by how it was reached. Until the supervisor threads env through,
+				// refusing at load is the only honest answer.
+				if len(cmd.Secrets) > 0 {
+					return spells.Descriptor{}, fmt.Errorf("spell %q op %q: secrets are not supported on a service op yet", name, op)
+				}
 				svc := &spells.Service{Command: cmd}
 				if readinessObj, ok := spec.Obj("readiness"); ok {
 					readiness, err := decodeCommand(name, op, readinessObj)
 					if err != nil {
 						return spells.Descriptor{}, err
+					}
+					if len(readiness.Secrets) > 0 {
+						return spells.Descriptor{}, fmt.Errorf("spell %q op %q: secrets are not supported on a service readiness command", name, op)
 					}
 					svc.Readiness = readiness
 				}
@@ -139,6 +156,9 @@ func Decode(src Obj) (spells.Descriptor, error) {
 					stop, err := decodeCommand(name, op, stopObj)
 					if err != nil {
 						return spells.Descriptor{}, err
+					}
+					if len(stop.Secrets) > 0 {
+						return spells.Descriptor{}, fmt.Errorf("spell %q op %q: secrets are not supported on a service stop command", name, op)
 					}
 					svc.Stop = stop
 				}
@@ -184,6 +204,28 @@ func Decode(src Obj) (spells.Descriptor, error) {
 	return m, nil
 }
 
+// validEnvName reports whether s is usable as an environment variable name:
+// letters, digits and underscores, not starting with a digit. The POSIX portable
+// set - anything looser differs by platform, and a secret landing under a
+// misparsed name fails somewhere far from the declaration.
+func validEnvName(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		switch {
+		case r == '_', r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+			if i == 0 {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // decodeCommand reads a Command field map (bin/args/charms), validating each charm's
 // RFC 6902 patch. It is shared by a command op and by each of a service op's
 // run/ready/stop commands, so every command shape decodes identically.
@@ -192,6 +234,32 @@ func decodeCommand(spellName, opName string, o Obj) (spells.Command, error) {
 	if bin, ok := o.Str("bin"); ok {
 		c.Bin = bin
 	}
+	// Qualify with spell/op only when named. The by-value entrypoint
+	// (DecodeCommandValue) passes neither, so an empty `spell "" op ""` prefix would
+	// read as a bug in the surfaced message; the engine path always names both.
+	where := ""
+	if spellName != "" || opName != "" {
+		where = fmt.Sprintf("spell %q op %q ", spellName, opName)
+	}
+	secrets, err := o.StrMap("secrets")
+	if err != nil {
+		return spells.Command{}, fmt.Errorf("%scommand secrets: %w", where, err)
+	}
+	for envName := range secrets {
+		// The key becomes `name=value` in the child environment, so a key carrying
+		// "=" would silently retarget a different variable and an empty key would
+		// emit "=value"; neither is a spelling of anything an author meant.
+		if !validEnvName(envName) {
+			return spells.Command{}, fmt.Errorf("%scommand secrets: %q is not an environment variable name (want letters, digits and underscores, not starting with a digit)", where, envName)
+		}
+	}
+	if len(secrets) == 0 {
+		// Normalized HERE, once, so "declared nothing" and "declared an empty map"
+		// are one value with one cache spelling, and no Obj implementation has to
+		// remember the rule.
+		secrets = nil
+	}
+	c.Secrets = secrets
 	charms, ok := o.Obj("charms")
 	if !ok {
 		return c, nil
@@ -222,13 +290,6 @@ func decodeCommand(spellName, opName string, o Obj) (spells.Command, error) {
 			ch.Ops = append(ch.Ops, po)
 		}
 		if err := spells.ValidatePatch(ch.Ops); err != nil {
-			// Qualify with spell/op only when named. The by-value entrypoint
-			// (DecodeCommandValue) passes neither, so an empty `spell "" op ""` prefix
-			// would read as a bug in the surfaced message; the engine path always names both.
-			where := ""
-			if spellName != "" || opName != "" {
-				where = fmt.Sprintf("spell %q op %q ", spellName, opName)
-			}
 			return spells.Command{}, fmt.Errorf("%scharm %q: %w", where, cn, err)
 		}
 		cm[cn] = ch

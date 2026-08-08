@@ -12,7 +12,7 @@ import (
 )
 
 // resolve builds a bare session with the magus/spell types registered, execs
-// src, and resolves its spec — the same setup Extract uses. Every op resolves to
+// src, and resolves its spec  -  the same setup Extract uses. Every op resolves to
 // its declared command.
 func resolve(t *testing.T, src string) (spells.Descriptor, error) {
 	t.Helper()
@@ -84,11 +84,91 @@ export fun mgs_listTargets() > any {
 	assert.Contains(t, spec.Ops, "build", "Targets[\"build\"] missing")
 }
 
+// TestResolve_RecordTargetsSecrets verifies a record op's `secrets` map (env var
+// name -> provider reference) round-trips through a real Buzz session into
+// Op.Secrets  -  the by-value form a spell can declare without the typed Command
+// object (gen/types/command.buzz), proving the StrMap decode path works end to end,
+// not only against the Go-level test double in decode_test.go.
+func TestResolve_RecordTargetsSecrets(t *testing.T) {
+	src := `
+export fun mgs_getName() > str { return "secretpkg"; }
+export fun mgs_listTargets() > any {
+    return {"publish": {"bin": "npm", "args": ["publish"], "secrets": {"NPM_TOKEN": "NPM_TOKEN"}}};
+}
+`
+	spec, err := resolve(t, src)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"NPM_TOKEN": "NPM_TOKEN"}, spec.Ops["publish"].Secrets)
+}
+
+// TestResolve_SecretsEmptyDecodesNil pins the production normalization: an empty
+// secrets map and an absent one are ONE value (nil), so both spellings share one
+// descriptor serialization and one cache entry. This runs through a real Buzz
+// session, exercising buzzSpellObj.StrMap plus decodeCommand's normalization - not
+// the Go test double.
+func TestResolve_SecretsEmptyDecodesNil(t *testing.T) {
+	src := `
+export fun mgs_getName() > str { return "emptysecrets"; }
+export fun mgs_listTargets() > any {
+    return {"publish": {"bin": "npm", "args": ["publish"], "secrets": {<str: str>}}};
+}
+`
+	spec, err := resolve(t, src)
+	require.NoError(t, err)
+	assert.Nil(t, spec.Ops["publish"].Secrets)
+}
+
+// TestResolve_SecretsRejectsWrongTypedValue proves the load-time type error
+// reaches a real session: a non-string value must fail resolution loudly rather
+// than decode to a zero that resolves nothing at spawn.
+func TestResolve_SecretsRejectsWrongTypedValue(t *testing.T) {
+	src := `
+export fun mgs_getName() > str { return "badsecrets"; }
+export fun mgs_listTargets() > any {
+    return {"publish": {"bin": "npm", "args": ["publish"], "secrets": {"NPM_TOKEN": 7}}};
+}
+`
+	_, err := resolve(t, src)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "NPM_TOKEN")
+}
+
+// TestResolve_SecretsRejectsBadEnvName: the key becomes `name=value` in the child
+// environment, so a key that is not an env var name (an "=" inside, an empty
+// string) would silently retarget or corrupt the environment; decode refuses it.
+func TestResolve_SecretsRejectsBadEnvName(t *testing.T) {
+	src := `
+export fun mgs_getName() > str { return "badname"; }
+export fun mgs_listTargets() > any {
+    return {"publish": {"bin": "npm", "args": ["publish"], "secrets": {"A=B": "REF"}}};
+}
+`
+	_, err := resolve(t, src)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not an environment variable name")
+}
+
+// TestResolve_SecretsRejectedOnServiceOps: the supervised path rebuilds a service
+// command without its env, so a secret would reach a foregrounded service and
+// vanish from a supervised one. Decode refuses all three service commands until
+// the supervisor threads env through.
+func TestResolve_SecretsRejectedOnServiceOps(t *testing.T) {
+	src := `
+export fun mgs_getName() > str { return "svcsecrets"; }
+export fun mgs_listTargets() > any {
+    return {"serve": {"command": {"bin": "node", "args": ["server.js"], "secrets": {"API_KEY": "API_KEY"}}}};
+}
+`
+	_, err := resolve(t, src)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not supported on a service op")
+}
+
 // TestResolve_FunctionValueTargets verifies the op form: mgs_listTargets returning
 // {str: fun(Target) Command} handlers, referenced by value, each returning the
 // {bin, args, charms} Command it declares. Handlers are called once at resolution to
 // record their commands, so the result decodes to the same targets a plain data form
-// would — proving the function form is behaviorally identical to a record.
+// would  -  proving the function form is behaviorally identical to a record.
 func TestResolve_FunctionValueTargets(t *testing.T) {
 	src := `
 import "magus/spell";
@@ -229,8 +309,8 @@ export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
 	assert.ErrorContains(t, err, "return `Command{...}`")
 }
 
-// TestResolve_CommandCapturesHandlerDoc pins that an op handler's doc comment —
-// the comment block directly above its `fun` declaration — is captured onto the
+// TestResolve_CommandCapturesHandlerDoc pins that an op handler's doc comment  -
+// the comment block directly above its `fun` declaration  -  is captured onto the
 // target's Doc, while an undocumented handler and one separated by a blank line
 // carry none. This is the data `magus describe` prints and `magus doctor` enforces.
 func TestResolve_CommandCapturesHandlerDoc(t *testing.T) {
@@ -243,7 +323,7 @@ fun build(tg: Target) > Command { return Command{bin = "echo", args = ["a"]}; }
 
 fun test(tg: Target) > Command { return Command{bin = "echo", args = ["b"]}; }
 
-// stray comment with a blank line below — not a doc comment.
+// stray comment with a blank line below  -  not a doc comment.
 
 fun lint(tg: Target) > Command { return Command{bin = "echo", args = ["c"]}; }
 
