@@ -17,6 +17,35 @@ export fun isDirectory(path: str) > bool {
     return fs\isDir(path);
 }
 
+// makeOutputDir creates a written page's output directory, naming the conflict when a
+// FILE already occupies that path.
+//
+// gen/ is not a pure render target: committed static files live in it alongside generated
+// pages. gen/install is the install script the README's curl one-liner fetches, and
+// pruneStaleOutputs lists it under alwaysKeep for exactly that reason. A page whose clean
+// URL is /install/ therefore needs gen/install to be a directory, which it can never be.
+//
+// Without this guard the render dies inside the mkdir as
+//
+//	fs.makeDirectory: mkdir /.../docs/gen/install: not a directory
+//
+// which names neither the page that wanted the directory nor the file standing in its way,
+// and reads as a filesystem fault rather than an authoring mistake. Every writer that
+// creates a page directory goes through here so the message is the same wherever the
+// collision happens.
+//
+// what identifies the thing being written (a source path, or an alias) and url is its
+// gen-root-relative clean URL, so the error can be acted on without grepping for which
+// page renders where.
+export fun makeOutputDir(dir: str, what: str, url: str) > void {
+    if (fs\isFile(dir)) {
+        throw "output path collision: " + what + " renders to /" + url
+            + ", but " + dir + " is an existing file. A page cannot share a URL with a "
+            + "static asset shipped in gen/ - give the page a different URL, or move the asset.";
+    }
+    fs\makeDirectory(dir);
+}
+
 // isGeneratorDir reports whether a docs-ROOT child directory is the SSG's own rather than
 // content. The SSG sits co-located with its markdown, so the content walk shares a tree
 // with node_modules/, gen/, src/, and tour/, whose stray .md (package READMEs, generated
