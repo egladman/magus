@@ -2,9 +2,10 @@
 
 This skill is an explicit opt-in to potentially expensive multi-agent work{{if .Full}}.
 Its fan-out can consume substantially more model time than a single-agent session,
-especially when workers are allowed to delegate again{{end}}. Do not activate it
-from a vague request to "work faster". Use it only when the user names
-`magus-delegate-ultra` or explicitly requests graph-planned parallel delegation.
+especially when workers are allowed to delegate again{{end}}. Use it only when the user
+names it or asks for the work to be split across agents. Wanting it faster or more
+thorough is not that request{{if .Full}}: those ask about the outcome, this chooses the
+method{{end}}.
 
 The root agent owns the goal, global budget, delegation topology, integration,
 and final verification. If the graph supports only one coherent edit unit, keep
@@ -64,11 +65,11 @@ descendants, their parent, effort tier, criteria, and owned paths. Descendants
 inherit the ancestor's forbidden paths and may subdivide only the ancestor's
 owned paths. Apply worker and cost caps globally, not once per parent.
 
-{{if .Full}}Keep one integration owner at the root even when the delegation tree
-is deep. A child may coordinate its descendants, but it may not accept changes
+Keep one integration owner at the root even when the delegation tree is deep.
+{{if .Full}}A child may coordinate its descendants, but it may not accept changes
 outside its own unit, relax top-level acceptance criteria, or hide additional
 fan-out from the root. Prefer a shallow tree unless a child has a genuinely
-separable area and enough context to partition it better than the root.{{end}}
+separable area and enough context to partition it better than the root.{{else}}A child coordinates its descendants but may not relax the root's criteria.{{end}}
 
 ## Seed the partition with Magus
 

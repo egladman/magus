@@ -17,7 +17,29 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Changed
 
-- **`cache.immutable` is now `cache.write.enabled`, inverted.** The old key named the
+- **`magus-delegate-ultra` can now be reached by asking for it in plain words.** It had two
+  triggers: its own literal name, and "explicitly requests graph-planned parallel
+  delegation" - a phrase nobody says out loud, so in practice it had one. It now also
+  matches how people actually ask ("fan this out", "run these in parallel", "use several
+  subagents") while keeping the opt-in sharp: wanting the work faster, sooner, or more
+  thorough is explicitly NOT that request, because those are asks about the outcome and
+  this skill is a choice about the method, with a real cost. The name is unchanged
+  deliberately - it is the trigger string, and `-ultra` already means "expensive,
+  explicitly requested" across this toolchain.
+- **`--simple` now sheds enumeration and keeps judgment, having previously done the
+  reverse.** It described itself as "the imperative steps without the rationale, for a
+  reader that infers the why" - which is backwards for who actually installs it. The
+  short permutation is for the most capable readers, and those are precisely the readers
+  that can re-derive a step from `-h` or `magus describe` but cannot re-derive which
+  failures are SILENT. It was handing its strongest reader the half it could have
+  reconstructed and taking away the half it could not. Twelve skill bodies were
+  re-cut against the new axis, so the short permutation now carries, in compressed form,
+  the reasons a whole-tree revert destroys a concurrent agent's work, that a merge driver
+  cannot finish a conflict alone, that a silent fallback hides the gap worth reporting,
+  and that a partial inventory is a wrong answer wearing a right answer's shape. Several
+  load-bearing imperatives turned out to be marked full-only and were reaching only half
+  the readers; they are unconditional now. The authoring skill and the flag's own help
+  carry the corrected framing. Skill contract v25. The old key named the
   absence of a behavior, so answering "can this run write?" meant parsing a double
   negative, and the documented CI snippet read inverted from its own intent:
   `MAGUS_CACHE_IMMUTABLE: ${{ github.event_name == 'pull_request' }}` becomes
@@ -33,6 +55,37 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Fixed
 
+- **A copied hook template can now be checked for staleness.** Every shipped template
+  carries a `magus-guard-template` version line, and the guide says how to compare it
+  against your own copy. It fills the one gap in the agent surface where a fix could not
+  reach its users: an installed skill is generated and regraded by `magus graph verify`,
+  but a hook template is copied into a host's config and owned by its reader from then on,
+  so the exit-code fix below would have been documented within the hour and absent from
+  every installed copy indefinitely. A version rather than a checksum, because these files
+  are explicitly yours to edit and a checksum would flag your own changes as drift. A bump
+  is total: a test fails until every template is re-stamped, so no file is left claiming a
+  version whose behavior it does not have.
+- **The shipped guard templates mishandled a denied command's non-zero exit.** A deny now
+  exits 2 with the verdict still on stdout, which the templates read as "this binary
+  rejected the attribution flags": the two generic templates silently judged every blocked
+  command a second time, unattributed and recorded twice in the activity trail, and the
+  Cursor script let the blocking status escape as its own, which Cursor reads as a crashed
+  hook and fails open on - turning every block into an allow. They now retry only when a
+  call produced no verdict at all, and the Cursor script prints its JSON and exits 0,
+  because Cursor's channel is that JSON rather than the status. Found by the new transport
+  cases on the first run after the exit-code change landed; nothing had executed these
+  files before.
+- **The OpenCode guard plugin never obtained a verdict, so OpenCode sessions ran
+  entirely unguarded.** It invoked `magus agent hook`, a subcommand that stopped
+  existing when the guard moved to the top-level `magus hook`, and passed the command
+  or path as a positional argument when `hook` reads its input from stdin and rejects
+  positionals. Both were invisible: the plugin ignores the child's stderr, so the
+  usage text went nowhere, an empty stdout failed to parse, and its fail-open arm
+  logged "verdict was not JSON; allowing" once per tool call and allowed everything.
+  It now calls `hook` and writes the input to the child's stdin. The parity check
+  that found this one deliberately does not cover it - a glue that handles verdicts
+  correctly but never receives one is a transport failure, and nothing executes the
+  templates against a real event yet.
 - **A defined type over a basic kind crossed into Buzz as `null`.** Now guarded by a
   test that crosses every runtime boundary type, with the list generated from the same
   registry that emits the Buzz mirrors - so a new boundary type is covered when it is
@@ -45,6 +98,31 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Added
 
+- **A workspace can carry its own magus rules, in a skill magus does not ship.** The
+  installed skills teach the tool and are identical in every repo, so a rule that is
+  true only here had nowhere to live: editing an installed copy reads as drift to
+  `magus graph verify` and is erased by the next `magus agent install --force`, and
+  nothing said so at the moment of the edit. A local skill beside the installed set
+  (`magus-local` by convention) was already safe by construction - install writes only
+  the names it ships and verify grades only those - so this release makes the
+  convention discoverable rather than building a mechanism: a new `magus-adapt` skill
+  carrying the method and the per-rule stamp format (evidence, and the condition that
+  retires the rule), the name reserved against a future shipped skill, and a `magus
+  hook --path` advisory that fires when an agent is about to edit a stamped install.
+  Skill contract v24.
+- **Host parity is now a build gate rather than a table nobody re-reads.** Each guard
+  template declares, per guard surface, how much of a verdict it can carry
+  (`magus-guard-coverage`), and the guard's own vocabulary moved into an importable
+  contract. Adding a decision kind or a guard surface without wiring every host now
+  fails `go test`, as does a declaration that disagrees with the parity table in the
+  agents guide. A declaration can also be sincere and wrong, so the templates are now
+  EXECUTED as well: a testscript corpus runs the three POSIX sh templates against real
+  host events with a real binary, and the OpenCode plugin's transport cases run under
+  node with `Bun.spawn` supplied by the test, leaving the shipped artifact untouched.
+  Both are tied back to the contract - a new decision or surface fails until an
+  executed case covers it, or the file says in writing why that cell is unreachable.
+  The honest remaining limit: the recorded event shapes come from each host's
+  documentation, so a host renaming a field is still invisible until someone runs it.
 - **Tool readiness probes.** A spell can declare `mgs_getReadinessProbes`, keyed by tool,
   and magus checks it before dispatching an op that runs that tool. `docker --version` is
   client-only and succeeds with no daemon, so a stopped daemon used to surface as a build

@@ -23,6 +23,7 @@ the one nobody remembers is loaded.
 | --- | --- |
 | the repo's agent instruction file (`CLAUDE.md`, `AGENTS.md`, ...) | always loaded, whole file, never scoped |
 | installed skills | whole directory; a stale one looks identical to a current one |
+| a local, workspace-owned skill (`magus-local`) | loads beside the shipped set, but nothing generates or verifies it |
 | the handoff journal / memory entries | loaded at session start, and POINT-IN-TIME by definition |
 | a routing index (`MAGUS.md`) | invites being read, only true as of its last regeneration |
 | hook-injected text | fires on every matching tool call, and nothing displays it in one place |
@@ -68,6 +69,9 @@ session", not "how wrong is the sentence".{{end}}
    is now denied.{{if .Full}} Indistinguishable from a dead end until the agent tries it.{{end}}
 3. **Split authority** - two surfaces describe the same decision differently
    (one "advised", the other "denied"). The agent cannot tell which is current.
+   {{if .Full}}A workspace-local rule contradicting a shipped skill is always this finding:
+   local text overrides nothing, so the two are simply in conflict.{{else}}A local rule contradicting a shipped skill is always this.{{end}} Check each
+   local rule's `retire-when` while you are here; the condition may have arrived.
 4. **Orphaned replacement** - a denial or deprecation names a tool that no
    instruction anywhere documents.
 5. **Silent duplication** - the same rule restated in several places.{{if .Full}} Not yet a
@@ -99,8 +103,8 @@ digest moved:
 magus graph verify    # the digest must CHANGE, or the install did nothing
 ```
 
-{{if .Full}}A stale binary re-installs the OLD body and reports success, which is the single
-most common way an applied fix silently does not apply.{{end}}
+A stale binary re-installs the OLD body and reports success{{if .Full}}, which is the single
+most common way an applied fix silently does not apply{{end}}.
 
 Prefer DELETING a contradicting line over reconciling it.{{if .Full}} Two reconciled
 statements are still two statements to keep in sync; one statement cannot

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -21,7 +22,7 @@ import (
 func TestEmbeddedSkillsAreWellFormed(t *testing.T) {
 	skills, err := agentSkills.EmbeddedSkills(agent.VariantFull)
 	require.NoError(t, err)
-	require.Len(t, skills, 11)
+	require.Len(t, skills, 12)
 	for _, skill := range skills {
 		assert.NotEmpty(t, skill.Name)
 		assert.NotEmpty(t, skill.Description)
@@ -824,6 +825,91 @@ func TestStageEverythingDenialNamesDirectStaging(t *testing.T) {
 // TestHookCmd covers the stdin-only guard boundary, the standard output arm,
 // and the fail-open contract for empty input. Host-specific event extraction
 // happens before the command is piped to magus.
+// verdictDecisionRe finds every decision literal the guard assigns, in either
+// spelling the code uses: the struct-literal `Decision: "pass"` and the
+// assignment `verdict.Decision = "deny"`.
+var verdictDecisionRe = regexp.MustCompile(`Decision(?::|\s*=)\s*"(\w+)"`)
+
+// TestGuardDecisionsCoverEveryVerdictTheHookEmits keeps agent.GuardDecisions
+// honest, which is what makes it usable as the contract the host-parity gate
+// compares against (see TestHostGluesCoverTheGuardContract in dogfood_test.go).
+//
+// Two directions, and both are load-bearing:
+//
+//   - Every decision the hook can EMIT must be listed. A source scan rather
+//     than a behavioral assertion, for the same reason
+//     TestEveryCommandBindsDisplayFlags is one: catching an emitted-but-
+//     unlisted decision at runtime would mean enumerating every input that
+//     produces every verdict, and that enumeration is the thing that goes
+//     stale.
+//   - Every listed decision must RENDER distinctly. writeGuardVerdict's text
+//     arm falls through to "pass" for anything it does not know, so a decision
+//     added to the list but not to the renderer would report itself as a pass -
+//     the quietest possible wrong answer.
+//
+// A decision that fails either direction is not a contract a host glue can be
+// asked to declare a stance on.
+func TestGuardDecisionsCoverEveryVerdictTheHookEmits(t *testing.T) {
+	listed := make(map[string]bool)
+	for _, d := range agent.GuardDecisions() {
+		listed[d] = true
+	}
+
+	body, err := os.ReadFile("agent.go")
+	require.NoError(t, err)
+	found := false
+	for _, m := range verdictDecisionRe.FindAllStringSubmatch(string(body), -1) {
+		found = true
+		assert.True(t, listed[m[1]],
+			"agent.go emits the verdict decision %q, which agent.GuardDecisions does not list.\n"+
+				"Add it there first: the host-parity gate asks every glue to declare a stance per\n"+
+				"decision, and a decision missing from the contract is one no host was asked about.", m[1])
+	}
+	require.True(t, found, "found no decision literals in agent.go; verdictDecisionRe no longer matches how the guard assigns a decision")
+
+	for _, d := range agent.GuardDecisions() {
+		var out strings.Builder
+		require.NoError(t, writeGuardVerdict(&out, OutputOptions{Format: FormatText}, guardVerdict{
+			SchemaVersion: agent.GuardSchemaVersion,
+			Decision:      d,
+			Reason:        "why",
+			Context:       "why",
+		}))
+		assert.True(t, strings.HasPrefix(out.String(), d),
+			"writeGuardVerdict renders the listed decision %q as %q: its text arm has no case for it and\n"+
+				"fell through to the default, so the verdict reads as a pass.", d, strings.TrimSpace(out.String()))
+	}
+}
+
+// TestAdviseInstalledSkillWrite pins the discriminator: the STAMP decides, not
+// the path. Both files below sit in the same directory under a magus-* name,
+// and only one of them is magus's to overwrite.
+func TestAdviseInstalledSkillWrite(t *testing.T) {
+	dir := t.TempDir()
+	write := func(rel, body string) string {
+		path := filepath.Join(dir, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+		return path
+	}
+
+	installed := write(".claude/skills/magus-run/SKILL.md", "---\nname: magus-run\nmetadata:\n  source: magus\n---\n\n# Running work\n")
+	got := adviseInstalledSkillWrite(installed)
+	assert.Contains(t, got, "INSTALLED skill")
+	assert.Contains(t, got, "magus-adapt")
+
+	// A workspace's own skill lives in the same directory and must draw silence:
+	// telling an author their hand-written file is generated is worse than
+	// saying nothing.
+	local := write(".claude/skills/"+agent.LocalSkillName+"/SKILL.md", "---\nname: "+agent.LocalSkillName+"\nmetadata:\n  source: workspace\n---\n\n# Our rules\n")
+	assert.Empty(t, adviseInstalledSkillWrite(local))
+
+	// Not a skill file, not in a skill directory, and not there at all.
+	assert.Empty(t, adviseInstalledSkillWrite(write(".claude/skills/magus-run/README.md", "source: magus")))
+	assert.Empty(t, adviseInstalledSkillWrite(write("docs/SKILL.md", "source: magus")))
+	assert.Empty(t, adviseInstalledSkillWrite(filepath.Join(dir, ".claude", "skills", "magus-vcs", "SKILL.md")))
+}
+
 func TestHookCmd(t *testing.T) {
 	auditDir := t.TempDir()
 	run := func(stdin string, args ...string) string {

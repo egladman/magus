@@ -68,7 +68,8 @@ siblings - do not re-search for each one.{{else}}Land via `llms.txt`, then sweep
 The `docs/` Markdown is the source of truth; `docs/gen/` is generated output
 (never edit it - change the source and regenerate). MAGUS.md is a routing index
 generated for HUMAN readers, so do not answer from it{{if .Full}}: it is true only as of the
-last regeneration, and every fact in it has a live command{{end}}.{{if .Full}} The knowledge graph
+last regeneration, and every fact in it has a live command{{else}}: true only as of its last
+regeneration{{end}}.{{if .Full}} The knowledge graph
 carries every page as a `doc` node, so `magus query "kind:doc"` (see the
 magus-query skill) lists them from the graph.{{else}} `magus query "kind:doc"` lists every
 page from the graph.{{end}}

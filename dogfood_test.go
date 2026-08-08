@@ -24,11 +24,14 @@ package magus_test
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/agent"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -100,6 +103,355 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 			}
 		}
 	}
+}
+
+// templateDirScaffolding is what lives beside the templates to LINT them rather
+// than to be installed into a host. Everything else in that directory is an
+// artifact a reader downloads, and therefore owes the parity gates below.
+//
+// An allowlist rather than a suffix rule, and deliberately so: the failure mode
+// worth preventing is a new HOST arriving unregistered, and this errs toward
+// failing on anything unrecognized. Adding tooling here costs one line; adding a
+// host without one costs a silently unguarded integration.
+var templateDirScaffolding = map[string]bool{
+	"package.json":            true,
+	"tsconfig.json":           true,
+	"biome.json":              true,
+	"pnpm-lock.yaml":          true,
+	"magusfile.buzz":          true,
+	"opencode-plugin.test.ts": true,
+}
+
+// TestEveryShippedTemplateIsRegistered closes the gate the other parity tests
+// leave open: they all iterate hookTemplates, so an artifact missing from that
+// list is not merely untested, it is invisible to every check at once - not
+// embedded in the guide, not asked for a coverage declaration, not owed a row in
+// the parity table.
+//
+// That is the exact shape of the regression this whole gate exists to prevent,
+// one level up: someone adds a fifth host, wires it correctly, and every test
+// stays green while the new integration answers to nothing.
+func TestEveryShippedTemplateIsRegistered(t *testing.T) {
+	registered := make(map[string]bool, len(hookTemplates))
+	for _, name := range hookTemplates {
+		registered[name] = true
+	}
+
+	entries, err := os.ReadDir(hookTemplateDir)
+	require.NoError(t, err, "read %s", hookTemplateDir)
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || templateDirScaffolding[name] {
+			continue
+		}
+		switch filepath.Ext(name) {
+		case ".sh", ".ts", ".json":
+		default:
+			continue
+		}
+		assert.True(t, registered[name],
+			"%s ships %s, but hookTemplates does not list it, so every parity check skips it:\n"+
+				"the guide is not required to embed it, no coverage declaration is demanded of it,\n"+
+				"and the parity table owes it no row. Add it to hookTemplates, or to\n"+
+				"templateDirScaffolding if it is tooling rather than something a reader installs.",
+			hookTemplateDir, name)
+	}
+}
+
+// TestShippedTemplatesCarryTheCurrentVersion makes a template version bump
+// TOTAL: re-stamp every template, or the build fails.
+//
+// This is the hook templates' answer to the fingerprint an installed skill
+// carries. The two artifacts differ in who owns them - a skill is generated and
+// regraded on every `graph verify`, a template is copied into a host's config
+// and owned by its reader from then on - so the marker cannot be a content
+// digest without flagging every customization the templates explicitly invite.
+// A version survives editing and still answers the one question that matters to
+// a reader: is my copy older than the fix?
+//
+// The forcing function only works if the bump reaches every file. Without this,
+// bumping the constant for a fix in one template would leave the other three
+// claiming a version whose behavior they do not have, which is worse than no
+// marker at all - it would be a wrong answer rather than a missing one.
+func TestShippedTemplatesCarryTheCurrentVersion(t *testing.T) {
+	want := fmt.Sprintf("%s %d", agent.GuardTemplateMarker, agent.GuardTemplateVersion)
+	for _, name := range hookTemplates {
+		// codex-hooks.json is JSON: no comment syntax to carry a marker, and an
+		// invented key risks the host rejecting the config. It ships no logic of
+		// its own - it names the two templates that do - so its version is theirs.
+		if filepath.Ext(name) == ".json" {
+			continue
+		}
+		body, err := os.ReadFile(filepath.Join(hookTemplateDir, name))
+		require.NoError(t, err, "read %s", name)
+		assert.Contains(t, string(body), want,
+			"%s does not carry %q.\n"+
+				"Every shipped template states the version a reader can compare their own copy against,\n"+
+				"and a bump has to reach all of them at once: a file left behind claims a version whose\n"+
+				"behavior it does not have, which is a wrong answer rather than a missing one.", name, want)
+	}
+}
+
+// guardCoverageMarker introduces a template's machine-readable statement of how
+// much of a verdict it can carry, on one guard surface, for one or more hosts.
+const guardCoverageMarker = "magus-guard-coverage:"
+
+// guardStances are the answers a template may give for a decision: the model
+// sees it, only the person sees it, or it is not delivered at all. "none" is a
+// legitimate answer - Cursor sends nothing on an allow, so an advise dies there
+// - and recording it is the point. Silence is the bug, because silence is
+// indistinguishable from nobody having asked.
+var guardStances = map[string]bool{"model": true, "human": true, "none": true}
+
+// hostCoverage is host -> surface -> decision -> stance.
+type hostCoverage map[string]map[string]map[string]string
+
+// parseGuardCoverage reads every coverage declaration out of the hook templates.
+// codex-hooks.json carries none and cannot: it is JSON, comments are not
+// available, and an invented key risks the host rejecting the config. Codex's
+// coverage is asserted separately, from the templates its command strings
+// invoke.
+func parseGuardCoverage(t *testing.T) hostCoverage {
+	t.Helper()
+	cov := hostCoverage{}
+	for _, name := range hookTemplates {
+		body, err := os.ReadFile(filepath.Join(hookTemplateDir, name))
+		require.NoError(t, err, "read %s", name)
+		for _, line := range strings.Split(string(body), "\n") {
+			_, decl, found := strings.Cut(line, guardCoverageMarker)
+			if !found {
+				continue
+			}
+			fields := map[string]string{}
+			for _, kv := range strings.Fields(decl) {
+				key, value, ok := strings.Cut(kv, "=")
+				require.True(t, ok, "%s: coverage declaration field %q is not key=value", name, kv)
+				fields[key] = value
+			}
+			require.Equal(t, "1", fields["schema"],
+				"%s declares guard schema %q; the contract is agent.GuardSchemaVersion=%d.\n"+
+					"A schema bump means every host glue must be updated and re-downloaded before it guards again.",
+				name, fields["schema"], agent.GuardSchemaVersion)
+			surface := fields["surface"]
+			require.Contains(t, agent.GuardSurfaces(), surface, "%s declares an unknown guard surface %q", name, surface)
+			require.NotEmpty(t, fields["host"], "%s: coverage declaration names no host", name)
+
+			for _, host := range strings.Split(fields["host"], ",") {
+				if cov[host] == nil {
+					cov[host] = map[string]map[string]string{}
+				}
+				require.Nil(t, cov[host][surface],
+					"host %q has two declarations for the %s surface; one artifact per host per surface, or the gate cannot tell which is true", host, surface)
+				stances := map[string]string{}
+				for _, decision := range agent.GuardDecisions() {
+					stance, ok := fields[decision]
+					require.True(t, ok,
+						"%s declares the %s surface for host %q but says nothing about the %q decision.\n"+
+							"Every decision in agent.GuardDecisions needs an explicit stance (model, human, or none):\n"+
+							"an undeclared decision is one this host was never asked about.", name, surface, host, decision)
+					require.True(t, guardStances[stance], "%s: unknown stance %q for %q (want model, human, or none)", name, stance, decision)
+					stances[decision] = stance
+				}
+				cov[host][surface] = stances
+			}
+		}
+	}
+	require.NotEmpty(t, cov, "no %s declarations found in any hook template", guardCoverageMarker)
+	return cov
+}
+
+// TestHostGluesCoverTheGuardContract is the host-parity gate.
+//
+// magus's guard rules come from one binary and are identical for every host;
+// what differs is how much of a verdict a host's hook surface can carry. That
+// difference was recorded only in prose - a table in the guide that nothing
+// checked - so adding a decision kind or a guard surface could leave a host
+// silently uncovered, and the first person to notice would be a user whose
+// session was not guarded.
+//
+// This makes the contract in internal/agent the thing every artifact answers
+// to. A new decision or surface must be added there first (the cmd/magus test
+// TestGuardDecisionsCoverEveryVerdictTheHookEmits forces that much), and the
+// moment it is, every template owes it an explicit stance and the guide's table
+// owes it a column. A glue left untouched fails `go test`.
+//
+// What it deliberately does NOT check: whether a declaration TELLS THE TRUTH.
+// A template that declares advise=model while its response body is mangled
+// passes here and fails nowhere - that is transport parity, which needs the
+// templates executed against real events, and it is not this test.
+func TestHostGluesCoverTheGuardContract(t *testing.T) {
+	cov := parseGuardCoverage(t)
+
+	for host, surfaces := range cov {
+		for _, surface := range agent.GuardSurfaces() {
+			assert.NotNil(t, surfaces[surface],
+				"host %q declares no coverage for the %q guard surface.\n"+
+					"Either a template wires it and needs a %s line, or the host cannot and\n"+
+					"some template must say so - a surface nobody claims is a coverage hole nobody sees.",
+				host, surface, guardCoverageMarker)
+		}
+	}
+
+	// Codex ships no script of its own: codex-hooks.json points at the two
+	// generic templates. Those templates claim the codex host, so this is what
+	// makes the claim checkable rather than aspirational.
+	wiring, err := os.ReadFile(filepath.Join(hookTemplateDir, "codex-hooks.json"))
+	require.NoError(t, err)
+	for _, name := range hookTemplates {
+		body, err := os.ReadFile(filepath.Join(hookTemplateDir, name))
+		require.NoError(t, err)
+		if !strings.Contains(string(body), "host=codex") && !strings.Contains(string(body), ",codex") {
+			continue
+		}
+		assert.Contains(t, string(wiring), name,
+			"%s claims to cover the codex host, but codex-hooks.json never invokes it", name)
+	}
+}
+
+// transportCorpus is the testscript that executes the sh templates against real
+// host events. Its cases are labeled so the contract can demand one per cell.
+const transportCorpus = "cmd/magus/testdata/script/guard_templates.txtar"
+
+// TestTransportCorpusCoversTheContract ties the executed cases to the same
+// contract the declarations answer to.
+//
+// Coverage parity asks every glue to DECLARE a stance; this asks that somebody
+// actually ran it. Without this, growing the contract would demand new
+// declarations (which the sibling test enforces) while the transport corpus
+// quietly kept testing the old cells - and a declaration nobody executes is the
+// exact failure that let a broken plugin ship.
+//
+// A cell the guard cannot currently produce is declared rather than skipped:
+// `# case: path/deny unreachable - ...` satisfies this and says why in the file
+// where the next person will look.
+func TestTransportCorpusCoversTheContract(t *testing.T) {
+	body, err := os.ReadFile(transportCorpus)
+	require.NoError(t, err, "read %s", transportCorpus)
+	corpus := string(body)
+
+	for _, surface := range agent.GuardSurfaces() {
+		for _, decision := range agent.GuardDecisions() {
+			label := "# case: " + surface + "/" + decision
+			assert.Contains(t, corpus, label,
+				"%s has no case labeled %q.\n"+
+					"Every surface-and-decision pair in the guard contract needs one executed case, or an\n"+
+					"explicit `%s unreachable - <why>` line when the guard cannot produce that verdict.",
+				transportCorpus, label, label)
+		}
+	}
+}
+
+// TestParityTableMatchesTheGlueDeclarations keeps the guide's hand-written
+// "Parity across hosts" table honest against the declarations.
+//
+// The table is what a person reads before choosing a host, so a wrong cell is a
+// user picking a host on a promise magus does not keep. Its deny and advise
+// columns describe the COMMAND surface - the declared-output rule has its own
+// column - so that is what they are checked against.
+func TestParityTableMatchesTheGlueDeclarations(t *testing.T) {
+	cov := parseGuardCoverage(t)
+	guide, err := os.ReadFile(hookGuideDoc)
+	require.NoError(t, err)
+
+	rows := parityTableRows(t, string(guide))
+	for host, surfaces := range cov {
+		cells, ok := rows[normalizeHost(host)]
+		require.True(t, ok,
+			"host %q is declared by a template but has no row in the parity table in %s.\n"+
+				"Every supported host belongs in the table a reader uses to choose one.", host, hookGuideDoc)
+
+		assertCell := func(column string, want bool) {
+			t.Helper()
+			cell, ok := cells[column]
+			require.True(t, ok, "the parity table has no %q column; the contract needs one", column)
+			got := strings.HasPrefix(strings.ToLower(cell), "yes")
+			assert.Equal(t, want, got,
+				"parity table row %q, column %q reads %q, which disagrees with the coverage the templates declare.\n"+
+					"Fix whichever is wrong - the table is a promise to a reader, the declaration is what the file does.",
+				host, column, cell)
+		}
+		assertCell("command rules", surfaces["command"] != nil)
+		assertCell("declared-output rule", surfaces["path"] != nil)
+		if command := surfaces["command"]; command != nil {
+			assertCell("deny", command["deny"] == "model")
+			assertCell("advise", command["advise"] == "model")
+		}
+	}
+
+	var declared []string
+	for host := range cov {
+		declared = append(declared, normalizeHost(host))
+	}
+	sort.Strings(declared)
+	for row := range rows {
+		assert.Contains(t, declared, row,
+			"the parity table in %s promises host %q, which no template declares coverage for", hookGuideDoc, row)
+	}
+}
+
+// normalizeHost folds the two spellings of a host name - the declarations use
+// the label the guard records (claude-code), the guide uses the product's own
+// (Claude Code) - so neither has to bend to the other.
+func normalizeHost(s string) string {
+	return strings.NewReplacer(" ", "", "-", "", "`", "").Replace(strings.ToLower(strings.TrimSpace(s)))
+}
+
+// parityTableRows extracts the guide's parity table as row label -> column ->
+// cell. Columns are keyed by the distinguishing word in the header rather than
+// its full text, so rewording a header does not silently drop a check.
+func parityTableRows(t *testing.T, guide string) map[string]map[string]string {
+	t.Helper()
+	_, section, found := strings.Cut(guide, "### Parity across hosts")
+	require.True(t, found, "%s has no 'Parity across hosts' section; the parity table is the human half of this gate", hookGuideDoc)
+
+	var header []string
+	rows := map[string]map[string]string{}
+	for _, line := range strings.Split(section, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "|") {
+			if len(rows) > 0 || header != nil {
+				break // past the table
+			}
+			continue
+		}
+		cells := splitTableRow(line)
+		switch {
+		case header == nil:
+			for _, cell := range cells {
+				switch {
+				case strings.Contains(cell, "command rules"):
+					header = append(header, "command rules")
+				case strings.Contains(cell, "declared-output"):
+					header = append(header, "declared-output rule")
+				case strings.Contains(cell, "deny"):
+					header = append(header, "deny")
+				case strings.Contains(cell, "advise"):
+					header = append(header, "advise")
+				default:
+					header = append(header, cell)
+				}
+			}
+		case strings.HasPrefix(cells[0], "---"):
+		default:
+			row := map[string]string{}
+			for i, cell := range cells {
+				if i < len(header) && i > 0 {
+					row[header[i]] = cell
+				}
+			}
+			rows[normalizeHost(cells[0])] = row
+		}
+	}
+	require.NotEmpty(t, rows, "parsed no rows out of the parity table in %s", hookGuideDoc)
+	return rows
+}
+
+func splitTableRow(line string) []string {
+	parts := strings.Split(strings.Trim(line, "|"), "|")
+	for i, p := range parts {
+		parts[i] = strings.TrimSpace(p)
+	}
+	return parts
 }
 
 // TestHookTemplatesAreEmbeddedInTheGuide keeps the docs site explorable without

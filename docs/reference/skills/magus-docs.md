@@ -3,7 +3,7 @@ title: magus-docs
 description: "Traverse magus's own documentation to answer a \"how does magus do X / what does Y mean / where is Z documented\" question, instead of guessing an answer or a URL."
 tags: [agents, skills, magus-docs]
 skill_full_bytes: 3670
-skill_simple_bytes: 2917
+skill_simple_bytes: 2956
 ---
 
 # magus-docs
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `23` |
+| `agent-skill-version` | `26` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `ace009cb3627` |
+| `skill-content` | `50e5cf282e9c` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -184,7 +184,8 @@ Land via `llms.txt`, then sweep siblings via "In this section".
 
 The `docs/` Markdown is the source of truth; `docs/gen/` is generated output
 (never edit it - change the source and regenerate). MAGUS.md is a routing index
-generated for HUMAN readers, so do not answer from it. `magus query "kind:doc"` lists every
+generated for HUMAN readers, so do not answer from it: true only as of its last
+regeneration. `magus query "kind:doc"` lists every
 page from the graph.
 ```
 

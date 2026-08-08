@@ -3,7 +3,7 @@ title: magus-run
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
 skill_full_bytes: 9375
-skill_simple_bytes: 5604
+skill_simple_bytes: 5947
 ---
 
 # magus-run
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `23` |
+| `agent-skill-version` | `26` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `ace009cb3627` |
+| `skill-content` | `50e5cf282e9c` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -243,7 +243,8 @@ The same steps with the rationale withheld; the bar under the heading above show
 
 magus is the task orchestrator: targets declare their inputs, outputs, and
 sandbox, and magus caches results and computes what a change affects. Invoking a
-raw language tool directly bypasses all of that.
+raw language tool directly bypasses all of that, so the cache goes
+stale and `magus affected` can no longer vouch for your change.
 
 ## Which project a command hits
 
@@ -272,7 +273,8 @@ project (`magus run test web`), or let `magus affected` compute it from the diff
    going around magus.
 4. `ci` is the canonical anchor target. When your change is done,
    run `magus affected ci` as the final gate. Verify in place; never `git stash`/`reset`
-   first.
+   first (it destroys a concurrent agent's untracked work, and the tree is already
+   what you want to verify).
 
 ## Command patterns
 
@@ -315,6 +317,8 @@ magus watch | magus affected --stdin        # changed paths -> affected set
 magus affected ci --plan | magus run ci-shard:gha   # plan -> shard matrix
 ```
 
+Rule of thumb: a pipe whose right-hand side is magus, or `jq` over `-o json`, is
+composition. A pipe whose right-hand side is a text filter is a missing `-o`.
 ## When you need finer granularity
 
 Every top-level target composes spell ops (tool-native operations). address one directly

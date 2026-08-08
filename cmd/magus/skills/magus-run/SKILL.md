@@ -3,7 +3,8 @@
 magus is the task orchestrator: targets declare their inputs, outputs, and
 sandbox, and magus caches results and computes what a change affects. Invoking a
 raw language tool directly bypasses all of that{{if .Full}}, so the cache goes stale, declared
-outputs drift, and `magus affected` can no longer vouch for your change{{end}}.
+outputs drift, and `magus affected` can no longer vouch for your change{{else}}, so the cache goes
+stale and `magus affected` can no longer vouch for your change{{end}}.
 
 ## Which project a command hits
 
@@ -46,7 +47,8 @@ project (`magus run test web`), or let `magus affected` compute it from the diff
    every project your change reaches, which is how you learn about ramifications
    in projects you never touched{{end}}. Verify in place; never `git stash`/`reset`
    first{{if .Full}} (data-loss-prone and pointless - the tree is already what you want to
-   verify){{end}}.
+   verify){{else}} (it destroys a concurrent agent's untracked work, and the tree is already
+   what you want to verify){{end}}.
 
 ## Command patterns
 
@@ -129,8 +131,9 @@ magus watch | magus affected --stdin        # changed paths -> affected set
 magus affected ci --plan | magus run ci-shard:gha   # plan -> shard matrix
 ```
 
-{{if .Full}}Rule of thumb: a pipe whose right-hand side is magus, or `jq` over `-o json`, is
+Rule of thumb: a pipe whose right-hand side is magus, or `jq` over `-o json`, is
 composition. A pipe whose right-hand side is a text filter is a missing `-o`.
+{{if .Full}}
 
 WRONG: `magus run test | head -50` (drops the failing tail that matters).
 WRONG: `magus query "kind:target" -o name | grep -c .` (use the JSON count).

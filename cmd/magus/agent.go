@@ -102,8 +102,9 @@ func agentUsage(w io.Writer) {
 	fmt.Fprintln(w, "  --dir <path>   repo directory to install into (default .)")
 	fmt.Fprintln(w, "  --force        overwrite existing installed skill files")
 	fmt.Fprintln(w, "  --simple       install the shorter curated permutation of each skill:")
-	fmt.Fprintln(w, "                 the imperative steps without the rationale, for a reader")
-	fmt.Fprintln(w, "                 that infers the why. Both permutations are hand-authored")
+	fmt.Fprintln(w, "                 the same judgment with the enumeration dropped, for a")
+	fmt.Fprintln(w, "                 reader that can re-derive the steps but not which")
+	fmt.Fprintln(w, "                 failures are silent. Both permutations are hand-authored")
 	fmt.Fprintln(w, "                 from one source and share one content digest, so they go")
 	fmt.Fprintln(w, "                 stale together and `graph verify` treats them alike.")
 	fmt.Fprintln(w, "  --tar          stream a tar archive to stdout instead of writing files")
@@ -131,7 +132,7 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	bindDisplayFlags(fset)
 	dir := fset.String("dir", ".", "Repo directory to install into")
 	force := fset.Bool("force", false, "Overwrite existing installed skill files (write mode)")
-	simple := fset.Bool("simple", false, "Install the shorter curated permutation of each skill: the imperative steps without the rationale, for a reader that infers the why")
+	simple := fset.Bool("simple", false, "Install the shorter curated permutation of each skill: the same judgment with the enumeration dropped, for a reader that can re-derive the steps but not which failures are silent")
 	tarMode := fset.Bool("tar", false, "Stream a tar archive of the skills to stdout instead of writing files")
 	global := fset.Bool("global", false, "Allow absolute destination paths in write mode (use --tar | tar -xf - for paths outside the repo instead)")
 	fset.Usage = func() { agentUsage(os.Stderr) }
@@ -278,12 +279,10 @@ func agentSampleCmd() error {
 // documentation, never in code.
 type guardVerdict struct {
 	SchemaVersion int    `json:"schema_version"`
-	Decision      string `json:"decision"`          // deny | advise | pass
+	Decision      string `json:"decision"`          // one of agent.GuardDecisions
 	Reason        string `json:"reason,omitempty"`  // deny: the block reason, written for the model
 	Context       string `json:"context,omitempty"` // advise: context to inject alongside the allowed call
 }
-
-const guardSchemaVersion = 1
 
 // hookCmd implements `magus hook`: evaluate one shell command against the guard
 // rules and emit a verdict. It reads exactly one command or file path from
@@ -342,13 +341,16 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 			who.Event = req.Who.Event
 		}
 	}
-	verdict := guardVerdict{SchemaVersion: guardSchemaVersion, Decision: "pass"}
+	verdict := guardVerdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 	if *asPath {
 		if hasInput {
 			// The generated-output rule is definitive (it reads declared globs), so it
 			// speaks first; the memory nudge is a heuristic on the filename and only
 			// fills the silence it leaves.
 			context := adviseGeneratedWrite(ctx, input.Value)
+			if context == "" {
+				context = adviseInstalledSkillWrite(input.Value)
+			}
 			if context == "" {
 				context = adviseMemoryWrite(input.Value)
 			}
@@ -493,6 +495,51 @@ func adviseMemoryWrite(path string) string {
 		return ""
 	}
 	return "magus workspace: this is a per-host instruction file - it lives in one checkout and one host's conventions, and a second worktree or a different agent host does not see it. If what you are recording is a DECISION ABOUT THIS WORKSPACE (a target, a saved query, an output ref, a doc), put it in the handoff journal too: `magus memory put <name>` keeps it outside the checkout, where it survives worktrees, sessions, and hosts. Host instructions are right where they are; workspace decisions are not. Load the magus-memory skill if not already loaded."
+}
+
+// adviseInstalledSkillWrite explains that an installed skill is generated, or
+// "" when the path is not one.
+//
+// The other two path advisories catch a write that is wasted; this one catches
+// a write that DISAPPEARS. An installed skill is rendered from magus's embedded
+// sources and stamped, so an edit to it is reported as drift by `graph verify`
+// and erased by the next install --force. Neither event explains itself at the
+// moment the edit is made, which is the only moment the advice is useful.
+//
+// The stamp is the discriminator, not the path: a workspace's own skill sits in
+// the same directory under a name magus does not ship, and telling an author
+// their own file is generated would be worse than saying nothing. So this reads
+// the file and speaks only for one magus wrote - and stays silent on an
+// unreadable one, like every other advisory here, because a nudge fired on a
+// guess trains the reader to ignore the ones that are right.
+//
+// It is unreachable in magus's OWN tree, which is worth knowing before hunting
+// for a bug: this repository declares its installed skills as outputs of the
+// root generate target, so adviseGeneratedWrite claims the path first and says
+// something more specific (it can name the producing target). Nobody else does
+// that - a workspace installs skills with `agent install`, which is not a
+// target and declares nothing - so in every repo but this one, this advisory is
+// the only thing that speaks.
+func adviseInstalledSkillWrite(path string) string {
+	clean := filepath.ToSlash(strings.TrimSpace(path))
+	if filepath.Base(clean) != "SKILL.md" {
+		return ""
+	}
+	installed := false
+	for _, dir := range agent.WellKnownSkillDirs() {
+		if strings.Contains(clean, dir+"/") {
+			installed = true
+			break
+		}
+	}
+	if !installed {
+		return ""
+	}
+	body, err := os.ReadFile(path)
+	if err != nil || !strings.Contains(string(body), "source: magus") {
+		return ""
+	}
+	return "magus workspace: that file is an INSTALLED skill - magus generates it from its own embedded sources and stamps it with a content digest. Editing it does not fail loudly, it fails silently in two ways: `magus graph verify` reports the file as stale rather than reading what you wrote, and the next `magus agent install <dir> --force` overwrites it. Rules that belong to THIS workspace go in a local skill beside the installed ones instead - a directory magus does not ship, conventionally magus-local, which install and verify both leave alone by construction. Stamp each rule with its evidence and the condition that retires it. Load the magus-adapt skill for the format and the rest of the method."
 }
 
 // guardInput keeps the resolved command/path distinct from its rendering and

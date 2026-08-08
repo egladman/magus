@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/rogpeppe/go-internal/testscript"
@@ -26,6 +27,15 @@ func TestScripts(t *testing.T) {
 		Setup: func(e *testscript.Env) error {
 			e.Setenv("MAGUS_DAEMON_ENABLED", "false")
 			e.Setenv("MAGUS_HINTS_ENABLED", "false")
+			// The shipped guard templates, by ABSOLUTE PATH to the real files.
+			// A script that copied them into its own archive would be testing a
+			// copy, and a copy of the artifact readers download is exactly what
+			// dogfood_test.go exists to prevent.
+			templates, err := filepath.Abs(filepath.Join("..", "..", "docs", "guides", "integrations", "agents"))
+			if err != nil {
+				return err
+			}
+			e.Setenv("GUARD_TEMPLATES", templates)
 			return nil
 		},
 	})
