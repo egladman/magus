@@ -960,47 +960,83 @@ export const MagusGuard: Plugin = async () => {
   const magus = process.env.GUARD_MAGUS_BIN ?? "magus";
 
   /**
-   * Runs one guard query. Returns null when no verdict could be obtained, which
-   * every caller treats as allow.
+   * One `magus hook` invocation. `ran` says whether the process completed
+   * successfully at all, which is what separates "magus judged this and the
+   * verdict is unusable" from "this binary could not run that call" - the
+   * second is retryable, the first is not.
+   */
+  type Attempt = { ran: boolean; verdict: Verdict | null };
+
+  /**
+   * Runs one guard query. `magus hook` reads the command or file path from
+   * STDIN and takes no positional arguments, so the subject is piped rather
+   * than appended to argv.
    *
    * Failing OPEN is deliberate. Throwing is OpenCode's only way to stop a call,
    * so a guard that threw whenever magus was missing would block every tool
    * call and make the session unusable - worse than no guard. The failure is
    * logged rather than swallowed, so an unguarded session stays visible.
    */
-  const judge = async (args: readonly string[]): Promise<Verdict | null> => {
+  const run = async (subject: string, args: readonly string[]): Promise<Attempt> => {
     let stdout: string;
+    let code: number;
     try {
-      const proc = Bun.spawn([magus, ...args], { stdout: "pipe", stderr: "ignore" });
+      const proc = Bun.spawn([magus, "hook", ...args, "-o", "json"], {
+        stdin: new Blob([subject]),
+        stdout: "pipe",
+        stderr: "ignore",
+      });
       stdout = await new Response(proc.stdout).text();
-      await proc.exited;
+      code = await proc.exited;
     } catch {
       console.warn(
         `[magus guard] could not run ${magus}; this call is UNGUARDED. ` +
           "Install magus, or set GUARD_MAGUS_BIN to its path.",
       );
-      return null;
+      return { ran: false, verdict: null };
     }
+    // A non-zero exit is magus declining the call itself - an unknown flag is
+    // the case this plugin plans for - and it prints usage on stdout, which
+    // would otherwise be reported as a malformed verdict.
+    if (code !== 0) return { ran: false, verdict: null };
 
     let parsed: unknown;
     try {
       parsed = JSON.parse(stdout);
     } catch {
       console.warn("[magus guard] verdict was not JSON; allowing");
-      return null;
+      return { ran: true, verdict: null };
     }
     if (!isVerdict(parsed)) {
       console.warn("[magus guard] unrecognized verdict shape; allowing");
-      return null;
+      return { ran: true, verdict: null };
     }
     if (parsed.schema_version !== SUPPORTED_SCHEMA) {
       console.warn(
         `[magus guard] verdict schema ${parsed.schema_version} differs from the expected ` +
           `${SUPPORTED_SCHEMA}; allowing. Update this plugin from the magus docs.`,
       );
-      return null;
+      return { ran: true, verdict: null };
     }
-    return parsed;
+    return { ran: true, verdict: parsed };
+  };
+
+  /**
+   * Judges one subject, with attribution when the binary supports it.
+   *
+   * Attribution is BEST EFFORT; the verdict is not. `--host` postdates the
+   * current magus release, and this file is copied and run against whatever
+   * binary a reader already has. Passing it unconditionally does not degrade
+   * the guard, it BREAKS it: an older binary rejects the unknown flag, prints
+   * usage and exits non-zero, so no verdict comes back and every deny rule
+   * silently stops being enforced. So: try with attribution, and on a failed
+   * run retry without it - exactly the call this plugin made before
+   * attribution existed. One extra process only on an older binary.
+   */
+  const judge = async (subject: string, args: readonly string[]): Promise<Verdict | null> => {
+    const attributed = await run(subject, [...args, "--host", "opencode"]);
+    if (attributed.ran) return attributed.verdict;
+    return (await run(subject, args)).verdict;
   };
 
   /** Throws on a deny; logs an advise, which OpenCode cannot inject as context. */
@@ -1026,7 +1062,7 @@ export const MagusGuard: Plugin = async () => {
       if (input.tool === "bash") {
         const command = argString(output.args, ["command"]);
         if (command === "") return;
-        apply(await judge(["agent", "hook", "--host", "opencode", "-o", "json", "--", command]));
+        apply(await judge(command, []));
         return;
       }
 
@@ -1035,9 +1071,7 @@ export const MagusGuard: Plugin = async () => {
         // plugin working if a future tool spells it differently.
         const path = argString(output.args, ["filePath", "file_path", "path"]);
         if (path === "") return;
-        apply(
-          await judge(["agent", "hook", "--path", "--host", "opencode", "-o", "json", "--", path]),
-        );
+        apply(await judge(path, ["--path"]));
       }
     },
   };

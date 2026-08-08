@@ -63,14 +63,20 @@ export function fmtPct(fraction: number | null | undefined): string {
   return Math.round(fraction * 100) + "%";
 }
 
-export function tsMillis(ts: Timestamp | undefined): number {
+// tsMillisOrNow converts a protobuf Timestamp to epoch milliseconds, substituting NOW when the
+// field is absent. The "OrNow" is in the name because that substitution is a real decision and a
+// lossy one: an event with no timestamp renders as "0s ago", i.e. indistinguishable from one that
+// just happened. Callers that would rather show nothing want activity/adapter.ts's tsMillis, which
+// returns null instead - the two used to share the plain name and differ only in that, which is
+// exactly the kind of pair a reader resolves wrongly.
+export function tsMillisOrNow(ts: Timestamp | undefined): number {
   if (!ts) return Date.now();
   return Number(ts.seconds) * 1000 + Math.floor((ts.nanos || 0) / 1e6);
 }
 
 export function relTime(ts: Timestamp | undefined): string {
   if (!ts) return "";
-  const secs = Math.max(0, Math.round((Date.now() - tsMillis(ts)) / 1000));
+  const secs = Math.max(0, Math.round((Date.now() - tsMillisOrNow(ts)) / 1000));
   if (secs < 60) return secs + "s";
   const mins = Math.round(secs / 60);
   if (mins < 60) return mins + "m";
@@ -233,8 +239,8 @@ function mapTargetRun(t: TargetRun): TargetRunView {
     label: t.project ? t.project + ":" + t.target : t.target || "",
     state,
     terminal: state === "passed" || state === "failed" || state === "cached",
-    startMs: t.startedAt ? tsMillis(t.startedAt) : null,
-    endMs: t.endedAt ? tsMillis(t.endedAt) : null,
+    startMs: t.startedAt ? tsMillisOrNow(t.startedAt) : null,
+    endMs: t.endedAt ? tsMillisOrNow(t.endedAt) : null,
     outputRef: t.outputRef || "",
     durationMs: Number(t.durationMs || 0),
   };
@@ -519,7 +525,7 @@ export interface MetricsView {
 
 export function mapSnapshot(snap: Snapshot): MetricsView {
   return {
-    capturedMs: tsMillis(snap.capturedAt),
+    capturedMs: tsMillisOrNow(snap.capturedAt),
     latency: {
       target: mapLat(snap.target),
       cache: mapLat(snap.cache),
@@ -561,7 +567,7 @@ export interface SampleView {
 
 export function mapSample(s: ProtoSample): SampleView {
   return {
-    at: tsMillis(s.at),
+    at: tsMillisOrNow(s.at),
     running: s.running,
     capacity: s.capacity,
     queued: s.queued,
@@ -581,7 +587,7 @@ export function mapSample(s: ProtoSample): SampleView {
 // fmtDate renders a wire Timestamp as a local date, blank when unset.
 export function fmtDate(ts: Timestamp | undefined): string {
   if (!ts) return "-";
-  return new Date(tsMillis(ts)).toLocaleDateString();
+  return new Date(tsMillisOrNow(ts)).toLocaleDateString();
 }
 
 export interface HotspotNodeView {

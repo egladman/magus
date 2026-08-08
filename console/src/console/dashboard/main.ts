@@ -221,6 +221,23 @@ function wireNotifications(): void {
 // ---- tiles -----------------------------------------------------------------
 let tiles: Tile[] = [];
 let rotator: Rotator | null = null;
+// Store subscriptions taken out by mountTiles, and the controller for activate()'s
+// window-level listeners. mountTiles runs again on every reopen (the rotator comment below
+// says so), so without dropping these the previous generation of tiles stays subscribed:
+// each dead board keeps its own live uPlot canvas and interval, updating on every status
+// frame, forever. The rotator already handled this one tile at a time; this is the same
+// reasoning applied to the whole set.
+let tileDisposers: (() => void)[] = [];
+let lifecycleAbort: AbortController | null = null;
+
+// releaseTiles drops the previous board: unsubscribe first so nothing can be updated while it
+// is being torn down, then destroy each tile (charts, intervals, observers).
+function releaseTiles(): void {
+  for (const off of tileDisposers) off();
+  tileDisposers = [];
+  for (const t of tiles) t.destroy();
+  tiles = [];
+}
 
 function mountTiles(): void {
   const host = el("dash-panels");
@@ -316,8 +333,8 @@ function mountTiles(): void {
   tiles = [header, ...ordered, ...insight.tiles];
 
   // Chrome first, then tiles: the panels are revealed before a chart tile builds.
-  store.subscribe(renderStatusBar);
-  for (const t of tiles) store.subscribe((s) => t.update(s));
+  tileDisposers.push(store.subscribe(renderStatusBar));
+  for (const t of tiles) tileDisposers.push(store.subscribe((s) => t.update(s)));
 
   // Board vs Big Picture. Big Picture is NOT a separate view: it is THIS SAME SET of tiles with
   // most of them hidden, re-laid-out by dashboard.css off [data-bigpicture]. So the only decision
@@ -497,7 +514,7 @@ function registerServiceWorker(): void {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
   const secure = location.protocol === "https:" || location.hostname === "localhost";
   if (!secure) return;
-  window.addEventListener("load", () => {
+  const go = (): void => {
     navigator.serviceWorker
       .register(new URL("../sw.js", import.meta.url))
       .then((reg) => {
@@ -505,7 +522,14 @@ function registerServiceWorker(): void {
         pollForNewVersion(reg);
       })
       .catch(() => {});
-  });
+  };
+  // Waiting on `load` unconditionally never fires when the console shell reaches this
+  // module through a dynamic import: by then the page has long finished loading, and the
+  // listener is registered for an event that has already been and gone - so the dashboard
+  // silently ran with no service worker at all inside the shell, while the standalone page
+  // (a deferred module script, which does run before `load`) worked fine.
+  if (document.readyState === "complete") go();
+  else window.addEventListener("load", go, { once: true });
 }
 
 // How often a tab re-checks the server for a new worker. Registration alone does not: the browser
@@ -591,6 +615,12 @@ let notificationsWired = false;
 export function activate(): void {
   document.documentElement.classList.remove("no-js");
   registerServiceWorker();
+  // Drop the previous generation before building the next one. activate() runs again every
+  // time the console reopens this surface, and the module (with its store and tile list)
+  // outlives the tab.
+  releaseTiles();
+  lifecycleAbort?.abort();
+  lifecycleAbort = new AbortController();
   mountTiles();
   // Subscribe the notification watcher once per page lifetime: the module-scoped store outlives a
   // console tab close/reopen, so re-subscribing on every activate() would double-fire.
@@ -606,8 +636,9 @@ export function activate(): void {
     if (badge) badge.hidden = navigator.onLine;
   };
   updateOffline();
-  window.addEventListener("online", updateOffline);
-  window.addEventListener("offline", updateOffline);
+  const sig = lifecycleAbort?.signal;
+  window.addEventListener("online", updateOffline, { signal: sig });
+  window.addEventListener("offline", updateOffline, { signal: sig });
 
   const params = parseHash();
   consumeLiveToken(params);
@@ -673,6 +704,11 @@ export function deactivate(): void {
   transport.stop();
   demo?.stop();
   demo = null;
+  rotator?.destroy();
+  rotator = null;
+  releaseTiles();
+  lifecycleAbort?.abort();
+  lifecycleAbort = null;
 }
 
 // Standalone auto-boot: only when the scaffold is already in the document at load. In the console the

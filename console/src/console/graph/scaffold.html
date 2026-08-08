@@ -19,8 +19,8 @@
         <button type="button" class="console-graph-views__chip" data-view="critical" data-conditional title="The longest duration-weighted chain of targets. Shown when the graph has timing (run a build first: magus graph deps -o json)">Find the slowest chain</button>
         <button type="button" class="console-graph-views__chip" data-view="cycles" title="Highlight targets caught in a circular dependency, where A needs B needs A. magus cannot order these, so it is a configuration error to fix. CLI: magus graph verify">Find circular dependencies</button>
         <button type="button" class="console-graph-views__chip" data-radialpick title="Pick a target to see its neighborhood as rings by distance.">See a target's neighbors</button>
-        <button type="button" class="console-graph-views__chip" data-view="hubs" data-lens="hubs" title="The highest-degree targets, the ones everything touches. CLI: magus query kind:target">Show the most depended-on targets</button>
-        <button type="button" class="console-graph-views__chip" data-view="orphans" data-lens="orphans" title="Targets with no dependents, potentially dead or unconfigured. CLI: magus query -kind:project">Show targets nothing depends on</button>
+        <button type="button" class="console-graph-views__chip" data-view="hubs" title="The highest-degree targets, the ones everything touches. CLI: magus query kind:target">Show the most depended-on targets</button>
+        <button type="button" class="console-graph-views__chip" data-view="orphans" title="Targets with no dependents, potentially dead or unconfigured. CLI: magus query -kind:project">Show targets nothing depends on</button>
         <button type="button" class="console-graph-views__chip" data-view="affected" disabled data-disabled title="Requires live mode: magus graph open --live">See what my last change affects</button>
         <button type="button" id="clear-view-btn" class="console-graph-views__clear" hidden>Clear</button>
         </div>
@@ -37,8 +37,8 @@
           <tr><td>What breaks if I change this?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="blast">blast</button></td><td><code>magus explain &lt;node-id-or-name&gt;</code></td></tr>
           <tr><td>Why does A depend on B?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="trace">trace</button></td><td><code>magus path &lt;a&gt; &lt;b&gt;</code></td></tr>
           <tr><td>What's slow?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="critical" data-conditional>critical</button></td><td><code>magus graph deps -o json</code></td></tr>
-          <tr><td>What's a hub?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="hubs" data-lens="hubs">hubs</button></td><td><code>magus query kind:target</code></td></tr>
-          <tr><td>What's dead?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="orphans" data-lens="orphans">orphans</button></td><td><code>magus query -kind:project</code></td></tr>
+          <tr><td>What's a hub?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="hubs">hubs</button></td><td><code>magus query kind:target</code></td></tr>
+          <tr><td>What's dead?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="orphans">orphans</button></td><td><code>magus query -kind:project</code></td></tr>
         </tbody>
       </table>
       </div>
@@ -133,7 +133,7 @@
         <!-- Ask a question: the question-first views, surfaced in the sidebar. The original
              #ask-panel reference block is display:none in the decoupled console (no ref drawer),
              so these are the live control. Reuses the sanctioned console-graph-views__chip
-             escape hatch; main.ts wires them by class + data-view/data-lens. Order matches the
+             escape hatch; main.ts wires them by class + data-view. Order matches the
              #ask-panel reference copy (keep both in sync). -->
         <div class="console-graph-views console-graph-sidebar__views" aria-label="Explore">
           <p class="console-graph-sidebar__viewslabel">Explore</p>
@@ -144,8 +144,8 @@
             <button type="button" class="console-graph-views__chip" data-view="critical" data-conditional title="The longest duration-weighted chain of targets. Shown when the graph has timing (run a build first: magus graph deps -o json)">Find the slowest chain</button>
             <button type="button" class="console-graph-views__chip" data-view="cycles" title="Highlight targets caught in a circular dependency, where A needs B needs A. magus cannot order these, so it is a configuration error to fix. CLI: magus graph verify">Find circular dependencies</button>
             <button type="button" class="console-graph-views__chip" data-radialpick title="Pick a target to see its neighborhood as rings by distance.">See a target's neighbors</button>
-            <button type="button" class="console-graph-views__chip" data-view="hubs" data-lens="hubs" title="The highest-degree targets, the ones everything touches. CLI: magus query kind:target">Show the most depended-on targets</button>
-            <button type="button" class="console-graph-views__chip" data-view="orphans" data-lens="orphans" title="Targets with no dependents, potentially dead or unconfigured. CLI: magus query -kind:project">Show targets nothing depends on</button>
+            <button type="button" class="console-graph-views__chip" data-view="hubs" title="The highest-degree targets, the ones everything touches. CLI: magus query kind:target">Show the most depended-on targets</button>
+            <button type="button" class="console-graph-views__chip" data-view="orphans" title="Targets with no dependents, potentially dead or unconfigured. CLI: magus query -kind:project">Show targets nothing depends on</button>
             <button type="button" class="console-graph-views__chip" data-view="affected" disabled data-disabled title="Requires live mode: magus graph open --live">See what my last change affects</button>
           </div>
         </div>

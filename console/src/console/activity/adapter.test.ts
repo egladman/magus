@@ -4,6 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Kind, Outcome, type ActivityEvent } from "../../gen/magus/activity/v1/activity_pb";
+import { must } from "../../lib/guards";
 import {
   activityToModel,
   clockTime,
@@ -16,7 +17,7 @@ import {
 } from "./adapter";
 
 // ev builds a minimal ActivityEvent for the pure adapter. Casts through unknown because the
-// generated Message carries a $typeName the adapter never reads; tests are excluded from tsc.
+// generated Message carries a $typeName the adapter never reads.
 function ev(partial: Partial<ActivityEvent>): ActivityEvent {
   return {
     kind: Kind.MCP_TOOL_CALL,
@@ -62,6 +63,19 @@ test("tsMillis: absent is null, else seconds*1000 + nanos", () => {
   assert.equal(tsMillis({ seconds: 2n, nanos: 500_000_000 } as never), 2500);
 });
 
+// The dashboard's agent tile links a summary row to "../activity/#at=<atMs>", and the trail
+// resolves it by matching that number against tsMillis(ev.time). The two sides therefore have to
+// agree on the SAME epoch-ms for one event: AgentCallView.atMs is built from the trail event, and
+// tsMillis is what the trail surface reads it back with. If these ever diverge the link silently
+// reveals nothing, which looks like a missing event rather than a broken link.
+test("tsMillis round-trips the epoch-ms an agent-call deep link carries", () => {
+  const ev = { seconds: 1_754_000_000n, nanos: 123_000_000 } as never;
+  const atMs = tsMillis(ev);
+  assert.equal(atMs, 1_754_000_000_123);
+  // What the trail does with "#at=1754000000123": Number() it, then compare by identity.
+  assert.equal(Number(String(atMs)), tsMillis(ev));
+});
+
 test("clockTime formats HH:MM:SS and empties a null instant", () => {
   assert.equal(clockTime(null), "");
   assert.match(clockTime(0), /^\d{2}:\d{2}:\d{2}$/);
@@ -74,8 +88,8 @@ test("an ok mcp call accents pass and heads with action+actor", () => {
   assert.equal(sec.meta?.status, "pass");
   assert.equal(sec.meta?.label, "mcp");
   assert.equal(sec.lines[0], sec.title);
-  assert.match(sec.title, /magus_query {2}agent:claude/);
-  assert.match(sec.title, /mcp - ok/);
+  assert.match(must(sec.title), /magus_query {2}agent:claude/);
+  assert.match(must(sec.title), /mcp - ok/);
 });
 
 test("an agent command observation renders as an agent event, not an execution result", () => {
@@ -90,8 +104,8 @@ test("an agent command observation renders as an agent event, not an execution r
   );
   assert.equal(sec.meta?.label, "agent");
   assert.equal(sec.meta?.status, "pass");
-  assert.match(sec.title, /Bash {2}session:abc/);
-  assert.match(sec.title, /agent - ok/);
+  assert.match(must(sec.title), /Bash {2}session:abc/);
+  assert.match(must(sec.title), /agent - ok/);
   assert.ok(sec.lines.includes("guard: deny"));
 });
 
@@ -100,7 +114,7 @@ test("an errored call accents fail and leads its body with the error text", () =
     ev({ action: "magus_run", outcome: Outcome.ERROR, error: "target not found" }),
   );
   assert.equal(sec.meta?.status, "fail");
-  assert.match(sec.title, / - error/);
+  assert.match(must(sec.title), / - error/);
   assert.equal(sec.lines[1], "target not found");
 });
 

@@ -58,6 +58,9 @@ importers:
       '@types/d3-zoom':
         specifier: 3.0.8
         version: 3.0.8
+      '@types/node':
+        specifier: 22.13.10
+        version: 22.13.10
       stylelint:
         specifier: 16.24.0
         version: 16.24.0(typescript@5.8.3)
@@ -227,8 +230,8 @@ packages:
   '@types/d3-zoom@3.0.8':
     resolution: {integrity: sha512-iqMC4/YlFCSlO8+2Ii1GGGliCAY4XdeG748w5vQUbevlbDu0zSjH/+jojorQVBK/se0j6DUFNPBGSqD3YWYnDw==}
 
-  '@types/node@26.1.1':
-    resolution: {integrity: sha512-nxAkRSVkN1Y0JC1W8ky/fTfkGsMmcrRsbx+3XoZE+rMOX71kLYTV7fLXpqud1GpbpP5TuffXFqfX7fH2GgZREw==}
+  '@types/node@22.13.10':
+    resolution: {integrity: sha512-I6LPUvlRH+O6VRUqYOcMudhaIdUVWfsjnZavnsraHvpBwaEyMN29ry+0UVJhImYL16xsscu0aske3yA+uPOWfw==}
 
   '@types/whatwg-mimetype@3.0.2':
     resolution: {integrity: sha512-c2AKvDT8ToxLIOUlN51gTiHXflsfIFisS4pO7pDPoKouJCESkhZnEy623gwP9laCy5lnLDAw1vAzu2vM2YLOrA==}
@@ -686,8 +689,8 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
-  undici-types@8.3.0:
-    resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
+  undici-types@6.20.0:
+    resolution: {integrity: sha512-Ny6QZ2Nju20vw1SRHe3d9jVu6gJ+4e3+MMpqu7pqE5HT6WsTSlce++GQmK5UXS8mzV8DSYHrQH+Xrf2jVcuKNg==}
 
   uplot@1.6.31:
     resolution: {integrity: sha512-sQZqSwVCbJGnFB4IQjQYopzj5CoTZJ4Br1fG/xdONimqgHmsacvCjNesdGDypNKFbrhLGIeshYhy89FxPF+H+w==}
@@ -806,7 +809,7 @@ snapshots:
 
   '@happy-dom/global-registrator@20.10.6':
     dependencies:
-      '@types/node': 26.1.1
+      '@types/node': 22.13.10
       happy-dom: 20.10.6
     transitivePeerDependencies:
       - bufferutil
@@ -853,15 +856,15 @@ snapshots:
       '@types/d3-interpolate': 3.0.4
       '@types/d3-selection': 3.0.11
 
-  '@types/node@26.1.1':
+  '@types/node@22.13.10':
     dependencies:
-      undici-types: 8.3.0
+      undici-types: 6.20.0
 
   '@types/whatwg-mimetype@3.0.2': {}
 
   '@types/ws@8.18.1':
     dependencies:
-      '@types/node': 26.1.1
+      '@types/node': 22.13.10
 
   ajv@8.20.0:
     dependencies:
@@ -890,7 +893,7 @@ snapshots:
 
   buffer-image-size@0.6.4:
     dependencies:
-      '@types/node': 26.1.1
+      '@types/node': 22.13.10
 
   cacheable@2.5.0:
     dependencies:
@@ -1051,7 +1054,7 @@ snapshots:
 
   happy-dom@20.10.6:
     dependencies:
-      '@types/node': 26.1.1
+      '@types/node': 22.13.10
       '@types/whatwg-mimetype': 3.0.2
       '@types/ws': 8.18.1
       buffer-image-size: 0.6.4
@@ -1298,7 +1301,7 @@ snapshots:
 
   typescript@5.8.3: {}
 
-  undici-types@8.3.0: {}
+  undici-types@6.20.0: {}
 
   uplot@1.6.31: {}
 

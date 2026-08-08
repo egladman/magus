@@ -119,6 +119,14 @@ magus\project({
         // whole tree: the input set really is everything, and a key that claimed
         // otherwise would go on being wrong in a way nobody could see.
         "index-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
+        // ci and test COMPOSE other targets and write nothing of their own. With outputs owned
+        // per-stage (see above), the wrapper has no glob of its own to snapshot, and the cache
+        // treats an empty match as a broken entry rather than an empty one:
+        // `snapshot "docs": no files matched declared outputs`. It stayed hidden while these
+        // wrappers replayed from cache and only surfaced once a change actually made docs
+        // re-run. Same shape, same fix, and the same reason as @magus/agents.
+        "ci": {"skip_cache": "composes other targets and declares no outputs of its own; an empty snapshot match reads as a broken cache entry"},
+        "test": {"skip_cache": "composes other targets and declares no outputs of its own; an empty snapshot match reads as a broken cache entry"},
         // generate is the cheap orchestration and drift gate. Its actual work lives in
         // cacheable *-generate stages below, so unchanged docs do not rebuild the site.
         "generate": {"skip_cache": "is the drift gate itself; a replay would skip the check it exists to make", "exclusive": true},

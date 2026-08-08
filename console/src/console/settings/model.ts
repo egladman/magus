@@ -4,9 +4,24 @@
 // without a browser.
 //
 // Forward-compat contract: the envelope is
-// { schemaVersion, settings: { poll, host, theme, focusRing, keymap } }.
+// { schemaVersion, settings: { poll, host, theme, focusRing, keymap }, layout: { ... } }.
 // On import, unknown keys are ignored and missing/wrong-typed keys keep the current value; only a
 // structurally broken envelope (not JSON, or no settings object) is a hard error.
+//
+// Two sections, because the two groups have different lifecycles. `settings` is what the Settings
+// surface EDITS - staged in a draft, diffed, then saved. `layout` is what the console picks up as
+// you use it (a split you dragged, a zoom you set, cards you collapsed); there is no form for it,
+// so it is read live on export and applied straight through on import rather than staged.
+//
+// `layout` is deliberately not "every remaining persisted cell". Excluded on purpose:
+//   - dashboard-collapse-seeded  one-time bookkeeping. Carrying it to a new machine would tell
+//                                that console the default collapse had already been applied, so
+//                                it would come up with nothing collapsed and never self-correct.
+//   - workspace, dashboard-daemon  session state (open tabs, last daemon), not preferences. The
+//                                intentional daemon choice is already `settings.host`.
+//   - t-* cells                  test fixtures.
+// The rule for adding one: export it if a person chose it on purpose and would want it on their
+// other machine.
 
 import type { Keymap } from "../commands";
 import type { Persisted } from "../../lib/persist";
@@ -27,14 +42,24 @@ export interface Settings {
   keymap: Keymap; // the user's command chord overrides (the shared "keymap" cell)
 }
 
+// The UI-shape preferences a person accumulates by USING the console. See the section note at the
+// top of this file for what is deliberately not here.
+export interface LayoutSettings {
+  splitMode: "row" | "col"; // pane split orientation (the shared "split-mode" cell)
+  bigPictureSplit: Record<string, number>; // Big Picture split handle positions ("dashboard-bigpicture-split")
+  logsZoom: number; // log viewer text zoom ("logs-zoom")
+  collapsedCards: string[]; // dashboard cards folded away ("dashboard-collapsed")
+}
+
 export interface SettingsEnvelope {
   schemaVersion: number;
   settings: Partial<Settings>;
+  layout: Partial<LayoutSettings>;
 }
 
 // buildSettingsEnvelope wraps a snapshot in the current versioned envelope. Pure - the surface
 // passes the live values it read from the cells.
-export function buildSettingsEnvelope(p: Settings): SettingsEnvelope {
+export function buildSettingsEnvelope(p: Settings, layout: LayoutSettings): SettingsEnvelope {
   return {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
     settings: {
@@ -43,6 +68,12 @@ export function buildSettingsEnvelope(p: Settings): SettingsEnvelope {
       theme: p.theme,
       focusRing: p.focusRing,
       keymap: p.keymap,
+    },
+    layout: {
+      splitMode: layout.splitMode,
+      bigPictureSplit: layout.bigPictureSplit,
+      logsZoom: layout.logsZoom,
+      collapsedCards: layout.collapsedCards,
     },
   };
 }
@@ -57,7 +88,11 @@ export type ImportResult =
   | {
       ok: true;
       next: Settings;
+      // The merged layout snapshot. Separate from `next` because the surface applies it directly
+      // rather than staging it: there is no form to stage it against.
+      nextLayout: LayoutSettings;
       applied: (keyof Settings)[];
+      appliedLayout: (keyof LayoutSettings)[];
       unknown: string[];
       skipped: string[];
       newerSchema?: number;
@@ -67,6 +102,14 @@ export type ImportResult =
 // The canonical set of keys importSettings understands. Kept in sync with the Settings interface so a
 // settings-object key outside this set is reported as unknown rather than silently dropped.
 const KNOWN_KEYS: readonly (keyof Settings)[] = ["poll", "host", "theme", "focusRing", "keymap"];
+
+// The same contract for the layout section.
+const KNOWN_LAYOUT_KEYS: readonly (keyof LayoutSettings)[] = [
+  "splitMode",
+  "bigPictureSplit",
+  "logsZoom",
+  "collapsedCards",
+];
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -79,10 +122,24 @@ function isKeymap(v: unknown): v is Keymap {
   return isRecord(v) && Object.values(v).every((x) => typeof x === "string");
 }
 
+function isStr(v: unknown): v is string {
+  return typeof v === "string";
+}
+
+// Same whole-or-nothing stance as isKeymap: a split map with one bad entry is skipped entirely
+// rather than half-applied, so an import never leaves a pane at a nonsense position.
+function isNumberMap(v: Record<string, unknown>): v is Record<string, number> {
+  return Object.values(v).every((x) => typeof x === "number" && Number.isFinite(x));
+}
+
 // importSettings validates raw envelope text and merges its known, well-typed keys onto `current`.
 // Unknown keys are ignored; missing or wrong-typed keys keep the current value; only invalid JSON or a
 // missing settings object is a hard error. Pure - the surface applies `next` through the real cells.
-export function importSettings(raw: string, current: Settings): ImportResult {
+export function importSettings(
+  raw: string,
+  current: Settings,
+  currentLayout: LayoutSettings,
+): ImportResult {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -98,7 +155,7 @@ export function importSettings(raw: string, current: Settings): ImportResult {
   const applied: (keyof Settings)[] = [];
   // A known key is `skipped` only when it is present but fails its type check; a key that is simply
   // absent keeps the current value and is not reported. `skip` records the former.
-  const skipped: (keyof Settings)[] = [];
+  const skipped: (keyof Settings | keyof LayoutSettings)[] = [];
   const skip = (key: keyof Settings): void => {
     if (key in settings) skipped.push(key);
   };
@@ -124,19 +181,46 @@ export function importSettings(raw: string, current: Settings): ImportResult {
     applied.push("keymap");
   } else skip("keymap");
 
-  if (applied.length === 0) {
+  // The layout section is optional: a file exported before it existed, or one hand-trimmed to
+  // carry preferences only, must still import cleanly rather than being rejected as malformed.
+  const layout = isRecord(parsed.layout) ? parsed.layout : {};
+  const nextLayout: LayoutSettings = { ...currentLayout };
+  const appliedLayout: (keyof LayoutSettings)[] = [];
+  const skipLayout = (key: keyof LayoutSettings): void => {
+    if (key in layout) skipped.push(key);
+  };
+
+  if (layout.splitMode === "row" || layout.splitMode === "col") {
+    nextLayout.splitMode = layout.splitMode;
+    appliedLayout.push("splitMode");
+  } else skipLayout("splitMode");
+  if (isRecord(layout.bigPictureSplit) && isNumberMap(layout.bigPictureSplit)) {
+    nextLayout.bigPictureSplit = layout.bigPictureSplit;
+    appliedLayout.push("bigPictureSplit");
+  } else skipLayout("bigPictureSplit");
+  if (typeof layout.logsZoom === "number" && Number.isFinite(layout.logsZoom)) {
+    nextLayout.logsZoom = layout.logsZoom;
+    appliedLayout.push("logsZoom");
+  } else skipLayout("logsZoom");
+  if (Array.isArray(layout.collapsedCards) && layout.collapsedCards.every(isStr)) {
+    nextLayout.collapsedCards = layout.collapsedCards;
+    appliedLayout.push("collapsedCards");
+  } else skipLayout("collapsedCards");
+
+  if (applied.length === 0 && appliedLayout.length === 0) {
     return { ok: false, error: "No recognizable settings to import." };
   }
 
-  const unknown = Object.keys(settings).filter(
-    (k) => !(KNOWN_KEYS as readonly string[]).includes(k),
-  );
+  const unknown = [
+    ...Object.keys(settings).filter((k) => !(KNOWN_KEYS as readonly string[]).includes(k)),
+    ...Object.keys(layout).filter((k) => !(KNOWN_LAYOUT_KEYS as readonly string[]).includes(k)),
+  ];
   // Imports stay permissive on version: a newer schemaVersion never hard-fails, it just tells the surface
   // the file came from a newer console so it can explain why some keys may not have applied.
   const version = parsed.schemaVersion;
   const newerSchema =
     typeof version === "number" && version > SETTINGS_SCHEMA_VERSION ? version : undefined;
-  return { ok: true, next, applied, unknown, skipped, newerSchema };
+  return { ok: true, next, nextLayout, applied, appliedLayout, unknown, skipped, newerSchema };
 }
 
 // --- Pending diff (the transactional model) --------------------------------------------------------

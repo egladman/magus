@@ -101,7 +101,7 @@ func resolveSpell(ctx context.Context, sess *buzz.Session) (spells.Descriptor, e
 				return spells.Descriptor{}, fmt.Errorf("magus/spell: %s: %w", f.Name, err)
 			}
 		}
-		if isPathMetadata(f.Field) {
+		if f.Paths {
 			rv, err = pathValues(f.Name, rv)
 			if err != nil {
 				return spells.Descriptor{}, fmt.Errorf("magus/spell: %w", err)
@@ -322,15 +322,6 @@ func valStrSlice(v vm.Value) []string {
 		}
 	}
 	return out
-}
-
-func isPathMetadata(field string) bool {
-	switch field {
-	case "needs", "provides", "claims", "ignore_dirs", "manifests":
-		return true
-	default:
-		return false
-	}
 }
 
 // pathValues is the sole MGS metadata boundary. Buzz authors use the generated

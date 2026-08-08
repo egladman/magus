@@ -1,0 +1,10 @@
+{
+  "//": "Type-check gate for the console's test files. Separate from tsconfig.json for one reason: the app config sets \"types\": [] so browser code cannot reach Node globals, and the tests need exactly the opposite - they import node:test and node:assert. Merging them would hand every browser module `process` and `Buffer` and lose that guard, so the split is the point, not overhead. Without this file the tests are not type-checked at all, which is how a duplicate-import TS2300 sat in notifications.test.ts unnoticed.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "//exclude": "Restated, not inherited-and-forgotten: the base config excludes src/**/*.test.ts, and exclude beats include, so without this override every test file is silently filtered back out and this config type-checks nothing.",
+  "exclude": ["node_modules"],
+  "include": ["src/**/*.ts"]
+}

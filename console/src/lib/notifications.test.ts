@@ -1,4 +1,3 @@
-import { must } from "./guards";
 import test from "node:test";
 import { must } from "./guards";
 import assert from "node:assert/strict";

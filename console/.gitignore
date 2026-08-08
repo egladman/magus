@@ -15,3 +15,9 @@ gen/search-index.json
 # verbatim (no build step at deploy), so the demo graph the Graph Explorer fetches must ship in gen/.
 # copy-static (package.json) refreshes it from ../docs/graph.json on every build; the build drift gate
 # keeps it in sync.
+
+# The per-process lcov reports `pnpm run test` writes, one per Node invocation. Intermediate
+# inputs to the merged figure, not the figure: coverage.svg IS committed (its drift gate is what
+# keeps the badge honest), these are regenerated on every run.
+coverage.plain.lcov
+coverage.dom.lcov

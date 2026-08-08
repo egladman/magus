@@ -137,7 +137,17 @@ export function agentsTile(): Tile {
         li.dataset.decision = decision;
         li.append(noticeGlyph(decision));
         const tool = c.tool || (c.mcp ? "mcp tool" : "command");
-        li.append(h("code", "console-dashboard-row__cmd", tool));
+        // The tool name is the link into the full trail entry. A denial here is a summary - what
+        // the operator wants next is the event itself, with its command and reason - and this tile
+        // is where they meet it first.
+        //
+        // Keyed on atMs because the trail assigns no id of its own. Epoch milliseconds are unique
+        // per producer in practice, and the trail is append-only, so the worst case of a collision
+        // is revealing the neighbouring row of the same millisecond rather than a wrong one.
+        const link = h("a", "console-dashboard-row__cmd") as HTMLAnchorElement;
+        link.href = "../activity/#at=" + String(c.atMs);
+        link.append(h("code", undefined, tool));
+        li.append(link);
         const meta = h("span", "console-dashboard-row__meta");
         const age = Math.max(0, Math.round((now - c.atMs) / 1000));
         const bits = [c.mcp ? "mcp" : hostLabel(c.host)];

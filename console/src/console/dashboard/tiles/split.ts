@@ -37,28 +37,24 @@
 // or be ignored. There is no stored value that can produce a layout this code would not itself
 // draw.
 
-import { persisted } from "../../../lib/persist";
+import {
+  bigPictureSplitCell as splitCell,
+  SPLIT_DEFAULT,
+  SPLIT_MAX,
+  SPLIT_MIN,
+  SPLIT_SCHEMA as SCHEMA,
+  type SplitPref,
+} from "../../layoutPrefs";
 import { viewMode } from "./bigPicture";
 
 // The wide canvas is twelve columns (dashboard.css). The split is how many of them the left stack
 // takes; the activity column takes the rest.
 const COLUMNS = 12;
-const SPLIT_DEFAULT = 8;
-const SPLIT_MIN = 6; // below this the run timeline cannot show a target label
-const SPLIT_MAX = 10; // above this the activity column is too narrow for a line of output
 
-// Bumped only when the MEANING of the stored value changes. A mismatch is discarded, never migrated.
-const SCHEMA = 1;
-
-interface SplitPref {
-  v: number;
-  cols: number;
-}
-
-const splitCell = persisted<SplitPref>("dashboard-bigpicture-split", {
-  v: SCHEMA,
-  cols: SPLIT_DEFAULT,
-});
+// The cell, its schema and its bounds come from layoutPrefs so the Settings surface can export
+// and import this preference without re-declaring the storage key or the fallback beside it.
+// Everything that INTERPRETS the stored value still lives here - readSplit below is the only
+// reader, and it discards anything it does not recognize.
 
 // readSplit is the ONLY way this module reads the preference. Everything storage can do wrong -
 // an older schema, a hand-edited value, a number outside the current bounds, a type that is not a

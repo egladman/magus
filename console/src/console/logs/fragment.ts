@@ -8,15 +8,8 @@ import { must } from "../../lib/guards";
 // The parsed #-fragment parameters (ref/data/src/port/token/...).
 export type ViewerParams = Record<string, string>;
 
-// --- Fragment decode (matches internal/render EncodeFragmentRaw) --------------
-// base64url -> bytes -> gunzip -> text. DecompressionStream is widely supported;
-// the whole path is local, so nothing is fetched and nothing is sent.
-export async function decodeFragment(b64url: string): Promise<string> {
-  return new Response(await gunzipFragment(b64url)).text();
-}
-
-// decodeFragmentBytes is the binary sibling: base64url -> gunzip -> Uint8Array, for the
-// protobuf Journal payload (decodeFragment layers a text decode on top for legacy text).
+// decodeFragmentBytes: base64url -> gunzip -> Uint8Array, for the protobuf Journal payload.
+// It had a text-decoding sibling for legacy text fragments; nothing imported it, so it is gone.
 export async function decodeFragmentBytes(b64url: string): Promise<Uint8Array> {
   return new Uint8Array(await new Response(await gunzipFragment(b64url)).arrayBuffer());
 }

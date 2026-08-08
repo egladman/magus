@@ -75,12 +75,13 @@ export function toggleSection(secEl: HTMLElement, head: HTMLElement): void {
 }
 
 // sectionAccent derives the status accent class stem for a section from its title: a
-// structured "[cached]" head or a heuristic "(cached)" note both mute+fold; otherwise the
-// leading status token drives it. Returns "" for an unaccented section.
+// "(cached, 42ms)" note mutes and folds it; otherwise the leading status token drives it.
+// Returns "" for an unaccented section. A cache hit is "[pass] api (cached, 42ms)" - the
+// outcome token says pass and the note is what carries the cache state, so the note is the
+// only thing to read here.
 export function sectionAccent(title: string): string {
   const st = statusToken(title);
-  const cached = st === "cached" || /\(cached/i.test(stripAnsi(title));
-  return cached ? "cached" : st;
+  return /\(cached/i.test(stripAnsi(title)) ? "cached" : st;
 }
 
 export interface BuildSectionOpts {

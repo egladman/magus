@@ -296,3 +296,49 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
 	_, err := resolve(t, src)
 	assert.Error(t, err, "expected error for a handler reading the Target")
 }
+
+// TestOptionalContract_PathEntriesAreSelfDescribing pins the invariant that made a rename fail
+// silently: which contract fields carry [Path] values is recorded ON the entry, so it travels with
+// the entry when its Field is renamed.
+//
+// The regression it guards is specific. resolve.go used to decide this with a switch over field
+// name strings. Renaming mgs_listManifests's field updated the contract, the decoder and every
+// spell source - and strings(1) confirmed the regenerated .bo exported the new name - but the
+// switch still named the old field, so pathValues stopped running, the Path objects were never
+// reduced to strings, and the decoded value came back EMPTY with no error anywhere. It cost a
+// revert to find. A second list of these field names is the thing to keep out of this package.
+func TestOptionalContract_PathEntriesAreSelfDescribing(t *testing.T) {
+	// Every entry whose Buzz signature is [Path]. Stated by NAME, which is the stable half of the
+	// contract - a Field rename must not be able to change this set.
+	pathFns := map[string]bool{
+		"mgs_listRequiredGlobs": true,
+		"mgs_listProvidedGlobs": true,
+		"mgs_listClaimedGlobs":  true,
+		"mgs_listIgnoreDirs":    true,
+		"mgs_listManifests":     true,
+	}
+	seen := map[string]bool{}
+	for _, e := range OptionalContract {
+		seen[e.Name] = true
+		assert.Equal(t, pathFns[e.Name], e.Paths,
+			"%s: Paths must match whether its Buzz signature returns [Path]", e.Name)
+	}
+	for name := range pathFns {
+		assert.True(t, seen[name], "%s left the contract; drop it here too", name)
+	}
+}
+
+// TestResolve_ManifestsSurviveAFieldRename is the end-to-end half: a [Path]-valued entry decodes to
+// strings. Read together with the test above, a rename that broke the Paths wiring would surface
+// here as an empty slice rather than as a mysterious downstream absence.
+func TestResolve_ManifestsUsePathValues(t *testing.T) {
+	const src = `
+import "magus/spell";
+export fun mgs_getName() > str { return "manifest-paths"; }
+export fun mgs_listManifests() > [Path] { return [Path{value = "package.json"}, Path{value = "deno.json"}]; }
+`
+	spec, err := resolve(t, src)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"package.json", "deno.json"}, spec.Manifests,
+		"a [Path] entry must reduce to its lexical strings, not decode empty")
+}

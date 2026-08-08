@@ -405,7 +405,8 @@
           "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
           "dependencies": [
             "advice-test",
-            "format"
+            "format",
+            "buzz-test"
           ],
           "charms": [
             "rw"
@@ -426,6 +427,11 @@
           "exec_overrides": [
             "env:GOEXPERIMENT=jsonv2"
           ]
+        },
+        {
+          "name": "buzz-test",
+          "declared": "buzz_test",
+          "doc": "Runs the in-file `test \"...\" {}` blocks in this repo's own root Buzz modules, through magus's embedded engine."
         },
         {
           "name": "preflight",
@@ -543,7 +549,8 @@
         }
       ],
       "depends_on": [
-        "libs/gopherbuzz"
+        "libs/gopherbuzz",
+        "libs/textsearch"
       ]
     },
     {
@@ -556,9 +563,17 @@
         },
         {
           "name": "test",
-          "doc": "test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests).",
+          "doc": "test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests) and renders a line-coverage badge from the run.",
           "dependencies": [
             "preflight"
+          ],
+          "charms": [
+            "rw"
+          ],
+          "writes_files": [
+            {
+              "glob": "coverage.svg"
+            }
           ]
         },
         {
@@ -1345,7 +1360,8 @@
           ],
           "writes_files": [
             {
-              "glob": "coverage.svg"
+              "project": "../..",
+              "glob": "assets/textsearch-coverage.svg"
             }
           ]
         },

@@ -63,7 +63,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 34 | `magus query project:.` | `generate`, `image-build`, `lint` |
+| . | 35 | `magus query project:.` | `generate`, `image-build`, `lint` |
 | console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 3 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
@@ -110,13 +110,14 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `index-generate` | Renders MAGUS.md via `magus describe graph`. |
 | `graph-generate` | Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects. |
 | `advice-test` | Runs the PR advisors' `test "..." {}` blocks. |
+| `buzz-test` | Runs the in-file `test "..." {}` blocks in this repo's own root Buzz modules, through magus's embedded engine. |
 | `completion-test` | Exercises the completion scripts magus SHIPS, each inside the official image for its shell. |
 
 ## Project: console
 
 | Target | What it does |
 |---|---|
-| `test` | test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests). |
+| `test` | test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests) and renders a line-coverage badge from the run. |
 | `build` | build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed. |
 | `lint` | lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate. |
 | `security` | security audits the dependency tree against the npm advisory database. |
