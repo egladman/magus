@@ -101,9 +101,6 @@
             "stable",
             "tagged",
             "unstable"
-          ],
-          "tools": [
-            "docker"
           ]
         },
         {
@@ -115,9 +112,6 @@
           ],
           "charms": [
             "rw"
-          ],
-          "tools": [
-            "trivy"
           ]
         },
         {
@@ -131,9 +125,6 @@
               ]
             }
           ],
-          "tools": [
-            "trivy"
-          ],
           "exec_overrides": [
             "env:GOEXPERIMENT=jsonv2"
           ]
@@ -142,9 +133,6 @@
           "name": "man-generate",
           "declared": "man_generate",
           "doc": "Renders the roff man pages into manpage/ (repo root).",
-          "tools": [
-            "go"
-          ],
           "writes_files": [
             {
               "glob": "manpage/*.1"
@@ -158,9 +146,6 @@
           "name": "changelog-generate",
           "declared": "changelog_generate",
           "doc": "CHANGELOG.md is a root artifact.",
-          "tools": [
-            "go"
-          ],
           "reads_files": [
             {
               "project": ".",
@@ -201,9 +186,6 @@
           "name": "types-generate",
           "declared": "types_generate",
           "doc": "Regenerates the runtime BuzzObject maps before anything imports a host binding.",
-          "tools": [
-            "go"
-          ],
           "writes_files": [
             {
               "glob": "types/buzzobject_gen.go"
@@ -217,9 +199,6 @@
           "dependencies": [
             "types-generate"
           ],
-          "tools": [
-            "go"
-          ],
           "writes_files": [
             {
               "glob": "internal/interp/bindings/gen/*.go"
@@ -232,9 +211,6 @@
           "doc": "Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen), the Buzz value-type mirrors (internal/spellruntime/gen/types) and the per-module host declarations (internal/spellruntime/gen/decls), all driven by the go:generate directives in internal/spellruntime.",
           "dependencies": [
             "types-generate"
-          ],
-          "tools": [
-            "go"
           ],
           "writes_files": [
             {
@@ -254,9 +230,6 @@
           "doc": "Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir.",
           "dependencies": [
             "types-generate"
-          ],
-          "tools": [
-            "go"
           ],
           "writes_files": [
             {
@@ -286,9 +259,6 @@
           "doc": "Regenerates the CLI config-flag plumbing from internal/config/config.go.",
           "dependencies": [
             "types-generate"
-          ],
-          "tools": [
-            "go"
           ],
           "writes_files": [
             {
@@ -359,9 +329,6 @@
         {
           "name": "tapes",
           "doc": "Records every VHS tape in tapes/ into assets/gen/.",
-          "tools": [
-            "vhs"
-          ],
           "reads_files": [
             {
               "project": ".",
@@ -393,9 +360,6 @@
               ]
             }
           ],
-          "tools": [
-            "go"
-          ],
           "writes_files": [
             {
               "glob": "dist/*"
@@ -405,10 +369,7 @@
         {
           "name": "release-sign",
           "declared": "release_sign",
-          "doc": "Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos).",
-          "tools": [
-            "go"
-          ]
+          "doc": "Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos)."
         },
         {
           "name": "release",
@@ -475,9 +436,6 @@
                 "go-test"
               ]
             }
-          ],
-          "tools": [
-            "go"
           ],
           "writes_files": [
             {
@@ -598,10 +556,7 @@
         },
         {
           "name": "serve",
-          "doc": "serve is the workspace-root dev loop for BOTH deployables.",
-          "tools": [
-            "pnpm"
-          ]
+          "doc": "serve is the workspace-root dev loop for BOTH deployables."
         }
       ],
       "depends_on": [
@@ -615,10 +570,7 @@
       "engine": "buzz",
       "nodes": [
         {
-          "name": "preflight",
-          "tools": [
-            "pnpm"
-          ]
+          "name": "preflight"
         },
         {
           "name": "test",
@@ -628,9 +580,6 @@
           ],
           "charms": [
             "rw"
-          ],
-          "tools": [
-            "pnpm"
           ],
           "writes_files": [
             {
@@ -647,9 +596,6 @@
           "charms": [
             "rw"
           ],
-          "tools": [
-            "pnpm"
-          ],
           "cross_dependencies": [
             {
               "project": ".",
@@ -662,9 +608,6 @@
           "doc": "lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.",
           "dependencies": [
             "preflight"
-          ],
-          "tools": [
-            "pnpm"
           ],
           "cross_dependencies": [
             {
@@ -703,10 +646,7 @@
       "engine": "buzz",
       "nodes": [
         {
-          "name": "preflight",
-          "tools": [
-            "pnpm"
-          ]
+          "name": "preflight"
         },
         {
           "name": "index-generate",
@@ -1016,9 +956,6 @@
               ]
             }
           ],
-          "tools": [
-            "pnpm"
-          ],
           "cross_dependencies": [
             {
               "project": "libs/textsearch",
@@ -1071,10 +1008,6 @@
           "dependencies": [
             "preflight"
           ],
-          "tools": [
-            "tinygo",
-            "sh"
-          ],
           "cross_dependencies": [
             {
               "project": "libs/gopherbuzz",
@@ -1089,9 +1022,6 @@
           "dependencies": [
             "preflight"
           ],
-          "tools": [
-            "pnpm"
-          ],
           "writes_files": [
             {
               "glob": "gen/assets/mermaid.js"
@@ -1105,9 +1035,6 @@
           "dependencies": [
             "preflight"
           ],
-          "tools": [
-            "pnpm"
-          ],
           "writes_files": [
             {
               "glob": "gen/assets/hljs.js"
@@ -1120,9 +1047,6 @@
           "doc": "build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js.",
           "dependencies": [
             "preflight"
-          ],
-          "tools": [
-            "pnpm"
           ],
           "writes_files": [
             {
@@ -1149,20 +1073,13 @@
       "engine": "buzz",
       "nodes": [
         {
-          "name": "preflight",
-          "tools": [
-            "pnpm"
-          ]
+          "name": "preflight"
         },
         {
           "name": "lint",
           "doc": "lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way).",
           "dependencies": [
             "preflight"
-          ],
-          "tools": [
-            "pnpm",
-            "shellcheck"
           ]
         },
         {
@@ -1180,19 +1097,13 @@
       "engine": "buzz",
       "nodes": [
         {
-          "name": "preflight",
-          "tools": [
-            "pnpm"
-          ]
+          "name": "preflight"
         },
         {
           "name": "lint",
           "doc": "lint validates every task file against the schema and checks that each named constraint predicate exists.",
           "dependencies": [
             "preflight"
-          ],
-          "tools": [
-            "pnpm"
           ]
         },
         {
@@ -1414,10 +1325,6 @@
           "doc": "Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go).",
           "dependencies": [
             "preflight"
-          ],
-          "tools": [
-            "git",
-            "go"
           ]
         }
       ]
@@ -1428,10 +1335,7 @@
       "engine": "buzz",
       "nodes": [
         {
-          "name": "preflight",
-          "tools": [
-            "pnpm"
-          ]
+          "name": "preflight"
         },
         {
           "name": "generate",
@@ -1454,9 +1358,6 @@
           "doc": "lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json).",
           "dependencies": [
             "preflight"
-          ],
-          "tools": [
-            "pnpm"
           ]
         },
         {
@@ -1467,10 +1368,6 @@
           ],
           "charms": [
             "rw"
-          ],
-          "tools": [
-            "pnpm",
-            "node"
           ],
           "writes_files": [
             {

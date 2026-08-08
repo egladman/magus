@@ -177,15 +177,6 @@ type TargetGraphNode struct {
 	// grouped by spell in first-appearance order. It shows which toolchain a
 	// composite target drives - the part `deps` (sibling targets) omits.
 	Spells []TargetSpellUse `json:"spells,omitempty" yaml:"spells,omitempty"`
-	// Tools are the programs the target's body runs DIRECTLY, via os\exec("<cmd>", ...),
-	// as opposed to through a spell op. Captured statically from the first argument when
-	// it is a string literal, deduped, in first-appearance order, basename only.
-	//
-	// Without this a bespoke target is opaque: the graph learns what a target runs from
-	// the spell ops it composes, so a target that shells out contributes no tool edge and
-	// reads as doing nothing at all. That is most of them - at the time this was added,
-	// 57 of this workspace's 93 targets had no op anywhere in their dependency closure.
-	Tools []string `json:"tools,omitempty" yaml:"tools,omitempty"`
 	// CrossDependencies are dependencies on specific targets in *other* projects,
 	// declared via a project import (<alias>.<target>). Unlike Dependencies (same-project
 	// target names), each carries the other project's path, so the graph can draw a
