@@ -482,6 +482,20 @@ func assembleProject(p types.TargetGraphProject) Shard {
 				s.Edges = append(s.Edges, extractedEdge(tID, oID, types.RelationUses, p.Path))
 			}
 		}
+		// Programs the target runs directly. The op path above reaches a tool via
+		// target->op->tool, which only covers targets that compose a spell; a target
+		// that shells out gets its tool edge here, so `explain tool:pnpm` reaches the
+		// bespoke targets running pnpm and not just the ops that do.
+		for _, tool := range n.Tools {
+			ttID := toolID(tool)
+			s.Nodes = append(s.Nodes, types.KnowledgeNode{
+				ID:    ttID,
+				Kind:  types.KindTool,
+				Label: sanitize(tool, maxLabelLen),
+				Attrs: map[string]string{AttrTool: sanitize(tool, maxLabelLen)},
+			})
+			s.Edges = append(s.Edges, extractedEdge(tID, ttID, types.RelationUses, p.Path))
+		}
 		for _, c := range n.Charms {
 			cID := charmID(c)
 			s.Nodes = append(s.Nodes, types.KnowledgeNode{ID: cID, Kind: types.KindCharm, Label: c})

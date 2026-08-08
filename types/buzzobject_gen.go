@@ -300,6 +300,7 @@ func (v TargetGraphNode) BuzzObject() BuzzObject {
 		"dependencies":          v.Dependencies,
 		"charms":                v.Charms,
 		"spells":                itemsSpells,
+		"tools":                 v.Tools,
 		"crossDependencies":     itemsCrossDependencies,
 		"readsFiles":            itemsReadsFiles,
 		"writesFiles":           itemsWritesFiles,

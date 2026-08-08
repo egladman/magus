@@ -293,6 +293,11 @@ func buzzValueMagusTargetGraphNode(v types.TargetGraphNode) vm.Value {
 		itemsSpells[indexSpells] = buzzValueMagusTargetSpellUse(v.Spells[indexSpells])
 	}
 	out.MapSet("spells", vm.ListValue(itemsSpells))
+	itemsTools := make([]vm.Value, len(v.Tools))
+	for indexTools := range v.Tools {
+		itemsTools[indexTools] = vm.StrValue(v.Tools[indexTools])
+	}
+	out.MapSet("tools", vm.ListValue(itemsTools))
 	itemsCrossDependencies := make([]vm.Value, len(v.CrossDependencies))
 	for indexCrossDependencies := range v.CrossDependencies {
 		itemsCrossDependencies[indexCrossDependencies] = buzzValueMagusCrossTargetRef(v.CrossDependencies[indexCrossDependencies])
