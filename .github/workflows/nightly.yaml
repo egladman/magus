@@ -19,6 +19,15 @@ on:
     - cron: '17 5 * * *'
   workflow_dispatch:
 
+# One nightly at a time, newest wins. Two triggers reach this file and they overlap in
+# practice: a hand dispatch while the cron run is still going, or a second dispatch when
+# the first looks stuck. Neither job gates anything and both answer "is this still true
+# today", so an older run's answer is worthless the moment a newer one starts - and
+# skill-evals is the expensive job in the repo to leave running for nothing.
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
