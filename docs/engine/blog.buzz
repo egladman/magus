@@ -84,7 +84,7 @@ export fun renderBlogPost(base: str, site: Site) > void {
     final pager = renderBlogPager(base, site);
 
     final doc = renderPage(title, desc, article, rel, pager, url, readingTime(md), parseTags(md), site);
-    fs\makeDirectory(site.outDir + "/" + site.blog + "/" + urlPath);
+    makeOutputDir(site.outDir + "/" + site.blog + "/" + urlPath, rel, url);
     final of = io\File.open(site.outDir + "/" + site.blog + "/" + urlPath + "/index.html", io\FileMode.write);
     of.write(doc);
     of.close();

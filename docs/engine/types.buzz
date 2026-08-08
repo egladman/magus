@@ -310,7 +310,7 @@ export object Site {
             if (this.pageUrls[a + "/"] != null or this.pageUrls[a] != null) {
                 throw "alias \"" + a + "\" collides with a real page at the same path";
             }
-            fs\makeDirectory(this.outDir + "/" + a);
+            makeOutputDir(this.outDir + "/" + a, "alias \"" + a + "\"", a + "/");
             final rel = relativePath(a, this.aliasTarget[a]);
             final csp = cspForRedirectStub(redirectScript(rel));
             fs\writeFile(this.outDir + "/" + a + "/index.html", aliasStub(rel, csp));
