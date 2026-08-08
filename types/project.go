@@ -172,7 +172,29 @@ type Project struct {
 	// harness no single pack describes) from a real gap (someone forgot to import the
 	// go spell) without being told. Carrying the REASON rather than a bare bool is what
 	// keeps the opt-out honest: it has to say what it is instead of silencing a check.
-	NoLanguage     string
+	NoLanguage string
+	// ToolBounds is the version window THIS project requires of each binary its spells
+	// drive, keyed by bin name, from magus.project's "tools" key. Intersected with what
+	// the spell itself declares at op dispatch, narrower bound winning on each side, so
+	// neither can loosen the other.
+	//
+	// On the project rather than in magus.yaml, and that is not a filing preference.
+	// config.Load merges a user-global tier ($XDG_CONFIG_HOME/magus/) beneath the
+	// workspace, so a bound living there could be set in one person's private file and
+	// silently gate every workspace on their machine. A magusfile is committed, is read
+	// by everyone who reads the project, and is per project - which also means `console`
+	// and `docs` can hold different policies instead of sharing one workspace-wide map.
+	//
+	// Sharing is an explicit import of a shared MODULE, never ambient inheritance: see
+	// tools/toolchain-policy.buzz, imported the same way tools/audit.buzz already is.
+	// There is no special root project and nothing is inherited by position in the tree.
+	//
+	// Deliberately not `import "project/.." as root`. That handle exposes only a
+	// project's `export fun` targets, read statically from the AST so an import can
+	// never trigger a VM load and recurse; an exported VALUE there reads as null and
+	// this key would be silently skipped. A policy several projects share is a shared
+	// module, not a side effect of one project's magusfile.
+	ToolBounds     map[string]spells.VersionBounds
 	WatchIgnores   []IgnorePattern
 	TargetPolicies map[string]Target // per-target execution policy; values carry only the policy fields of Target
 	// TargetInputs are per-target file inputs declared in a target body via

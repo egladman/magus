@@ -38,9 +38,20 @@ export fun mgs_listRequiredGlobs() > [Path] {
 // and scanner versions. Extracting a semver would take the Go version (printed first)
 // and throw the database date away, leaving a newly published CVE unable to invalidate
 // a cached pass. Keying on the whole output is correct, and declaring nothing asks for it.
+//
+// `supported` on go is a MINIMUM ONLY, and deliberately has no ceiling. It says what
+// these ops need to function - 1.21 is where the toolchain line in go.mod became
+// something the module ops rely on - not which Go a repo has qualified. A ceiling here
+// would be this spell deciding that nobody may run a newer Go, which is a workspace's
+// call: `tools:` in magus.yaml is where that goes, and the two are intersected.
+//
+// golangci-lint and govulncheck declare no window. Neither has a version below which
+// the ops are known to break, and inventing one to look thorough would fail builds over
+// a bound nobody verified.
 export fun mgs_getTools() > {str: Tool} {
     return {
-        "go": Tool{probe = Command{bin = "go", args = ["version"]}, key = VersionKey{upTo = VersionComponent.patch}},
+        "go": Tool{probe = Command{bin = "go", args = ["version"]}, key = VersionKey{upTo = VersionComponent.patch},
+                   supported = VersionBounds{min = "1.21"}},
         "golangci-lint": Tool{probe = Command{bin = "golangci-lint", args = ["--version"]}, key = VersionKey{upTo = VersionComponent.patch}},
         "govulncheck": Tool{probe = Command{bin = "govulncheck", args = ["-version"]}},
     };

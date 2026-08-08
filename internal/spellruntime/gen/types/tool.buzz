@@ -14,6 +14,6 @@ export object Tool {
     probe: Command = Command{},
     key: VersionKey = VersionKey{},
     ready: Command = Command{},
-    floor: str = "",
+    supported: VersionBounds = VersionBounds{},
     diagnostics: DiagnosticFormat = DiagnosticFormat.none,
 }

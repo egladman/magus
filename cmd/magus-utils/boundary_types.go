@@ -24,6 +24,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "Charm", Type: reflect.TypeFor[spells.Charm]()},
 	{Name: "PatchOp", Type: reflect.TypeFor[spells.PatchOp]()},
 	{Name: "VersionKey", Type: reflect.TypeFor[spells.VersionKey]()},
+	{Name: "VersionBounds", Type: reflect.TypeFor[spells.VersionBounds]()},
 	{Name: "Tool", Type: reflect.TypeFor[spells.Tool]()},
 	// A spell WRITES this one, so it takes the bare Buzz name; the Go side carries
 	// the adjective because types.Project and types.ProjectEntry already exist. The

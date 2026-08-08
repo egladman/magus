@@ -2,6 +2,7 @@ import "magus";
 // The shared advisory gate. See tools/audit.buzz for why an exit code is the wrong
 // question and what this asks instead.
 import "../tools/audit" as audit;
+import "../tools/toolchain-policy" as policy;
 // Modules the targets use: fs (lcov reads, badge write), os (pnpm/esbuild), vcs (drift gate).
 import "fs";
 import "os";
@@ -28,6 +29,10 @@ import "magus/spell/typescript";
 // and vendored copies of the shared lib/ui/proto/styles - with NO dependency on the docs site. This
 // magusfile registers it as a first-class magus project so `magus affected ci` covers it.
 magus\project({
+    // Adopts the shared node window by explicit import, not by position in the tree.
+    // Just node: this project drives no Go, and declaring a window for a toolchain it
+    // does not use would fail it on a version nobody here runs.
+    "tools": {"node": policy.node},
     "spells": [typescript],
     // Affected/drift tracks this sources glob, not the import graph, so every input must be named to be
     // watched. The client is TypeScript (esbuild strips the types) plus per-surface CSS and the

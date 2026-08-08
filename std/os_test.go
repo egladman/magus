@@ -489,3 +489,29 @@ func TestExecSignalKilledNamesTheSignal(t *testing.T) {
 	assert.Contains(t, err.Error(), "OOM killer", "say what usually does this on CI")
 	assert.NotContains(t, err.Error(), "exit -1")
 }
+
+// quiet is read in runResult, the one path os.exec, os.exec_sh, and vcs.cmd share, so
+// the three cannot drift into offering different option sets. Capture stays on
+// regardless: a quiet call is still consuming the value, just not echoing it.
+func TestOsExecQuietStillCaptures(t *testing.T) {
+	res, err := OsExec(context.Background(), "sh", []string{"-c", "echo captured"}, "",
+		map[string]any{"quiet": true})
+	require.NoError(t, err)
+	assert.Equal(t, "captured", res.Stdout, "os.exec trims captured output")
+	assert.Equal(t, 0, res.Code)
+}
+
+func TestOsExecShQuietStillCaptures(t *testing.T) {
+	res, err := OsExecSh(context.Background(), "echo captured", "", map[string]any{"quiet": true})
+	require.NoError(t, err)
+	assert.Equal(t, "captured", res.Stdout, "os.exec trims captured output")
+}
+
+// Absent quiet must keep the streaming default. The option is opt-in because a build
+// log that silently stopped showing command output would be a worse regression than
+// any noise it removed.
+func TestOsExecDefaultsToNotQuiet(t *testing.T) {
+	res, err := OsExec(context.Background(), "sh", []string{"-c", "echo shown"}, "", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "shown", res.Stdout)
+}

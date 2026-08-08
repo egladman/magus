@@ -7,7 +7,7 @@ tags: [documentation, docs, getting-started, magus, guide, index, overview]
 
 # Documentation
 
-New to magus? [Install it](guides/download.md), skim the two core ideas below ([Targets](concepts/targets.md) and [Spells](concepts/spells.md)), or [try it live in the playground](playground.html) without installing anything.
+New to magus? [Install it](setup.md), skim the two core ideas below ([Targets](concepts/targets.md) and [Spells](concepts/spells.md)), or [try it live in the playground](playground.html) without installing anything.
 
 ## Philosophy
 
@@ -22,7 +22,7 @@ That machinery stays transparent. The cache, the daemon socket, and the run log 
 Prefer a linear, written walkthrough? The [Getting started guide](guides/getting-started.md)
 runs install to first `ci` pipeline as prose. The quick version:
 
-**1. [Install magus](guides/download.md).** A single self-contained binary. The [Download guide](guides/download.md) covers install, verification, and updating.
+**1. [Install magus](setup.md).** A single self-contained binary. The [Install guide](setup.md) covers install, verification, and updating.
 
 **2. Initialize your workspace.** From the root of your repo:
 

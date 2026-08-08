@@ -18,6 +18,7 @@
 // the target graph - affected tracking is glob-based (sources), not import-graph-based.
 
 import "magus";
+import "../../tools/toolchain-policy" as policy;
 // fs writes MAGUS.md and reads the sources it indexes; os shells out to pnpm
 // (typecheck/biome/test); vcs gates the generated MAGUS.md on drift.
 import "fs";
@@ -45,6 +46,9 @@ import "../../coverage" as cov;
 import "project/../.." as workspace;
 
 magus\project({
+    // The shared node window, by explicit import (tools/toolchain-policy.buzz).
+    // This project drives node; it declares no go window because it drives no Go.
+    "tools": {"node": policy.node},
     "spells": [typescript],
     // Affected/drift tracks this sources glob, not the import graph, so every input must
     // be named to be watched: the shared TypeScript, the build manifests (package.json +

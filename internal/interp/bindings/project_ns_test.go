@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -140,4 +141,65 @@ func TestParseBuzzProjectOpts_UnknownTargetPolicyKeyErrors(t *testing.T) {
 	_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("lint", pol))
 	assert.ErrorContains(t, err, `unknown option "skipCache"`)
 	assert.ErrorContains(t, err, `did you mean "skip_cache"`)
+}
+
+// toolsOpts builds a `{"tools": {bin: {min, below}}}` options map.
+func toolsOpts(bin string, kv map[string]string) vm.Value {
+	bounds := vm.NewMap()
+	for k, v := range kv {
+		bounds.MapSet(k, vm.StrValue(v))
+	}
+	tools := vm.NewMap()
+	tools.MapSet(bin, bounds)
+	opts := vm.NewMap()
+	opts.MapSet("tools", tools)
+	return opts
+}
+
+func TestParseBuzzProjectOpts_Tools(t *testing.T) {
+	t.Run("both bounds decode", func(t *testing.T) {
+		p := applyOpts(t, toolsOpts("node", map[string]string{"min": "22", "below": "25"}))
+		assert.Equal(t, spells.VersionBounds{Min: "22", Below: "25"}, p.ToolBounds["node"])
+	})
+
+	t.Run("a ceiling alone is enough", func(t *testing.T) {
+		p := applyOpts(t, toolsOpts("node", map[string]string{"below": "25"}))
+		assert.Equal(t, spells.VersionBounds{Below: "25"}, p.ToolBounds["node"])
+	})
+
+	// A bound that is not a version must fail at LOAD. Letting it through would make
+	// VersionBounds.Check return unknown, which never fails a build - so a typo would
+	// silently widen the window to everything, the exact opposite of declaring one.
+	t.Run("a non-version bound is a load error", func(t *testing.T) {
+		got, err := parseBuzzProjectOpts(context.Background(), toolsOpts("node", map[string]string{"min": "latest"}))
+		require.NoError(t, err, "decode succeeds; the option itself rejects")
+		p := &types.Project{Path: "."}
+		var applyErr error
+		for _, o := range got {
+			if e := o(p); e != nil {
+				applyErr = e
+			}
+		}
+		assert.ErrorContains(t, applyErr, `tools["node"].min "latest" is not a valid version`)
+	})
+
+	// An unknown key inside a tool entry is a load error naming the two valid ones, and
+	// deliberately NOT the "your magus may predate this" hint: min/below is a closed
+	// vocabulary that does not grow, so a stray key there is always a typo. ("minimum"
+	// is too far from "min" for the suggester's distance threshold, which is fine - the
+	// known-options list is two items long and the fix is visible in the message.)
+	t.Run("an unknown bound key is a plain load error, with no upgrade hint", func(t *testing.T) {
+		_, err := parseBuzzProjectOpts(context.Background(), toolsOpts("node", map[string]string{"minimum": "22"}))
+		assert.ErrorContains(t, err, `tools["node"]: unknown option "minimum"`)
+		assert.ErrorContains(t, err, "known options: below, min")
+		assert.NotContains(t, err.Error(), "magus self update",
+			"a closed sub-map must not suggest upgrading; the key cannot be from the future")
+	})
+
+	// An empty entry contributes nothing, so a project that writes one is not treated as
+	// having declared a window (which would make checkBounds probe for no reason).
+	t.Run("an empty entry is dropped", func(t *testing.T) {
+		p := applyOpts(t, toolsOpts("node", map[string]string{}))
+		assert.Empty(t, p.ToolBounds)
+	})
 }

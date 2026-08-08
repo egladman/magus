@@ -22,6 +22,7 @@ import (
 //go:generate go run ../../cmd/magus-utils types -type PatchOp -out gen/types/patchop.buzz
 //go:generate go run ../../cmd/magus-utils types -type Charm -out gen/types/charm.buzz
 //go:generate go run ../../cmd/magus-utils types -type VersionKey -out gen/types/versionkey.buzz
+//go:generate go run ../../cmd/magus-utils types -type VersionBounds -out gen/types/versionbounds.buzz
 //go:generate go run ../../cmd/magus-utils types -type Tool -out gen/types/tool.buzz
 //go:generate go run ../../cmd/magus-utils types -type Command -out gen/types/command.buzz
 //go:generate go run ../../cmd/magus-utils types -type Service -out gen/types/service.buzz
