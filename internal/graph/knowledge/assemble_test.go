@@ -322,7 +322,9 @@ func TestRuntimeOutputRefMergesOntoTarget(t *testing.T) {
 // uses edge to the tool it runs (argv[0] basename); its spell uses that tool too, deduped
 // to a single edge; a function-op (no OpCommands entry) carries no argv and links to no
 // tool; and two ops sharing a tool link to a SINGLE tool node. Model B: what a target runs
-// is reached via target->op->tool, not a per-target command node.
+// is reached via target->op->tool, not a per-target command node. A target that shells out
+// instead of composing an op links to the same shared tool node directly - see
+// TestAssembleTargetTools.
 func TestAssembleOpTools(t *testing.T) {
 	in := sampleInputs()
 	in.Spells[0].Language = "go" // the "go" spell declares a language
@@ -482,4 +484,43 @@ func TestContainsChainRefusesEscape(t *testing.T) {
 		assert.True(t, workspaceContainsPath(n.Source), "minted dir %q stays inside the workspace", n.Source)
 	}
 	assert.NotEmpty(t, edges)
+}
+
+// TestAssembleTargetTools: a target that runs a program directly (os\exec) links to the
+// tool it runs, so a bespoke target is not opaque. It shares the SAME workspace-scoped
+// tool node the ops use, which is what makes `explain tool:go` reach both the ops that
+// run go and the targets that shell out to it.
+func TestAssembleTargetTools(t *testing.T) {
+	in := sampleInputs()
+	// "gen" composes no spell op; it shells out. "build" already uses the go-build op,
+	// and additionally runs git itself.
+	in.Graph.Projects[0].Nodes[1].Tools = []string{"pnpm", "go"}
+	in.Graph.Projects[0].Nodes[0].Tools = []string{"git"}
+	in.Spells[0].Targets = []string{"go-build"}
+	in.Spells[0].OpCommands = map[string][]string{"go-build": {"/usr/bin/go", "build"}}
+	out := mergeAll(AssembleShards(in)).Output()
+
+	genID := "target:pkg/a:gen"
+	assert.True(t, hasEdge(out, genID, "tool:pnpm", types.RelationUses),
+		"a target that only shells out still reaches a tool")
+	assert.True(t, hasEdge(out, genID, "tool:go", types.RelationUses),
+		"a direct exec of go links the target to the go tool")
+	assert.True(t, hasEdge(out, "target:pkg/a:build", "tool:git", types.RelationUses),
+		"a target composing an op can also run its own program")
+
+	// One node per tool, shared with the op path rather than minted per target.
+	n, ok := nodeByID(out, "tool:go")
+	require.True(t, ok)
+	assert.Equal(t, types.KindTool, n.Kind)
+	assert.Empty(t, n.Source, "the tool node stays workspace-scoped")
+	assert.True(t, hasEdge(out, "op:go:go-build", "tool:go", types.RelationUses),
+		"the op path still reaches the same node")
+
+	var goNodes int
+	for _, node := range out.Nodes {
+		if node.ID == "tool:go" {
+			goNodes++
+		}
+	}
+	assert.Equal(t, 1, goNodes, "the op path and the exec path share one tool node")
 }

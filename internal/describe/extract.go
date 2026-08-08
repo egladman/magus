@@ -22,6 +22,7 @@
 package describe
 
 import (
+	"path"
 	"slices"
 	"strings"
 
@@ -156,6 +157,13 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 					}
 					if name, ok := charmCall(e); ok {
 						node.Charms = appendUniq(node.Charms, name)
+					}
+					// A program the body runs itself rather than through a spell op. The
+					// spell path already attributes its tool; this is the other half, and
+					// it is what makes a bespoke target (one that just shells out) visible
+					// as something other than empty.
+					if cmd, ok := execCall(e); ok {
+						node.Tools = appendUniq(node.Tools, cmd)
 					}
 					// Per-target cache footprint: ctx.readsFiles(...) / ctx.writesFiles(...).
 					// Every argument must be a string literal; a non-literal one is not
@@ -545,6 +553,33 @@ func crossFileArg(arg ast.Node, aliases map[string]string) (types.InputRef, bool
 // charm visible to the static charm inventory (the charm/target-collision and
 // has_charm-typo doctor checks). Unlike needs/inputs/outputs, has_charm keeps its global
 // form, so both spellings must be scanned.
+// execCall reports the program an `os\exec("<cmd>", ...)` call runs, as a basename.
+// Both separators are read: `os\exec` is the current spelling and `os.exec` the older
+// one, and they are the same call.
+//
+// Only a string-literal first argument is attributed. A computed command
+// (os\exec(tool, ...)) is invisible to this static read, exactly as a computed
+// ctx.needs handle or a non-literal glob is, and is left out rather than guessed at.
+// The basename keeps `./node_modules/.bin/tsc` and `tsc` one tool rather than two.
+func execCall(e *ast.CallExpr) (string, bool) {
+	me, ok := e.Callee.(*ast.MemberExpr)
+	if !ok || me.Name != "exec" {
+		return "", false
+	}
+	id, ok := me.Object.(*ast.IdentExpr)
+	if !ok || id.Name != "os" {
+		return "", false
+	}
+	if len(e.Args) == 0 {
+		return "", false
+	}
+	lit, ok := e.Args[0].(*ast.StringLit)
+	if !ok || lit.Val == "" {
+		return "", false
+	}
+	return path.Base(lit.Val), true
+}
+
 func charmCall(e *ast.CallExpr) (string, bool) {
 	me, ok := e.Callee.(*ast.MemberExpr)
 	if !ok || me.Name != "has_charm" {
