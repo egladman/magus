@@ -691,15 +691,10 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// installs its own first, and this leaves it alone.
 	ctx = types.EnsureReturnCapture(ctx)
 
-	// Watch host memory for the life of the invocation. This funnel is the one place
-	// every dispatch passes through, and the unit at risk is the MACHINE, so it
-	// belongs here rather than per target - the peak RSS collector in runTarget
-	// answers the complementary question of WHICH target was expensive.
-	//
-	// Silent unless headroom actually collapses, and it replaces a shell loop that
-	// used to live in .github/actions/magus/action.yml: Linux-only, unlinted, and
-	// untestable without stubbing `free`. In Go it is cross-platform, covered, and
-	// works on a laptop as well as a runner.
+	// Watch host memory for the life of the invocation. Every dispatch passes
+	// through here and the machine is what is at risk, so this belongs per-run;
+	// the peak-RSS collector in invokeSpell answers which target was expensive.
+	// Silent unless headroom collapses.
 	if m.cache != nil {
 		if total := hostmem.Total(); total > 0 {
 			watchCtx, stopWatch := context.WithCancel(ctx)

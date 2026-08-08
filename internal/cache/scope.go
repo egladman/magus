@@ -145,20 +145,16 @@ func (c *Cache) LogSummary(ctx context.Context, elapsed time.Duration) {
 	)
 }
 
-// LogMemoryPressure emits a warning that the host is running out of memory, routed
-// through the cache logger like every other header so all output formats receive it.
+// LogMemoryPressure warns that the host is running out of memory, routed through
+// the cache logger like every other header.
 //
-// Warn rather than Info because this line has a job to do in a log nobody chose to
-// read: when a CI runner is killed, magus never reaches the end of the invocation
-// where it prints its summary, so anything held for later is lost with the process.
-// Only what was already streamed survives, and this is the one line that explains an
-// otherwise unattributable "the runner has received a shutdown signal".
+// Warn rather than Info because a killed runner never lets magus reach its
+// summary. Only what magus already streamed survives, and this is the line that
+// explains an otherwise unattributable shutdown signal.
 func (c *Cache) LogMemoryPressure(ctx context.Context, msg string) {
-	// Name what is RUNNING. A bare "the machine is out of memory" makes the reader
-	// guess which of several concurrent targets did it, and guessing is the thing
-	// the inflight registry exists to end - it already survives a SIGKILL so the
-	// next run can report the same set. Consulting it live means the answer is in
-	// the log of the run that died, not only the one after it.
+	// Name what is running. The inflight registry already tracks this and already
+	// survives a SIGKILL, so a warning that made the reader guess was withholding
+	// an answer magus had on hand.
 	if running := c.inflight.Running(); len(running) > 0 {
 		names := make([]string, 0, len(running))
 		for _, t := range running {
@@ -166,12 +162,8 @@ func (c *Cache) LogMemoryPressure(ctx context.Context, msg string) {
 		}
 		msg += "; running: " + strings.Join(names, ", ")
 	}
-	// Name the Buzz heap when it is large. This is the line that would have ended a
-	// long investigation on its first day: the VM's heap is append-only and never
-	// freed, so a magusfile can consume the machine without any subprocess looking
-	// guilty - and every visible suspect (a race-enabled `go test`, the runner) was
-	// measured and cleared before the real cause was found. Reported only past a
-	// threshold no ordinary run reaches, so a healthy build stays quiet.
+	// The Buzz heap, when it is large. Its heap never frees, so a magusfile can
+	// consume the machine with no subprocess looking guilty.
 	if objects, peak := vm.HeapStats(); peak > buzzHeapNoteworthy {
 		msg += fmt.Sprintf("; buzz heap: %d objects (peak %d) - an append-only heap this "+
 			"large usually means a magusfile is building a value in a loop", objects, peak)
@@ -179,9 +171,7 @@ func (c *Cache) LogMemoryPressure(ctx context.Context, msg string) {
 	c.log.WarnContext(ctx, "cache.warn", slog.String("msg", msg))
 }
 
-// buzzHeapNoteworthy is the object count past which the Buzz heap is worth naming
-// in a memory warning. Chosen from measurement, not taste: the pathological case
-// that motivated this reached tens of millions of objects, while a healthy run of
-// this repo's own magusfiles stays orders of magnitude below it. Low enough to fire
-// before the machine dies, high enough that a normal build never sees it.
+// buzzHeapNoteworthy is the object count past which the Buzz heap is worth
+// naming. Measured, not chosen: the case that motivated this reached tens of
+// millions, while a healthy run of this repo stays orders of magnitude below.
 const buzzHeapNoteworthy = 1_000_000

@@ -8,26 +8,25 @@ import (
 	"strings"
 )
 
-// Available approximates MemAvailable on macOS as (free + inactive + speculative)
-// pages, or 0 when vm_stat cannot be read or parsed.
+// Available approximates MemAvailable as (free + inactive + speculative) pages,
+// or 0 when vm_stat cannot be read or parsed.
 //
-// Darwin publishes no single MemAvailable equivalent. Inactive pages are the
-// closest analogue to Linux's reclaimable page cache: they hold content the VM
-// can evict on demand. Wired and active pages are excluded because they cannot be
-// handed to a new allocation without paging.
+// Darwin publishes no MemAvailable equivalent. Inactive pages are the closest
+// analogue to Linux's reclaimable cache; wired and active pages are excluded
+// because a new allocation cannot have them without paging.
 //
-// This is a watchdog input, not an accounting figure. It is allowed to be
-// approximate; it is not allowed to be confidently wrong in the tight direction,
-// which is why anything unparsable yields 0 (UNKNOWN, watchdog stays silent)
-// rather than a partial sum that would read as an emergency.
+// A watchdog input, so it may be approximate. It may not be confidently wrong in
+// the tight direction, which is why a partial parse yields 0.
 func Available() int64 {
 	out, err := exec.Command("vm_stat").Output()
 	if err != nil {
 		return 0
 	}
-	var pageSize int64 = 4096
+	// No default: a wrong page size is wrong by a factor of four on Apple Silicon
+	// (16K pages), and always in the direction that invents an emergency.
+	var pageSize int64
 	var pages int64
-	var sawAny bool
+	var fields int
 	for _, line := range strings.Split(string(out), "\n") {
 		if strings.HasPrefix(line, "Mach Virtual Memory Statistics:") {
 			// The header carries the page size: "... (page size of 16384 bytes)".
@@ -55,9 +54,11 @@ func Available() int64 {
 			return 0
 		}
 		pages += n
-		sawAny = true
+		fields++
 	}
-	if !sawAny {
+	// All three fields, or none: a truncated vm_stat that yielded only "Pages free"
+	// reports a fraction of what is actually available, which reads as a crisis.
+	if fields != 3 || pageSize <= 0 {
 		return 0
 	}
 	return pages * pageSize

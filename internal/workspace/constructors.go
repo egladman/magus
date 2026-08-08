@@ -202,10 +202,8 @@ func Slots(n int) TargetOption {
 	return func(t *types.Target) { t.Slots = n }
 }
 
-// MemoryMB returns a TargetOption declaring the peak resident memory the target
-// needs, in megabytes. magus converts it to concurrency slots against the host's
-// memory-per-slot share, so it rides the same limiter Slots does rather than
-// introducing a second budget - see Target.MemoryMB.
+// MemoryMB returns a TargetOption setting the target's memory budget in
+// megabytes. See types.Target.MemoryMB.
 func MemoryMB(n int) TargetOption {
 	return func(t *types.Target) { t.MemoryMB = n }
 }

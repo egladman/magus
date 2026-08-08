@@ -11,11 +11,10 @@ import (
 
 // Available reads MemAvailable from /proc/meminfo, or 0 when it cannot.
 //
-// MemAvailable, not MemFree: the kernel's own estimate of what a new allocation
+// MemAvailable, not MemFree: the kernel's estimate of what a new allocation
 // could get without swapping, which counts reclaimable page cache. MemFree on a
-// CI runner mid-build sits near zero on every healthy run, because the build just
-// read a toolchain into cache - a watchdog on MemFree would fire constantly and
-// teach its reader to ignore it.
+// runner mid-build sits near zero on every healthy run, so a watchdog wired to
+// it would fire constantly.
 func Available() int64 {
 	f, err := os.Open("/proc/meminfo")
 	if err != nil {

@@ -1,3 +1,5 @@
+//go:build !buzz_safe && !buzz_unsafe
+
 package vm
 
 import "testing"

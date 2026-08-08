@@ -97,3 +97,17 @@ func TestWatchToleratesNilArguments(t *testing.T) {
 		Watch(context.Background(), 16*gb, func() int64 { return 1 }, nil)
 	})
 }
+
+// A run that dips, recovers, then collapses again must report the second collapse.
+// It is the one that kills the machine, and an earlier floor left in place silences
+// it: once floor is 100MB, `avail > floor-250MB` is true for every possible reading.
+func TestWatchReportsACollapseAfterRecovery(t *testing.T) {
+	got := drive(t, 16*gb, []int64{
+		100 << 20, // first collapse: reports
+		9 * gb,    // recovered, above the threshold
+		1 << 30,   // collapses again: must report, not be measured against 100MB
+	})
+	require.Len(t, got, 2, "got: %v", got)
+	assert.Contains(t, got[0], "100MB")
+	assert.Contains(t, got[1], "1024MB")
+}

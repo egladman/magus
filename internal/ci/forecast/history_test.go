@@ -108,7 +108,7 @@ func TestHistorySchemaLock(t *testing.T) {
 		"duration_ms": true, // int64 — wall-clock timing; same safety profile as p75_ms
 		"at":          true, // ISO timestamp of when the run completed; same safety profile as last_updated
 		"attempts":    true, // int — number of attempts (1 or 2); safe integer counter
-		// int64 — peak resident bytes over the target's processes. A magnitude
+		// int64: peak resident bytes over the target's processes. A magnitude
 		// measured by the kernel, carrying no path, no argv and no payload: the
 		// same safety profile as duration_ms, which is likewise a number about a
 		// run rather than anything from inside it. Omitted when unknown, so it

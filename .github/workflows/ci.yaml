@@ -33,16 +33,12 @@ env:
   MAGUS_CACHE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}
   MAGUS_CACHE_REMOTE_INSECURE: 'true'
   MAGUS_CACHE_REMOTE_TRUSTED_KEYS: ${{ vars.MAGUS_CACHE_PUBLIC_KEY }}
-  # A CEILING, not a target: the forecaster still picks the count, and now also
-  # splits a shard whose projects are predicted to exceed the runner's memory.
-  # Pinned at 2 this could not do that - the memory constraint may only raise the
-  # count, and there was nowhere to raise it to, which is how docs and the root
-  # project kept landing on one 16GB runner and killing it.
-  #
-  # Shard count is not runner spend: ci.runner_pool_budget caps how many run at
-  # once, so a higher ceiling buys smaller shards in waves rather than more
-  # machines. Left at magus's own default (8) rather than a number invented here.
-  MAGUS_CI_MAX_SHARDS: '8'
+  # A CEILING, not a target: the forecaster picks the count, and may raise it to
+  # split a shard predicted to exceed the runner's memory. Held at 2 deliberately -
+  # shard count is not runner spend, but it is runner *concurrency*, and the OOM
+  # that made this knob interesting turned out to be one magusfile allocating 13GB,
+  # not too much work on one machine. Raise it when a measurement asks for it.
+  MAGUS_CI_MAX_SHARDS: '2'
   # Stream every target's output live instead of withholding it until something
   # fails. magus collapses on success by default, which is right on a terminal you
   # are sitting at and wrong in a log nobody reads until it goes red: a green run
