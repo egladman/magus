@@ -154,6 +154,9 @@ type MemoryPressure struct {
 	// guilty; 0 means the caller did not measure.
 	BuzzObjects int
 	BuzzPeak    int
+	// BuzzHotSite is the source position responsible for the most heap growth,
+	// as "source:line", or "" when nothing was sampled.
+	BuzzHotSite string
 }
 
 // LogMemoryPressure warns that the host is running out of memory, routed through
@@ -185,8 +188,13 @@ func (c *Cache) LogMemoryPressure(ctx context.Context, p MemoryPressure) {
 		attrs = append(attrs,
 			slog.Int("buzz_objects", p.BuzzObjects),
 			slog.Int("buzz_peak", p.BuzzPeak))
-		msg += fmt.Sprintf("; buzz heap: %d objects (peak %d) - an append-only heap this "+
-			"large usually means a magusfile is building a value in a loop", p.BuzzObjects, p.BuzzPeak)
+		msg += fmt.Sprintf("; buzz heap: %d objects (peak %d)", p.BuzzObjects, p.BuzzPeak)
+		if p.BuzzHotSite != "" {
+			attrs = append(attrs, slog.String("buzz_hot_site", p.BuzzHotSite))
+			msg += ", most of it from " + p.BuzzHotSite
+		} else {
+			msg += " - an append-only heap this large usually means a magusfile is building a value in a loop"
+		}
 	}
 	c.log.WarnContext(ctx, "cache.memory", append([]any{slog.String("msg", msg)}, attrs...)...)
 }

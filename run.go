@@ -701,18 +701,27 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// anything. Joined rather than merely cancelled: an in-flight report would
 	// otherwise land after the summary footer, or be cut off by process exit.
 	if m.cache != nil && !opts.DryRun {
+		// Rebase the heap peak and attribution: the daemon serves many invocations
+		// from one process against a heap that never shrinks, and without this the
+		// first run's peak is reported against every later one.
+		vm.ResetHeapStats()
 		watchCtx, stopWatch := context.WithCancel(ctx)
 		var watchDone sync.WaitGroup
 		watchDone.Add(1)
 		go func() {
 			defer watchDone.Done()
 			hostmem.Watch(watchCtx, func(available, total int64) {
-				objects, peak := vm.HeapStats()
+				heap := vm.ReadHeapStats()
+				var hot string
+				if sites, _ := vm.HeapHotSites(1); len(sites) > 0 {
+					hot = sites[0].Site
+				}
 				m.cache.LogMemoryPressure(ctx, cache.MemoryPressure{
 					AvailableBytes: available,
 					TotalBytes:     total,
-					BuzzObjects:    objects,
-					BuzzPeak:       peak,
+					BuzzObjects:    heap.Objects,
+					BuzzPeak:       heap.Peak,
+					BuzzHotSite:    hot,
 				})
 			})
 		}()

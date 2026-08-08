@@ -64,53 +64,90 @@ func TestWatcherDetectsFileWrite(t *testing.T) {
 	})
 }
 
+// Debounce coalesces a burst of writes into few batches.
+//
+// The watcher must be HOT before the burst. fsnotify's Add() returns before the
+// kernel watch is actually delivering, so writes issued immediately after New()
+// can land in that gap and produce no events at all - which is how this test
+// failed roughly one run in three while reporting "no batches received", a
+// message that says nothing about the race that caused it. TestWatcherDetectsFileWrite
+// already documents the gap and closes it with awaitEventFor; this does the same
+// rather than retrying the whole test.
+//
+// The warm-up write is on a SEPARATE file so its own debounce batch cannot be
+// mistaken for one of the burst's.
 func TestWatcherDebounceCoalesces(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	f, err := os.CreateTemp(dir, "*.go")
+
+	warm, err := os.CreateTemp(dir, "warmup-*.go")
+	require.NoError(t, err)
+	warm.Close()
+	f, err := os.CreateTemp(dir, "burst-*.go")
 	require.NoError(t, err)
 	f.Close()
 
+	const debounce = 100 * time.Millisecond
 	w, err := New(
 		context.Background(),
 		WithRoot(dir),
-		WithDebounce(100*time.Millisecond),
+		WithDebounce(debounce),
 	)
 	require.NoError(t, err)
 	defer w.Close()
 
-	// Write 10 times in rapid succession.
+	// Block until the watch is delivering, then let its batch settle so the burst
+	// below starts from a quiet channel.
+	awaitEventFor(t, w, warm.Name(), func() {
+		require.NoError(t, os.WriteFile(warm.Name(), []byte("warm"), 0o644))
+	})
+	drain(t, w, 2*debounce)
+
 	for i := range 10 {
 		require.NoError(t, os.WriteFile(f.Name(), []byte{byte(i)}, 0o644))
 	}
 
-	var batches int
-	deadline := time.After(2 * time.Second)
-	// Drain events for 500ms after the first batch to confirm no second batch fires.
-	got := false
+	batches := countBatches(t, w, f.Name(), 2*time.Second, 3*debounce)
+	require.NotZero(t, batches, "the watcher was hot and 10 writes landed, so at least one batch must arrive")
+	assert.LessOrEqual(t, batches, 3, "debounce should coalesce 10 rapid writes into <=3 batches")
+}
+
+// drain discards batches until the channel stays quiet for settle.
+func drain(t *testing.T, w *Watcher, settle time.Duration) {
+	t.Helper()
 	for {
 		select {
 		case _, ok := <-w.Events():
 			if !ok {
-				goto done
+				return
 			}
-			batches++
-			got = true
-		case <-deadline:
-			goto done
-		case <-func() <-chan time.Time {
-			if got {
-				return time.After(300 * time.Millisecond)
-			}
-			return nil
-		}():
-			goto done
+		case <-time.After(settle):
+			return
 		}
 	}
-done:
-	require.NotZero(t, batches, "no batches received")
-	// Tolerate at most 3 batches (debounce may fire between writes on slow CI).
-	assert.LessOrEqual(t, batches, 3, "debounce should coalesce 10 rapid writes into ≤3 batches")
+}
+
+// countBatches counts batches mentioning wantPath, stopping once the channel has
+// been quiet for settle or the overall deadline passes.
+func countBatches(t *testing.T, w *Watcher, wantPath string, deadline, settle time.Duration) int {
+	t.Helper()
+	var n int
+	overall := time.After(deadline)
+	for {
+		select {
+		case batch, ok := <-w.Events():
+			if !ok {
+				return n
+			}
+			if slices.Contains(batch.Paths, wantPath) {
+				n++
+			}
+		case <-time.After(settle):
+			return n
+		case <-overall:
+			return n
+		}
+	}
 }
 
 func TestWatcherIgnoresBuiltinPaths(t *testing.T) {

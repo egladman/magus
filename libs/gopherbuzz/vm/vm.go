@@ -120,6 +120,10 @@ type VM struct {
 	stepHook func(StepEvent, DebugFrame)
 	stepMask StepMask
 	lastLine int // last source line a StepLine event fired for; 0 = none yet
+	// heapTick counts instructions for the masked heap-growth sample; heapLastLen
+	// is the heap length at the previous sample. See heapattr.go.
+	heapTick    uint64
+	heapLastLen int
 	// faultHook, if set, is notified when this VM faults: FaultPanic for a Go panic
 	// recovered in Exec, FaultHostError for a host callable error raised as a throw.
 	// nil in every normal run, so the single `if vm.faultHook != nil` guard at each
@@ -380,6 +384,14 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 	for {
 		ins := fetch(code, f.ip) // unchecked fetch; see fetch_unsafe.go (chunk-terminator invariant)
 		f.ip++
+
+		// Heap growth attribution. One AND and a not-taken branch 4095 times out
+		// of 4096; see heapattr.go for why the sampling lives here rather than in
+		// the allocator.
+		vm.heapTick++
+		if vm.heapTick&heapSampleMask == 0 {
+			sampleHeapGrowth(f, &vm.heapLastLen)
+		}
 
 		// Debugger line hook. In normal runs debug is false and this entire
 		// block is a single correctly-predicted not-taken branch. When a pry()
