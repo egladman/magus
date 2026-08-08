@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2695,
-  "edge_count": 5866,
+  "node_count": 2689,
+  "edge_count": 5829,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "catalog_fingerprint": "3e64891912aad41b",
   "nodes": [
@@ -24977,14 +24977,6 @@
       }
     },
     {
-      "id": "tool:git",
-      "kind": "tool",
-      "label": "git",
-      "attrs": {
-        "tool": "git"
-      }
-    },
-    {
       "id": "tool:go",
       "kind": "tool",
       "label": "go",
@@ -25033,14 +25025,6 @@
       }
     },
     {
-      "id": "tool:node",
-      "kind": "tool",
-      "label": "node",
-      "attrs": {
-        "tool": "node"
-      }
-    },
-    {
       "id": "tool:pnpm",
       "kind": "tool",
       "label": "pnpm",
@@ -25065,30 +25049,6 @@
       }
     },
     {
-      "id": "tool:shellcheck",
-      "kind": "tool",
-      "label": "shellcheck",
-      "attrs": {
-        "tool": "shellcheck"
-      }
-    },
-    {
-      "id": "tool:tinygo",
-      "kind": "tool",
-      "label": "tinygo",
-      "attrs": {
-        "tool": "tinygo"
-      }
-    },
-    {
-      "id": "tool:trivy",
-      "kind": "tool",
-      "label": "trivy",
-      "attrs": {
-        "tool": "trivy"
-      }
-    },
-    {
       "id": "tool:typos",
       "kind": "tool",
       "label": "typos",
@@ -25102,14 +25062,6 @@
       "label": "uv",
       "attrs": {
         "tool": "uv"
-      }
-    },
-    {
-      "id": "tool:vhs",
-      "kind": "tool",
-      "label": "vhs",
-      "attrs": {
-        "tool": "vhs"
       }
     }
   ],
@@ -67693,14 +67645,6 @@
       "provenance": "."
     },
     {
-      "source": "target:.:bindings-generate",
-      "target": "tool:go",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
       "source": "target:.:build",
       "target": "target:.:format",
       "relation": "depends_on",
@@ -67877,14 +67821,6 @@
       "provenance": "."
     },
     {
-      "source": "target:.:changelog-generate",
-      "target": "tool:go",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
       "source": "target:.:ci",
       "target": "target:.:build",
       "relation": "depends_on",
@@ -67976,14 +67912,6 @@
       "source": "target:.:config-generate",
       "target": "target:.:types-generate",
       "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:config-generate",
-      "target": "tool:go",
-      "relation": "uses",
       "confidence": "extracted",
       "score": 1,
       "provenance": "."
@@ -68197,25 +68125,9 @@
       "provenance": "."
     },
     {
-      "source": "target:.:image-login",
-      "target": "tool:docker",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
       "source": "target:.:image-scan",
       "target": "target:.:image-build",
       "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:image-scan",
-      "target": "tool:trivy",
-      "relation": "uses",
       "confidence": "extracted",
       "score": 1,
       "provenance": "."
@@ -68285,14 +68197,6 @@
       "provenance": "."
     },
     {
-      "source": "target:.:man-generate",
-      "target": "tool:go",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
       "source": "target:.:mocks-generate",
       "target": "file:internal/dry/gen/mocks/spell_catalog.go",
       "relation": "produces",
@@ -68304,14 +68208,6 @@
       "source": "target:.:mocks-generate",
       "target": "target:.:types-generate",
       "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:mocks-generate",
-      "target": "tool:go",
-      "relation": "uses",
       "confidence": "extracted",
       "score": 1,
       "provenance": "."
@@ -68333,22 +68229,6 @@
       "provenance": "."
     },
     {
-      "source": "target:.:release-build",
-      "target": "tool:go",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:release-sign",
-      "target": "tool:go",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
       "source": "target:.:security",
       "target": "op:go:govulncheck",
       "relation": "uses",
@@ -68359,22 +68239,6 @@
     {
       "source": "target:.:security",
       "target": "spell:go",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:security",
-      "target": "tool:trivy",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:serve",
-      "target": "tool:pnpm",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
@@ -68408,22 +68272,6 @@
       "source": "target:.:spells-generate",
       "target": "target:.:types-generate",
       "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:spells-generate",
-      "target": "tool:go",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:tapes",
-      "target": "tool:vhs",
-      "relation": "uses",
       "confidence": "extracted",
       "score": 1,
       "provenance": "."
@@ -68469,25 +68317,9 @@
       "provenance": "."
     },
     {
-      "source": "target:.:test",
-      "target": "tool:go",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
       "source": "target:.:types-generate",
       "target": "file:types/buzzobject_gen.go",
       "relation": "produces",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:types-generate",
-      "target": "tool:go",
-      "relation": "uses",
       "confidence": "extracted",
       "score": 1,
       "provenance": "."
@@ -68528,14 +68360,6 @@
       "source": "target:console:build",
       "target": "target:console:preflight",
       "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "console"
-    },
-    {
-      "source": "target:console:build",
-      "target": "tool:pnpm",
-      "relation": "uses",
       "confidence": "extracted",
       "score": 1,
       "provenance": "console"
@@ -68597,22 +68421,6 @@
       "provenance": "console"
     },
     {
-      "source": "target:console:lint",
-      "target": "tool:pnpm",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "console"
-    },
-    {
-      "source": "target:console:preflight",
-      "target": "tool:pnpm",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "console"
-    },
-    {
       "source": "target:console:security",
       "target": "target:console:preflight",
       "relation": "depends_on",
@@ -68624,14 +68432,6 @@
       "source": "target:console:test",
       "target": "target:console:preflight",
       "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "console"
-    },
-    {
-      "source": "target:console:test",
-      "target": "tool:pnpm",
-      "relation": "uses",
       "confidence": "extracted",
       "score": 1,
       "provenance": "console"
@@ -68653,30 +68453,6 @@
       "provenance": "docs/guides/integrations/agents"
     },
     {
-      "source": "target:docs/guides/integrations/agents:lint",
-      "target": "tool:pnpm",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/integrations/agents"
-    },
-    {
-      "source": "target:docs/guides/integrations/agents:lint",
-      "target": "tool:shellcheck",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/integrations/agents"
-    },
-    {
-      "source": "target:docs/guides/integrations/agents:preflight",
-      "target": "tool:pnpm",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/integrations/agents"
-    },
-    {
       "source": "target:docs:build",
       "target": "target:docs:generate",
       "relation": "depends_on",
@@ -68693,25 +68469,9 @@
       "provenance": "docs"
     },
     {
-      "source": "target:docs:build-hljs",
-      "target": "tool:pnpm",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
       "source": "target:docs:build-mermaid",
       "target": "target:docs:preflight",
       "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:build-mermaid",
-      "target": "tool:pnpm",
-      "relation": "uses",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs"
@@ -68733,33 +68493,9 @@
       "provenance": "docs"
     },
     {
-      "source": "target:docs:build-playground",
-      "target": "tool:sh",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:build-playground",
-      "target": "tool:tinygo",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
       "source": "target:docs:build-playground-editor",
       "target": "target:docs:preflight",
       "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:build-playground-editor",
-      "target": "tool:pnpm",
-      "relation": "uses",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs"
@@ -70333,22 +70069,6 @@
       "provenance": "docs"
     },
     {
-      "source": "target:docs:lint",
-      "target": "tool:pnpm",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:preflight",
-      "target": "tool:pnpm",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
       "source": "target:docs:security",
       "target": "target:docs:preflight",
       "relation": "depends_on",
@@ -71245,22 +70965,6 @@
       "provenance": "evals"
     },
     {
-      "source": "target:evals:lint",
-      "target": "tool:pnpm",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "evals"
-    },
-    {
-      "source": "target:evals:preflight",
-      "target": "tool:pnpm",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "evals"
-    },
-    {
       "source": "target:evals:security",
       "target": "target:evals:preflight",
       "relation": "depends_on",
@@ -71493,22 +71197,6 @@
       "provenance": "libs/gopherbuzz"
     },
     {
-      "source": "target:libs/gopherbuzz:conformance",
-      "target": "tool:git",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/gopherbuzz"
-    },
-    {
-      "source": "target:libs/gopherbuzz:conformance",
-      "target": "tool:go",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/gopherbuzz"
-    },
-    {
       "source": "target:libs/gopherbuzz:format",
       "target": "op:go:go-fmt",
       "relation": "uses",
@@ -71645,41 +71333,9 @@
       "provenance": "libs/textsearch"
     },
     {
-      "source": "target:libs/textsearch:lint",
-      "target": "tool:pnpm",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/textsearch"
-    },
-    {
-      "source": "target:libs/textsearch:preflight",
-      "target": "tool:pnpm",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/textsearch"
-    },
-    {
       "source": "target:libs/textsearch:test",
       "target": "target:libs/textsearch:preflight",
       "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/textsearch"
-    },
-    {
-      "source": "target:libs/textsearch:test",
-      "target": "tool:node",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/textsearch"
-    },
-    {
-      "source": "target:libs/textsearch:test",
-      "target": "tool:pnpm",
-      "relation": "uses",
       "confidence": "extracted",
       "score": 1,
       "provenance": "libs/textsearch"
