@@ -72,12 +72,22 @@ export fun isGeneratedSource(body: str) > bool {
 // prefix is the module path plus a trailing slash; each profile line begins with
 // an import path, so removing it yields a workspace-relative file.
 export fun stripGenerated(profile: str, prefix: str) > str {
-    var kept = "";
+    // Collect into a LIST and join once. `kept = kept + line` looks harmless and is
+    // catastrophic here: every concatenation allocates a whole new string, and this
+    // VM's heap is append-only - "objects are never removed (pinned for the process
+    // lifetime)", see vm/value_nanbox.go - so each intermediate survives to the end
+    // of the run. Over this repo's own 30,803-line profile that pattern measured a
+    // 13.1GB peak to produce 2.1MB of output, which is precisely what was killing a
+    // 16GB CI runner with no failing target to blame.
+    //
+    // A list appends a reference per line and joins once, so the intermediates never
+    // exist. Same output, bounded memory.
+    var kept = mut [<str>];
     var verdict = mut {};
     foreach (line in profile.split("\n")) {
         if (line == "") { continue; }
         // The mode: header is required by the format and belongs to no file.
-        if (line.startsWith("mode:")) { kept = kept + line + "\n"; continue; }
+        if (line.startsWith("mode:")) { kept.append(line); continue; }
 
         final file = line.split(":")[0];
         if (verdict[file] == null) {
@@ -87,9 +97,12 @@ export fun stripGenerated(profile: str, prefix: str) > str {
             // dropping it would understate the denominator.
             verdict[file] = if (fs\exists(rel)) isGeneratedSource(fs\readFile(rel)) else false;
         }
-        if (verdict[file] == false) { kept = kept + line + "\n"; }
+        if (verdict[file] == false) { kept.append(line); }
     }
-    return kept;
+    // Trailing newline preserved: the profile format expects every record line
+    // terminated, and join alone would drop the last one.
+    if (kept.len() == 0) { return ""; }
+    return kept.join("\n") + "\n";
 }
 
 // lcovPercent totals LINE coverage across every lcov record whose source file

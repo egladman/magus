@@ -174,6 +174,7 @@ func gHeapAlloc(ptr heapVal) uint64 {
 	idx := uint64(len(s))
 	s = append(s, ptr)
 	gHeapPtr.Store(&s)
+	recordHeapPeak(len(s))
 	gHeapMu.Unlock()
 	return idx
 }

@@ -2,8 +2,11 @@ package cache
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
+
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"time"
 )
 
@@ -163,5 +166,22 @@ func (c *Cache) LogMemoryPressure(ctx context.Context, msg string) {
 		}
 		msg += "; running: " + strings.Join(names, ", ")
 	}
+	// Name the Buzz heap when it is large. This is the line that would have ended a
+	// long investigation on its first day: the VM's heap is append-only and never
+	// freed, so a magusfile can consume the machine without any subprocess looking
+	// guilty - and every visible suspect (a race-enabled `go test`, the runner) was
+	// measured and cleared before the real cause was found. Reported only past a
+	// threshold no ordinary run reaches, so a healthy build stays quiet.
+	if objects, peak := vm.HeapStats(); peak > buzzHeapNoteworthy {
+		msg += fmt.Sprintf("; buzz heap: %d objects (peak %d) - an append-only heap this "+
+			"large usually means a magusfile is building a value in a loop", objects, peak)
+	}
 	c.log.WarnContext(ctx, "cache.warn", slog.String("msg", msg))
 }
+
+// buzzHeapNoteworthy is the object count past which the Buzz heap is worth naming
+// in a memory warning. Chosen from measurement, not taste: the pathological case
+// that motivated this reached tens of millions of objects, while a healthy run of
+// this repo's own magusfiles stays orders of magnitude below it. Low enough to fire
+// before the machine dies, high enough that a normal build never sees it.
+const buzzHeapNoteworthy = 1_000_000

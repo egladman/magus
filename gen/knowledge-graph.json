@@ -7494,7 +7494,7 @@
       "kind": "function",
       "label": "lcovPercent",
       "doc": "lcovPercent totals LINE coverage across every lcov record whose source file path contains keep, as a one-decimal percentage string (\"85.7\") - the shape badge.coverage renders.  lcov rather than Node's printed table: the table is a display format that has changed shape across Node releases, while LF/LH are counts. Summing counts and dividing once is also the only correct way to combine files - averaging their per-file percentages would weight a three-line module the same as a three-hundred-line one.  keep ex",
-      "source": "coverage.buzz:109",
+      "source": "coverage.buzz:122",
       "attrs": {
         "exported": "true"
       }
