@@ -140,3 +140,15 @@ func (c *Cache) LogSummary(ctx context.Context, elapsed time.Duration) {
 		slog.Int64("elapsed", int64(elapsed)),
 	)
 }
+
+// LogMemoryPressure emits a warning that the host is running out of memory, routed
+// through the cache logger like every other header so all output formats receive it.
+//
+// Warn rather than Info because this line has a job to do in a log nobody chose to
+// read: when a CI runner is killed, magus never reaches the end of the invocation
+// where it prints its summary, so anything held for later is lost with the process.
+// Only what was already streamed survives, and this is the one line that explains an
+// otherwise unattributable "the runner has received a shutdown signal".
+func (c *Cache) LogMemoryPressure(ctx context.Context, msg string) {
+	c.log.WarnContext(ctx, "cache.warn", slog.String("msg", msg))
+}

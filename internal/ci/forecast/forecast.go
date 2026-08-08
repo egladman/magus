@@ -7,6 +7,7 @@ import (
 	"math"
 	"slices"
 
+	"github.com/egladman/magus/internal/hostmem"
 	"github.com/egladman/magus/types"
 )
 
@@ -44,7 +45,7 @@ func (f Forecaster) memoryBudget() int64 {
 	if f.MemoryBudgetBytes > 0 {
 		return f.MemoryBudgetBytes
 	}
-	if total := hostMemoryBytes(); total > 0 {
+	if total := hostmem.Total(); total > 0 {
 		return total / 4 * usableMemoryFraction
 	}
 	return 0

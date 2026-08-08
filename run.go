@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
+	"github.com/egladman/magus/internal/hostmem"
 	"github.com/egladman/magus/internal/interactive"
 	interp "github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
@@ -685,6 +686,25 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// A caller that wants to READ the values back (the run and affected commands)
 	// installs its own first, and this leaves it alone.
 	ctx = types.EnsureReturnCapture(ctx)
+
+	// Watch host memory for the life of the invocation. This funnel is the one place
+	// every dispatch passes through, and the unit at risk is the MACHINE, so it
+	// belongs here rather than per target - the peak RSS collector in runTarget
+	// answers the complementary question of WHICH target was expensive.
+	//
+	// Silent unless headroom actually collapses, and it replaces a shell loop that
+	// used to live in .github/actions/magus/action.yml: Linux-only, unlinted, and
+	// untestable without stubbing `free`. In Go it is cross-platform, covered, and
+	// works on a laptop as well as a runner.
+	if m.cache != nil {
+		if total := hostmem.Total(); total > 0 {
+			watchCtx, stopWatch := context.WithCancel(ctx)
+			defer stopWatch()
+			go hostmem.Watch(watchCtx, total, hostmem.Available, func(msg string) {
+				m.cache.LogMemoryPressure(watchCtx, msg)
+			})
+		}
+	}
 
 	if opts.DryRun {
 		// Deep dry run: evaluate each target body under a tracing context, so

@@ -88,62 +88,17 @@ runs:
         case "$INPUT_COMMAND" in
           *[\;\&\|\`\$\(\)\<\>\!\\]*) echo "::error::magus action: command contains shell metacharacters: $INPUT_COMMAND"; exit 1 ;;
         esac
-        # Headroom trace, backgrounded INSIDE this step on purpose.
+        # Host memory is watched by magus itself, not by a loop here. This used to be
+        # a backgrounded shell sampler, and it was the wrong home twice over: it read
+        # `free`/`df`, so it worked on Linux runners and nowhere else, and it was
+        # untestable without stubbing both. internal/hostmem does the same job in Go,
+        # covered by tests, and streams a [warn] line the moment headroom collapses -
+        # which is what has to survive, because a killed runner never lets magus reach
+        # the summary it would otherwise print. See internal/hostmem/watch.go.
         #
-        # A shard has repeatedly ended as CANCELLED with "The runner has received a
-        # shutdown signal" and no diagnostics whatsoever - the runner going away
-        # mid-run, not a target failing. Nothing outlives that: every later step
-        # reports conclusion=skipped, so an artifact upload cannot collect anything
-        # however its `if:` is written, and magus never reaches the end of the
-        # invocation where it prints the failure summary. The only channel that
-        # survives is this log, because Actions streams it live - so the trace goes
-        # to stdout, and it has to be started here rather than in its own step,
-        # because a background writer loses its pipe once the step that spawned it
-        # returns.
-        #
-        # It watches what a concurrency limit cannot. magus sizes itself
-        # min(NumCPU,8) and `go test -p` follows GOMAXPROCS, so both scale on CORES,
-        # while the two plausible killers scale on neither: the race detector's
-        # shadow memory, and gopherbuzz's string intern table, which has no eviction
-        # anywhere in the tree and grows for the life of the process. Disk is here
-        # too, since a full disk takes a runner down just as quietly.
-        # Plain stdout, not ::debug::, deliberately: a debug line is invisible unless
-        # someone re-runs with debug logging on, and the whole point is to catch the
-        # NEXT occurrence rather than ask for one.
-        #
-        # SAMPLE FAST, PRINT RARELY. This first shipped at one line per 30s, and that
-        # interval cannot answer the question it was built for: a shard died 30s after
-        # a sample that read 13.8GB free, so the trace showed "no pressure" while
-        # saying nothing about the 30 seconds that actually killed the runner. A Go
-        # test binary can allocate its way out of 14GB in well under that. So sample
-        # every 2s and keep a LOW-WATER MARK, printing only when the floor drops by
-        # more than 250MB - dense enough that a spike cannot hide between samples,
-        # quiet enough that a healthy shard still costs a handful of lines. The
-        # heartbeat every 60s distinguishes "nothing got worse" from "the tracer died".
-        ( low=99999999; last_beat=0; beat=0
-          while true; do
-            avail=$(free -m 2>/dev/null | awk '/^Mem:/{print $7}')
-            case "$avail" in ''|*[!0-9]*) avail=$low ;; esac
-            if [ "$avail" -lt $((low - 250)) ]; then
-              low=$avail
-              printf '[headroom] %s NEW LOW mem_avail=%sMB disk_avail=%sMB\n' \
-                "$(date -u +%H:%M:%S)" "$avail" \
-                "$(df -m --output=avail / 2>/dev/null | tail -1 | tr -d ' ')"
-            elif [ "$avail" -lt "$low" ]; then
-              low=$avail
-            fi
-            beat=$((beat + 2))
-            if [ $((beat - last_beat)) -ge 60 ]; then
-              last_beat=$beat
-              printf '[headroom] %s floor=%sMB now=%sMB disk_avail=%sMB\n' \
-                "$(date -u +%H:%M:%S)" "$low" "$avail" \
-                "$(df -m --output=avail / 2>/dev/null | tail -1 | tr -d ' ')"
-            fi
-            sleep 2
-          done ) &
-        headroom=$!
-        trap 'kill "$headroom" 2>/dev/null || true' EXIT
-
+        # The disk half is gone rather than ported: every sample it ever took reported
+        # 82-85GB free, so it was watching something that was never a candidate. Add it
+        # back when a measurement, not a hunch, says disk is in play.
         # Word-split is intentional here: INPUT_COMMAND is a space-separated argv.
         # shellcheck disable=SC2086
         magus $INPUT_COMMAND

@@ -1,6 +1,6 @@
 //go:build linux
 
-package forecast
+package hostmem
 
 import (
 	"bufio"
@@ -9,14 +9,14 @@ import (
 	"strings"
 )
 
-// hostMemoryBytes reads MemTotal from /proc/meminfo, or 0 when it cannot.
+// Total reads MemTotal from /proc/meminfo, or 0 when it cannot.
 //
 // MemTotal rather than MemAvailable: this figure is a property of the machine
 // class the shards will run on, not of the machine doing the planning at the
 // moment it plans. The planner runs on its own runner with its own transient
 // load, and budgeting from whatever happened to be free there would make the
 // shard plan depend on the planner's mood.
-func hostMemoryBytes() int64 {
+func Total() int64 {
 	f, err := os.Open("/proc/meminfo")
 	if err != nil {
 		return 0
