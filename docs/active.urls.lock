@@ -138,6 +138,7 @@ development/gopherbuzz/
 development/libs-diag/
 development/libs-diagnostics/
 development/libs-gopherbuzz/
+development/libs-orphanator/
 development/libs-textsearch/
 development/magus/
 development/projects/
@@ -191,6 +192,7 @@ guides/integrations/pr-advice/
 guides/mcp/
 guides/profiling/
 guides/quickstart/
+guides/releasing/
 guides/testing/
 guides/tips/
 index.html

@@ -45,8 +45,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Kind | Size | List them | Anchors (most connected) |
 |---|--:|---|---|
-| project | 9 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 90+ | `magus query kind:target` | `content-generate`, `site-generate`, `generate` |
+| project | 10+ | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
+| target | 100+ | `magus query kind:target` | `content-generate`, `site-generate`, `generate` |
 | spell | 10+ | `magus query kind:spell` | `go`, `markdown`, `typescript` |
 | op | 50+ | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-tidy` |
 | tool | 10+ | `magus query kind:tool` | `sh`, `go`, `pnpm` |
@@ -63,13 +63,14 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 34 | `magus query project:.` | `generate`, `image-build`, `lint` |
+| . | 35 | `magus query project:.` | `generate`, `image-build`, `lint` |
 | console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 3 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
 | evals | 4 | `magus query project:evals` | `lint`, `preflight`, `ci` |
 | libs/diagnostics | 8 | `magus query project:libs/diagnostics` | `format`, `build`, `generate` |
 | libs/gopherbuzz | 10 | `magus query project:libs/gopherbuzz` | `build`, `format`, `generate` |
+| libs/orphanator | 8 | `magus query project:libs/orphanator` | `format`, `build`, `generate` |
 | libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `generate`, `preflight` |
 | proto | 3 | `magus query project:proto` | `generate`, `lint`, `ci` |
 
