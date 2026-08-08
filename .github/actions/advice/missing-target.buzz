@@ -1,0 +1,294 @@
+// Comment when a pull request touches a project that is missing a target every
+// comparable project has.
+//
+// The sibling of conformance.buzz and the same inversion: the norm is derived from the
+// corpus, never declared. Nobody writes down "every Go service shall expose a test
+// target"; the graph observes that 11 of 12 already do, and the 12th is the finding.
+//
+// WHY THIS IS A SEPARATE ADVISOR RATHER THAN A FLAG ON conformance.buzz. It groups on a
+// different key, for a reason worth stating because it looks like an inconsistency:
+//
+//   - conformance groups TARGETS by their exact OP set. The question there is "do these
+//     do the same work", which needs precision - loosening that key to the spell was
+//     measured and destroys the signal, collapsing every Go target into one bucket.
+//   - this groups PROJECTS by their SPELL set. The question here is "are these the same
+//     KIND of project", which needs generality - two Go services with slightly different
+//     toolchains are still both Go services, and an exact op-set key would put them in
+//     different cohorts and see nothing.
+//
+// Same corpus, opposite direction, because they ask different questions of it.
+//
+// THE COHORT IS THE WHOLE POINT. Comparing each project against the WHOLE workspace was
+// measured first and every finding it produced was a false positive: `proto` is a schema
+// project and correctly has no `test`; `libs/textsearch` is a library and correctly has
+// no `build`. Judged against projects of the same KIND instead, those comparisons never
+// arise - a schema project is only ever measured against other schema projects.
+//
+// Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA, MIN_COHORT, MIN_SHARE.
+import "advice";
+import "magus";
+import "std";
+
+final section = "missing-target";
+
+// kind is a project's fingerprint: the spells its targets use, sorted and joined. Two
+// projects with the same kind are the same sort of project, so what one exposes is a
+// fair question to ask of the other.
+//
+// A project using no spell has no kind and never participates, in either direction: it
+// is neither judged nor counted as evidence about anyone else.
+export fun kind(spells: [str]) > str {
+    if (spells.len() == 0) { return ""; }
+    var uniq = mut [];
+    foreach (s in spells) {
+        var already = false;
+        foreach (u in uniq) {
+            if (u == s) { already = true; }
+        }
+        if (!already) { uniq.append(s); }
+    }
+    // sort mutates in place, so uniq is built fresh rather than sorting the argument.
+    final ordered = uniq.sort(fun (a: str, b: str) > bool { return a < b; });
+    var joined = "";
+    foreach (s in ordered) {
+        if (joined != "") { joined = joined + ","; }
+        joined = joined + s;
+    }
+    return joined;
+}
+
+fun has(names: [str], name: str) > bool {
+    foreach (n in names) {
+        if (n == name) { return true; }
+    }
+    return false;
+}
+
+// gaps returns one entry per project missing a target its cohort overwhelmingly has.
+// projects is [{"path": str, "kind": str, "targets": [str]}].
+//
+// minCohort and minShare are the silence gates, and a cohort failing either produces
+// NOTHING rather than a weaker finding. A target that EVERY member has is not a finding
+// either - there is nobody missing it.
+export fun gaps(projects: [{str: any}], minCohort: int, minShare: double) > [{str: str}] {
+    var seenKinds = mut [];
+    var found = mut [];
+    foreach (p in projects) {
+        final k = p["kind"] ?? "";
+        if (k == "") { continue; }
+        var already = false;
+        foreach (s in seenKinds) {
+            if (s == k) { already = true; }
+        }
+        if (already) { continue; }
+        seenKinds.append(k);
+
+        var cohort = mut [];
+        foreach (other in projects) {
+            if ((other["kind"] ?? "") == k) { cohort.append(other); }
+        }
+        if (cohort.len() < minCohort) { continue; }
+
+        // Every target name anyone in the cohort exposes, deduped.
+        var candidates = mut [];
+        foreach (member in cohort) {
+            foreach (t in member["targets"] ?? []) {
+                if (!has(candidates, name: t)) { candidates.append(t); }
+            }
+        }
+
+        foreach (name in candidates) {
+            var haveIt = 0;
+            foreach (member in cohort) {
+                if (has(member["targets"] ?? [], name: name)) { haveIt = haveIt + 1; }
+            }
+            // Nobody is missing it, so there is nothing to say.
+            if (haveIt == cohort.len()) { continue; }
+            // Multiplied, not divided: haveIt / cohort.len() is INTEGER division and
+            // would floor every ratio to 0, so the gate would never hold anything back.
+            if (haveIt < cohort.len() * minShare) { continue; }
+            foreach (member in cohort) {
+                if (has(member["targets"] ?? [], name: name)) { continue; }
+                found.append({
+                    "project": member["path"] ?? "",
+                    "missing": name,
+                    "evidence": "{haveIt} of {cohort.len()}",
+                    "kind": k,
+                });
+            }
+        }
+    }
+    return found;
+}
+
+// keepEdited drops findings outside the projects this pull request touched, so the
+// comment is about what the author can still change rather than a workspace backlog.
+export fun keepEdited(all: [{str: str}], edited: [str]) > [{str: str}] {
+    var kept = mut [];
+    foreach (f in all) {
+        foreach (p in edited) {
+            if ((f["project"] ?? "") == p) { kept.append(f); }
+        }
+    }
+    return kept;
+}
+
+fun body(items: [{str: str}]) > str {
+    var text = "**This project is missing a target that comparable projects have.**\n\n"
+        + "| project | missing | projects of this kind that have it |\n| --- | --- | --- |\n";
+    foreach (f in items) {
+        text = text + "| `" + (f["project"] ?? "") + "` | `" + (f["missing"] ?? "") + "` | "
+            + (f["evidence"] ?? "") + " (uses `" + (f["kind"] ?? "") + "`) |\n";
+    }
+    return text
+        + "\nThe comparison is against projects that use the same spells, not against the "
+        + "whole workspace - a schema project is only ever measured against other schema "
+        + "projects. Nobody declared this convention; magus derived it from what projects "
+        + "of this kind already expose.\n\n"
+        + "A missing target is usually a gap in what CI checks: `magus affected ci` runs "
+        + "what each project declares, so a project with no `test` is quietly exempt from "
+        + "testing rather than visibly failing.\n\n"
+        + "If it genuinely does not apply here - the project has nothing to test, or the "
+        + "work happens somewhere else - then this is wrong and worth ignoring. Add the "
+        + "`magus:silence:" + section + "` label and it will stay quiet.\n";
+}
+
+fun main() > void {
+    final repo = advice\env("REPO");
+    final pr = advice\env("PR_NUMBER");
+    final base = advice\env("PR_BASE");
+    final head = advice\env("PR_HEAD_SHA");
+    if (pr == "" and base == "" and head == "") {
+        std\print("missing-target: no PR context; nothing to advise");
+        return;
+    }
+    if (pr == "" or base == "" or head == "") {
+        throw "missing-target: PR_NUMBER, PR_BASE, and PR_HEAD_SHA must be set together";
+    }
+    if (advice\silenced(repo, pr: pr, name: section)) {
+        // Retract rather than leave the last finding frozen on the page.
+        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        std\print("missing-target: silenced by label");
+        return;
+    }
+
+    var minCohort = 5;
+    final configuredCohort = advice\env("MIN_COHORT");
+    if (configuredCohort != "") { minCohort = std\parseInt(configuredCohort) ?? 5; }
+    var minShare = 0.8;
+    final configuredShare = advice\env("MIN_SHARE");
+    if (configuredShare != "") { minShare = std\parseDouble(configuredShare) ?? 0.8; }
+
+    var projects = mut [];
+    foreach (p in magus\targetGraph().projects) {
+        var spells = mut [];
+        var targets = mut [];
+        foreach (n in p.nodes) {
+            targets.append(n.name);
+            foreach (use in n.spells) { spells.append(use.spell); }
+        }
+        projects.append({"path": p.path, "kind": kind(spells), "targets": targets});
+    }
+
+    var edited = mut [];
+    foreach (p in magus\affectedImpact("origin/" + base).affectedProjects) {
+        if (p.seed) { edited.append(p.path); }
+    }
+
+    final items = keepEdited(gaps(projects, minCohort: minCohort, minShare: minShare),
+        edited: edited);
+    if (items.len() == 0) {
+        advice\publish(repo, pr: pr, name: section, title: "A project is missing a target its peers have", body: "");
+        std\print("missing-target: nothing to say ({projects.len()} projects, cohort>={minCohort}, share>={minShare})");
+        return;
+    }
+    advice\publish(repo, pr: pr, name: section,
+        title: "A project is missing a target its peers have ({items.len()})",
+        body: body(items));
+    std\print("missing-target: advised on {items.len()} gap(s)");
+}
+
+main();
+
+test "kind is order-independent and dedupes, so two projects match however written" {
+    std\assert(kind(["go", "markdown", "go"]) == kind(["markdown", "go"]),
+        message: "the spell SET is the key; a spell used by two targets counts once");
+}
+
+test "a project using no spell has no kind and never participates" {
+    std\assert(kind([]) == "", message: "nothing to compare");
+}
+
+test "gaps names the project missing what its cohort has" {
+    var projects = mut [];
+    foreach (p in ["svc-a", "svc-b", "svc-c", "svc-d", "svc-e"]) {
+        projects.append({"path": p, "kind": "go", "targets": ["build", "test"]});
+    }
+    projects.append({"path": "svc-new", "kind": "go", "targets": ["build"]});
+    final got = gaps(projects, minCohort: 5, minShare: 0.8);
+    std\assert(got.len() == 1, message: "one gap");
+    std\assert(got[0]["project"] == "svc-new", message: "the project missing it");
+    std\assert(got[0]["missing"] == "test", message: "what it lacks");
+    std\assert(got[0]["evidence"] == "5 of 6", message: "shows its work");
+}
+
+test "gaps does NOT flag a schema project for lacking test" {
+    // The false positive that killed the workspace-wide version: proto has no `test`,
+    // and judged against every project that looked like a finding. Judged against
+    // projects of its own KIND it is never compared to a Go service at all.
+    var projects = mut [];
+    foreach (p in ["svc-a", "svc-b", "svc-c", "svc-d", "svc-e"]) {
+        projects.append({"path": p, "kind": "go", "targets": ["build", "test"]});
+    }
+    projects.append({"path": "proto", "kind": "buf", "targets": ["generate", "lint"]});
+    final got = gaps(projects, minCohort: 5, minShare: 0.8);
+    std\assert(got.len() == 0, message: "a schema project is not a Go service short of a test");
+}
+
+test "gaps says nothing when the cohort is too small to mean anything" {
+    final projects = [
+        {"path": "a", "kind": "ts", "targets": ["build", "test"]},
+        {"path": "b", "kind": "ts", "targets": ["build", "test"]},
+        {"path": "c", "kind": "ts", "targets": ["build"]},
+    ];
+    std\assert(gaps(projects, minCohort: 5, minShare: 0.8).len() == 0,
+        message: "three projects cannot establish what every project of a kind does");
+}
+
+test "gaps says nothing when the cohort itself is split" {
+    var projects = mut [];
+    foreach (p in ["a", "b", "c"]) {
+        projects.append({"path": p, "kind": "go", "targets": ["build", "test"]});
+    }
+    foreach (p in ["d", "e", "f"]) {
+        projects.append({"path": p, "kind": "go", "targets": ["build"]});
+    }
+    std\assert(gaps(projects, minCohort: 5, minShare: 0.8).len() == 0,
+        message: "half of them lacking it is not a convention anyone broke");
+}
+
+test "gaps says nothing when nobody is missing the target" {
+    var projects = mut [];
+    foreach (p in ["a", "b", "c", "d", "e"]) {
+        projects.append({"path": p, "kind": "go", "targets": ["build", "test"]});
+    }
+    std\assert(gaps(projects, minCohort: 5, minShare: 0.8).len() == 0,
+        message: "unanimous agreement has no outlier to report");
+}
+
+test "keepEdited drops a pre-existing gap the pull request did not touch" {
+    final all = [
+        {"project": "svc-new", "missing": "test", "evidence": "5 of 6", "kind": "go"},
+        {"project": "old", "missing": "test", "evidence": "5 of 6", "kind": "go"},
+    ];
+    final kept = keepEdited(all, edited: ["svc-new"]);
+    std\assert(kept.len() == 1, message: "only what this change touched");
+    std\assert(kept[0]["project"] == "svc-new", message: "the edited one");
+}
+
+test "body explains the cohort and names the escape hatch" {
+    final text = body([{"project": "svc-new", "missing": "test", "evidence": "11 of 12", "kind": "go"}]);
+    std\assert(text.indexOf("11 of 12") != null, message: "the count is the argument");
+    std\assert(text.indexOf("quietly exempt") != null, message: "says why a gap matters");
+    std\assert(text.indexOf("label") != null, message: "declining must be easy and permanent");
+}
