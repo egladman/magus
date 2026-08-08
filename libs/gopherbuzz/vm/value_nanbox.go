@@ -173,8 +173,12 @@ func gHeapAlloc(ptr heapVal) uint64 {
 	s := *gHeapPtr.Load()
 	idx := uint64(len(s))
 	s = append(s, ptr)
+	// Peak before publish: a HeapStats reader that saw the new pointer first could
+	// otherwise observe objects > peak, contradicting "high-water mark".
+	if n := int64(len(s)); n > gHeapPeak.Load() {
+		gHeapPeak.Store(n)
+	}
 	gHeapPtr.Store(&s)
-	recordHeapPeak(len(s))
 	gHeapMu.Unlock()
 	return idx
 }

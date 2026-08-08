@@ -20253,12 +20253,12 @@
       }
     },
     {
-      "id": "method:platform.memory",
+      "id": "method:platform.memory_bytes",
       "kind": "method",
-      "label": "platform.memory",
-      "doc": "The machine's total physical memory in bytes, or 0 when it cannot be determined (any host other than Linux or macOS). A magusfile sizing work that scales on MEMORY rather than cores needs this: `go test` defaults its package parallelism to the CPU count, which is the wrong axis under -race, where each test binary carries the race detector's shadow memory. Branch on 0 rather than treating it as \"no memory\".",
+      "label": "platform.memory_bytes",
+      "doc": "The machine's total physical memory in BYTES, or 0 when it cannot be determined (any host other than Linux or macOS). Note magus.project targets take memory_mb in MEGABYTES. Size work that scales on memory rather than cores with this: `go test` defaults its package parallelism to the CPU count, which is the wrong axis under -race, where each test binary carries the race detector's shadow memory. Branch on 0 rather than treating it as \"no memory\".",
       "attrs": {
-        "buzz": "platform\\memory() → int"
+        "buzz": "platform\\memoryBytes() → int"
       }
     },
     {
@@ -61836,7 +61836,7 @@
     },
     {
       "source": "module:platform",
-      "target": "method:platform.memory",
+      "target": "method:platform.memory_bytes",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1

@@ -4,6 +4,7 @@ package forecast
 
 import (
 	"cmp"
+	"context"
 	"math"
 	"slices"
 
@@ -45,7 +46,7 @@ func (f Forecaster) memoryBudget() int64 {
 	if f.MemoryBudgetBytes > 0 {
 		return f.MemoryBudgetBytes
 	}
-	if total := hostmem.Total(); total > 0 {
+	if total := hostmem.TotalBytes(context.Background()); total > 0 {
 		return total / 4 * usableMemoryFraction
 	}
 	return 0

@@ -1,6 +1,7 @@
 package hostmem
 
 import (
+	"context"
 	"runtime"
 	"testing"
 
@@ -16,12 +17,12 @@ import (
 // to assert - which is itself the contract, so the test states it rather than
 // skipping silently.
 func TestTotalAndAvailableAgree(t *testing.T) {
-	total, avail := Total(), Available()
+	total, avail := TotalBytes(context.Background()), AvailableBytes(context.Background())
 
 	switch runtime.GOOS {
 	case "linux", "darwin":
-		assert.Positive(t, total, "Total must read the machine's memory on %s", runtime.GOOS)
-		assert.Positive(t, avail, "Available must read the machine's free memory on %s", runtime.GOOS)
+		assert.Positive(t, total, "TotalBytes must read the machine's memory on %s", runtime.GOOS)
+		assert.Positive(t, avail, "AvailableBytes must read the machine's free memory on %s", runtime.GOOS)
 		assert.LessOrEqual(t, avail, total,
 			"available (%d) cannot exceed total (%d); the darwin page-size parse is the likely culprit",
 			avail, total)
@@ -43,7 +44,7 @@ func TestAvailableIsNotFreeMemory(t *testing.T) {
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("no reading on this platform")
 	}
-	total, avail := Total(), Available()
+	total, avail := TotalBytes(context.Background()), AvailableBytes(context.Background())
 	assert.Greater(t, avail, total/100,
 		"available (%d) is under 1%% of total (%d) - either this host is genuinely "+
 			"thrashing, or the reading picked up free rather than available memory",

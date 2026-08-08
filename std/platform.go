@@ -3,11 +3,13 @@ package std
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	goruntime "runtime"
 
-	"github.com/egladman/magus/internal/hostmem"
 	"strings"
+
+	"github.com/egladman/magus/internal/hostmem"
 )
 
 //go:generate go run ../cmd/magus-utils bindings -module platform -lang buzz -out ../internal/interp/bindings/gen/platform.go
@@ -110,8 +112,8 @@ var Platform = Module{
 			Impl:    PlatformOS,
 		},
 		{
-			Name:    "memory",
-			Doc:     "The machine's total physical memory in bytes, or 0 when it cannot be determined (any host other than Linux or macOS). A magusfile sizing work that scales on MEMORY rather than cores needs this: `go test` defaults its package parallelism to the CPU count, which is the wrong axis under -race, where each test binary carries the race detector's shadow memory. Branch on 0 rather than treating it as \"no memory\".",
+			Name:    "memory_bytes",
+			Doc:     "The machine's total physical memory in BYTES, or 0 when it cannot be determined (any host other than Linux or macOS). Note magus.project targets take memory_mb in MEGABYTES. Size work that scales on memory rather than cores with this: `go test` defaults its package parallelism to the CPU count, which is the wrong axis under -race, where each test binary carries the race detector's shadow memory. Branch on 0 rather than treating it as \"no memory\".",
 			Returns: []Ret{{Type: TypeInt}},
 			Impl:    PlatformMemory,
 		},
@@ -135,16 +137,13 @@ var Platform = Module{
 // hold reports UNKNOWN rather than a truncated figure. That is only reachable on
 // a 32-bit host with over 2GB, where a silently wrapped number would size a
 // magusfile's parallelism off nonsense - see the deferred 32-bit plan.
-func PlatformMemory(_ context.Context) (int, error) {
-	b := hostmem.Total()
-	if b <= 0 || b > int64(maxInt) {
+func PlatformMemory(ctx context.Context) (int, error) {
+	b := hostmem.TotalBytes(ctx)
+	if b <= 0 || b > int64(math.MaxInt) {
 		return 0, nil
 	}
 	return int(b), nil
 }
-
-// maxInt is the largest value the boundary's int can carry on this build.
-const maxInt = int(^uint(0) >> 1)
 
 // PlatformCPUs returns GOMAXPROCS rather than NumCPU: inside a container with a
 // CPU quota the two disagree, and the quota is what actually bounds the work. Go

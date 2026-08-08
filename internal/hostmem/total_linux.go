@@ -4,19 +4,21 @@ package hostmem
 
 import (
 	"bufio"
+	"context"
 	"os"
 	"strconv"
 	"strings"
 )
 
-// Total reads MemTotal from /proc/meminfo, or 0 when it cannot.
+// TotalBytes reads MemTotal from /proc/meminfo, or 0 when it cannot.
 //
-// MemTotal rather than MemAvailable: this figure is a property of the machine
-// class the shards will run on, not of the machine doing the planning at the
-// moment it plans. The planner runs on its own runner with its own transient
-// load, and budgeting from whatever happened to be free there would make the
-// shard plan depend on the planner's mood.
-func Total() int64 {
+// MemTotal, not MemAvailable: the shard planner budgets against the machine class
+// the shards will run on, not against whatever happened to be free on the machine
+// doing the planning.
+//
+// ctx is unused here (reading /proc cannot block meaningfully) and present so the
+// signature matches darwin's, which forks a subprocess.
+func TotalBytes(_ context.Context) int64 {
 	f, err := os.Open("/proc/meminfo")
 	if err != nil {
 		return 0

@@ -23,9 +23,8 @@ import (
 type peakRSSKey struct{}
 
 type peakRSS struct {
-	mu   sync.Mutex
-	max  int64
-	seen bool
+	mu  sync.Mutex
+	max int64
 }
 
 // WithPeakRSS returns a context that collects the peak resident memory of every
@@ -50,22 +49,20 @@ func RecordPeakRSS(ctx context.Context, bytes int64) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.seen = true
 	if bytes > c.max {
 		c.max = bytes
 	}
 }
 
-// PeakRSS returns the highest peak reported under ctx, and whether anything was
-// reported at all. The bool is the whole point: a caller must be able to tell
-// "no process reported a figure" from "a process peaked at zero bytes", because
-// only the first is a reason to fall back rather than to record a measurement.
-func PeakRSS(ctx context.Context) (int64, bool) {
+// PeakRSS returns the highest peak reported under ctx, or 0 when nothing was
+// collected. RecordPeakRSS drops non-positive figures, so 0 already means "no
+// process reported one" and a second return value would distinguish nothing.
+func PeakRSS(ctx context.Context) int64 {
 	c, ok := ctx.Value(peakRSSKey{}).(*peakRSS)
 	if !ok {
-		return 0, false
+		return 0
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.max, c.seen
+	return c.max
 }

@@ -8,5 +8,5 @@
 
 export extern fun arch(name: str, style: str = "") > str;
 export extern fun cpus() > int;
-export extern fun memory() > int;
+export extern fun memoryBytes() > int;
 export extern fun os(name: str, style: str = "") > str;

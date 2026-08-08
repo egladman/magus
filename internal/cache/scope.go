@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-
-	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"time"
 )
 
@@ -145,13 +143,33 @@ func (c *Cache) LogSummary(ctx context.Context, elapsed time.Duration) {
 	)
 }
 
+// MemoryPressure is what the run-time watchdog observed. Data, not a sentence:
+// every other Log* method on Cache takes the facts and builds the record here, and
+// a warning assembled across two packages has no single owner for its wording.
+type MemoryPressure struct {
+	AvailableBytes int64
+	TotalBytes     int64
+	// BuzzObjects and BuzzPeak are the script VM's heap counts. Its heap never
+	// frees, so a magusfile can consume the machine with no subprocess looking
+	// guilty; 0 means the caller did not measure.
+	BuzzObjects int
+	BuzzPeak    int
+}
+
 // LogMemoryPressure warns that the host is running out of memory, routed through
 // the cache logger like every other header.
 //
 // Warn rather than Info because a killed runner never lets magus reach its
 // summary. Only what magus already streamed survives, and this is the line that
 // explains an otherwise unattributable shutdown signal.
-func (c *Cache) LogMemoryPressure(ctx context.Context, msg string) {
+func (c *Cache) LogMemoryPressure(ctx context.Context, p MemoryPressure) {
+	attrs := []any{
+		slog.Int64("available_mb", p.AvailableBytes>>20),
+		slog.Int64("total_mb", p.TotalBytes>>20),
+	}
+	msg := fmt.Sprintf("memory headroom low: %dMB available of %dMB total; a target here is close to taking the machine down",
+		p.AvailableBytes>>20, p.TotalBytes>>20)
+
 	// Name what is running. The inflight registry already tracks this and already
 	// survives a SIGKILL, so a warning that made the reader guess was withholding
 	// an answer magus had on hand.
@@ -160,15 +178,17 @@ func (c *Cache) LogMemoryPressure(ctx context.Context, msg string) {
 		for _, t := range running {
 			names = append(names, t.Project+":"+t.Target)
 		}
+		attrs = append(attrs, slog.String("running", strings.Join(names, ", ")))
 		msg += "; running: " + strings.Join(names, ", ")
 	}
-	// The Buzz heap, when it is large. Its heap never frees, so a magusfile can
-	// consume the machine with no subprocess looking guilty.
-	if objects, peak := vm.HeapStats(); peak > buzzHeapNoteworthy {
+	if p.BuzzPeak > buzzHeapNoteworthy {
+		attrs = append(attrs,
+			slog.Int("buzz_objects", p.BuzzObjects),
+			slog.Int("buzz_peak", p.BuzzPeak))
 		msg += fmt.Sprintf("; buzz heap: %d objects (peak %d) - an append-only heap this "+
-			"large usually means a magusfile is building a value in a loop", objects, peak)
+			"large usually means a magusfile is building a value in a loop", p.BuzzObjects, p.BuzzPeak)
 	}
-	c.log.WarnContext(ctx, "cache.warn", slog.String("msg", msg))
+	c.log.WarnContext(ctx, "cache.memory", append([]any{slog.String("msg", msg)}, attrs...)...)
 }
 
 // buzzHeapNoteworthy is the object count past which the Buzz heap is worth

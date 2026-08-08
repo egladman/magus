@@ -34,7 +34,7 @@ func RegisterPlatform(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return StrVal(ret0), nil
 	}))
-	m.MapSet("memory", vm.DirectValue("platform.memory", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+	m.MapSet("memoryBytes", vm.DirectValue("platform.memoryBytes", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.PlatformMemory(ctx)
 		if err != nil {
 			return vm.Null, HostError(err)

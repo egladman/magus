@@ -3,13 +3,14 @@
 package hostmem
 
 import (
+	"context"
 	"os/exec"
 	"strconv"
 	"strings"
 )
 
-// Available approximates MemAvailable as (free + inactive + speculative) pages,
-// or 0 when vm_stat cannot be read or parsed.
+// AvailableBytes approximates MemAvailable as (free + inactive + speculative)
+// pages, or 0 when vm_stat cannot be read or parsed.
 //
 // Darwin publishes no MemAvailable equivalent. Inactive pages are the closest
 // analogue to Linux's reclaimable cache; wired and active pages are excluded
@@ -17,8 +18,12 @@ import (
 //
 // A watchdog input, so it may be approximate. It may not be confidently wrong in
 // the tight direction, which is why a partial parse yields 0.
-func Available() int64 {
-	out, err := exec.Command("vm_stat").Output()
+//
+// CommandContext, not Command: the watchdog calls this every two seconds for the
+// life of an invocation, and a fork that hangs would block the watch goroutine
+// where ctx.Done() cannot reach it.
+func AvailableBytes(ctx context.Context) int64 {
+	out, err := exec.CommandContext(ctx, "vm_stat").Output()
 	if err != nil {
 		return 0
 	}

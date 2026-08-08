@@ -32,6 +32,7 @@ import (
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/service"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -432,7 +433,7 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// understands. A target declaring memory_mb holds however many slots that memory
 	// is worth on THIS host, so an 8GB suite throttles peers on a 16GB runner and
 	// barely registers on a 64GB workstation, without the magusfile naming either.
-	step.Slots = slotsForPolicy(pol.Slots, pol.MemoryMB, m.limiter().Capacity())
+	step.Slots = slotsForPolicy(pol.Slots, pol.MemoryMB, m.limiter().Capacity(), m.hostTotalBytes())
 	return step
 }
 
@@ -695,14 +696,30 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// through here and the machine is what is at risk, so this belongs per-run;
 	// the peak-RSS collector in invokeSpell answers which target was expensive.
 	// Silent unless headroom collapses.
-	if m.cache != nil {
-		if total := hostmem.Total(); total > 0 {
-			watchCtx, stopWatch := context.WithCancel(ctx)
-			defer stopWatch()
-			go hostmem.Watch(watchCtx, total, hostmem.Available, func(msg string) {
-				m.cache.LogMemoryPressure(watchCtx, msg)
+	//
+	// Not started for a dry run, which executes nothing and so cannot exhaust
+	// anything. Joined rather than merely cancelled: an in-flight report would
+	// otherwise land after the summary footer, or be cut off by process exit.
+	if m.cache != nil && !opts.DryRun {
+		watchCtx, stopWatch := context.WithCancel(ctx)
+		var watchDone sync.WaitGroup
+		watchDone.Add(1)
+		go func() {
+			defer watchDone.Done()
+			hostmem.Watch(watchCtx, func(available, total int64) {
+				objects, peak := vm.HeapStats()
+				m.cache.LogMemoryPressure(ctx, cache.MemoryPressure{
+					AvailableBytes: available,
+					TotalBytes:     total,
+					BuzzObjects:    objects,
+					BuzzPeak:       peak,
+				})
 			})
-		}
+		}()
+		defer func() {
+			stopWatch()
+			watchDone.Wait()
+		}()
 	}
 
 	if opts.DryRun {
@@ -1210,9 +1227,14 @@ func (m *Magus) buildVolatilityRuntime(ctx context.Context, retry bool) *volatil
 	if err := h.Load(ctx, m.cfg.HistoryPath); err != nil {
 		return nil
 	}
+	// Only when retrying. affected feeds shouldRetry and nothing else, so computing
+	// it for a run that will never retry buys nothing and costs a full affected
+	// pass - which every invocation now reaches, since recording is unconditional.
 	var affected []string
-	if res, err := m.Affected(ctx, ""); err == nil {
-		affected = res.Affected
+	if retry {
+		if res, err := m.Affected(ctx, ""); err == nil {
+			affected = res.Affected
+		}
 	}
 	return volatility.NewRuntime(&h, m.cfg.HistoryPath, m.volatilityConfig(), affected, retry)
 }
@@ -1281,7 +1303,7 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 	// Reported only when a process actually reported one: an unmeasured target
 	// must stay zero in the record so a reader can tell it apart from a
 	// measured-and-tiny one.
-	peakRSS, _ := types.PeakRSS(ctx)
+	peakRSS := types.PeakRSS(ctx)
 	rt.Record(p.Path, volatileTarget, forecast.Outcome{
 		Result:         result,
 		AffectedByDiff: affected,

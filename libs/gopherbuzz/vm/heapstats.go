@@ -26,16 +26,9 @@ func HeapStats() (objects int, peak int) {
 	return len(*s), int(gHeapPeak.Load())
 }
 
-// gHeapPeak is the heap's high-water object count. Tracked separately from the
+// gHeapPeak is the heap's high-water object count, maintained by gHeapAlloc
+// under gHeapMu. Tracked separately from the
 // live length because the two agree only until something reclaims: the planned
 // compaction pass would make them diverge exactly when the peak is the number
 // worth reporting.
 var gHeapPeak atomic.Int64
-
-// recordHeapPeak updates the high-water mark. gHeapAlloc calls it under gHeapMu,
-// so it needs no compare-and-swap of its own.
-func recordHeapPeak(n int) {
-	if int64(n) > gHeapPeak.Load() {
-		gHeapPeak.Store(int64(n))
-	}
-}

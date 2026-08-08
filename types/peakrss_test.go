@@ -7,7 +7,6 @@ import (
 
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestPeakRSSTakesTheMaximumNotTheSum(t *testing.T) {
@@ -22,8 +21,7 @@ func TestPeakRSSTakesTheMaximumNotTheSum(t *testing.T) {
 	types.RecordPeakRSS(ctx, 4<<30)
 	types.RecordPeakRSS(ctx, 512<<20)
 
-	got, seen := types.PeakRSS(ctx)
-	assert.True(t, seen)
+	got := types.PeakRSS(ctx)
 	assert.Equal(t, int64(4<<30), got, "want the peak, not the total")
 }
 
@@ -35,18 +33,15 @@ func TestPeakRSSDistinguishesUnmeasuredFromZero(t *testing.T) {
 	// which arrive as 0. A planner that reads 0 as "cheap" would co-schedule
 	// precisely the targets it knows least about.
 	ctx := types.WithPeakRSS(context.Background())
-	got, seen := types.PeakRSS(ctx)
-	assert.False(t, seen, "nothing reported: the figure is unknown, not zero")
+	got := types.PeakRSS(ctx)
 	assert.Zero(t, got)
 
 	types.RecordPeakRSS(ctx, 0)
 	types.RecordPeakRSS(ctx, -1)
-	_, seen = types.PeakRSS(ctx)
-	assert.False(t, seen, "a non-positive report is not a measurement")
+	assert.Zero(t, types.PeakRSS(ctx), "a non-positive figure is not a reading")
 
 	types.RecordPeakRSS(ctx, 1)
-	got, seen = types.PeakRSS(ctx)
-	assert.True(t, seen)
+	got = types.PeakRSS(ctx)
 	assert.Equal(t, int64(1), got)
 }
 
@@ -56,8 +51,7 @@ func TestPeakRSSWithoutACollectorIsANoOp(t *testing.T) {
 	// must not claim a measurement.
 	ctx := context.Background()
 	types.RecordPeakRSS(ctx, 1<<30)
-	got, seen := types.PeakRSS(ctx)
-	assert.False(t, seen)
+	got := types.PeakRSS(ctx)
 	assert.Zero(t, got)
 }
 
@@ -71,9 +65,9 @@ func TestPeakRSSNestedCollectorsAreIndependent(t *testing.T) {
 
 	// An inner unit's peak does not leak outward: the outer figure would
 	// otherwise describe work the outer unit did not do.
-	got, _ := types.PeakRSS(outer)
+	got := types.PeakRSS(outer)
 	assert.Equal(t, int64(1<<30), got)
-	got, _ = types.PeakRSS(inner)
+	got = types.PeakRSS(inner)
 	assert.Equal(t, int64(8<<30), got)
 }
 
@@ -91,7 +85,6 @@ func TestPeakRSSIsConcurrencySafe(t *testing.T) {
 	}
 	wg.Wait()
 
-	got, seen := types.PeakRSS(ctx)
-	require.True(t, seen)
+	got := types.PeakRSS(ctx)
 	assert.Equal(t, int64(64<<20), got)
 }

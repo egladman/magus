@@ -2,6 +2,7 @@ package hostmem
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -23,7 +24,7 @@ func drive(t *testing.T, total int64, readings []int64) []string {
 	var mu sync.Mutex
 	var got []string
 	i := 0
-	sample := func() int64 {
+	sample := func(context.Context) int64 {
 		mu.Lock()
 		defer mu.Unlock()
 		if i >= len(readings) {
@@ -38,16 +39,16 @@ func drive(t *testing.T, total int64, readings []int64) []string {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		watch(ctx, total, sample, func(s string) {
+		watch(ctx, total, sample, func(avail, tot int64) {
 			mu.Lock()
 			defer mu.Unlock()
-			got = append(got, s)
+			got = append(got, fmt.Sprintf("%dMB of %dMB", avail>>20, tot>>20))
 		}, time.Millisecond)
 	}()
 	select {
 	case <-done:
 	case <-time.After(30 * time.Second):
-		t.Fatal("Watch did not return after the sampler exhausted its readings")
+		t.Fatal("watch did not return after the sampler exhausted its readings")
 	}
 	mu.Lock()
 	defer mu.Unlock()
@@ -66,7 +67,7 @@ func TestWatchIsSilentWhenHeadroomIsFine(t *testing.T) {
 func TestWatchReportsASuddenDrop(t *testing.T) {
 	got := drive(t, 16*gb, []int64{14 * gb, 900 << 20})
 	require.Len(t, got, 1)
-	assert.Contains(t, got[0], "900MB available of 16384MB total")
+	assert.Contains(t, got[0], "900MB of 16384MB")
 }
 
 // Once talking, it re-reports only on a further material drop - not every tick.
@@ -93,8 +94,8 @@ func TestWatchSaysNothingWithoutAReading(t *testing.T) {
 // never be the reason a run fails.
 func TestWatchToleratesNilArguments(t *testing.T) {
 	assert.NotPanics(t, func() {
-		Watch(context.Background(), 16*gb, nil, nil)
-		Watch(context.Background(), 16*gb, func() int64 { return 1 }, nil)
+		watch(context.Background(), 16*gb, nil, nil, time.Millisecond)
+		watch(context.Background(), 16*gb, func(context.Context) int64 { return 1 }, nil, time.Millisecond)
 	})
 }
 
