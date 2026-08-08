@@ -45,8 +45,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Kind | Size | List them | Anchors (most connected) |
 |---|--:|---|---|
-| project | 9 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 90+ | `magus query kind:target` | `content-generate`, `site-generate`, `generate` |
+| project | 10+ | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
+| target | 100+ | `magus query kind:target` | `content-generate`, `site-generate`, `generate` |
 | spell | 10+ | `magus query kind:spell` | `go`, `markdown`, `typescript` |
 | op | 50+ | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-tidy` |
 | tool | 10+ | `magus query kind:tool` | `sh`, `go`, `pnpm` |
@@ -63,13 +63,14 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 35 | `magus query project:.` | `generate`, `image-build`, `lint` |
+| . | 36 | `magus query project:.` | `generate`, `image-build`, `lint` |
 | console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 3 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
 | evals | 4 | `magus query project:evals` | `lint`, `preflight`, `ci` |
 | libs/diagnostics | 8 | `magus query project:libs/diagnostics` | `format`, `build`, `generate` |
 | libs/gopherbuzz | 10 | `magus query project:libs/gopherbuzz` | `build`, `format`, `generate` |
+| libs/orphanator | 8 | `magus query project:libs/orphanator` | `format`, `build`, `generate` |
 | libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `generate`, `preflight` |
 | proto | 3 | `magus query project:proto` | `generate`, `lint`, `ci` |
 
@@ -94,7 +95,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `watch` | Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive. |
 | `test` | Tests with race detection, coverage, and a drift-gated coverage badge. |
 | `build` | Compiles one artifact: the host binary, or the container image under the `container` charm. |
-| `lint` | Formats first, then golangci-lint, go vet, markdownlint, and shellcheck. |
+| `lint` | Formats and builds the linter first, then golangci-lint, go vet, markdownlint, and shellcheck. |
 | `format` | Regenerates, then formats Go and tidies `go.mod`. |
 | `ci` | Runs the CI gates through their declared dependencies. |
 | `ci-shard` | Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed. |
@@ -111,6 +112,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `graph-generate` | Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects. |
 | `advice-test` | Runs the PR advisors' `test "..." {}` blocks. |
 | `buzz-test` | Runs the in-file `test "..." {}` blocks in this repo's own root Buzz modules, through magus's embedded engine. |
+| `lint-build` | Builds ./custom-gcl, the golangci-lint carrying this repo's own linters. |
 | `completion-test` | Exercises the completion scripts magus SHIPS, each inside the official image for its shell. |
 
 ## Project: console
@@ -191,6 +193,19 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `conformance` | Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go). |
 | `preflight` |  |
 | `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
+
+## Project: libs/orphanator
+
+| Target | What it does |
+|---|---|
+| `generate` | Regenerates MAGUS.md and fails on drift. |
+| `format` |  |
+| `lint` | go-vet only, as in libs/diagnostics. |
+| `build` |  |
+| `test` |  |
+| `ci` | The anchor `magus affected ci` keys off; fans out lint/build/test after format. |
+| `preflight` |  |
+| `md-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
 
 ## Project: libs/textsearch
 
