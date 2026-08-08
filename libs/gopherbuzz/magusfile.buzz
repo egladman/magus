@@ -29,6 +29,15 @@ magus\project({
     "targets": {
         // Drift-gates MAGUS.md via git status: run alone, every time.
         "generate": {"skip_cache": "drift-gates MAGUS.md via git status; a replay would skip the check", "exclusive": true},
+        // md-generate renders `magus describe graph -o markdown`, so its output is a
+        // function of the WHOLE knowledge graph. Its declared inputs are the magusfiles,
+        // which is the only part of that a glob can name, so any other change leaves the
+        // key unmoved: a cache hit then replays a MAGUS.md built before it and REVERTS the
+        // committed one, which the drift gate above correctly reports as drift. That is why
+        // a branch touching the graph fails this gate in CI, where the shared cache is
+        // restored, while passing on a clean checkout that has nothing to hit. The docs
+        // project carries the same opt-out for the same reason.
+        "md-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
         // Fetches over the network and re-checks upstream out every run.
         "conformance": {"skip_cache": "fetches over the network and re-checks upstream on every run"},
     },
