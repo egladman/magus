@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2478,
-  "edge_count": 5641,
+  "node_count": 2479,
+  "edge_count": 5642,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "catalog_fingerprint": "9c2ac7a836e91117",
   "nodes": [
@@ -8163,7 +8163,7 @@
       "kind": "function",
       "label": "isGeneratorDir",
       "doc": "isGeneratorDir reports whether a docs-ROOT child directory is the SSG's own rather than content. The SSG sits co-located with its markdown, so the content walk shares a tree with node_modules/, gen/, src/, and tour/, whose stray .md (package READMEs, generated index.md) must not be ingested as pages. CRUCIAL: call sites guard on rel == \"\", so only EXACT docs-root children are skipped - a content subdir sharing one of these names at any depth is still walked.",
-      "source": "docs/engine/path.buzz:26",
+      "source": "docs/engine/path.buzz:55",
       "attrs": {
         "exported": "true"
       }
@@ -8173,7 +8173,7 @@
       "kind": "function",
       "label": "isGeneratorFile",
       "doc": "isGeneratorFile reports whether a docs-ROOT .md file is an SSG artifact rather than content. MAGUS.md (the generated target catalog) sits at the docs root but must not render as a doc page; it surfaces instead via renderDevelopment. Like isGeneratorDir, consulted only at the docs root (rel == \"\").",
-      "source": "docs/engine/path.buzz:37",
+      "source": "docs/engine/path.buzz:66",
       "attrs": {
         "exported": "true"
       }
@@ -8183,7 +8183,17 @@
       "kind": "function",
       "label": "isNeverContentDir",
       "doc": "isNeverContentDir reports whether a directory can never hold site content, at ANY depth - as opposed to isGeneratorDir above, which is deliberately root-only.  node_modules is the whole list. A package tree holds thousands of README.md files and none of them are this site's pages. The root-only rule covered docs/node_modules but not a nested one, so the moment a sub-project under docs/ had its dependencies installed - which `magus run ci docs/guides/integrations/agents` does - the walk started rendering eve",
-      "source": "docs/engine/path.buzz:53",
+      "source": "docs/engine/path.buzz:82",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/engine/path.buzz:makeOutputDir",
+      "kind": "function",
+      "label": "makeOutputDir",
+      "doc": "makeOutputDir creates a written page's output directory, naming the conflict when a FILE already occupies that path.  gen/ is not a pure render target: committed static files live in it alongside generated pages. gen/install is the install script the README's curl one-liner fetches, and pruneStaleOutputs lists it under alwaysKeep for exactly that reason. A page whose clean URL is /install/ therefore needs gen/install to be a directory, which it can never be.  Without this guard the render dies inside the mk",
+      "source": "docs/engine/path.buzz:40",
       "attrs": {
         "exported": "true"
       }
@@ -40678,6 +40688,14 @@
     {
       "source": "file:docs/engine/path.buzz",
       "target": "function:docs/engine/path.buzz:isNeverContentDir",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/engine/path.buzz"
+    },
+    {
+      "source": "file:docs/engine/path.buzz",
+      "target": "function:docs/engine/path.buzz:makeOutputDir",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

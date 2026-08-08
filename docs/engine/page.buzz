@@ -618,7 +618,7 @@ export fun renderFile(rel: str, site: Site) > void {
     // Directory-index output: every page is <cleanURL>index.html (extensionless). url is
     // gen-root-relative and ends in a slash, matching search.js/sitemap/canonical.
     final dir = site.outDir + "/" + url.sub(0, url.len() - 1);   // drop trailing slash for mkdir
-    fs\makeDirectory(dir);
+    makeOutputDir(dir, site.docs + "/" + rel, url);
 
     final of = io\File.open(dir + "/index.html", io\FileMode.write);
     of.write(doc);
