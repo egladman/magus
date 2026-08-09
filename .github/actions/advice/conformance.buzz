@@ -1,0 +1,304 @@
+// Comment when a pull request adds a target whose NAME diverges from what the rest of
+// the workspace already calls that same work.
+//
+// The norm is derived from the corpus, never declared. Nobody writes down "a target
+// running jest shall be called test"; the graph observes that 47 of 48 already are, and
+// the 48th is the finding. That is what makes the advice persuasive - it is not one
+// team's opinion, it is what everyone else already agreed on by doing it - and it is why
+// this cannot be a linter, which needs a human to write the rule first. In a monorepo
+// where nobody owns DevX, that human is exactly who does not exist.
+//
+// SILENCE IS THE DEFAULT AND THE HARD PART. A workspace with no convention must produce
+// nothing. Two gates enforce that, and both must pass:
+//
+//   - the cohort must be big enough to establish a convention at all (MIN_COHORT). Two
+//     targets agreeing is a coincidence.
+//   - the majority must be overwhelming (MIN_SHARE). A 30/28 split is not a violation,
+//     it is a workspace that has not decided, and reporting it as one burns the tool's
+//     credibility on the first run.
+//
+// Measured against this repo (2026-08) both gates hold it silent, correctly: the largest
+// cohort here is 7 targets sharing `go:go-build` under 6 different names, because
+// `dogfood`, `watch`, `release-build` and `buzz-build` genuinely ARE different jobs that
+// happen to invoke the same op. An exact-op-set rule with a naive threshold would have
+// made that its first finding, and been wrong 7 times.
+//
+// It fires only on projects the pull request actually edited. Reporting every
+// pre-existing inconsistency would produce a backlog nobody burns down, and shipping one
+// as the first output guarantees the feature is ignored. The valuable moment is the pull
+// request that adds project 49 with a target named `unit-test`, before it becomes the
+// 49th thing to migrate later.
+//
+// It never renames anything. Renaming a target breaks every caller, CI config, and
+// script outside the workspace, so this advises and stops.
+//
+// Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA, MIN_COHORT, MIN_SHARE.
+import "advice";
+import "magus";
+import "std";
+
+final section = "conformance";
+
+// signature is a target's tooling fingerprint: its spell ops, sorted and joined. Two
+// targets with the same signature do the same work as far as magus can see.
+//
+// Exact set equality, deliberately. Loosening the key to the SPELL was measured on this
+// workspace and is strictly worse: it collapses every Go target into one bucket of 17
+// with an 18% majority, which is no signal at all. The op set is the loosest key that
+// still means anything.
+//
+// A target invoking no op has no signature and never participates - it is not comparable
+// to anything. That covers most of a workspace (74% here), which bounds how much this
+// can ever see; the graph learns what a target runs from the spell ops it composes, and
+// a target that shells out contributes nothing to compare.
+export fun signature(ops: [str]) > str {
+    if (ops.len() == 0) { return ""; }
+    // Copied before sorting: sort mutates in place, so sorting the argument directly
+    // would reorder the caller's list and reject an immutable one outright.
+    var copy = mut [];
+    foreach (op in ops) { copy.append(op); }
+    final ordered = copy.sort(fun (a: str, b: str) > bool { return a < b; });
+    var joined = "";
+    foreach (op in ordered) {
+        if (joined != "") { joined = joined + ","; }
+        joined = joined + op;
+    }
+    return joined;
+}
+
+// majority returns the most common name in names, and how many carry it. Ties break on
+// the lexically smaller name so the answer never depends on graph iteration order.
+export fun majority(names: [str]) > {str: any} {
+    var best = "";
+    var bestCount = 0;
+    foreach (candidate in names) {
+        var n = 0;
+        foreach (other in names) {
+            if (other == candidate) { n = n + 1; }
+        }
+        if (n > bestCount or (n == bestCount and best != "" and candidate < best)) {
+            best = candidate;
+            bestCount = n;
+        }
+    }
+    return {"name": best, "count": bestCount};
+}
+
+// findings returns one entry per target whose name diverges from a confident majority.
+// members is [{"project", "name", "sig"}]; each finding carries the evidence that
+// justifies it, because a claim about what "everyone else" does has to show its work.
+//
+// minCohort and minShare are the two silence gates. A cohort below either produces
+// NOTHING - not a weaker finding.
+export fun findings(members: [{str: str}], minCohort: int, minShare: double) > [{str: str}] {
+    var seen = mut [];
+    var found = mut [];
+    foreach (m in members) {
+        final sig = m["sig"] ?? "";
+        if (sig == "") { continue; }
+        var already = false;
+        foreach (s in seen) {
+            if (s == sig) { already = true; }
+        }
+        if (already) { continue; }
+        seen.append(sig);
+
+        var names = mut [];
+        var cohort = mut [];
+        foreach (other in members) {
+            if ((other["sig"] ?? "") == sig) {
+                names.append(other["name"] ?? "");
+                cohort.append(other);
+            }
+        }
+        // Too small to establish a convention: two targets agreeing is a coincidence.
+        if (cohort.len() < minCohort) { continue; }
+
+        final maj = majority(names);
+        final majName = maj["name"] ?? "";
+        final majCount = maj["count"] ?? 0;
+        // Multiplied, not divided: majCount / cohort.len() is INTEGER division and would
+        // floor every ratio to 0, so the gate would never hold anything back.
+        if (majCount < cohort.len() * minShare) { continue; }
+
+        foreach (member in cohort) {
+            final name = member["name"] ?? "";
+            if (name == majName) { continue; }
+            found.append({
+                "project": member["project"] ?? "",
+                "name": name,
+                "majority": majName,
+                "evidence": "{majCount} of {cohort.len()}",
+                "ops": sig,
+            });
+        }
+    }
+    return found;
+}
+
+// keepEdited drops findings outside the projects this pull request actually touched, so
+// the comment is about what the author can still change rather than a workspace backlog.
+export fun keepEdited(all: [{str: str}], edited: [str]) > [{str: str}] {
+    var kept = mut [];
+    foreach (f in all) {
+        foreach (p in edited) {
+            if ((f["project"] ?? "") == p) { kept.append(f); }
+        }
+    }
+    return kept;
+}
+
+fun body(items: [{str: str}]) > str {
+    var text = "**This adds a target whose name differs from what the rest of the "
+        + "workspace calls the same work.**\n\n"
+        + "| target | runs | the rest of the workspace calls this |\n| --- | --- | --- |\n";
+    foreach (f in items) {
+        text = text + "| `" + (f["name"] ?? "") + "` in `" + (f["project"] ?? "") + "` | `"
+            + (f["ops"] ?? "") + "` | `" + (f["majority"] ?? "") + "` ("
+            + (f["evidence"] ?? "") + ") |\n";
+    }
+    return text
+        + "\nNobody wrote this convention down. magus derived it by grouping every target "
+        + "in the workspace by the ops it invokes and looking at what those targets are "
+        + "named, so the count above is what other teams already do, not a rule imposed "
+        + "on you.\n\n"
+        + "Renaming now is cheap. Later it means changing every caller, CI config, and "
+        + "script that names the target, across teams that each have to be persuaded "
+        + "separately.\n\n"
+        + "If the divergence is deliberate - the target really is a different job that "
+        + "happens to run the same tool - then this is wrong and worth ignoring. Add the "
+        + "`magus:silence:" + section + "` label and it will stay quiet.\n";
+}
+
+fun main() > void {
+    final repo = advice\env("REPO");
+    final pr = advice\env("PR_NUMBER");
+    final base = advice\env("PR_BASE");
+    final head = advice\env("PR_HEAD_SHA");
+    if (pr == "" and base == "" and head == "") {
+        std\print("conformance: no PR context; nothing to advise");
+        return;
+    }
+    if (pr == "" or base == "" or head == "") {
+        throw "conformance: PR_NUMBER, PR_BASE, and PR_HEAD_SHA must be set together";
+    }
+    if (advice\silenced(repo, pr: pr, name: section)) {
+        // Retract rather than leave the last finding frozen on the page.
+        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        std\print("conformance: silenced by label");
+        return;
+    }
+
+    var minCohort = 5;
+    final configuredCohort = advice\env("MIN_COHORT");
+    if (configuredCohort != "") { minCohort = std\parseInt(configuredCohort) ?? 5; }
+    var minShare = 0.8;
+    final configuredShare = advice\env("MIN_SHARE");
+    if (configuredShare != "") { minShare = std\parseDouble(configuredShare) ?? 0.8; }
+
+    var members = mut [];
+    foreach (p in magus\targetGraph().projects) {
+        foreach (n in p.nodes) {
+            var ops = mut [];
+            foreach (use in n.spells) {
+                foreach (op in use.ops) { ops.append(use.spell + ":" + op); }
+            }
+            members.append({"project": p.path, "name": n.name, "sig": signature(ops)});
+        }
+    }
+
+    // Only what this pull request edited. A seed is a project the diff touched directly;
+    // a project pulled in downstream did not add the target and cannot answer for it.
+    var edited = mut [];
+    foreach (p in magus\affectedImpact("origin/" + base).affectedProjects) {
+        if (p.seed) { edited.append(p.path); }
+    }
+
+    final items = keepEdited(findings(members, minCohort: minCohort, minShare: minShare),
+        edited: edited);
+    if (items.len() == 0) {
+        advice\publish(repo, pr: pr, name: section, title: "A target name diverges from the workspace", body: "");
+        std\print("conformance: nothing to say ({members.len()} targets, cohort>={minCohort}, share>={minShare})");
+        return;
+    }
+    advice\publish(repo, pr: pr, name: section,
+        title: "A target name diverges from the workspace ({items.len()})",
+        body: body(items));
+    std\print("conformance: advised on {items.len()} target(s)");
+}
+
+main();
+
+test "signature is order-independent so two targets match however they were written" {
+    std\assert(signature(["go:go-test", "go:go-vet"]) == signature(["go:go-vet", "go:go-test"]),
+        message: "the op SET is the key, not the call order");
+}
+
+test "a target invoking no op has no signature and never participates" {
+    std\assert(signature([]) == "", message: "nothing to compare");
+}
+
+test "findings names the outlier in an overwhelming cohort" {
+    var members = mut [];
+    foreach (p in ["a", "b", "c", "d", "e", "f"]) {
+        members.append({"project": p, "name": "test", "sig": "node:jest"});
+    }
+    members.append({"project": "checkout", "name": "unit-test", "sig": "node:jest"});
+    final got = findings(members, minCohort: 5, minShare: 0.8);
+    std\assert(got.len() == 1, message: "one outlier, not seven findings");
+    std\assert(got[0]["name"] == "unit-test", message: "the divergent one");
+    std\assert(got[0]["majority"] == "test", message: "what everyone else calls it");
+    std\assert(got[0]["evidence"] == "6 of 7", message: "shows its work");
+}
+
+test "findings says NOTHING when the workspace has not decided" {
+    // 4/7 is a plurality, not a convention. This is the case that would destroy the
+    // tool's credibility, so it is the one most worth pinning.
+    var members = mut [];
+    foreach (p in ["a", "b", "c", "d"]) {
+        members.append({"project": p, "name": "test", "sig": "node:jest"});
+    }
+    foreach (p in ["e", "f", "g"]) {
+        members.append({"project": p, "name": "unit-test", "sig": "node:jest"});
+    }
+    std\assert(findings(members, minCohort: 5, minShare: 0.8).len() == 0,
+        message: "a split workspace has no convention to enforce");
+}
+
+test "findings says nothing when the cohort is too small to mean anything" {
+    final members = [
+        {"project": "a", "name": "test", "sig": "node:jest"},
+        {"project": "b", "name": "test", "sig": "node:jest"},
+        {"project": "c", "name": "unit-test", "sig": "node:jest"},
+    ];
+    std\assert(findings(members, minCohort: 5, minShare: 0.8).len() == 0,
+        message: "two targets agreeing is a coincidence, not a norm");
+}
+
+test "findings ignores targets that invoke no op" {
+    var members = mut [];
+    foreach (p in ["a", "b", "c", "d", "e", "f"]) {
+        members.append({"project": p, "name": "build", "sig": ""});
+    }
+    members.append({"project": "odd", "name": "compile", "sig": ""});
+    std\assert(findings(members, minCohort: 5, minShare: 0.8).len() == 0,
+        message: "no signature, nothing to compare");
+}
+
+test "keepEdited drops a pre-existing outlier the pull request did not touch" {
+    final all = [
+        {"project": "checkout", "name": "unit-test", "majority": "test", "evidence": "6 of 7", "ops": "node:jest"},
+        {"project": "legacy", "name": "run-tests", "majority": "test", "evidence": "6 of 7", "ops": "node:jest"},
+    ];
+    final kept = keepEdited(all, edited: ["checkout"]);
+    std\assert(kept.len() == 1, message: "only what this change added");
+    std\assert(kept[0]["project"] == "checkout", message: "the edited one");
+}
+
+test "body shows the evidence and names the escape hatch" {
+    final text = body([{"project": "apps/checkout", "name": "unit-test",
+        "majority": "test", "evidence": "47 of 48", "ops": "node:jest"}]);
+    std\assert(text.indexOf("47 of 48") != null, message: "the count is the argument");
+    std\assert(text.indexOf("`unit-test` in `apps/checkout`") != null, message: "names the target");
+    std\assert(text.indexOf("label") != null, message: "declining must be easy and permanent");
+}

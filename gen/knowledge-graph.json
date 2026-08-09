@@ -3,10 +3,10 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2504,
-  "edge_count": 5693,
+  "node_count": 2506,
+  "edge_count": 5704,
   "source_base": "https://github.com/egladman/magus/blob/main",
-  "catalog_fingerprint": "9c2ac7a836e91117",
+  "catalog_fingerprint": "3e64891912aad41b",
   "nodes": [
     {
       "id": "charm:amd64",
@@ -253,6 +253,14 @@
       "label": "MGS1024",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1024/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1025",
+      "kind": "diagnostic",
+      "label": "MGS1025",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1025/"
       }
     },
     {
@@ -943,7 +951,7 @@
       "source": "docs/reference",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "152",
+        "dir_files": "153",
         "dir_languages": "markdown"
       }
     },
@@ -976,7 +984,7 @@
       "source": "docs/reference/codes",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "76",
+        "dir_files": "77",
         "dir_languages": "markdown"
       }
     },
@@ -1020,7 +1028,7 @@
       "source": "docs/reference/codes/magusfile",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "25",
+        "dir_files": "26",
         "dir_languages": "markdown"
       }
     },
@@ -3959,6 +3967,18 @@
         "section": "reference",
         "tags": "MGS1024,magusfile,workspace-providers,projects,precedence",
         "title": "MGS1024: workspace provider project shadowed by a magusfile"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/magusfile/MGS1025.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/magusfile/MGS1025.md",
+      "source": "docs/reference/codes/magusfile/MGS1025.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1025,magusfile,migration,needs,target-graph,compatibility",
+        "title": "MGS1025: magusfile calls an API that was removed"
       }
     },
     {
@@ -7372,7 +7392,7 @@
       "id": "function:benchmarks/large-monorepo/spells/nextjs.buzz:mgs_getName",
       "kind": "function",
       "label": "mgs_getName",
-      "source": "benchmarks/large-monorepo/spells/nextjs.buzz:7",
+      "source": "benchmarks/large-monorepo/spells/nextjs.buzz:8",
       "attrs": {
         "exported": "true"
       }
@@ -7381,7 +7401,7 @@
       "id": "function:benchmarks/large-monorepo/spells/nextjs.buzz:mgs_getVersionProbe",
       "kind": "function",
       "label": "mgs_getVersionProbe",
-      "source": "benchmarks/large-monorepo/spells/nextjs.buzz:18",
+      "source": "benchmarks/large-monorepo/spells/nextjs.buzz:19",
       "attrs": {
         "exported": "true"
       }
@@ -7390,7 +7410,7 @@
       "id": "function:benchmarks/large-monorepo/spells/nextjs.buzz:mgs_listProvidedGlobs",
       "kind": "function",
       "label": "mgs_listProvidedGlobs",
-      "source": "benchmarks/large-monorepo/spells/nextjs.buzz:16",
+      "source": "benchmarks/large-monorepo/spells/nextjs.buzz:17",
       "attrs": {
         "exported": "true"
       }
@@ -7399,7 +7419,7 @@
       "id": "function:benchmarks/large-monorepo/spells/nextjs.buzz:mgs_listRequiredGlobs",
       "kind": "function",
       "label": "mgs_listRequiredGlobs",
-      "source": "benchmarks/large-monorepo/spells/nextjs.buzz:9",
+      "source": "benchmarks/large-monorepo/spells/nextjs.buzz:10",
       "attrs": {
         "exported": "true"
       }
@@ -7408,7 +7428,7 @@
       "id": "function:benchmarks/large-monorepo/spells/nextjs.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "benchmarks/large-monorepo/spells/nextjs.buzz:25",
+      "source": "benchmarks/large-monorepo/spells/nextjs.buzz:23",
       "attrs": {
         "exported": "true"
       }
@@ -7417,7 +7437,7 @@
       "id": "function:benchmarks/large-monorepo/spells/nextjs.buzz:nextBuild",
       "kind": "function",
       "label": "nextBuild",
-      "source": "benchmarks/large-monorepo/spells/nextjs.buzz:20"
+      "source": "benchmarks/large-monorepo/spells/nextjs.buzz:21"
     },
     {
       "id": "function:benchmarks/large-monorepo/spells/tslib.buzz:mgs_getName",
@@ -7441,7 +7461,7 @@
       "id": "function:benchmarks/large-monorepo/spells/tslib.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "benchmarks/large-monorepo/spells/tslib.buzz:18",
+      "source": "benchmarks/large-monorepo/spells/tslib.buzz:15",
       "attrs": {
         "exported": "true"
       }
@@ -25045,6 +25065,14 @@
     },
     {
       "source": "dir:docs/reference/codes/magusfile",
+      "target": "doc:docs/reference/codes/magusfile/MGS1025.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1025.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/magusfile",
       "target": "doc:docs/reference/codes/magusfile/README.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -28566,6 +28594,22 @@
     {
       "source": "doc:benchmarks/README.md",
       "target": "spell:go",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "benchmarks/README.md"
+    },
+    {
+      "source": "doc:benchmarks/README.md",
+      "target": "spell:python",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "benchmarks/README.md"
+    },
+    {
+      "source": "doc:benchmarks/README.md",
+      "target": "spell:typescript",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.5,
@@ -33021,6 +33065,30 @@
     },
     {
       "source": "doc:docs/migrating/breaking-changes.md",
+      "target": "diagnostic:MGS1025",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/migrating/breaking-changes.md"
+    },
+    {
+      "source": "doc:docs/migrating/breaking-changes.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1025.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/migrating/breaking-changes.md"
+    },
+    {
+      "source": "doc:docs/migrating/breaking-changes.md",
+      "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/migrating/breaking-changes.md"
+    },
+    {
+      "source": "doc:docs/migrating/breaking-changes.md",
       "target": "spell:buf",
       "relation": "documents",
       "confidence": "inferred",
@@ -35002,6 +35070,46 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1024.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1025.md",
+      "target": "diagnostic:MGS1008",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1025.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1025.md",
+      "target": "diagnostic:MGS1025",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1025.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1025.md",
+      "target": "doc:docs/concepts/targets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1025.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1025.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1008.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1025.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1025.md",
+      "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1025.md"
     },
     {
       "source": "doc:docs/reference/codes/magusfile/README.md",

@@ -55,6 +55,108 @@ func CtxFormTargetKeys(src string) map[string]bool {
 	return out
 }
 
+// removedMagusfileAPI lists the magusfile calls magus no longer binds, each paired
+// with the call that replaced it. Removing a binding is not self-reporting: Buzz
+// reads a missing member as null rather than erroring, so every one of these still
+// parses, still loads, and still passes `magus ls` - the magusfile only breaks when
+// the target finally runs, as a bare "null is not callable" that names neither the
+// call nor the migration. The needs family is worse than that, because the static
+// target graph is built from `ctx.needs`: a magusfile still calling `magus.needs`
+// reports NO dependency edge, so `explain`, `affected`, and scheduling all quietly
+// act on a graph with the edge missing long before anything fails.
+//
+// Ordered longest-prefix first so `magus.target.literal` is reported as itself
+// rather than as its `magus.target` prefix.
+var removedMagusfileAPI = []struct {
+	path        []string // member path after the `magus` root, e.g. target.literal
+	replacement string
+}{
+	{[]string{"target", "literal"}, "pass the target function itself to ctx.needs(<target>)"},
+	{[]string{"project", "register"}, `call magus\project({...}) at the top level`},
+	{[]string{"needs"}, "call ctx.needs(<target>)"},
+	{[]string{"glob"}, `call ctx.glob("<pattern>")`},
+}
+
+// RemovedAPINames returns the dotted member path of every removed call, without the
+// `magus.` root (e.g. "project.register"). The surface lock test uses it to assert the
+// table never names something the namespace still binds.
+func RemovedAPINames() []string {
+	out := make([]string, 0, len(removedMagusfileAPI))
+	for _, r := range removedMagusfileAPI {
+		out = append(out, strings.Join(r.path, "."))
+	}
+	return out
+}
+
+// RemovedAPICall reports the first removed magusfile API call in src, with the call
+// that replaced it. ok is false when src uses none of them.
+//
+// Two readings, because a stale magusfile fails in two different places. When src
+// parses, the AST is authoritative and a mention inside a comment or string literal
+// cannot fake a hit. When src does NOT parse, the removed shape may be the very
+// reason (`magus.project.register(fun(p, cb) ...)` predates required parameter
+// annotations, so it dies in the parser with a message about parameter "p"), and a
+// textual scan is the only thing left; it is reached only for a file that is already
+// failing, so at worst it re-explains a broken magusfile with the wrong migration.
+func RemovedAPICall(src string) (call, replacement string, ok bool) {
+	prog, err := buzz.ParseEmbedded(src)
+	if err != nil || prog == nil {
+		for _, r := range removedMagusfileAPI {
+			if text := "magus." + strings.Join(r.path, "."); strings.Contains(src, text+"(") {
+				return text, r.replacement, true
+			}
+		}
+		return "", "", false
+	}
+	for _, stmt := range prog.Stmts {
+		fd, isFun := stmt.(*ast.FunDecl)
+		if !isFun || fd.Body == nil {
+			continue
+		}
+		ast.Inspect(fd.Body, func(n ast.Node) bool {
+			if ok {
+				return false
+			}
+			ce, isCall := n.(*ast.CallExpr)
+			if !isCall {
+				return true
+			}
+			for _, r := range removedMagusfileAPI {
+				if magusRooted(ce.Callee, r.path) {
+					call, replacement, ok = "magus."+strings.Join(r.path, "."), r.replacement, true
+					return false
+				}
+			}
+			return true
+		})
+		if ok {
+			return call, replacement, true
+		}
+	}
+	return "", "", false
+}
+
+// magusRooted reports whether e is the member path `magus.<path...>`, written with
+// either separator - the dot and backslash forms are the same access, and a stale
+// magusfile predates the backslash spelling entirely.
+func magusRooted(e ast.Node, path []string) bool {
+	for i := len(path) - 1; i >= 0; i-- {
+		me, isMember := e.(*ast.MemberExpr)
+		if !isMember || me.Name != path[i] {
+			return false
+		}
+		e = me.Object
+	}
+	id, isIdent := e.(*ast.IdentExpr)
+	return isIdent && id.Name == "magus"
+}
+
+// removedAPIErr reports a magusfile still calling an API magus no longer binds.
+func removedAPIErr(call, replacement string) error {
+	return types.DiagnosticErrorf(types.MagusfileAPIRemoved,
+		"%s was removed: %s instead", call, replacement)
+}
+
 // WithSource stores src in ctx so that bindings (e.g. ctx.needs) can
 // retrieve the active magusfile source for pool lookup.
 func WithSource(ctx context.Context, src *Source) context.Context {
@@ -424,6 +526,14 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 				_ = buzzSess.Close()
 				return nil, fmt.Errorf("magusfile: %s: %w", rel, err)
 			}
+		}
+		// Reject a call magus no longer binds before Exec, so the magusfile fails at
+		// load naming the migration rather than at run time as "null is not callable"
+		// (or, for a shape that predates required parameter annotations, as a parser
+		// complaint about the callback's parameter).
+		if call, replacement, stale := RemovedAPICall(code); stale {
+			_ = buzzSess.Close()
+			return nil, fmt.Errorf("magusfile: %s: %w", rel, removedAPIErr(call, replacement))
 		}
 		if err := TimeExec(ctx, ModeMagusfile, func() error { return buzzSess.Exec(ctx, code) }); err != nil {
 			_ = buzzSess.Close()

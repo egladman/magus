@@ -72,6 +72,45 @@ inputs:
       magus requires for it.
     required: false
     default: 'true'
+  conformance:
+    description: >
+      Comment when the pull request adds a target whose name diverges from what the rest
+      of the workspace already calls the same work, derived by grouping targets on the
+      ops they invoke. Silent unless a large cohort agrees overwhelmingly, so a workspace
+      with no convention produces nothing.
+    required: false
+    default: 'true'
+  conformance-min-cohort:
+    description: >
+      How many targets must share an op set before their naming counts as a convention.
+      Below this, agreement is a coincidence rather than a norm.
+    required: false
+    default: '5'
+  conformance-min-share:
+    description: >
+      Share of a cohort that must agree on a name before a divergence is worth raising.
+      A near-even split is a workspace that has not decided, not a violation.
+    required: false
+    default: '0.8'
+  missing-target:
+    description: >
+      Comment when the pull request touches a project missing a target that projects of
+      the same kind overwhelmingly have. Cohorts are keyed on the SPELL set, so a schema
+      project is only ever measured against other schema projects and never against a
+      service that happens to have a test target.
+    required: false
+    default: 'true'
+  missing-target-min-cohort:
+    description: >
+      How many projects of a kind must exist before what they expose counts as a norm.
+    required: false
+    default: '5'
+  missing-target-min-share:
+    description: >
+      Share of a cohort that must expose a target before its absence elsewhere is worth
+      raising.
+    required: false
+    default: '0.8'
   first-contribution:
     description: >
       Welcome someone opening their first pull request here, with the two repository
@@ -227,6 +266,36 @@ runs:
         PR_BASE: ${{ inputs.base-ref }}
         PR_HEAD_SHA: ${{ inputs.head-sha }}
       run: magus buzz "$GITHUB_ACTION_PATH/skip-cache.buzz"
+
+    - name: Advise on a target name that diverges from the workspace
+      if: inputs.conformance == 'true'
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_BASE: ${{ inputs.base-ref }}
+        PR_HEAD_SHA: ${{ inputs.head-sha }}
+        MIN_COHORT: ${{ inputs.conformance-min-cohort }}
+        MIN_SHARE: ${{ inputs.conformance-min-share }}
+      run: magus buzz "$GITHUB_ACTION_PATH/conformance.buzz"
+
+    - name: Advise on a project missing a target its peers have
+      if: inputs.missing-target == 'true'
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_BASE: ${{ inputs.base-ref }}
+        PR_HEAD_SHA: ${{ inputs.head-sha }}
+        MIN_COHORT: ${{ inputs.missing-target-min-cohort }}
+        MIN_SHARE: ${{ inputs.missing-target-min-share }}
+      run: magus buzz "$GITHUB_ACTION_PATH/missing-target.buzz"
 
     - name: Welcome a first-time contributor
       if: inputs.first-contribution == 'true'

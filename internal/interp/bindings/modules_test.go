@@ -368,6 +368,78 @@ export fun build(ctx: magus\Context, args: [str]) > void { fs.writeFile("ran", "
 	})
 }
 
+// TestRemovedMagusfileAPIRejected pins the migration contract for the magusfile calls
+// magus no longer binds. Each one used to fail only when the target ran, as a bare
+// "null is not callable" naming neither the call nor its replacement, because Buzz
+// reads a missing member as null; magus.needs was worse still, since the static target
+// graph reads ctx.needs and so reported no dependency edge at all. They are rejected at
+// load with MGS1025 instead, and the replacement spellings must keep loading.
+func TestRemovedMagusfileAPIRejected(t *testing.T) {
+	removed := map[string]struct{ body, names string }{
+		"magus.needs":          {"magus.needs(format);", "magus.needs"},
+		"magus.glob":           {`ctx.needs(magus.glob("form*"));`, "magus.glob"},
+		"magus.target.literal": {`ctx.needs(magus.target.literal("format"));`, "magus.target.literal"},
+	}
+	for name, tc := range removed {
+		t.Run(name+" rejected with MGS1025", func(t *testing.T) {
+			dir := t.TempDir()
+			writeMagusfile(t, dir, `import "magus";
+export fun format(ctx: magus\Context, args: [str]) > void {}
+export fun build(ctx: magus\Context, args: [str]) > void { `+tc.body+` }
+`)
+			err := runTargetIn(t, dir, "build")
+			require.Error(t, err, "a removed magusfile API must be rejected at load")
+			require.ErrorIs(t, err, types.MagusfileAPIRemoved, "carries the MGS1025 code")
+			assert.Contains(t, err.Error(), tc.names, "names the removed call")
+		})
+	}
+
+	// The registration shape predates required parameter annotations, so it dies in the
+	// parser before there is an AST to read. The textual fallback is what covers it.
+	t.Run("magus.project.register rejected though it cannot parse", func(t *testing.T) {
+		dir := t.TempDir()
+		writeMagusfile(t, dir, `import "magus";
+magus.project.register(fun(p, cb) > bool { cb({"spells": []}); return true; });
+export fun build(ctx: magus\Context, args: [str]) > void {}
+`)
+		err := runTargetIn(t, dir, "build")
+		require.Error(t, err)
+		require.ErrorIs(t, err, types.MagusfileAPIRemoved, "carries the MGS1025 code")
+		assert.Contains(t, err.Error(), "magus.project.register", "names the removed call")
+	})
+
+	t.Run("the replacements still load", func(t *testing.T) {
+		dir := t.TempDir()
+		writeMagusfile(t, dir, `import "magus";
+import "fs";
+export fun format(ctx: magus\Context, args: [str]) > void {}
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
+    ctx.needs(ctx.glob("form*"));
+    fs.writeFile("ran", "ok");
+}
+`)
+		require.NoError(t, runTargetIn(t, dir, "build"))
+	})
+
+	// The AST reading is what keeps a removed name inside a comment or a string from
+	// failing a magusfile that never calls it.
+	t.Run("a mention is not a call", func(t *testing.T) {
+		dir := t.TempDir()
+		writeMagusfile(t, dir, `import "magus";
+import "fs";
+export fun format(ctx: magus\Context, args: [str]) > void {}
+export fun build(ctx: magus\Context, args: [str]) > void {
+    // magus.needs( was removed; so was magus.glob(
+    final note = "magus.needs(";
+    ctx.needs(format);
+    fs.writeFile("ran", note);
+}
+`)
+		require.NoError(t, runTargetIn(t, dir, "build"))
+	})
+}
+
 func sentinel(dir string) string { return filepath.Join(dir, "ran") }
 
 func TestRunTopLevelTarget(t *testing.T) {
