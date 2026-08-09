@@ -9,11 +9,11 @@ tags: [release, versioning, tags, go-modules, workflow]
 You release from your machine. `magus run release` cuts the tags. Nothing in CI
 does it for you, and nothing pushes on your behalf.
 
-| Step | Where | What it does |
-| --- | --- | --- |
-| Cut the tag | your machine, `magus run release` | tags each module, rewrites the root `go.mod` |
-| Push the tag | your machine, `git push` | deliberate, separate, yours |
-| Build the artifacts | `release.yaml` on GitHub | archives, images, signatures |
+| Step                | Where                             | What it does                                 |
+| ------------------- | --------------------------------- | -------------------------------------------- |
+| Cut the tag         | your machine, `magus run release` | tags each module, rewrites the root `go.mod` |
+| Push the tag        | your machine, `git push`          | deliberate, separate, yours                  |
+| Build the artifacts | `release.yaml` on GitHub          | archives, images, signatures                 |
 
 ## Survey first
 

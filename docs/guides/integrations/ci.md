@@ -76,11 +76,11 @@ shallow - is the right default.
 
 Measured on this repository, cloning the same revision three ways:
 
-| clone                       | `.git` size |
-| --------------------------- | ----------- |
-| `fetch-depth: 0`            | 67 MB       |
-| `--filter=blob:none`        | 14 MB       |
-| blobless, depth-bounded     | 11 MB       |
+| clone                   | `.git` size |
+| ----------------------- | ----------- |
+| `fetch-depth: 0`        | 67 MB       |
+| `--filter=blob:none`    | 14 MB       |
+| blobless, depth-bounded | 11 MB       |
 
 ### GitHub Actions
 

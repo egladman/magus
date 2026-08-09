@@ -144,11 +144,11 @@ the browser and lets you edit the patterns and re-run them.
 
 Three forms, and they compose in one call:
 
-| Form | Example | Compiles to | Matches |
-| --- | --- | --- | --- |
-| Suffix shorthand | `"build"` | `^.*-build$` | `go-build`, `docker-build` |
-| Glob | `"*-generate"` | `^.*-generate$` | `index-generate`, `site-generate` |
-| Negation | `"!site-generate"` | `^site-generate$`, subtracted | everything else the includes matched |
+| Form             | Example            | Compiles to                   | Matches                              |
+| ---------------- | ------------------ | ----------------------------- | ------------------------------------ |
+| Suffix shorthand | `"build"`          | `^.*-build$`                  | `go-build`, `docker-build`           |
+| Glob             | `"*-generate"`     | `^.*-generate$`               | `index-generate`, `site-generate`    |
+| Negation         | `"!site-generate"` | `^site-generate$`, subtracted | everything else the includes matched |
 
 Negation subtracts from the union of the includes, so order never matters:
 `("*-generate", "!site-generate")` and `("!site-generate", "*-generate")` select

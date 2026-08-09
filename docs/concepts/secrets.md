@@ -40,7 +40,7 @@ how:
 - **The value exists for one read, in one process.** It is fetched when a target asks for
   it and handed to the one subprocess that needs it, over stdin. It is not in your shell,
   so nothing you launch later inherits it.
-- **Nothing is stored in plaintext.** The magusfile holds a *reference*. The backend holds
+- **Nothing is stored in plaintext.** The magusfile holds a _reference_. The backend holds
   the secret, behind whatever authentication it already enforces.
 - **The blast radius of a compromised machine shrinks to what an attacker can unlock**,
   rather than everything you have ever exported or written to a file.
@@ -52,7 +52,7 @@ reasonable thing to do rather than a thing you get away with. The credential is 
 the run that needs it.
 
 magus does not stop a compromised machine, and nothing here claims to. What it removes is
-the *standing* exposure - the plaintext file and the inherited variable that are readable
+the _standing_ exposure - the plaintext file and the inherited variable that are readable
 long before and long after the moment they were needed.
 
 > The built-in environment provider still reads environment variables, because a CI
@@ -205,12 +205,12 @@ magus\secret.provider(secrets);
 
 The spell classifies its own failures rather than surfacing an exit status:
 
-| What went wrong | What magus tells you |
-| --- | --- |
-| `op` not on PATH | the mise, homebrew, and manual install commands |
-| not authenticated | `Run \`op signin\`, or set OP_SERVICE_ACCOUNT_TOKEN for an unattended run` |
-| wrong vault/item/field | `op item list --vault <vault>` to find the right one |
-| anything else | the CLI's own stderr, trimmed |
+| What went wrong        | What magus tells you                                                       |
+| ---------------------- | -------------------------------------------------------------------------- |
+| `op` not on PATH       | the mise, homebrew, and manual install commands                            |
+| not authenticated      | `Run \`op signin\`, or set OP_SERVICE_ACCOUNT_TOKEN for an unattended run` |
+| wrong vault/item/field | `op item list --vault <vault>` to find the right one                       |
+| anything else          | the CLI's own stderr, trimmed                                              |
 
 For CI or any unattended run, a 1Password service account token avoids the interactive
 signin entirely - but note that on a CI runner the platform's own secret store is usually
@@ -232,7 +232,7 @@ try them in order.
 **It should not, and magus deliberately cannot.** One provider is active per run, and a
 failed read is an error rather than a reason to try the next backend.
 
-The reason is not simplicity. A fallback chain fails *open*: a locked 1Password vault
+The reason is not simplicity. A fallback chain fails _open_: a locked 1Password vault
 silently falls through to a stale environment variable, the read succeeds, and the build
 pushes with the wrong credential. That failure is invisible - everything is green - and it
 is strictly worse than an error naming the reference and the provider. Secrets are the one
@@ -297,7 +297,7 @@ Three rules, and each exists because the alternative is infuriating.
 calls `magus\secret.read`, never at magusfile evaluation. This matters more than it
 sounds: a magusfile that read a secret at the top level would prompt on `magus ls`, on
 `magus describe`, on every command in the workspace. Keep reads inside target bodies, and
-keep the *act of authenticating* in its own target rather than as a side effect of a
+keep the _act of authenticating_ in its own target rather than as a side effect of a
 build - see the convention below.
 
 The same rule applies to reporting. `magus run image-registries` lists what a publish
@@ -355,7 +355,7 @@ continue" during a wait. It deliberately does not, for four reasons that compoun
   feature exists to remove.
 - **It builds a phishing surface.** Once magus is a thing that asks for credentials at a
   prompt, any magusfile can ask for credentials at a prompt that looks exactly like
-  magus's. The announcement above is meant to make an unexplained request *suspicious* -
+  magus's. The announcement above is meant to make an unexplained request _suspicious_ -
   a paste prompt makes it routine.
 - **It has no provenance.** A pasted value came from no provider, so the audit trail
   cannot say which backend served it, and "which credentials did this run touch" loses its
@@ -455,7 +455,7 @@ Where types DO earn their place is in your own declarations. Keep the registry t
 fun publish_registries(ctx: magus\Context) > [Registry] { ... }
 ```
 
-That signature is checked. `Registry` fields carrying secret *references* rather than
+That signature is checked. `Registry` fields carrying secret _references_ rather than
 values is a convention this page recommends, not a guarantee the compiler makes.
 
 ## Limits

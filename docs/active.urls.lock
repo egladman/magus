@@ -90,6 +90,7 @@ concepts/compatibility/
 concepts/concurrency/
 concepts/dependencies/
 concepts/engines/
+concepts/generated-files/
 concepts/knowledge/
 concepts/knowledge/insight/
 concepts/operations/
@@ -456,6 +457,7 @@ tags/ci-provider/
 tags/ci/
 tags/claude/
 tags/cli/
+tags/codegen/
 tags/codex/
 tags/compatibility/
 tags/completion/
@@ -501,6 +503,7 @@ tags/filesystem/
 tags/fingerprint/
 tags/fish/
 tags/flags/
+tags/format/
 tags/formatter/
 tags/fs/
 tags/generated-files/

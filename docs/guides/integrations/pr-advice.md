@@ -44,10 +44,10 @@ stop without committing that opinion to everyone forever.
 
 Label the pull request:
 
-| label | effect |
-| --- | --- |
-| `magus:silence` | mutes every advisor on this pull request |
-| `magus:silence:unclaimed` | mutes one, by its input name |
+| label                     | effect                                   |
+| ------------------------- | ---------------------------------------- |
+| `magus:silence`           | mutes every advisor on this pull request |
+| `magus:silence:unclaimed` | mutes one, by its input name             |
 
 A silenced advisor retracts its section rather than freezing the last thing it said, so
 the comment never shows a finding nobody is still checking. Remove the label and it comes
@@ -58,18 +58,18 @@ what was muted and by whom.
 
 ## What each advisor says
 
-| input | it comments when |
-| --- | --- |
-| `merge-conflicts` | the pull request conflicts with its base in files magus generates, which a merge driver cannot settle on the server |
-| `hand-edited-generated` | a generated file changed and nothing that produces it did, so the next regeneration overwrites the edit |
-| `unclaimed` | changed files belong to no project, so no target reads them and the checks say nothing about them |
-| `target-outputs` | a new target declares no outputs, which means it never replays from cache |
-| `skip-cache` | a target opts out of the cache, quoting the reason magus requires for it |
-| `blast-radius` | the change reaches a large share of the workspace, with the chain that pulled each project in |
-| `doctor` | `magus doctor` reports a failing or advisory check |
-| `version-floor` | the pull request raises `required_version`, which every contributor must act on |
-| `first-contribution` | the author has no merged pull request here yet |
-| `fix-generated-drift` | off by default; regenerates drifted files and pushes them, and only with a label |
+| input                   | it comments when                                                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `merge-conflicts`       | the pull request conflicts with its base in files magus generates, which a merge driver cannot settle on the server |
+| `hand-edited-generated` | a generated file changed and nothing that produces it did, so the next regeneration overwrites the edit             |
+| `unclaimed`             | changed files belong to no project, so no target reads them and the checks say nothing about them                   |
+| `target-outputs`        | a new target declares no outputs, which means it never replays from cache                                           |
+| `skip-cache`            | a target opts out of the cache, quoting the reason magus requires for it                                            |
+| `blast-radius`          | the change reaches a large share of the workspace, with the chain that pulled each project in                       |
+| `doctor`                | `magus doctor` reports a failing or advisory check                                                                  |
+| `version-floor`         | the pull request raises `required_version`, which every contributor must act on                                     |
+| `first-contribution`    | the author has no merged pull request here yet                                                                      |
+| `fix-generated-drift`   | off by default; regenerates drifted files and pushes them, and only with a label                                    |
 
 `blast-radius` takes a `fanout-share` (default `0.5`): the share of the workspace a
 change must reach before it says anything. It is a share rather than a count because

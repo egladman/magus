@@ -43,11 +43,11 @@ and the affected set and the knowledge graph reach them like any other.
 
 This is the third instance of one arrangement magus already uses twice:
 
-| Wiring                            | Subsystem delegated  | The spell exports                          |
-| --------------------------------- | -------------------- | ------------------------------------------ |
-| `magus\cache.remote(github)`      | remote cache         | `enabled`, `get_artifact`, `put_artifact`  |
-| `magus\ci.provider(github)`       | CI job-log structure | `group_start`, `group_end`, `annotate`, .. |
-| `magus\workspace.provider(nx)`    | the project set      | `list_projects`                            |
+| Wiring                         | Subsystem delegated  | The spell exports                          |
+| ------------------------------ | -------------------- | ------------------------------------------ |
+| `magus\cache.remote(github)`   | remote cache         | `enabled`, `get_artifact`, `put_artifact`  |
+| `magus\ci.provider(github)`    | CI job-log structure | `group_start`, `group_end`, `annotate`, .. |
+| `magus\workspace.provider(nx)` | the project set      | `list_projects`                            |
 
 In all three the magusfile names a spell, the subsystem invokes contract
 functions **by name**, and magus knows nothing about the foreign system. You
@@ -98,15 +98,15 @@ writes (alongside `Command`, `Service`, `Charm`). Its fields match the
 `magus\project({...})` options map one for one, so you configure a provided
 project in the same words you would have written by hand.
 
-| Field        | Meaning                                                                     |
-| ------------ | --------------------------------------------------------------------------- |
-| `path`       | the project's directory, **relative to the workspace root**; required       |
-| `name`       | the human label, when the tool's project name is not its directory          |
-| `spells`     | spell NAMES to bind (a spell cannot hold another spell's handle)            |
-| `depends_on` | upstream projects, resolved exactly as a magusfile's `depends_on` is        |
-| `sources`    | input globs, **relative to the project directory**                          |
-| `outputs`    | output globs, **relative to the project directory**                         |
-| `exclusive`  | the project must not run alongside its peers                                |
+| Field        | Meaning                                                               |
+| ------------ | --------------------------------------------------------------------- |
+| `path`       | the project's directory, **relative to the workspace root**; required |
+| `name`       | the human label, when the tool's project name is not its directory    |
+| `spells`     | spell NAMES to bind (a spell cannot hold another spell's handle)      |
+| `depends_on` | upstream projects, resolved exactly as a magusfile's `depends_on` is  |
+| `sources`    | input globs, **relative to the project directory**                    |
+| `outputs`    | output globs, **relative to the project directory**                   |
+| `exclusive`  | the project must not run alongside its peers                          |
 
 Watch the two anchors. `path` is workspace-relative, because that is a
 project's identity; `sources` and `outputs` are project-relative, because that is

@@ -443,11 +443,14 @@ type KnowledgeRouting struct {
 	// CatalogFingerprint identifies the binary that rendered this index; see the field of
 	// the same name on KnowledgeGraphOutput. Carried here so MAGUS.md can show it without
 	// the renderer taking another parameter. Empty when no graph was available.
-	CatalogFingerprint string                    `json:"catalog_fingerprint,omitempty" yaml:"catalog_fingerprint,omitempty"`
-	NodeCount          int                       `json:"node_count"     yaml:"node_count"`
-	EdgeCount          int                       `json:"edge_count"     yaml:"edge_count"`
-	Kinds              []KnowledgeRoutingKind    `json:"kinds"          yaml:"kinds"`
-	Projects           []KnowledgeRoutingProject `json:"projects"       yaml:"projects"`
+	CatalogFingerprint string `json:"catalog_fingerprint,omitempty" yaml:"catalog_fingerprint,omitempty"`
+	NodeCount          int    `json:"node_count"     yaml:"node_count"`
+	// EdgeCount counts the edges this summary ranked on, so it excludes runtime edges and
+	// is NOT KnowledgeGraphOutput's or KnowledgeStats' count. Unrendered (writeRouting
+	// drops totals), kept so a renderer that adds one cannot reintroduce the dependence.
+	EdgeCount int                       `json:"edge_count"     yaml:"edge_count"`
+	Kinds     []KnowledgeRoutingKind    `json:"kinds"          yaml:"kinds"`
+	Projects  []KnowledgeRoutingProject `json:"projects"       yaml:"projects"`
 }
 
 // KnowledgeRoutingKind is one row of the domain routing table: a node kind, how

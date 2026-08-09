@@ -1,0 +1,14 @@
+{
+  // Shared Markdown formatting, extended by each project's dprint.json. Settings chosen
+  // to minimize churn on an existing hand-written corpus, not to express a preference:
+  // maintain the hand wrapping, and keep the underscores the corpus already favours
+  // 110 files to 45.
+  "markdown": {
+    "textWrap": "maintain",
+    "emphasisKind": "underscores",
+    "strongKind": "asterisks"
+  },
+  "plugins": [
+    "https://plugins.dprint.dev/markdown-0.22.1.wasm"
+  ]
+}

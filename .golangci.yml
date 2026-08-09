@@ -268,6 +268,22 @@ linters:
       - path: ^internal/report/
         linters: [sloglint]
 
+# Formatting is gated HERE, not by the format target, because `gofmt -l` cannot fail: it
+# reports on stdout and exits 0, and magus reads an op's verdict from the exit code alone.
+# The format target keeps it as the local reporter (rw flips it to -w).
+# Zero findings when adopted: a ratchet, not a cleanup.
+formatters:
+  enable:
+    - gofmt
+  settings:
+    gofmt:
+      # simplify: false to match what `format:rw` actually applies. golangci-lint defaults
+      # it ON (gofmt -s), but the go-fmt op runs plain `gofmt -w`, so leaving it on makes
+      # the gate demand a rewrite the formatter will not perform - lint failing on
+      # something format cannot fix. Adopting -s is a separate decision; it belongs in the
+      # spell's op first, so the two stay in agreement.
+      simplify: false
+
 # Report every finding. golangci-lint defaults to max-issues-per-linter: 50 and
 # max-same-issues: 3, which silently hides repeated findings (e.g. a pervasive
 # pattern shows only its first 3 hits). Disabling the caps keeps CI honest — the

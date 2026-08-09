@@ -17,12 +17,12 @@ golangci-lint module plugin in `plugin/`.
 The obvious rule, "every `X_test.go` needs an `X.go`", is not what this
 implements. Measured against the Go 1.26 standard library, excluding `src/cmd`:
 
-| Rule | Reported | Share of 1348 test files |
-| --- | --- | --- |
-| Any test file with no source file of the same name | 660 | 49.0% |
-| ...exempting the conventional names below | 459 | 34.1% |
-| ...reporting only a name that narrows an existing source name | 51 | 3.8% |
-| ...also exempting build-tag suffixes | **16** | **1.2%** |
+| Rule                                                          | Reported | Share of 1348 test files |
+| ------------------------------------------------------------- | -------- | ------------------------ |
+| Any test file with no source file of the same name            | 660      | 49.0%                    |
+| ...exempting the conventional names below                     | 459      | 34.1%                    |
+| ...reporting only a name that narrows an existing source name | 51       | 3.8%                     |
+| ...also exempting build-tag suffixes                          | **16**   | **1.2%**                 |
 
 A third of the standard library names test files after a cross-cutting concern no
 single source file owns: `concurrency_test.go`, `sizeof_test.go`. Reporting those
@@ -35,7 +35,7 @@ file instead.
 
 No published Go style guide states a test-file naming rule. Go by Example says the
 test for `intutils.go` "would then be named" `intutils_test.go`, with no position
-on exceptions. Google's style guide covers test *package* naming and skips file
+on exceptions. Google's style guide covers test _package_ naming and skips file
 naming. The toolchain reads `_test.go`, ignores names starting with `_` or `.`,
 and treats a trailing `_GOOS`/`_GOARCH` as a build constraint. None of them
 mention pairing.
@@ -43,15 +43,15 @@ mention pairing.
 That leaves the standard library as the only corpus, so the exemptions below come
 from counting it rather than from taste. Counts are occurrences in `$GOROOT/src`.
 
-| Pattern | Uses | Why it cannot pair |
-| --- | --- | --- |
-| `example_test.go`, `*_example_test.go` | 105 | godoc renders examples from it |
-| `export_test.go`, `*_export_test.go` | 52 | exports internals to an external test package |
-| `fuzz_test.go`, `*_fuzz_test.go` | 15 | seed corpus kept separate |
-| `bench_test.go`, `benchmark_test.go` and their `*_` forms | 15 | benchmarks kept out of the unit test file |
-| `main_test.go` | 6 | the `TestMain` entry point |
-| `all_test.go` | 5 | package-wide suite |
-| `internal_test.go`, `*_internal_test.go`, `*_pkg_test.go` | 6 | white-box companion to an external test package |
+| Pattern                                                   | Uses | Why it cannot pair                              |
+| --------------------------------------------------------- | ---- | ----------------------------------------------- |
+| `example_test.go`, `*_example_test.go`                    | 105  | godoc renders examples from it                  |
+| `export_test.go`, `*_export_test.go`                      | 52   | exports internals to an external test package   |
+| `fuzz_test.go`, `*_fuzz_test.go`                          | 15   | seed corpus kept separate                       |
+| `bench_test.go`, `benchmark_test.go` and their `*_` forms | 15   | benchmarks kept out of the unit test file       |
+| `main_test.go`                                            | 6    | the `TestMain` entry point                      |
+| `all_test.go`                                             | 5    | package-wide suite                              |
+| `internal_test.go`, `*_internal_test.go`, `*_pkg_test.go` | 6    | white-box companion to an external test package |
 
 Trailing GOOS and GOARCH segments are also exempt, plus `unix`, so
 `rawconn_unix_test.go` still pairs with `rawconn.go`. Without that the standard

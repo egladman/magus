@@ -60,11 +60,11 @@ nothing and says nothing.
 `magus server start` installs them, best-effort: a repository with no daemon never gets
 them, and a failure to write one is a warning, never a reason the daemon does not start.
 
-| Hook | Fires on |
-| --- | --- |
+| Hook            | Fires on                                                         |
+| --------------- | ---------------------------------------------------------------- |
 | `post-checkout` | a branch switch (guarded so a file checkout does not trigger it) |
-| `post-merge` | a merge or pull |
-| `post-rewrite` | a rebase or amend |
+| `post-merge`    | a merge or pull                                                  |
+| `post-rewrite`  | a rebase or amend                                                |
 
 Each is a history change that can stale the knowledge graph and the symbol index.
 Mercurial gets the same treatment through its `update` hook; jj has no hook support and

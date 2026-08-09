@@ -25,9 +25,15 @@ const maxAnchors = 3
 // a few highest-degree anchor nodes, and per-project target counts with key
 // targets. Degree (in + out) is the cheap "how connected / how central" proxy the
 // plan calls god nodes; ties break by ID so the summary is deterministic.
+//
+// Runtime edges are excluded from the ranking and from EdgeCount, so MAGUS.md - which
+// is committed and drift-gated - does not rank on which diagnostics THIS machine
+// tripped. `magus graph stats` keeps them on purpose: an interactive query wants local
+// context, so its EdgeCount and god nodes differ from these.
+//
+// That buys independence from run history, NOT from the machine. @vcs author edges and
+// the @docs/@buzz filesystem walks still feed this table wherever they are enabled.
 func (g *Graph) Routing() types.KnowledgeRouting {
-	g.ensureAdj()
-
 	type scored struct {
 		label string
 		deg   int
@@ -36,8 +42,21 @@ func (g *Graph) Routing() types.KnowledgeRouting {
 	byKind := map[string][]scored{}
 	byProject := map[string][]scored{}
 
+	// From the edge set, not the adjacency index: the index keeps runtime edges for
+	// traversal. A dangling endpoint gets a deg entry the node loop never reads.
+	deg := make(map[string]int, len(g.nodes))
+	edgeCount := 0
+	for _, e := range g.edges {
+		if e.Provenance == ProvenanceRuntime {
+			continue
+		}
+		edgeCount++
+		deg[e.Source]++
+		deg[e.Target]++
+	}
+
 	for id, n := range g.nodes {
-		s := scored{label: n.Label, deg: len(g.out[id]) + len(g.in[id]), id: id}
+		s := scored{label: n.Label, deg: deg[id], id: id}
 		byKind[n.Kind] = append(byKind[n.Kind], s)
 		if n.Kind == types.KindTarget {
 			if proj, ok := projectOfTargetID(id); ok {
@@ -63,7 +82,7 @@ func (g *Graph) Routing() types.KnowledgeRouting {
 	out := types.KnowledgeRouting{
 		SchemaVersion: types.KnowledgeSchemaVersion,
 		NodeCount:     len(g.nodes),
-		EdgeCount:     len(g.edges),
+		EdgeCount:     edgeCount,
 	}
 	for _, kind := range routingKindOrder {
 		xs, ok := byKind[kind]

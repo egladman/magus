@@ -49,7 +49,7 @@ Two things that setup buys, both load-bearing:
   and the second really replays it. No tape clears the developer's own cache.
 
 Then keep it to a few beats with a `Sleep` after each - the pauses are where a
-reader's eye actually lands. `Set Height` is set by the *last* frame: a GIF
+reader's eye actually lands. `Set Height` is set by the _last_ frame: a GIF
 loops, so whatever the final frame shows is what someone who glances at it sees.
 
 ## Keeping them useful

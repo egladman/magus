@@ -41,9 +41,9 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return StrVal(ret0), nil
 	}))
-	m.MapSet("diff", vm.DirectValue("vcs.diff", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+	m.MapSet("changedFiles", vm.DirectValue("vcs.changedFiles", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		base := Str(bzArgs, 0)
-		ret0, err := std.VcsDiff(ctx, base)
+		ret0, err := std.VcsChangedFiles(ctx, base)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
@@ -71,6 +71,14 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 			return vm.Null, HostError(err)
 		}
 		return BoolVal(ret0), nil
+	}))
+	m.MapSet("dirtyDiff", vm.DirectValue("vcs.dirtyDiff", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		paths := StrSlice(bzArgs, 0)
+		ret0, err := std.VcsDirtyDiff(ctx, paths)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrVal(ret0), nil
 	}))
 	m.MapSet("commit", vm.DirectValue("vcs.commit", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		rev := Str(bzArgs, 0)

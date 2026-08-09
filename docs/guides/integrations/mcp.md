@@ -111,9 +111,9 @@ Knowledge graph:
 
 Memory and scratch:
 
-| Tool               | Purpose                                                                            |
-| ------------------ | ---------------------------------------------------------------------------------- |
-| `magus_memory`     | User-owned per-repo handoff journal: list/get/put/delete/verify named entries shared across worktrees |
+| Tool           | Purpose                                                                                               |
+| -------------- | ----------------------------------------------------------------------------------------------------- |
+| `magus_memory` | User-owned per-repo handoff journal: list/get/put/delete/verify named entries shared across worktrees |
 
 Config mutation is not exposed over MCP. Use the CLI for `magus config set` and related commands.
 

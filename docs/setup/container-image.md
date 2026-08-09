@@ -53,9 +53,9 @@ test.
 
 ## Variants
 
-| Image                               | Base                  | Platforms                | Notes                                                                                              |
-| ----------------------------------- | --------------------- | ------------------------ | -------------------------------------------------------------------------------------------------- |
-| `ghcr.io/egladman/magus:latest`     | distroless/static     | linux/amd64, linux/arm64 | Fully static, no libc. The default; use this unless you need something below.                      |
+| Image                                   | Base                  | Platforms                | Notes                                                                                              |
+| --------------------------------------- | --------------------- | ------------------------ | -------------------------------------------------------------------------------------------------- |
+| `ghcr.io/egladman/magus:latest`         | distroless/static     | linux/amd64, linux/arm64 | Fully static, no libc. The default; use this unless you need something below.                      |
 | `ghcr.io/egladman/magus:latest-dynamic` | distroless/cc (glibc) | linux/amd64              | glibc build that bundles `inotify-tools`, so `magus watch` / `fs\watch` work inside the container. |
 
 Use `latest` unless you know you need the other one. The difference that matters follows
@@ -104,13 +104,13 @@ buildx build --load` cannot load a multi-platform result into the image store, s
 local build has exactly one architecture no matter what. It defaults to your host's,
 so an Apple Silicon machine builds and runs `linux/arm64` natively.
 
-| Command | Builds |
-| --- | --- |
-| `magus run image-build` | cgo variant, host architecture |
-| `magus run image-build` | static variant (the default), host architecture |
-| `magus run image-build:arm64` | static variant, forced `linux/arm64` |
-| `magus run image-build:dynamic` | dynamic (glibc) variant, host architecture |
-| `magus run image-build:amd64` | cgo variant, forced `linux/amd64` |
+| Command                         | Builds                                          |
+| ------------------------------- | ----------------------------------------------- |
+| `magus run image-build`         | cgo variant, host architecture                  |
+| `magus run image-build`         | static variant (the default), host architecture |
+| `magus run image-build:arm64`   | static variant, forced `linux/arm64`            |
+| `magus run image-build:dynamic` | dynamic (glibc) variant, host architecture      |
+| `magus run image-build:amd64`   | cgo variant, forced `linux/amd64`               |
 
 The `amd64` and `arm64` charms exist for reproducing a failure that only happens on
 the other architecture. They go through QEMU emulation, so expect them to be slow -

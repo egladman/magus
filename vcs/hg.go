@@ -39,7 +39,7 @@ func (v hgVCS) Root(ctx context.Context, dir string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func (v hgVCS) Diff(ctx context.Context, dir, base string) ([]string, error) {
+func (v hgVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, error) {
 	if err := checkRef(base); err != nil {
 		return nil, err
 	}
@@ -145,6 +145,20 @@ func (v hgVCS) DirtyFiles(ctx context.Context, dir string, paths []string) ([]st
 		return nil, fmt.Errorf("hg status: %w", err)
 	}
 	return splitStatusLines(out), nil
+}
+
+// DirtyDiff implements types.VCSDriver: uncommitted changes against the working parent.
+func (v hgVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (string, error) {
+	args := []string{"diff", "-U", "1"}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		args = append(args, paths...)
+	}
+	out, err := vcsOutputRaw(ctx, dir, "hg", args...)
+	if err != nil {
+		return "", fmt.Errorf("hg diff: %w", err)
+	}
+	return out, nil
 }
 
 // Describe returns the working revision's latest reachable tag (Mercurial's

@@ -6,6 +6,12 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+export object Path {
+    value: str = "",
+    base: str = "",
+    isDir: bool = false,
+}
+
 export object ExecResult {
     stdout: str = "",
     stderr: str = "",
@@ -26,12 +32,6 @@ export object Commit {
     subject: str = "",
     body: str = "",
     parents: [str] = [],
-}
-
-export object Path {
-    value: str = "",
-    base: str = "",
-    isDir: bool = false,
 }
 
 export object Status {
@@ -57,10 +57,11 @@ export object Tag {
 }
 
 export extern fun base() > str;
+export extern fun changedFiles(base: str = "") > [Path];
 export extern fun cmd(args: [str], opts: {str: any} = {<str: any>}) > ExecResult;
 export extern fun commit(rev: str = "") > Commit;
 export extern fun describe() > str;
-export extern fun diff(base: str = "") > [Path];
+export extern fun dirtyDiff(paths: [str] = [<str>]) > str;
 export extern fun history(limit: int = 10) > [Commit];
 export extern fun isDirty(paths: [str] = [<str>]) > bool;
 export extern fun name() > str;

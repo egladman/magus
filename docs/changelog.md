@@ -15,7 +15,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 See the unreleased changes at
 https://github.com/egladman/magus/compare/v0.2.1...main
 
+### Breaking
+
+- **`vcs\diff` is now `vcs\changedFiles`.** It returns the file paths changed against a
+  base ref, not a diff, and the name said otherwise. The confusion became concrete when
+  `vcs\dirtyDiff` arrived and read like a variant of it rather than a different question.
+  The old name is retired rather than repurposed on purpose: host-module members are typed
+  to the checker, so a magusfile still calling `vcs\diff` fails at load with a clear
+  error, where reusing the name for the new meaning would have silently passed a base ref
+  where a path list is expected.
+
+### Added
+
+- **`vcs\dirtyDiff([paths])` returns the working tree's uncommitted changes as text**, on
+  every backend. Drift gates previously branched on `vcs\name() == "git"` and shelled out
+  through `vcs\cmd`, so an hg or jj user got filenames with no diff. git, hg, and jj now
+  each implement it and every one of those branches is gone.
+- **Markdown is formatted by dprint.** The workspace had no markdown formatter after
+  prettier was dropped. Each project carries its own `dprint.json` extending a shared base,
+  the way `biome.json` already does, and the markdown spell exposes a `dprint` op.
+
 ### Changed
+
+- **Generated-file drift is measured by content, not by asking whether the tree is clean.**
+  Every gate hashed nothing and instead required a clean tree, which disarmed it at exactly
+  the moment it was reached: the documented pre-push check runs with uncommitted work in
+  the tree, so it printed "skipped" and exited 0. Gates now hash their paths before and
+  after the generators run, so an unrelated edit no longer hides drift, and an
+  uncommitted-but-current generated file still passes because its bytes do not move.
+- **Go formatting is gated by golangci-lint's `formatters` section.** `gofmt -l` reports on
+  stdout and exits 0, and magus reads an op's verdict from the exit code, so unformatted Go
+  passed green. The `format` target keeps `gofmt -l` as the local reporter.
+- **MGS4003 fails the run instead of warning.** Determinism is what drift gating, cache
+  replay, and regenerate-to-resolve merges all rest on, so there is no useful "warned about
+  it" state. `--race=replay` is now run weekly by `audit.yaml`, renamed from `nightly.yaml`
+  because a workflow should be named for its purpose rather than its cadence.
+- **`MAGUS.md`'s routing anchors no longer depend on local run history.** The `@runtime`
+  shard records which diagnostics a machine happened to trip, and those edges fed the
+  degree ranking, so a committed generated file differed between a developer's machine and
+  CI.
+
 
 - **`magus-delegate-ultra` can now be reached by asking for it in plain words.** It had two
   triggers: its own literal name, and "explicitly requests graph-planned parallel

@@ -540,12 +540,19 @@ func nilIfEmpty(m map[string]string) map[string]string {
 // "@" keeps it clear of any project path and is the remote-export exclusion key.
 const RuntimeShardName = "@runtime"
 
+// ProvenanceRuntime marks an edge the runtime shard contributed, so consumers that must
+// not depend on local run history can drop it after the shard boundary is gone. It keeps
+// the "@" because provenance otherwise holds a source path, often a bare top-level
+// directory name: plain "runtime" would collide with a runtime/ directory.
+const ProvenanceRuntime = RuntimeShardName
+
 // assembleRuntime builds the isolated shard from the non-deterministic inputs:
 // one "emits" edge per (unit, code) from the target/project node to the diagnostic
 // node, a partial target node per timing carrying observed performance attrs, and a
-// partial target node per output ref carrying the last-output attrs. All connect to
-// nodes the registry and project shards define; timings and refs for a target no longer
-// in known are dropped so stale history never adds a phantom node.
+// partial target node per output ref carrying the last-output attrs. Timings and refs
+// for a target no longer in known are dropped, so stale history never adds a phantom
+// node. The emits edges are NOT gated on known, so a stale unit yields a dangling edge;
+// that is safe only because AddEdge never materializes an endpoint.
 func assembleRuntime(events []types.DiagnosticEvent, timings []types.KnowledgeTiming, refs []types.KnowledgeOutputRef, known map[string]bool) Shard {
 	s := Shard{Name: RuntimeShardName}
 	seen := map[string]bool{}
@@ -560,7 +567,7 @@ func assembleRuntime(events []types.DiagnosticEvent, timings []types.KnowledgeTi
 			continue
 		}
 		seen[key] = true
-		s.Edges = append(s.Edges, extractedEdge(unit, diag, types.RelationEmits, "runtime"))
+		s.Edges = append(s.Edges, extractedEdge(unit, diag, types.RelationEmits, ProvenanceRuntime))
 	}
 	for _, t := range timings {
 		tID := targetID(t.Project, t.Target)

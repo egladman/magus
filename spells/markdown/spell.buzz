@@ -5,7 +5,7 @@ import "magus/charm";
 export fun mgs_getName() > str { return "markdown"; }
 
 export fun mgs_listRequiredGlobs() > [Path] {
-    return [Path{value = "**/*.md"}, Path{value = "**/*.MD"}, Path{value = "**/*.markdown"}, Path{value = ".markdownlint.json"}, Path{value = ".markdownlint.yaml"}];
+    return [Path{value = "**/*.md"}, Path{value = "**/*.MD"}, Path{value = "**/*.markdown"}, Path{value = ".markdownlint.json"}, Path{value = ".markdownlint.yaml"}, Path{value = "dprint.json"}];
 }
 
 export fun mgs_listClaimedGlobs() > [Path] {
@@ -24,6 +24,15 @@ fun prettier(target: Target) > Command {
         "rw": set(args, "--check", "--write"),
     }};
 }
+fun dprint(target: Target) > Command {
+    // The formatter half, next to markdownlint's linter half. Scope comes from
+    // dprint.json (includes/excludes), not argv, so there are no globs here and no
+    // empty-glob problem. The `rw` charm swaps the check for the write.
+    final args = ["check"];
+    return Command{bin = "dprint", args = args, charms = {
+        "rw": set(args, "check", "fmt"),
+    }};
+}
 fun typos(target: Target) > Command {
     // Corrections-based prose checker: `typos` walks the tree, matches only known
     // misspellings from its curated typo->fix map (never unknown words), and
@@ -39,5 +48,5 @@ fun typos(target: Target) > Command {
 }
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {
-    return {"markdownlint": markdownlint, "prettier": prettier, "typos": typos};
+    return {"markdownlint": markdownlint, "prettier": prettier, "dprint": dprint, "typos": typos};
 }

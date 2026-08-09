@@ -18,11 +18,11 @@
 // the target graph - affected tracking is glob-based (sources), not import-graph-based.
 
 import "magus";
+import "../../tools/drift" as drift;
 // fs writes MAGUS.md and reads the sources it indexes; os shells out to pnpm
-// (typecheck/biome/test); vcs gates the generated MAGUS.md on drift.
+// (typecheck/biome/test); tools/drift.buzz gates the generated MAGUS.md on drift.
 import "fs";
 import "os";
-import "vcs";
 
 // magusfile binds this file's exported targets (generate, lint, test, ci); ts adds the
 // TypeScript spell so the shared src/ is symbol-capable - its `scip` op indexes it (via
@@ -89,18 +89,18 @@ fun install() > void {
     os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
 }
 
-// Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result. Drift =
-// regeneration dirtied a file that was clean, via vcs.isDirty, so a locally-regenerated
-// MAGUS.md passes whether or not it is committed; only a regeneration that changes a
-// clean file fails.
+// Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result. Drift is
+// measured by hashing MAGUS.md before and after (tools/drift.buzz), not by asking whether
+// it was clean, so the gate still fires when you already have it uncommitted. A
+// locally-regenerated MAGUS.md passes either way: its bytes do not move.
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
-    final clean_before = vcs\isDirty(["MAGUS.md"]) == false;
+    final before = drift.hashes(["MAGUS.md"]);
     ctx.needs(index_generate);
     if (ctx.has_charm("rw")) { return; }
 
-    if (clean_before and vcs\isDirty(["MAGUS.md"])) {
-        throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/textsearch` and commit";
+    if (drift.changedSince(before, ["MAGUS.md"]).len() > 0) {
+        throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/textsearch` and commit" + drift.secondCause;
     }
 }
 
@@ -132,7 +132,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     ctx.writesFiles(workspace.file("assets/textsearch-coverage.svg"));
     final badge_path = fs\join("..", "..", "assets", "textsearch-coverage.svg");
-    final clean_before = vcs\isDirty([badge_path]) == false;
+    final before = drift.hashes([badge_path]);
     install();
 
     final tests = fs\glob("src/**/*.test.ts");
@@ -156,7 +156,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     final pct = cov\lcovPercent(fs\readFile("coverage.lcov"), keep: "src/");
     fs\writeFile(badge_path, badge\coverage("textsearch coverage", percent: pct, radius: 3));
     if (ctx.has_charm("rw")) { return; }
-    if (clean_before and vcs\isDirty([badge_path])) {
+    if (drift.changedSince(before, [badge_path]).len() > 0) {
         throw "test: assets/textsearch-coverage.svg is stale; re-run `magus run test:rw libs/textsearch` and commit the badge";
     }
 }

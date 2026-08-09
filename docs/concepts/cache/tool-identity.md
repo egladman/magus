@@ -10,11 +10,11 @@ magus keys a target on its inputs, and the toolchain that built them is one. Thi
 page is the three separate questions a spell can answer about a tool, and which of
 them reach the cache key.
 
-| question | declared by | reaches the key |
-| --- | --- | --- |
-| what version is installed? | `mgs_getVersionProbe` | yes |
-| what part of that version matters? | `mgs_getVersionKey` | it decides |
-| is the tool usable right now? | `mgs_getReadinessProbes` | **no** |
+| question                           | declared by              | reaches the key |
+| ---------------------------------- | ------------------------ | --------------- |
+| what version is installed?         | `mgs_getVersionProbe`    | yes             |
+| what part of that version matters? | `mgs_getVersionKey`      | it decides      |
+| is the tool usable right now?      | `mgs_getReadinessProbes` | **no**          |
 
 ## A probe's output is not a version
 
@@ -111,12 +111,12 @@ An axis the target does not mention inherits. A misspelled nesting level is a lo
 error rather than a silent inherit - the two are indistinguishable at run time, and
 one of them is a cache that quietly does the wrong thing.
 
-This is the **host** platform. The platform an artifact is built *for* travels as
+This is the **host** platform. The platform an artifact is built _for_ travels as
 `GOOS`/`GOARCH` through the environment allowlist and keys through the env lines.
 
 ## Readiness never keys the cache
 
-A readiness probe answers whether a tool is usable *now*:
+A readiness probe answers whether a tool is usable _now_:
 
 ```buzz
 export fun mgs_getReadinessProbes() > {str: Command} {

@@ -322,7 +322,7 @@ func TestDiffRecoversMergeBaseInShallowClone(t *testing.T) {
 	// tree the same way a real `magus affected` run sees it.
 	require.NoError(t, os.WriteFile(filepath.Join(clone, "dirty.txt"), []byte("uncommitted\n"), 0o644))
 
-	files, err := gitVCS{}.Diff(t.Context(), clone, "origin/main")
+	files, err := gitVCS{}.ChangedFiles(t.Context(), clone, "origin/main")
 	require.NoError(t, err)
 	assert.Contains(t, files, "app.txt", "the branch's committed change")
 	assert.Contains(t, files, "dirty.txt", "an untracked working-tree file")

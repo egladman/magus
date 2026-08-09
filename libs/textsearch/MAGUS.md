@@ -47,7 +47,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 |---|--:|---|---|
 | project | 10+ | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
 | target | 100+ | `magus query kind:target` | `content-generate`, `site-generate`, `generate` |
-| spell | 10+ | `magus query kind:spell` | `go`, `typescript`, `markdown` |
+| spell | 10+ | `magus query kind:spell` | `go`, `markdown`, `typescript` |
 | op | 50+ | `magus query kind:op` | `go-build`, `go-test`, `go-fmt` |
 | tool | 10+ | `magus query kind:tool` | `sh`, `go`, `pnpm` |
 | charm | 10+ | `magus query kind:charm` | `rw`, `cd`, `stable` |
@@ -55,7 +55,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | method | 100+ | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 60+ | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS1022` |
 | doc | 200+ | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/concepts/spells.md` |
-| dir | 100+ | `magus query kind:dir` | `docs/reference/codes/magusfile`, `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs` |
+| dir | 100+ | `magus query kind:dir` | `docs/reference/codes/magusfile`, `libs/gopherbuzz/examples/bubblegum`, `docs/concepts` |
 | file | 200+ | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
 | function | 1000+ | `magus query kind:function` | `sel`, `sendObject`, `send` |
 | import | 100+ | `magus query kind:import` | `std`, `magus`, `fs` |
@@ -63,13 +63,13 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 37 | `magus query project:.` | `generate`, `image-build`, `lint` |
+| . | 37 | `magus query project:.` | `generate`, `image-build`, `format` |
 | console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 4 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
 | evals | 4 | `magus query project:evals` | `lint`, `preflight`, `ci` |
 | libs/diagnostics | 8 | `magus query project:libs/diagnostics` | `format`, `build`, `generate` |
-| libs/gopherbuzz | 10 | `magus query project:libs/gopherbuzz` | `build`, `format`, `generate` |
+| libs/gopherbuzz | 10 | `magus query project:libs/gopherbuzz` | `format`, `build`, `generate` |
 | libs/testsprawl | 8 | `magus query project:libs/testsprawl` | `format`, `build`, `generate` |
 | libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `generate`, `preflight` |
 | proto | 3 | `magus query project:proto` | `generate`, `lint`, `ci` |
@@ -97,7 +97,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `test` | Tests with race detection, coverage, and a drift-gated coverage badge. |
 | `build` | Compiles one artifact: the host binary, or the container image under the `container` charm. |
 | `lint` | Formats and builds the linter first, then golangci-lint, go vet, markdownlint, and shellcheck. |
-| `format` | Regenerates, then formats Go and tidies `go.mod`. |
+| `format` | Regenerates, then formats Go, tidies `go.mod`, and formats Markdown. |
 | `ci` | Runs the CI gates through their declared dependencies. |
 | `ci-shard` | Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed. |
 | `deploy-generate` | deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/. |
@@ -114,7 +114,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `buzz-test` | Runs the in-file `test "..." {}` blocks in this repo's own root Buzz modules, through magus's embedded engine. |
 | `lint-build` | Builds ./custom-gcl, the golangci-lint carrying this repo's own linters. |
 | `completion-test` | Exercises the completion scripts magus SHIPS, each inside the official image for its shell. |
-| `compress-cgo-test` | Runs internal/compress's tests against the CGO codecs, which the ordinary test target cannot reach. |
+| `compress-cgo-test` | Runs internal/compress's tests under the CGO tags, which the ordinary test target cannot reach. |
 
 ## Project: console
 
@@ -133,7 +133,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 |---|---|
 | `generate` | generate is the one public docs publication target. |
 | `format` |  |
-| `lint` | lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). |
+| `lint` | lint runs the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). |
 | `build` |  |
 | `test` |  |
 | `security` | security audits what actually ships against the npm advisory database. |

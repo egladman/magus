@@ -2,8 +2,10 @@ import "magus";
 // The shared advisory gate. See tools/audit.buzz for why an exit code is the wrong
 // question and what this asks instead.
 import "../tools/audit" as audit;
+import "../tools/drift" as drift;
 import "../tools/toolchain-policy" as policy;
-// Modules the targets use: fs (lcov reads, badge write), os (pnpm/esbuild), vcs (drift gate).
+// Modules the targets use: fs (lcov reads, badge write), os (pnpm/esbuild); the drift
+// coverage.svg gates hash through tools/drift.buzz; the gen/ gate still uses vcs.
 import "fs";
 import "os";
 import "vcs";
@@ -118,7 +120,7 @@ fun install() > void {
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     ctx.writesFiles("coverage.svg");
-    final clean_before = vcs\isDirty(["coverage.svg"]) == false;
+    final before = drift.hashes(["coverage.svg"]);
     install();
     os\exec("pnpm", ["run", "test"], ".", {});
 
@@ -127,7 +129,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
         keep: "src/");
     fs\writeFile("coverage.svg", badge\coverage("console coverage", percent: pct, radius: 3));
     if (ctx.has_charm("rw")) { return; }
-    if (clean_before and vcs\isDirty(["coverage.svg"])) {
+    if (drift.changedSince(before, ["coverage.svg"]).len() > 0) {
         // Names the figure this run measured. Node's line coverage differs by a fraction
         // of a point between platforms, so a badge committed from a developer machine can
         // be stale on CI by a rounding step nobody can see from the message alone.
@@ -142,6 +144,10 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     ctx.needs(root\graph_generate);
+    // NOT drift.hashes: console/gen is gitignored, so there is nothing committed to drift
+    // against and hashing fires on every rebuild. vcs\isDirty reports an ignored path as
+    // clean, which is why this gate has never fired. It is inert, and the comment above
+    // claiming gen/ is committed is wrong - left as-is here rather than changed blind.
     final clean_before = vcs\isDirty(["gen"]) == false;
     os\exec("pnpm", ["run", "build"], ".", {});
     if (ctx.has_charm("rw")) {

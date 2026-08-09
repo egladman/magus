@@ -24,6 +24,8 @@ func TestRoutingCountsAndKinds(t *testing.T) {
 
 	assert.Equal(t, types.KnowledgeSchemaVersion, r.SchemaVersion)
 	assert.Equal(t, len(g.Nodes()), r.NodeCount)
+	// Equal only because sampleInputs sets no Runtime events; EdgeCount counts
+	// non-runtime edges, which TestRoutingIgnoresRuntimeShard pins.
 	assert.Equal(t, len(g.Edges()), r.EdgeCount)
 
 	tgt, ok := routingKind(r, types.KindTarget)
@@ -66,6 +68,52 @@ func TestRoutingProjects(t *testing.T) {
 		paths[i] = p.Path
 	}
 	assert.True(t, slices.IsSorted(paths), "projects sorted by path")
+}
+
+// TestRoutingIgnoresRuntimeShard pins the summary against local run history. All three
+// runtime inputs are populated, so the partial nodes are covered along with the edges.
+func TestRoutingIgnoresRuntimeShard(t *testing.T) {
+	// Which codes these are does not matter, only that two targets document the first and
+	// one documents the second: degree decides the order, so the assertion below holds
+	// whatever the constants say.
+	const documented, tripped = types.MagusfileOnlyMember, types.ToolTooNew
+	sourceGraph := func() *Graph {
+		g := NewGraph()
+		for _, code := range []types.DiagnosticCode{documented, tripped} {
+			g.AddNode(types.KnowledgeNode{ID: diagnosticID(string(code)), Kind: types.KindDiagnostic, Label: string(code)})
+		}
+		for _, name := range []string{"build", "lint"} {
+			id := targetID("pkg/a", name)
+			g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindTarget, Label: name})
+			g.AddEdge(extractedEdge(id, diagnosticID(string(documented)), types.RelationDocuments, "magusfile.buzz"))
+		}
+		g.AddEdge(extractedEdge(targetID("pkg/a", "build"), diagnosticID(string(tripped)), types.RelationDocuments, "magusfile.buzz"))
+		return g
+	}
+
+	want := sourceGraph().Routing()
+	diag, ok := routingKind(want, types.KindDiagnostic)
+	require.True(t, ok, "diagnostic kind row present")
+	require.Equal(t, []string{string(documented), string(tripped)}, diag.Anchors,
+		"sources alone rank the twice-documented code first")
+
+	// Three hits on the less-documented code, enough to invert the ranking if runtime
+	// edges counted. pkg/b:test is undefined by any shard, so a dangling edge rides along.
+	local := assembleRuntime(
+		[]types.DiagnosticEvent{
+			{Unit: "pkg/a:build", Code: tripped},
+			{Unit: "pkg/a:lint", Code: tripped},
+			{Unit: "pkg/b:test", Code: tripped},
+		},
+		[]types.KnowledgeTiming{{Project: "pkg/a", Target: "build", P75Ms: 4200, Samples: 9, HitRate: 0.75, HitRateSamples: 12}},
+		[]types.KnowledgeOutputRef{{Project: "pkg/a", Target: "build", Ref: "out1a2b3c", OK: true}},
+		map[string]bool{targetID("pkg/a", "build"): true})
+	require.NotEmpty(t, local.Edges, "fixture must produce runtime edges")
+	require.NotEmpty(t, local.Nodes, "and partial target nodes")
+
+	g := sourceGraph()
+	g.Merge(local.Nodes, local.Edges)
+	assert.Equal(t, want, g.Routing(), "routing is identical with and without the runtime shard")
 }
 
 func TestProjectOfTargetID(t *testing.T) {

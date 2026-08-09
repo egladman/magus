@@ -21,13 +21,13 @@ The model has to exist before magus can be trusted with a single skipped build,
 so the expensive part is already paid for. Answering questions from it costs
 almost nothing:
 
-| verb | the question it answers |
-| --- | --- |
-| `affected` | what does this diff reach |
-| `query`, `explain`, `path` | what exists, and how do these relate |
-| `describe file` | is this generated, and by what |
-| `refs` | where is this symbol defined and used |
-| the version window | is the binary that ran inside the range you declared |
+| verb                       | the question it answers                              |
+| -------------------------- | ---------------------------------------------------- |
+| `affected`                 | what does this diff reach                            |
+| `query`, `explain`, `path` | what exists, and how do these relate                 |
+| `describe file`            | is this generated, and by what                       |
+| `refs`                     | where is this symbol defined and used                |
+| the version window         | is the binary that ran inside the range you declared |
 
 Take the version window, the newest of them. A tool's version already feeds the
 cache key, so magus probes it on every build whether or not you declare a range.

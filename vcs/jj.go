@@ -36,7 +36,7 @@ func (v jjVCS) Root(ctx context.Context, dir string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func (v jjVCS) Diff(ctx context.Context, dir, base string) ([]string, error) {
+func (v jjVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, error) {
 	if err := checkRef(base); err != nil {
 		return nil, err
 	}
@@ -166,6 +166,22 @@ func (v jjVCS) DirtyFiles(ctx context.Context, dir string, paths []string) ([]st
 		return nil, fmt.Errorf("jj diff: %w", err)
 	}
 	return splitStatusLines(out), nil
+}
+
+// DirtyDiff implements types.VCSDriver: the working copy's own changes. --git so the output
+// is a unified diff rather than jj's default colorized summary. No context flag: jj's
+// spelling has moved across releases, and the caller bounds the size anyway.
+func (v jjVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (string, error) {
+	args := []string{"diff", "--git"}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		args = append(args, paths...)
+	}
+	out, err := vcsOutputRaw(ctx, dir, "jj", args...)
+	if err != nil {
+		return "", fmt.Errorf("jj diff: %w", err)
+	}
+	return out, nil
 }
 
 // ConflictResolver for jj. The mapping is NOT a transliteration of the git one, because

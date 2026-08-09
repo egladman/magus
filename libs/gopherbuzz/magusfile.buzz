@@ -8,14 +8,18 @@
 //   magus run ci libs/gopherbuzz            lint, build, and test
 
 import "magus";
+import "../../tools/drift" as drift;
 
 // go spell: claims **/*.go and the module files. This file's own export-fun targets
 // need no declaration - magus binds the magusfile driver to every project.
 import "magus/spell/go";
+// Imported for its dprint op only, NOT added to the spells list: binding markdown here
+// would also claim this tree's **/*.md for markdownlint, which the root project lints.
+import "magus/spell/markdown";
 import "../../spells/golang/gomod" as gomod;
 
 // os.exec runs the benchmark; fs reads and writes the profile (Buzz's stdlib has
-// neither streaming exec nor raw file IO). vcs.isDirty gates regenerated outputs.
+// neither streaming exec nor raw file IO). tools/drift.buzz gates regenerated outputs.
 // env.home locates the upstream clone cache for the conformance target.
 import "os";
 import "fs";
@@ -48,29 +52,24 @@ magus\project({
 
 export fun preflight(ctx: magus\Context, args: [str]) > void {}
 
-// Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
-// Drift = regeneration dirtied a file that was clean, via vcs.isDirty (not a raw
-// git/porcelain shell-out), so a locally-regenerated MAGUS.md passes whether or
-// not it is committed; only a regeneration that changes a clean file fails.
+// Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result. Drift is
+// measured by hashing MAGUS.md before and after (tools/drift.buzz), not by asking whether
+// it was clean, so the gate still fires when you already have it uncommitted. A
+// locally-regenerated MAGUS.md passes either way: its bytes do not move.
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     gomod\replaceWorkspaceModules(ctx, go, "libs/gopherbuzz");
-    final clean_before = vcs\isDirty(["MAGUS.md"]) == false;
+    final before = drift.hashes(["MAGUS.md"]);
     ctx.needs(index_generate);
     if (ctx.has_charm("rw")) { return; }
 
-    if (clean_before == false) {
-        magus\info("generate: drift gate skipped - MAGUS.md was already dirty when it started; commit, then re-run to actually check");
-    }
-    if (clean_before and vcs\isDirty(["MAGUS.md"])) {
+    if (drift.changedSince(before, ["MAGUS.md"]).len() > 0) {
         // Print the diff, not just the verdict. This gate fires where its reader has
         // a CI log and no tree, and the index carries workspace-wide counts, so
         // "drifted" alone cannot say whether a count moved or a whole section did.
-        if (vcs\name() == "git") {
-            final d = vcs\cmd(["diff", "--unified=1", "--", "MAGUS.md"], opts: {"allow_failure": true});
-            if (d.stdout != "") { magus\info("generate: what changed on this runner:\n" + d.stdout); }
-        }
-        throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/gopherbuzz` and commit";
+        final body = vcs\dirtyDiff(["MAGUS.md"]);
+        if (body != "") { magus\info("generate: what changed on this runner:\n" + body); }
+        throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/gopherbuzz` and commit" + drift.secondCause;
     }
 }
 
@@ -80,7 +79,12 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void {
     fs\writeFile("MAGUS.md", doc + "\n");
 }
 
-export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); go["go-fmt"](ctx); go["go-mod-tidy"](ctx); }
+export fun format(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(generate);
+    go["go-fmt"](ctx);
+    go["go-mod-tidy"](ctx);
+    markdown["dprint"](ctx);
+}
 export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-vet"](ctx); }
 export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-build"](ctx); }
 export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-test"](ctx); }

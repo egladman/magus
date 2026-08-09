@@ -50,8 +50,8 @@ func (v gitVCS) Root(ctx context.Context, dir string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// Diff lists files changed against base. It diffs the merge-base of base and HEAD
-// against the working tree, not base...HEAD. The three-dot form is commit-to-commit
+// ChangedFiles lists the files changed against base. It diffs the merge-base of base and
+// HEAD against the working tree, not base...HEAD. The three-dot form is commit-to-commit
 // and silently ignores uncommitted work, so editing files without committing (or
 // committing straight onto the base branch, where HEAD == base) reported an empty
 // set and "0 projects affected". The merge-base keeps changes that landed on base
@@ -60,10 +60,10 @@ func (v gitVCS) Root(ctx context.Context, dir string) (string, error) {
 // "current working tree" contract. With a clean tree this still equals base...HEAD,
 // so CI behavior is unchanged.
 //
-// Diff is not purely a read. In a SHALLOW clone whose merge base is missing it fetches
+// ChangedFiles is not purely a read. In a SHALLOW clone whose merge base is missing it fetches
 // more history before answering (see recoverMergeBase), so it can touch the network and
 // add refs. A full clone is never fetched into.
-func (v gitVCS) Diff(ctx context.Context, dir, base string) ([]string, error) {
+func (v gitVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, error) {
 	if err := checkRef(base); err != nil {
 		return nil, err
 	}
@@ -392,6 +392,24 @@ func splitStatusLines(out string) []string {
 // every one becomes an argv entry; batching keeps the command clear of ARG_MAX instead of
 // failing on the one workspace big enough to hit it.
 const gitTrackedBatch = 256
+
+// DirtyDiff implements types.VCSDriver. `git diff` is working tree against the index, which
+// is what a drift gate wants: a generator writes files, it does not stage them. -U1 keeps a
+// multi-file diff readable in a CI log, where this is mostly read.
+func (v gitVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (string, error) {
+	// core.quotePath=false for the same reason DirtyFiles sets it: a non-ASCII path
+	// otherwise comes back C-quoted.
+	args := []string{"-c", "core.quotePath=false", "diff", "-U1"}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		args = append(args, paths...)
+	}
+	out, err := vcsOutputRaw(ctx, dir, "git", args...)
+	if err != nil {
+		return "", fmt.Errorf("git diff: %w", err)
+	}
+	return out, nil
+}
 
 // TrackedFiles implements types.TrackedFileReporter. `git ls-files -- <paths>` prints the
 // subset of those pathspecs that are in the index, which is exactly "tracked": an ignored

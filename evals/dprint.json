@@ -1,0 +1,6 @@
+{
+  // fixtures/ carries installed agent-skill copies, which are generated.
+  "extends": "../dprint-base.json",
+  "includes": ["./**/*.md"],
+  "excludes": ["./node_modules/**", "./gen/**", "./MAGUS.md", "./fixtures/**"]
+}

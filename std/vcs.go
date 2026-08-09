@@ -40,13 +40,13 @@ var Vcs = Module{
 			Impl:    VcsRoot,
 		},
 		{
-			Name: "diff",
-			Doc:  "The files changed against the given base (defaults to vcs.base), each a Path carrying the repository root as its base. Empty when no VCS is resolved.",
+			Name: "changed_files",
+			Doc:  "The files changed against the given base (defaults to vcs.base), each a Path carrying the repository root as its base. Empty when no VCS is resolved. Named for what it returns: it answers WHICH files a branch touched, where vcs.dirtyDiff answers WHAT changed inside the working tree.",
 			Args: []Arg{
 				{Name: "base", Type: TypeString, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "[Path]"}},
-			Impl:    VcsDiff,
+			Impl:    VcsChangedFiles,
 		},
 		{
 			Name:    "ref",
@@ -56,7 +56,7 @@ var Vcs = Module{
 		},
 		{
 			Name: "status",
-			Doc:  "The working tree's uncommitted state as {clean, files}: clean is true when nothing changed, files are the changed paths (empty when clean). Pass paths to scope it. Each file is a Path carrying the repository root as its base, because a VCS reports paths from the root while a target runs in its project directory. Paths only - a per-entry status code is not portable (jj reports none), so reach for vcs.exe() when the codes matter.",
+			Doc:  "The working tree's uncommitted state as {clean, files}: clean is true when nothing changed, files are the changed paths (empty when clean). Pass paths to scope it. Each file is a Path carrying the repository root as its base, because a VCS reports paths from the root while a target runs in its project directory. Paths only - a per-entry status code is not portable (jj reports none), so reach for vcs.cmd() when the codes matter.",
 			Args: []Arg{
 				{Name: "paths", Type: TypeStringSlice, Optional: true},
 			},
@@ -71,6 +71,15 @@ var Vcs = Module{
 			},
 			Returns: []Ret{{Type: TypeBool}},
 			Impl:    VcsIsDirty,
+		},
+		{
+			Name: "dirty_diff",
+			Doc:  "The uncommitted changes to paths, as the active VCS's own unified diff; \"\" when nothing changed or no VCS is resolved. is_dirty answers whether an output moved, this answers how - which is what a drift gate needs when it fires in CI and nobody can look at the tree. Every backend implements it, so a magusfile no longer branches on vcs.name() to print a diff; the bytes are the backend's native format, not a normalized one.",
+			Args: []Arg{
+				{Name: "paths", Type: TypeStringSlice, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    VcsDirtyDiff,
 		},
 		{
 			Name: "commit",
@@ -111,7 +120,7 @@ var Vcs = Module{
 		},
 		{
 			Name:    "describe",
-			Doc:     "Human-readable version string from the nearest tag (git's `describe --tags --always --dirty`: tag, else short hash, with a -dirty suffix for a modified tree). \"\" when no VCS is resolved, or for a backend without a tag-describe concept (jj) - so a magusfile stamps a version without shelling out to git. Pair with vcs.shortHash() as a fallback.",
+			Doc:     "Human-readable version string from the nearest tag (git's `describe --tags --always --dirty`: tag, else short hash, with a -dirty suffix for a modified tree). \"\" when no VCS is resolved, or for a backend without a tag-describe concept (jj) - so a magusfile stamps a version without shelling out to git. Pair with vcs.commit().short as a fallback.",
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    VcsDescribe,
 		},
@@ -180,7 +189,7 @@ func VcsRoot(ctx context.Context) (string, error) {
 	return root, nil
 }
 
-// VcsDiff lists files changed against base, defaulting to the resolved base ref.
+// VcsChangedFiles lists files changed against base, defaulting to the resolved base ref.
 //
 // Paths, like vcs.status's, each carrying the repository root as their base. A VCS
 // reports diff paths from the root while a target runs in its project directory, so a
@@ -192,7 +201,7 @@ func VcsRoot(ctx context.Context) (string, error) {
 // only while both sit in the same repository - and a target's cwd IS its project
 // directory, so a nested repository, or a daemon whose process cwd is outside the
 // workspace, made the two disagree.
-func VcsDiff(ctx context.Context, base string) ([]types.Path, error) {
+func VcsChangedFiles(ctx context.Context, base string) ([]types.Path, error) {
 	v, defaultBase := resolveVCS(ctx)
 	if v == nil {
 		return nil, nil
@@ -204,7 +213,7 @@ func VcsDiff(ctx context.Context, base string) ([]types.Path, error) {
 	if err != nil {
 		dir = ""
 	}
-	files, err := v.Diff(ctx, dir, base)
+	files, err := v.ChangedFiles(ctx, dir, base)
 	if err != nil {
 		return nil, fmt.Errorf("vcs.diff: %w", err)
 	}
@@ -342,6 +351,26 @@ func VcsIsDirty(ctx context.Context, paths []string) (bool, error) {
 	return dirty, nil
 }
 
+// VcsDirtyDiff returns the working tree's uncommitted diff for paths. Unlike VcsIsDirty
+// this does NOT raise on a failed probe: it is a diagnostic printed beside a failure that
+// has already been decided, so a backend that cannot produce a diff must not become the
+// reason the build fails. "" reads as "no diff to show".
+func VcsDirtyDiff(ctx context.Context, paths []string) (string, error) {
+	v, _ := resolveVCS(ctx)
+	if v == nil {
+		return "", nil
+	}
+	dir, err := EffectiveCwd(ctx)
+	if err != nil {
+		dir = ""
+	}
+	diff, err := v.DirtyDiff(ctx, dir, paths)
+	if err != nil {
+		return "", nil //nolint:nilerr // deliberate: a diagnostic must not become the failure
+	}
+	return diff, nil
+}
+
 // VcsCommit resolves rev (empty = current revision) to its commit object. When
 // no VCS is resolved or the revision can't be looked up it returns the zero
 // types.Commit - an all-empty object (id/date/… are ""), so a caller tests a
@@ -400,7 +429,7 @@ func VcsTags(ctx context.Context, pattern string) ([]types.VCSTag, error) {
 		return nil, nil
 	}
 	// Errors propagate, deliberately breaking with the metadata accessors above.
-	// Those return "" for a failed query because a magusfile reading vcs.branch()
+	// Those return "" for a failed query because a magusfile reading vcs.ref()
 	// outside a repo wants a blank, not an exception. Tags differ: resolveVCS
 	// already covers "no VCS", a repository with no tags exits 0 with no output,
 	// so a non-nil error here is a real fault - git missing, not a repository, or
@@ -427,7 +456,7 @@ func vcsExe(ctx context.Context) (string, error) {
 // VcsCmd runs the active VCS binary with args.
 //
 // This replaced vcs.exe, which handed back a PATH and left every caller to write
-// os.exec(vcs.exe(), [...]) - two calls, and a silent no-op when the path came back
+// os.exec(<the vcs binary>, [...]) - two calls, and a silent no-op when the path came back
 // empty because no VCS was resolved. Returning an ExecResult also puts the escape hatch
 // on the same typed footing as magus.cmd and os.exec instead of a bare string. "exe" was
 // the wrong word besides: it reads as a Windows file extension, and the value is a
