@@ -26,11 +26,14 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
+	"net/url"
 
 	json "github.com/egladman/magus/internal/json"
 	"os"
@@ -77,11 +80,64 @@ func checkPubKey(pk ed25519.PublicKey) error {
 	return nil
 }
 
+// httpClient returns the client every signed fetch uses. The transport floor matches
+// what the install script already demands of curl (`--proto '=https' --proto-redir
+// '=https' --tlsv1.2`, docs/gen/install), so the two paths that can install magus agree
+// about what they will speak. Without this the client inherited Go's default, which is
+// reasonable and unstated - not the same thing as chosen.
 func (o Options) httpClient() *http.Client {
 	if o.HTTPClient != nil {
 		return o.HTTPClient
 	}
-	return &http.Client{Timeout: 60 * time.Second}
+	return &http.Client{
+		Timeout: 60 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
+		},
+		// A redirect may not leave https. The tarball 302s from github.com to
+		// release-assets.githubusercontent.com, so redirects are on the normal path and
+		// an http:// hop would be a silent downgrade mid-download.
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if req.URL.Scheme != "https" && !(req.URL.Scheme == "http" && isLoopbackHost(req.URL.Hostname())) {
+				return fmt.Errorf("refusing redirect to %s: a signed fetch must stay on https", req.URL.Scheme)
+			}
+			if len(via) >= 10 {
+				return errors.New("stopped after 10 redirects")
+			}
+			return nil
+		},
+	}
+}
+
+// requireHTTPS rejects a non-https source. The Ed25519 signature makes plaintext
+// survivable, not acceptable: a downgrade nobody is told about is how every quiet failure
+// in this path starts. A load error, never a warning.
+//
+// Loopback is exempt, the same carve-out Docker, pip and the Go module proxy make. A
+// packet that never leaves the host has no network attacker to protect it from, and the
+// exemption is what lets a local mirror - and this package's own tests - exercise the
+// real code path instead of a weakened copy of it.
+func requireHTTPS(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("parse %q: %w", rawURL, err)
+	}
+	if u.Scheme == "https" {
+		return nil
+	}
+	if u.Scheme == "http" && isLoopbackHost(u.Hostname()) {
+		return nil
+	}
+	return fmt.Errorf("refusing %q: a signed source must be https, got %q", rawURL, u.Scheme)
+}
+
+// isLoopbackHost reports whether host names this machine.
+func isLoopbackHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip, err := netip.ParseAddr(host)
+	return err == nil && ip.IsLoopback()
 }
 
 func (o Options) discoveryURL() string {
@@ -128,15 +184,22 @@ func FetchAndVerifyIndex(ctx context.Context, opts Options) (*ReleaseIndex, erro
 		return nil, err
 	}
 	indexURL := opts.discoveryURL()
+	if err := requireHTTPS(indexURL); err != nil {
+		return nil, err
+	}
 	sigURL := indexURL + ".sig"
 
-	indexBytes, err := FetchLimited(ctx, indexURL, MaxIndex, opts)
-	if err != nil {
-		return nil, fmt.Errorf("release index unreachable (%s): %w", indexURL, err)
-	}
+	// Signature FIRST. It cannot be verified without the artifact - a detached signature is
+	// computed over those bytes - but fetching it first fails cheap when it is missing
+	// rather than after pulling the whole index, and the artifact host is not contacted
+	// until the expected signature is already pinned locally.
 	sigBytes, err := FetchLimited(ctx, sigURL, MaxSig, opts)
 	if err != nil {
 		return nil, fmt.Errorf("release index signature unreachable (%s): %w", sigURL, err)
+	}
+	indexBytes, err := FetchLimited(ctx, indexURL, MaxIndex, opts)
+	if err != nil {
+		return nil, fmt.Errorf("release index unreachable (%s): %w", indexURL, err)
 	}
 	if !ed25519.Verify(opts.PubKey, indexBytes, sigBytes) {
 		return nil, errors.New("index signature check failed: index.json.sig does not match index.json")
@@ -258,13 +321,14 @@ func FetchAndVerifyManifest(ctx context.Context, sumsURL, sigURL string, opts Op
 	if err := checkPubKey(opts.PubKey); err != nil {
 		return nil, err
 	}
-	sumsBytes, err := FetchLimited(ctx, sumsURL, MaxManifest, opts)
-	if err != nil {
-		return nil, fmt.Errorf("download SHA256SUMS: %w", err)
-	}
+	// Signature first, for the reason given in FetchAndVerifyIndex.
 	sigBytes, err := FetchLimited(ctx, sigURL, MaxSig, opts)
 	if err != nil {
 		return nil, fmt.Errorf("download SHA256SUMS.sig: %w", err)
+	}
+	sumsBytes, err := FetchLimited(ctx, sumsURL, MaxManifest, opts)
+	if err != nil {
+		return nil, fmt.Errorf("download SHA256SUMS: %w", err)
 	}
 	if !ed25519.Verify(opts.PubKey, sumsBytes, sigBytes) {
 		return nil, errors.New("signature check failed: SHA256SUMS.sig does not match SHA256SUMS")

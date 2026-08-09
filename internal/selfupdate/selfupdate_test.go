@@ -10,10 +10,12 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -755,4 +757,69 @@ func TestFetchAndVerifyTarball_OK(t *testing.T) {
 	r, err := FetchAndVerifyTarball(context.Background(), srv.URL+"/asset", assetName, m, Options{})
 	require.NoError(t, err)
 	assert.NotNil(t, r)
+}
+
+// A signed source must be https. The signature makes plaintext survivable, not
+// acceptable: a downgrade nobody is told about is how a quiet failure starts, so this is
+// an error rather than a warning.
+//
+// Loopback is exempt, the carve-out Docker, pip and the Go module proxy all make - a
+// packet that never leaves the host has no network attacker to protect it from, and it is
+// what lets this package's own tests drive the real path.
+func TestRequireHTTPSRefusesPlaintextExceptLoopback(t *testing.T) {
+	for _, tc := range []struct {
+		url string
+		ok  bool
+	}{
+		{"https://eli.gladman.cc/magus/public/release/index.json", true},
+		{"http://eli.gladman.cc/magus/public/release/index.json", false},
+		{"http://example.internal/index.json", false},
+		{"ftp://example.internal/index.json", false},
+		{"http://127.0.0.1:8080/index.json", true},
+		{"http://[::1]:8080/index.json", true},
+		{"http://localhost:8080/index.json", true},
+	} {
+		err := requireHTTPS(tc.url)
+		if tc.ok && err != nil {
+			t.Errorf("requireHTTPS(%q) = %v, want accepted", tc.url, err)
+		}
+		if !tc.ok && err == nil {
+			t.Errorf("requireHTTPS(%q) accepted a plaintext source off-host", tc.url)
+		}
+	}
+}
+
+// The transport floor matches what the install script demands of curl, so the two paths
+// that can install magus agree about what they will speak.
+func TestHTTPClientSetsTheTLSFloor(t *testing.T) {
+	tr, ok := Options{}.httpClient().Transport.(*http.Transport)
+	if !ok {
+		t.Fatal("default client must carry its own transport, not inherit an unstated default")
+	}
+	if got := tr.TLSClientConfig.MinVersion; got != tls.VersionTLS12 {
+		t.Errorf("MinVersion = %#x, want TLS 1.2 (%#x)", got, tls.VersionTLS12)
+	}
+}
+
+// A redirect may not leave https. The release tarball 302s from github.com to
+// release-assets.githubusercontent.com, so redirects are on the normal path and an http
+// hop would be a silent downgrade partway through a download.
+func TestRedirectMayNotLeaveHTTPS(t *testing.T) {
+	check := Options{}.httpClient().CheckRedirect
+	req := func(raw string) *http.Request {
+		u, err := url.Parse(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &http.Request{URL: u}
+	}
+	if err := check(req("https://release-assets.githubusercontent.com/x"), nil); err != nil {
+		t.Errorf("an https redirect must be followed: %v", err)
+	}
+	if err := check(req("http://evil.example/x"), nil); err == nil {
+		t.Error("a redirect to http off-host must be refused")
+	}
+	if err := check(req("http://127.0.0.1:9/x"), nil); err != nil {
+		t.Errorf("a loopback redirect stays allowed: %v", err)
+	}
 }
