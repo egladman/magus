@@ -80,18 +80,23 @@ func TestSelfUpdateCmdSignatureCompat(t *testing.T) {
 	var _ func(context.Context, []string) error = selfUpdateCmd //nolint:staticcheck // QF1011: the explicit type is the compile-time signature assertion this test exists for
 }
 
-// TestSelfNounSurvivesNoSelfUpdate is the property narrowing the tag bought:
-// install-shorthand has nothing to do with updating, so it must stay reachable in
-// a build that compiled the updater out, and the usage must not offer `update`
-// where it would only refuse.
+// TestSelfNounSurvivesNoSelfUpdate is the property narrowing the tag bought: a
+// subcommand with nothing to do with updating must stay reachable in a build that
+// compiled the updater out, and the usage must not offer `update` where it would
+// only refuse. A distro-packaged magus, where the package manager owns the binary,
+// still reads data files - so `refresh` disappearing with the updater would leave
+// it reporting `never synced` forever, naming a subcommand it does not have.
+//
+// Properties rather than the exact string: this list grows, and pinning it would
+// fail on every addition without catching anything.
 func TestSelfNounSurvivesNoSelfUpdate(t *testing.T) {
-	if selfUpdateCompiled {
-		if got := selfSubcommands(); got != "update, install-shorthand" {
-			t.Fatalf("selfSubcommands() = %q, want both", got)
+	got := selfSubcommands()
+	for _, want := range []string{"refresh", "registry", "install-shorthand"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("selfSubcommands() = %q, missing %q; it does not depend on the updater", got, want)
 		}
-		return
 	}
-	if got := selfSubcommands(); got != "install-shorthand" {
-		t.Fatalf("selfSubcommands() = %q, want install-shorthand alone", got)
+	if strings.Contains(got, "update") != selfUpdateCompiled {
+		t.Errorf("selfSubcommands() = %q, but selfUpdateCompiled = %v", got, selfUpdateCompiled)
 	}
 }

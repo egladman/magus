@@ -78,6 +78,8 @@ var (
 	Where            = cmd("where")
 	MCPTokenGenerate = cmd("config", "mcp", "token", "generate")
 	SelfUpdate       = cmd("self", "update")
+	SelfRefresh      = cmd("self", "refresh")
+	SelfRegistry     = cmd("self", "registry")
 )
 
 // All is every canonical command referenced in output, for the drift test to
@@ -86,5 +88,5 @@ var All = []Command{
 	Run, QueryOutput, GraphOpen, GraphExport, GraphStats, GraphBuild,
 	ServerStart, ServerStop, ServerJob, Status, Watch, Affected,
 	DescribeTargets, DescribeProject, Ls, LsTargets, Where, MCPTokenGenerate,
-	SelfUpdate,
+	SelfUpdate, SelfRefresh, SelfRegistry,
 }
