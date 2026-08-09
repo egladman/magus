@@ -62,20 +62,27 @@ func TestCatalogInstallsAndVerifiesSkillTree(t *testing.T) {
 	assert.True(t, catalog.CheckStatuses(dir)[0].Stale)
 }
 
-func TestCatalogMaintainsOnlyManagedAgentsSection(t *testing.T) {
+// TestCatalogAgentsBlockIsSelfDelimitedAndStable pins what a developer pastes:
+// exactly one marker pair, a stamp CheckStatuses can grade, and the same bytes
+// on every call so re-running to refresh a stale block produces a clean diff.
+func TestCatalogAgentsBlockIsSelfDelimitedAndStable(t *testing.T) {
 	catalog := testCatalog(t)
-	dir := t.TempDir()
-	path := filepath.Join(dir, "AGENTS.md")
-	require.NoError(t, os.WriteFile(path, []byte("# Local rules\n\nkeep this\n"), 0o644))
-	_, err := catalog.WriteAgentsSection(dir)
-	require.NoError(t, err)
-	_, err = catalog.WriteAgentsSection(dir)
-	require.NoError(t, err)
+	block := catalog.AgentsBlock()
 
-	body, err := os.ReadFile(path)
-	require.NoError(t, err)
-	assert.Contains(t, string(body), "keep this")
-	assert.Equal(t, 1, strings.Count(string(body), "magus:skills:begin"))
+	assert.True(t, strings.HasPrefix(block, "<!-- magus:skills:begin "))
+	assert.True(t, strings.HasSuffix(block, "<!-- magus:skills:end -->\n"))
+	assert.Equal(t, 1, strings.Count(block, "magus:skills:begin"))
+	assert.Contains(t, block, "skill-content: "+catalog.contentDigest)
+	assert.Equal(t, block, catalog.AgentsBlock(), "AgentsBlock must be byte-stable across calls")
+
+	// The block a developer pastes is the block CheckStatuses grades: round-trip
+	// it through a hand-owned AGENTS.md and it must read as current, not stale.
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# Local rules\n\nkeep this\n\n"+block), 0o644))
+	statuses := catalog.CheckStatuses(dir)
+	require.Len(t, statuses, 1)
+	assert.Equal(t, "AGENTS.md", statuses[0].Location)
+	assert.False(t, statuses[0].Stale, statuses[0].Detail)
 }
 
 func TestCatalogSkillTarIsByteStable(t *testing.T) {

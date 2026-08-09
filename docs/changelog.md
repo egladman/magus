@@ -24,6 +24,24 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   to the checker, so a magusfile still calling `vcs\diff` fails at load with a clear
   error, where reusing the name for the new meaning would have silently passed a base ref
   where a path list is expected.
+- **`magus agent install-agents-md` is removed; magus no longer writes your `AGENTS.md`
+  at all.** It managed a marker-delimited block inside the file - creating it when
+  absent, replacing the block in place on re-run, never touching your bytes outside the
+  markers. That is the careful version of an installer appending to your `.bashrc`, and
+  the care is what makes the point rather than excusing it: the file belongs to the
+  developer, merge logic like that is never as careful as it looks, and a re-run leaves
+  bytes nobody wrote in a file nobody can easily audit. Instruct, do not mutate. Nothing
+  replaces the subcommand - `magus agent install` now PRINTS the block on stderr for you
+  to paste, and only when your `AGENTS.md` is missing it or carrying a stale one, so a
+  `--force` reinstall does not dump 80 lines of Markdown at you every time. `magus agent
+  sample` prints the same block inside a whole starter file and is never gated. Reading
+  `AGENTS.md` to grade the pasted block's stamp is untouched: `magus graph verify` still
+  reports it present, absent, or stale per location, because reporting is not writing.
+  Two knock-on effects: `magus agent sample` now emits its magus guidance BETWEEN the
+  begin/end markers rather than unmarked, so a paste from it is gradeable exactly as a
+  paste from install's offer is; and this repo's own `generate` target no longer rewrites
+  `AGENTS.md`, which makes that file plain hand-authored prose instead of a hybrid of
+  prose and generated block.
 
 ### Added
 

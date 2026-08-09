@@ -138,36 +138,87 @@ func TestSkillTarIsReproducibleAndExtracts(t *testing.T) {
 	assert.Equal(t, body, body2, "SkillTar must be byte-stable across calls")
 }
 
-func TestInstallAgentsSectionCreatesReplacesPreserves(t *testing.T) {
+// TestAgentInstallNeverWritesAgentsMD is the regression test for the rule that
+// replaced install-agents-md: AGENTS.md belongs to the developer, so install
+// offers the block on stderr and touches nothing. The existing file coming back
+// byte-identical is the assertion the old marker-merge could never have made.
+func TestAgentInstallNeverWritesAgentsMD(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "AGENTS.md")
-
-	// No AGENTS.md: created holding just the managed section.
-	written, err := agentSkills.WriteAgentsSection(dir)
+	const theirs = "# My agents notes\n\nkeep me\n"
+	require.NoError(t, os.WriteFile(path, []byte(theirs), 0o644))
+	_, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.VariantFull)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"AGENTS.md"}, written)
+
+	before := dirSnapshot(t, dir)
+	out := captureStderr(t, func() {
+		printAgentInstallNextSteps(dir, []string{".claude/skills/magus-query/SKILL.md"}, agent.VariantFull)
+	})
+
+	assert.Contains(t, out, "magus does not write AGENTS.md")
+	assert.Contains(t, out, "<!-- magus:skills:begin")
+	assert.Contains(t, out, "<!-- magus:skills:end -->")
+	assert.Equal(t, before, dirSnapshot(t, dir), "install must not touch AGENTS.md")
 	body, err := os.ReadFile(path)
 	require.NoError(t, err)
-	assert.True(t, strings.HasPrefix(string(body), "# AGENTS.md\n"))
-	assert.Contains(t, string(body), "magus:skills:begin")
-	assert.Contains(t, string(body), "agent-skill-version:")
+	assert.Equal(t, theirs, string(body), "an existing AGENTS.md is left byte-identical")
+}
 
-	// Existing AGENTS.md with other content: section appended, content preserved.
-	require.NoError(t, os.WriteFile(path, []byte("# My agents notes\n\nkeep me\n"), 0o644))
-	_, err = agentSkills.WriteAgentsSection(dir)
-	require.NoError(t, err)
-	body, err = os.ReadFile(path)
-	require.NoError(t, err)
-	assert.Contains(t, string(body), "keep me")
-	assert.Contains(t, string(body), "magus:skills:begin")
+// TestAgentInstallStaysQuietWhenTheBlockIsCurrent keeps the offer actionable:
+// 80 lines of Markdown on every --force reinstall is how a reader learns to
+// scroll past this command's output, including the parts that matter.
+func TestAgentInstallStaysQuietWhenTheBlockIsCurrent(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# Theirs\n\n"+agentSkills.AgentsBlock()), 0o644))
 
-	// Re-install: the section is replaced in place, not duplicated.
-	_, err = agentSkills.WriteAgentsSection(dir)
-	require.NoError(t, err)
-	body, err = os.ReadFile(path)
-	require.NoError(t, err)
-	assert.Equal(t, 1, strings.Count(string(body), "magus:skills:begin"), "re-install must not duplicate the section")
-	assert.Equal(t, 1, strings.Count(string(body), "keep me"))
+	out := captureStderr(t, func() { printAgentsBlockToPaste(dir) })
+	assert.Empty(t, out, "a current block is not reprinted")
+
+	// A stale one is, with the replace-in-place instruction rather than the add-it one.
+	stale := strings.Replace(agentSkills.AgentsBlock(), "skill-content: ", "skill-content: 0", 1)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# Theirs\n\n"+stale), 0o644))
+	out = captureStderr(t, func() { printAgentsBlockToPaste(dir) })
+	assert.Contains(t, out, "older copy")
+	assert.Contains(t, out, "<!-- magus:skills:begin")
+}
+
+// TestAgentSamplePrintsAMarkedBlock keeps the two print paths on one set of
+// bytes: a paste from `sample` must be gradeable by `graph verify` exactly as a
+// paste from install's offer is.
+func TestAgentSamplePrintsAMarkedBlock(t *testing.T) {
+	out := captureStdout(t, func() { require.NoError(t, agentSampleCmd()) })
+	assert.True(t, strings.HasPrefix(out, "# AGENTS.md\n"))
+	assert.Contains(t, out, "## Conventions")
+	assert.Contains(t, out, agentSkills.AgentsBlock())
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte(out), 0o644))
+	statuses := agentSkills.CheckStatuses(dir)
+	require.Len(t, statuses, 1)
+	assert.False(t, statuses[0].Stale, statuses[0].Detail)
+}
+
+// dirSnapshot maps every path under dir to its contents, so a test can assert a
+// command wrote nothing at all rather than only that one known file survived.
+func dirSnapshot(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	require.NoError(t, filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			return err
+		}
+		out[rel] = string(body)
+		return nil
+	}))
+	return out
 }
 
 func TestStampSkillAppendsExactlyOneFooter(t *testing.T) {
@@ -196,8 +247,8 @@ func TestCheckSkillStatusesCurrent(t *testing.T) {
 	dir := t.TempDir()
 	_, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.VariantFull)
 	require.NoError(t, err)
-	_, err = agentSkills.WriteAgentsSection(dir)
-	require.NoError(t, err)
+	// Pasted the way a developer would, since magus no longer writes this file.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# Their notes\n\n"+agentSkills.AgentsBlock()), 0o644))
 
 	statuses := agentSkills.CheckStatuses(dir)
 	require.Len(t, statuses, 2, "one status per installed location")
