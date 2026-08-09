@@ -159,7 +159,7 @@ runs:
     # Everything below only runs when there's no prebuilt binary. This action
     # never installs liblzma-dev/libzstd-dev/pkg-config: the bootstrap build
     # is CGO_ENABLED=0 (see "Build magus from source" below) and never
-    # touches internal/codec's cgo path. A caller whose own downstream step
+    # touches internal/compress's cgo path. A caller whose own downstream step
     # needs a real cgo build - cd.yaml's release-<platform> jobs, ci.yaml's
     # "ci" job - installs those itself. Keying that on installation-strategy
     # would be wrong: it has nothing to do with what the caller does after
@@ -241,7 +241,7 @@ runs:
       shell: bash
       working-directory: ${{ inputs.source-path != '' && inputs.source-path || '.setup-magus-src' }}
       # CGO_ENABLED=0: the bootstrap magus only orchestrates builds (it never needs
-      # internal/codec's cgo xz/zstd fast path), so build it pure-Go. This keeps the
+      # internal/compress's cgo xz/zstd fast path), so build it pure-Go. This keeps the
       # bootstrap off pkg-config/liblzma/libzstd entirely - on Windows the default
       # cgo build otherwise grabs Strawberry Perl's broken pkg-config and fails before
       # the real release-build (which sets up the mingw toolchain) ever runs.

@@ -1,8 +1,10 @@
-// Package codec provides the streaming compression primitives Magus uses for
-// cache artifacts and archives. The compressors have cgo fast paths (libzstd,
+// Package compress provides the streaming compression primitives Magus uses for
+// cache artifacts and archives. Named for what it holds rather than "codec": codec
+// is the umbrella term for JSON, protobuf and bytecode too, and in this repo it
+// already meant JSON until internal/codec/json.go became internal/json. The compressors have cgo fast paths (libzstd,
 // liblzma) selected by build tag, with pure-Go fallbacks so the module builds
 // and runs without a C toolchain.
-package codec
+package compress
 
 import "io"
 

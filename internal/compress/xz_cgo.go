@@ -1,6 +1,6 @@
 //go:build cgo && liblzma && !wasm
 
-package codec
+package compress
 
 // Excluded on wasm even with cgo enabled: a wasm sandbox can't link native
 // liblzma, and TinyGo forces cgo on with a clang that has no host headers for

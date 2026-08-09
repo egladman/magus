@@ -1,6 +1,6 @@
 //go:build cgo && libzstd && !wasm
 
-package codec
+package compress
 
 // Excluded on wasm: see the rationale in xz_cgo.go. The pure-Go fallback
 // (zstd_other.go) covers the wasm playground.

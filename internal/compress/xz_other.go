@@ -1,6 +1,6 @@
 //go:build !cgo || !liblzma || wasm
 
-package codec
+package compress
 
 // The `|| wasm` arm routes the wasm playground here even under cgo: native
 // liblzma can't be linked into a wasm sandbox (see xz_cgo.go).

@@ -561,7 +561,7 @@
             "lint",
             "build",
             "test",
-            "codec-cgo-test",
+            "compress-cgo-test",
             "completion-test",
             "security"
           ]
@@ -590,9 +590,9 @@
           ]
         },
         {
-          "name": "codec-cgo-test",
-          "declared": "codec_cgo_test",
-          "doc": "Runs internal/codec's tests against the CGO codecs, which the ordinary test target cannot reach.",
+          "name": "compress-cgo-test",
+          "declared": "compress_cgo_test",
+          "doc": "Runs internal/compress's tests against the CGO codecs, which the ordinary test target cannot reach.",
           "spells": [
             {
               "spell": "go",
@@ -604,7 +604,7 @@
           "reads_files": [
             {
               "project": ".",
-              "glob": "internal/codec/*.go"
+              "glob": "internal/compress/*.go"
             }
           ],
           "exec_overrides": [

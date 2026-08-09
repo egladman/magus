@@ -1149,7 +1149,7 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     // for the charm that happens to set them. A build tag describes what a FILE links, so
     // it stays meaningful to anyone running `go build` directly, and keeping them separate
     // means a host with only one of the two libraries can still take that one fast path.
-    // internal/codec's
+    // internal/compress's
     // cgo path declares `#cgo pkg-config: liblzma` and `libzstd`, and CGO_ENABLED defaults
     // to 1 wherever a C compiler exists - so gating that path on `cgo` alone made
     // `go install github.com/egladman/magus/cmd/magus@latest` fail on any machine without
@@ -1713,7 +1713,7 @@ export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate);
 
 // Runs the CI gates through their declared dependencies.
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(lint, build, test, codec_cgo_test, completion_test, security);
+    ctx.needs(lint, build, test, compress_cgo_test, completion_test, security);
 }
 
 // Exercises the completion scripts magus SHIPS, each inside the official image for its
@@ -1756,13 +1756,13 @@ export fun completion_test(ctx: magus\Context, args: [str]) > void {
     }
 }
 
-// Runs internal/codec's tests against the CGO codecs, which the ordinary test target
+// Runs internal/compress's tests against the CGO codecs, which the ordinary test target
 // cannot reach.
 //
 // `go-test` runs with no build tags, so it compiles zstd_other.go and xz_other.go and
 // never the ~470 lines of zstd_cgo.go and xz_cgo.go - which are exactly the files a
 // release binary ships (`release-build` passes -tags liblzma,libzstd). The coverage
-// figure hid it: internal/codec read 78.9% while the shipped half was at zero.
+// figure hid it: internal/compress read 78.9% while the shipped half was at zero.
 //
 // That gap cost real correctness. The cgo zstd reader discarded ZSTD_decompressStream's
 // hint, so a stream cut mid-frame returned io.EOF with a NIL error - 393216 of 1200000
@@ -1776,14 +1776,14 @@ export fun completion_test(ctx: magus\Context, args: [str]) > void {
 // is how the untested half got there. CI already installs liblzma-dev and libzstd-dev,
 // and both cgo files declare `#cgo pkg-config:` on them, so a host that cannot build
 // this cannot build a release either.
-export fun codec_cgo_test(ctx: magus\Context, args: [str]) > void {
+export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void {
     // Narrow on purpose: affected reaches this only when the codecs or their tests move.
-    ctx.readsFiles("internal/codec/*.go");
+    ctx.readsFiles("internal/compress/*.go");
     foreach (lib in ["libzstd", "liblzma"]) {
         os\exec("pkg-config", ["--exists", lib], ".", {});
     }
     go["go-test"](ctx.withEnv({"CGO_ENABLED": "1"}),
-        {"args": ["-tags", "liblzma,libzstd", "./internal/codec/"]});
+        {"args": ["-tags", "liblzma,libzstd", "./internal/compress/"]});
 }
 
 // Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix

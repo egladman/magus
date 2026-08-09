@@ -271,3 +271,70 @@ func TestRuntimeRecordsWithoutRetryingWhenNotOptedIn(t *testing.T) {
 	// nothing else.
 	assert.True(t, NewRuntime(h, "", DefaultConfig(), nil, true).Decide("svc/api", "go/test", true).Retry)
 }
+
+// Recording an outcome must feed the DURATION model, not only the volatility counters.
+// This is the wiring that was missing: run.go measured a real duration into
+// Outcome.DurationMs and nothing read it, so the shard forecaster predicted
+// DefaultDurationMs for every project forever and LPT packed uniform weights.
+func TestRecordOutcomeFeedsTheDurationModel(t *testing.T) {
+	h := forecast.History{}
+	rt := NewRuntime(&h, "", Config{Enabled: true, MinSamples: 2}, nil, false)
+	at := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+
+	for i, ms := range []int64{1000, 2000, 3000} {
+		rt.Record("libs/foo", "test", forecast.Outcome{
+			Result: "pass", DurationMs: ms, At: at.Add(time.Duration(i) * time.Minute),
+		})
+	}
+
+	st := h.Projects["libs/foo"]["test"]
+	if st.Samples != 3 {
+		t.Fatalf("Samples = %d, want 3: the predictor's tier-3 gate needs >= 3", st.Samples)
+	}
+	if st.P75Ms <= 0 {
+		t.Fatalf("P75Ms = %d, want a measured percentile", st.P75Ms)
+	}
+	// And the prediction stops being the hardcoded default.
+	if got := h.PredictDuration("libs/foo", "test", nil); got == time.Duration(forecast.DefaultDurationMs)*time.Millisecond {
+		t.Fatalf("PredictDuration returned the default %v; the recorded durations were not read", got)
+	}
+}
+
+// A run that reported no duration is not a sample. Folding a zero in would drag the
+// percentile toward zero and make a heavy target look cheap to the shard planner.
+func TestRecordOutcomeIgnoresAnUnmeasuredRun(t *testing.T) {
+	h := forecast.History{}
+	rt := NewRuntime(&h, "", Config{Enabled: true}, nil, false)
+	rt.Record("libs/foo", "test", forecast.Outcome{Result: "fail", DurationMs: 0, At: time.Now()})
+
+	st := h.Projects["libs/foo"]["test"]
+	if st.Samples != 0 || st.P75Ms != 0 {
+		t.Fatalf("Samples=%d P75Ms=%d, want an unmeasured run to contribute neither", st.Samples, st.P75Ms)
+	}
+	if st.FailCount != 1 {
+		t.Fatalf("FailCount = %d, want the volatility counter still updated", st.FailCount)
+	}
+}
+
+// Merge resolves collisions on LastUpdated, which recordOutcome never set - so every
+// shard's entry compared equal and merge-history kept whichever file it read first,
+// silently discarding the rest of the run.
+func TestMergeKeepsTheNewerShardsOutcomes(t *testing.T) {
+	at := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+	build := func(ms int64, when time.Time) *forecast.History {
+		h := &forecast.History{}
+		rt := NewRuntime(h, "", Config{Enabled: true}, nil, false)
+		rt.Record("libs/foo", "test", forecast.Outcome{Result: "pass", DurationMs: ms, At: when})
+		return h
+	}
+	older, newer := build(1000, at), build(9000, at.Add(time.Hour))
+
+	older.Merge(newer)
+	got := older.Projects["libs/foo"]["test"]
+	if got.P75Ms != 9000 {
+		t.Fatalf("P75Ms = %d, want 9000: the newer shard's outcome was discarded", got.P75Ms)
+	}
+	if !got.LastUpdated.Equal(at.Add(time.Hour)) {
+		t.Fatalf("LastUpdated = %v, want the newer shard's timestamp", got.LastUpdated)
+	}
+}

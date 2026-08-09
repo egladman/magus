@@ -16340,16 +16340,6 @@
       }
     },
     {
-      "id": "function:magusfile.buzz:codec_cgo_test",
-      "kind": "function",
-      "label": "codec_cgo_test",
-      "doc": "Runs internal/codec's tests against the CGO codecs, which the ordinary test target cannot reach.  `go-test` runs with no build tags, so it compiles zstd_other.go and xz_other.go and never the ~470 lines of zstd_cgo.go and xz_cgo.go - which are exactly the files a release binary ships (`release-build` passes -tags liblzma,libzstd). The coverage figure hid it: internal/codec read 78.9% while the shipped half was at zero.  That gap cost real correctness. The cgo zstd reader discarded ZSTD_decompressStream's hi",
-      "source": "magusfile.buzz:1779",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
       "id": "function:magusfile.buzz:commit",
       "kind": "function",
       "label": "commit",
@@ -16362,6 +16352,16 @@
       "label": "completion_test",
       "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell. Part of ci, and it REQUIRES a docker daemon rather than skipping without one: a gate that silently skips when a tool is missing is how the zsh recipe stayed broken - it told users to append a script to ~/.zshrc that registers nothing, and nothing ever ran it to find out. Its declared footprint keeps the cost off every run: affected only reaches it when the completion scripts or their checks change.  One image per she",
       "source": "magusfile.buzz:1736",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:magusfile.buzz:compress_cgo_test",
+      "kind": "function",
+      "label": "compress_cgo_test",
+      "doc": "Runs internal/compress's tests against the CGO codecs, which the ordinary test target cannot reach.  `go-test` runs with no build tags, so it compiles zstd_other.go and xz_other.go and never the ~470 lines of zstd_cgo.go and xz_cgo.go - which are exactly the files a release binary ships (`release-build` passes -tags liblzma,libzstd). The coverage figure hid it: internal/compress read 78.9% while the shipped half was at zero.  That gap cost real correctness. The cgo zstd reader discarded ZSTD_decompressStrea",
+      "source": "magusfile.buzz:1779",
       "attrs": {
         "exported": "true"
       }
@@ -22163,17 +22163,6 @@
       }
     },
     {
-      "id": "target:.:codec-cgo-test",
-      "kind": "target",
-      "label": "codec-cgo-test",
-      "doc": "Runs internal/codec's tests against the CGO codecs, which the ordinary test target cannot reach.",
-      "source": ".",
-      "attrs": {
-        "declared_as": "codec_cgo_test",
-        "engine": "buzz"
-      }
-    },
-    {
       "id": "target:.:completion-test",
       "kind": "target",
       "label": "completion-test",
@@ -22181,6 +22170,17 @@
       "source": ".",
       "attrs": {
         "declared_as": "completion_test",
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:.:compress-cgo-test",
+      "kind": "target",
+      "label": "compress-cgo-test",
+      "doc": "Runs internal/compress's tests against the CGO codecs, which the ordinary test target cannot reach.",
+      "source": ".",
+      "attrs": {
+        "declared_as": "compress_cgo_test",
         "engine": "buzz"
       }
     },
@@ -53078,14 +53078,6 @@
     },
     {
       "source": "file:magusfile.buzz",
-      "target": "function:magusfile.buzz:codec_cgo_test",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "magusfile.buzz"
-    },
-    {
-      "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:commit",
       "relation": "contains",
       "confidence": "extracted",
@@ -53095,6 +53087,14 @@
     {
       "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:completion_test",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "file:magusfile.buzz",
+      "target": "function:magusfile.buzz:compress_cgo_test",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -64628,7 +64628,7 @@
     },
     {
       "source": "project:.",
-      "target": "target:.:codec-cgo-test",
+      "target": "target:.:completion-test",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -64636,7 +64636,7 @@
     },
     {
       "source": "project:.",
-      "target": "target:.:completion-test",
+      "target": "target:.:compress-cgo-test",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -66368,7 +66368,7 @@
     },
     {
       "source": "target:.:ci",
-      "target": "target:.:codec-cgo-test",
+      "target": "target:.:completion-test",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
@@ -66376,7 +66376,7 @@
     },
     {
       "source": "target:.:ci",
-      "target": "target:.:completion-test",
+      "target": "target:.:compress-cgo-test",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
@@ -66407,22 +66407,6 @@
       "provenance": "."
     },
     {
-      "source": "target:.:codec-cgo-test",
-      "target": "op:go:go-test",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:codec-cgo-test",
-      "target": "spell:go",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
       "source": "target:.:completion-test",
       "target": "op:docker:docker-run",
       "relation": "uses",
@@ -66433,6 +66417,22 @@
     {
       "source": "target:.:completion-test",
       "target": "spell:docker",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:compress-cgo-test",
+      "target": "op:go:go-test",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:compress-cgo-test",
+      "target": "spell:go",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
