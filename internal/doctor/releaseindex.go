@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/registry"
 	"github.com/egladman/magus/types"
 )
 
@@ -96,5 +98,58 @@ func roughly(d time.Duration) string {
 		return fmt.Sprintf("%d hours", int(d.Hours()))
 	default:
 		return "under an hour"
+	}
+}
+
+// checkRegistryFreshness is where staleness prompts, deliberately instead of a
+// note appended to a correct answer. A row that reads `2028-04-30 (41d)` has
+// already told the truth, and 41 days of drift changes nothing the reader is doing
+// this minute - so a nag there is one they learn to filter, which teaches them to
+// filter the never-synced hint too.
+//
+// The Fix is what makes it actionable without anyone having heard of the command:
+// `magus doctor --fix` runs it.
+func (r *runner) checkRegistryFreshness() types.DoctorCheck {
+	const name = "registry"
+
+	cached, err := registry.Load()
+	if err != nil {
+		return types.DoctorCheck{Name: name, Status: types.DoctorFail, Message: err.Error()}
+	}
+	if len(cached) == 0 {
+		// Nothing configured, or every source declined. Both are settled positions,
+		// and telling someone who opted out to sync is the nag this design avoids.
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no sources configured"}
+	}
+
+	var never, stale []string
+	for _, c := range cached {
+		switch c.State {
+		case registry.StateNeverSynced:
+			never = append(never, c.Source.Name)
+		case registry.StateStale:
+			stale = append(stale, fmt.Sprintf("%s (%s old)", c.Source.Name, roughly(c.Age)))
+		}
+	}
+	switch {
+	case len(never) > 0:
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorAdvice,
+			Message: fmt.Sprintf("never synced: %s", strings.Join(never, ", ")),
+			Details: []string{"this fetches a data file; it does not upgrade magus"},
+			Fix:     []string{"self", "refresh"},
+		}
+	case len(stale) > 0:
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorAdvice,
+			Message: fmt.Sprintf("data is older than its window: %s", strings.Join(stale, ", ")),
+			Details: []string{"age is measured from the publisher's generated_at, so this may mean the publisher stopped"},
+			Fix:     []string{"self", "refresh"},
+		}
+	default:
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorOK,
+			Message: fmt.Sprintf("%d source(s), all fresh", len(cached)),
+		}
 	}
 }

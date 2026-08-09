@@ -63,6 +63,35 @@ func UserStateDir() (string, error) {
 	return filepath.Join(home, ".local", "state"), nil
 }
 
+// UserCacheDir returns the base directory for magus's user-global CACHE:
+// data magus fetched and can fetch again. The distinction from state is what
+// deleting it costs - losing state loses history nothing can rebuild, losing
+// cache costs a download.
+//
+// Separate from the workspace's .magus/ deliberately. That directory is
+// documented as safe to delete, it is per-worktree (this repo runs dozens), and a
+// signed remote snapshot is the one thing in it that no local command could
+// regenerate - `magus clean --cache` on a disconnected machine would leave a hole
+// only a human carrying a file could fill.
+//
+// It honors XDG_CACHE_HOME on every platform, falling back to %LocalAppData% on
+// Windows and ~/.cache elsewhere (the XDG Base Directory default).
+func UserCacheDir() (string, error) {
+	if x := os.Getenv("XDG_CACHE_HOME"); x != "" && filepath.IsAbs(x) {
+		return x, nil
+	}
+	if runtime.GOOS == "windows" {
+		if lad := os.Getenv("LocalAppData"); lad != "" {
+			return lad, nil
+		}
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".cache"), nil
+}
+
 // EnvPrefix is the lowercase env-var prefix; Cache.Dir → MAGUS_CACHE_DIR.
 const EnvPrefix = "magus"
 
