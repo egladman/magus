@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2532,
-  "edge_count": 5776,
+  "node_count": 2531,
+  "edge_count": 5773,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -7889,7 +7889,7 @@
       "kind": "function",
       "label": "abandonedLinkCheck",
       "doc": "abandonedLinkCheck is the parity gate: every URL the site has shipped before (recorded in URL_LOCK) must still resolve, so a renamed or deleted page can't silently start 404-ing on inbound links and bookmarks. To retire a URL on purpose, either add a redirect (frontmatter `aliases:`, whose stub keeps the old URL resolving) or list it in retired.urls.lock. Runs every render; the lock only grows (updateUrlLock, under the rw charm).",
-      "source": "docs/engine/gates.buzz:402",
+      "source": "docs/engine/gates.buzz:407",
       "attrs": {
         "exported": "true"
       }
@@ -7948,21 +7948,21 @@
       "kind": "function",
       "label": "collectFindings",
       "doc": "collectFindings runs both halves over one file and sorts what they report into the tier that throws and the tier that prints.",
-      "source": "docs/engine/gates.buzz:525"
+      "source": "docs/engine/gates.buzz:530"
     },
     {
       "id": "function:docs/engine/gates.buzz:collectMarkdown",
       "kind": "function",
       "label": "collectMarkdown",
       "doc": "collectMarkdown appends every .md file under dir (recursively) to acc, as a path relative to the walk root.",
-      "source": "docs/engine/gates.buzz:446"
+      "source": "docs/engine/gates.buzz:451"
     },
     {
       "id": "function:docs/engine/gates.buzz:conventionsCheck",
       "kind": "function",
       "label": "conventionsCheck",
       "doc": "conventionsCheck holds the docs corpus to the conventions page it ships. It runs from `lint`, NOT from the render, on purpose: a prose nit must not fail `build`. A gate that fails the wrong target teaches people that the failing target is unreliable, and the next real breakage in it gets waved through.  Two tiers, the same split assetIntegrityCheck and axisReport already draw here:  THROWS on the objective rules. A `$ ` prompt in a command block and a pinned version standing in for example output are facts",
-      "source": "docs/engine/gates.buzz:484",
+      "source": "docs/engine/gates.buzz:489",
       "attrs": {
         "exported": "true"
       }
@@ -7971,7 +7971,7 @@
       "id": "function:docs/engine/gates.buzz:lintSkipDir",
       "kind": "function",
       "label": "lintSkipDir",
-      "source": "docs/engine/gates.buzz:437"
+      "source": "docs/engine/gates.buzz:442"
     },
     {
       "id": "function:docs/engine/gates.buzz:loadMeta",
@@ -7998,7 +7998,7 @@
       "kind": "function",
       "label": "pageKey",
       "doc": "pageKey normalizes a scanReferencesInHTML result (a gen-root-relative path with no trailing slash - \"spells/go\", \"index.html\", \"assets/x.png\") to a page key: \"\" for the home page, else the directory that holds the page's index.html. Asset paths pass through unchanged and simply never match a real page key.",
-      "source": "docs/engine/gates.buzz:366",
+      "source": "docs/engine/gates.buzz:371",
       "attrs": {
         "exported": "true"
       }
@@ -8008,7 +8008,7 @@
       "kind": "function",
       "label": "pathExists",
       "doc": "pathExists is the one filesystem question the conventions lint asks.",
-      "source": "docs/engine/gates.buzz:462"
+      "source": "docs/engine/gates.buzz:467"
     },
     {
       "id": "function:docs/engine/gates.buzz:pruneStaleOutputs",
@@ -8025,7 +8025,7 @@
       "kind": "function",
       "label": "readURLSet",
       "doc": "readURLSet reads a newline-delimited URL file into a set, skipping blanks and \"#\" comments. Missing file -> empty set (the bootstrap case for URL_LOCK).",
-      "source": "docs/engine/gates.buzz:383",
+      "source": "docs/engine/gates.buzz:388",
       "attrs": {
         "exported": "true"
       }
@@ -8045,7 +8045,7 @@
       "kind": "function",
       "label": "updateUrlLock",
       "doc": "updateUrlLock folds this build's URLs into URL_LOCK and rewrites it sorted. It only adds - a URL that drops out of the build stays in the ledger so the gate keeps demanding a redirect or an explicit retirement for it. Called under the rw charm so a plain (checking) render never mutates the tree.",
-      "source": "docs/engine/gates.buzz:421",
+      "source": "docs/engine/gates.buzz:426",
       "attrs": {
         "exported": "true"
       }
@@ -8065,7 +8065,7 @@
       "kind": "function",
       "label": "writeSiteManifest",
       "doc": "writeSiteManifest emits gen/site-manifest.sha256: one \"<sha256>  <path>\\n\" line (standard sha256sum(1) format, so `sha256sum -c` verifies it directly) per file shipped under gen/, repo-relative, sorted. Called from generate() AFTER generateJsBundles(), not from site_render(), because generateJsBundles() writes gen/assets/mermaid.js and hljs.js (served assets) only after site_render() returns - computing the manifest earlier would omit them. Excludes its own output path (a file cannot hash itself).",
-      "source": "docs/engine/gates.buzz:350",
+      "source": "docs/engine/gates.buzz:355",
       "attrs": {
         "exported": "true"
       }
@@ -9765,24 +9765,17 @@
       "kind": "function",
       "label": "loadReleases",
       "doc": "loadReleases builds site.releases, newest-first.  TAGS ARE THE SPINE. A release exists because someone tagged it, so the version list and its dates come from vcs\\tags(\"v*\"); the glob keeps release tags and skips namespaced ones (backup/x, pre-rebase-main), whose wildcards stop at \"/\".  releases/v*.yaml is ENRICHMENT layered on top, carrying the two things a tag cannot know: the changelog prose the Atom feed renders, and the artifact name/platform/size/sha256 that gen/public/release/index.json publishes for",
-      "source": "docs/site/public.buzz:43",
+      "source": "docs/site/public.buzz:42",
       "attrs": {
         "exported": "true"
       }
-    },
-    {
-      "id": "function:docs/site/public.buzz:releaseIndexJSON",
-      "kind": "function",
-      "label": "releaseIndexJSON",
-      "doc": "releaseIndexJSON builds gen/public/release/index.json - the machine-readable manifest `magus self update` fetches (and Go signs into index.json.sig). Carries only what a consumer reads: schema_version, and per release the version, optional yanked flag, and artifacts (name/platform/size/sha256). The changelog prose (notes/body) is deliberately excluded - nothing reads it here; it ships in the Atom feed and each release YAML. jsonEncode (not hand-rolled concat) sorts keys deterministically for byte-stability",
-      "source": "docs/site/public.buzz:150"
     },
     {
       "id": "function:docs/site/public.buzz:renderPublic",
       "kind": "function",
       "label": "renderPublic",
       "doc": "renderPublic writes /public/ - one ordinary page listing the machine-readable endpoints this site serves. It used to be four nested Apache-mod_autoindex listings (public/, public/atom/, public/release/, public/release/<ver>/) whose columns promised more than the site delivers: the per-version pages tabulated artifact names, sizes, and checksums for files that are hosted on GitHub and were never served from here, so each one rendered a directory listing of an empty directory. Releases now link to the GitHub",
-      "source": "docs/site/public.buzz:178",
+      "source": "docs/site/public.buzz:167",
       "attrs": {
         "exported": "true"
       }
@@ -43814,26 +43807,10 @@
     },
     {
       "source": "file:docs/site/public.buzz",
-      "target": "function:docs/site/public.buzz:releaseIndexJSON",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/site/public.buzz"
-    },
-    {
-      "source": "file:docs/site/public.buzz",
       "target": "function:docs/site/public.buzz:renderPublic",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/site/public.buzz"
-    },
-    {
-      "source": "file:docs/site/public.buzz",
-      "target": "import:assert",
-      "relation": "imports",
-      "confidence": "inferred",
-      "score": 0.7,
       "provenance": "docs/site/public.buzz"
     },
     {
@@ -58267,14 +58244,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/site/development.buzz"
-    },
-    {
-      "source": "function:docs/site/public.buzz:renderPublic",
-      "target": "function:docs/site/public.buzz:releaseIndexJSON",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/site/public.buzz"
     },
     {
       "source": "function:docs/site/release.buzz:sortNamesSemverDesc",

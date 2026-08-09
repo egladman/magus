@@ -399,6 +399,13 @@ can verify later releases signed by the replacement key. Then move the
 releases with it. Update every public-key copy above in the same change, run
 the trust-anchor test, and dry-run the installer before publishing.
 
+The served release index is signed with the same key, so a rotation strands
+`magus self update` until it is re-signed: `docs/gen/public/release/index.json.sig`
+still carries the old key's signature, which the replacement binary rejects. Run
+the Release index workflow after moving the secret. It is manual for this reason -
+the moments the index has to change without a version being cut are a rotation, a
+corrected manifest, and a yank.
+
 A compromised key cannot be revoked from binaries that already trust it: those
 binaries cannot distinguish a legitimate replacement from an attacker-signed
 one. Treat that as an incident: stop using the compromised signing secret,

@@ -297,7 +297,8 @@ jobs:
       - release-windows
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # create the GitHub Release and upload assets
+      contents: write        # create the GitHub Release, upload assets, push the index branch
+      pull-requests: write   # open the pull request carrying the signed release index
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
@@ -358,6 +359,32 @@ jobs:
             dist/SHA256SUMS
             dist/SHA256SUMS.sig
           generate_release_notes: true
+
+      # The two steps below are what `magus self update` needs and the GitHub Release
+      # does not supply. Neither ran until now: `cut` and `release-index` were written,
+      # tested, and called by nothing, so v0.3.0 shipped with no releases/v0.3.0.yaml
+      # and the site served an index.json whose signature 404ed - self update exited 1
+      # on every platform for every user.
+      #
+      # They run AFTER the release is created on purpose. The binaries are what a tag
+      # is for; a failure to publish the update index must not withhold them.
+      #
+      # cut moves the CHANGELOG's [Unreleased] section into the manifest and empties it,
+      # then generate-changelog folds the new version back in - the repo's CHANGELOG.md
+      # is generated from releases/*.yaml, so both halves have to happen here or the
+      # next drift gate on main fails.
+      - name: Cut the release manifest
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          go run ./cmd/magus-utils cut -version "$TAG" -artifacts ./dist -changelog ./CHANGELOG.md -out ./releases
+          go run ./cmd/magus-utils generate-changelog -releases ./releases -changelog ./CHANGELOG.md
+
+      - uses: ./.github/actions/release-index
+        with:
+          signing-key: ${{ secrets.MAGUS_SIGNING_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          reason: the ${{ github.ref_name }} release
 
   image:
     name: Publish container images

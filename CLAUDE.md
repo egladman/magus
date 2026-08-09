@@ -118,17 +118,23 @@ Flag placement matters when forwarding: magus flags go BEFORE `--`.
 `magus run go::go-test . --silent -- ./internal/foo/` works; putting `--silent`
 after `--` forwards it to the test binary, which rejects it.
 
-Four workflows, one trigger each, and the name says which:
+Five workflows, one trigger each, and the name says which:
 
 | File | Runs on | Ships |
 | --- | --- | --- |
 | `ci.yaml` | pull request, and main push | nothing |
 | `cd.yaml` | main push | docs site (Pages), per-commit container image (GHCR) |
 | `release.yaml` | `v*` tag | binaries and release images |
+| `release-index.yaml` | manual | a PR carrying the signed `public/release/index.json` pair |
 | `nightly.yaml` | cron 05:17 UTC, manual | nothing |
 
 ci also runs on a main push, and that is not a publish step: the push run is what
 populates the shared cache and the run history a pull request may only read.
+
+release-index.yaml and release.yaml's tail both call `.github/actions/release-index`,
+and they are the only two things that read `MAGUS_SIGNING_KEY` besides `release-sign`.
+Neither pushes to main - the ruleset requires a pull request and bypasses only for the
+admin role - so each opens one instead, and merging it is what publishes the index.
 
 `setup-magus` is called two ways, on purpose:
 
