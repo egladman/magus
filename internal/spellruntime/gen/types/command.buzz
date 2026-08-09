@@ -11,4 +11,5 @@ export object Command {
     charms: {str: Charm} = {},
     capture: bool = false,
     secrets: {str: str} = {},
+    hints: [Hint] = [],
 }

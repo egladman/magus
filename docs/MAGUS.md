@@ -48,13 +48,13 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | project | 10+ | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
 | target | 100+ | `magus query kind:target` | `content-generate`, `site-generate`, `generate` |
 | spell | 10+ | `magus query kind:spell` | `go`, `markdown`, `typescript` |
-| op | 50+ | `magus query kind:op` | `go-build`, `go-test`, `go-fmt` |
+| op | 60+ | `magus query kind:op` | `go-build`, `go-test`, `go-fmt` |
 | tool | 10+ | `magus query kind:tool` | `sh`, `go`, `pnpm` |
 | charm | 10+ | `magus query kind:charm` | `rw`, `cd`, `stable` |
 | module | 20+ | `magus query kind:module` | `fs`, `charm`, `magus` |
 | method | 100+ | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 60+ | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS1022` |
-| doc | 200+ | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/concepts/spells.md` |
+| doc | 200+ | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 100+ | `magus query kind:dir` | `docs/reference/codes/magusfile`, `libs/gopherbuzz/examples/bubblegum`, `docs/concepts` |
 | file | 200+ | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
 | function | 1000+ | `magus query kind:function` | `sel`, `sendObject`, `send` |

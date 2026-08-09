@@ -157,6 +157,9 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 					if name, ok := charmCall(e); ok {
 						node.Charms = appendUniq(node.Charms, name)
 					}
+					if secretReadCall(e) {
+						node.ReadsSecrets = true
+					}
 					// Per-target cache footprint: ctx.readsFiles(...) / ctx.writesFiles(...).
 					// Every argument must be a string literal; a non-literal one is not
 					// collected, so len(globs) < len(args) means the call had a computed
@@ -545,6 +548,27 @@ func crossFileArg(arg ast.Node, aliases map[string]string) (types.InputRef, bool
 // charm visible to the static charm inventory (the charm/target-collision and
 // has_charm-typo doctor checks). Unlike needs/inputs/outputs, has_charm keeps its global
 // form, so both spellings must be scanned.
+// secretReadCall reports whether e is `magus\secret.read(...)`. Matched structurally rather
+// than by rendered text so an aliased import or stray whitespace cannot hide it.
+//
+// The shape is a member access on a NAMESPACED member: magus\secret is the namespace access,
+// .read hangs off it. Only the direct call is recognized - a read behind a helper the static
+// walk cannot reach is invisible here, exactly like an unreached ctx.readsFiles (MGS1004), and
+// under-reports rather than over-reports. That is the right direction for a check whose
+// remedy is to opt a target OUT of the cache.
+func secretReadCall(e *ast.CallExpr) bool {
+	me, ok := e.Callee.(*ast.MemberExpr)
+	if !ok || me.Name != "read" {
+		return false
+	}
+	ns, ok := me.Object.(*ast.MemberExpr)
+	if !ok || !ns.Namespaced || ns.Name != "secret" {
+		return false
+	}
+	id, ok := ns.Object.(*ast.IdentExpr)
+	return ok && id.Name == "magus"
+}
+
 func charmCall(e *ast.CallExpr) (string, bool) {
 	me, ok := e.Callee.(*ast.MemberExpr)
 	if !ok || me.Name != "has_charm" {

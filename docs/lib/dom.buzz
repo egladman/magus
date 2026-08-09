@@ -33,3 +33,16 @@ test "attr escapes and el/voidEl wrap" {
     assert\equal(voidEl("meta", attr("charset", "utf-8")), "<meta charset=\"utf-8\">", "void element");
     assert\equal(esc("<a & b>"), "&lt;a &amp; b&gt;", "text escape");
 }
+
+// EVERY occurrence. The fixture above has exactly one of each character, which is the
+// shape that hid a real defect: str.replace substituted only the FIRST match until
+// 2026-08-09, so this escaper encoded the first ampersand of a fragment and left the
+// rest raw. Repetition is the axis that catches it, not character coverage.
+test "esc and attr escape EVERY occurrence, not just the first" {
+    assert\equal(esc("&a&b&"), "&amp;a&amp;b&amp;", "ampersands at both edges and between");
+    assert\equal(esc("<a><b>"), "&lt;a&gt;&lt;b&gt;", "repeated angle brackets");
+    assert\equal(esc("&&"), "&amp;&amp;", "adjacent ampersands");
+    // Ampersand first, so the & introduced by &lt;/&gt; is never rescanned.
+    assert\equal(esc("<&>"), "&lt;&amp;&gt;", "no double-encoding of introduced entities");
+    assert\equal(attr("id", "a&b&c"), " id=\"a&amp;b&amp;c\"", "attribute values too");
+}

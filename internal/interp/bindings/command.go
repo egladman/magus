@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
 
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/service/identity"
@@ -102,7 +104,119 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 			return run.ExecResult{}, serr
 		}
 	}
-	return execCommand(ctx, dir, tgt.Bin, args, opts.env, opts.stdin, tgt.Capture)
+	// Failure advice tees a bounded TAIL of each stream so a non-zero exit can be
+	// classified into a next step. Teeing rather than capturing keeps the tool's output
+	// streaming live, which is the whole point of a non-capture op; the cost is paid only
+	// by an op that actually declares hints.
+	//
+	// ONE TAIL PER STREAM, deliberately. os/exec drives stdout and stderr with a copy
+	// goroutine each, so a shared buffer would hold an arbitrary interleaving of two
+	// documents that never existed as one - splitting a real message with a chunk of the
+	// other stream, or abutting two chunks into a substring that appeared in neither. A
+	// shared buffer would also make the two compete for one budget, so stdout progress
+	// chatter could evict the stderr error the advice exists to catch.
+	//
+	// The tail is FIRST in each MultiWriter: it cannot fail, and MultiWriter aborts on the
+	// first error, so putting the real stream first would let a broken pipe silently stop
+	// feeding the classifier.
+	var outTail, errTail *outputTail
+	if len(tgt.Hints) > 0 {
+		outTail, errTail = newOutputTail(hintTailBytes), newOutputTail(hintTailBytes)
+		stdout, stderr := run.OutputWriters(ctx)
+		ctx = run.WithOutputWriters(ctx, io.MultiWriter(outTail, stdout), io.MultiWriter(errTail, stderr))
+	}
+	res, err := execCommand(ctx, dir, tgt.Bin, args, opts.env, opts.stdin, tgt.Capture)
+	// A REAL failure only: the process started and exited non-zero, and nothing cancelled
+	// it. run.Exec joins ctx.Err() into its error, so gating on err alone would advise a
+	// user who pressed Ctrl-C to go and authenticate, diagnosing a failure that never
+	// happened.
+	if outTail != nil && res.Started && res.Code != 0 && ctx.Err() == nil {
+		// Each stream is matched on its own; see the tee comment above. res.Stdout/Stderr
+		// are deliberately NOT consulted - a capturing op streams through these same tees
+		// (run.Exec buffers on top of the writers rather than instead of them), so reading
+		// the result too would only add a duplicate and an unbounded copy of the whole log.
+		if advice := adviceFor(tgt.Hints, outTail.String(), errTail.String()); advice != "" {
+			// Through the run's own stderr writer, not os.Stderr. That writer is the tap
+			// that mirrors into the persisted log and the output ref, so advice printed
+			// around it is invisible to exactly the reader it is for - someone reading a
+			// CI failure after the fact. It also keeps the advice attributed and ordered
+			// with the target's own output when several projects run at once.
+			_, stderr := run.OutputWriters(ctx)
+			interactive.Emit(stderr, advice)
+		}
+	}
+	return res, err
+}
+
+// hintTailBytes bounds the output kept per stream for classification. A tool's failure
+// explanation is the last thing it prints, and holding a whole build log in memory to
+// classify one exit code is the wrong trade - so this keeps the tail and forgets the rest.
+const hintTailBytes = 8 << 10
+
+// adviceFor returns the Advise of the first declared hint whose Contains appears in any of
+// sources, or "" when none matches. Declaration order is the precedence, so a spell author
+// orders specific before general and reads the outcome off the file rather than guessing at
+// a scoring rule.
+//
+// Sources are matched INDEPENDENTLY rather than joined: a Contains spanning the seam of two
+// separate streams would fire on text that appeared in neither of them.
+func adviceFor(hints []spells.Hint, sources ...string) string {
+	for _, h := range hints {
+		// An empty Contains matches every string, so it would advise on every failure of
+		// this command. decodeCommand rejects that, which covers every spell-authored
+		// value; this guards one built in Go, where nothing does.
+		if h.Contains == "" || h.Advise == "" {
+			continue
+		}
+		for _, src := range sources {
+			if strings.Contains(src, h.Contains) {
+				return h.Advise
+			}
+		}
+	}
+	return ""
+}
+
+// outputTail keeps the LAST limit bytes written to it and discards the rest.
+//
+// It is written from a subprocess copy goroutine, so Write must never fail: it drops old
+// bytes rather than growing, and reports every write as fully accepted so the MultiWriter
+// it sits in never short-circuits the real output stream on its account.
+//
+// The bytes it holds are pre-redaction - the capture tap redacts inside its own Write, and
+// MultiWriter hands each writer the same original slice. Nothing here is ever printed (only
+// the spell author's own Advise text is), and the buffer dies with the call, but it is a
+// window where resolved secrets exist outside the redaction boundary and that is worth
+// knowing before anything is added that surfaces it.
+type outputTail struct {
+	mu    sync.Mutex
+	buf   []byte
+	limit int
+}
+
+// newOutputTail returns a tail bounded to limit bytes. A zero limit would make Write
+// discard everything and advice silently never fire, so it is floored rather than trusted.
+func newOutputTail(limit int) *outputTail {
+	if limit <= 0 {
+		limit = hintTailBytes
+	}
+	return &outputTail{limit: limit}
+}
+
+func (t *outputTail) Write(p []byte) (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.buf = append(t.buf, p...)
+	if over := len(t.buf) - t.limit; over > 0 {
+		t.buf = append(t.buf[:0], t.buf[over:]...)
+	}
+	return len(p), nil
+}
+
+func (t *outputTail) String() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return string(t.buf)
 }
 
 // resolveCharmArgs reshapes base by the charms active on ctx. Each active charm

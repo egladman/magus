@@ -111,8 +111,19 @@ a successful rebuild. Use `magus run go_build .` when you intend to run the resu
 mismatch: github.com/egladman/magus ...`, which was mise setting
 `GOEXPERIMENT=jsonv2` for this repo while a sandboxed child did not inherit it -
 two differently-fingerprinted builds of the same package in one cache. The
-`GO*` passthrough in `magus.yaml`'s `sandbox.env` is what fixed it; that block's
-comment is the long version.
+`GO*` passthrough in `magus.yaml`'s `sandbox.env` was recorded as the fix.
+
+VERIFY BEFORE TRUSTING THAT, because it does not hold today: `sandbox.enabled`
+defaults to FALSE, `magus.yaml` never sets it, and there is no user-global config
+or `MAGUS_SANDBOX_ENABLED` on this machine. With the sandbox off no policy is
+attached (`run.go`'s `if m.cfg.Sandbox.Enabled`), and `childEnv` then hands the
+child `os.Environ()` unscrubbed - measured 2026-08-09 with a throwaway workspace:
+both `MYVAR` and `GOEXPERIMENT` reached the subprocess intact. So the passthrough
+is INERT as configured, and whatever fixed the fingerprint mismatch, it was not
+that entry doing the work described here. Either the sandbox was on when this was
+diagnosed and has since been off, or the cause was something else and is still
+present. Do not delete the passthrough on the strength of this note - it becomes
+load-bearing the moment the sandbox is enabled - but do not credit it either.
 
 Flag placement matters when forwarding: magus flags go BEFORE `--`.
 `magus run go::go-test . --silent -- ./internal/foo/` works; putting `--silent`

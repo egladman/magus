@@ -132,8 +132,9 @@ On **macOS, Windows, or Linux older than 5.13** (or with the LSM disabled), `App
 
 What that degradation means precisely:
 
-- **Filesystem and env confinement through the documented bindings still hold.** Every spell magus ships and every magusfile written against the `fs.*` / `sh.*` / `env.*` API is still blocked from out-of-workspace paths and secret env vars. Env scrubbing in particular is pure Go and always applies.
-- **What is lost is the kernel backstop.** A spell that bypassed the binding layer - native code, a Go plugin, embedded cgo - could not be confined by user-space checks alone. No such spell type exists today; the spell API routes everything through the bindings. If one is ever added it must require landlock or be rejected up front.
+- **Filesystem and env confinement through the documented bindings still hold.** Every spell magus ships and every magusfile written against the `fs.*` / `sh.*` / `env.*` API is still blocked from out-of-workspace paths and secret env vars. Env scrubbing is pure Go and applies on every platform, whenever the sandbox is on.
+- **What is lost is confinement of the subprocess.** Say this first, because it is the ordinary case rather than an exotic one: the interpreter layer checks what _Buzz_ does, plus the binary path at spawn. Once `sh`, `go test`, `cargo` or `prettier` is running, its reads and writes are arbitrary code that no user-space Go check can observe. Landlock is the only layer that ever confined a subprocess, so on macOS and Windows a build step can read any file the user can, inside or outside the workspace. Since running subprocesses is most of what a build tool does, treat non-Linux hosts as having **no filesystem sandbox for build steps** - the exec allowlist still fires, and nothing after it does.
+- **The kernel backstop is also what would contain a binding-layer bypass.** A spell using native code, a Go plugin, or embedded cgo could not be confined by user-space checks alone. No such spell type exists today; the spell API routes everything through the bindings. If one is ever added it must require landlock or be rejected up front.
 
 ### The daemon and policy immutability
 
@@ -143,6 +144,19 @@ Because `landlock_restrict_self` is process-global and irreversible, a long-runn
 
 Being explicit about the boundary is part of the threat model:
 
+- **It is off unless you turn it on.** `sandbox.enabled` defaults to false, so on a
+  default installation none of this section's confinement runs - including the env
+  scrubbing, which needs a policy to exist. magus's own workspace does not enable it.
+  Everything below describes the sandbox when it is on.
+- **A subprocess's filesystem access is confined only on Linux 5.13+.** The interpreter
+  layer covers magus's own bindings and the binary path at spawn; landlock is what covers
+  the process afterwards. Without it a build step reads whatever the user can. See the
+  degradation notes above - this is the ordinary case on macOS, not an edge one.
+- **An undeclared input is not detected.** The allowlist governs what a step _may_ reach,
+  not what it _declared_. A target that reads a file it never declared runs fine, and the
+  read contributes nothing to the cache key - so a later change to that file replays a
+  stale result with no warning. Declaring inputs completely is the author's job, and
+  nothing checks the work.
 - **Network egress is not sandboxed at all.** A compromised spell with no token in its environment can still reach an arbitrary host, including localhost, RFC1918 ranges, and the cloud metadata endpoint (`169.254.169.254`). Treat any URL reachable from a magusfile as trusted. An audit log for the `http.*` bindings used to sit here and was removed: it observed only that one binding, so it saw neither magus's own traffic (self update, remote cache) nor anything a subprocess did, which is where nearly all outbound traffic originates. A record of one narrow slice, presented as network auditing, invites more trust than it earns. An opt-in network policy remains the intended fix, and it has to sit below the subprocess boundary to mean anything.
 - **In-memory secret theft from magus itself.** If magus holds a secret in memory when a spell runs, landlock cannot help; the sandbox confines the tool's filesystem and environment, not magus's own address space.
 - **Descendant-boundary writes** fail the target through [MGS3001](../reference/codes/sandbox/MGS3001.md); the audit cannot undo an external tool's prior write.
@@ -166,18 +180,18 @@ Every sandbox violation maps to a boundary described above.
 
 ## Glossary
 
-| Term                   | Definition                                                                                                                                                                 |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Policy**             | The immutable per-workspace sandbox record: a filesystem `Ruleset`, an env `Allowlist`, and a frozen base-env snapshot. A nil policy means the sandbox is off.             |
-| **Rule**               | One filesystem allowlist entry: a resolved path plus `read` / `write` / `exec` bits. Access is granted to a path at or beneath a rule with the matching bit.               |
-| **Footprint**          | The set of paths and env vars a target legitimately touches: its project subtree, the default caches/system paths, and any workspace-declared extras. It is the allowlist. |
-| **Kernel layer**       | Linux landlock (`landlock_restrict_self`), applied once per process, inherited across `fork+exec`, permanent. Absent on non-Linux and pre-5.13 kernels.                    |
-| **Interpreter layer**  | The pure-Go checks the Buzz `fs.*` / `sh.*` / `env.*` bindings run before any operation. Enforced on every platform; the only layer where the kernel one is absent.        |
-| **Env scrubbing**      | Rebuilding the child environment from the allowlist, dropping every unlisted (including secret-bearing) variable. Pure Go; always enforced.                                |
-| **Passthrough**        | The `sandbox.env.passthrough` opt-in that adds exact names or suffix-glob patterns (`NAME_*`) back into the child environment.                                             |
-| **Fingerprint**        | A stable hash of a policy's FS rules and env config; equal fingerprints can share one landlock ruleset. A mismatch against a daemon's applied union raises MGS2010.        |
-| **Union policy**       | The set-union of every declared workspace's policy, applied once by a multi-workspace daemon because landlock is irreversible.                                             |
-| **SandboxUnsupported** | The `ErrUnsupported` fallback: kernel landlock is unavailable, so only the interpreter layer runs (MGS2005). Non-fatal by design.                                          |
+| Term                   | Definition                                                                                                                                                                                                                                                                              |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Policy**             | The immutable per-workspace sandbox record: a filesystem `Ruleset`, an env `Allowlist`, and a frozen base-env snapshot. A nil policy means the sandbox is off.                                                                                                                          |
+| **Rule**               | One filesystem allowlist entry: a resolved path plus `read` / `write` / `exec` bits. Access is granted to a path at or beneath a rule with the matching bit.                                                                                                                            |
+| **Footprint**          | The set of paths and env vars a target legitimately touches: its project subtree, the default caches/system paths, and any workspace-declared extras. It is the allowlist.                                                                                                              |
+| **Kernel layer**       | Linux landlock (`landlock_restrict_self`), applied once per process, inherited across `fork+exec`, permanent. Absent on non-Linux and pre-5.13 kernels.                                                                                                                                 |
+| **Interpreter layer**  | The pure-Go checks the Buzz `fs.*` / `sh.*` / `env.*` bindings run before any operation. Enforced on every platform; the only layer where the kernel one is absent.                                                                                                                     |
+| **Env scrubbing**      | Rebuilding the child environment from the allowlist, dropping every unlisted (including secret-bearing) variable. Pure Go, on every platform - but it needs a policy, so it runs only when `sandbox.enabled` is on. With the sandbox off a child inherits the whole parent environment. |
+| **Passthrough**        | The `sandbox.env.passthrough` opt-in that adds exact names or suffix-glob patterns (`NAME_*`) back into the child environment.                                                                                                                                                          |
+| **Fingerprint**        | A stable hash of a policy's FS rules and env config; equal fingerprints can share one landlock ruleset. A mismatch against a daemon's applied union raises MGS2010.                                                                                                                     |
+| **Union policy**       | The set-union of every declared workspace's policy, applied once by a multi-workspace daemon because landlock is irreversible.                                                                                                                                                          |
+| **SandboxUnsupported** | The `ErrUnsupported` fallback: kernel landlock is unavailable, so only the interpreter layer runs (MGS2005). Non-fatal by design.                                                                                                                                                       |
 
 ## See also
 

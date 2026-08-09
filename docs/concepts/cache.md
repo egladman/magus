@@ -148,6 +148,14 @@ the `Step`. magus writes these lines, in this order, into one hash:
 
 - **`keyVersion`** - an internal schema version. Bumping it (when the set of hashed
   fields changes) forces a global rebuild.
+- **`os`** and **`arch`** - the host platform, each independently switchable with
+  [`cache.include.os.enabled`](../reference/config.md) and
+  `cache.include.arch.enabled`. Both default to on, so a macOS laptop and a Linux runner
+  mint different keys for identical sources. That is the safe direction - the alternative
+  is sharing an artifact between platforms that may not agree - but it does mean an
+  output ref is **not** comparable across machines by default. Turning one off is a claim
+  that the artifact does not vary along that axis, and being wrong that way replays a
+  foreign artifact out of a shared cache, where being wrong the other way only costs hits.
 - **`projectPath`** and **`target`** - so the same sources under different targets
   key separately.
 - **`charm:` lines** - the active [charms](charms.md), sorted by name. A

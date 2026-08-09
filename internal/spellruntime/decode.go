@@ -141,6 +141,16 @@ func Decode(src Obj) (spells.Descriptor, error) {
 				if len(cmd.Secrets) > 0 {
 					return spells.Descriptor{}, fmt.Errorf("spell %q op %q: secrets are not supported on a service op yet", name, op)
 				}
+				// Hints are refused on a service op for the same reason and with the
+				// same shape of answer. Reached as a dependency the op is handed to
+				// the supervisor and never runs through runCommand, so its advice
+				// could not fire; run directly it foregrounds and would fire - on
+				// every Ctrl-C shutdown, since that is how a foregrounded service
+				// ends. Advice that depends on how the op was reached, and that
+				// mostly fires on a normal exit, is worse than none.
+				if len(cmd.Hints) > 0 {
+					return spells.Descriptor{}, fmt.Errorf("spell %q op %q: hints are not supported on a service op (a supervised service never reaches the classifier, and a foregrounded one ends by being stopped)", name, op)
+				}
 				svc := &spells.Service{Command: cmd}
 				if readinessObj, ok := spec.Obj("readiness"); ok {
 					readiness, err := decodeCommand(name, op, readinessObj)
@@ -149,6 +159,12 @@ func Decode(src Obj) (spells.Descriptor, error) {
 					}
 					if len(readiness.Secrets) > 0 {
 						return spells.Descriptor{}, fmt.Errorf("spell %q op %q: secrets are not supported on a service readiness command", name, op)
+					}
+					// A readiness probe is polled by the supervisor, not run through
+					// runCommand, so advice declared here can never fire. Refuse it
+					// rather than accept a declaration that does nothing.
+					if len(readiness.Hints) > 0 {
+						return spells.Descriptor{}, fmt.Errorf("spell %q op %q: hints are not supported on a service readiness command (the supervisor polls it directly, so they could never fire)", name, op)
 					}
 					svc.Readiness = readiness
 				}
@@ -159,6 +175,10 @@ func Decode(src Obj) (spells.Descriptor, error) {
 					}
 					if len(stop.Secrets) > 0 {
 						return spells.Descriptor{}, fmt.Errorf("spell %q op %q: secrets are not supported on a service stop command", name, op)
+					}
+					// Same as readiness: the supervisor runs stop, so advice here is inert.
+					if len(stop.Hints) > 0 {
+						return spells.Descriptor{}, fmt.Errorf("spell %q op %q: hints are not supported on a service stop command (the supervisor runs it directly, so they could never fire)", name, op)
 					}
 					svc.Stop = stop
 				}
@@ -260,6 +280,20 @@ func decodeCommand(spellName, opName string, o Obj) (spells.Command, error) {
 		secrets = nil
 	}
 	c.Secrets = secrets
+	// Failure advice, in declaration order - that order IS the precedence, so it must
+	// survive decode unsorted. A half-written rule is rejected rather than dropped: a
+	// rule with no `contains` matches every string and would advise on every failure of
+	// this command, and one with no `advise` would consume the match and print nothing,
+	// which reads as "magus had no idea" when in fact it matched and had nothing to say.
+	for i, ho := range o.Objs("hints") {
+		var h spells.Hint
+		h.Contains, _ = ho.Str("contains")
+		h.Advise, _ = ho.Str("advise")
+		if h.Contains == "" || h.Advise == "" {
+			return spells.Command{}, fmt.Errorf("%scommand hints[%d]: both contains and advise are required (contains %q, advise %q)", where, i, h.Contains, h.Advise)
+		}
+		c.Hints = append(c.Hints, h)
+	}
 	charms, ok := o.Obj("charms")
 	if !ok {
 		return c, nil

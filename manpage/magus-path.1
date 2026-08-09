@@ -1,0 +1,81 @@
+.TH MAGUS-PATH 1 "" "magus" "magus Manual"
+.SH NAME
+magus\-path \- Connect two knowledge\-graph nodes: the shortest chain of edges between them
+.SH SYNOPSIS
+.B magus
+.RI "path <a> <b> [flags]"
+.SH DESCRIPTION
+path connects two nodes: the shortest chain of edges between them (edges
+walked in either direction), with each hop's relation.
+.PP
+It answers the question the other two verbs cannot: not "what is this" or "what does
+this touch", but "how are these two related at all". That is the question worth asking
+when a change to one thing breaks a seemingly unrelated other, or when you suspect two
+projects are coupled and want the chain rather than a hunch. Each hop names its
+relation, so the answer is a mechanism you can check and not just a claim that a
+connection exists.
+.PP
+Edges are walked in EITHER direction, which is what makes it useful and is also its
+main caveat: a returned chain proves the two nodes are connected in the graph, not that
+influence flows from one to the other. Read the hop relations to see which way each
+link actually points.
+.PP
+Each argument is a node ID (target:pkg/foo:build) or a name that resolves to one.
+The graph is cache\-backed under <cache>/knowledge; \-\-refresh forces a full rebuild.
+.SH OPTIONS
+.RS
+.TP
+\fB\-\-global\fR
+Resolve endpoints across the workspaces registered in config (knowledge.workspaces)
+.TP
+\fB\-\-refresh\fR
+Force a full graph rebuild before pathfinding
+.RE
+.SH EXAMPLES
+\fIHow are two projects related\fR
+.PP
+.EX
+magus path pkg/api pkg/web
+.EE
+.PP
+\fIFrom a spell to a diagnostic\fR
+.PP
+.EX
+magus path spell:go MGS3003
+.EE
+.PP
+\fIBetween two targets by ID\fR
+.PP
+.EX
+magus path target:pkg/api:build target:pkg/web:test
+.EE
+.PP
+\fIAs a record\fR
+.PP
+.EX
+magus path pkg/api pkg/web -o json
+.EE
+.PP
+.SH SEE ALSO
+\fBmagus\fR(1),
+\fBmagus\-ls\fR(1),
+\fBmagus\-describe\fR(1),
+\fBmagus\-run\fR(1),
+\fBmagus\-x\fR(1),
+\fBmagus\-where\fR(1),
+\fBmagus\-affected\fR(1),
+\fBmagus\-insight\fR(1),
+\fBmagus\-graph\fR(1),
+\fBmagus\-query\fR(1),
+\fBmagus\-explain\fR(1),
+\fBmagus\-watch\fR(1),
+\fBmagus\-status\fR(1),
+\fBmagus\-doctor\fR(1),
+\fBmagus\-config\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-completion\fR(1),
+\fBmagus\-man\fR(1),
+\fBmagus\-init\fR(1),
+\fBmagus\-self\fR(1),
+\fBmagus\-version\fR(1)
+.br

@@ -59,6 +59,52 @@ type Command struct {
 	// cannot patch this field; they patch Args only. Refs are static data (never a
 	// value), so the op stays hashable and describable without ever holding a secret.
 	Secrets map[string]string `json:"secrets,omitempty"`
+	// Hints classify a FAILURE of this command into a next step. Each entry pairs a
+	// substring of the tool's output with the advice magus prints when the command
+	// exits non-zero and that substring appeared. The first declared match wins; a
+	// command that succeeds never consults them.
+	//
+	// This exists so a tool's own error can teach its fix. `docker buildx build --push`
+	// failing with "authentication required" is a complete diagnosis to anyone who
+	// already knows docker, and an exit code to everyone else - and the alternative
+	// magus used to document (a separate `-login` target you must remember) is a mode
+	// switch the user has to know about in advance, which is the thing advice removes.
+	//
+	// `json:"-"` is load-bearing, not tidiness. BuiltinsHash marshals the whole
+	// resolved registry into every project's SpellDefVersion, so a field serialized
+	// here puts its CONTENTS in every cache key: rewording a sentence of advice would
+	// invalidate every target in every project, for a string that cannot change what
+	// any command does. Doc is excluded from the key for the same reason (see below);
+	// this is the same property, and JSON is not used to transport an Op - the only
+	// marshal of the registry is the hash itself.
+	Hints []Hint `json:"-"`
+}
+
+// Hint is one failure classification: when a command fails and Contains appears in its
+// output, magus prints Advise.
+//
+// The field names are the authoring surface. A spell writes these in Buzz, so they are
+// the same words in Go, in the generated mirror, and in a spell file:
+//
+//	Hint{contains = "authentication required", advise = "run `docker login <registry>`"}
+//
+// Contains rather than the more obvious "match" for two reasons that point the same way.
+// It names the actual operation - this is strings.Contains, not a pattern - so the type
+// no longer needs a paragraph insisting it is not a regex. And `match` is a RESERVED word
+// in Buzz (libs/gopherbuzz parser reservedIdents), so a field called match can only be
+// written `@"match" = ...` by every author forever. PatchOp.From above hit the same wall
+// and solved it with a differing Buzz name, which then drifted from the Go name and
+// silently produced empty fields; keeping one name in all three places is what avoids
+// repeating that.
+type Hint struct {
+	// Contains is matched against the failed command's stdout and stderr SEPARATELY,
+	// never against the two joined: a substring spanning the seam of two independent
+	// streams would fire on output that appeared in neither.
+	Contains string `json:"contains"`
+	// Advise is the text magus prints. Write the command to run rather than the
+	// diagnosis - it is printed after the tool's own error, which already said what
+	// went wrong.
+	Advise string `json:"advise"`
 }
 
 // Op kinds. A kind lives on the op, not the spell: one spell freely mixes command

@@ -173,6 +173,7 @@ func (r *runner) run(wsErr error) types.DoctorReport {
 		r.checkTargetNameConventions(projects),
 		r.checkBespokePhaseFragmentTargets(projects),
 		r.checkUnreachedFootprintDecls(projects),
+		r.checkCacheableSecretReads(projects),
 		r.checkRedundantFootprintGlobs(projects),
 		r.checkDeadOutputGlobs(projects),
 		r.checkOutputOwnedByTwoTargets(projects),

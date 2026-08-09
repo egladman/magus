@@ -4,6 +4,10 @@
 //   import "spells/github/actions" as github
 //   magus\cache.remote(github)
 //
+// It carries two more contracts further down, each wired the same way and each inert
+// outside Actions: a CI provider (magus\ci.provider) and a secret provider
+// (magus\secret.provider). One spell per vendor, three contracts.
+//
 // magus knows nothing about GitHub Actions: it speaks only the generic spell
 // contract. It exports the cache contract, functions typed fun(Target, fun(any))
 // bool that the remote-cache subsystem detects by name and invokes with the
@@ -34,6 +38,7 @@
 //   ACTIONS_RESULTS_URL    — cache service base URL (always ends in "/")
 //   ACTIONS_RUNTIME_TOKEN  — bearer token
 
+import "encoding"
 import "http"
 import "magus/spell"
 import "serialize"
@@ -242,4 +247,200 @@ export fun annotate(target: Target, cb: fun(any)) > bool {
 // Returned once per run; magus does the per-line matching itself.
 export fun quote_prefixes(target: Target, cb: fun(any)) > [str] {
     return ["::"];
+}
+
+// --- Secret provider contract ------------------------------------------------
+//
+// Wired with magus\secret.provider(github): the third contract this one spell
+// carries, alongside the cache backend and the CI provider. magus calls one op,
+// resolve_secret, and passes the reference through without parsing it - the
+// reference format is this file's business. See docs/concepts/secrets.md.
+//
+// Worth saying why this is not the built-in environment provider wearing a
+// spell's clothes. An Actions secret is WRITE-ONLY: nothing running inside a job
+// can fetch one, and interpolating it into a step's env: block is the only path
+// there has ever been. So this provider does the two things the platform-neutral
+// built-in structurally cannot:
+//
+//   oidc:<audience>   MINTS a short-lived token from the runner's own endpoint.
+//                     It is the one credential on a runner that is genuinely
+//                     fetched rather than injected, which is what lets a
+//                     repository hold no long-lived cloud key at all.
+//   <NAME>            reads the injected variable, registers the value with the
+//                     RUNNER so every later step's log is masked too - not only
+//                     the output magus captures - and on a miss says which line
+//                     to add to the workflow rather than that a variable is unset.
+//
+// Selecting it is an environment decision, the same one docs/concepts/secrets.md
+// draws for every provider - there is no fallback chain, so a workspace picks
+// this under Actions and something else on a laptop:
+//
+//   if (os\env("GITHUB_ACTIONS") == "true") { magus\secret.provider(github); }
+
+final OIDC_PREFIX = "oidc:";
+
+// resolve_secret is the secret-provider contract, detected by name and invoked by
+// magus\secret.read(). It receives the reference as payload.ref.
+export fun resolve_secret(target: Target, cb: fun(any)) > str {
+    final io = {<str, any>};
+    cb(io);
+    final ref = "" + io["ref"];
+    if (ref == "") {
+        throw "github-actions: no reference given";
+    }
+
+    var value = "";
+    if (ref.startsWith(OIDC_PREFIX)) {
+        value = oidcToken(ref.sub(OIDC_PREFIX.len()));
+    } else {
+        value = workflowEnv(ref);
+    }
+    maskInRunnerLog(value);
+    return value;
+}
+
+// maskInRunnerLog asks the RUNNER to redact value from its own log. magus already
+// redacts the output it captures; this covers the half magus cannot reach - a later
+// step, or an action that never ran under magus at all. It is not pure belt and
+// braces: the runner auto-masks anything interpolated from `secrets.*`, but NOT a
+// step output injected into env:, and not a token minted mid-job like the OIDC one
+// below.
+//
+// std\print rather than anything magus captures, for the same reason group_start
+// above uses it: a workflow command is only a command if the runner reads it.
+//
+// THE GATE IS SPOOFABLE, AND THAT IS SAFE ONLY BECAUSE OF AN INVARIANT. This
+// command has to carry the secret in the clear - that is the only way the runner
+// can learn which bytes to mask - and GITHUB_ACTIONS is an ordinary environment
+// variable anyone can set, so `GITHUB_ACTIONS=true magus run ...` on a laptop makes
+// magus print a credential to a terminal. It escalates nothing TODAY because every
+// value that reaches here was derived from the very environment the gate reads:
+// workflowEnv returns a variable the caller already had, and oidcToken returns what
+// an endpoint named by that same environment answered. Whoever can spoof the gate
+// could only ever be shown what they themselves supplied.
+//
+// So the rule a future branch must keep: a value sourced from anywhere OTHER than
+// this process's environment - a file, a keychain, a second backend - must not reach
+// this function, because for that value the invariant is false and the gate is all
+// that stands between it and a terminal.
+fun maskInRunnerLog(value: str) > void {
+    if (value == "") { return; }
+    if (getenv("GITHUB_ACTIONS") != "true") { return; }
+    std\print("::add-mask::" + escapeData(value));
+}
+
+// workflowEnv reads a secret the workflow injected. There is no other way in, so a
+// miss is a workflow-file edit rather than anything this run could recover from -
+// which is why the error is the snippet to paste rather than a status.
+fun workflowEnv(name: str) > str {
+    final value = getenv(name);
+    if (value != "") { return value; }
+    if (getenv("GITHUB_ACTIONS") != "true") {
+        throw "github-actions: $" + name + " is not set, and GITHUB_ACTIONS is not "
+            + "\"true\", so this is not an Actions runner. This provider resolves the "
+            + "environment a workflow injects; select it only under Actions, and select "
+            + "a backend a workstation can reach for local runs.";
+    }
+    throw "github-actions: $" + name + " is not set in this step's environment.\n"
+        + "  An Actions secret is only readable through the workflow file - nothing\n"
+        + "  running inside the job can fetch one. Add it to the step:\n"
+        + "      env:\n"
+        + "        " + name + ": $\{\{ secrets." + name + " \}\}";
+}
+
+// oidcToken mints an OIDC token for audience from the runner's token endpoint.
+// Actions publishes the endpoint and its request token into the environment only
+// when the job declares `permissions: id-token: write`, so an unset variable means
+// a missing permission far more often than a broken runner - and the message says
+// that rather than naming the variable.
+//
+// The audience identifies the relying party: "sts.amazonaws.com" for AWS, the
+// workload-identity-pool provider URL for GCP, whatever the trust policy on the
+// other end was written against.
+fun oidcToken(audience: str) > str {
+    if (audience == "") {
+        throw "github-actions: an oidc: reference needs an audience, as in "
+            + "magus\\secret.read(\"oidc:sts.amazonaws.com\")";
+    }
+    final endpoint = getenv("ACTIONS_ID_TOKEN_REQUEST_URL");
+    final request_token = getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN");
+    if (endpoint == "" or request_token == "") {
+        throw "github-actions: this job has no OIDC token endpoint.\n"
+            + "  Grant it permission to mint one:\n"
+            + "      permissions:\n"
+            + "        id-token: write\n"
+            + "  The permission is off by default, and a job without it is given no endpoint.";
+    }
+    // The endpoint is read from the environment and the request token is sent to it as
+    // a bearer credential, so whoever names the endpoint receives that token. An earlier
+    // step in the same job can rewrite a job's environment by appending to $GITHUB_ENV,
+    // which makes "wherever the environment points" an exfiltration target rather than a
+    // given. Requiring TLS is the part that can be checked without guessing a hostname:
+    // GitHub's own endpoint host is not stable, and GitHub Enterprise Server serves a
+    // different one entirely, so pinning a domain would break real installations while
+    // this rejects the plaintext case outright.
+    if (!endpoint.startsWith("https://")) {
+        throw "github-actions: refusing to send the OIDC request token to a non-HTTPS "
+            + "endpoint. ACTIONS_ID_TOKEN_REQUEST_URL is not an https:// URL, which the "
+            + "runner never produces - something in this job rewrote it.";
+    }
+
+    final res = http\get(tokenURL(endpoint, audience),
+        mut {"Authorization": "Bearer " + request_token, "Accept": "application/json"});
+    if (res["status"] != 200) {
+        // The status, deliberately without the body. Every other failure path in this
+        // file trims the backend's own stderr into the message, but this response body
+        // is the one that can CONTAIN a token, and an error string is the least
+        // redacted thing magus handles - it has not been resolved yet, so nothing is
+        // registered for redaction at the moment it is thrown.
+        throw "github-actions: the OIDC token endpoint answered " + ("" + res["status"])
+            + " for audience " + audience;
+    }
+    final value = serialize\jsonDecode(res["body"]).q("value").stringValue();
+    if (value == "") {
+        throw "github-actions: the OIDC token endpoint returned no token for audience "
+            + audience;
+    }
+    return value;
+}
+
+// tokenURL puts the audience on the runner's token endpoint. The separator is chosen
+// rather than assumed: the endpoint arrives carrying ?api-version=2.0, so a
+// hard-coded "?" would build a second query string and earn a 400 that names nothing.
+fun tokenURL(endpoint: str, audience: str) > str {
+    var sep = "&";
+    if (endpoint.indexOf("?") == null) { sep = "?"; }
+    return endpoint + sep + "audience=" + encoding\urlEncode(audience);
+}
+
+import "assert";
+
+test "tokenURL appends the audience to whatever query the endpoint already carries" {
+    assert\equal(tokenURL("https://run.example.com/token?api-version=2.0", "sts.amazonaws.com"),
+        "https://run.example.com/token?api-version=2.0&audience=sts.amazonaws.com",
+        "an endpoint with a query string gets &");
+    assert\equal(tokenURL("https://run.example.com/token", "sts.amazonaws.com"),
+        "https://run.example.com/token?audience=sts.amazonaws.com",
+        "a bare endpoint gets ?");
+    assert\equal(tokenURL("https://run.example.com/token?api-version=2.0", "https://github.com/egladman"),
+        "https://run.example.com/token?api-version=2.0&audience=https%3A%2F%2Fgithub.com%2Fegladman",
+        "an audience that is itself a URL is percent-encoded");
+}
+
+test "escapeProp encodes every separator, not just the first" {
+    // Repetition on purpose. A one-of-each fixture passed for as long as str.replace
+    // substituted only the first match, which is how the escapers in this repo shipped
+    // broken; see libs/gopherbuzz/testdata/66_str_replace_all.buzz.
+    assert\equal(escapeProp("a:b:c"), "a%3Ab%3Ac", "every colon");
+    assert\equal(escapeProp("a,b,c"), "a%2Cb%2Cc", "every comma");
+    // escapeProp layers on escapeData, so a value carrying both a separator and a
+    // newline must come back with all of them encoded and nothing raw.
+    assert\equal(escapeProp("x:1\ny,2"), "x%3A1%0Ay%2C2", "separators and newlines together");
+}
+
+test "escapeData keeps a multi-line secret inside one add-mask command" {
+    // A raw newline would end the command at the first line, so the runner would mask
+    // one line of a multi-line key and print the rest.
+    assert\equal(escapeData("-----BEGIN KEY-----\nabc\n"), "-----BEGIN KEY-----%0Aabc%0A",
+        "every newline is encoded");
 }

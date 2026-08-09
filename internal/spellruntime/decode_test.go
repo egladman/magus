@@ -485,3 +485,38 @@ func TestDecodeToolsRejectsUnknownDiagnosticsFormat(t *testing.T) {
 	assert.Contains(t, err.Error(), "diagnostics is sarif")
 	assert.Contains(t, err.Error(), "gnu", "the message names the formats magus accepts")
 }
+
+// TestDecodeCommandHints pins that failure hints survive decode in DECLARATION order (that
+// order is the precedence) and that a half-written rule is refused rather than dropped.
+func TestDecodeCommandHints(t *testing.T) {
+	t.Run("hints decode in declaration order", func(t *testing.T) {
+		cmd, err := decodeCommand("docker", "docker-buildx", mapObj{
+			"bin": "docker",
+			"hints": []any{
+				map[string]any{"contains": "denied: requested access", "advise": "specific"},
+				map[string]any{"contains": "denied", "advise": "general"},
+			},
+		})
+		require.NoError(t, err)
+		require.Len(t, cmd.Hints, 2)
+		assert.Equal(t, "specific", cmd.Hints[0].Advise, "order must not be sorted away - it is the precedence")
+		assert.Equal(t, "denied", cmd.Hints[1].Contains)
+	})
+	t.Run("no hints decodes to nil", func(t *testing.T) {
+		cmd, err := decodeCommand("docker", "docker-build", mapObj{"bin": "docker"})
+		require.NoError(t, err)
+		assert.Nil(t, cmd.Hints)
+	})
+	t.Run("a hint with no contains is refused", func(t *testing.T) {
+		// Would otherwise fire on EVERY failure of this command.
+		_, err := decodeCommand("s", "o", mapObj{"hints": []any{map[string]any{"advise": "do the thing"}}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "both contains and advise are required")
+	})
+	t.Run("a contains with no advise is refused", func(t *testing.T) {
+		// Would otherwise consume the match and print nothing, reading as "no idea".
+		_, err := decodeCommand("s", "o", mapObj{"hints": []any{map[string]any{"contains": "denied"}}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "both contains and advise are required")
+	})
+}

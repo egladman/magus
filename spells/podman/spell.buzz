@@ -1,0 +1,78 @@
+// The podman container runtime. A SEPARATE spell from docker rather than a bin
+// substitution, because podman is not a drop-in for docker where it matters here: it has
+// no `buildx`. Multi-platform images are `podman build --platform` plus
+// `podman manifest`, so an engine that swapped the binary under docker's ops would emit
+// `podman buildx build`, which is not a command. One spell per tool lets each model the
+// CLI it actually has - the same reason gitlab/ci and github/actions are two spells for
+// one contract rather than one spell with a vendor switch.
+//
+// Import the one you use:
+//
+//   import "magus/spell/podman" as podman;
+//
+// A workspace that runs both (a laptop on podman, CI on docker) imports both and picks in
+// the magusfile; magus does not detect a container runtime for you.
+import "magus/spell";
+
+export fun mgs_getName() > str { return "podman"; }
+
+// Containerfile is podman's own name for the file and takes precedence when both exist;
+// Dockerfile is accepted because most repositories still ship that name.
+export fun mgs_listRequiredGlobs() > [Path] {
+    return [Path{value = "Containerfile"}, Path{value = "Dockerfile"}, Path{value = ".containerignore"}, Path{value = ".dockerignore"}, Path{value = "**/*"}];
+}
+
+// REGISTRY_HINTS are emitted by the OCI registry and by containers/image, not by podman
+// itself, so the wording is shared with the docker spell. Ordered specific before general:
+// the first declared match wins.
+final REGISTRY_HINTS = [
+    Hint{contains = "denied: requested access to the resource is denied",
+         advise = "the registry accepted you but not this repository; check the image name and that the token may push to it"},
+    Hint{contains = "authenticating creds for",
+         advise = "podman could not authenticate to the registry; run `podman login <registry>` and re-run"},
+    Hint{contains = "authentication required",
+         advise = "not authenticated to the registry; run `podman login <registry>` and re-run (everything before the push replays from cache)"},
+    Hint{contains = "unauthorized",
+         advise = "the registry rejected these credentials; run `podman login <registry>` and re-run, or check the token's scopes (a push needs write)"},
+    // podman is daemonless on Linux but talks to a VM on macOS and Windows, and to a
+    // socket unit under rootless systemd - so "not running" means different fixes.
+    Hint{contains = "Cannot connect to Podman",
+         advise = "the podman service is not running; `podman machine start` on macOS or Windows, or start the podman.socket unit on Linux"},
+    Hint{contains = "short-name resolution enforced but cannot prompt",
+         advise = "podman refuses ambiguous short names in non-interactive use; write the fully qualified image (docker.io/library/alpine, not alpine)"},
+];
+
+fun podmanBuild(target: Target) > Command {
+    return Command{bin = "podman", args = ["build"], hints = REGISTRY_HINTS};
+}
+// podman push is its own verb; docker reaches the same place through `buildx --push`.
+fun podmanPush(target: Target) > Command {
+    return Command{bin = "podman", args = ["push"], hints = REGISTRY_HINTS};
+}
+// Multi-platform images without buildx: build per-arch, then assemble and push a manifest
+// list. The caller supplies the list name and members through args.
+fun podmanManifest(target: Target) > Command {
+    return Command{bin = "podman", args = ["manifest"], hints = REGISTRY_HINTS};
+}
+// --rm is baked in for the same reason the docker spell bakes it in: an op that leaves
+// containers behind turns a repeated target into a disk leak.
+fun podmanRun(target: Target) > Command {
+    return Command{bin = "podman", args = ["run", "--rm"], hints = REGISTRY_HINTS};
+}
+
+export fun mgs_listTargets() > {str: fun(Target) Command} {
+    return {"podman-build": podmanBuild, "podman-push": podmanPush, "podman-manifest": podmanManifest, "podman-run": podmanRun};
+}
+
+// `podman info` is the readiness probe rather than `--version`: podman is daemonless on
+// Linux but needs a running machine on macOS and Windows, so the version answers whether
+// the CLI exists while info answers whether it can do anything.
+export fun mgs_getTools() > {str: Tool} {
+    return {
+        "podman": Tool{
+            probe = Command{bin = "podman", args = ["--version"]},
+            key = VersionKey{upTo = VersionComponent.patch},
+            ready = Command{bin = "podman", args = ["info"]},
+        },
+    };
+}

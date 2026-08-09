@@ -67,10 +67,25 @@ export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "vendor", isDir 
 // cache key). A Go module has exactly one candidate.
 export fun mgs_listManifests() > [Path] { return [Path{value = "go.mod"}]; }
 
-fun goBuild(target: Target) > Command { return Command{bin = "go", args = ["build"]}; }
+// GO_MOD_HINTS classify the two failures a Go build hits after someone else's merge, and
+// they are worth advice because the tool's message names a symptom rather than the command
+// that fixes it. Both mean the module graph on disk disagrees with go.mod/go.sum; neither
+// says "run go mod tidy". Declared once and shared by the ops that compile or test, which
+// are the ones a developer meets first.
+//
+// Only exact, stable Go messages are matched. A wrong hint is worse than none, so a
+// phrasing that moves between toolchain releases does not belong here.
+final GO_MOD_HINTS = [
+    Hint{contains = "missing go.sum entry",
+         advise = "go.sum is out of date with go.mod; run `magus run generate:relock` (or `go mod tidy`) and commit the result"},
+    Hint{contains = "updates to go.mod needed",
+         advise = "go.mod does not cover the imports in the tree; run `magus run generate:relock` (or `go mod tidy`) and commit the result"},
+];
+
+fun goBuild(target: Target) > Command { return Command{bin = "go", args = ["build"], hints = GO_MOD_HINTS}; }
 fun goClean(target: Target) > Command { return Command{bin = "go", args = ["clean", "./..."]}; }
 fun goGenerate(target: Target) > Command { return Command{bin = "go", args = ["generate", "./..."]}; }
-fun goRun(target: Target) > Command { return Command{bin = "go", args = ["run"]}; }
+fun goRun(target: Target) > Command { return Command{bin = "go", args = ["run"], hints = GO_MOD_HINTS}; }
 
 fun goFmt(target: Target) > Command {
     final args = ["-l", "."];
@@ -92,7 +107,7 @@ fun golangCILint(target: Target) > Command {
     }};
 }
 fun goTest(target: Target) > Command {
-    return Command{bin = "go", args = ["test", "./..."], charms = {
+    return Command{bin = "go", args = ["test", "./..."], hints = GO_MOD_HINTS, charms = {
         "debug": append(["-v"]),
         "cd": append(["-covermode=atomic", "-coverprofile=coverage.out"]),
     }};

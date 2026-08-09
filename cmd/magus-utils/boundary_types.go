@@ -19,6 +19,8 @@ import (
 var boundaryTypes = []boundaryType{
 	{Name: "Path", Type: reflect.TypeFor[types.Path]()},
 	{Name: "Target", Type: reflect.TypeFor[types.Target]()},
+	// Leaf first: Command.hints is [Hint], so Hint must already be declared.
+	{Name: "Hint", Type: reflect.TypeFor[spells.Hint]()},
 	{Name: "Command", Type: reflect.TypeFor[spells.Command]()},
 	{Name: "Service", Type: reflect.TypeFor[spells.Service]()},
 	{Name: "Charm", Type: reflect.TypeFor[spells.Charm]()},

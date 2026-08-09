@@ -1,0 +1,37 @@
+// @expect: true
+// str.replace substitutes EVERY occurrence, matching upstream: src/builtin/str.zig
+// hands the whole string to Zig's std.mem.replaceOwned, which walks it to the end.
+//
+// gopherbuzz substituted only the first for a long time, and nothing failed loudly
+// because the callers that care are escapers - they produce output that is merely
+// WRONG. An HTML escaper encoded the first ampersand of a document; a workflow-command
+// escaper encoded the first newline and let the runner end the command at the second.
+// This file pins the upstream shape so the quiet version cannot come back.
+final every = "a,b,c".replace(",", with: "-");
+
+// A replacement CONTAINING the needle must not be rescanned - otherwise "%" -> "%25"
+// re-finds the "%" it just wrote and loops forever. This is the exact composition an
+// escaper uses, and it is the reason percent has to be escaped before the escapes that
+// introduce one.
+final selfContaining = "50%".replace("%", with: "%25");
+final chained = "100%\ndone".replace("%", with: "%25").replace("\n", with: "%0A");
+
+// Adjacent and edge-anchored occurrences are all matched, including a whole string that
+// is nothing but needles.
+final adjacent = "aaa".replace("a", with: "b");
+final edges = "xhix".replace("x", with: "");
+
+// An absent needle returns the string unchanged rather than erroring, so a chain of
+// escapes can name characters the input happens not to contain.
+final absent = "nothing".replace("q", with: "Z");
+
+// Deleting by replacing with the empty string, and a multi-character needle.
+final multi = "abab".replace("ab", with: "z");
+
+final __r = every == "a-b-c"
+    and selfContaining == "50%25"
+    and chained == "100%25%0Adone"
+    and adjacent == "bbb"
+    and edges == "hi"
+    and absent == "nothing"
+    and multi == "zz";

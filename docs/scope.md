@@ -134,6 +134,124 @@ behind a paid tier. Nothing exists to upsell.
 magus will not decide for you. It answers questions. You decide, or your agent
 does.
 
+## The container question
+
+"No container runtime" is one clause of one rule above, and it is the clause
+with the best argument against it, so it gets its own section.
+
+The argument is Dagger's, and it is a good one. Run every step in a container
+against a pinned image and the environment stops being a variable. No more
+"works on my machine": the machine is the same machine. That is a real property,
+and it removes an entire category of support burden.
+
+**A container gives you environment reproducibility, not hermeticity.** A pinned
+image fixes what is installed. Inside it, a step can still reach the network,
+read the clock, resolve a floating tag, or depend on filesystem ordering.
+Nothing fails a build there because a step read a file it never declared. That
+is Bazel's guarantee, and containerizing does not supply it. The certainty a
+container produces is partly a feeling, and the feeling is
+what makes the runtime dependency seem cheap.
+
+**The dependency is disqualifying at this level specifically.** A task
+orchestrator is the thing you reach for before anything else works. If it needs
+a container runtime, it cannot be used to install or check that runtime; it is
+unavailable on a locked-down laptop, a rootless runner, or an air-gapped
+builder; and when the daemon is not up, the failure arrives oblique, far from
+the cause, with nowhere sensible to attach an error explaining it. That is the
+same shape as the rule about package managers above - a tool that arrives
+through the thing it is meant to orchestrate has put itself downstream of it.
+One rule, two instances.
+
+So magus pursues determinism without the runtime, through mechanisms that need
+nothing installed: inputs are declared and hashed, the child environment is
+rebuilt from an allowlist rather than inherited, every tool's version is part of
+the cache key, and a declared version window fails the build when what
+ran falls outside it. Where a container normalizes the world, magus describes it
+precisely and notices when the description stops matching.
+
+That is a harder route with more moving parts, and being specific about the
+remaining gap matters more than the claim does. Undeclared **file reads** are
+caught only by the [sandbox](concepts/sandbox.md), which is off by default and
+has no kernel layer on macOS - so on the machine most of this is written on, an
+undeclared read succeeds silently. **Network egress is not confined at all.**
+Until both close, magus's determinism is "the inputs you declared are hashed and
+the environment is scrubbed", which is weaker than what a container gives you on
+the filesystem axis and stronger on the version axis. Weigh it that way when
+you compare the two.
+
+One thing this page must not imply, because the wording invites it: **magus has
+no opt-in container isolation, and the `container` charm is not it.** In this
+repo `magus run build:container` selects a different _artifact_ - it builds and
+signs an image instead of a host binary - and the build itself still runs on the
+host, unconfined. That is container-grade packaging, not container-grade
+isolation, and they are different products. Reading the charm as "the Dagger
+guarantee, available per run" is a misreading this section previously
+encouraged.
+
+So the honest position is narrower than "you can have it when you want it": if
+you need every step to run in a fixed environment, magus does not offer that at
+any setting, and a container-native runner is the better tool. What magus offers
+instead is a precise description of the environment plus a build that fails when
+what ran falls outside what you declared. That is a different bet, not a cheaper
+version of the same one.
+
+## The knobs
+
+The test above governs verbs. Options need their own, because they are the other
+way a tool loses its shape, and the cheaper one - nobody blocks a pull request
+over one more setting.
+
+An option is not additive. Each independent switch doubles the number of states
+the tool can be in, and the states nobody thought about are where the
+bugs live, because no one wrote a test for a combination no one imagined. A
+configuration surface large enough to be flexible is large enough that its author
+cannot enumerate what it does. You have met the result: a build that works on one
+machine, a setting three people cargo-culted from a blog post, and a maintainer
+who cannot tell you what turning it off would break.
+
+So the default is the product. Zero configuration is the feature - not because
+there are no knobs, but because **you should never need one to get correct
+behavior**. magus is opinionated where an opinion prevents a footgun: one
+required target name, four reserved charms, `skip_cache` demanding a reason
+string rather than a boolean, no fallback chain when a secret will not resolve.
+Each of those removes states rather than adding them.
+
+The honest numbers, because this is the section where a claim like that gets
+tested. `magus.yaml` accepts about a hundred keys, container and leaf together,
+and magus binds 63 of them to command-line flags. That is not a small surface,
+and calling it zero configuration would be a lie.
+
+What the claim rests on is the second number. magus's own `magus.yaml`, for a
+ten-project polyglot repo that publishes containers, signs releases and runs a
+sharded CI pipeline, sets four things:
+
+```yaml
+default_charms: [rw]
+sandbox: { env: { passthrough: ["GO*"] } }
+cache: { remote: { trusted_keys: ["..."] } }
+required_version: ">= 0.4.0"
+```
+
+Three of those four are facts about this repository that no default could
+supply - a trust key, an environment passthrough, a version floor. Only
+`default_charms` is a preference. Every other key exists for a workspace whose
+situation we did not anticipate, and the measure of whether that is discipline or
+sprawl is whether we reach for them ourselves.
+
+The rule that follows: **a new option must remove a failure, not enable a
+preference.** If the answer to "what happens if I set this wrong" is "your build
+is subtly different and nothing says so", it is not an option, it is a trap with
+a default.
+
+Where this is strained: an option nobody can find is worse than one that does not
+exist, because the escape hatch is real and the person who needs it is told it is
+not. `cache.include.os.enabled` and `cache.include.arch.enabled` decide whether
+host OS and architecture key every cache entry. Both are real, both have
+environment variables, and neither appears in [the cache-key reference](concepts/cache.md) - which instead enumerates the hashed fields and
+says nothing else reaches the hash. Anyone comparing a laptop's output reference
+against CI's is looking at this, and the page that would tell them says
+the inputs do not exist.
+
 ## Where the claim is strained
 
 The claim is that magus only reads a model it already had to build. Five places

@@ -452,6 +452,58 @@ func TestInvocationByID(t *testing.T) {
 	assert.ErrorIs(t, err, fs.ErrNotExist, "an aged-out run log surfaces as fs.ErrNotExist")
 }
 
+// TestInvocationEventsByID pins the read side of the audit trail: the EVENTS survive, not
+// just the header InvocationByID reconstructs from them. journal.KindSecret is the reason -
+// a run's credential reads were recorded and then unreachable, so the trail had no reader.
+func TestInvocationEventsByID(t *testing.T) {
+	dir := t.TempDir()
+	runs := filepath.Join(dir, RunsDir)
+	require.NoError(t, os.MkdirAll(runs, 0o755))
+	f, err := os.Create(filepath.Join(runs, "invaudit1.jsonl"))
+	require.NoError(t, err)
+	enc := json.NewEncoder(f)
+	require.NoError(t, enc.Encode(journal.Event{Kind: journal.KindStarted, Command: &journal.Command{Arguments: []string{"run", "image-login"}}}))
+	require.NoError(t, enc.Encode(journal.Event{Kind: journal.KindSecret, Project: ".", Target: "image-login", Text: `read secret "GHCR_TOKEN" via onepassword`}))
+	require.NoError(t, enc.Encode(journal.Event{Kind: journal.KindFinished, Status: journal.StatusPass}))
+	require.NoError(t, f.Close())
+
+	header, events, err := NewOutputStore(dir).InvocationEventsByID("invaudit1")
+	require.NoError(t, err)
+	assert.Equal(t, "invaudit1", header.ID)
+	assert.Equal(t, journal.StatusPass, header.Status, "the header is still reconstructed")
+	require.Len(t, events, 3, "every event is returned, not only the two lifecycle ones")
+
+	var secrets []journal.Event
+	for _, e := range events {
+		if e.Kind == journal.KindSecret {
+			secrets = append(secrets, e)
+		}
+	}
+	require.Len(t, secrets, 1, "the credential read is reachable")
+	assert.Contains(t, secrets[0].Text, "GHCR_TOKEN", "the reference is the auditable fact")
+	assert.Contains(t, secrets[0].Text, "onepassword", "so is the provider that served it")
+
+	_, _, err = NewOutputStore(dir).InvocationEventsByID("invmissing")
+	assert.ErrorIs(t, err, fs.ErrNotExist, "an aged-out run log surfaces as fs.ErrNotExist")
+}
+
+// TestLooksLikeInvocationID pins the recognizer that keeps a pasted invocation id out of the
+// graph grammar, where it matched nothing and reported `matches: 0` - which reads as "no such
+// run" rather than "wrong command".
+func TestLooksLikeInvocationID(t *testing.T) {
+	for _, s := range []string{"invmsm3vcou1", "inv123", "invabc0z9"} {
+		assert.True(t, LooksLikeInvocationID(s), "%q should be recognized as an invocation id", s)
+	}
+	// "invoke"/"invalid" are the collisions that matter: they are plausible free-text search
+	// terms, and stealing them from the graph grammar would be a regression in itself. They
+	// are lowercase alphanumeric, so they DO match the shape - the router only reaches this
+	// check for a single positional, and a miss reports a missing run log rather than
+	// searching. Pin the shapes that must never match at all.
+	for _, s := range []string{"inv", "INV123", "inv-123", "inv 123", "kind:spell", "out1a2b3c", ""} {
+		assert.False(t, LooksLikeInvocationID(s), "%q must NOT be treated as an invocation id", s)
+	}
+}
+
 // TestAmbiguousRefErrorMessage covers AmbiguousRefError.Error's rendering.
 func TestAmbiguousRefErrorMessage(t *testing.T) {
 	e := &AmbiguousRefError{Prefix: "refde", Candidates: []string{"outdead", "outdeed"}}

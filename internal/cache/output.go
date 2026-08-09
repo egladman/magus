@@ -864,12 +864,43 @@ func (s *OutputStore) ByRef(ref string) ([]byte, OutputDescriptor, error) {
 // `magus query output <ref> --meta` and the viewer surface this lineage. Reads off the cache
 // ROOT (RunsDir), not outputsDir. Returns fs.ErrNotExist when the run log has aged out.
 func (s *OutputStore) InvocationByID(inv string) (journal.Invocation, error) {
-	events, err := readEvents(filepath.Join(s.cacheDir, RunsDir, inv+".jsonl"))
+	_, events, err := s.InvocationEventsByID(inv)
 	if err != nil {
 		return journal.Invocation{}, err
 	}
 	return journal.InvocationFromEvents(inv, events), nil
 }
+
+// InvocationEventsByID reads one invocation's run log and returns its header alongside the
+// EVENTS it was reconstructed from. [OutputStore.InvocationByID] keeps only the header, which
+// is all a `--meta` line needs; this is for a caller that wants the stream itself.
+//
+// It exists because the events were being read and discarded. journal.KindSecret records every
+// credential a run reached for, and docs/concepts/secrets.md offers that as the answer to "what
+// did this run touch" - but nothing could read it back, so the audit trail was a claim with no
+// reader. Anything that wants to answer a question FROM the journal, rather than about a single
+// output, starts here.
+//
+// inv must be a full invocation id: unlike an output ref there is no prefix resolution, because
+// a run log is addressed by exact filename and a partial id would need a directory scan to
+// disambiguate. Returns fs.ErrNotExist when the log has aged out under the RotateLogs cap.
+func (s *OutputStore) InvocationEventsByID(inv string) (journal.Invocation, []journal.Event, error) {
+	events, err := readEvents(filepath.Join(s.cacheDir, RunsDir, inv+runExt))
+	if err != nil {
+		return journal.Invocation{}, nil, err
+	}
+	return journal.InvocationFromEvents(inv, events), events, nil
+}
+
+// invPattern matches a full invocation id: the literal "inv" then the base-36 timestamp and
+// sequence NewInvocationID mints. Used only to recognize one a user pasted, so `magus query`
+// can route it instead of handing it to the graph grammar, which finds nothing and says so in
+// a way that reads like the run does not exist.
+var invPattern = regexp.MustCompile("^inv[0-9a-z]+$")
+
+// LooksLikeInvocationID reports whether s is shaped like an invocation id. The counterpart to
+// [LooksLikeRef], and deliberately only a recognizer: retrieval stays an explicit subcommand.
+func LooksLikeInvocationID(s string) bool { return invPattern.MatchString(s) }
 
 // refPattern matches a full ref id or a hex prefix of one: the literal "out" then
 // one or more lowercase hex digits, anchored. The anchored hex tail is what makes

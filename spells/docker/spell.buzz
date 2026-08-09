@@ -11,7 +11,49 @@ export fun mgs_listRequiredGlobs() > [Path] {
 
 
 fun dockerBuild(target: Target) > Command { return Command{bin = "docker", args = ["build"]}; }
-fun dockerBuildx(target: Target) > Command { return Command{bin = "docker", args = ["buildx", "build"]}; }
+// buildx is the op that PUSHES (`--push`), so it is the one that meets a registry and the
+// one that fails on authentication. Docker's own message is a complete diagnosis to anyone
+// who already knows docker and an exit code to everyone else, so the hints turn it into the
+// command to run. Registries disagree about the wording - Docker Hub says "authentication
+// required", GHCR and most OCI registries say "unauthorized" or "denied" - so each phrasing
+// gets an entry rather than one guess.
+//
+// This is what a workspace should reach for before a separate `<area>-login` target: the
+// failure teaches the fix, so nobody has to know a convention in advance. See
+// docs/concepts/secrets.md.
+fun dockerBuildx(target: Target) > Command {
+    return Command{
+        bin = "docker",
+        args = ["buildx", "build"],
+        // Ordered SPECIFIC before general, because the first match wins: "denied:
+        // requested access" also contains no "unauthorized", but a registry that emits
+        // both phrasings should get the precise advice, not the catch-all.
+        hints = [
+            Hint{contains = "denied: requested access to the resource is denied",
+                 advise = "the registry accepted you but not this repository; check the image name and that the token may push to it"},
+            Hint{contains = "authentication required",
+                 advise = "not authenticated to the registry; run `docker login <registry>` and re-run (everything before the push replays from cache)"},
+            Hint{contains = "unauthorized",
+                 advise = "the registry rejected these credentials; run `docker login <registry>` and re-run, or check the token's scopes (a push needs write)"},
+            Hint{contains = "Cannot connect to the Docker daemon",
+                 advise = "the docker daemon is not running; start Docker Desktop or `systemctl start docker`"},
+            // podman's own phrasings. The registry entries above are already shared
+            // with it - those messages come from containers/image and the OCI registry
+            // rather than from either tool - so only what podman says in its own voice
+            // needs adding here.
+            //
+            // These belong to whatever op ends up forking podman. This spell forks
+            // `docker`, so today they only fire where a podman-docker shim is installed,
+            // and that is a workaround rather than podman support: a user who invokes
+            // podman directly does not reach this spell at all. See the note above
+            // mgs_getName.
+            Hint{contains = "Cannot connect to Podman",
+                 advise = "the podman service is not running; `podman machine start` on macOS or Windows, or start the podman.socket unit on Linux"},
+            Hint{contains = "authenticating creds for",
+                 advise = "podman could not authenticate to the registry; run `podman login <registry>` and re-run"},
+        ],
+    };
+}
 fun dockerBuildCheck(target: Target) > Command { return Command{bin = "docker", args = ["build", "--check"]}; }
 // Lints the Dockerfile, reporting in the GNU diagnostic format the tool declares in
 // mgs_getTools, so magus reads each finding's file, line and rule rather than its prose.

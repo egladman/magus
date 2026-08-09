@@ -194,6 +194,14 @@ type TargetGraphNode struct {
 	// cross-project input only; a same-project one seeds by directory containment), and
 	// the consumes edge to the file node in the owning project.
 	ReadsFiles []InputRef `json:"reads_files,omitempty" yaml:"reads_files,omitempty"`
+	// ReadsSecrets records that the target body calls magus\secret.read. A resolved
+	// credential contributes NOTHING to the cache key - deliberately, since hashing one
+	// would write it into cache metadata - so rotating or revoking it invalidates nothing.
+	// A cacheable target that reads a credential therefore becomes a replay that reports
+	// success without ever contacting the provider, which is worst for exactly the
+	// authentication targets the `-login` convention encourages, whose sources rarely
+	// change. MGS1026 reports the combination; skip_cache with a reason is the fix.
+	ReadsSecrets bool `json:"reads_secrets,omitempty" yaml:"reads_secrets,omitempty"`
 	// WritesFiles are the per-target ctx.writesFiles(...) refs, each carrying its owning project
 	// (empty means this target's own). When present, they define the target's
 	// snapshot/replay set instead of inheriting project-wide and spell outputs.

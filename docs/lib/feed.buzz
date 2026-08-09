@@ -4,7 +4,10 @@ namespace feed;
 
 import "assert";
 
-// escapeXml is escapeAttr's XML form (five entities, & last to avoid double-encoding).
+// escapeXml is escapeAttr's XML form: five entities, ampersand FIRST so the & each of
+// the other four introduces is never rescanned. (This note used to say "& last", which
+// is the opposite of both the code and the correct order - replacing it last would turn
+// "&lt;" into "&amp;lt;".)
 export fun escapeXml(s: str) > str {
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         .replace("\"", "&quot;").replace("'", "&apos;");
@@ -36,6 +39,24 @@ test "escapeXml substitutes all five XML entities, ampersand-safe" {
     assert\equal(escapeXml("a & b < c > d \" e ' f"),
         "a &amp; b &lt; c &gt; d &quot; e &apos; f", "all five entities");
     assert\equal(escapeXml("plain"), "plain", "no-op on safe text");
+}
+
+// EVERY occurrence, not one of each. The test above covers all five entities and still
+// missed a real defect for months: str.replace substituted only the FIRST match until
+// 2026-08-09, so this escaper encoded the first ampersand of a document and left the
+// rest raw in the feed. One-of-each fixtures measure thoroughness across CHARACTERS,
+// which is the wrong axis - the axis that catches this is repetition.
+//
+// The shape to copy for any escaper: the character at both edges, adjacent to itself,
+// and interleaved with the others.
+test "escapeXml substitutes EVERY occurrence, not just the first" {
+    assert\equal(escapeXml("&a&b&"), "&amp;a&amp;b&amp;", "ampersands at both edges and between");
+    assert\equal(escapeXml("&&"), "&amp;&amp;", "adjacent ampersands");
+    assert\equal(escapeXml("<a><b>"), "&lt;a&gt;&lt;b&gt;", "repeated angle brackets");
+    assert\equal(escapeXml("\"a\"'b'"), "&quot;a&quot;&apos;b&apos;", "repeated quotes");
+    // Ampersand is replaced FIRST so the & it introduces is never rescanned by the
+    // later arms. Replacing it last would turn "&lt;" into "&amp;lt;".
+    assert\equal(escapeXml("<&>"), "&lt;&amp;&gt;", "no double-encoding of introduced entities");
 }
 
 test "xml builders wrap and escape" {

@@ -51,6 +51,13 @@ var PatchOpSource string
 //go:embed gen/types/charm.buzz
 var CharmTypeSource string
 
+// HintSource is the generated mirror of spells.Hint: one {match, then} failure
+// classification a command op declares. It must PRECEDE CommandSource in the bundle -
+// Command.hints is [Hint] - and it references nothing itself.
+//
+//go:embed gen/types/hint.buzz
+var HintSource string
+
 //go:embed gen/types/command.buzz
 var CommandSource string
 
@@ -115,7 +122,7 @@ var CharmModuleSource string
 // Service, each referencing the prior; Target and Project have no cross-references
 // so their position is free). Shared by the runtime registration (modules.go) and
 // the built-in inliner (builtinModuleSources) below, so the two can't drift apart.
-var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, CommandSource, ServiceSource, VersionKeySource, VersionBoundsSource, ToolSource, ProjectSource}, "\n")
+var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, HintSource, CommandSource, ServiceSource, VersionKeySource, VersionBoundsSource, ToolSource, ProjectSource}, "\n")
 
 // builtinModuleSources maps an import path a self-contained built-in may use to
 // the module source prepended in its place (imports emit no bytecode, so an

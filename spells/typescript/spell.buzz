@@ -90,13 +90,54 @@ export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "node_modules", 
 // cache key). A node project has exactly one candidate.
 export fun mgs_listManifests() > [Path] { return [Path{value = "package.json"}]; }
 
+// PACKAGE_MANAGER_HINTS classify the failures that follow a stale install - the case where
+// somebody else's merge changed the lockfile and node_modules did not move with it. The
+// tool says what broke; none of these say "your install is out of date", which is the
+// actual fact and the reason this spell declares them.
+//
+// Every manager gets its own phrasing because every manager invented one. The ops here
+// currently fork pnpm, so the npm/yarn/bun entries cannot fire yet - they are declared
+// anyway because a non-matching string costs nothing, and the engine-side package-manager
+// substitution (a spell opts in, the runner forks the project's detected manager) makes
+// them live without touching this list again. An entry that never matches is inert; an
+// entry missing when the substitution lands is a silent gap.
+//
+// Only exact error CODES and verbatim messages are matched. A wrong hint is worse than
+// none, so a phrasing that drifts between releases does not belong here.
+final PACKAGE_MANAGER_HINTS = [
+    // pnpm
+    Hint{contains = "ERR_PNPM_OUTDATED_LOCKFILE",
+         advise = "pnpm-lock.yaml disagrees with package.json - usually a merge that changed one of them; run `pnpm install` and commit the lockfile"},
+    Hint{contains = "ERR_PNPM_NO_SCRIPT",
+         advise = "package.json declares no such script; check the name, or the target may be pointed at the wrong project"},
+    // npm. `npm ci` refuses rather than silently reconciling, which is the right call and
+    // also the one that reads as a wall of text; the fix is one command.
+    Hint{contains = "can only install packages when your package.json and package-lock.json",
+         advise = "package-lock.json disagrees with package.json - usually a merge that changed one of them; run `npm install` and commit the lockfile"},
+    Hint{contains = "Missing script:",
+         advise = "package.json declares no such script; check the name, or the target may be pointed at the wrong project"},
+    // yarn: classic, then berry.
+    Hint{contains = "Your lockfile needs to be updated",
+         advise = "yarn.lock disagrees with package.json; run `yarn install` and commit the lockfile"},
+    Hint{contains = "The lockfile would have been modified by this install",
+         advise = "yarn.lock disagrees with package.json; run `yarn install` and commit the lockfile"},
+    // bun
+    Hint{contains = "lockfile had changes, but lockfile is frozen",
+         advise = "the bun lockfile disagrees with package.json; run `bun install` and commit the lockfile"},
+    // Manager-agnostic: node and the shell, whatever installed (or failed to install).
+    Hint{contains = "Cannot find module",
+         advise = "a dependency is missing from node_modules, usually a stale install; run your package manager's install"},
+    Hint{contains = "command not found",
+         advise = "the tool is not in node_modules/.bin, usually a stale or missing install; run your package manager's install"},
+];
+
 // biome-check is biome's lint/analyze pass (eslint's role, if your project
 // chose Biome over eslint+prettier - the magusfile decides which composes
 // into lint, not this spell). --write and --reporter=github verified against
 // the current Biome CLI docs (biomejs.dev/reference/cli).
 fun biomeCheck(target: Target) > Command {
     final args = ["exec", "biome", "check", "."];
-    return Command{bin = "pnpm", args = args, charms = {
+    return Command{bin = "pnpm", args = args, hints = PACKAGE_MANAGER_HINTS, charms = {
         "rw":  after(args, "check", ["--write"]),
         "gha": after(args, "check", ["--reporter=github"]),
     }};
@@ -107,7 +148,7 @@ fun biomeCheck(target: Target) > Command {
 // of removing one.
 fun biomeFormat(target: Target) > Command {
     final args = ["exec", "biome", "format", "."];
-    return Command{bin = "pnpm", args = args, charms = {
+    return Command{bin = "pnpm", args = args, hints = PACKAGE_MANAGER_HINTS, charms = {
         "rw": after(args, "format", ["--write"]),
     }};
 }
@@ -116,7 +157,7 @@ fun biomeFormat(target: Target) > Command {
 // one-line-per-problem shape for annotation/regex parsing.
 fun eslint(target: Target) > Command {
     final args = ["exec", "eslint", "."];
-    return Command{bin = "pnpm", args = args, charms = {
+    return Command{bin = "pnpm", args = args, hints = PACKAGE_MANAGER_HINTS, charms = {
         "rw": after(args, "eslint", ["--fix"]),
         "gha": after(args, "eslint", ["--format=unix"]),
     }};
@@ -125,11 +166,11 @@ fun eslint(target: Target) > Command {
 fun preflight(target: Target) > Command { return Command{}; }
 fun prettier(target: Target) > Command {
     final args = ["exec", "prettier", "--check", "."];
-    return Command{bin = "pnpm", args = args, charms = {
+    return Command{bin = "pnpm", args = args, hints = PACKAGE_MANAGER_HINTS, charms = {
         "rw": set(args, "--check", "--write"),
     }};
 }
-fun tsc(target: Target) > Command { return Command{bin = "pnpm", args = ["exec", "tsc"]}; }
+fun tsc(target: Target) > Command { return Command{bin = "pnpm", args = ["exec", "tsc"], hints = PACKAGE_MANAGER_HINTS}; }
 // tsc-build uses TypeScript's project-references incremental build mode (works
 // even without declared references, via its own .tsbuildinfo cache), emitting per
 // tsconfig outDir - see mgs_listProvidedGlobs.

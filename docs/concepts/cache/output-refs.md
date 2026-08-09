@@ -139,9 +139,9 @@ For the LATEST log of a project or target (rather than a specific past execution
 ### What the ref does not depend on
 
 The key is a pure function of [the hashed `Step` fields](../cache.md#the-cache-key):
-`keyVersion`, `projectPath`, `target`, `charm`, `arg`, `src`, `env`, `exec`, `dep`,
-`spellDefVersion`, `tool`. Nothing else reaches the hash. Four omissions account for
-most of the questions people ask.
+`keyVersion`, `os`, `arch`, `projectPath`, `target`, `charm`, `arg`, `src`, `env`,
+`exec`, `dep`, `spellDefVersion`, `tool`. Nothing else reaches the hash. Four omissions
+account for most of the questions people ask.
 
 - **No commit, no branch.** A target's key is the content of its declared sources,
   not the commit they sit on. Check the same bytes out at two commits and they hash
@@ -154,8 +154,13 @@ most of the questions people ask.
   (`internal/cache/hash.go`), never the machine-specific one. Your checkout and
   CI's disagree on everything above the workspace root and agree below it, which is
   what carries a ref across machines.
-- **No machine identity.** Hostname, OS, user, runner id: none of it is an input. A
-  tool's _version_ is, through the `tool:` lines. Where it ran is not.
+- **No machine identity, beyond platform.** Hostname, user, and runner id are not
+  inputs, and a tool's _version_ is, through the `tool:` lines. But the host **OS and
+  architecture are** hashed by default (`cache.include.os` / `cache.include.arch`), so
+  two refs from different platforms differ even when everything else matches. Comparing a
+  laptop's ref against a Linux runner's with `--against` will report a difference that is
+  the platform, not the change you are chasing; turn the two switches off for that
+  comparison, or compare like with like.
 
 `Step.Label` is also excluded, so renaming what a log line calls a project (root
 prints as `magus`, not `.`) cannot change a ref.

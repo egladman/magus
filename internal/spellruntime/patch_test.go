@@ -180,6 +180,46 @@ func applyWithEvanphx(argv []string, ops []spells.PatchOp) ([]string, error) {
 // reproduces these exact values, so an accidental change in a built-in's .buzz — or in
 // the Buzz toolchain — is caught. Update this table in lockstep with an intentional
 // built-in change.
+// Failure-advice tables, mirroring the shared lists the built-in .buzz sources declare.
+// Named here for the same reason they are named there: the list is shared by several ops,
+// so a golden that inlined it per op would drift one entry at a time.
+var (
+	goldenGoModHints = []spells.Hint{
+		{Contains: "missing go.sum entry", Advise: "go.sum is out of date with go.mod; run `magus run generate:relock` (or `go mod tidy`) and commit the result"},
+		{Contains: "updates to go.mod needed", Advise: "go.mod does not cover the imports in the tree; run `magus run generate:relock` (or `go mod tidy`) and commit the result"},
+	}
+	goldenPackageManagerHints = []spells.Hint{
+		{Contains: "ERR_PNPM_OUTDATED_LOCKFILE", Advise: "pnpm-lock.yaml disagrees with package.json - usually a merge that changed one of them; run `pnpm install` and commit the lockfile"},
+		{Contains: "ERR_PNPM_NO_SCRIPT", Advise: "package.json declares no such script; check the name, or the target may be pointed at the wrong project"},
+		{Contains: "can only install packages when your package.json and package-lock.json", Advise: "package-lock.json disagrees with package.json - usually a merge that changed one of them; run `npm install` and commit the lockfile"},
+		{Contains: "Missing script:", Advise: "package.json declares no such script; check the name, or the target may be pointed at the wrong project"},
+		{Contains: "Your lockfile needs to be updated", Advise: "yarn.lock disagrees with package.json; run `yarn install` and commit the lockfile"},
+		{Contains: "The lockfile would have been modified by this install", Advise: "yarn.lock disagrees with package.json; run `yarn install` and commit the lockfile"},
+		{Contains: "lockfile had changes, but lockfile is frozen", Advise: "the bun lockfile disagrees with package.json; run `bun install` and commit the lockfile"},
+		{Contains: "Cannot find module", Advise: "a dependency is missing from node_modules, usually a stale install; run your package manager's install"},
+		{Contains: "command not found", Advise: "the tool is not in node_modules/.bin, usually a stale or missing install; run your package manager's install"},
+	}
+	goldenBuildxHints = []spells.Hint{
+		{Contains: "denied: requested access to the resource is denied", Advise: "the registry accepted you but not this repository; check the image name and that the token may push to it"},
+		{Contains: "authentication required", Advise: "not authenticated to the registry; run `docker login <registry>` and re-run (everything before the push replays from cache)"},
+		{Contains: "unauthorized", Advise: "the registry rejected these credentials; run `docker login <registry>` and re-run, or check the token's scopes (a push needs write)"},
+		{Contains: "Cannot connect to the Docker daemon", Advise: "the docker daemon is not running; start Docker Desktop or `systemctl start docker`"},
+		{Contains: "Cannot connect to Podman", Advise: "the podman service is not running; `podman machine start` on macOS or Windows, or start the podman.socket unit on Linux"},
+		{Contains: "authenticating creds for", Advise: "podman could not authenticate to the registry; run `podman login <registry>` and re-run"},
+	}
+	goldenRustupHints = []spells.Hint{
+		{Contains: "no such command", Advise: "cargo subcommands like clippy and rustfmt are rustup components; install with `rustup component add clippy` (or rustfmt)"},
+	}
+	goldenPodmanHints = []spells.Hint{
+		{Contains: "denied: requested access to the resource is denied", Advise: "the registry accepted you but not this repository; check the image name and that the token may push to it"},
+		{Contains: "authenticating creds for", Advise: "podman could not authenticate to the registry; run `podman login <registry>` and re-run"},
+		{Contains: "authentication required", Advise: "not authenticated to the registry; run `podman login <registry>` and re-run (everything before the push replays from cache)"},
+		{Contains: "unauthorized", Advise: "the registry rejected these credentials; run `podman login <registry>` and re-run, or check the token's scopes (a push needs write)"},
+		{Contains: "Cannot connect to Podman", Advise: "the podman service is not running; `podman machine start` on macOS or Windows, or start the podman.socket unit on Linux"},
+		{Contains: "short-name resolution enforced but cannot prompt", Advise: "podman refuses ambiguous short names in non-interactive use; write the fully qualified image (docker.io/library/alpine, not alpine)"},
+	}
+)
+
 var goldenBuiltins = map[string]spells.Descriptor{
 	"bash": {
 		Name:       "bash",
@@ -247,7 +287,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Ops: map[string]spells.Op{
 			"docker-build":       {Command: spells.Command{Bin: "docker", Args: []string{"build"}}},
 			"docker-run":         {Command: spells.Command{Bin: "docker", Args: []string{"run", "--rm"}}},
-			"docker-buildx":      {Command: spells.Command{Bin: "docker", Args: []string{"buildx", "build"}}},
+			"docker-buildx":      {Command: spells.Command{Bin: "docker", Args: []string{"buildx", "build"}, Hints: goldenBuildxHints}},
 			"docker-build-check": {Command: spells.Command{Bin: "docker", Args: []string{"build", "--check"}}},
 			"hadolint":           {Command: spells.Command{Bin: "hadolint", Args: []string{"-f", "gnu", "Dockerfile"}}},
 		},
@@ -265,14 +305,14 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		IgnoreDirs: []string{"vendor"},
 		Manifests:  []string{"go.mod"},
 		Ops: map[string]spells.Op{
-			"go-build":    {Command: spells.Command{Bin: "go", Args: []string{"build"}}},
+			"go-build":    {Command: spells.Command{Bin: "go", Args: []string{"build"}, Hints: goldenGoModHints}},
 			"go-clean":    {Command: spells.Command{Bin: "go", Args: []string{"clean", "./..."}}},
 			"go-generate": {Command: spells.Command{Bin: "go", Args: []string{"generate", "./..."}}},
 			"go-mod-edit": {Command: spells.Command{Bin: "go", Args: []string{"mod", "edit", "-print"}, Capture: true, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
 			}}, Capture: true},
 			"go-mod-json": {Command: spells.Command{Bin: "go", Args: []string{"mod", "edit", "-json"}, Capture: true}, Capture: true},
-			"go-run":      {Command: spells.Command{Bin: "go", Args: []string{"run"}}},
+			"go-run":      {Command: spells.Command{Bin: "go", Args: []string{"run"}, Hints: goldenGoModHints}},
 			"go-fmt": {Command: spells.Command{Bin: "gofmt", Args: []string{"-l", "."}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
 			}}},
@@ -283,7 +323,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 				"rw":    {Ops: []spells.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
 			}}},
-			"go-test": {Command: spells.Command{Bin: "go", Args: []string{"test", "./..."}, Charms: map[string]spells.Charm{
+			"go-test": {Command: spells.Command{Bin: "go", Args: []string{"test", "./..."}, Hints: goldenGoModHints, Charms: map[string]spells.Charm{
 				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 				"cd": {Ops: []spells.PatchOp{
 					{Op: "add", Path: "/-", Value: "-covermode=atomic"},
@@ -316,6 +356,25 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"typos": {Command: spells.Command{Bin: "typos", Args: []string{"--format", "brief"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-w"}}},
 			}}},
+		},
+	},
+	"podman": {
+		Name:  "podman",
+		Needs: []string{"Containerfile", "Dockerfile", ".containerignore", ".dockerignore", "**/*"},
+		Tools: map[string]spells.Tool{
+			// Daemonless on Linux but VM-backed on macOS/Windows, so --version answers
+			// whether the CLI exists and `info` whether it can do anything.
+			"podman": {
+				Probe: spells.Command{Bin: "podman", Args: []string{"--version"}},
+				Key:   spells.VersionKey{UpTo: spells.VersionPatch},
+				Ready: spells.Command{Bin: "podman", Args: []string{"info"}},
+			},
+		},
+		Ops: map[string]spells.Op{
+			"podman-build":    {Command: spells.Command{Bin: "podman", Args: []string{"build"}, Hints: goldenPodmanHints}},
+			"podman-push":     {Command: spells.Command{Bin: "podman", Args: []string{"push"}, Hints: goldenPodmanHints}},
+			"podman-manifest": {Command: spells.Command{Bin: "podman", Args: []string{"manifest"}, Hints: goldenPodmanHints}},
+			"podman-run":      {Command: spells.Command{Bin: "podman", Args: []string{"run", "--rm"}, Hints: goldenPodmanHints}},
 		},
 	},
 	"python": {
@@ -352,7 +411,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Ops: map[string]spells.Op{
 			"cargo-build":  {Command: spells.Command{Bin: "cargo", Args: []string{"build", "--release"}}},
 			"cargo-clean":  {Command: spells.Command{Bin: "cargo", Args: []string{"clean"}}},
-			"cargo-clippy": {Command: spells.Command{Bin: "cargo", Args: []string{"clippy", "--", "-D", "warnings"}}},
+			"cargo-clippy": {Command: spells.Command{Bin: "cargo", Args: []string{"clippy", "--", "-D", "warnings"}, Hints: goldenRustupHints}},
 			"cargo-fmt": {Command: spells.Command{Bin: "cargo", Args: []string{"fmt", "--", "--check"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}},
 			}}},
@@ -378,22 +437,22 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		IgnoreDirs: []string{"node_modules"},
 		Manifests:  []string{"package.json"},
 		Ops: map[string]spells.Op{
-			"biome-check": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "biome", "check", "."}, Charms: map[string]spells.Charm{
+			"biome-check": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "biome", "check", "."}, Hints: goldenPackageManagerHints, Charms: map[string]spells.Charm{
 				"rw":  {Ops: []spells.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
 				"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/3", Value: "--reporter=github"}}},
 			}}},
-			"biome-format": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "biome", "format", "."}, Charms: map[string]spells.Charm{
+			"biome-format": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "biome", "format", "."}, Hints: goldenPackageManagerHints, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
 			}}},
-			"eslint": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "eslint", "."}, Charms: map[string]spells.Charm{
+			"eslint": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "eslint", "."}, Hints: goldenPackageManagerHints, Charms: map[string]spells.Charm{
 				"rw":  {Ops: []spells.PatchOp{{Op: "add", Path: "/2", Value: "--fix"}}},
 				"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/2", Value: "--format=unix"}}},
 			}}},
 			"preflight": {},
-			"prettier": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "prettier", "--check", "."}, Charms: map[string]spells.Charm{
+			"prettier": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "prettier", "--check", "."}, Hints: goldenPackageManagerHints, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/2", Value: "--write"}}},
 			}}},
-			"tsc":       {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc"}}},
+			"tsc":       {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc"}, Hints: goldenPackageManagerHints}},
 			"tsc-build": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc", "--build"}}},
 			"tsc-clean": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc", "--build", "--clean"}}},
 			"vitest": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "vitest", "run"}, Charms: map[string]spells.Charm{
