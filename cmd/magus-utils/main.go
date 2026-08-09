@@ -35,7 +35,6 @@ var scribes = map[string]func(args []string) error{
 	"cut":                runCut,
 	"migrate":            runMigrate,
 	"release-index":      runReleaseIndex,
-	"registry-build":     runRegistryBuild,
 	"generate-changelog": runGenerateChangelog,
 }
 
@@ -58,5 +57,5 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: magus-utils <types|buzzobjects|moduledecls|bindings|config|spells|sign|api|verify|cut|migrate|release-index|registry-build|generate-changelog> [flags]")
+	fmt.Fprintln(os.Stderr, "usage: magus-utils <types|buzzobjects|moduledecls|bindings|config|spells|sign|api|verify|cut|migrate|release-index|generate-changelog> [flags]")
 }

@@ -6,19 +6,18 @@ name: Registry
 # unsanctioned". Every user reads one static file.
 #
 # NOT audit.yaml. That workflow's header promises neither job publishes anything,
-# and this one exists to publish. A schedule is not a reason to share a file with a
-# workflow that makes the opposite promise.
+# and this one exists to publish.
+#
+# The work is tools/registry.buzz, not a Go program, and docs/scope.md is why:
+# "The binary supplies primitives. You supply knowledge about the world." Which
+# upstream to read and which of its fields matter is knowledge about the world, so
+# it belongs in a file anyone can change without cutting a magus release.
 #
 # It signs with MAGUS_REGISTRY_KEY and never MAGUS_SIGNING_KEY. The release key is
 # reachable from exactly one job on a v* tag and release.yaml records that
-# quarantine deliberately; a job whose input is several hundred third-party HTTP
-# responses is the last place it should appear. A second keypair costs nothing.
-#
-# The build is split from the download on purpose: -fetch writes ./upstream, and the
-# transform reads only files. That is what lets a stranger run
-# `magus-utils registry-build -upstream ... -verify <published>` and get a diff
-# rather than a promise. See docs/scope.md for what a signature does and does not
-# prove - it never says any date in this file is correct.
+# quarantine; a job whose input is several hundred third-party HTTP responses is the
+# last place it should appear. crypto\ed25519Sign takes the NAME of the variable, so
+# the key never becomes a Buzz value that could reach a log.
 
 on:
   schedule:
@@ -39,57 +38,82 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: write        # push the branch the pull request is opened from
+      contents: write        # create the branch ref and its commits through the API
       pull-requests: write
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
 
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+      - uses: ./.github/actions/setup-magus
         with:
-          go-version-file: go.mod
+          installation-strategy: source
+          source-path: .
 
       # Its own step so a network failure stops here, loudly, rather than being
       # folded into a build that would then publish a half-refreshed snapshot.
       - name: Fetch from endoflife.date
-        run: go run ./cmd/magus-utils registry-build -upstream ./upstream -fetch
+        env:
+          REGISTRY_MODE: fetch
+        run: magus buzz tools/registry.buzz
 
       - name: Build and sign the registry
         env:
+          REGISTRY_MODE: build
           MAGUS_REGISTRY_KEY: ${{ secrets.MAGUS_REGISTRY_KEY }}
-        run: go run ./cmd/magus-utils registry-build -upstream ./upstream -releases ./releases -out ./docs/gen/public/registry
+        run: |
+          # 180 days, matching the release index. Long because nothing republishes on
+          # a timer - this workflow does, and `magus doctor` warns as it nears.
+          REGISTRY_EXPIRES="$(date -u -d '+180 days' +%Y-%m-%dT%H:%M:%SZ)" \
+            magus buzz tools/registry.buzz
 
-      # Same reason release-index opens one: main's ruleset requires a pull request
-      # and bypasses only for the admin role, so no workflow pushes to the default
-      # branch. A day with no upstream change produces no diff and no pull request.
+      # Everything below goes through `gh`, which already holds a token, rather than
+      # through git plumbing. No credential juggling, no persist-credentials
+      # dependency, and it works from the shallow checkout above - a `git push` out of
+      # one is the kind of thing that works until the day it does not.
+      #
+      # main's ruleset requires a pull request and bypasses only for the admin role,
+      # so nothing here writes to the default branch. A day with no upstream change
+      # produces no commit and no pull request.
       - name: Open a pull request
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          BASE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          paths=(docs/gen/public/registry)
-          if [ -z "$(git status --porcelain -- "${paths[@]}")" ]; then
+          dir=docs/gen/public/registry
+          if git diff --quiet -- "$dir"; then
             echo "upstream is unchanged since the last run; nothing to publish"
             exit 0
           fi
-          branch="registry/$(git rev-parse --short HEAD)"
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git switch -c "$branch"
-          git add -- "${paths[@]}"
-          git commit -m "Refresh the signed registry from endoflife.date"
-          git push origin "$branch"
+
+          branch="registry/$(date -u +%Y-%m-%d)"
+          gh api "repos/$REPO/git/refs" -f ref="refs/heads/$branch" -f sha="$BASE_SHA" \
+            --silent 2>/dev/null || echo "branch $branch already exists; updating it"
+
+          # One API call per file. The Contents API wants the blob's current sha to
+          # REPLACE it and none to create it, hence the lookup that tolerates a 404.
+          for f in index.json index.json.sig; do
+            path="$dir/$f"
+            sha="$(gh api "repos/$REPO/contents/$path?ref=$branch" --jq .sha 2>/dev/null || true)"
+            args=(-f "message=Refresh the signed registry from endoflife.date"
+                  -f "content=$(base64 < "$path" | tr -d '\n')"
+                  -f "branch=$branch")
+            if [ -n "$sha" ]; then args+=(-f "sha=$sha"); fi
+            gh api -X PUT "repos/$REPO/contents/$path" "${args[@]}" --silent
+          done
+
           gh pr create --base main --head "$branch" \
             --title "Refresh the signed registry from endoflife.date" \
             --body "$(cat <<'BODY'
-          Opened by `.github/workflows/registry.yaml`.
+          Opened by `.github/workflows/registry.yaml`, built by `tools/registry.buzz`.
 
           Republished end-of-life facts, keyed by upstream product slug. The signature
           says these are the bytes our pipeline built; it does not say any date in them
           is correct. magus did not author this data and cannot verify it.
 
-          Every upstream response's digest is recorded in the file, so this rebuilds:
+          Every upstream response's digest is recorded in the file, so anyone can rebuild
+          it and diff rather than take our word for it:
 
-              go run ./cmd/magus-utils registry-build -upstream ./upstream \
-                -releases ./releases -verify docs/gen/public/registry/index.json
+              REGISTRY_MODE=verify magus buzz tools/registry.buzz
           BODY
-          )"
+          )" 2>/dev/null || echo "a pull request for $branch is already open"
