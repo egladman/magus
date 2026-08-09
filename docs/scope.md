@@ -95,6 +95,38 @@ which a monorepo needs.
 
 </details>
 
+**One of those four is being reversed, and it should be named rather than
+quietly dropped.** A signed registry of release and end-of-life data, hosted on
+the magus site and fetched only when you ask for it, is the third rejection: it
+is a network call to a domain we control, and it does commit a project with no
+revenue to keeping an aggregator fresh. Neither objection has stopped being
+true. What changed is that the failure mode is now visible instead of silent:
+staleness is measured from a `generated_at` inside the signed file, so an
+aggregator nobody is maintaining reports itself as old rather than serving
+confident stale dates. The file is keyed by upstream product slug and carries no
+magus concepts, so mirroring it is a copy rather than a port, and a mirror is
+what you reach for when you would rather not depend on us. Declining is
+`enabled: false`, and a declined install is silent forever rather than nagged.
+
+The other three stand, and the registry does not smuggle them back:
+
+- **No release-feed type in the binary.** The registry is data magus fetches, not
+  a concept it implements. It republishes a third party's fields; it does not
+  decide what counts as a release or what LTS means, and there is nothing in the
+  binary that would have to answer those questions.
+- **The data is still sparse.** Around five of the eighteen tools here publish a
+  support window, and a registry does not create the other thirteen. It reports
+  `-` for them. Serving a minority was only a fatal objection when the design
+  degraded into a wrong answer; reporting "unknown" for most tools is honest.
+- **The policy still is not in config.** What a source-of-truth URL is gets
+  configured; what version range your project accepts does not, and stays where
+  it was. Nothing the registry reports fails a build - it is a column in a
+  report and a doctor line, never a gate.
+
+Read what a signature does and does not prove before relying on it: it says the
+file is the one our pipeline published, unmodified. It does not say any date in
+it is correct. magus did not author this data and cannot verify it.
+
 The surviving design is a version range you declare, compared against a version
 magus already probes. It never learns which versions exist upstream and never
 picks one. To find out when your range has gone stale, write that in your own
