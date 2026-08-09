@@ -98,3 +98,43 @@ func TestStrUnwrapsOnlyStrBackedEnums(t *testing.T) {
 	`))
 	assert.Equal(t, "", Str([]vm.Value{sess.GetGlobal("picked")}, 0))
 }
+
+// BenchmarkStr guards the hot path. Str runs for EVERY string argument of every
+// host call, so the enum unwrap added to it is the one change in that area that
+// could cost something measurable.
+//
+// The str case is what to watch: it is the overwhelmingly common one, and it now
+// runs a tag check before the IsStr it always ran. The enum case is rarer and pays
+// one extra branch plus the unwrap by definition.
+func BenchmarkStr(b *testing.B) {
+	ctx := context.Background()
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	defer sess.Close()
+	if err := sess.Exec(ctx, `
+		enum<str> Alg { Ed25519 = "ed25519" }
+		final picked = Alg.Ed25519;
+	`); err != nil {
+		b.Fatal(err)
+	}
+
+	cases := []struct {
+		name string
+		args []vm.Value
+	}{
+		{"str", []vm.Value{vm.StrValue("ed25519")}},
+		{"enum", []vm.Value{sess.GetGlobal("picked")}},
+		{"absent", nil},
+	}
+	for _, c := range cases {
+		b.Run(c.name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				sink = Str(c.args, 0)
+			}
+		})
+	}
+}
+
+// sink defeats dead-store elimination of the benchmarked call.
+var sink string
