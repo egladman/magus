@@ -24,13 +24,13 @@ magus completion <shell>    # e.g. bash, zsh, fish
 Every synopsis on this site and in `magus <verb> -h` and the manpages uses the
 same five marks. This is the whole vocabulary:
 
-| notation | means | example |
-| --- | --- | --- |
-| `<value>` | required; replace it | `magus run <target>` |
-| `[thing]` | optional; omit the brackets if you use it | `magus ls [flags]` |
-| `<a\|b\|c>` | required, and one of these exact words | `magus completion <bash\|zsh\|fish\|powershell>` |
-| `<value>...` | repeatable; one or more, space separated | `magus describe file <path> [<path>...]` |
-| `word[s]` | the `s` is optional - both spellings work | `magus describe spell[s]` |
+| notation     | means                                     | example                                          |
+| ------------ | ----------------------------------------- | ------------------------------------------------ |
+| `<value>`    | required; replace it                      | `magus run <target>`                             |
+| `[thing]`    | optional; omit the brackets if you use it | `magus ls [flags]`                               |
+| `<a\|b\|c>`  | required, and one of these exact words    | `magus completion <bash\|zsh\|fish\|powershell>` |
+| `<value>...` | repeatable; one or more, space separated  | `magus describe file <path> [<path>...]`         |
+| `word[s]`    | the `s` is optional - both spellings work | `magus describe spell[s]`                        |
 
 The last one is the only place square brackets do NOT mean "optional argument":
 `spell[s]` means `magus describe spell` and `magus describe spells` are the same
@@ -77,7 +77,7 @@ magus where --filter type=regex,pattern='^libs/'
 
 Two tags, and the difference is whether you are meant to copy the block or read it.
 
-A ` ```sh ` block is a **command block**. It omits the shell prompt, so you can copy the
+A `` ```sh `` block is a **command block**. It omits the shell prompt, so you can copy the
 whole thing as-is with no leading `$` or `>` to strip. A `#` comment on or after a line
 shows expected output or an aside:
 
@@ -91,7 +91,7 @@ a version, a commit, a duration, a cache key - the comment shows the SHAPE with
 placeholders in it, not one machine's answer. A pasted-in literal goes stale silently;
 a shape does not.
 
-A ` ```console ` block is a **session transcript**: a command and the output it actually
+A `` ```console `` block is a **session transcript**: a command and the output it actually
 produced, with the `$` prompt kept because that is what separates the two. You read these
 rather than copy them. Several are captured from real runs against a fixture workspace and
 re-injected on every build, so they cannot drift from what the command prints
@@ -136,6 +136,7 @@ off, every block is plain, copyable text.)
 This one is live. Press Run:
 
 <!-- magus-run -->
+
 ```buzz
 import "std";
 import "strings";
@@ -150,6 +151,7 @@ An author opts a block in with an HTML comment on the line directly above the fe
 
 ````md
 <!-- magus-run -->
+
 ```buzz
 std\print("hello");
 ```
@@ -192,8 +194,7 @@ the claim, or a "see also" that is worth keeping but not worth interrupting the
 thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
 detail entirely.
 
-[^example]:
-    Authored as `text[^label]` in the prose, with a matching `[^label]: note`
+[^example]: Authored as `text[^label]` in the prose, with a matching `[^label]: note`
     line anywhere in the file.
 
 ## Cross-links
@@ -233,11 +234,11 @@ this site - it is a static tree of files.
 
 A few things are deliberately left to the browser, each for its own reason:
 
-| feature | why it is not precomputed |
-| --- | --- |
-| syntax highlighting | highlight.js colors the fenced blocks on load so they track your light/dark theme; the markup ships uncolored and legible |
-| mermaid diagrams | rendered from the fence's source on load, likewise theme-aware |
-| runnable examples | the Buzz WebAssembly module is a large download, so it loads only if you press **Run** |
+| feature             | why it is not precomputed                                                                                                                                                                                                           |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| syntax highlighting | highlight.js colors the fenced blocks on load so they track your light/dark theme; the markup ships uncolored and legible                                                                                                           |
+| mermaid diagrams    | rendered from the fence's source on load, likewise theme-aware                                                                                                                                                                      |
+| runnable examples   | the Buzz WebAssembly module is a large download, so it loads only if you press **Run**                                                                                                                                              |
 | relative timestamps | `Last updated` ships as an absolute date and is swapped to "3 days ago" in the browser. A build-time relative date would change every day, which would make the rendered site differ from the committed one and trip the drift gate |
 
 Each is additive. With JavaScript off you get uncolored code, plain fenced text where a
@@ -251,7 +252,7 @@ know which file a snippet belongs in (for example a `magusfile.buzz`).
 
 ## Diffs
 
-A ` ```diff ` block shows a change: added lines (leading `+`) render as a green band,
+A `` ```diff `` block shows a change: added lines (leading `+`) render as a green band,
 removed lines (leading `-`) as a red one.
 
 ```diff

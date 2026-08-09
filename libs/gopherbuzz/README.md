@@ -8,8 +8,7 @@ language with JIT support. It targets Buzz 0.6.0-dev, tracking upstream
 It implements a **subset** of the language. The goal is 100% compatibility; the
 running record of how far along that is lives in [Upstream parity](#upstream-parity),
 and is enforced by a test rather than asserted by this file. If you are evaluating
-gopherbuzz as a Buzz implementation, read [Where the skeletons
-are](#where-the-skeletons-are) before the feature list -- it names every place this VM
+gopherbuzz as a Buzz implementation, read [Where the skeletons are](#where-the-skeletons-are) before the feature list -- it names every place this VM
 answers differently from upstream, or accepts source upstream refuses.
 
 - Reference: <https://buzz-lang.dev/0.5.0/reference/> (latest published; 0.6.0 is unreleased)
@@ -21,14 +20,14 @@ Measured against `UpstreamRef` (`0.5.0-251-ged42f47`) on 2026-07-30. Upstream sh
 six test directories; three are measurable here, and all three numbers are below
 rather than only the flattering one.
 
-| upstream suite | files | gopherbuzz | what it asks |
-| --- | ---: | ---: | --- |
-| `tests/behavior/` | 83 | **67 pass** | does correct source produce the right answer? |
-| `tests/compile_errors/` | 77 | **26 rejected** | does gopherbuzz REJECT what upstream rejects? |
-| `tests/fuzzed/` | 644 | **0 panics** | can malformed input crash the front end? |
-| `tests/bench/` | 11 | not run | upstream's benchmarks (ours are in [`benchmarks/`](benchmarks/)) |
-| `tests/manual/` | 9 | not run | interactive |
-| `tests/utils/` | 10 | n/a | helper modules the behavior tests import |
+| upstream suite          | files |      gopherbuzz | what it asks                                                     |
+| ----------------------- | ----: | --------------: | ---------------------------------------------------------------- |
+| `tests/behavior/`       |    83 |     **67 pass** | does correct source produce the right answer?                    |
+| `tests/compile_errors/` |    77 | **26 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
+| `tests/fuzzed/`         |   644 |    **0 panics** | can malformed input crash the front end?                         |
+| `tests/bench/`          |    11 |         not run | upstream's benchmarks (ours are in [`benchmarks/`](benchmarks/)) |
+| `tests/manual/`         |     9 |         not run | interactive                                                      |
+| `tests/utils/`          |    10 |             n/a | helper modules the behavior tests import                         |
 
 **The compile-error row is the uncomfortable one and the most important.** 51 of those
 77 programs compile CLEAN here that upstream refuses. That is not a missing feature, it
@@ -105,28 +104,26 @@ the compiler can mint -- null, bool, int, float, str, enum def, object declarati
 pattern, and type value -- has an encoding, so the encoder's "cannot serialize" arm
 is unreachable from compiled code. A type-value constant (`<T>`, `typeof x`) was the
 one that had been missed: `Marshal` failed outright on it, which silently barred any
-program using `typeof` from ever being a built-in spell. [Bytecode
-version](#bytecode-version) records what each format bump changed and why an older
+program using `typeof` from ever being a built-in spell. [Bytecode version](#bytecode-version) records what each format bump changed and why an older
 VM must reject a newer blob.
 
 Read that list as "the shape parses and runs", not as "matches upstream in every
-detail". Several entries carry a caveat recorded under [Where the skeletons
-are](#where-the-skeletons-are) -- `as` coerces rather than asserts, `match` does no
+detail". Several entries carry a caveat recorded under [Where the skeletons are](#where-the-skeletons-are) -- `as` coerces rather than asserts, `match` does no
 exhaustiveness analysis, protocol conformance is unverified, and generics are erased.
 
 ### What does not
 
 Seven of the sixteen remaining failures are open gaps, each with a known cause:
 
-| Gap | Blocks | Cause |
-| --- | ---: | --- |
-| Buffer's binary API | `buffer` | Missing `writeInt`/`readInt` (upstream's `Integer` is an **i48**, so six bytes), `writeDouble`/`readDouble`, `writeBoolean`/`readBoolean`, and `empty`; `write`/`read` also take and return a `str` upstream where gopherbuzz uses `[int]`. |
-| Object-keyed maps | `protocols` | `mapObj` is keyed by `string` throughout, and a map literal stores a bare identifier key as its literal name rather than evaluating it. Upstream allows any value as a key. |
-| Tuple types | `tuples` | `obj{ :str, :str }` (positional fields) and the matching `.{ a, b }` literal. |
-| `typeof` and mutability | `clone-mutability-methods` | `cloneMutable()` has to retype to `<mut [int]>`; mutability is a property no runtime value carries. |
-| Namespaces sharing a leading segment | `common-namespace` | Two imports whose namespaces share a first part must both bind under it. |
-| Namespaced imported object types | `import-export` | `testing\PrefixMe{}` does not resolve the type through the import. |
-| Circular imports | `mutual-import` | Two modules importing each other. |
+| Gap                                  |                     Blocks | Cause                                                                                                                                                                                                                                       |
+| ------------------------------------ | -------------------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Buffer's binary API                  |                   `buffer` | Missing `writeInt`/`readInt` (upstream's `Integer` is an **i48**, so six bytes), `writeDouble`/`readDouble`, `writeBoolean`/`readBoolean`, and `empty`; `write`/`read` also take and return a `str` upstream where gopherbuzz uses `[int]`. |
+| Object-keyed maps                    |                `protocols` | `mapObj` is keyed by `string` throughout, and a map literal stores a bare identifier key as its literal name rather than evaluating it. Upstream allows any value as a key.                                                                 |
+| Tuple types                          |                   `tuples` | `obj{ :str, :str }` (positional fields) and the matching `.{ a, b }` literal.                                                                                                                                                               |
+| `typeof` and mutability              | `clone-mutability-methods` | `cloneMutable()` has to retype to `<mut [int]>`; mutability is a property no runtime value carries.                                                                                                                                         |
+| Namespaces sharing a leading segment |         `common-namespace` | Two imports whose namespaces share a first part must both bind under it.                                                                                                                                                                    |
+| Namespaced imported object types     |            `import-export` | `testing\PrefixMe{}` does not resolve the type through the import.                                                                                                                                                                          |
+| Circular imports                     |            `mutual-import` | Two modules importing each other.                                                                                                                                                                                                           |
 
 The other nine cannot be accommodated here, which is a property of the embedding
 rather than a backlog:
@@ -468,14 +465,14 @@ by executing the differential suite (`TestJITMatchesInterpreter`,
 `TestJITComputesNatively`, `TestJITDeoptsOnRuntimeError`) on the platform in
 question. Where each stands:
 
-| Platform | Backend | Executable memory | Status |
-| --- | --- | --- | --- |
-| linux/amd64 | `jit_amd64.go` | mmap | **Exercised every CI run** - the only platform CI covers. |
-| darwin/arm64 | `jit_arm64.go` | mmap | **Exercised continuously** by hand - primary development platform, not covered by CI. |
-| linux/arm64 | `jit_arm64.go` | mmap | **Verified by hand** - suite executed on arm64 hardware, 2026-08-04. Not covered by CI. |
-| darwin/amd64 | `jit_amd64.go` | mmap | Not executed here. Same backend and mapping as linux/amd64; only the OS differs. |
-| windows/amd64 | `jit_amd64.go` | `VirtualAlloc` | **NEVER EXECUTED.** Compiled and reviewed only. |
-| windows/arm64 | `jit_arm64.go` | `VirtualAlloc` | **NEVER EXECUTED.** Compiled and reviewed only. |
+| Platform      | Backend        | Executable memory | Status                                                                                  |
+| ------------- | -------------- | ----------------- | --------------------------------------------------------------------------------------- |
+| linux/amd64   | `jit_amd64.go` | mmap              | **Exercised every CI run** - the only platform CI covers.                               |
+| darwin/arm64  | `jit_arm64.go` | mmap              | **Exercised continuously** by hand - primary development platform, not covered by CI.   |
+| linux/arm64   | `jit_arm64.go` | mmap              | **Verified by hand** - suite executed on arm64 hardware, 2026-08-04. Not covered by CI. |
+| darwin/amd64  | `jit_amd64.go` | mmap              | Not executed here. Same backend and mapping as linux/amd64; only the OS differs.        |
+| windows/amd64 | `jit_amd64.go` | `VirtualAlloc`    | **NEVER EXECUTED.** Compiled and reviewed only.                                         |
+| windows/arm64 | `jit_arm64.go` | `VirtualAlloc`    | **NEVER EXECUTED.** Compiled and reviewed only.                                         |
 
 The two Windows rows are the honest gap, and they are new: the JIT was excluded
 on Windows (`!windows` in every build tag) until it was enabled alongside the

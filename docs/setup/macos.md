@@ -40,7 +40,7 @@ curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/SHA256
 curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/SHA256SUMS.sig"
 ```
 
-Then verify the Ed25519 signature *first*, and only then the checksum - checking a hash against an unverified manifest proves nothing. The exact commands (macOS uses `shasum -a 256`) are in [Verify a release](verify.md).
+Then verify the Ed25519 signature _first_, and only then the checksum - checking a hash against an unverified manifest proves nothing. The exact commands (macOS uses `shasum -a 256`) are in [Verify a release](verify.md).
 
 ## Clear the quarantine flag
 

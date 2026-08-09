@@ -70,11 +70,11 @@ promise forbids, and the answer is a second name rather than a redefinition.
 
 **Three gates catch a break before review does**, one per surface:
 
-| Surface           | Gate                                                    |
-| ----------------- | ------------------------------------------------------- |
-| CLI               | `internal/manpage/testdata/api.lock`, a drift-gated snapshot of every subcommand, flag, config key, and target |
-| protobuf          | `buf breaking`, composed into `lint`                     |
-| magusfile keys    | the `required_version` floor, plus doctor's check that the floor is accurate |
+| Surface        | Gate                                                                                                           |
+| -------------- | -------------------------------------------------------------------------------------------------------------- |
+| CLI            | `internal/manpage/testdata/api.lock`, a drift-gated snapshot of every subcommand, flag, config key, and target |
+| protobuf       | `buf breaking`, composed into `lint`                                                                           |
+| magusfile keys | the `required_version` floor, plus doctor's check that the floor is accurate                                   |
 
 A diff to `api.lock` is the signal to read carefully: a line removed there is a
 removed public surface. Regenerate it with `go generate ./internal/manpage/...`
@@ -156,7 +156,7 @@ generated metadata" commit after every real one, and amending could not escape
 it, because the new hash restales the footer it just recorded. Rendering at
 deploy time knows the final commit already.
 
-What still gates on drift is the generated Markdown that *is* tracked:
+What still gates on drift is the generated Markdown that _is_ tracked:
 `MAGUS.md`, the root `CHANGELOG.md`, `docs/src/gen`, and the derived pages under
 `docs/reference/`. A plain `magus run generate docs` fails if any of those was
 left un-regenerated, so CI still catches a forgotten regen for everything a
@@ -218,7 +218,7 @@ binary" is the wrong answer, and it is easy to lose an afternoon to:
 ```
 
 `magus init` registers the git merge driver as whichever `magus` leads PATH.
-That is correct for someone *using* magus, because the registration survives an
+That is correct for someone _using_ magus, because the registration survives an
 upgrade-in-place. In a magus worktree it is backwards: PATH holds a release, and
 the merge driver is part of what you are changing. A rebase then resolves every
 generated conflict with the release, not with your tree.
@@ -276,7 +276,7 @@ be unambiguous on its own:
   registers `github-actions`, not `actions` - "GitHub Actions" is the product's
   real name, and `actions` alone identifies nothing.
 - **Never take a word the core model already owns.** `spells/gitlab/ci/` used to
-  register `ci`, which collides with the `ci` *target* that `magus affected ci`
+  register `ci`, which collides with the `ci` _target_ that `magus affected ci`
   anchors on. A listing then showed a `ci` spell beside a `ci` target meaning
   entirely different things. It registers `gitlab-ci`.
 
@@ -332,6 +332,65 @@ registered command and asserts it still resolves, so a rename cannot leave a
 hint pointing at a command that no longer exists. That has already happened once:
 a failing target printed `magus query <ref>` long after the command became
 `magus query output <ref>`.
+
+## Generated files in this repository
+
+The general rules are in [Generated files and your toolchain](https://egladman.github.io/magus/concepts/generated-files/): linters never
+gate on generated output, formatters cover it as long as the generator emits
+formatter-normal output, and the scope for both derives from `ctx.writesFiles` rather
+than a hand-maintained ignore list. What follows is how that lands here.
+
+| Language   | Formatter                 | Generated output         | Why                                                                     |
+| ---------- | ------------------------- | ------------------------ | ----------------------------------------------------------------------- |
+| Go         | `gofmt`, via `go-fmt`     | covered                  | `internal/generate/emit` gofmts before writing, so the check is a no-op |
+| TypeScript | Biome, via `biome-format` | excluded (`!src/gen/**`) | bundler and protobuf output is not Biome-normal and never will be       |
+| Markdown   | dprint                    | excluded (`dprint.json`) | generators do not emit dprint-normal output yet; see below              |
+
+Two things worth knowing before you change any of it:
+
+- **Go formatting is gated by golangci-lint, not by the `format` target.** `gofmt -l`
+  lists unformatted files on stdout and exits 0, and magus reads an op's verdict from
+  the exit code alone, so unformatted Go used to pass green. `.golangci.yml` enables
+  `gofmt` under `formatters:`, which reports the same finding and exits 1. The `format`
+  target keeps `gofmt -l` as the local reporter, and `format:rw` flips it to `-w`.
+- **Markdown formatting is dprint, and generated Markdown is excluded from it.** That
+  exclusion is the documented fallback, not the goal: it stays until each Markdown
+  generator emits dprint-normal output, at which point its entry comes out of
+  `dprint.json`. dprint over prettier because it needs no Node in the format path, and
+  over Biome because Biome does not read Markdown at all. `.prettierignore` was deleted
+  when prettier stopped being installed; it had outlived the tool by long enough that
+  six of its seven paths no longer existed.
+
+- **The console lint target conflates formatting with linting, and should not.** The
+  typescript spell exposes `biome-check` and `biome-format` as separate ops precisely so
+  a target can compose them independently, but `console/magusfile.buzz` calls
+  `os\exec("pnpm", ["exec", "biome", "check", "src"])` directly, and `biome check`
+  reports formatting as lint findings. That is the exact blur the concepts page argues
+  against, in our own tree. Route it through the spell ops when you next touch it.
+
+Byte-stability is the one rule with no exceptions, and this repository has paid for it
+more than once. Every instance was a real bug in a generator, never a reason to relax
+the rule:
+
+- The knowledge store merged shards in Go's randomized map order, so which shard
+  supplied a node's `source` changed run to run. Node and edge counts never moved, so
+  it surfaced only as `magus run generate` failing its drift gate on provenance lines.
+  Fixed by sorting shard names before the merge (`internal/graph/knowledge/store.go`).
+- `catalog_fingerprint` identifies the binary, not the graph, so two builds of one
+  source produced different values and a regeneration that changed no node and no edge
+  still rewrote the file and failed CI with the fingerprint as the entire diff. It is
+  excluded from `graph export --static` for that reason.
+- The `@runtime` shard put locally observed diagnostics into `MAGUS.md`'s anchor
+  ranking, so the committed index depended on which codes that machine had tripped.
+  `Routing()` now excludes runtime edges.
+
+`Graph.Output` and `writeShard` both sort before emitting, and both say why in a
+comment. Do the same in any new generator.
+
+When you add a generated artifact here, follow the five-step checklist in the concepts
+page. The magus-specific part is that the root `generate` target already drift-gates
+every generated file in the workspace, so a per-artifact drift test in Go is redundant
+and will drift from the real `//go:generate` directive.
 
 ## Workflow targets, not inline shell
 

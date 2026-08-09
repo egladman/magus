@@ -20,8 +20,7 @@ tags:
 magus's build cache is **content-addressed**: a target's outputs are keyed by the
 SHA-256 of its inputs, so an unchanged target replays its previous outputs instead
 of rerunning. This page is the **local** model: what magus hashes, what invalidates
-a key, what "replay" restores, and where it all lives on disk. The [remote
-cache](cache/remote.md) shares these same artifacts across machines and layers a
+a key, what "replay" restores, and where it all lives on disk. The [remote cache](cache/remote.md) shares these same artifacts across machines and layers a
 signed trust model on top; this page is the substrate it references, so we describe
 it once here and link there for the distributed story.
 
@@ -101,10 +100,10 @@ its siblings under-declared (see [Granularity](#granularity-project-wide-vs-per-
 
 The declaration names encode ownership, not merely direction:
 
-| Declaration | File relationship | Cache and clean behavior |
-| --- | --- | --- |
-| `ctx.readsFiles(...)` | the target reads the named files | hashes their current bytes into the cache key |
-| `ctx.writesFiles(...)` | the target creates or replaces complete generated files | snapshots and replays them; `magus clean` may remove them |
+| Declaration                      | File relationship                                                    | Cache and clean behavior                                                  |
+| -------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `ctx.readsFiles(...)`            | the target reads the named files                                     | hashes their current bytes into the cache key                             |
+| `ctx.writesFiles(...)`           | the target creates or replaces complete generated files              | snapshots and replays them; `magus clean` may remove them                 |
 | `ctx.modifiesExistingFiles(...)` | the files already exist and the target changes only part of each one | hashes their current bytes, but never snapshots, replays, or removes them |
 
 That last case is for a hand-written page with a generated region between markers,
@@ -309,13 +308,13 @@ probe once per workspace instead of per project.
 
 Four controls, at four different scopes:
 
-| Control                                     | Scope                       | Semantics                                                                                                                                                                                                                               |
-| ------------------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `skip_cache` target policy                  | one target, every run       | Always runs; never replays **or** snapshots (a long-running `fs\watch` loop, a service op).                                                                                                                                             |
-| `magus run <target> --no-cache`             | one target, one invocation  | Skips replay for this run only, but still snapshots on success - the entry is refreshed, not left stale, unlike `skip_cache`.                                                                                                           |
-| `magus\bust_cache(path?)`                   | runtime, one magusfile call | Clears manifests (one project, or the whole cache if `path` is omitted) from inside a target body. An escape hatch that logs a warning every time - the fix is usually to model the missing input as a declared `needs` source instead. |
-| `magus clean --cache`                       | CLI, whole cache            | Wipes the on-disk store from outside any run.                                                                                                                                                                                           |
-| `cache.write.enabled` (`MAGUS_CACHE_WRITE_ENABLED`) | whole cache, whole run      | When false, replays hits, but a miss runs the target and does **not** write a new manifest - locally or to a remote. Restoring still populates the local cache.                                                                                                                                         |
+| Control                                             | Scope                       | Semantics                                                                                                                                                                                                                               |
+| --------------------------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `skip_cache` target policy                          | one target, every run       | Always runs; never replays **or** snapshots (a long-running `fs\watch` loop, a service op).                                                                                                                                             |
+| `magus run <target> --no-cache`                     | one target, one invocation  | Skips replay for this run only, but still snapshots on success - the entry is refreshed, not left stale, unlike `skip_cache`.                                                                                                           |
+| `magus\bust_cache(path?)`                           | runtime, one magusfile call | Clears manifests (one project, or the whole cache if `path` is omitted) from inside a target body. An escape hatch that logs a warning every time - the fix is usually to model the missing input as a declared `needs` source instead. |
+| `magus clean --cache`                               | CLI, whole cache            | Wipes the on-disk store from outside any run.                                                                                                                                                                                           |
+| `cache.write.enabled` (`MAGUS_CACHE_WRITE_ENABLED`) | whole cache, whole run      | When false, replays hits, but a miss runs the target and does **not** write a new manifest - locally or to a remote. Restoring still populates the local cache.                                                                         |
 
 `skip_cache` states that **replaying this target would be wrong**: it signs a
 fresh artifact, records a screen capture, mutates `go.mod`, rewrites a badge, or
@@ -453,10 +452,10 @@ An output glob answers two different questions, and magus keeps them on two
 different code paths. Confusing them is the easiest way to introduce a stale-hit
 or a broken `magus clean`, so the model is worth stating once.
 
-| Role                         | Question it answers                            | Scope         | Where it lives                                                                                                            |
-| ---------------------------- | ---------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Role                         | Question it answers                            | Scope         | Where it lives                                                                                                                                                |
+| ---------------------------- | ---------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Cache footprint**          | "what does _this target_ snapshot and replay?" | one target    | `cache.Step.Outputs`, assembled per-target in `buildStep`: project-wide `Outputs` when no target output is declared, otherwise that target's `magus\outputs`. |
-| **Generated-files manifest** | "what files does _this project_ generate?"     | whole project | `types.Project.AllOutputs()`: the project-wide `Outputs` unioned with _every_ target's `magus\outputs`.                   |
+| **Generated-files manifest** | "what files does _this project_ generate?"     | whole project | `types.Project.AllOutputs()`: the project-wide `Outputs` unioned with _every_ target's `magus\outputs`.                                                       |
 
 The cache role is per-target on purpose. A miss snapshots exactly the outputs in
 that target's `Step`, and a hit replays exactly those - so an output must be
@@ -515,12 +514,12 @@ commit cannot be committed and stay correct, whatever the other answers are - th
 is [the next section](#the-self-staling-output-generated-files-that-record-vcs-state).
 The rest trade cost against reach:
 
-| Question | Commit it | Regenerate it |
-| --- | --- | --- |
-| Is the generator already required to build? | No - committing removes a dependency | Yes - committing adds churn, removes nothing |
-| Does anything read it without running the build? | Yes - IDEs, `pkg.go.dev`, a downstream module | No |
-| Is it a pure function of committed sources? | Yes | No - see the next section |
-| Is it small and slow-churning? | Yes | No - large or per-commit churn |
+| Question                                         | Commit it                                     | Regenerate it                                |
+| ------------------------------------------------ | --------------------------------------------- | -------------------------------------------- |
+| Is the generator already required to build?      | No - committing removes a dependency          | Yes - committing adds churn, removes nothing |
+| Does anything read it without running the build? | Yes - IDEs, `pkg.go.dev`, a downstream module | No                                           |
+| Is it a pure function of committed sources?      | Yes                                           | No - see the next section                    |
+| Is it small and slow-churning?                   | Yes                                           | No - large or per-commit churn               |
 
 **Commit it when a consumer cannot regenerate it.** A Go module's generated code
 ships in the module zip. Leave it out and everyone importing your package needs

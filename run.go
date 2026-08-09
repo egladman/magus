@@ -1093,8 +1093,11 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}
 
 	if opts.RaceReplay && runErr == nil {
+		// Every stage replays; a caller who asked for the check wants the whole list.
 		for _, st := range stages {
-			runReplay(ctx, m.ws, st.projects, st.target, byPath, st.handler, opts.Report)
+			if err := runReplay(ctx, m.ws, st.projects, st.target, byPath, st.handler, opts.Report); err != nil && runErr == nil {
+				runErr = err
+			}
 		}
 	}
 
@@ -1150,10 +1153,14 @@ func (m *Magus) buildRaceRuntime() *race.Runtime {
 
 // runReplay re-executes projects and compares output content hashes to detect
 // non-determinism (MGS4003). Bypasses cache so spells actually re-execute.
+//
+// It fails rather than warns: drift gating, cache replay, and regenerate-to-resolve
+// merges are each unsound without byte-stability, so there is no useful "warned about it"
+// state. Every offender is reported before it returns.
 func runReplay(ctx context.Context, ws *types.Workspace, projects []*types.Project, target string,
 	byPath map[string]*types.Project, handler TargetHandler,
 	w *report.Writer,
-) {
+) error {
 	var replayable []*types.Project
 	for _, p := range projects {
 		if len(outputWatchDirs(ws, p, target)) > 0 {
@@ -1161,7 +1168,7 @@ func runReplay(ctx context.Context, ws *types.Workspace, projects []*types.Proje
 		}
 	}
 	if len(replayable) == 0 {
-		return
+		return nil
 	}
 
 	snapsA := make(map[string]diff.ContentSnap, len(replayable))
@@ -1175,6 +1182,7 @@ func runReplay(ctx context.Context, ws *types.Workspace, projects []*types.Proje
 		}
 	}
 
+	var offenders []string
 	for _, p := range replayable {
 		postSnap := diff.HashContent(outputWatchDirs(ws, p, target))
 		changed := diff.DiffContent(snapsA[p.Path], postSnap)
@@ -1189,7 +1197,14 @@ func runReplay(ctx context.Context, ws *types.Workspace, projects []*types.Proje
 			Target:         target,
 			DifferingPaths: changed,
 		})
+		offenders = append(offenders, p.Path)
 	}
+	if len(offenders) == 0 {
+		return nil
+	}
+	// The per-project diagnostics above already carry the differing paths.
+	return types.DiagnosticErrorf(types.NondeterministicOutput,
+		"non-deterministic output from %s in %s", target, strings.Join(offenders, ", "))
 }
 
 // checkMissingDependencies audits for undeclared dependencies (MGS4004).

@@ -12,8 +12,7 @@ argv and rejects it when the command contradicts the op's declared _kind_, so a
 misconfigured op fails immediately with a coded, actionable diagnostic instead of
 misbehaving at run time.
 
-Wards share the `MGSxxxx` diagnostic rail with the rest of magus's [diagnostics and
-error codes](../reference/codes/services/README.md): each ward raises a typed error with a stable
+Wards share the `MGSxxxx` diagnostic rail with the rest of magus's [diagnostics and error codes](../reference/codes/services/README.md): each ward raises a typed error with a stable
 code, a plain-language explanation, and a suggested fix.
 
 ## Kind coherence

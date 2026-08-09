@@ -114,7 +114,7 @@ This is the same mistake as validating in the client and trusting the result.
 The check has to run somewhere the person being checked does not control,
 or it is a suggestion wearing a gate's clothing. The failure mode is
 characteristic: an error reaches the main branch, and now it fails for
-*everyone* - including people whose change had nothing to do with it - until
+_everyone_ - including people whose change had nothing to do with it - until
 somebody volunteers to fix a break they did not cause.
 
 **magus:** keep the hook, demote it. Its job is fast feedback while you work, not
@@ -146,7 +146,7 @@ files instead of commits.
 
 A pull request runs one workflow. The main branch runs a different one. Somewhere
 in the second is a step the first never had - building types, a codegen pass, a
-stricter lint - and the first time it executes on a given change is *after* that
+stricter lint - and the first time it executes on a given change is _after_ that
 change has already landed.
 
 When it fails, it fails on main, which means it fails for everyone. The author who
@@ -160,7 +160,7 @@ apart the way any two copies do, and nothing in either file says the other exist
 **The distinction that matters is not PR versus main, it is verification versus
 delivery.** Publishing a package, pushing an image, tagging a release, deploying -
 those genuinely cannot happen before the merge, and keeping them on main is
-correct. But a step that *builds*, *checks*, *generates*, or *type-checks* can
+correct. But a step that _builds_, _checks_, _generates_, or _type-checks_ can
 fail for a reason a pull request could have caught, and every one of those belongs
 in front of the merge. If a step can go red for a code reason, running it only on
 main means you have chosen to find out late.

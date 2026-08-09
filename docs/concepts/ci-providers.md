@@ -92,13 +92,13 @@ Every op is optional. A spell implements the verbs its provider supports and
 omits the rest; magus treats an undeclared op as "this provider does not do
 that", which is the normal case rather than an error.
 
-| Op | Returns | Called |
-| --- | --- | --- |
-| `enabled()` | bool | once per run, cached |
-| `group_start({id, title, collapsed})` | bool | once per failing project |
-| `group_end({id})` | bool | once per failing project |
-| `annotate({level, message, title, code, file, line, end_line, col, end_col})` | bool | once per failure |
-| `quote_prefixes()` | [str] | once per run, cached |
+| Op                                                                            | Returns | Called                   |
+| ----------------------------------------------------------------------------- | ------- | ------------------------ |
+| `enabled()`                                                                   | bool    | once per run, cached     |
+| `group_start({id, title, collapsed})`                                         | bool    | once per failing project |
+| `group_end({id})`                                                             | bool    | once per failing project |
+| `annotate({level, message, title, code, file, line, end_line, col, end_col})` | bool    | once per failure         |
+| `quote_prefixes()`                                                            | [str]   | once per run, cached     |
 
 Nothing here is called per log line. That is deliberate: crossing into a spell's
 VM for every line of a failing build's output would cost more than the whole
@@ -111,14 +111,14 @@ matching itself.
 The vocabulary is the **union** of what real systems need, not the intersection -
 the intersection is nearly empty:
 
-| System | Section open | Section close | Collapse | Annotations |
-| --- | --- | --- | --- | --- |
-| GitHub Actions | `::group::TITLE` | `::endgroup::` | always collapsed | `::error/warning/notice::` with file, line, col, title |
-| GitLab CI | `section_start:<unix>:<id>` | `section_end:<unix>:<id>` | `[collapsed=true]` | none in-log (report artifacts) |
-| Azure Pipelines | `##[group]TITLE` | `##[endgroup]` | - | `##vso[task.logissue ...]` with a `code` field |
-| Buildkite | `--- TITLE` / `+++` / `~~~` | none - implicit | three modes | out-of-band: `buildkite-agent annotate` |
-| TeamCity | `##teamcity[blockOpened name=...]` | `blockClosed name=...` | - | `message status='ERROR'` |
-| AWS CodeBuild, CircleCI | none | none | - | none |
+| System                  | Section open                       | Section close             | Collapse           | Annotations                                            |
+| ----------------------- | ---------------------------------- | ------------------------- | ------------------ | ------------------------------------------------------ |
+| GitHub Actions          | `::group::TITLE`                   | `::endgroup::`            | always collapsed   | `::error/warning/notice::` with file, line, col, title |
+| GitLab CI               | `section_start:<unix>:<id>`        | `section_end:<unix>:<id>` | `[collapsed=true]` | none in-log (report artifacts)                         |
+| Azure Pipelines         | `##[group]TITLE`                   | `##[endgroup]`            | -                  | `##vso[task.logissue ...]` with a `code` field         |
+| Buildkite               | `--- TITLE` / `+++` / `~~~`        | none - implicit           | three modes        | out-of-band: `buildkite-agent annotate`                |
+| TeamCity                | `##teamcity[blockOpened name=...]` | `blockClosed name=...`    | -                  | `message status='ERROR'`                               |
+| AWS CodeBuild, CircleCI | none                               | none                      | -                  | none                                                   |
 
 Hence: a section carries an `id` distinct from its `title`, because GitLab and
 TeamCity key sections by name while GitHub and Azure use only a title.
@@ -186,7 +186,7 @@ place magus names a CI system outside a spell.
 
 The reason is ordering, not preference: the concurrency limiter is built before
 the magusfile is evaluated, so no provider spell is loaded in time to answer.
-Anything a spell *can* answer, a spell does.
+Anything a spell _can_ answer, a spell does.
 
 ## Writing a provider
 

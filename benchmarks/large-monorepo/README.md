@@ -113,12 +113,12 @@ takes hours. Run it on a dedicated host, not in CI. Defaults are modest:
 
 ## Scenarios
 
-| ID  | Scenario         | What happens                                                           |
-| --- | ---------------- | ---------------------------------------------------------------------- |
-| S4  | Cold build       | clear each tool's cache **and** all `.next`, build everything          |
-| S5  | Warm replay      | build again with a fully-populated cache                               |
-| S6  | One leaf changed | edit `apps/crew/pages/index.tsx`, rebuild (only `crew` is affected)    |
-| S7  | One lib changed  | edit `packages/crew/important-feature-0`, rebuild (`crew` is affected) |
+| ID | Scenario         | What happens                                                           |
+| -- | ---------------- | ---------------------------------------------------------------------- |
+| S4 | Cold build       | clear each tool's cache **and** all `.next`, build everything          |
+| S5 | Warm replay      | build again with a fully-populated cache                               |
+| S6 | One leaf changed | edit `apps/crew/pages/index.tsx`, rebuild (only `crew` is affected)    |
+| S7 | One lib changed  | edit `packages/crew/important-feature-0`, rebuild (`crew` is affected) |
 
 Note on S7: this repo's only shared code is `packages/shared/*`, but no
 `package.json` declares those as dependencies, so no tool (turbo, nx, lage, or

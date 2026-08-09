@@ -13,14 +13,17 @@
 // `golangci-lint custom`, which reads .custom-gcl.yml at the repo root.
 
 import "magus";
+import "../../tools/drift" as drift;
 
 // go spell claims **/*.go and the module files. This file's own export-fun targets
 // need no declaration - magus binds the magusfile driver to every project.
 import "magus/spell/go";
+// Imported for its dprint op only, NOT added to the spells list: binding markdown here
+// would also claim this tree's **/*.md for markdownlint, which the root project lints.
+import "magus/spell/markdown";
 import "../../spells/golang/gomod" as gomod;
 
 import "fs";
-import "vcs";
 
 magus\project({
     "spells": [go],
@@ -41,12 +44,12 @@ export fun preflight(ctx: magus\Context, args: [str]) > void {}
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     gomod\replaceWorkspaceModules(ctx, go, "libs/orphanator");
-    final clean_before = vcs\isDirty(["MAGUS.md"]) == false;
+    final before = drift.hashes(["MAGUS.md"]);
     ctx.needs(md_generate);
     if (ctx.has_charm("rw")) { return; }
 
-    if (clean_before and vcs\isDirty(["MAGUS.md"])) {
-        throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/orphanator` and commit";
+    if (drift.changedSince(before, ["MAGUS.md"]).len() > 0) {
+        throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/orphanator` and commit" + drift.secondCause;
     }
 }
 
@@ -56,7 +59,12 @@ export fun md_generate(ctx: magus\Context, args: [str]) > void {
     fs\writeFile("MAGUS.md", doc + "\n");
 }
 
-export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); go["go-fmt"](ctx); go["go-mod-tidy"](ctx); }
+export fun format(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(generate);
+    go["go-fmt"](ctx);
+    go["go-mod-tidy"](ctx);
+    markdown["dprint"](ctx);
+}
 // go-vet only, as in libs/diagnostics. Deliberately NOT golangci-lint: this module
 // is what a custom golangci-lint binary is built FROM, and linting it with a binary
 // that carries it is a bootstrap nobody needs.

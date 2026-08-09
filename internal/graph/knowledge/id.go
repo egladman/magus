@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -166,6 +167,18 @@ const (
 	// the ref's outcome is legible from the node without fetching the output.
 	AttrLastRunOK = "last_run_ok"
 )
+
+// runtimeAttrs enumerates the const block above. It is a second place to edit, kept
+// honest by TestRuntimeAttrsCoversAssembled, which derives the set from what
+// assembleRuntime emits. The @coverage overlay is also observed and is NOT in here.
+var runtimeAttrs = []string{
+	AttrDurationP75Ms, AttrCacheHitRate, AttrRunSamples, AttrLastOutputRef, AttrLastRunOK,
+}
+
+// IsRuntimeAttr reports whether an attr key holds observed run history, so a reproducible
+// export can drop it. A func, not an exported slice: an importer could write to the slice
+// and silently un-strip a key. Mirrors IsRuntimeShard.
+func IsRuntimeAttr(key string) bool { return slices.Contains(runtimeAttrs, key) }
 
 // Directory aggregate keys. These roll up from a directory's files (transitively) so a
 // dir node reads as a subsystem summary - the granularity agent memory anchors to and

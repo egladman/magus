@@ -66,7 +66,7 @@ lines rather than one every two seconds.
 
 ### Reading the heap figure
 
-Objects, not bytes. The pathological shape is millions of *small* strings, which a
+Objects, not bytes. The pathological shape is millions of _small_ strings, which a
 byte reading makes look unremarkable. What diagnoses the problem is the shape of
 the growth: an object count that climbs with the size of the input is quadratic in
 memory whatever each object weighs.
@@ -102,7 +102,7 @@ heap: 30660 objects live, 30660 peak this run
 
 `.heap` sits alongside `.where`, `.locals` and `.globals` - see
 [Debugging](debugging.md) for the rest of the pry surface. It answers the one
-question a paused stack cannot: where you *are* says nothing about what filled
+question a paused stack cannot: where you _are_ says nothing about what filled
 memory getting there.
 
 The peak is rebased per invocation, so under `magus server` a long-lived daemon
@@ -139,11 +139,11 @@ intermediates never exist.
 
 The same shape appears whenever a value is rebuilt inside a loop:
 
-| Instead of | Write |
-| --- | --- |
-| `s = s + x` in a loop | append to a list, `join` once |
-| `while (s.indexOf(x) != null) { s = s.replace(x, y) }` | `s.split(x).join(y)` |
-| counting with `replace` in a loop | `s.split(x).len() - 1` |
+| Instead of                                             | Write                         |
+| ------------------------------------------------------ | ----------------------------- |
+| `s = s + x` in a loop                                  | append to a list, `join` once |
+| `while (s.indexOf(x) != null) { s = s.replace(x, y) }` | `s.split(x).join(y)`          |
+| counting with `replace` in a loop                      | `s.split(x).len() - 1`        |
 
 Note `str.replace` substitutes only the FIRST occurrence, which is why the
 rescanning loop gets written in the first place.
@@ -178,7 +178,7 @@ concurrency slots, so the declaration throttles on a 16GB runner and barely
 registers on a 64GB workstation without naming either machine. See
 [configuration](../reference/config.md) for the rest of the target policy.
 
-This bounds what runs *alongside* the target. It cannot shrink a single target
+This bounds what runs _alongside_ the target. It cannot shrink a single target
 that alone exceeds the machine - for that, size the work itself:
 
 ```buzz

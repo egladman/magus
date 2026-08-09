@@ -23,13 +23,13 @@ single file, and the whole contract is a set of exported functions magus looks u
 
 There are **two kinds**, and picking the right one first saves rewriting the file:
 
-| | Toolchain spell | Provider spell |
-| --- | --- | --- |
-| Answers | "how do I build/test/lint this kind of project?" | "how do I reach this backend?" |
-| Declares | `mgs_listTargets` returning named [operations](../concepts/operations.md) | handler ops returning data |
-| Bound by | listing it in `magus\project({"spells": [...]})` | `magus\cache.remote()`, `magus\ci.provider()`, `magus\secret.provider()` |
-| Runs | as part of a target, cached | when the subsystem asks, never cached |
-| Examples | [`go`](../concepts/spells/go.md), [`docker`](../concepts/spells/docker.md) | `spells/github/actions`, `spells/onepassword` |
+|          | Toolchain spell                                                            | Provider spell                                                           |
+| -------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Answers  | "how do I build/test/lint this kind of project?"                           | "how do I reach this backend?"                                           |
+| Declares | `mgs_listTargets` returning named [operations](../concepts/operations.md)  | handler ops returning data                                               |
+| Bound by | listing it in `magus\project({"spells": [...]})`                           | `magus\cache.remote()`, `magus\ci.provider()`, `magus\secret.provider()` |
+| Runs     | as part of a target, cached                                                | when the subsystem asks, never cached                                    |
+| Examples | [`go`](../concepts/spells/go.md), [`docker`](../concepts/spells/docker.md) | `spells/github/actions`, `spells/onepassword`                            |
 
 A spell can be both, but rarely wants to be. A provider contributes no operation a target
 could compose, which is why the provider spells in this repo declare no `mgs_listTargets`
@@ -52,12 +52,12 @@ The constraint that decides how your spell is loaded:
 
 So there are two shapes, and you do not get to choose - the imports choose for you:
 
-| | Built-in spell | Workspace-local spell |
-| --- | --- | --- |
-| Imports | `magus/spell` only (pure types) | anything, including host modules |
-| Ships | compiled into the binary | as source in your repo |
-| Imported as | `import "magus/spell/go"` | `import "spells/onepassword"` (a path) |
-| Examples | `go`, `docker`, `cosign`, `markdown` | `github-actions`, `onepassword` |
+|             | Built-in spell                       | Workspace-local spell                  |
+| ----------- | ------------------------------------ | -------------------------------------- |
+| Imports     | `magus/spell` only (pure types)      | anything, including host modules       |
+| Ships       | compiled into the binary             | as source in your repo                 |
+| Imported as | `import "magus/spell/go"`            | `import "spells/onepassword"` (a path) |
+| Examples    | `go`, `docker`, `cosign`, `markdown` | `github-actions`, `onepassword`        |
 
 Almost every provider is workspace-local, because reaching a backend means `os\exec` or
 `http`. That is expected, not a downgrade: `spells/github/actions` backs this repo's own
@@ -75,11 +75,11 @@ the split is not arbitrary:
 
 That single fact decides which members you may call:
 
-| | members | in a spell |
-| --- | --- | --- |
-| in-process | `ls`, `targets`, `affected`, `graph`, `where` | **raise [MGS1022](../reference/codes/magusfile/MGS1022.md)** - they read the workspace already open on the context, and there is not one |
-| declaring | `project`, `cache.remote`, `ci.provider` | **raise MGS1022** - only a magusfile evaluation has the registry to declare into |
-| forking | `cmd`, `run`, `describe`, `insight`, `doctor`, `describeFile`, `impact`, `targetGraph`, `insightReport` | **work** - each spawns a nested magus that discovers and loads its own workspace |
+|            | members                                                                                                 | in a spell                                                                                                                               |
+| ---------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| in-process | `ls`, `targets`, `affected`, `graph`, `where`                                                           | **raise [MGS1022](../reference/codes/magusfile/MGS1022.md)** - they read the workspace already open on the context, and there is not one |
+| declaring  | `project`, `cache.remote`, `ci.provider`                                                                | **raise MGS1022** - only a magusfile evaluation has the registry to declare into                                                         |
+| forking    | `cmd`, `run`, `describe`, `insight`, `doctor`, `describeFile`, `impact`, `targetGraph`, `insightReport` | **work** - each spawns a nested magus that discovers and loads its own workspace                                                         |
 
 So the rule is: from a spell, fork. `magus\cmd("ls", args: ["-o", "json"])` answers what
 `magus\ls()` would have, at the cost of a subprocess.
@@ -103,18 +103,18 @@ from its caller.
 Every function is optional except `mgs_getName`. magus looks each one up by name and uses
 a default when it is absent, so a minimal spell is two functions.
 
-| Function | Signature | What it decides |
-| --- | --- | --- |
-| `mgs_getName` | `() > str` | the registered name. **Required.** It must stand alone - it is what `magus describe spells` and every diagnostic show, with no directory around it to supply context |
-| `mgs_listTargets` | `() > {str: fun(Target) Command}` | the operations this spell contributes. Absent for providers |
-| `mgs_getLanguage` | `() > str` | the language tag reported for projects bound to it |
-| `mgs_isOpaque` | `() > bool` | true when another tool owns the dependency graph (a package manager), so magus does not try to infer one |
-| `mgs_listRequiredGlobs` | `() > [Path]` | files a project MUST have for this spell to bind |
-| `mgs_listProvidedGlobs` | `() > [Path]` | files this spell's operations produce |
-| `mgs_listClaimedGlobs` | `() > [Path]` | files this spell owns, so two spells cannot both claim them |
-| `mgs_listManifests` | `() > [Path]` | dependency manifests, read for the project graph |
-| `mgs_listIgnoreDirs` | `() > [Path]` | directories to prune from source expansion (`node_modules`, `target`) |
-| `mgs_getTools` | `() > {str: Tool}` | every binary the spell drives, keyed by the bin an op names: what prints its version (`probe`), what part of that keys the cache (`key`), what proves it is usable (`ready`), the oldest version its ops work against (`floor`), and how it prints its findings (`diagnostics`) |
+| Function                | Signature                         | What it decides                                                                                                                                                                                                                                                                 |
+| ----------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mgs_getName`           | `() > str`                        | the registered name. **Required.** It must stand alone - it is what `magus describe spells` and every diagnostic show, with no directory around it to supply context                                                                                                            |
+| `mgs_listTargets`       | `() > {str: fun(Target) Command}` | the operations this spell contributes. Absent for providers                                                                                                                                                                                                                     |
+| `mgs_getLanguage`       | `() > str`                        | the language tag reported for projects bound to it                                                                                                                                                                                                                              |
+| `mgs_isOpaque`          | `() > bool`                       | true when another tool owns the dependency graph (a package manager), so magus does not try to infer one                                                                                                                                                                        |
+| `mgs_listRequiredGlobs` | `() > [Path]`                     | files a project MUST have for this spell to bind                                                                                                                                                                                                                                |
+| `mgs_listProvidedGlobs` | `() > [Path]`                     | files this spell's operations produce                                                                                                                                                                                                                                           |
+| `mgs_listClaimedGlobs`  | `() > [Path]`                     | files this spell owns, so two spells cannot both claim them                                                                                                                                                                                                                     |
+| `mgs_listManifests`     | `() > [Path]`                     | dependency manifests, read for the project graph                                                                                                                                                                                                                                |
+| `mgs_listIgnoreDirs`    | `() > [Path]`                     | directories to prune from source expansion (`node_modules`, `target`)                                                                                                                                                                                                           |
+| `mgs_getTools`          | `() > {str: Tool}`                | every binary the spell drives, keyed by the bin an op names: what prints its version (`probe`), what part of that keys the cache (`key`), what proves it is usable (`ready`), the oldest version its ops work against (`floor`), and how it prints its findings (`diagnostics`) |
 
 ### Readiness
 
@@ -222,11 +222,11 @@ fill a payload map by calling `cb`, and return data rather than a `Command`.
 
 Three subsystems accept one, and each detects its ops by name:
 
-| Subsystem | Selected with | Ops |
-| --- | --- | --- |
-| [Remote cache](../concepts/cache/remote.md) | `magus\cache.remote(<spell>)` | `enabled` (optional), `get_artifact`, `put_artifact`, `prune` (optional) |
-| [CI provider](../concepts/ci-providers.md) | `magus\ci.provider(<spell>)` | `enabled`, `group_start`, `group_end`, `annotate`, `quote_prefixes` - all optional |
-| [Secrets](../concepts/secrets.md) | `magus\secret.provider(<spell>)` | `resolve_secret` |
+| Subsystem                                   | Selected with                    | Ops                                                                                |
+| ------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------- |
+| [Remote cache](../concepts/cache/remote.md) | `magus\cache.remote(<spell>)`    | `enabled` (optional), `get_artifact`, `put_artifact`, `prune` (optional)           |
+| [CI provider](../concepts/ci-providers.md)  | `magus\ci.provider(<spell>)`     | `enabled`, `group_start`, `group_end`, `annotate`, `quote_prefixes` - all optional |
+| [Secrets](../concepts/secrets.md)           | `magus\secret.provider(<spell>)` | `resolve_secret`                                                                   |
 
 A secret provider is the smallest of the three, and the whole contract is one op:
 

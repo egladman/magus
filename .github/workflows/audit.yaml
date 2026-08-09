@@ -1,31 +1,23 @@
-name: Nightly
+name: Audit
 
-# The out-of-band checks: expensive, non-blocking, and answering a question that does not
-# change per pull request. Neither job gates a merge and neither publishes anything.
-#
-# They share a file because they share a trigger and a promise, not because they are
-# related work. Putting them on the PR path would pay per pull request for an answer that
-# only moves when something OUTSIDE this branch does - a new magus release, or a model
-# provider's behaviour. Both stay dispatchable by hand for when you want the answer now.
-#
-# `compat` moved here out of ci.yaml, where it ran on every pull request as
-# continue-on-error. A check that never blocks and never changes with the diff is noise on
-# a pull request and a real signal on a schedule.
+# The out-of-band checks: expensive, non-blocking, and answering a question that only
+# moves when something OUTSIDE this branch does - a new magus release, a model provider's
+# behaviour, a generator that stopped being deterministic. Nothing here gates a merge or
+# publishes. That is why they are off the PR path rather than continue-on-error, which is
+# where `compat` used to live: a check that never blocks and never changes with the diff
+# is noise on a pull request and a real signal on a schedule.
 
 on:
   schedule:
-    # 05:00 UTC daily. Nothing downstream waits on this, so the hour only needs to be off
-    # the top-of-hour rush that GitHub delays hardest.
-    - cron: '17 5 * * *'
+    # Monday, so the answer is waiting at the start of the week. :17 keeps it off the
+    # top-of-hour rush GitHub delays hardest.
+    - cron: '17 5 * * 1'
   workflow_dispatch:
 
-# One nightly at a time, newest wins. Two triggers reach this file and they overlap in
-# practice: a hand dispatch while the cron run is still going, or a second dispatch when
-# the first looks stuck. Neither job gates anything and both answer "is this still true
-# today", so an older run's answer is worthless the moment a newer one starts - and
-# skill-evals is the expensive job in the repo to leave running for nothing.
+# Newest wins: cron and a hand dispatch overlap in practice, and an older run's answer to
+# "is this still true" is worthless once a newer one starts.
 concurrency:
-  group: nightly-${{ github.ref }}
+  group: audit-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -105,6 +97,42 @@ jobs:
 
       - name: Run ci with the released magus
         run: magus affected ci --no-default-charms
+
+  determinism:
+    # Byte-stability is an invariant drift gating, cache replay, and regenerate-to-resolve
+    # merges all rest on; see docs/concepts/generated-files.md. Here rather than on the PR
+    # path because replay roughly doubles the run and cannot use the cache.
+    name: generator determinism
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: '2026.4.8'
+
+      - name: Install codec build dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
+
+      # rw is load-bearing: without it generate's own drift gate throws the moment a
+      # generator rewrites a committed file, killing the run before replay compares
+      # anything. Children still run; ctx.needs precedes the charm check.
+      - name: Replay every generator and compare declared outputs
+        run: magus run generate:rw --race=replay
 
   skill-evals:
     # MUTED 2026-08-03. This drives promptfoo against live models and costs real money.

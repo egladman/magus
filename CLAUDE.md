@@ -118,12 +118,12 @@ after `--` forwards it to the test binary, which rejects it.
 
 Four workflows, one trigger each, and the name says which:
 
-| File | Runs on | Ships |
-| --- | --- | --- |
-| `ci.yaml` | pull request, and main push | nothing |
-| `cd.yaml` | main push | docs site (Pages), per-commit container image (GHCR) |
-| `release.yaml` | `v*` tag | binaries and release images |
-| `nightly.yaml` | cron 05:17 UTC, manual | nothing |
+| File           | Runs on                        | Ships                                                |
+| -------------- | ------------------------------ | ---------------------------------------------------- |
+| `ci.yaml`      | pull request, and main push    | nothing                                              |
+| `cd.yaml`      | main push                      | docs site (Pages), per-commit container image (GHCR) |
+| `release.yaml` | `v*` tag                       | binaries and release images                          |
+| `audit.yaml`   | cron 05:17 UTC Mondays, manual | nothing                                              |
 
 ci also runs on a main push, and that is not a publish step: the push run is what
 populates the shared cache and the run history a pull request may only read.
@@ -131,11 +131,11 @@ populates the shared cache and the run history a pull request may only read.
 `setup-magus` is called two ways, on purpose:
 
 - `source-path: .` - nearly everything: ci's `preflight`, `ci`, `advice`,
-  `site-build`, `report`, both cd jobs, and nightly's `skill-evals`. Builds the magus
+  `site-build`, `report`, both cd jobs, and audit's `determinism` and `skill-evals`. Builds the magus
   THIS commit defines and runs it against this commit's magusfile, so a change that
   `magusfile.buzz` needs is exercised by the very run that introduces it - there is
   no "release first" chicken-and-egg.
-- `git-ref: <latest release tag>` - exactly ONE job, nightly's `compat`. It runs the
+- `git-ref: <latest release tag>` - exactly ONE job, audit's `compat`. It runs the
   pinned, checksum-verified release instead. That is the compatibility contract: when
   it breaks because the magusfile needs an unreleased feature, that is a
   breaking-change signal to surface, not to paper over. It is non-blocking by trigger

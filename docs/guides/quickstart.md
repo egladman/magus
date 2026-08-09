@@ -88,15 +88,15 @@ Add `--dry-run` to any of these to print the exact commands without running them
 magus has output flags, so you never need to pipe its output through `grep`,
 `head`, or `awk`. Every one of these works on every command:
 
-| flag | does |
-| --- | --- |
-| `-s` / `--silent` | a pass prints a result line plus an output ref; a failure adds a bounded tail |
-| `-q` / `--quiet` | drops progress, keeps errors and the failing project's full output |
-| `-o json` / `yaml` / `jsonl` | machine-readable, `schema_version`-stamped |
-| `-o name` | bare identifiers, one per line |
-| `-o template=<go-template>` | project exactly the fields you want |
-| `-v` / `-vv` / `-vvv` | more log verbosity |
-| `--tee <file>` | mirror structured output to a file |
+| flag                         | does                                                                          |
+| ---------------------------- | ----------------------------------------------------------------------------- |
+| `-s` / `--silent`            | a pass prints a result line plus an output ref; a failure adds a bounded tail |
+| `-q` / `--quiet`             | drops progress, keeps errors and the failing project's full output            |
+| `-o json` / `yaml` / `jsonl` | machine-readable, `schema_version`-stamped                                    |
+| `-o name`                    | bare identifiers, one per line                                                |
+| `-o template=<go-template>`  | project exactly the fields you want                                           |
+| `-v` / `-vv` / `-vvv`        | more log verbosity                                                            |
+| `--tee <file>`               | mirror structured output to a file                                            |
 
 When a target fails it mints an output ref (`out1a2b3c`). Fetch the full log with
 `magus query output out1a2b3c` instead of re-running the target to see the error
@@ -175,20 +175,20 @@ stale rules while looking perfectly healthy.
 
 ## Where to go next
 
-| you want | read |
-| --- | --- |
-| the guided walkthrough | [Getting started](getting-started.md) |
-| every install method | [Download](../setup.md) |
-| what a target is, really | [Targets](../concepts/targets.md) |
-| how caching decides a hit | [Cache](../concepts/cache.md) |
-| binding a toolchain | [Spells](../concepts/spells.md) |
-| sandboxing and what it enforces | [Sandbox](../concepts/sandbox.md) |
-| writing magusfile logic | [Buzz reference](../reference/buzz/index.md) |
-| querying the knowledge graph | [Knowledge](../concepts/knowledge.md) |
-| a diagnostic code you hit | [Diagnostics](../reference/diagnostics.md) |
-| running the daemon and console | [Daemon](integrations/daemon.md), [Console](../reference/console.md) |
-| CI wiring | [CI providers](../concepts/ci-providers.md) |
-| when something is wrong | [Debugging](debugging.md), [FAQ](../reference/faq.md) |
+| you want                        | read                                                                 |
+| ------------------------------- | -------------------------------------------------------------------- |
+| the guided walkthrough          | [Getting started](getting-started.md)                                |
+| every install method            | [Download](../setup.md)                                              |
+| what a target is, really        | [Targets](../concepts/targets.md)                                    |
+| how caching decides a hit       | [Cache](../concepts/cache.md)                                        |
+| binding a toolchain             | [Spells](../concepts/spells.md)                                      |
+| sandboxing and what it enforces | [Sandbox](../concepts/sandbox.md)                                    |
+| writing magusfile logic         | [Buzz reference](../reference/buzz/index.md)                         |
+| querying the knowledge graph    | [Knowledge](../concepts/knowledge.md)                                |
+| a diagnostic code you hit       | [Diagnostics](../reference/diagnostics.md)                           |
+| running the daemon and console  | [Daemon](integrations/daemon.md), [Console](../reference/console.md) |
+| CI wiring                       | [CI providers](../concepts/ci-providers.md)                          |
+| when something is wrong         | [Debugging](debugging.md), [FAQ](../reference/faq.md)                |
 
 Every flag and target set differs per workspace and magus version, so trust
 `magus describe targets`, `magus describe target <name>`, and `magus <verb> -h`

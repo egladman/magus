@@ -27,14 +27,14 @@ curl --proto '=https' --tlsv1.2 -sSf https://eli.gladman.cc/magus/install | sh
 
 ### Other ways
 
-| Route                                              | When                                                       |
-| -------------------------------------------------- | ---------------------------------------------------------- |
-| [Linux](setup/linux.md)                     | manual install, amd64 or arm64                        |
-| [macOS](setup/macos.md)                     | manual install, Apple Silicon or Intel                |
-| [Windows](setup/windows.md)                 | manual install, amd64 or arm64                        |
-| [Container image](setup/container-image.md) | run from an OCI image, or extract the binary from one |
-| [mise](setup/mise.md)                       | you already manage tool versions with mise            |
-| [Build from source](setup/build-from-source.md) | you want a local build, or a `noselfupdate` build |
+| Route                                           | When                                                  |
+| ----------------------------------------------- | ----------------------------------------------------- |
+| [Linux](setup/linux.md)                         | manual install, amd64 or arm64                        |
+| [macOS](setup/macos.md)                         | manual install, Apple Silicon or Intel                |
+| [Windows](setup/windows.md)                     | manual install, amd64 or arm64                        |
+| [Container image](setup/container-image.md)     | run from an OCI image, or extract the binary from one |
+| [mise](setup/mise.md)                           | you already manage tool versions with mise            |
+| [Build from source](setup/build-from-source.md) | you want a local build, or a `noselfupdate` build     |
 
 ## Platform support
 
@@ -47,14 +47,14 @@ than to imply otherwise.
 CI runs the full test suite on **linux/amd64 only**. Every other platform is built
 by the release pipeline but not tested by it.
 
-| Platform | Testing |
-| --- | --- |
-| linux/amd64 | Full test suite on every CI run. The only continuously tested platform. |
-| darwin/arm64 | Not covered by CI, but it is the primary development platform, so the suite runs against it constantly by hand. |
-| linux/arm64 | Not covered by CI. Built natively by the release pipeline; the release binary and the test suites have been executed on real arm64 hardware. |
-| darwin/amd64 | Not covered by CI. Built natively by the release pipeline on an Intel runner, so it compiles and links, but **never executed**. |
-| windows/amd64 | Not covered by CI. Built natively by the release pipeline, so it compiles and links, but **never executed**. |
-| windows/arm64 | Not covered by CI. Cross-compiled, static only, **never executed** - the newest and least proven target. |
+| Platform      | Testing                                                                                                                                      |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| linux/amd64   | Full test suite on every CI run. The only continuously tested platform.                                                                      |
+| darwin/arm64  | Not covered by CI, but it is the primary development platform, so the suite runs against it constantly by hand.                              |
+| linux/arm64   | Not covered by CI. Built natively by the release pipeline; the release binary and the test suites have been executed on real arm64 hardware. |
+| darwin/amd64  | Not covered by CI. Built natively by the release pipeline on an Intel runner, so it compiles and links, but **never executed**.              |
+| windows/amd64 | Not covered by CI. Built natively by the release pipeline, so it compiles and links, but **never executed**.                                 |
+| windows/arm64 | Not covered by CI. Cross-compiled, static only, **never executed** - the newest and least proven target.                                     |
 
 Two consequences worth knowing before you pick a build:
 
@@ -66,8 +66,7 @@ Two consequences worth knowing before you pick a build:
   on Windows entirely) and its machine-code path has not executed on any Windows
   machine here. If a magusfile produces a result that looks wrong on Windows, set
   `BUZZ_JIT=0` and re-run: if the answer changes, that is a JIT bug and a very
-  valuable report. See the [gopherbuzz JIT
-  notes](https://github.com/egladman/magus/blob/main/libs/gopherbuzz/README.md#which-platforms-this-has-actually-run-on)
+  valuable report. See the [gopherbuzz JIT notes](https://github.com/egladman/magus/blob/main/libs/gopherbuzz/README.md#which-platforms-this-has-actually-run-on)
   for the full matrix.
 
 ## Next steps

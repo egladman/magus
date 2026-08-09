@@ -942,7 +942,7 @@ func sourcesChangedSinceBase(ctx context.Context, ws types.WorkspaceRepository, 
 	if res.VCS == nil || res.Base == "" {
 		return nil
 	}
-	paths, err := res.VCS.Diff(ctx, root, res.Base)
+	paths, err := res.VCS.ChangedFiles(ctx, root, res.Base)
 	if err != nil || len(paths) == 0 {
 		return nil
 	}

@@ -26,6 +26,29 @@ Working directory and environment are NOT options: they ride the context, as `ma
 
 Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).
 
+## dprint
+
+**Command:** `dprint check`
+
+### rw
+
+Replaces `check` with `fmt`.
+
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+
+```json
+[
+  {
+    "op": "replace",
+    "path": "/0",
+    "value": "fmt"
+  }
+]
+```
+
+</details>
+
 ## markdownlint
 
 **Command:** `markdownlint **/*.md **/*.mdx`

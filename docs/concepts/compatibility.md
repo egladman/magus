@@ -30,11 +30,11 @@ not cover, and the mechanisms that make it checkable rather than aspirational.
 different consumers and three different ways to break. Keeping them separate is
 what makes each one answerable.
 
-| Contract                  | The consumer                            | How it breaks                            | The mechanism                                       |
-| ------------------------- | --------------------------------------- | ---------------------------------------- | --------------------------------------------------- |
-| magusfile and `magus.yaml` | your repository                          | a key or function magus no longer accepts | additive-only keys, plus a declared version floor    |
+| Contract                   | The consumer                            | How it breaks                             | The mechanism                                          |
+| -------------------------- | --------------------------------------- | ----------------------------------------- | ------------------------------------------------------ |
+| magusfile and `magus.yaml` | your repository                         | a key or function magus no longer accepts | additive-only keys, plus a declared version floor      |
 | the CLI surface            | your shell scripts and CI configuration | a removed flag, a changed output format   | a drift-gated `api.lock` snapshot of the whole surface |
-| the daemon wire API        | the console, MCP clients, editors        | a removed or repurposed protobuf field    | reserved field numbers, and `buf breaking` in `lint` |
+| the daemon wire API        | the console, MCP clients, editors       | a removed or repurposed protobuf field    | reserved field numbers, and `buf breaking` in `lint`   |
 
 The promise is the same for all three. The mechanisms differ because the ways
 they break differ.

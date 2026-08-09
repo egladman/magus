@@ -22,11 +22,11 @@ tags:
 magus publishes three composite actions. Each does one thing, and a workflow reaches for
 as few of them as it needs.
 
-| action | what it does |
-| --- | --- |
-| `setup-magus` | installs magus and puts it on PATH |
-| `magus` | runs a magus command, writes the run summary, or merges shard histories |
-| `advice` | leaves [pull request advice](pr-advice.md) on what your build graph noticed |
+| action        | what it does                                                                |
+| ------------- | --------------------------------------------------------------------------- |
+| `setup-magus` | installs magus and puts it on PATH                                          |
+| `magus`       | runs a magus command, writes the run summary, or merges shard histories     |
+| `advice`      | leaves [pull request advice](pr-advice.md) on what your build graph noticed |
 
 Reference them from a tag, never a branch:
 
@@ -83,12 +83,12 @@ after you pays to disentangle them.
 
 magus's own repository settles on four, and the name says which is which:
 
-| file | runs on | ships |
-| --- | --- | --- |
-| `ci.yaml` | pull request, and main push | nothing |
-| `cd.yaml` | main push | docs site, per-commit container image |
-| `release.yaml` | `v*` tag | binaries and release images |
-| `nightly.yaml` | cron, manual | nothing |
+| file           | runs on                     | ships                                 |
+| -------------- | --------------------------- | ------------------------------------- |
+| `ci.yaml`      | pull request, and main push | nothing                               |
+| `cd.yaml`      | main push                   | docs site, per-commit container image |
+| `release.yaml` | `v*` tag                    | binaries and release images           |
+| `audit.yaml`   | cron, manual                | nothing                               |
 
 A tag build is a deliberate release, not continuous delivery, so it is not called `cd`.
 Name a workflow for what it promises, never for the ceremony around it.
@@ -127,11 +127,11 @@ where a failure is a signal instead of a row everyone has learned to scroll past
 
 `setup-magus` takes three inputs, and the interesting one is `installation-strategy`:
 
-| strategy | what it installs |
-| --- | --- |
+| strategy    | what it installs                                   |
+| ----------- | -------------------------------------------------- |
 | `automatic` | a verified release, falling back to a source build |
-| `prebuilt` | the release named by `git-ref`, checksum-verified |
-| `source` | the magus that `source-path` defines |
+| `prebuilt`  | the release named by `git-ref`, checksum-verified  |
+| `source`    | the magus that `source-path` defines               |
 
 Reach for `source` when the workspace under test needs a magus that has not been released
 yet - a magusfile using a feature from this commit. Reach for `prebuilt` with an explicit
@@ -233,20 +233,20 @@ so a workspace can swap in its own spell for another CI system.
 One job, after the shards, for everything that describes the run:
 
 ```yaml
-  report:
-    needs: [plan, ci]
-    if: always() && needs.plan.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with: { fetch-depth: 0, filter: blob:none }
-      - uses: egladman/magus/.github/actions/setup-magus@v0.4.0
-      - uses: egladman/magus/.github/actions/magus@v0.4.0
-        with:
-          report: 'true'
-          ci-result: ${{ needs.ci.result }}
-          shard-count: ${{ needs.plan.outputs.count }}
-          merge-history: ${{ github.ref == 'refs/heads/main' }}
+report:
+  needs: [plan, ci]
+  if: always() && needs.plan.result == 'success'
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v5
+      with: { fetch-depth: 0, filter: blob:none }
+    - uses: egladman/magus/.github/actions/setup-magus@v0.4.0
+    - uses: egladman/magus/.github/actions/magus@v0.4.0
+      with:
+        report: 'true'
+        ci-result: ${{ needs.ci.result }}
+        shard-count: ${{ needs.plan.outputs.count }}
+        merge-history: ${{ github.ref == 'refs/heads/main' }}
 ```
 
 `report` writes the outcome and the workspace's insight report to the step summary.
@@ -267,11 +267,11 @@ input, and every one can be silenced per pull request with a label. See
 
 ## Permissions
 
-| job | needs |
-| --- | --- |
-| running targets | `contents: read` |
-| advice | `pull-requests: write` |
-| advice with `fix-generated-drift` | `contents: write` |
+| job                               | needs                  |
+| --------------------------------- | ---------------------- |
+| running targets                   | `contents: read`       |
+| advice                            | `pull-requests: write` |
+| advice with `fix-generated-drift` | `contents: write`      |
 
 On a pull request from a fork the default token is read-only whatever you declare, so the
 advice comment and the drift autofix both fail there. That is the platform's rule, not

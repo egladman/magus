@@ -6,7 +6,7 @@ name: CI
 #
 # Four workflows, one trigger each, and the name says which: ci.yaml validates (pull
 # request), cd.yaml ships what a merge produces (main push), release.yaml cuts a release
-# (v* tag), nightly.yaml runs the expensive out-of-band checks (cron).
+# (v* tag), audit.yaml runs the expensive out-of-band checks (cron).
 #
 # ci also runs on main pushes, and that is not a publish step: the push run is what
 # populates the shared cache and the run-duration history a pull request may only read.

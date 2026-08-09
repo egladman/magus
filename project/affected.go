@@ -25,7 +25,7 @@ func Affected(ctx context.Context, w *types.Workspace, base string) (*types.Affe
 	if res.Source == types.VCSSourceDisabled {
 		return nil, fmt.Errorf("%w: vcs disabled", types.ErrAffectedFallback)
 	}
-	rawFiles, err := res.VCS.Diff(ctx, w.Root, res.Base)
+	rawFiles, err := res.VCS.ChangedFiles(ctx, w.Root, res.Base)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return nil, err

@@ -34,23 +34,23 @@ Three things come with every code, for free:
 
 The prefix tells you the domain at a glance:
 
-| Range | Domain |
-|-------|--------|
-| MGS1xxx | magusfile authoring |
-| MGS2xxx | sandbox / permissions |
-| MGS3xxx | workspace scope |
-| MGS4xxx | determinism and drift |
-| MGS5xxx | services |
-| MGS6xxx | charms |
+| Range   | Domain                     |
+| ------- | -------------------------- |
+| MGS1xxx | magusfile authoring        |
+| MGS2xxx | sandbox / permissions      |
+| MGS3xxx | workspace scope            |
+| MGS4xxx | determinism and drift      |
+| MGS5xxx | services                   |
+| MGS6xxx | charms                     |
 | MGS7xxx | knowledge-graph extraction |
-| MGS8xxx | output references |
-| MGS9xxx | auth / connectors |
+| MGS8xxx | output references          |
+| MGS9xxx | auth / connectors          |
 
 ## A worked example: drift classification
 
 The clearest expression of the philosophy is what magus does when a generated file
 drifts. A `generate` gate re-runs the generators and checks whether the tree went
-dirty. When it did, `vcs\diagnoseDrift` names *why*, instead of just failing:
+dirty. When it did, `vcs\diagnoseDrift` names _why_, instead of just failing:
 
 - **[MGS4006](codes/race/MGS4006.md) - stale generated output.** A declared input
   actually changed. Real drift: regenerate and commit.

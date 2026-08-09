@@ -1725,7 +1725,7 @@ func (r *runner) checkGeneratedDrift() types.DoctorCheck {
 	// Sources committed since the base ref explain their outputs too; see
 	// sourcesChangedSinceBase in cmd/magus/vcs.go for why the working tree alone is wrong.
 	var sinceBase map[string]bool
-	if changed, derr := res.VCS.Diff(ctx, r.root, res.Base); derr == nil && len(changed) > 0 {
+	if changed, derr := res.VCS.ChangedFiles(ctx, r.root, res.Base); derr == nil && len(changed) > 0 {
 		if cf, cerr := insp.ClassifyFiles(ctx, changed); cerr == nil {
 			sinceBase = types.SourceProjects(cf)
 		}
