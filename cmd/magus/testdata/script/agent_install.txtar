@@ -14,11 +14,25 @@ exec magus agent install .opencode/skills .agents/skills
 exists .opencode/skills/magus-query/SKILL.md
 exists .agents/skills/magus-query/SKILL.md
 
-# install-agents-md maintains a managed AGENTS.md section; re-install replaces, never duplicates
-exec magus agent install-agents-md
-grep 'magus:skills:begin' AGENTS.md
-exec magus agent install-agents-md
-grep -count=1 'magus:skills:begin' AGENTS.md
+# install OFFERS the AGENTS.md block on stderr and never writes the file.
+# The offer is a hint, so this is the one stretch that turns hints back on.
+env MAGUS_HINTS_ENABLED=true
+exec magus agent install .agents/skills --force
+stderr 'magus does not write AGENTS.md'
+stderr 'magus:skills:begin'
+! exists AGENTS.md
+
+# an AGENTS.md that already exists is left byte-identical
+cp theirs.md AGENTS.md
+exec magus agent install .agents/skills --force
+cmp AGENTS.md theirs.md
+
+# once the block is pasted and current, install stops reprinting it
+exec magus agent sample
+cp stdout AGENTS.md
+exec magus agent install .agents/skills --force
+! stderr 'magus:skills:begin'
+env MAGUS_HINTS_ENABLED=false
 
 # a second skill-dir install refuses to clobber without --force
 ! exec magus agent install .claude/skills
@@ -59,3 +73,7 @@ stdout 'pass'
 git stash
 -- pass-command.txt --
 git status
+-- theirs.md --
+# My agents notes
+
+keep me

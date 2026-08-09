@@ -2,9 +2,12 @@
 exec magus graph verify --dir .
 stdout 'not installed'
 
-# after install it reports up to date, per location
+# after install it reports up to date, per location. AGENTS.md is PASTED rather
+# than installed - magus never writes it - so this stands in for the developer,
+# and verify grading it proves the printed block round-trips.
 exec magus agent install .claude/skills
-exec magus agent install-agents-md
+exec magus agent sample
+cp stdout AGENTS.md
 exec magus graph verify --dir .
 stdout 'agent skills \(.claude/skills\): up to date'
 stdout 'agent skills \(AGENTS.md\): up to date'

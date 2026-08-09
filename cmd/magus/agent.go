@@ -43,10 +43,19 @@ var agentSkills = agent.NewCatalog(skillFS, agentsSection, types.KnowledgeSchema
 
 // agentCmd implements `magus agent <subcommand>`: the agent-integration surface.
 // `install` writes the embedded skills into explicitly named destinations and
-// `install-agents-md` maintains the managed magus section in AGENTS.md.
-// Destinations and event shapes are explicit arguments, never auto-detected
-// (per the explicit-and-granular preference); writing into a repo's agent-config
-// dirs happens only through these commands, never as a side effect of another.
+// `sample` prints AGENTS.md content for a developer to own. Destinations and
+// event shapes are explicit arguments, never auto-detected (per the
+// explicit-and-granular preference); writing into a repo's agent-config dirs
+// happens only through `install`, never as a side effect of another command.
+//
+// AGENTS.md is the one file magus refuses to write, and `install-agents-md`
+// (which did) is gone with no subcommand replacing it. It managed a marked block
+// inside the file, which is the polite version of an installer appending to your
+// .bashrc and still the wrong shape: the file is the developer's, the merge logic
+// is never as careful as it looks, and a re-run leaves bytes nobody wrote.
+// `install` prints the block when your AGENTS.md is missing it or carrying a
+// stale one, which is the moment the block is worth reading, and `sample` prints
+// a whole starter file with the same block in it.
 //
 // The `hook` and `notify` subcommands used to live here; they are now top-level
 // (`magus hook`, `magus notify`) because their contracts are not agent-specific.
@@ -59,30 +68,30 @@ func agentCmd(ctx context.Context, args []string) error {
 	switch args[0] {
 	case "install":
 		return agentInstallCmd(ctx, args[1:])
-	case "install-agents-md":
-		return agentInstallAgentsMDCmd(ctx, args[1:])
 	case "sample":
 		return agentSampleCmd()
 	case "-h", "--help", "help":
 		agentUsage(os.Stderr)
 		return nil
 	default:
-		return usagef("magus agent: unknown subcommand %q (want install, install-agents-md, or sample)", args[0])
+		return usagef("magus agent: unknown subcommand %q (want install or sample)", args[0])
 	}
 }
 
 func agentUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: magus agent <install|install-agents-md|sample> [flags]")
+	fmt.Fprintln(w, "Usage: magus agent <install|sample> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  install            render the embedded skills and write or stream them")
 	fmt.Fprintln(w, "                     into named destinations (.claude/skills, .agents/skills,")
 	fmt.Fprintln(w, "                     .opencode/skills, ...)")
-	fmt.Fprintln(w, "  install-agents-md  maintain the managed magus section in AGENTS.md")
-	fmt.Fprintln(w, "                     (created if absent, replaced in place on re-install,")
-	fmt.Fprintln(w, "                     bytes outside the markers never touched)")
 	fmt.Fprintln(w, "  sample             print a starter AGENTS.md to stdout to own and tweak;")
 	fmt.Fprintln(w, "                     never writes a file")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "magus never writes your AGENTS.md. That file is yours, and an installer")
+	fmt.Fprintln(w, "that edits a file you own leaves bytes you did not write and cannot audit.")
+	fmt.Fprintln(w, "So `install` PRINTS the managed magus block for you to paste, and only")
+	fmt.Fprintln(w, "when your AGENTS.md is missing it or carrying a stale one.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Stdout philosophy: `magus agent` is a pure data generator. To install")
 	fmt.Fprintln(w, "skills anywhere your shell can reach, use --tar and pipe to tar:")
@@ -186,42 +195,6 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	return nil
 }
 
-// agentInstallAgentsMDCmd renders the managed magus section for <dir>/AGENTS.md
-// and either writes it back in place or streams it on stdout (--tar).
-// Bytes outside the begin/end markers are preserved from any existing file.
-func agentInstallAgentsMDCmd(ctx context.Context, args []string) error {
-	fset := flag.NewFlagSet("agent install-agents-md", flag.ContinueOnError)
-	bindDisplayFlags(fset)
-	dir := fset.String("dir", ".", "Repo directory whose AGENTS.md to manage")
-	tarMode := fset.Bool("tar", false, "Stream a tar archive containing AGENTS.md to stdout instead of writing")
-	fset.Usage = func() { agentUsage(os.Stderr) }
-	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
-		return err
-	}
-	if rest := fset.Args(); len(rest) > 0 {
-		return fmt.Errorf("agent install-agents-md: takes no positional arguments")
-	}
-	if *tarMode {
-		body, err := agentSkills.AgentsSectionTar(*dir)
-		if err != nil {
-			return err
-		}
-		if _, err := os.Stdout.Write(body); err != nil {
-			return fmt.Errorf("agent install-agents-md --tar: write stdout: %w", err)
-		}
-		return nil
-	}
-	written, err := agentSkills.WriteAgentsSection(*dir)
-	if err != nil {
-		return err
-	}
-	for _, p := range written {
-		slog.InfoContext(ctx, "agent install-agents-md: wrote", slog.String("path", p))
-	}
-	printAgentInstallNextSteps(*dir, written, agent.VariantFull)
-	return nil
-}
-
 // printAgentInstallNextSteps prints an actionable hint after install, gated on
 // the user-controlled hints preference so MAGUS_HINTS_ENABLED=false silences it.
 func printAgentInstallNextSteps(dir string, written []string, v agent.Variant) {
@@ -236,6 +209,40 @@ func printAgentInstallNextSteps(dir string, written []string, v agent.Variant) {
 	interactive.Emit(os.Stderr, "safety: consider a line in your repo's agent instruction file so parallel agents cannot wipe each other's work:")
 	interactive.Emit(os.Stderr, "  \""+vcsSafetyRule+"\"")
 	interactive.Emit(os.Stderr, "starter AGENTS.md you can own and tweak (prints, never writes):  magus agent sample")
+	printAgentsBlockToPaste(dir)
+}
+
+// printAgentsBlockToPaste offers the managed AGENTS.md block for the developer to
+// paste, and says nothing when their file already carries a current one.
+//
+// This is what replaced `magus agent install-agents-md`, which WROTE the block
+// into AGENTS.md. Magus does not edit a file the developer owns - for the same
+// reason an installer appending to your .bashrc is bad manners, and it is the
+// careful implementations that make the point, not the sloppy ones: the merge
+// logic was marker-delimited and idempotent, and it still left bytes nobody
+// wrote in a file nobody could easily audit.
+//
+// It rides on install rather than on a subcommand of its own because the block
+// is only ever wanted right after the skills land, and a print-only subcommand
+// would have been a second name for a thing `sample` already prints.
+//
+// Silent when the block is present and current, because 80 lines of Markdown
+// emitted on every --force reinstall is how a reader learns to scroll past this
+// command's output - including the parts that are actionable. CheckStatuses
+// reads AGENTS.md to decide; reading it was never the objectionable part.
+func printAgentsBlockToPaste(dir string) {
+	verb := "add it to AGENTS.md at your repo root"
+	for _, s := range agentSkills.CheckStatuses(dir) {
+		if s.Location != "AGENTS.md" {
+			continue
+		}
+		if !s.Stale {
+			return
+		}
+		verb = "your AGENTS.md has an older copy: replace it BETWEEN the markers and leave the rest of the file alone"
+	}
+	interactive.Emit(os.Stderr, "magus does not write AGENTS.md - that file is yours. If your agent host reads it, "+verb+":")
+	fmt.Fprint(os.Stderr, "\n"+agentSkills.AgentsBlock()+"\n")
 }
 
 // vcsSafetyRule is the one always-on version-control rule worth carrying in a
@@ -244,15 +251,20 @@ func printAgentInstallNextSteps(dir string, written []string, v agent.Variant) {
 const vcsSafetyRule = "Version control is the orchestrator's job: do it yourself, never delegate it to a subagent, and never discard or revert uncommitted changes across the whole tree to verify a build - build in place. A whole-tree revert permanently destroys a concurrent agent's uncommitted work."
 
 // agentSampleDoc returns a complete, opinionated-but-tweakable AGENTS.md starter a
-// developer can paste and adapt. It is print-only (magus agent sample): unlike
-// a host-named subcommand, which would manage a marked magus section inside an existing
-// AGENTS.md, this hands over a whole file to own, so magus never risks clobbering
-// one. The magus block reproduces agents-section.md verbatim.
+// developer can paste and adapt. It is print-only (magus agent sample): magus hands
+// over a whole file to own rather than managing one in place, so it never risks
+// clobbering an AGENTS.md somebody wrote.
+//
+// The magus guidance arrives inside its begin/end markers, the same bytes install
+// prints, so `magus graph verify` can grade it once pasted and a reader who only
+// wants that part can lift it out on the markers. It carried an UNMARKED copy
+// before this file became the sole source of the block, which left a paste from
+// here invisible to verification.
 func agentSampleDoc() string {
 	return "# AGENTS.md\n\n" +
 		"<!-- A starter for AI agents working in this repo. Own and edit this file:\n" +
-		"     fill in the project-specific sections below. The magus block reproduces\n" +
-		"     the guidance `magus agent install` would otherwise manage for you. -->\n\n" +
+		"     fill in the project-specific sections below. Everything outside the\n" +
+		"     magus:skills markers is yours; magus never writes this file. -->\n\n" +
 		"## Project\n\n" +
 		"<!-- What this repo is, its primary language(s), and where the entry points\n" +
 		"     and top-level layout live. A few sentences. -->\n\n" +
@@ -261,7 +273,7 @@ func agentSampleDoc() string {
 		"     naming, error handling, comment style, and what NOT to touch. -->\n\n" +
 		"## Version control\n\n" +
 		"- " + vcsSafetyRule + "\n\n" +
-		strings.TrimSpace(agentSkills.Section()) + "\n"
+		agentSkills.AgentsBlock()
 }
 
 // agentSampleCmd prints agentSampleDoc to stdout. It never writes a file: an

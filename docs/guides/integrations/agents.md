@@ -131,12 +131,42 @@ cover every install case.
 magus agent install .claude/skills          # write to repo-relative dir; refuses to overwrite
 magus agent install .claude/skills --force  # overwrite after a magus upgrade
 magus agent install .claude/skills --simple # the shorter permutation (see below)
-magus agent install-agents-md               # write/refresh the AGENTS.md managed section
 magus agent install --tar                   # stream a tar of every skill to stdout
-magus agent install-agents-md --tar         # stream a tar containing AGENTS.md to stdout
+magus agent sample                          # print a whole starter AGENTS.md
 magus graph verify                          # are the installed skills current? (per location)
 magus graph verify --strict                 # CI gate: non-zero exit when stale
 ```
+
+### AGENTS.md is yours; magus never writes it
+
+No command writes your `AGENTS.md`, and there will not be one. `magus agent
+install` **prints** the managed magus block - between its begin/end markers, on
+stderr - and you paste it in.
+
+That is a deliberate limit, not a missing feature. `magus agent install-agents-md`
+used to manage the block in place: creating the file when absent, replacing the
+block on re-run, preserving your bytes outside the markers. It was the careful
+version of an installer appending to your `.bashrc`, and still the wrong shape.
+The file belongs to you, merge logic like that is never as careful as it looks,
+and a re-run leaves bytes you did not write and cannot easily audit. So magus
+instructs instead of mutating.
+
+The offer is scoped to when it is useful. Install reads your `AGENTS.md`,
+compares the block's stamp against the running binary, and:
+
+| your AGENTS.md      | install prints                                          |
+| ------------------- | ------------------------------------------------------- |
+| has no magus block  | the block, with "add it to AGENTS.md at your repo root" |
+| has a stale block   | the block, with "replace it BETWEEN the markers"        |
+| has a current block | nothing                                                 |
+
+So a `--force` reinstall does not dump 80 lines of Markdown at you every time.
+It is a hint, so `MAGUS_HINTS_ENABLED=false` silences it along with the others;
+`magus agent sample` prints the same block inside a whole starter file and is
+never gated.
+
+`magus graph verify` reads `AGENTS.md` to grade the pasted block's stamp and
+tells you when it has gone stale. Reporting is not writing, and that stays.
 
 The `--tar` form is the supported way to install skills anywhere your shell
 can reach. Pipe to `tar -xf - -C <dir>` and the shell does the file writes -
@@ -146,8 +176,11 @@ the user typed:
 ```sh
 magus agent install --tar | tar -xf - -C .claude/skills
 magus agent install --tar | tar -xf - -C ~/.config/opencode/skills
-magus agent install-agents-md --tar | tar -xf - -C ~/my-project
 ```
+
+There is no `--tar` for the AGENTS.md block. Piping it into `tar -xf -` would
+overwrite that file with magus's idea of its contents, which is exactly what
+magus stopped doing.
 
 Write-mode destinations are paths relative to `--dir` (default `.`). Absolute
 paths and `~` prefixes are refused unless `--global` is set, to keep magus
@@ -224,15 +257,17 @@ every well-known location it finds installed (`.agents/skills`,
 `.claude/skills`, `.opencode/skills`, and the AGENTS.md section), so a magus
 upgrade that changes the tool surface shows up as actionable drift instead of
 silently wrong instructions. Do not hand-edit installed skills; change flows
-through re-running install.
+through re-running install. The AGENTS.md block is the exception in one
+direction only: you paste it, so refreshing it means replacing the block
+yourself, and everything outside the markers is yours to edit freely.
 
 ### Codex
 
-Codex needs both the focused skills and the repository guidance:
+Codex needs both the focused skills and the repository guidance. The skills
+install; the AGENTS.md block is printed by that same install for you to paste:
 
 ```sh
 magus agent install .agents/skills
-magus agent install-agents-md
 magus server start
 ```
 
