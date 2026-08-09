@@ -118,6 +118,9 @@ type Ret struct {
 	// a mismatch or an omission, so it cannot drift from the struct it names. That
 	// is the whole reason it is safe to state twice.
 	Object string
+	// Enum names the Buzz enum this return's string is a case of. Same role as
+	// Arg.Enum, on the way out.
+	Enum string
 }
 
 // Method declares one host function bound into the VM.

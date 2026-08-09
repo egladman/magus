@@ -252,3 +252,15 @@ func boundaryTypeNamed(name string) (boundaryType, bool) {
 	}
 	return boundaryType{}, false
 }
+
+// boundaryEnumNamed finds a declared enum by its Buzz name. The counterpart to
+// boundaryTypeNamed, for the generator that has to declare an enum a signature
+// references.
+func boundaryEnumNamed(name string) (boundaryEnum, bool) {
+	for _, e := range boundaryEnums {
+		if e.Name == name {
+			return e, true
+		}
+	}
+	return boundaryEnum{}, false
+}
