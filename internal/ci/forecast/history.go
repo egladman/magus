@@ -145,17 +145,14 @@ func (h *History) PredictDuration(project, target string, tags []string) time.Du
 
 // resolvePrediction returns (p75, hitCount, missCount, hitRate) for the best matching tier.
 //
-// Tier 3 is the one the record path fills. Tiers 1-2 read Buckets, which are keyed by
-// the tags Tags() derives from the CHANGED FILE LIST - known at plan time and not at
-// record time, where ApplyDuration is called from an executed target that has no view
-// of the diff. So they are reachable only through Update, and no caller builds a batch
-// for it. Filling them means threading the affected-file set onto the outcome, which is
-// a real change to what the record path knows, not a missing line here.
+// Tier 3 is the tier the record path fills. Tiers 1-2 read Buckets, keyed by tags Tags()
+// derives from the changed-file list - known at plan time, not at record time. Filling
+// them means threading the affected set onto the outcome, a real change to what the
+// record path knows.
 //
-// HitCount/MissCount are likewise unfed from the record path: a cache HIT executes no
-// target, so no outcome is recorded for it. hitRate therefore stays 0 and PredictDuration
-// applies no hit discount - it predicts the full duration, which is the conservative
-// direction for a shard planner.
+// HitCount/MissCount stay unfed for the same shape of reason: a cache hit executes no
+// target, so no outcome exists. hitRate stays 0 and no hit discount applies, which
+// over-predicts - the safe direction for a shard planner.
 func (h *History) resolvePrediction(project, target string, tags []string) (p75 int64, hitCount, missCount int, hitRate float64) {
 	if targets, ok := h.Projects[project]; ok {
 		if s, ok := targets[target]; ok {
@@ -223,23 +220,19 @@ type ShardSample struct {
 	NShards int
 }
 
-// ApplyDuration folds one measured run into a target's duration statistics and returns
-// the result. Exported because the RECORD path lives in internal/ci/volatility, which
-// sees every executed target, while Update ingests a batch - and the two used to be
-// wired to different fields. run.go measured a real duration into Outcome.DurationMs,
-// nothing read it, and resolvePrediction fell through to DefaultDurationMs for every
-// project forever, which made LPT pack uniform weights and adaptive sharding
-// round-robin with extra steps.
+// ApplyDuration folds one measured run into a target's duration statistics.
 //
-// One definition of "how a duration becomes a p75", used by both, so they cannot drift
-// back apart.
+// Exported because the record path lives in internal/ci/volatility, which sees every
+// executed target, while Update ingests a batch nobody builds. The two were wired to
+// different fields: run.go measured a duration into Outcome.DurationMs, nothing read it,
+// and resolvePrediction returned DefaultDurationMs forever, so LPT packed uniform
+// weights. One definition of "duration to p75" now, so they cannot drift apart again.
 //
-// at is also what Merge resolves collisions on. Leaving it zero is why per-shard
-// histories compared equal and merge-history kept whichever file it read first,
-// discarding every other shard's outcomes.
+// at is what Merge resolves collisions on. Left zero, per-shard histories compared equal
+// and merge-history kept whichever file it read first.
 func ApplyDuration(st Stats, durationMs int64, at time.Time) Stats {
 	if durationMs <= 0 {
-		return st // an unmeasured run is not a sample; averaging in a zero would drag p75 down
+		return st // an unmeasured run is not a sample; a zero would drag p75 down
 	}
 	st.Recent = appendCapped(st.Recent, durationMs)
 	st.Samples++

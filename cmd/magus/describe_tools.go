@@ -21,10 +21,8 @@ type toolRow struct {
 	Project string `json:"project" yaml:"project"`
 	Bin     string `json:"bin" yaml:"bin"`
 	Spell   string `json:"spell" yaml:"spell"`
-	// InstalledVersion is what the probe reported. Empty means no version was read, and
-	// ProbeError says whether that is because the tool could not run or because it ran
-	// and printed nothing version-shaped - those look identical in a bare empty string,
-	// and only one of them means "not installed".
+	// Empty means no version was read; ProbeError says whether the tool could not run or
+	// ran and printed nothing version-shaped. Only the first means "not installed".
 	InstalledVersion string `json:"installed_version,omitempty" yaml:"installed_version,omitempty"`
 	ProbeError       string `json:"probe_error,omitempty" yaml:"probe_error,omitempty"`
 	// The two declarations stay separate: the first question about a failing bound is
@@ -71,8 +69,8 @@ func renderWindow(b spells.VersionBounds) string {
 }
 
 // buildToolRow turns one probe outcome into a row. Pure - no context, no exec - because
-// the interesting part of this command is the state machine, and welding it inside the
-// fork loop is what made four distinct outcomes collapse into one blank "not found".
+// welding this state machine inside the fork loop is what let four distinct outcomes
+// collapse into one blank "not found".
 func buildToolRow(project, bin, spell string, t spells.Tool, projBounds spells.VersionBounds, raw string, probeErr error) toolRow {
 	window := t.Supported.Intersect(projBounds)
 	row := toolRow{
@@ -83,15 +81,14 @@ func buildToolRow(project, bin, spell string, t spells.Tool, projBounds spells.V
 	}
 	switch {
 	case probeErr != nil:
-		// The tool could not be run at all. Distinct from every case below, and the only
-		// one that means "not installed".
+		// Could not run at all - the only outcome that means "not installed".
 		row.Verdict, row.ProbeError = verdictUnprobed, probeErr.Error()
 		return row
 	default:
 		v, ok := spells.ExtractVersion(raw)
 		if !ok {
-			// It ran and said something magus could not read. Reporting this as "not
-			// found" would be a claim about a binary that is demonstrably present.
+			// It ran and said something unreadable. "not found" would be a claim about a
+			// binary that is demonstrably present.
 			row.Verdict = verdictUnreadable
 			return row
 		}
@@ -105,8 +102,8 @@ func buildToolRow(project, bin, spell string, t spells.Tool, projBounds spells.V
 	case spells.VerdictInside:
 		row.Verdict = verdictInside
 	default:
-		// A bound that survived decode unparsed leaves nothing to compare. Spelled out
-		// rather than defaulted to inside: "could not check" must never read as "fine".
+		// An unparsed bound leaves nothing to compare. Explicit rather than defaulting to
+		// inside: "could not check" must not read as "fine".
 		row.Verdict = verdictUnknown
 	}
 	return row
@@ -153,8 +150,8 @@ func describeTools(ctx context.Context, root string, args []string) error {
 	}
 
 	var rows []toolRow
-	// Memoized on (spell, dir, bin), matching what the run path does: a workspace where
-	// six projects resolve the go spell must cost one `go version`, not six.
+	// Memoized on (spell, dir, bin), as the run path does: six projects resolving the go
+	// spell cost one `go version`, not six.
 	type reading struct {
 		raw string
 		err error
@@ -165,13 +162,13 @@ func describeTools(ctx context.Context, root string, args []string) error {
 			for _, bin := range sp.ToolNames() {
 				t, _ := sp.Tool(bin) // ToolNames ranges the same map Tool reads
 				if t.Probe.Bin == "" {
-					// Nothing to ask. A tool keyed by a declared constant lands here: the
-					// author typed that token to invalidate a cache, not to report a
-					// version. The console's ToolService skips it for the same reason.
+					// Nothing to ask. A constant-keyed tool lands here: an author typed
+					// that token to invalidate a cache, not to report a version. The
+					// console's ToolService skips it too.
 					continue
 				}
-				// Probing forks, so an abandoned command stops forking rather than
-				// printing a full report of failures that only means it was interrupted.
+				// Probing forks. An abandoned command stops rather than printing a
+				// report of failures that only means it was interrupted.
 				if err := ctx.Err(); err != nil {
 					return err
 				}

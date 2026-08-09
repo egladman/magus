@@ -592,7 +592,7 @@
         {
           "name": "compress-cgo-test",
           "declared": "compress_cgo_test",
-          "doc": "Runs internal/compress's tests against the CGO codecs, which the ordinary test target cannot reach.",
+          "doc": "Runs internal/compress's tests under the CGO tags, which the ordinary test target cannot reach.",
           "spells": [
             {
               "spell": "go",

@@ -114,7 +114,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `buzz-test` | Runs the in-file `test "..." {}` blocks in this repo's own root Buzz modules, through magus's embedded engine. |
 | `lint-build` | Builds ./custom-gcl, the golangci-lint carrying this repo's own linters. |
 | `completion-test` | Exercises the completion scripts magus SHIPS, each inside the official image for its shell. |
-| `compress-cgo-test` | Runs internal/compress's tests against the CGO codecs, which the ordinary test target cannot reach. |
+| `compress-cgo-test` | Runs internal/compress's tests under the CGO tags, which the ordinary test target cannot reach. |
 
 ## Project: console
 

@@ -1,18 +1,17 @@
 // Package compress provides the streaming compression primitives Magus uses for
-// cache artifacts and archives. Named for what it holds rather than "codec": codec
-// is the umbrella term for JSON, protobuf and bytecode too, and in this repo it
-// already meant JSON until internal/codec/json.go became internal/json. The compressors have cgo fast paths (libzstd,
+// cache artifacts and archives. The compressors have cgo fast paths (libzstd,
 // liblzma) selected by build tag, with pure-Go fallbacks so the module builds
 // and runs without a C toolchain.
+//
+// Not "codec": that name covers JSON and protobuf too, and here it already meant
+// JSON until internal/codec/json.go became internal/json.
 package compress
 
 import "io"
 
-// Each codec has two implementations selected at build time: a cgo path backed by
-// libzstd/liblzma (zstd_cgo.go, xz_cgo.go) and a pure-Go fallback
-// (zstd_other.go, xz_other.go). The wrappers below delegate to whichever
-// implementation the build selected, so callers get one documented API
-// regardless of whether cgo is enabled.
+// The wrappers below delegate to whichever implementation the build selected
+// (zstd_cgo.go / zstd_other.go, xz_cgo.go / xz_other.go), so callers get one
+// documented API whether or not cgo is enabled.
 
 // NewZstdWriter returns a streaming zstd compressor writing to w. level is the
 // compression level (-1 = default, 1-19); threads sets encoder concurrency

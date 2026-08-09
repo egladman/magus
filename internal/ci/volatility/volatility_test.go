@@ -272,10 +272,10 @@ func TestRuntimeRecordsWithoutRetryingWhenNotOptedIn(t *testing.T) {
 	assert.True(t, NewRuntime(h, "", DefaultConfig(), nil, true).Decide("svc/api", "go/test", true).Retry)
 }
 
-// Recording an outcome must feed the DURATION model, not only the volatility counters.
-// This is the wiring that was missing: run.go measured a real duration into
-// Outcome.DurationMs and nothing read it, so the shard forecaster predicted
-// DefaultDurationMs for every project forever and LPT packed uniform weights.
+// Recording an outcome must feed the DURATION model as well as the volatility counters.
+// This was the missing wiring: run.go measured a duration into Outcome.DurationMs,
+// nothing read it, and the forecaster predicted DefaultDurationMs for every project
+// forever while LPT packed uniform weights.
 func TestRecordOutcomeFeedsTheDurationModel(t *testing.T) {
 	h := forecast.History{}
 	rt := NewRuntime(&h, "", Config{Enabled: true, MinSamples: 2}, nil, false)

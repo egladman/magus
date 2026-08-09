@@ -1756,28 +1756,23 @@ export fun completion_test(ctx: magus\Context, args: [str]) > void {
     }
 }
 
-// Runs internal/compress's tests against the CGO codecs, which the ordinary test target
+// Runs internal/compress's tests under the CGO tags, which the ordinary test target
 // cannot reach.
 //
-// `go-test` runs with no build tags, so it compiles zstd_other.go and xz_other.go and
-// never the ~470 lines of zstd_cgo.go and xz_cgo.go - which are exactly the files a
-// release binary ships (`release-build` passes -tags liblzma,libzstd). The coverage
-// figure hid it: internal/compress read 78.9% while the shipped half was at zero.
+// `go-test` passes no tags, so it compiles the pure-Go fallbacks and never the ~470
+// lines of zstd_cgo.go and xz_cgo.go - exactly the files a release binary ships. The
+// coverage figure hid it: 78.9% while the shipped half sat at zero.
 //
-// That gap cost real correctness. The cgo zstd reader discarded ZSTD_decompressStream's
-// hint, so a stream cut mid-frame returned io.EOF with a NIL error - 393216 of 1200000
-// bytes handed back as a successful read, where the pure-Go path returned
-// io.ErrUnexpectedEOF for the same input. A truncated cache artifact extracted as a
-// complete-looking archive with files missing. TestTruncatedStreamIsAnError covers it
-// now, and covers nothing that ships unless this target runs it under the tags.
+// It cost correctness. The cgo zstd reader dropped ZSTD_decompressStream's hint, so a
+// stream cut mid-frame returned io.EOF with a NIL error and a truncated cache artifact
+// extracted as a complete-looking archive with files missing.
 //
-// REQUIRED, not skipped when pkg-config comes up empty - the same call completion_test
-// makes about docker, for the same reason: a gate that quietly skips on a missing tool
-// is how the untested half got there. CI already installs liblzma-dev and libzstd-dev,
-// and both cgo files declare `#cgo pkg-config:` on them, so a host that cannot build
-// this cannot build a release either.
+// REQUIRED, not skipped when pkg-config comes up empty - the call completion_test makes
+// about docker, for the same reason: quietly skipping on a missing tool is how the
+// untested half got here. CI already installs both -dev packages, and a host that cannot
+// build this cannot build a release.
 export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void {
-    // Narrow on purpose: affected reaches this only when the codecs or their tests move.
+    // Narrow: affected reaches this only when the codecs or their tests move.
     ctx.readsFiles("internal/compress/*.go");
     foreach (lib in ["libzstd", "liblzma"]) {
         os\exec("pkg-config", ["--exists", lib], ".", {});

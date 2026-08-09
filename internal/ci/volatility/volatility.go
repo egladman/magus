@@ -130,10 +130,9 @@ func lastPassTime(s forecast.Stats) time.Time {
 }
 
 func recordOutcome(s forecast.Stats, o forecast.Outcome) forecast.Stats {
-	// The duration model is fed HERE, from the same outcome that feeds volatility,
-	// because this is the one place that sees every target magus actually executed.
-	// forecast.Update ingests a batch and no caller builds one, so without this the
-	// shard forecaster never learned a single duration - see ApplyDuration's comment.
+	// The duration model is fed here, from the same outcome volatility reads, because
+	// this is the one place that sees every executed target. forecast.Update ingests a
+	// batch nobody builds, so without this the forecaster learned nothing.
 	s = forecast.ApplyDuration(s, o.DurationMs, o.At)
 
 	s.RecentOutcomes = append(s.RecentOutcomes, o)

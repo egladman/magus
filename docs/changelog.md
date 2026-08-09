@@ -115,17 +115,17 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   is inclusive and `below` is exclusive, both plain versions rather than a constraint
   range, because a range language puts a syntax between you and the two cases that
   matter. magus never learns which versions exist upstream and never selects one.
-- **`magus describe tool[s]`, and a Toolchain tile in the console.** The window a build
-  is held to was only observable by failing one: the diagnostic named the tool that broke
-  the rule and nothing listed the rest. Both surfaces read the same state (the probed
-  version, the spell's `supported`, the project's `tools` key) and report the verdict the
-  CLI would raise for the same pair, so they cannot disagree with a terminal. The spell's
-  window and the workspace's stay separate columns, because the first question about a
-  failing bound is who set it and the intersection has already discarded that by the time
-  a diagnostic is built. The console reads it over a new `magus.tool.v1` service; a probe
-  forks a process, so the daemon caches each reading for a minute and the row carries the
-  reading's age rather than implying live. Nothing here learns which versions exist
-  upstream, selects one, or carries end-of-life data.
+- **`magus describe tool[s]`, and a Toolchain tile in the console.** Until now you could
+  only see the window a build is held to by failing one, and the diagnostic named the tool
+  that broke the rule without listing the rest. Both surfaces read the same state - the
+  probed version, the spell's `supported`, the project's `tools` key - and report the
+  verdict the CLI would raise for the same pair, so a page and a terminal cannot disagree.
+  The spell's window and the workspace's stay separate columns: the first question about a
+  failing bound is who set it, and the intersection has already thrown that away by the
+  time a diagnostic exists. The console reads it over a new `magus.tool.v1` service. A
+  probe forks a process, so the daemon caches each reading for a minute and every row
+  carries its age instead of implying it is live. magus still never learns which versions
+  exist upstream, never selects one, and carries no end-of-life data.
 - **`opts.quiet` on `os\exec`, `os\exec_sh`, and `vcs\cmd`.** Captures output without
   echoing it, matching what `magus\cmd` and friends already accepted. Read in the one
   path all three share, so they cannot drift into different option sets.

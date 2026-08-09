@@ -39,9 +39,8 @@ const probeTTL = time.Minute
 // would otherwise hang the request for as long as the client is willing to wait.
 const probeTimeout = 10 * time.Second
 
-// workspace is the slice of the workspace this handler reads: one method, because that is
-// all it calls. A narrow view of a large producer type, the same shape the other read
-// services take, and it is what lets the tests run without a tree.
+// workspace is what this handler reads: one method, because that is all it calls. The
+// narrow view the other read services take, and what lets the tests run without a tree.
 type workspace interface {
 	All() []*types.Project
 }
@@ -52,14 +51,12 @@ type Service struct {
 
 	mu     sync.Mutex
 	probes map[string]probe // key: spell \x00 bin \x00 dir
-	// ttl is how stale a cached reading may be. A field rather than the const directly so
-	// a test can shorten it; nothing else sets it.
+	// A field rather than the const so a test can shorten it. Nothing else sets it.
 	ttl time.Duration
 }
 
 // probe is one cached version reading. A zero at means no probe ran; an empty version
-// with a non-zero at means one ran and read nothing usable, which is a different thing
-// and renders as VERDICT_UNKNOWN either way.
+// with a non-zero at means one ran and read nothing usable. Both are VERDICT_UNKNOWN.
 type probe struct {
 	version string
 	at      time.Time
@@ -82,8 +79,8 @@ func (s *Service) ListTools(ctx context.Context, req *connect.Request[toolv1.Lis
 			continue
 		}
 		matched = true
-		// Probing forks, so an abandoned request must stop forking rather than walk the
-		// rest of the workspace failing instantly and returning a blank report as success.
+		// Probing forks. An abandoned request must stop, not walk the rest of the
+		// workspace failing instantly and return a blank report as success.
 		if err := ctx.Err(); err != nil {
 			return nil, connect.NewError(connect.CodeCanceled, err)
 		}
@@ -93,8 +90,8 @@ func (s *Service) ListTools(ctx context.Context, req *connect.Request[toolv1.Lis
 		}
 		out.Projects = append(out.Projects, &toolv1.Project{Path: p.Path, Name: p.Name, Tools: tools})
 	}
-	// A named project that does not exist is a client error, not an empty workspace. Left
-	// as an empty list it is indistinguishable from a project that declares no tool.
+	// An unknown project is a client error: as an empty list it is indistinguishable from
+	// a project that declares no tool.
 	if want != "" && !matched {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no project %q in this workspace", want))
 	}
@@ -109,11 +106,9 @@ func (s *Service) projectTools(ctx context.Context, p *types.Project) []*toolv1.
 		for _, bin := range sp.ToolNames() {
 			t, _ := sp.Tool(bin) // ToolNames ranges the same map Tool reads
 			if t.Probe.Bin == "" {
-				// Nothing to ask. That includes a tool keyed by a declared constant: the
-				// author typed that token to invalidate a cache, it is not a reading of
-				// anything installed, and rendering it as a version would be a claim
-				// magus cannot support. `magus describe tools` skips it for the same
-				// reason, so the two surfaces agree.
+				// Nothing to ask, including a tool keyed by a declared constant: that
+				// token was typed by an author, not read off anything installed.
+				// `magus describe tools` skips it too, so the surfaces agree.
 				continue
 			}
 			projBounds := p.ToolBounds[bin]
@@ -128,8 +123,8 @@ func (s *Service) projectTools(ctx context.Context, p *types.Project) []*toolv1.
 				WorkspaceBounds:  boundsToProto(projBounds),
 				Effective:        boundsToProto(effective),
 			}
-			// Stamped only for a reading that happened. A probe that never ran must not
-			// carry a timestamp asserting one did.
+			// Only for a reading that happened: a probe that never ran must not carry a
+			// timestamp saying it did.
 			if !pr.at.IsZero() {
 				row.ProbedAt = timestamppb.New(pr.at)
 			}
@@ -141,14 +136,12 @@ func (s *Service) projectTools(ctx context.Context, p *types.Project) []*toolv1.
 	return out
 }
 
-// probeVersion returns the tool's reading, going to the cache first. A probe that fails
-// yields an empty version rather than an error: an absent tool is not a version violation,
-// the same call the CLI's window check makes.
+// probeVersion returns the tool's reading, cache first. A failed probe yields an empty
+// version, not an error: an absent tool is not a violation.
 //
-// The FAILURE is cached too, which is the whole point of caching here. A tool that is not
-// installed is the population this view exists to show, and it is also the fastest thing
-// to re-fork; caching only successes left exactly the broken tools re-forking on every
-// request, which is the fork loop probeTTL was written to prevent.
+// Failures are cached too. Absent tools are the population this view exists to show, so
+// caching only successes left exactly them re-forking every request - the fork loop
+// probeTTL exists to prevent.
 func (s *Service) probeVersion(ctx context.Context, sp *spells.Spell, bin, dir string) probe {
 	// Keyed by spell as well as (bin, dir), because the argv comes from the spell: two
 	// spells declaring the same bin ask different questions and must not share an answer.
@@ -196,14 +189,14 @@ func verdict(b spells.VersionBounds, version string) toolv1.Verdict {
 	case spells.VerdictInside:
 		return toolv1.Verdict_VERDICT_INSIDE
 	default:
-		// Inside is spelled out above so this arm can be UNKNOWN. A verdict added
-		// upstream must surface as "we could not check", never as "checked, fine".
+		// Inside is explicit above so this arm can be UNKNOWN: a verdict added upstream
+		// must read as "could not check", never "checked, fine".
 		return toolv1.Verdict_VERDICT_UNKNOWN
 	}
 }
 
-// diagnosticFor is the code the CLI raises for a verdict. Derived rather than returned
-// beside it, so a new verdict cannot be wired with its code silently left blank.
+// diagnosticFor is the code the CLI raises for a verdict. Derived, not returned beside
+// it, so a new verdict cannot be wired with its code left blank.
 func diagnosticFor(v toolv1.Verdict) string {
 	switch v {
 	case toolv1.Verdict_VERDICT_TOO_OLD:
