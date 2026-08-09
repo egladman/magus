@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/selfupdate"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
@@ -67,8 +69,7 @@ func TestReleaseIndexSignAndVerify(t *testing.T) {
 			},
 		},
 	}
-	idx := ReleaseIndex{SchemaVersion: 1, Releases: manifests}
-	data, err := json.MarshalIndent(idx, "", "  ")
+	data, err := json.Marshal(buildIndex(manifests))
 	require.NoError(t, err)
 	data = append(data, '\n')
 
@@ -82,19 +83,104 @@ func TestReleaseIndexSignAndVerify(t *testing.T) {
 	require.False(t, verifyIndexSig(tampered, sig, pub), "verification must fail on tampered data")
 }
 
-// TestReleaseIndexJSON verifies the index.json structure carries schema_version.
-func TestReleaseIndexJSON(t *testing.T) {
+// TestBuildIndexEmitsOnlyTheServedSchema pins the exact bytes of the file
+// `magus self update` downloads, and pins them BYTEWISE rather than semantically.
+// A signature covers bytes, so an encoder difference is a real defect here even
+// when the JSON means the same thing - which is how omitempty on Yanked was caught
+// emitting `"yanked":false` under GOEXPERIMENT=jsonv2 and nothing without it.
+//
+// The manifest's prose must not reach the file either: every client fetches it on
+// every check, and date/notes/body would multiply its size for fields nothing reads.
+func TestBuildIndexEmitsOnlyTheServedSchema(t *testing.T) {
 	manifests := []ReleaseManifest{
-		{Version: "v0.2.0", Date: "2026-08-01", Body: "### Added\n\n- new feature"},
-		{Version: "v0.1.0", Date: "2026-07-05", Body: "### Added\n\n- initial"},
+		{
+			Version: "v0.2.0",
+			Date:    "2026-08-01",
+			Notes:   ReleaseNotes{Added: []string{"new feature"}},
+			Body:    "### Added\n\n- new feature",
+			Artifacts: []ReleaseArtifact{
+				{Name: "magus_v0.2.0_linux_amd64_static.tar.gz", Platform: "linux/amd64", Size: "12", SHA256: "ab"},
+			},
+		},
+		{Version: "v0.1.0", Date: "2026-07-05", Body: "### Added\n\n- initial", Yanked: true},
 	}
-	want := ReleaseIndex{SchemaVersion: 1, Releases: manifests}
-	data, err := json.MarshalIndent(want, "", "  ")
+	data, err := json.Marshal(buildIndex(manifests))
+	require.NoError(t, err)
+	require.Equal(t, `{"schema_version":1,"releases":[`+
+		`{"version":"v0.2.0","artifacts":[{"name":"magus_v0.2.0_linux_amd64_static.tar.gz","platform":"linux/amd64","size":"12","sha256":"ab"}]},`+
+		`{"version":"v0.1.0","yanked":true,"artifacts":[]}`+
+		`]}`, string(data))
+}
+
+// TestBuildIndexParsesAsTheClientReadsIt runs the emitted bytes through the
+// reader in internal/selfupdate. The two schemas are declared in different
+// packages, so nothing but this stops them drifting apart.
+func TestBuildIndexParsesAsTheClientReadsIt(t *testing.T) {
+	data, err := json.Marshal(buildIndex([]ReleaseManifest{
+		{Version: "v0.2.0", Artifacts: []ReleaseArtifact{{Name: "magus_v0.2.0_linux_amd64_static.tar.gz"}}},
+		{Version: "v0.3.0", Yanked: true},
+	}))
 	require.NoError(t, err)
 
-	var got ReleaseIndex
-	require.NoError(t, json.Unmarshal(data, &got))
-	require.Equal(t, want, got, "ReleaseIndex round-trips through JSON")
+	var idx selfupdate.ReleaseIndex
+	require.NoError(t, json.Unmarshal(data, &idx))
+	require.Equal(t, 1, idx.SchemaVersion)
+
+	rel, err := selfupdate.SelectRelease(&idx, "")
+	require.NoError(t, err)
+	require.Equal(t, "v0.2.0", rel.Version, "the yanked v0.3.0 must not be selected")
+	require.Equal(t, "magus_v0.2.0_linux_amd64_static.tar.gz", rel.Artifacts[0].Name)
+}
+
+// servedIndexDir is the tracked docs/gen/public/release, the one directory under
+// docs/gen/ that a render never writes.
+const servedIndexDir = "../../docs/gen/public/release"
+
+// mustLoadShippedManifests reads this repository's own releases/, newest-first.
+func mustLoadShippedManifests(t *testing.T) []ReleaseManifest {
+	t.Helper()
+	manifests, err := loadManifests(filepath.Join("..", "..", "releases"))
+	require.NoError(t, err)
+	require.NotEmpty(t, manifests, "releases/ must hold a manifest per shipped release")
+	return manifests
+}
+
+// TestServedIndexMatchesTheManifests catches a manifest edited without re-running
+// release-index. The usual regenerate-and-diff drift gate is the wrong shape here:
+// index.json.sig covers these exact bytes, so a gate allowed to REWRITE the file
+// would silently invalidate the signature it is meant to protect. Comparing can
+// only ever report.
+func TestServedIndexMatchesTheManifests(t *testing.T) {
+	want, err := json.Marshal(buildIndex(mustLoadShippedManifests(t)))
+	require.NoError(t, err)
+	got, err := os.ReadFile(filepath.Join(servedIndexDir, "index.json"))
+	require.NoError(t, err)
+	require.Equal(t, string(want)+"\n", string(got),
+		"docs/gen/public/release/index.json is stale: re-run `magus-utils release-index` and re-sign it")
+}
+
+// TestServedIndexSignatureVerifies proves the published pair is one a shipped
+// binary can verify - the failure that made `magus self update` exit 1 for every
+// user of v0.3.0. Only a tag build (or the release-index workflow) holds the key,
+// so the signature arrives after the index; the skip is that window and nothing else.
+func TestServedIndexSignatureVerifies(t *testing.T) {
+	if _, err := os.Stat(filepath.Join(servedIndexDir, "index.json.sig")); os.IsNotExist(err) {
+		t.Skip("index.json.sig not committed yet; run the release-index workflow")
+	}
+	require.NoError(t, verifyIndexSigFile(servedIndexDir, selfupdate.PubKey))
+}
+
+// TestShippedManifestsPinEveryArtifact guards the defect that made the served
+// index useless: every size and sha256 in releases/*.yaml was the empty string,
+// so a signature would have covered a file that pinned nothing.
+func TestShippedManifestsPinEveryArtifact(t *testing.T) {
+	for _, m := range mustLoadShippedManifests(t) {
+		require.NotEmpty(t, m.Artifacts, "%s: no artifacts", m.Version)
+		for _, a := range m.Artifacts {
+			require.NotEmpty(t, a.Size, "%s: %s has no size", m.Version, a.Name)
+			require.NotEmpty(t, a.SHA256, "%s: %s has no sha256", m.Version, a.Name)
+		}
+	}
 }
 
 // TestCompareSemver verifies numeric semver sort direction.
@@ -147,63 +233,87 @@ func TestLoadManifestsSortedNewestFirst(t *testing.T) {
 	}
 }
 
-// TestRunReleaseIndex_NoSignKey verifies runReleaseIndex signs the bytes of a
-// pre-existing index.json without MAGUS_SIGNING_KEY set (signing is skipped).
-func TestRunReleaseIndex_NoSignKey(t *testing.T) {
-	t.Setenv("MAGUS_SIGNING_KEY", "")
-
-	servedDir := t.TempDir()
-	// Write a pre-built index.json (the served file the renderer would emit).
-	idxJSON := `{"schema_version":1,"releases":[{"version":"v0.1.0","date":"2026-07-05","notes":{},"body":"### Added\n\n- x","artifacts":[]}]}` + "\n"
-	idxPath := filepath.Join(servedDir, "index.json")
-	require.NoError(t, os.WriteFile(idxPath, []byte(idxJSON), 0o644))
-
-	require.NoError(t, runReleaseIndex([]string{"-served", servedDir}))
-
-	// No .sig file should exist when the key is unset.
-	_, err := os.Stat(idxPath + ".sig")
-	require.True(t, os.IsNotExist(err), "no .sig file expected when MAGUS_SIGNING_KEY is unset")
+// seedReleaseIndexInput writes one manifest and returns (releasesDir, outDir).
+func seedReleaseIndexInput(t *testing.T) (string, string) {
+	t.Helper()
+	relDir := t.TempDir()
+	writeManifestFile(t, relDir, ReleaseManifest{
+		Version:   "v0.1.0",
+		Date:      "2026-07-05",
+		Body:      "### Added\n\n- x",
+		Artifacts: []ReleaseArtifact{{Name: "magus_v0.1.0_linux_amd64_static.tar.gz", Platform: "linux/amd64", Size: "9", SHA256: "ab"}},
+	})
+	return relDir, filepath.Join(t.TempDir(), "release")
 }
 
-// TestRunReleaseIndex_WithEphemeralKey tests that runReleaseIndex signs the
-// exact bytes of the pre-existing index.json, and the sig verifies against the
-// same bytes. This is the sig-over-served-bytes contract.
+// TestRunReleaseIndex_UnsetKeyIsFatal covers the defect directly: a release job
+// whose signing key was missing used to write index.json, warn, and exit 0,
+// publishing an index whose .sig 404s for every client.
+func TestRunReleaseIndex_UnsetKeyIsFatal(t *testing.T) {
+	t.Setenv("MAGUS_SIGNING_KEY", "")
+	relDir, outDir := seedReleaseIndexInput(t)
+
+	err := runReleaseIndex([]string{"-releases", relDir, "-out", outDir})
+	require.Error(t, err, "an unsigned index must not pass silently")
+	require.Contains(t, err.Error(), "-no-sign", "the error must name the opt-out")
+}
+
+// TestRunReleaseIndex_NoSign writes the index without a signature when asked.
+func TestRunReleaseIndex_NoSign(t *testing.T) {
+	t.Setenv("MAGUS_SIGNING_KEY", "")
+	relDir, outDir := seedReleaseIndexInput(t)
+
+	require.NoError(t, runReleaseIndex([]string{"-releases", relDir, "-out", outDir, "-no-sign"}))
+
+	_, err := os.Stat(filepath.Join(outDir, "index.json"))
+	require.NoError(t, err, "index.json is written even unsigned")
+	_, err = os.Stat(filepath.Join(outDir, "index.json.sig"))
+	require.True(t, os.IsNotExist(err), "no .sig expected under -no-sign")
+}
+
+// TestRunReleaseIndex_WithEphemeralKey checks the sig covers the exact bytes
+// written, which is the contract the client verifies before parsing them.
 func TestRunReleaseIndex_WithEphemeralKey(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	t.Setenv("MAGUS_SIGNING_KEY", hex.EncodeToString(priv))
+	overrideVerifyPubKey = pub
+	t.Cleanup(func() { overrideVerifyPubKey = nil })
 
-	servedDir := t.TempDir()
-	// Write a pre-built index.json (the served file the renderer would emit).
-	idxJSON := `{"schema_version":1,"releases":[{"version":"v0.1.0","date":"2026-07-05","notes":{},"body":"### Added\n\n- x","artifacts":[]}]}` + "\n"
-	idxPath := filepath.Join(servedDir, "index.json")
-	require.NoError(t, os.WriteFile(idxPath, []byte(idxJSON), 0o644))
+	relDir, outDir := seedReleaseIndexInput(t)
+	require.NoError(t, runReleaseIndex([]string{"-releases", relDir, "-out", outDir}))
 
-	require.NoError(t, runReleaseIndex([]string{"-served", servedDir}))
-
-	idxData, err := os.ReadFile(idxPath)
+	idxData, err := os.ReadFile(filepath.Join(outDir, "index.json"))
 	require.NoError(t, err)
-	sigData, err := os.ReadFile(idxPath + ".sig")
+	sigData, err := os.ReadFile(filepath.Join(outDir, "index.json.sig"))
 	require.NoError(t, err)
+	require.True(t, verifyIndexSig(idxData, sigData, pub), "sig must verify against the written bytes")
+	require.NoError(t, verifyIndexSigFile(outDir, pub))
 
-	// The sig must cover the exact bytes of the served file.
-	require.True(t, verifyIndexSig(idxData, sigData, pub), "sig must verify against served bytes")
-
-	// Verify via the helper that checks the files on disk.
-	require.NoError(t, verifyIndexSigFile(servedDir, pub))
-
-	// Mutating the served bytes must break the sig.
 	mutated := append([]byte(nil), idxData...)
 	mutated[0] ^= 0x01
 	require.False(t, verifyIndexSig(mutated, sigData, pub), "sig must not verify after mutation")
 }
 
-// TestRunReleaseIndex_MissingFile verifies an error is returned when index.json
-// does not exist (generate docs must be run first).
-func TestRunReleaseIndex_MissingFile(t *testing.T) {
-	servedDir := t.TempDir()
-	err := runReleaseIndex([]string{"-served", servedDir})
-	require.Error(t, err, "must fail when index.json is missing")
+// TestRunReleaseIndex_SigningKeyMustMatchTheEmbeddedKey is the check that catches
+// a rotation gone wrong: a signature nothing in the field can verify.
+func TestRunReleaseIndex_SigningKeyMustMatchTheEmbeddedKey(t *testing.T) {
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	t.Setenv("MAGUS_SIGNING_KEY", hex.EncodeToString(priv))
+
+	relDir, outDir := seedReleaseIndexInput(t)
+	err = runReleaseIndex([]string{"-releases", relDir, "-out", outDir})
+	require.Error(t, err, "signing with a key no binary carries must fail the release")
+	require.Contains(t, err.Error(), "signature verification failed")
+}
+
+// TestRunReleaseIndex_NoManifests verifies an empty releases/ is refused rather
+// than published: SelectRelease rejects an index with no releases, so an empty
+// one strands every client that fetches it.
+func TestRunReleaseIndex_NoManifests(t *testing.T) {
+	err := runReleaseIndex([]string{"-releases", t.TempDir(), "-out", t.TempDir()})
+	require.Error(t, err, "must fail when there is nothing to index")
 }
 
 // TestFileSizeAndSHA256 verifies size and digest against a known temp file.
@@ -333,16 +443,34 @@ func TestRunCut_HappyPath(t *testing.T) {
 				Size:     fmt.Sprintf("%d", len(tarContent)),
 				SHA256:   tarDigest,
 			},
-			{
-				Name:     "magus-release.pem",
-				Platform: "",
-				Size:     "",
-				SHA256:   "",
-			},
 		},
 	}
 	require.NotEmpty(t, got.Date, "date must be populated")
 	require.Equal(t, want, got, "ReleaseManifest matches expected whole struct")
+}
+
+// TestCutThenGenerateChangelogDoesNotDuplicate walks the pair of commands a
+// release runs. CHANGELOG.md is generated back out of the manifests, so a cut
+// that left [Unreleased] populated would print the shipped entries twice.
+func TestCutThenGenerateChangelogDoesNotDuplicate(t *testing.T) {
+	artifactsDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, "magus_v0.2.0_linux_amd64_static.tar.gz"), []byte("x"), 0o644))
+
+	changelogPath := filepath.Join(t.TempDir(), "CHANGELOG.md")
+	require.NoError(t, os.WriteFile(changelogPath,
+		[]byte("# Changelog\n\n## [Unreleased]\n\n### Added\n\n- brand new feature\n\n## [v0.1.0] - 2026-07-05\n\nOld.\n"), 0o644))
+
+	relDir := t.TempDir()
+	writeManifestFile(t, relDir, ReleaseManifest{Version: "v0.1.0", Date: "2026-07-05", Body: "Old."})
+	require.NoError(t, runCut([]string{
+		"-version", "v0.2.0", "-artifacts", artifactsDir, "-changelog", changelogPath, "-out", relDir,
+	}))
+	require.NoError(t, runGenerateChangelog([]string{"-releases", relDir, "-changelog", changelogPath}))
+
+	got, err := os.ReadFile(changelogPath)
+	require.NoError(t, err)
+	require.Equal(t, 1, strings.Count(string(got), "- brand new feature"), "the entry belongs to v0.2.0 alone:\n%s", got)
+	require.Contains(t, string(got), "## [Unreleased]\n\n## [v0.2.0]", "Unreleased is emptied, not removed")
 }
 
 // TestRunCut_ImmutabilityGuard verifies that runCut refuses to overwrite an

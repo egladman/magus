@@ -305,7 +305,13 @@ export fun pruneStaleOutputs(site: Site) > void {
     // band).
     final alwaysKeep: {str: bool} = mut {
         "index.html": true, "index.md": true, "404.html": true,
+        // The tracked files that live inside the output tree. gen/install is the POSIX
+        // sh installer; public/release/index.json and its Ed25519 signature are the
+        // release manifest `magus self update` reads, written by `magus-utils
+        // release-index` at tag time because only a tag build holds the signing key.
+        // Nothing here writes any of the three, so this list is also where you find them.
         "install": true,
+        "public/release/index.json": true, "public/release/index.json.sig": true,
         "sitemap.xml": true, "robots.txt": true, "manifest.webmanifest": true,
         "service-worker.js": true, "search-index.json": true, "site-manifest.sha256": true,
         "site.css": true, "console.css": true, "ui-panels.css": true, "theme.css": true, "theme.js": true, "main.js": true,
@@ -329,8 +335,7 @@ export fun pruneStaleOutputs(site: Site) > void {
     foreach (dir in staleDirs.keys()) {
         // Pruning keys off a missing index.html but deletes the whole directory, so a
         // directory holding produced NON-page outputs must survive its page going away.
-        // /public/atom/ (the Atom feeds) and /public/release/ (the signed release
-        // manifest) are exactly that: real files, no page of their own.
+        // /public/atom/ (the Atom feeds) is exactly that: real files, no page of its own.
         var produced = false;
         foreach (w in site.writtenPaths.keys()) {
             if (w.startsWith(dir + "/")) { produced = true; }

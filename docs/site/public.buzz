@@ -1,7 +1,7 @@
-// site/public.buzz - the /public/ mirror: Apache-mod_autoindex-styled directory
-// listings (renderAutoindex), the per-version release tree, the self-update
-// index.json (releaseIndexJSON), and loadReleases (releases/v*.yaml -> Site).
-// renderPublic walks it all; site_render calls loadReleases + renderPublic once each.
+// site/public.buzz - the /public/ page listing the endpoints this site serves for
+// machines, and loadReleases (releases/v*.yaml + tags -> Site). site_render calls
+// loadReleases + renderPublic once each. The self-update index.json is NOT rendered
+// here; see the note above renderPublic for why.
 namespace public;
 
 import "fs";
@@ -10,7 +10,6 @@ import "io";
 import "os";
 import "serialize";
 import "template";
-import "assert";
 import "yaml";
 import "lib/text" as _;
 import "lib/feed" as _;
@@ -139,28 +138,18 @@ export fun loadReleases(site: Site) > void {
 
 
 
-// releaseIndexJSON builds gen/public/release/index.json - the machine-readable
-// manifest `magus self update` fetches (and Go signs into index.json.sig). Carries
-// only what a consumer reads: schema_version, and per release the version, optional
-// yanked flag, and artifacts (name/platform/size/sha256). The changelog prose
-// (notes/body) is deliberately excluded - nothing reads it here; it ships in the Atom
-// feed and each release YAML. jsonEncode (not hand-rolled concat) sorts keys
-// deterministically for byte-stability and avoids escaping bugs. Schema is version 1
-// and additive-only, so existing readers ignoring unknown/missing fields are safe.
-fun releaseIndexJSON(site: Site) > str {
-    var releases: [{str: any}] = mut [<{str: any}>];
-    foreach (rel in site.releases) {
-        var arts: [{str: any}] = mut [<{str: any}>];
-        foreach (a in rel.artifacts) {
-            arts.append(mut {"name": a["name"], "platform": a["platform"], "size": a["size"], "sha256": a["sha256"]});
-        }
-        var entry: {str: any} = mut {"version": rel.version, "artifacts": arts};
-        if (rel.yanked) { entry["yanked"] = true; }   // omitted when false, matching the reader's omitempty
-        releases.append(entry);
-    }
-    final root: {str: any} = mut {"schema_version": 1, "releases": releases};
-    return serialize\jsonEncode(serialize\Boxed.init(root)) + "\n";
-}
+// gen/public/release/index.json is NOT rendered here, and the omission is the
+// whole mechanism. It is the manifest `magus self update` fetches, and it is only
+// trustworthy alongside index.json.sig - which needs MAGUS_SIGNING_KEY, which only
+// a tag build holds. This render runs on every push to main. A renderer that could
+// write index.json would therefore overwrite a signed file with an unsigned one the
+// next time anything merged, and the signature would 404 again.
+//
+// So the pair is TRACKED at docs/gen/public/release/, written by `magus-utils
+// release-index` at release time from releases/*.yaml, and copied out by the deploy
+// like any other file under gen/. Same arrangement as gen/install: a source file
+// living inside the output tree, listed in pruneStaleOutputs' alwaysKeep so this
+// render leaves it alone.
 
 
 // renderPublic writes /public/ - one ordinary page listing the machine-readable
@@ -173,20 +162,10 @@ fun releaseIndexJSON(site: Site) > str {
 // bytes actually are.
 //
 // Only the HTML went. The feeds (public/atom/*.xml, written by engine/feeds.buzz)
-// and the signed release manifest (public/release/index.json, the frozen URL
-// `magus self update` reads) are real files and are written exactly as before.
+// are real files and are written exactly as before; the signed release manifest at
+// public/release/index.json is tracked rather than rendered, for the reason above.
 export fun renderPublic(site: Site) > void {
     if (site.config.baseURL == "") { return; }
-
-    // gen/public/release/index.json - machine-readable release index, newest-first.
-    // URL and schema are frozen at birth; additive-only. index.json.sig (Ed25519) is
-    // written by magus-utils release-index at release time, not here (no signing key
-    // at site-build time). Track in writtenPaths so pruneStaleOutputs keeps it.
-    if (site.releases.len() > 0) {
-        fs\makeDirectory(site.outDir + "/public/release");
-        fs\writeFile(site.outDir + "/public/release/index.json", releaseIndexJSON(site));
-        site.writtenPaths["public/release/index.json"] = true;
-    }
 
     // Releases stay newest-first (loadReleases sorts by semver); each card is a
     // deep link to that version's GitHub release page rather than to any asset,
@@ -253,34 +232,4 @@ are hosted on GitHub; the links below go there.</p>
     fs\writeFile(site.outDir + "/public/index.html", doc);
     site.pageUrls["public/"] = true;
     site.writtenPaths["public/index.html"] = true;
-}
-
-
-test "releaseIndexJSON emits the slim self-update manifest and omits the changelog prose" {
-    final s = mut Site{};
-    var added: [str] = mut [<str>];
-    added.append("first feature");
-    var artifacts: [{str: str}] = mut [<{str: str}>];
-    artifacts.append(mut {"name": "magus_v0.2.0_linux_amd64.tar.gz", "platform": "linux/amd64", "size": "12345", "sha256": "abc123"});
-    s.releases.append(Release{
-        version = "v0.2.0",
-        date = "2026-08-01",
-        notesAdded = added,
-        body = "### Added\n\n- first feature",
-        artifacts = artifacts,
-    });
-    final got = releaseIndexJSON(s);
-    // Probe via indexOf so literal braces need no escaping. The manifest carries
-    // exactly what a consumer reads: schema_version, version, artifacts.
-    assert\equal(got.indexOf("\"schema_version\":1") != null, true, "schema_version:1 present");
-    assert\equal(got.indexOf("\"version\":\"v0.2.0\"") != null, true, "version present");
-    assert\equal(got.indexOf("\"name\":\"magus_v0.2.0_linux_amd64.tar.gz\"") != null, true, "artifact name present");
-    assert\equal(got.indexOf("\"platform\":\"linux/amd64\"") != null, true, "artifact platform present");
-    // Changelog prose (notes/body) and date are excluded - they ship in the Atom
-    // feed/YAML, nothing reads them here.
-    assert\equal(got.indexOf("\"notes\"") != null, false, "notes omitted");
-    assert\equal(got.indexOf("\"body\"") != null, false, "body omitted");
-    assert\equal(got.indexOf("\"date\"") != null, false, "date omitted");
-    // yanked is omitted when false (matching the reader's omitempty).
-    assert\equal(got.indexOf("yanked") != null, false, "yanked absent when false");
 }
