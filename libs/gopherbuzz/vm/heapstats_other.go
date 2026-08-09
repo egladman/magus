@@ -36,3 +36,6 @@ func sampleHeapGrowth(*frame, *int) {}
 
 // HeapProfile reports nothing: this build has no global heap table.
 func HeapProfile() map[string]int { return nil }
+
+// heapLen reports 0: this build has no global heap table to seed from.
+func heapLen() int { return 0 }

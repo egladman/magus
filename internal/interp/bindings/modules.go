@@ -2,7 +2,9 @@ package bindings
 
 import (
 	"context"
+	"io"
 	"log/slog"
+	"os"
 	"slices"
 	"strings"
 
@@ -92,7 +94,16 @@ func mergeModuleMap(dst, src vm.Value) {
 }
 
 // moduleSurfaceConfig is the resolved options for one RegisterModuleSurface call.
-type moduleSurfaceConfig struct{ modules bindinggen.Set }
+type moduleSurfaceConfig struct {
+	modules bindinggen.Set
+	// scriptOut is where std.print goes. Defaults to STDERR: under `magus run` a
+	// magusfile's print is human output like every other thing magus says, and
+	// stdout carries the structured answer (-o json|yaml|jsonl|template) alone. A
+	// magusfile with a print in it would otherwise emit a document no parser
+	// accepts. `magus buzz` overrides it - there the script IS the program, so its
+	// output is the command's output.
+	scriptOut io.Writer
+}
 
 // ModuleSurfaceOption configures one registration of the host module surface.
 type ModuleSurfaceOption func(*moduleSurfaceConfig)
@@ -104,6 +115,13 @@ func WithModules(modules bindinggen.Set) ModuleSurfaceOption {
 	return func(c *moduleSurfaceConfig) { c.modules = modules }
 }
 
+// WithScriptOutput sends std.print to w instead of the default stderr. `magus buzz`
+// passes stdout: it runs a script as a program, so the script's output is the
+// command's output rather than commentary alongside one.
+func WithScriptOutput(w io.Writer) ModuleSurfaceOption {
+	return func(c *moduleSurfaceConfig) { c.scriptOut = w }
+}
+
 // RegisterModuleSurface installs the shared Buzz module surface: Buzz's own
 // stdlib, the magus testing extensions (assert/suite), and every magus module
 // (hostreg.Modules) layered on top of the same bare names. It is the full surface
@@ -111,7 +129,7 @@ func WithModules(modules bindinggen.Set) ModuleSurfaceOption {
 // magus.* namespace and the Target/Charm source types on top) and the `magus buzz`
 // runner, so the two never drift.
 func RegisterModuleSurface(ctx context.Context, sess *buzz.Session, opts ...ModuleSurfaceOption) {
-	cfg := moduleSurfaceConfig{modules: bindinggen.Modules}
+	cfg := moduleSurfaceConfig{modules: bindinggen.Modules, scriptOut: os.Stderr}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
@@ -119,7 +137,7 @@ func RegisterModuleSurface(ctx context.Context, sess *buzz.Session, opts ...Modu
 	// the same bare names (their Bind reads back and merges) or install fresh. One
 	// registration path: gopherbuzz's stdlib and magus's own modules are both
 	// buzz.Modules applied through Session.Provide.
-	buzzstd.Register(sess)
+	buzzstd.RegisterWithOutput(sess, cfg.scriptOut)
 	_ = sess.Provide(buzz.ModuleEnv{Ctx: ctx}, magusModules(cfg.modules)...)
 }
 

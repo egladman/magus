@@ -152,3 +152,14 @@ func resetHeapAttr() {
 	heapAttr.growth = nil
 	heapAttr.full = false
 }
+
+// heapLen is the live object count, for seeding a new VM's sample baseline. See
+// VM.heapLastLen: an unseeded baseline makes the first sample charge every object
+// already on the process-wide heap to whichever line the tick landed on.
+func heapLen() int {
+	s := gHeapPtr.Load()
+	if s == nil {
+		return 0
+	}
+	return len(*s)
+}

@@ -127,6 +127,12 @@ type VM struct {
 	lastLine int // last source line a StepLine event fired for; 0 = none yet
 	// heapTick counts instructions for the masked heap-growth sample; heapLastLen
 	// is the heap length at the previous sample. See heapattr.go.
+	//
+	// heapLastLen is SEEDED at construction rather than left at zero. Zero would
+	// make a fresh VM's first sample compute grown = the entire process heap and
+	// charge all of it to whichever line the tick happened to land on - and the
+	// heap is process-global and never shrinks, so under the daemon that is every
+	// object every earlier run allocated, attributed to an innocent line.
 	heapTick    uint64
 	heapLastLen int
 	// faultHook, if set, is notified when this VM faults: FaultPanic for a Go panic
@@ -165,9 +171,10 @@ type iterSlot struct {
 
 func NewVM(ctx context.Context) *VM {
 	return &VM{
-		ctx:    ctx,
-		stack:  make([]Value, 0, 64),
-		frames: make([]frame, 0, 16),
+		ctx:         ctx,
+		stack:       make([]Value, 0, 64),
+		frames:      make([]frame, 0, 16),
+		heapLastLen: heapLen(),
 	}
 }
 
