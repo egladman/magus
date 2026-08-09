@@ -8,9 +8,13 @@
 
 export extern fun md5File(path: str) > str;
 export extern fun md5Hex(data: str) > str;
+export extern fun publicKey(alg: SignAlgorithm, key_env: str) > str;
 export extern fun sha1File(path: str) > str;
 export extern fun sha1Hex(data: str) > str;
 export extern fun sha256File(path: str) > str;
 export extern fun sha256Hex(data: str) > str;
 export extern fun sha512File(path: str) > str;
 export extern fun sha512Hex(data: str) > str;
+export extern fun sign(alg: SignAlgorithm, data: str, key_env: str) > str;
+export extern fun signFile(alg: SignAlgorithm, path: str, key_env: str) > str;
+export extern fun verify(alg: SignAlgorithm, data: str, sig_hex: str, pub_hex: str) > bool;

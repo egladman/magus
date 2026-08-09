@@ -128,6 +128,11 @@ func externDecl(m std.Method) (string, error) {
 		if a.Object != "" {
 			typ = a.Object
 		}
+		// Same rule for a closed set of strings: the enum is what the checker should
+		// enforce, and `str` enforces nothing.
+		if a.Enum != "" {
+			typ = a.Enum
+		}
 		p := a.Name + ": " + typ
 		if a.Optional {
 			def, derr := buzzDefault(a)

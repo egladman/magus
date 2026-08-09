@@ -128,6 +128,11 @@ var boundaryEnums = []boundaryEnum{
 	// constant carries, which is why the two are separate: "up-to-date" and
 	// "both-deleted" are perfectly good JSON and impossible identifiers.
 	{
+		Name:  "SignAlgorithm",
+		Type:  reflect.TypeFor[types.SignAlgorithm](),
+		Cases: []enumCase{{"Ed25519", "ed25519"}},
+	},
+	{
 		Name:  "DoctorCheckStatus",
 		Type:  reflect.TypeFor[types.DoctorCheckStatus](),
 		Cases: []enumCase{{"none", ""}, {"ok", "ok"}, {"fail", "fail"}, {"advice", "advice"}},

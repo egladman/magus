@@ -11,7 +11,7 @@ import (
 )
 
 // RegisterCrypto builds the "crypto" module map and returns it.
-// Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop).
+// Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop) and Ed25519 signing.
 func RegisterCrypto(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
@@ -59,6 +59,46 @@ func RegisterCrypto(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("sha1File", vm.DirectValue("crypto.sha1File", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		path := Str(bzArgs, 0)
 		ret0, err := std.CryptoSha1File(ctx, path)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrVal(ret0), nil
+	}))
+	m.MapSet("sign", vm.DirectValue("crypto.sign", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		alg := Str(bzArgs, 0)
+		data := Str(bzArgs, 1)
+		key_env := Str(bzArgs, 2)
+		ret0, err := std.CryptoSign(ctx, alg, data, key_env)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrVal(ret0), nil
+	}))
+	m.MapSet("signFile", vm.DirectValue("crypto.signFile", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		alg := Str(bzArgs, 0)
+		path := Str(bzArgs, 1)
+		key_env := Str(bzArgs, 2)
+		ret0, err := std.CryptoSignFile(ctx, alg, path, key_env)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrVal(ret0), nil
+	}))
+	m.MapSet("verify", vm.DirectValue("crypto.verify", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		alg := Str(bzArgs, 0)
+		data := Str(bzArgs, 1)
+		sig_hex := Str(bzArgs, 2)
+		pub_hex := Str(bzArgs, 3)
+		ret0, err := std.CryptoVerify(ctx, alg, data, sig_hex, pub_hex)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return BoolVal(ret0), nil
+	}))
+	m.MapSet("publicKey", vm.DirectValue("crypto.publicKey", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		alg := Str(bzArgs, 0)
+		key_env := Str(bzArgs, 1)
+		ret0, err := std.CryptoPublicKey(ctx, alg, key_env)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}

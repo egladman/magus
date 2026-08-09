@@ -87,6 +87,15 @@ type Arg struct {
 	// though parse_url returns a URL - so the round trip was typed in one direction and
 	// untyped in the other, and a caller could pass any map at all.
 	Object string
+	// Enum names the Buzz enum this argument's string must be a case of, for an arg
+	// whose Type is TypeString but whose values are a closed set. Like Object it
+	// changes only the DECLARED signature: an enum case is a string at runtime, so
+	// the Impl still receives a string and needs no decoder.
+	//
+	// The name must be a boundaryEnums entry in cmd/magus-utils. Without it a
+	// closed-set parameter reads as `str`, and naming an algorithm magus does not
+	// implement is a runtime throw rather than something the checker catches.
+	Enum string
 }
 
 // Ret is one return value of a Method.
