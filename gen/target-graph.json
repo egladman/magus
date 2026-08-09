@@ -195,7 +195,7 @@
         {
           "name": "bindings-generate",
           "declared": "bindings_generate",
-          "doc": "Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.",
+          "doc": "Regenerates the Go host bindings (std -\u003e internal/interp/bindings/gen) from std.Module declarations.",
           "dependencies": [
             "types-generate"
           ],
@@ -1059,7 +1059,7 @@
         {
           "name": "build-mermaid",
           "declared": "build_mermaid",
-          "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into gen/assets/mermaid.js.",
+          "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -\u003e mermaid@11) into gen/assets/mermaid.js.",
           "dependencies": [
             "preflight"
           ],
@@ -1072,7 +1072,7 @@
         {
           "name": "build-hljs",
           "declared": "build_hljs",
-          "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js.",
+          "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -\u003e highlight.js@11) into gen/assets/hljs.js.",
           "dependencies": [
             "preflight"
           ],
@@ -1124,10 +1124,18 @@
           ]
         },
         {
+          "name": "test",
+          "doc": "test runs the OpenCode plugin's transport cases: does it ASK magus correctly (the top-level `hook` subcommand, the input on stdin) and handle each decision the way it declares.",
+          "dependencies": [
+            "preflight"
+          ]
+        },
+        {
           "name": "ci",
           "doc": "'ci' is the anchor `magus affected ci` keys off.",
           "dependencies": [
-            "lint"
+            "lint",
+            "test"
           ]
         }
       ]
