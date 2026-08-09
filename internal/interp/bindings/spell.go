@@ -680,9 +680,3 @@ func levenshtein(a, b string) int {
 	}
 	return row[len(b)]
 }
-
-// It sits beside readiness because both answer "is this binary fit to run", and both
-// must resolve before the op forks - a too-old tool otherwise fails with whatever it
-// says about an unrecognized flag, which is the misleading failure readiness exists to
-
-

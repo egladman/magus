@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"flag"
 	"fmt"
@@ -11,35 +12,48 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ToolRow is one binary a project's spells drive, with the window it is held to.
+// toolRow is one binary a project's spells drive, with the window it is held to.
 //
-// Exported shape rather than an inline struct because -o json/yaml/template project it,
-// so its field names are the contract a script reads.
-type ToolRow struct {
-	Project   string `json:"project" yaml:"project"`
-	Bin       string `json:"bin" yaml:"bin"`
-	Spell     string `json:"spell" yaml:"spell"`
-	Installed string `json:"installed,omitempty" yaml:"installed,omitempty"`
+// Field names and verdict values track magus.tool.v1 (proto/magus/tool/v1/tool.proto),
+// which serves the same view to the console. One concept gets one vocabulary, or a script
+// author has to learn which surface they are reading before they can read it.
+type toolRow struct {
+	Project string `json:"project" yaml:"project"`
+	Bin     string `json:"bin" yaml:"bin"`
+	Spell   string `json:"spell" yaml:"spell"`
+	// InstalledVersion is what the probe reported. Empty means no version was read, and
+	// ProbeError says whether that is because the tool could not run or because it ran
+	// and printed nothing version-shaped - those look identical in a bare empty string,
+	// and only one of them means "not installed".
+	InstalledVersion string `json:"installed_version,omitempty" yaml:"installed_version,omitempty"`
+	ProbeError       string `json:"probe_error,omitempty" yaml:"probe_error,omitempty"`
 	// The two declarations stay separate: the first question about a failing bound is
 	// who set it, and the effective window alone cannot say.
-	SpellWindow     string `json:"spell_window,omitempty" yaml:"spell_window,omitempty"`
-	WorkspaceWindow string `json:"workspace_window,omitempty" yaml:"workspace_window,omitempty"`
-	Window          string `json:"window,omitempty" yaml:"window,omitempty"`
+	SpellBounds     string `json:"spell_bounds,omitempty" yaml:"spell_bounds,omitempty"`
+	WorkspaceBounds string `json:"workspace_bounds,omitempty" yaml:"workspace_bounds,omitempty"`
+	Effective       string `json:"effective,omitempty" yaml:"effective,omitempty"`
 	Verdict         string `json:"verdict" yaml:"verdict"`
-	Code            string `json:"code,omitempty" yaml:"code,omitempty"`
+	DiagnosticCode  string `json:"diagnostic_code,omitempty" yaml:"diagnostic_code,omitempty"`
 }
 
-// ToolReport is the describe-tools payload.
-type ToolReport struct {
+// toolReport is the describe-tools payload.
+type toolReport struct {
 	Definition string    `json:"definition" yaml:"definition"`
 	Workspace  string    `json:"workspace" yaml:"workspace"`
 	Count      int       `json:"count" yaml:"count"`
-	Tools      []ToolRow `json:"tools" yaml:"tools"`
+	Tools      []toolRow `json:"tools" yaml:"tools"`
 }
 
-const toolDefinition = "A tool is a binary a spell drives. Its version is probed on every run (it keys the cache), " +
-	"and a project may hold it to a version window: an inclusive min and an exclusive below, " +
-	"intersected with what the declaring spell requires."
+// The verdicts a row can carry. Underscored, not spaced, so a shell comparison needs no
+// quoting and the values line up with the VERDICT_* enum the console reads.
+const (
+	verdictInside     = "inside"
+	verdictTooOld     = "too_old"
+	verdictTooNew     = "too_new"
+	verdictUnknown    = "unknown"
+	verdictUnreadable = "unreadable"
+	verdictUnprobed   = "unprobed"
+)
 
 // renderWindow prints a window the way the docs write it. below is the first version
 // REJECTED, so it renders as "< x" and never as a max.
@@ -56,6 +70,48 @@ func renderWindow(b spells.VersionBounds) string {
 	}
 }
 
+// buildToolRow turns one probe outcome into a row. Pure - no context, no exec - because
+// the interesting part of this command is the state machine, and welding it inside the
+// fork loop is what made four distinct outcomes collapse into one blank "not found".
+func buildToolRow(project, bin, spell string, t spells.Tool, projBounds spells.VersionBounds, raw string, probeErr error) toolRow {
+	window := t.Supported.Intersect(projBounds)
+	row := toolRow{
+		Project: project, Bin: bin, Spell: spell,
+		SpellBounds:     renderWindow(t.Supported),
+		WorkspaceBounds: renderWindow(projBounds),
+		Effective:       renderWindow(window),
+	}
+	switch {
+	case probeErr != nil:
+		// The tool could not be run at all. Distinct from every case below, and the only
+		// one that means "not installed".
+		row.Verdict, row.ProbeError = verdictUnprobed, probeErr.Error()
+		return row
+	default:
+		v, ok := spells.ExtractVersion(raw)
+		if !ok {
+			// It ran and said something magus could not read. Reporting this as "not
+			// found" would be a claim about a binary that is demonstrably present.
+			row.Verdict = verdictUnreadable
+			return row
+		}
+		row.InstalledVersion = v
+	}
+	switch window.Check(row.InstalledVersion) {
+	case spells.VerdictTooOld:
+		row.Verdict, row.DiagnosticCode = verdictTooOld, string(types.ToolTooOld)
+	case spells.VerdictTooNew:
+		row.Verdict, row.DiagnosticCode = verdictTooNew, string(types.ToolTooNew)
+	case spells.VerdictInside:
+		row.Verdict = verdictInside
+	default:
+		// A bound that survived decode unparsed leaves nothing to compare. Spelled out
+		// rather than defaulted to inside: "could not check" must never read as "fine".
+		row.Verdict = verdictUnknown
+	}
+	return row
+}
+
 // describeTools reports every project's tools, their probed versions, and their windows.
 //
 // The CLI owns this rather than the console: the console never owns a capability, and a
@@ -65,7 +121,7 @@ func describeTools(ctx context.Context, root string, args []string) error {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe tool[s] [<project>] [flags]")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, toolDefinition)
+			fmt.Fprintln(os.Stderr, types.ToolDefinition)
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -80,101 +136,121 @@ func describeTools(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	m, err := loadMagus(ctx, root)
+	ws, err := inspectWorkspace(ctx, root)
 	if err != nil {
 		return err
 	}
 
-	projects := m.All()
+	projects := ws.All()
 	if len(pos) > 0 {
 		names := namesOf(projects, func(p *types.Project) string { return p.Path })
 		projects = filterByName(projects, pos[0], func(p *types.Project) string { return p.Path })
 		if len(projects) == 0 {
+			// The entity is the PROJECT being filtered, not the tool: naming the noun the
+			// command is called after would send the reader looking for a missing binary.
 			return unknownEntity("project", pos[0], names)
 		}
 	}
 
-	report := ToolReport{Definition: toolDefinition, Workspace: m.Root()}
+	var rows []toolRow
+	// Memoized on (spell, dir, bin), matching what the run path does: a workspace where
+	// six projects resolve the go spell must cost one `go version`, not six.
+	type reading struct {
+		raw string
+		err error
+	}
+	memo := map[string]reading{}
 	for _, p := range projects {
 		for _, sp := range p.ResolvedSpells {
 			for _, bin := range sp.ToolNames() {
-				t, ok := sp.Tool(bin)
-				if !ok || !t.HasProbe() {
+				t, _ := sp.Tool(bin) // ToolNames ranges the same map Tool reads
+				if t.Probe.Bin == "" {
+					// Nothing to ask. A tool keyed by a declared constant lands here: the
+					// author typed that token to invalidate a cache, not to report a
+					// version. The console's ToolService skips it for the same reason.
 					continue
 				}
-				window := t.Supported.Intersect(p.ToolBounds[bin])
-				row := ToolRow{
-					Project: p.Path, Bin: bin, Spell: sp.Name(),
-					SpellWindow:     renderWindow(t.Supported),
-					WorkspaceWindow: renderWindow(p.ToolBounds[bin]),
-					Window:          renderWindow(window),
-					Verdict:         "unknown",
+				// Probing forks, so an abandoned command stops forking rather than
+				// printing a full report of failures that only means it was interrupted.
+				if err := ctx.Err(); err != nil {
+					return err
 				}
-				// Probing is the only work this command does, and it is the point: the
-				// question is what the binary on PATH reports, not what a manifest pins.
-				if raw, perr := sp.ProbeVersion(ctx, bin, p.Dir); perr == nil {
-					if v, ok := spells.ExtractVersion(raw); ok {
-						row.Installed = v
-						switch window.Check(v) {
-						case spells.VerdictTooOld:
-							row.Verdict, row.Code = "too old", string(types.ToolTooOld)
-						case spells.VerdictTooNew:
-							row.Verdict, row.Code = "too new", string(types.ToolTooNew)
-						case spells.VerdictInside:
-							row.Verdict = "inside"
-						}
-					}
+				k := sp.Name() + "\x00" + p.Dir + "\x00" + bin
+				r, hit := memo[k]
+				if !hit {
+					r.raw, r.err = sp.ProbeVersion(ctx, bin, p.Dir)
+					memo[k] = r
 				}
-				report.Tools = append(report.Tools, row)
+				rows = append(rows, buildToolRow(p.Path, bin, sp.Name(), t, p.ToolBounds[bin], r.raw, r.err))
 			}
 		}
 	}
-	slices.SortFunc(report.Tools, func(a, b ToolRow) int {
-		if a.Project != b.Project {
-			return cmpString(a.Project, b.Project)
-		}
-		return cmpString(a.Bin, b.Bin)
+	// Spell is the third key, not decoration: two spells in one project can declare the
+	// same bin, and without it their order is whatever pdqsort happened to do.
+	slices.SortFunc(rows, func(a, b toolRow) int {
+		return cmp.Or(cmp.Compare(a.Project, b.Project), cmp.Compare(a.Bin, b.Bin), cmp.Compare(a.Spell, b.Spell))
 	})
-	report.Count = len(report.Tools)
+
+	report := toolReport{Definition: types.ToolDefinition, Workspace: ws.Root(), Count: len(rows), Tools: rows}
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, report)
 	case outputName:
 		for _, t := range report.Tools {
-			fmt.Println(t.Bin)
+			// project/bin, because a bare bin repeats once per project that drives it and
+			// cannot be fed back to `magus describe tools <project>`.
+			fmt.Println(t.Project + "/" + t.Bin)
 		}
 		return nil
 	}
 
+	// text / wide
 	fmt.Printf("definition: %s\n\n", report.Definition)
 	fmt.Printf("workspace: %s (%d tools)\n\n", report.Workspace, report.Count)
+	fmt.Printf("  %-24s %-14s %-24s %-12s %s\n", "PROJECT/TOOL", "INSTALLED", "WINDOW", "DECLARED BY", "VERDICT")
 	for _, t := range report.Tools {
-		window := t.Window
-		if window == "" {
-			window = "unconstrained"
-		}
-		installed := t.Installed
-		if installed == "" {
-			installed = "not found"
-		}
-		line := fmt.Sprintf("  %-22s %-14s %-24s %s", t.Project+"/"+t.Bin, installed, window, t.Verdict)
-		if t.Code != "" {
-			line += " (" + t.Code + ")"
+		line := fmt.Sprintf("  %-24s %-14s %-24s %-12s %s",
+			t.Project+"/"+t.Bin, installedCell(t), windowCell(t), declaredByCell(t), t.Verdict)
+		if t.DiagnosticCode != "" {
+			line += " (" + t.DiagnosticCode + ")"
 		}
 		fmt.Println(line)
 	}
 	return nil
 }
 
-// cmpString orders two strings for slices.SortFunc.
-func cmpString(a, b string) int {
+// installedCell says what was read, and when nothing was, which kind of nothing.
+func installedCell(t toolRow) string {
 	switch {
-	case a < b:
-		return -1
-	case a > b:
-		return 1
+	case t.InstalledVersion != "":
+		return t.InstalledVersion
+	case t.Verdict == verdictUnprobed:
+		return "not found"
 	default:
-		return 0
+		return "unreadable"
+	}
+}
+
+func windowCell(t toolRow) string {
+	if t.Effective == "" {
+		return "unconstrained"
+	}
+	return t.Effective
+}
+
+// declaredByCell answers the question the intersection discarded: whose bound is this.
+// Without it the two declarations are visible only to someone piping JSON, which is not
+// the reader looking at a failing row.
+func declaredByCell(t toolRow) string {
+	switch {
+	case t.SpellBounds != "" && t.WorkspaceBounds != "":
+		return "spell+ws"
+	case t.SpellBounds != "":
+		return "spell"
+	case t.WorkspaceBounds != "":
+		return "workspace"
+	default:
+		return "-"
 	}
 }

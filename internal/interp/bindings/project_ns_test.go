@@ -241,7 +241,7 @@ func TestParseBuzzProjectOpts_Tools(t *testing.T) {
 	})
 
 	// An empty entry contributes nothing, so a project that writes one is not treated as
-	// having declared a window (which would make checkBounds probe for no reason).
+	// having declared a window (which would make the run-start check compare nothing).
 	t.Run("an empty entry is dropped", func(t *testing.T) {
 		p := applyOpts(t, toolsOpts("node", map[string]string{}))
 		assert.Empty(t, p.ToolBounds)

@@ -586,6 +586,11 @@ type WorkspaceConfig struct {
 	Concurrency int
 }
 
+// ToolDefinition is the human-readable description printed by "magus describe tool".
+const ToolDefinition = "A tool is a binary a spell drives. Its version is probed on every " +
+	"run (it keys the cache), and a project may hold it to a version window: an inclusive " +
+	"min and an exclusive below, intersected with what the declaring spell requires."
+
 // FileDefinition is the human-readable description printed by "magus describe file".
 const FileDefinition = "Describe file classifies paths against the workspace's declared " +
 	"globs: the project that owns each path, whether it is a declared output (generated: " +

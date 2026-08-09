@@ -343,23 +343,30 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			shareGuarded[statusPath] = statusConnectHandler
 			log.InfoContext(ctx, "[BRIDGE] status service mounted", slog.String("path", statusPath))
 
+			// Tool Connect service: the toolchain view - which binaries this workspace's
+			// spells drive, what each reported, and the window it is held to. Read-only and
+			// a read of state magus already builds (the probe keys the cache; the window is
+			// declared). It caches probes behind a TTL: a page load must never fork one
+			// process per declared tool, and a refreshing dashboard must never become a
+			// fork loop.
+			//
+			// Deliberately NOT in shareGuarded, unlike every other read service here. Being
+			// read-only is not the bar for that surface - every other entry on it answers
+			// from memory or disk, and this one EXECS argv the workspace's spells declare,
+			// once per tool per project on a cold key. A share is a read-only token handed
+			// to a phone on the LAN; it must not be a remote handle for spawning processes
+			// on the operator's machine. The console reaches this over the authenticated
+			// loopback route above, which is the only caller that needs it.
+			toolPath, toolConnectHandler := toolv1connect.NewToolServiceHandler(toolhandler.NewService(opts.Magus))
+			httpServer.Handle(toolPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, toolConnectHandler))))
+			log.InfoContext(ctx, "[BRIDGE] tool service mounted", slog.String("path", toolPath))
+
 			// Insight Connect service: the typed twin of the JSON /api/v1/insight route, reading
 			// the SAME cached scan through the same console service. The console dashboard reads
 			// it here; the JSON route stays mounted above for its documented non-console callers.
 			// Same cross-origin guards as the other read services, and read-only, so it joins the
 			// share read surface too - the LAN "share to phone" dashboard renders insight, and it
 			// reaches it over this route now rather than the JSON one.
-			// Tool Connect service: the toolchain view - which binaries this workspace's
-			// spells drive, what each reported, and the window it is held to. Read-only and
-			// a read of state magus already builds (the probe keys the cache; the window is
-			// declared), so it joins the share read surface with the others. It caches
-			// probes behind a TTL: a page load must never fork one process per declared
-			// tool, and a refreshing dashboard must never become a fork loop.
-			toolPath, toolConnectHandler := toolv1connect.NewToolServiceHandler(toolhandler.NewService(opts.Magus, log))
-			httpServer.Handle(toolPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, toolConnectHandler))))
-			shareGuarded[toolPath] = toolConnectHandler
-			log.InfoContext(ctx, "[BRIDGE] tool service mounted", slog.String("path", toolPath))
-
 			insightPath, insightConnectHandler := insightv1connect.NewInsightServiceHandler(insighthandler.NewService(svc))
 			httpServer.Handle(insightPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, insightConnectHandler))))
 			shareGuarded[insightPath] = insightConnectHandler
