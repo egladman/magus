@@ -84,21 +84,16 @@ runs:
         # Via env, not interpolation: inputs.command comes from directory names;
         # shell metacharacters would execute if templated into the run line.
         INPUT_COMMAND: ${{ inputs.command }}
-      # The empty check earns its place and nothing else here did: bare `magus` prints
-      # usage and exits 0, so `command: ''` would be a green step that ran nothing.
-      #
-      # What used to be here and is gone: a shell-metacharacter reject. Passing the
-      # command through the environment rather than templating it into the run line is
-      # the actual fix, and it is sufficient - an unquoted expansion word-splits, it does
-      # not interpret `;` or `|` as operators, so `version; echo PWNED` reaches magus as
-      # three arguments and is refused by argument parsing. The guard could only ever
-      # reject commands that were already safe.
+      # Passing the command through the environment rather than templating it into the
+      # run line is what makes this safe, and it is sufficient on its own - an unquoted
+      # expansion word-splits, it does not interpret `;` or `|` as operators, so
+      # `version; echo PWNED` reaches magus as three arguments and is refused by argument
+      # parsing. A shell-metacharacter reject used to sit here and could only ever have
+      # rejected commands that were already safe.
       #
       # Word-split is intentional: INPUT_COMMAND is a space-separated argv.
       # shellcheck disable=SC2086
-      run: |
-        [ -n "$INPUT_COMMAND" ] || { echo "::error::magus action: command is required"; exit 1; }
-        magus $INPUT_COMMAND
+      run: magus $INPUT_COMMAND
 
     # The write half of the history round trip; setup-magus does the read half. A shard
     # that ran is a shard with timings worth keeping, so this is keyed on `shard` being
