@@ -31,6 +31,14 @@
 # On a missing magus this prints a visible notice rather than exiting quietly. A
 # bare `command -v magus || exit 0` fails SILENTLY - the guard never runs and
 # nothing says so - and an unguarded session you know about beats one you do not.
+#
+# The line below declares, per guard surface, how much of a verdict this file
+# can carry: model (reaches the agent), human (reaches the person only), or none
+# (not delivered). It is machine-read by the host-parity gate, which fails the
+# build when a decision or surface exists in the guard contract that some host
+# was never asked about. Keep it true to what HOST_RESPONSE actually renders.
+# magus-guard-template: 1
+# magus-guard-coverage: schema=1 host=claude-code,codex surface=command deny=model advise=model pass=none
 
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}` and
 # the first one would terminate a ${...} expansion, silently truncating it.
@@ -67,5 +75,13 @@ session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty")
 guard() {
   printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" hook "$@" -o "template=$HOST_RESPONSE"
 }
-verdict=$(guard --host "$GUARD_HOST" --session "$session" 2>/dev/null) || verdict=$(guard 2>/dev/null)
+# A DENY exits non-zero (2) with the verdict on stdout, so a bare `||` retry would treat
+# every blocked command as "this binary rejected the attribution flags" and judge it a
+# second time - unattributed, and recorded twice in the activity trail. Emptiness alone
+# cannot tell the cases apart either, because a pass renders empty on purpose. Both
+# together can: a rejected flag prints its usage to STDERR and leaves stdout empty, while
+# any real verdict that is not a pass leaves something on stdout.
+verdict=$(guard --host "$GUARD_HOST" --session "$session" 2>/dev/null) || {
+  [ -n "$verdict" ] || verdict=$(guard 2>/dev/null)
+}
 printf '%s' "$verdict"

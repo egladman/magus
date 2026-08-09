@@ -3,7 +3,7 @@ title: magus-architecture
 description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition."
 tags: [agents, skills, magus-architecture]
 skill_full_bytes: 6277
-skill_simple_bytes: 5030
+skill_simple_bytes: 5104
 ---
 
 # magus-architecture
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `23` |
+| `agent-skill-version` | `26` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `ace009cb3627` |
+| `skill-content` | `50e5cf282e9c` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -179,7 +179,8 @@ The same steps with the rationale withheld; the bar under the heading above show
 
 magus already measured the workspace: what depends on what, what changes
 together, where churn and complexity concentrate, who owns what. Query those
-facts before proposing structure.
+facts before proposing structure; a proposal citing graph evidence is
+checkable, one from intuition is not.
 
 ## Survey before proposing
 

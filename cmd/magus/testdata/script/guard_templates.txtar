@@ -1,0 +1,138 @@
+# TRANSPORT PARITY: the shipped guard templates, executed against real host events.
+#
+# The sibling gate in dogfood_test.go checks that every host DECLARES a stance for
+# every decision and surface. A declaration can be sincere and still wrong, because
+# nothing there runs the file: the OpenCode plugin declared a correct stance for
+# months while invoking a subcommand that no longer existed, so it never received a
+# verdict to have a stance about, and every session it guarded ran unguarded.
+#
+# These cases close that hole for the POSIX sh templates. They run the real files
+# (GUARD_TEMPLATES is an absolute path to docs/guides/integrations/agents, never a
+# copy) against the event shapes their hosts actually send, and assert the response
+# a host would receive. `magus` here is the CLI under test, resolved off PATH the
+# same way the templates resolve it in a session.
+#
+# Every case is labeled `# case: <surface>/<decision>`; TestTransportCorpusCoversTheContract
+# in dogfood_test.go fails when the guard contract grows a cell no case covers.
+
+# jq comes from the machine, not from mise, and that is deliberate: jq is a runtime
+# dependency of the TEMPLATES a user installs into their host, not of building magus,
+# so pinning it in this repo's toolchain would assert something false. CI runs on
+# ubuntu-latest, which ships jq, so these cases execute there. Do not "fix" this skip
+# by adding jq to mise.toml - mise.toml is a root-level source, and touching it puts
+# every project in the workspace into the affected set.
+[!exec:jq] skip 'the guard templates pipe events through jq, which is not installed'
+[windows] skip 'POSIX sh templates; Windows hosts wire the same verdict differently'
+
+env GUARD_HOST=testscript
+
+# --- magus-guard-command.sh: the Claude Code and Codex shape ------------------
+
+# case: command/deny
+stdin deny-command.json
+exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+stdout '"permissionDecision":"deny"'
+stdout '"permissionDecisionReason":"whole-tree git stash'
+
+# case: command/advise
+stdin advise-command.json
+exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+stdout '"additionalContext":"'
+! stdout 'permissionDecision'
+
+# case: command/pass
+# An allowed call must produce NOTHING. A host reads an empty response as allow, so
+# a template that emitted an envelope here would turn every benign command into a
+# decision the host has to interpret.
+stdin pass-command.json
+exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+! stdout .
+
+# --- magus-guard-path.sh: the same hosts, their file-writing tool -------------
+
+# case: path/advise
+stdin advise-path.json
+exec sh $GUARD_TEMPLATES/magus-guard-path.sh
+stdout '"additionalContext":"'
+stdout 'magus memory put'
+
+# case: path/pass
+stdin pass-path.json
+exec sh $GUARD_TEMPLATES/magus-guard-path.sh
+! stdout .
+
+# case: path/deny unreachable - the path surface advises and never denies, which is
+# why magus-guard-path.sh declares deny=none. If magus ever denies on this surface,
+# the coverage gate fails first and this case becomes writable.
+
+# --- cursor-guard.sh: one file, both events, a different response dialect -----
+
+# case: command/deny
+stdin cursor-shell-deny.json
+exec sh $GUARD_TEMPLATES/cursor-guard.sh
+stdout '"permission":"deny"'
+stdout '"agent_message":"whole-tree git stash'
+
+# case: command/pass
+# Cursor is the one host that must answer on an allow rather than stay silent.
+stdin cursor-shell-pass.json
+exec sh $GUARD_TEMPLATES/cursor-guard.sh
+stdout '"permission":"allow"'
+
+# case: command/advise
+# Cursor declares advise=none: it sends nothing on an allow, so an advise is
+# indistinguishable from a pass here. Pinning that keeps the declaration honest -
+# if this ever carries the advisory text, the declaration is what is now wrong.
+stdin cursor-shell-advise.json
+exec sh $GUARD_TEMPLATES/cursor-guard.sh
+stdout '"permission":"allow"'
+! stdout 'magus memory put'
+
+# case: path/advise
+# Declared advise=human: the prose goes to stderr for the person, and stdout stays
+# empty because Cursor would not read a verdict on this event.
+stdin cursor-file.json
+exec sh $GUARD_TEMPLATES/cursor-guard.sh
+! stdout .
+stderr 'DECLARED OUTPUT|magus:'
+
+# --- fail-open: a missing magus must degrade the way each template promises ---
+
+env GUARD_MAGUS_BIN=$WORK/nonexistent-magus
+
+# The command template announces itself. An unguarded session you know about beats
+# one you do not.
+stdin deny-command.json
+exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+stdout 'magus guard is NOT running'
+
+# The path template stays silent by default: for most hosts an empty response means
+# allow, and this surface only ever advises.
+stdin advise-path.json
+exec sh $GUARD_TEMPLATES/magus-guard-path.sh
+! stdout .
+
+# Cursor allows explicitly, because Cursor fails open on a hook crash anyway and
+# pretending otherwise would give false assurance.
+stdin cursor-shell-deny.json
+exec sh $GUARD_TEMPLATES/cursor-guard.sh
+stdout '"permission":"allow"'
+
+-- deny-command.json --
+{"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "git stash"}}
+-- advise-command.json --
+{"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "git push"}}
+-- pass-command.json --
+{"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "ls -la"}}
+-- advise-path.json --
+{"session_id": "s1", "tool_name": "Write", "tool_input": {"file_path": "AGENTS.md"}}
+-- pass-path.json --
+{"session_id": "s1", "tool_name": "Write", "tool_input": {"file_path": "README.md"}}
+-- cursor-shell-deny.json --
+{"command": "git stash", "cwd": ".", "sandbox": false}
+-- cursor-shell-pass.json --
+{"command": "ls -la", "cwd": ".", "sandbox": false}
+-- cursor-shell-advise.json --
+{"command": "git push", "cwd": ".", "sandbox": false}
+-- cursor-file.json --
+{"file_path": "AGENTS.md", "edits": []}

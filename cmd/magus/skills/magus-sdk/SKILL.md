@@ -117,11 +117,12 @@ canceled"`), and wraps `ctx.Err()`, so `errors.Is(err, context.Canceled)` and
 before calling `ListProjects` on a one-project workspace produces exactly
 that message and `errors.Is` returns true.
 
-{{if .Full}}The reason is stated directly in describe.go: a partial inventory
-reporting `Count: 3` is indistinguishable from a workspace that genuinely has
-three projects, so silently truncating would be a wrong answer wearing a
-right answer's shape. Never treat an empty or short `List*`/`Evaluate*`
-result as "the workspace has nothing" without checking the error first.{{end}}
+Never treat an empty or short `List*`/`Evaluate*` result as "the workspace has
+nothing" without checking the error first.{{if .Full}} The reason is stated directly in
+describe.go: a partial inventory reporting `Count: 3` is indistinguishable from a
+workspace that genuinely has three projects, so silently truncating would be a
+wrong answer wearing a right answer's shape.{{else}} A partial inventory is
+indistinguishable from a small one: a wrong answer wearing a right answer's shape.{{end}}
 
 ## Two different graphs, easy to conflate
 

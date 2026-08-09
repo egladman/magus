@@ -3,7 +3,8 @@
 magus already measured the workspace: what depends on what, what changes
 together, where churn and complexity concentrate, who owns what. Query those
 facts before proposing structure{{if .Full}}; a proposal that cites graph evidence is
-checkable, one from intuition is vibes{{end}}.
+checkable, one from intuition is vibes{{else}}; a proposal citing graph evidence is
+checkable, one from intuition is not{{end}}.
 
 ## Survey before proposing
 

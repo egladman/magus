@@ -238,9 +238,18 @@ func graphExport(ctx context.Context, root string, args []string) error {
 	if static {
 		stripRuntimeAttrs(&out)
 	}
-	// On every export, not just --static: it identifies the build behind any graph you
-	// are looking at, which is the question when two exports disagree.
-	out.CatalogFingerprint = magus.CatalogFingerprint()
+	// NOT under --static, whose contract is "a reproducible source artifact". The
+	// fingerprint identifies the BINARY, not the graph, and gen/knowledge-graph.json
+	// is committed and drift-gated: two builds of one source produced different
+	// values, so a regeneration that changed no node and no edge still rewrote this
+	// field and failed CI with the fingerprint as the entire diff. A locally observed
+	// attribute is exactly what --static exists to omit.
+	//
+	// Every other export still carries it, which is where it answers its question:
+	// when two graphs disagree, which build produced each.
+	if !static {
+		out.CatalogFingerprint = magus.CatalogFingerprint()
+	}
 	// The blob base lets a viewer link a node's relative `source` to the right repo.
 	// A --global union spans many repos, so a single base would be wrong: leave it off.
 	if !globalScope {

@@ -1124,10 +1124,18 @@
           ]
         },
         {
+          "name": "test",
+          "doc": "test runs the OpenCode plugin's transport cases: does it ASK magus correctly (the top-level `hook` subcommand, the input on stdin) and handle each decision the way it declares.",
+          "dependencies": [
+            "preflight"
+          ]
+        },
+        {
           "name": "ci",
           "doc": "'ci' is the anchor `magus affected ci` keys off.",
           "dependencies": [
-            "lint"
+            "lint",
+            "test"
           ]
         }
       ]

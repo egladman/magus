@@ -2,8 +2,8 @@
 title: magus-context-audit
 description: "Audit the instructions an agent was given - the repo instruction file, installed skills, handoff-journal entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do."
 tags: [agents, skills, magus-context-audit]
-skill_full_bytes: 5164
-skill_simple_bytes: 3680
+skill_full_bytes: 5525
+skill_simple_bytes: 4017
 ---
 
 # magus-context-audit
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `23` |
+| `agent-skill-version` | `26` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `ace009cb3627` |
+| `skill-content` | `50e5cf282e9c` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -64,6 +64,7 @@ the one nobody remembers is loaded.
 | --- | --- |
 | the repo's agent instruction file (`CLAUDE.md`, `AGENTS.md`, ...) | always loaded, whole file, never scoped |
 | installed skills | whole directory; a stale one looks identical to a current one |
+| a local, workspace-owned skill (`magus-local`) | loads beside the shipped set, but nothing generates or verifies it |
 | the handoff journal / memory entries | loaded at session start, and POINT-IN-TIME by definition |
 | a routing index (`MAGUS.md`) | invites being read, only true as of its last regeneration |
 | hook-injected text | fires on every matching tool call, and nothing displays it in one place |
@@ -109,6 +110,9 @@ session", not "how wrong is the sentence".
    is now denied. Indistinguishable from a dead end until the agent tries it.
 3. **Split authority** - two surfaces describe the same decision differently
    (one "advised", the other "denied"). The agent cannot tell which is current.
+   A workspace-local rule contradicting a shipped skill is always this finding:
+   local text overrides nothing, so the two are simply in conflict. Check each
+   local rule's `retire-when` while you are here; the condition may have arrived.
 4. **Orphaned replacement** - a denial or deprecation names a tool that no
    instruction anywhere documents.
 5. **Silent duplication** - the same rule restated in several places. Not yet a
@@ -178,6 +182,7 @@ the one nobody remembers is loaded.
 | --- | --- |
 | the repo's agent instruction file (`CLAUDE.md`, `AGENTS.md`, ...) | always loaded, whole file, never scoped |
 | installed skills | whole directory; a stale one looks identical to a current one |
+| a local, workspace-owned skill (`magus-local`) | loads beside the shipped set, but nothing generates or verifies it |
 | the handoff journal / memory entries | loaded at session start, and POINT-IN-TIME by definition |
 | a routing index (`MAGUS.md`) | invites being read, only true as of its last regeneration |
 | hook-injected text | fires on every matching tool call, and nothing displays it in one place |
@@ -213,6 +218,8 @@ Report findings in this order.
    is now denied.
 3. **Split authority** - two surfaces describe the same decision differently
    (one "advised", the other "denied"). The agent cannot tell which is current.
+   A local rule contradicting a shipped skill is always this. Check each
+   local rule's `retire-when` while you are here; the condition may have arrived.
 4. **Orphaned replacement** - a denial or deprecation names a tool that no
    instruction anywhere documents.
 5. **Silent duplication** - the same rule restated in several places.
@@ -238,6 +245,8 @@ digest moved:
 ```sh
 magus graph verify    # the digest must CHANGE, or the install did nothing
 ```
+
+A stale binary re-installs the OLD body and reports success.
 
 Prefer DELETING a contradicting line over reconciling it. When a rule genuinely must appear twice, make one the source
 and have the other name it rather than restate it.

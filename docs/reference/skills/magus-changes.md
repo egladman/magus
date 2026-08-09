@@ -3,7 +3,7 @@ title: magus-changes
 description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question."
 tags: [agents, skills, magus-changes]
 skill_full_bytes: 5133
-skill_simple_bytes: 3863
+skill_simple_bytes: 3911
 ---
 
 # magus-changes
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `23` |
+| `agent-skill-version` | `26` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `ace009cb3627` |
+| `skill-content` | `50e5cf282e9c` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -183,7 +183,7 @@ brief.
 
 1. Get the project map and target vocabulary from the workspace: `magus ls`
    for projects, `magus describe targets` for the target vocabulary. Do not
-   read `MAGUS.md` for this.
+   read `MAGUS.md` for this - a brief on stale structure is worse than none.
 2. Establish the requested time boundary.
 
    ```sh

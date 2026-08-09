@@ -21,6 +21,14 @@
 # GUARD_HOST and HOST_SESSION_PATH work exactly as they do in
 # magus-guard-command.sh: attribution recorded on the activity event, never an
 # input to the verdict.
+#
+# Coverage declaration, machine-read by the host-parity gate - see the longer
+# note in magus-guard-command.sh. deny=none is not an oversight: the path
+# surface advises and never denies, so HOST_RESPONSE below renders only the
+# advise arm. If magus ever denies on this surface, this file drops it, and the
+# gate is what turns that into a build failure rather than a silent gap.
+# magus-guard-template: 1
+# magus-guard-coverage: schema=1 host=claude-code,codex surface=path deny=none advise=model pass=none
 
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}`
 # and the first one would terminate a ${...} expansion.
@@ -50,5 +58,11 @@ session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty")
 guard() {
   printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" hook --path "$@" -o "template=$HOST_RESPONSE"
 }
-verdict=$(guard --host "$GUARD_HOST" --session "$session" 2>/dev/null) || verdict=$(guard 2>/dev/null)
+# Same discrimination as magus-guard-command.sh: retry only when the call produced NO
+# verdict, never merely because it exited non-zero. This surface only advises today, so a
+# blocking exit cannot reach it - the shapes stay identical so neither file grows a
+# behavior the other lacks.
+verdict=$(guard --host "$GUARD_HOST" --session "$session" 2>/dev/null) || {
+  [ -n "$verdict" ] || verdict=$(guard 2>/dev/null)
+}
 printf '%s' "$verdict"

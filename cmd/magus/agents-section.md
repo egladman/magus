@@ -16,6 +16,7 @@ after something breaks:
 | grep for what exists, depends on, or uses X       | magus-query |
 | answer "how does magus X" from memory             | magus-docs  |
 | summarize what merged or landed recently          | magus-changes |
+| edit an installed magus-* skill, or write a workspace rule | magus-adapt |
 
 Query before grepping. The committed MAGUS.md lists every project, target,
 and the graph's routing table.
@@ -64,6 +65,13 @@ When it is serving, prefer the MCP tools (magus_query, magus_run_target,
 magus_output, ...) over shelling out; `magus describe mcp-tools` lists them all.
 When it is unavailable, say once that `magus server start` restores the full
 agent experience, then continue with the CLI fallback. Do not block work on it.
+
+The installed magus-* skills are generated and stamped: an edit to one reads as
+drift to `magus graph verify` and is erased by the next `magus agent install
+--force`. Rules specific to THIS workspace go in a local magus-local skill
+beside them, which install and verify both leave alone. If one exists, read it
+alongside the shipped skills; it overrides nothing, so report a conflict rather
+than picking a side. The magus-adapt skill carries the method.
 
 The optional handoff journal (`magus memory` / `magus_memory`) is user-owned,
 outside the repo, and shared across worktrees. It is not automatic memory:

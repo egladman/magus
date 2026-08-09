@@ -67,9 +67,33 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
                           "magus-guard-command.sh", "magus-guard-path.sh", "cursor-guard.sh"], ".", {});
 }
 
-// 'ci' is the anchor `magus affected ci` keys off. Lint is the whole gate: there is nothing to
-// build and no unit tests here, because the templates' BEHAVIOR is asserted from the repo root
-// (dogfood_test.go runs them against real host events).
+// test runs the OpenCode plugin's transport cases: does it ASK magus correctly (the top-level
+// `hook` subcommand, the input on stdin) and handle each decision the way it declares.
+//
+// It runs under node, not bun, even though the plugin's runtime is bun. The test supplies
+// Bun.spawn - the only Bun API the plugin touches - and leaves the shipped artifact unmodified,
+// which is a better trade than putting a second JS runtime in every contributor's toolchain for
+// one file. The residual gap is bun-versus-node spawn semantics, and it is small.
+//
+// The sh templates are covered elsewhere, by cmd/magus/testdata/script/guard_templates.txtar:
+// testscript already gives them a real magus on PATH, which is exactly what a shell template
+// needs and what this project cannot offer.
+export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
+    os\exec("pnpm", ["run", "test"], ".", {});
+}
+
+// 'ci' is the anchor `magus affected ci` keys off. There is nothing to build here, so the gate is
+// lint plus the plugin's transport tests. The rest of what these files must agree WITH is checked
+// at the repo root: dogfood_test.go verifies that this repository's own hook config invokes them,
+// that the guide embeds them verbatim, and that each declares a stance for every decision and
+// surface in the guard contract (the magus-guard-coverage lines).
+//
+// This comment used to claim the templates' behavior was asserted from the repo root when
+// nothing executed them at all, which is why the gap went unnoticed for so long. It is closed
+// now, and the honest remaining limit is narrow: the event SHAPES in the fixtures are recorded
+// from each host's documentation, so a host silently renaming a field is still invisible here.
 export fun ci(ctx: magus\Context, args: [str]) > void {
     ctx.needs(lint);
+    ctx.needs(test);
 }
