@@ -107,8 +107,19 @@ func roughly(d time.Duration) string {
 // this minute - so a nag there is one they learn to filter, which teaches them to
 // filter the never-synced hint too.
 //
-// The Fix is what makes it actionable without anyone having heard of the command:
-// `magus doctor --fix` runs it.
+// It carries NO Fix, deliberately, and that is a departure from the design that
+// specified one. A Fix is what `magus doctor --fix` RUNS, and refreshing the registry
+// sends a request - so wiring it here would make a repair command fetch from our
+// domain on behalf of someone who asked for neither. That is precisely the consent
+// rule the registry package doc states: a command whose purpose IS the network may
+// fetch, and every other command reads the local cache. `doctor --fix` is a repair
+// command, not a network one.
+//
+// It also broke in practice before it broke in principle: with no registry key pinned
+// yet, the fix failed and took `doctor --fix` down with it for every user, over a
+// state - never synced - that is normal on a fresh install rather than a defect.
+//
+// So the command is named in the message and the human runs it.
 func (r *runner) checkRegistryFreshness() types.DoctorCheck {
 	const name = "registry"
 
@@ -137,15 +148,16 @@ func (r *runner) checkRegistryFreshness() types.DoctorCheck {
 		return types.DoctorCheck{
 			Name: name, Status: types.DoctorAdvice,
 			Message: fmt.Sprintf("never synced: %s", strings.Join(never, ", ")),
-			Details: []string{"this fetches a data file; it does not upgrade magus"},
-			Fix:     []string{"self", "refresh"},
+			Details: []string{"run `magus self refresh` to fill it in; that fetches a data file and does not upgrade magus"},
 		}
 	case len(stale) > 0:
 		return types.DoctorCheck{
 			Name: name, Status: types.DoctorAdvice,
 			Message: fmt.Sprintf("data is older than its window: %s", strings.Join(stale, ", ")),
-			Details: []string{"age is measured from the publisher's generated_at, so this may mean the publisher stopped"},
-			Fix:     []string{"self", "refresh"},
+			Details: []string{
+				"run `magus self refresh` to update it",
+				"age is measured from the publisher's generated_at, so this may instead mean the publisher stopped",
+			},
 		}
 	default:
 		return types.DoctorCheck{
