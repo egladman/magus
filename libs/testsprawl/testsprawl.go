@@ -1,4 +1,4 @@
-// Package orphanator defines an analyzer that reports a Go test file whose name
+// Package testsprawl defines an analyzer that reports a Go test file whose name
 // narrows the name of a source file in the same directory.
 //
 // It catches test sprawl: rather than adding cases to resolver_test.go, someone
@@ -16,7 +16,7 @@
 // It is not hermetic: sourceNames reads the directory, so a driver caching
 // results against declared package inputs (go vet's unitchecker) can replay a
 // stale verdict after you add or remove a sibling file.
-package orphanator
+package testsprawl
 
 import (
 	"fmt"
@@ -89,7 +89,7 @@ type Options struct {
 func New(opts Options) (*analysis.Analyzer, error) {
 	for _, pattern := range opts.Allow {
 		if _, err := filepath.Match(pattern, "probe"); err != nil {
-			return nil, fmt.Errorf("orphanator: allow pattern %q: %w", pattern, err)
+			return nil, fmt.Errorf("testsprawl: allow pattern %q: %w", pattern, err)
 		}
 	}
 
@@ -108,7 +108,7 @@ func newAnalyzer(opts Options) *analysis.Analyzer {
 		exempt: slices.Concat(conventional, opts.Allow),
 	}
 
-	return &analysis.Analyzer{Name: "orphanator", Doc: doc, Run: l.run}
+	return &analysis.Analyzer{Name: "testsprawl", Doc: doc, Run: l.run}
 }
 
 type linter struct {

@@ -1,4 +1,4 @@
-module github.com/egladman/magus/libs/orphanator
+module github.com/egladman/magus/libs/testsprawl
 
 go 1.26
 

@@ -43,19 +43,27 @@ static size_t mg_zstd_compress_step(
 //
 // Returns bytes written to dst. Sets *srcConsumed to bytes consumed from src.
 // Sets *errFlag=1 on any ZSTD error.
+//
+// Sets *frameIncomplete=1 when ZSTD_decompressStream's return hint is nonzero, which
+// means the current frame needs more input. The caller MUST carry that out: a reader
+// that hits EOF mid-frame and reports io.EOF hands back a short read as a success, so
+// a truncated cache artifact extracts as a complete-looking archive with files missing.
 static size_t mg_zstd_decompress_step(
     ZSTD_DCtx*  dctx,
     void*       dst,  size_t dstCap,
     const void* src,  size_t srcLen,
     size_t*     srcConsumed,
-    int*        errFlag)
+    int*        errFlag,
+    int*        frameIncomplete)
 {
     *errFlag = 0;
+    *frameIncomplete = 0;
     ZSTD_inBuffer  in  = { src, srcLen, 0 };
     ZSTD_outBuffer out = { dst, dstCap, 0 };
     size_t hint = ZSTD_decompressStream(dctx, &out, &in);
     *srcConsumed = in.pos;
     if (ZSTD_isError(hint)) { *errFlag = 1; return 0; }
+    if (hint != 0) { *frameIncomplete = 1; }
     return out.pos;
 }
 */
@@ -186,7 +194,10 @@ type zstdCGOReader struct {
 	outStart int
 	outEnd   int
 	eof      bool // underlying reader returned io.EOF
-	closed   bool
+	// inFrame is true when the last decompress step reported that the current frame
+	// wants more input. Reaching EOF in that state means the stream was cut mid-frame.
+	inFrame bool
+	closed  bool
 }
 
 // newZstdReader returns a streaming zstd decompressor reading from r.
@@ -196,9 +207,12 @@ func newZstdReader(r io.Reader, threads int) (io.ReadCloser, error) {
 	if dctx == nil {
 		return nil, fmt.Errorf("zstd: ZSTD_createDCtx failed")
 	}
-	if threads > 0 {
-		C.ZSTD_DCtx_setParameter(dctx, C.ZSTD_d_windowLogMax, 31) // allow large frames
-	}
+	// Unconditional, and NOT gated on threads: libzstd has no multi-threaded
+	// decompression, so the old `if threads > 0` guard read as if this were a
+	// concurrency knob while resolveThreads' floor of 1 meant it always applied.
+	// Same value as before - the cap has to stay wide enough to read every artifact
+	// already in a cache, so narrowing it is a separate, compat-bearing decision.
+	C.ZSTD_DCtx_setParameter(dctx, C.ZSTD_d_windowLogMax, 31)
 	return &zstdCGOReader{
 		r:      r,
 		dctx:   dctx,
@@ -221,6 +235,9 @@ func (z *zstdCGOReader) Read(p []byte) (int, error) {
 		z.outEnd = 0
 
 		if z.eof && z.inStart >= z.inEnd {
+			if z.inFrame {
+				return 0, io.ErrUnexpectedEOF
+			}
 			return 0, io.EOF
 		}
 
@@ -233,6 +250,9 @@ func (z *zstdCGOReader) Read(p []byte) (int, error) {
 			if err == io.EOF {
 				z.eof = true
 				if n == 0 {
+					if z.inFrame {
+						return 0, io.ErrUnexpectedEOF
+					}
 					return 0, io.EOF
 				}
 			} else if err != nil {
@@ -244,16 +264,17 @@ func (z *zstdCGOReader) Read(p []byte) (int, error) {
 			continue
 		}
 		var consumed C.size_t
-		var errFlag C.int
+		var errFlag, incomplete C.int
 		written := C.mg_zstd_decompress_step(
 			z.dctx,
 			unsafe.Pointer(&z.outBuf[0]), C.size_t(len(z.outBuf)),
 			unsafe.Pointer(&z.inBuf[z.inStart]), C.size_t(z.inEnd-z.inStart),
-			&consumed, &errFlag,
+			&consumed, &errFlag, &incomplete,
 		)
 		if errFlag != 0 {
 			return 0, fmt.Errorf("zstd: decompression error")
 		}
+		z.inFrame = incomplete != 0
 		z.inStart += int(consumed)
 		z.outEnd = int(written)
 	}

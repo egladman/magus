@@ -5321,10 +5321,10 @@
       }
     },
     {
-      "id": "doc:libs/orphanator/readme.md",
+      "id": "doc:libs/testsprawl/readme.md",
       "kind": "doc",
-      "label": "libs/orphanator/readme.md",
-      "source": "libs/orphanator/readme.md",
+      "label": "libs/testsprawl/readme.md",
+      "source": "libs/testsprawl/readme.md",
       "attrs": {
         "role": "readme"
       }
@@ -6482,10 +6482,10 @@
       }
     },
     {
-      "id": "file:libs/orphanator/magusfile.buzz",
+      "id": "file:libs/testsprawl/magusfile.buzz",
       "kind": "file",
-      "label": "libs/orphanator/magusfile.buzz",
-      "source": "libs/orphanator/magusfile.buzz",
+      "label": "libs/testsprawl/magusfile.buzz",
+      "source": "libs/testsprawl/magusfile.buzz",
       "attrs": {
         "language": "buzz"
       }
@@ -16101,77 +16101,77 @@
       "source": "libs/gopherbuzz/std/testing.buzz:41"
     },
     {
-      "id": "function:libs/orphanator/magusfile.buzz:build",
+      "id": "function:libs/testsprawl/magusfile.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "libs/orphanator/magusfile.buzz:64",
+      "source": "libs/testsprawl/magusfile.buzz:72",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:libs/orphanator/magusfile.buzz:ci",
+      "id": "function:libs/testsprawl/magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
       "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
-      "source": "libs/orphanator/magusfile.buzz:68",
+      "source": "libs/testsprawl/magusfile.buzz:76",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:libs/orphanator/magusfile.buzz:format",
+      "id": "function:libs/testsprawl/magusfile.buzz:format",
       "kind": "function",
       "label": "format",
-      "source": "libs/orphanator/magusfile.buzz:59",
+      "source": "libs/testsprawl/magusfile.buzz:67",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:libs/orphanator/magusfile.buzz:generate",
+      "id": "function:libs/testsprawl/magusfile.buzz:generate",
       "kind": "function",
       "label": "generate",
       "doc": "Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.",
-      "source": "libs/orphanator/magusfile.buzz:41",
+      "source": "libs/testsprawl/magusfile.buzz:49",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:libs/orphanator/magusfile.buzz:lint",
+      "id": "function:libs/testsprawl/magusfile.buzz:index_generate",
+      "kind": "function",
+      "label": "index_generate",
+      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
+      "source": "libs/testsprawl/magusfile.buzz:62",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:libs/testsprawl/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "go-vet only, as in libs/diagnostics. Deliberately NOT golangci-lint: this module is what a custom golangci-lint binary is built FROM, and linting it with a binary that carries it is a bootstrap nobody needs.",
-      "source": "libs/orphanator/magusfile.buzz:63",
+      "source": "libs/testsprawl/magusfile.buzz:71",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:libs/orphanator/magusfile.buzz:md_generate",
-      "kind": "function",
-      "label": "md_generate",
-      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/orphanator/magusfile.buzz:54",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:libs/orphanator/magusfile.buzz:preflight",
+      "id": "function:libs/testsprawl/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "libs/orphanator/magusfile.buzz:38",
+      "source": "libs/testsprawl/magusfile.buzz:46",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:libs/orphanator/magusfile.buzz:test",
+      "id": "function:libs/testsprawl/magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "libs/orphanator/magusfile.buzz:65",
+      "source": "libs/testsprawl/magusfile.buzz:73",
       "attrs": {
         "exported": "true"
       }
@@ -16544,7 +16544,7 @@
       "id": "function:magusfile.buzz:lint_build",
       "kind": "function",
       "label": "lint_build",
-      "doc": "Builds ./custom-gcl, the golangci-lint carrying this repo's own linters. golangci-lint compiles plugins in rather than loading them at runtime, so an in-repo rule only runs through a binary built here.  The build runs in libs/orphanator because `golangci-lint custom` reads .custom-gcl.yml from its working directory and takes no config flag. That file lives with the linter it declares; `destination: ../..` puts the binary back at the root, where .golangci.yml and lint expect it.  No declared outputs, for go-",
+      "doc": "Builds ./custom-gcl, the golangci-lint carrying this repo's own linters. golangci-lint compiles plugins in rather than loading them at runtime, so an in-repo rule only runs through a binary built here.  The build runs in libs/testsprawl because `golangci-lint custom` reads .custom-gcl.yml from its working directory and takes no config flag. That file lives with the linter it declares; `destination: ../..` puts the binary back at the root, where .golangci.yml and lint expect it.  No declared outputs, for go-",
       "source": "magusfile.buzz:1665",
       "attrs": {
         "exported": "true"
@@ -21920,10 +21920,10 @@
       }
     },
     {
-      "id": "project:libs/orphanator",
+      "id": "project:libs/testsprawl",
       "kind": "project",
-      "label": "libs/orphanator",
-      "source": "libs/orphanator",
+      "label": "libs/testsprawl",
+      "source": "libs/testsprawl",
       "attrs": {
         "engine": "buzz",
         "target_count": "8"
@@ -22953,78 +22953,78 @@
       }
     },
     {
-      "id": "target:libs/orphanator:build",
+      "id": "target:libs/testsprawl:build",
       "kind": "target",
       "label": "build",
-      "source": "libs/orphanator",
+      "source": "libs/testsprawl",
       "attrs": {
         "engine": "buzz"
       }
     },
     {
-      "id": "target:libs/orphanator:ci",
+      "id": "target:libs/testsprawl:ci",
       "kind": "target",
       "label": "ci",
       "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
-      "source": "libs/orphanator",
+      "source": "libs/testsprawl",
       "attrs": {
         "engine": "buzz"
       }
     },
     {
-      "id": "target:libs/orphanator:format",
+      "id": "target:libs/testsprawl:format",
       "kind": "target",
       "label": "format",
-      "source": "libs/orphanator",
+      "source": "libs/testsprawl",
       "attrs": {
         "engine": "buzz"
       }
     },
     {
-      "id": "target:libs/orphanator:generate",
+      "id": "target:libs/testsprawl:generate",
       "kind": "target",
       "label": "generate",
       "doc": "Regenerates MAGUS.md and fails on drift.",
-      "source": "libs/orphanator",
+      "source": "libs/testsprawl",
       "attrs": {
         "engine": "buzz"
       }
     },
     {
-      "id": "target:libs/orphanator:lint",
+      "id": "target:libs/testsprawl:index-generate",
+      "kind": "target",
+      "label": "index-generate",
+      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
+      "source": "libs/testsprawl",
+      "attrs": {
+        "declared_as": "index_generate",
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:libs/testsprawl:lint",
       "kind": "target",
       "label": "lint",
       "doc": "go-vet only, as in libs/diagnostics.",
-      "source": "libs/orphanator",
+      "source": "libs/testsprawl",
       "attrs": {
         "engine": "buzz"
       }
     },
     {
-      "id": "target:libs/orphanator:md-generate",
-      "kind": "target",
-      "label": "md-generate",
-      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/orphanator",
-      "attrs": {
-        "declared_as": "md_generate",
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:libs/orphanator:preflight",
+      "id": "target:libs/testsprawl:preflight",
       "kind": "target",
       "label": "preflight",
-      "source": "libs/orphanator",
+      "source": "libs/testsprawl",
       "attrs": {
         "engine": "buzz"
       }
     },
     {
-      "id": "target:libs/orphanator:test",
+      "id": "target:libs/testsprawl:test",
       "kind": "target",
       "label": "test",
-      "source": "libs/orphanator",
+      "source": "libs/testsprawl",
       "attrs": {
         "engine": "buzz"
       }
@@ -23393,11 +23393,11 @@
     },
     {
       "source": "charm:rw",
-      "target": "target:libs/orphanator:generate",
+      "target": "target:libs/testsprawl:generate",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
       "source": "charm:rw",
@@ -52688,108 +52688,108 @@
       "provenance": "libs/gopherbuzz/std/testing.buzz"
     },
     {
-      "source": "file:libs/orphanator/magusfile.buzz",
-      "target": "function:libs/orphanator/magusfile.buzz:build",
+      "source": "file:libs/testsprawl/magusfile.buzz",
+      "target": "function:libs/testsprawl/magusfile.buzz:build",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator/magusfile.buzz"
+      "provenance": "libs/testsprawl/magusfile.buzz"
     },
     {
-      "source": "file:libs/orphanator/magusfile.buzz",
-      "target": "function:libs/orphanator/magusfile.buzz:ci",
+      "source": "file:libs/testsprawl/magusfile.buzz",
+      "target": "function:libs/testsprawl/magusfile.buzz:ci",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator/magusfile.buzz"
+      "provenance": "libs/testsprawl/magusfile.buzz"
     },
     {
-      "source": "file:libs/orphanator/magusfile.buzz",
-      "target": "function:libs/orphanator/magusfile.buzz:format",
+      "source": "file:libs/testsprawl/magusfile.buzz",
+      "target": "function:libs/testsprawl/magusfile.buzz:format",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator/magusfile.buzz"
+      "provenance": "libs/testsprawl/magusfile.buzz"
     },
     {
-      "source": "file:libs/orphanator/magusfile.buzz",
-      "target": "function:libs/orphanator/magusfile.buzz:generate",
+      "source": "file:libs/testsprawl/magusfile.buzz",
+      "target": "function:libs/testsprawl/magusfile.buzz:generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator/magusfile.buzz"
+      "provenance": "libs/testsprawl/magusfile.buzz"
     },
     {
-      "source": "file:libs/orphanator/magusfile.buzz",
-      "target": "function:libs/orphanator/magusfile.buzz:lint",
+      "source": "file:libs/testsprawl/magusfile.buzz",
+      "target": "function:libs/testsprawl/magusfile.buzz:index_generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator/magusfile.buzz"
+      "provenance": "libs/testsprawl/magusfile.buzz"
     },
     {
-      "source": "file:libs/orphanator/magusfile.buzz",
-      "target": "function:libs/orphanator/magusfile.buzz:md_generate",
+      "source": "file:libs/testsprawl/magusfile.buzz",
+      "target": "function:libs/testsprawl/magusfile.buzz:lint",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator/magusfile.buzz"
+      "provenance": "libs/testsprawl/magusfile.buzz"
     },
     {
-      "source": "file:libs/orphanator/magusfile.buzz",
-      "target": "function:libs/orphanator/magusfile.buzz:preflight",
+      "source": "file:libs/testsprawl/magusfile.buzz",
+      "target": "function:libs/testsprawl/magusfile.buzz:preflight",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator/magusfile.buzz"
+      "provenance": "libs/testsprawl/magusfile.buzz"
     },
     {
-      "source": "file:libs/orphanator/magusfile.buzz",
-      "target": "function:libs/orphanator/magusfile.buzz:test",
+      "source": "file:libs/testsprawl/magusfile.buzz",
+      "target": "function:libs/testsprawl/magusfile.buzz:test",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator/magusfile.buzz"
+      "provenance": "libs/testsprawl/magusfile.buzz"
     },
     {
-      "source": "file:libs/orphanator/magusfile.buzz",
+      "source": "file:libs/testsprawl/magusfile.buzz",
       "target": "import:../../spells/golang/gomod",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "libs/orphanator/magusfile.buzz"
+      "provenance": "libs/testsprawl/magusfile.buzz"
     },
     {
-      "source": "file:libs/orphanator/magusfile.buzz",
+      "source": "file:libs/testsprawl/magusfile.buzz",
       "target": "import:fs",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "libs/orphanator/magusfile.buzz"
+      "provenance": "libs/testsprawl/magusfile.buzz"
     },
     {
-      "source": "file:libs/orphanator/magusfile.buzz",
+      "source": "file:libs/testsprawl/magusfile.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "libs/orphanator/magusfile.buzz"
+      "provenance": "libs/testsprawl/magusfile.buzz"
     },
     {
-      "source": "file:libs/orphanator/magusfile.buzz",
+      "source": "file:libs/testsprawl/magusfile.buzz",
       "target": "import:magus/spell/go",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "libs/orphanator/magusfile.buzz"
+      "provenance": "libs/testsprawl/magusfile.buzz"
     },
     {
-      "source": "file:libs/orphanator/magusfile.buzz",
+      "source": "file:libs/testsprawl/magusfile.buzz",
       "target": "import:vcs",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "libs/orphanator/magusfile.buzz"
+      "provenance": "libs/testsprawl/magusfile.buzz"
     },
     {
       "source": "file:libs/textsearch/magusfile.buzz",
@@ -65542,84 +65542,84 @@
       "provenance": "libs/gopherbuzz"
     },
     {
-      "source": "project:libs/orphanator",
-      "target": "doc:libs/orphanator/readme.md",
+      "source": "project:libs/testsprawl",
+      "target": "doc:libs/testsprawl/readme.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator/readme.md"
+      "provenance": "libs/testsprawl/readme.md"
     },
     {
-      "source": "project:libs/orphanator",
-      "target": "file:libs/orphanator/magusfile.buzz",
+      "source": "project:libs/testsprawl",
+      "target": "file:libs/testsprawl/magusfile.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator/magusfile.buzz"
+      "provenance": "libs/testsprawl/magusfile.buzz"
     },
     {
-      "source": "project:libs/orphanator",
-      "target": "target:libs/orphanator:build",
+      "source": "project:libs/testsprawl",
+      "target": "target:libs/testsprawl:build",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "project:libs/orphanator",
-      "target": "target:libs/orphanator:ci",
+      "source": "project:libs/testsprawl",
+      "target": "target:libs/testsprawl:ci",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "project:libs/orphanator",
-      "target": "target:libs/orphanator:format",
+      "source": "project:libs/testsprawl",
+      "target": "target:libs/testsprawl:format",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "project:libs/orphanator",
-      "target": "target:libs/orphanator:generate",
+      "source": "project:libs/testsprawl",
+      "target": "target:libs/testsprawl:generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "project:libs/orphanator",
-      "target": "target:libs/orphanator:lint",
+      "source": "project:libs/testsprawl",
+      "target": "target:libs/testsprawl:index-generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "project:libs/orphanator",
-      "target": "target:libs/orphanator:md-generate",
+      "source": "project:libs/testsprawl",
+      "target": "target:libs/testsprawl:lint",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "project:libs/orphanator",
-      "target": "target:libs/orphanator:preflight",
+      "source": "project:libs/testsprawl",
+      "target": "target:libs/testsprawl:preflight",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "project:libs/orphanator",
-      "target": "target:libs/orphanator:test",
+      "source": "project:libs/testsprawl",
+      "target": "target:libs/testsprawl:test",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
       "source": "project:libs/textsearch",
@@ -67963,7 +67963,7 @@
     },
     {
       "source": "target:docs:index-generate",
-      "target": "file:libs/orphanator/magusfile.buzz",
+      "target": "file:libs/testsprawl/magusfile.buzz",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
@@ -68858,148 +68858,148 @@
       "provenance": "libs/gopherbuzz"
     },
     {
-      "source": "target:libs/orphanator:build",
+      "source": "target:libs/testsprawl:build",
       "target": "op:go:go-build",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "target:libs/orphanator:build",
+      "source": "target:libs/testsprawl:build",
       "target": "spell:go",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "target:libs/orphanator:build",
-      "target": "target:libs/orphanator:format",
+      "source": "target:libs/testsprawl:build",
+      "target": "target:libs/testsprawl:format",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "target:libs/orphanator:ci",
-      "target": "target:libs/orphanator:build",
+      "source": "target:libs/testsprawl:ci",
+      "target": "target:libs/testsprawl:build",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "target:libs/orphanator:ci",
-      "target": "target:libs/orphanator:lint",
+      "source": "target:libs/testsprawl:ci",
+      "target": "target:libs/testsprawl:lint",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "target:libs/orphanator:ci",
-      "target": "target:libs/orphanator:test",
+      "source": "target:libs/testsprawl:ci",
+      "target": "target:libs/testsprawl:test",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "target:libs/orphanator:format",
+      "source": "target:libs/testsprawl:format",
       "target": "op:go:go-fmt",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "target:libs/orphanator:format",
+      "source": "target:libs/testsprawl:format",
       "target": "op:go:go-mod-tidy",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "target:libs/orphanator:format",
+      "source": "target:libs/testsprawl:format",
       "target": "spell:go",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "target:libs/orphanator:format",
-      "target": "target:libs/orphanator:generate",
+      "source": "target:libs/testsprawl:format",
+      "target": "target:libs/testsprawl:generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "target:libs/orphanator:generate",
-      "target": "target:libs/orphanator:md-generate",
+      "source": "target:libs/testsprawl:generate",
+      "target": "target:libs/testsprawl:index-generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "target:libs/orphanator:generate",
-      "target": "target:libs/orphanator:preflight",
+      "source": "target:libs/testsprawl:generate",
+      "target": "target:libs/testsprawl:preflight",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "target:libs/orphanator:lint",
+      "source": "target:libs/testsprawl:lint",
       "target": "op:go:go-vet",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "target:libs/orphanator:lint",
+      "source": "target:libs/testsprawl:lint",
       "target": "spell:go",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "target:libs/orphanator:lint",
-      "target": "target:libs/orphanator:format",
+      "source": "target:libs/testsprawl:lint",
+      "target": "target:libs/testsprawl:format",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "target:libs/orphanator:test",
+      "source": "target:libs/testsprawl:test",
       "target": "op:go:go-test",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "target:libs/orphanator:test",
+      "source": "target:libs/testsprawl:test",
       "target": "spell:go",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
-      "source": "target:libs/orphanator:test",
-      "target": "target:libs/orphanator:format",
+      "source": "target:libs/testsprawl:test",
+      "target": "target:libs/testsprawl:format",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/orphanator"
+      "provenance": "libs/testsprawl"
     },
     {
       "source": "target:libs/textsearch:ci",

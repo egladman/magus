@@ -70,7 +70,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | evals | 4 | `magus query project:evals` | `lint`, `preflight`, `ci` |
 | libs/diagnostics | 8 | `magus query project:libs/diagnostics` | `format`, `build`, `generate` |
 | libs/gopherbuzz | 10 | `magus query project:libs/gopherbuzz` | `build`, `format`, `generate` |
-| libs/orphanator | 8 | `magus query project:libs/orphanator` | `format`, `build`, `generate` |
+| libs/testsprawl | 8 | `magus query project:libs/testsprawl` | `format`, `build`, `generate` |
 | libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `generate`, `preflight` |
 | proto | 3 | `magus query project:proto` | `generate`, `lint`, `ci` |
 
@@ -195,7 +195,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `preflight` |  |
 | `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
 
-## Project: libs/orphanator
+## Project: libs/testsprawl
 
 | Target | What it does |
 |---|---|
@@ -206,7 +206,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `test` |  |
 | `ci` | The anchor `magus affected ci` keys off; fans out lint/build/test after format. |
 | `preflight` |  |
-| `md-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
+| `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
 
 ## Project: libs/textsearch
 

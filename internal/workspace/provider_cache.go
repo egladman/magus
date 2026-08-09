@@ -51,11 +51,14 @@ import (
 // artifact.
 
 // providerCacheVersion is the entry format, folded into the fingerprint rather than
-// compared separately. The record is marshalled by Go field name, so a field added or
-// retyped in a later magus would otherwise decode silently zeroed against a
-// fingerprint that still matched - a wrong project set that looks fresh. Bumping this
-// makes every existing entry miss.
-const providerCacheVersion = 1
+// compared separately. A field added, retyped or RE-TAGGED in a later magus would
+// otherwise decode silently zeroed against a fingerprint that still matched - a wrong
+// project set that looks fresh. Bumping this makes every existing entry miss.
+//
+// v2: spells.ProvidedProject carries json tags. Before them the record encoded under
+// its Go field names, so a v1 file would decode to empty projects under the tagged
+// names - the exact silently-zeroed hit this constant exists to prevent.
+const providerCacheVersion = 2
 
 // ProviderCache says where a provider's answer is remembered between commands. A
 // zero value (empty Dir) disables the cache and re-runs every provider.

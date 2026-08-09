@@ -51,7 +51,7 @@ coverage.hand.out
 /langservice-manifest
 /buzz-playground
 
-# golangci-lint binary built from libs/orphanator/.custom-gcl.yml, carrying the
+# golangci-lint binary built from libs/testsprawl/.custom-gcl.yml, carrying the
 # in-repo linters. Rebuilt from source, never committed.
 /custom-gcl
 

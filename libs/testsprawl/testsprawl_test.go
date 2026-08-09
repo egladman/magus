@@ -1,10 +1,10 @@
-package orphanator_test
+package testsprawl_test
 
 import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/libs/orphanator"
+	"github.com/egladman/magus/libs/testsprawl"
 	"golang.org/x/tools/go/analysis/analysistest"
 )
 
@@ -18,14 +18,14 @@ import (
 // sprawl_test). That pass holds no source files at all, so the rule only reaches
 // the right answer because the sibling listing is read off disk.
 func TestAnalyzer(t *testing.T) {
-	analysistest.Run(t, analysistest.TestData(), orphanator.Analyzer, "sprawl")
+	analysistest.Run(t, analysistest.TestData(), testsprawl.Analyzer, "sprawl")
 }
 
 // TestAnalyzerUnpaired checks the opt-in half: the cross-cutting shape sprawl
 // leaves alone is reported once Unpaired is set, and a narrowing name still gets
 // the narrowing message rather than the weaker unpaired one.
 func TestAnalyzerUnpaired(t *testing.T) {
-	analyzer, err := orphanator.New(orphanator.Options{Unpaired: true})
+	analyzer, err := testsprawl.New(testsprawl.Options{Unpaired: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func TestAnalyzerUnpaired(t *testing.T) {
 // widget_conformance_test.go narrows widget.go exactly as resolver_edge_cases
 // narrows resolver.
 func TestAnalyzerAllow(t *testing.T) {
-	analyzer, err := orphanator.New(orphanator.Options{Allow: []string{"*_conformance_test.go"}})
+	analyzer, err := testsprawl.New(testsprawl.Options{Allow: []string{"*_conformance_test.go"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestAnalyzerAllow(t *testing.T) {
 // lint clean until it met a package containing a non-exempt test file and then
 // fail the run from somewhere unrelated to the mistake.
 func TestNewRejectsMalformedGlob(t *testing.T) {
-	_, err := orphanator.New(orphanator.Options{Allow: []string{"*_ok_test.go", "[bad"}})
+	_, err := testsprawl.New(testsprawl.Options{Allow: []string{"*_ok_test.go", "[bad"}})
 	if err == nil {
 		t.Fatal("expected an error for a malformed glob")
 	}

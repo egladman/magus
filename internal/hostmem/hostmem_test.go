@@ -3,6 +3,7 @@
 // and what these tests assert is the RELATIONSHIP between the two - which belongs to
 // neither file. Splitting it per reader would lose the only assertion worth making on an
 // arbitrary host.
+
 package hostmem
 
 import (

@@ -7,7 +7,7 @@ import (
 )
 
 // TestNewPluginDecodesSettings drives the path production actually runs: a yaml
-// settings block arrives as map[string]any and has to reach [orphanator.Options].
+// settings block arrives as map[string]any and has to reach [testsprawl.Options].
 // The transpose this replaced was a hand-written field copy, where a missed field
 // compiled clean and silently ignored what the user configured - so the point of
 // this test is that the json tags, not a copy, are what carry the values across.
@@ -32,7 +32,7 @@ func TestNewPluginDecodesSettings(t *testing.T) {
 	// The name is the golangci-lint config key: linters.settings.custom.<name> and
 	// the entry in linters.enable both have to match what register.Plugin was given,
 	// and a drift between them fails at config load rather than at compile time.
-	if analyzers[0].Name != "orphanator" {
+	if analyzers[0].Name != "testsprawl" {
 		t.Errorf("analyzer name %q must match the registered plugin name", analyzers[0].Name)
 	}
 }

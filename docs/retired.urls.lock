@@ -193,3 +193,11 @@ reference/codes/sandbox/MGS2009/
 # page for a view you could already get. No successor page: the capability did not
 # move, it was folded into an existing verb.
 reference/manpage/magus-tail/
+
+# The analyzer was renamed to testsprawl before its first tag: "orphan" means "no
+# owner" everywhere else in this repo (orphaned locks, orphaned graph nodes, orphaned
+# blobs) and this rule reports the opposite - a test file that HAS an owner and
+# narrows its name. The page moved to development/libs-testsprawl/ under the new
+# directory. Not aliased: the module was never published and the page was one day old,
+# so nothing outside this repo can be holding the old URL.
+development/libs-orphanator/

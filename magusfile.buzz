@@ -1472,7 +1472,7 @@ export fun release(ctx: magus\Context, args: [str]) > void {
         if (deliver) { vcs\cmd(["tag", m["prefix"] + "v" + v]); }
         // Only a Go module is required by the root's go.mod; a library in another
         // language is tag-only, so there is nothing to repoint.
-        // "Go module" used to imply "the root's go.mod requires it". libs/orphanator
+        // "Go module" used to imply "the root's go.mod requires it". libs/testsprawl
         // breaks that: `golangci-lint custom` compiles it into a binary and magus
         // never imports it, so there is no require line to repoint. Ask go.mod
         // directly instead of inferring from the manifest. rewriteRequire still
@@ -1653,7 +1653,7 @@ export fun build(ctx: magus\Context, args: [str])  > void {
 // golangci-lint compiles plugins in rather than loading them at runtime, so an
 // in-repo rule only runs through a binary built here.
 //
-// The build runs in libs/orphanator because `golangci-lint custom` reads
+// The build runs in libs/testsprawl because `golangci-lint custom` reads
 // .custom-gcl.yml from its working directory and takes no config flag. That file
 // lives with the linter it declares; `destination: ../..` puts the binary back at
 // the root, where .golangci.yml and lint expect it.
@@ -1663,9 +1663,9 @@ export fun build(ctx: magus\Context, args: [str])  > void {
 // declaring it would name an untrackable path. Same consequence too - a read-only
 // run leaves no binary, so a fresh worktree needs this again.
 export fun lint_build(ctx: magus\Context, args: [str]) > void {
-    ctx.readsFiles("libs/orphanator/.custom-gcl.yml", "libs/orphanator/go.mod",
-                   "libs/orphanator/go.sum", "libs/orphanator/**/*.go");
-    os\exec("golangci-lint", ["custom"], "libs/orphanator");
+    ctx.readsFiles("libs/testsprawl/.custom-gcl.yml", "libs/testsprawl/go.mod",
+                   "libs/testsprawl/go.sum", "libs/testsprawl/**/*.go");
+    os\exec("golangci-lint", ["custom"], "libs/testsprawl");
 }
 
 // Formats and builds the linter first, then golangci-lint, go vet, markdownlint, and
@@ -1692,10 +1692,10 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     // NOT go["golangci-lint"], which runs the stock binary off PATH and cannot see
     // an in-repo linter. That op existed to get the linter version into the cache
     // key; readsFiles does it by content instead. Its .custom-gcl.yml pins the
-    // golangci-lint release and the orphanator globs cover the rule, while
+    // golangci-lint release and the testsprawl globs cover the rule, while
     // `--version` on a custom binary carries a build timestamp that moves every
     // rebuild.
-    ctx.readsFiles("libs/orphanator/.custom-gcl.yml", "libs/orphanator/**/*.go");
+    ctx.readsFiles("libs/testsprawl/.custom-gcl.yml", "libs/testsprawl/**/*.go");
     os\exec("./custom-gcl", ["run"]);
     go["go-vet"](ctx);
     markdown.markdownlint(ctx);

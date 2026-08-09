@@ -484,19 +484,19 @@
           "reads_files": [
             {
               "project": ".",
-              "glob": "libs/orphanator/.custom-gcl.yml"
+              "glob": "libs/testsprawl/.custom-gcl.yml"
             },
             {
               "project": ".",
-              "glob": "libs/orphanator/go.mod"
+              "glob": "libs/testsprawl/go.mod"
             },
             {
               "project": ".",
-              "glob": "libs/orphanator/go.sum"
+              "glob": "libs/testsprawl/go.sum"
             },
             {
               "project": ".",
-              "glob": "libs/orphanator/**/*.go"
+              "glob": "libs/testsprawl/**/*.go"
             }
           ]
         },
@@ -530,11 +530,11 @@
           "reads_files": [
             {
               "project": ".",
-              "glob": "libs/orphanator/.custom-gcl.yml"
+              "glob": "libs/testsprawl/.custom-gcl.yml"
             },
             {
               "project": ".",
-              "glob": "libs/orphanator/**/*.go"
+              "glob": "libs/testsprawl/**/*.go"
             }
           ]
         },
@@ -1385,8 +1385,8 @@
       ]
     },
     {
-      "path": "libs/orphanator",
-      "name": "libs/orphanator",
+      "path": "libs/testsprawl",
+      "name": "libs/testsprawl",
       "engine": "buzz",
       "nodes": [
         {
@@ -1397,15 +1397,15 @@
           "doc": "Regenerates MAGUS.md and fails on drift.",
           "dependencies": [
             "preflight",
-            "md-generate"
+            "index-generate"
           ],
           "charms": [
             "rw"
           ]
         },
         {
-          "name": "md-generate",
-          "declared": "md_generate",
+          "name": "index-generate",
+          "declared": "index_generate",
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
         },
         {

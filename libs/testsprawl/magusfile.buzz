@@ -1,16 +1,16 @@
-// magusfile.buzz for orphanator, a standalone Go module (github.com/egladman/magus/libs/orphanator)
-// at libs/orphanator: a static analyzer reporting a test file whose name narrows a
+// magusfile.buzz for testsprawl, a standalone Go module (github.com/egladman/magus/libs/testsprawl)
+// at libs/testsprawl: a static analyzer reporting a test file whose name narrows a
 // source file's name. Its own module (not part of the magus module) because
 // golangci-lint compiles a plugin INTO its binary rather than loading one at
 // runtime, so the rule has to be a dependency someone can pin at a version -
 // which is what makes it a project here rather than a package in the magus tree.
 //
-//   magus run build libs/orphanator   compile the analyzer and the plugin glue
-//   magus run test libs/orphanator    run the analysistest suite
-//   magus run ci libs/orphanator      lint, build, and test
+//   magus run build libs/testsprawl   compile the analyzer and the plugin glue
+//   magus run test libs/testsprawl    run the analysistest suite
+//   magus run ci libs/testsprawl      lint, build, and test
 //
 // Nothing in the magus module imports it, and nothing should: the consumer is
-// `golangci-lint custom`, which reads .custom-gcl.yml at the repo root.
+// `golangci-lint custom`, which reads the .custom-gcl.yml beside this magusfile.
 
 import "magus";
 
@@ -29,10 +29,18 @@ magus\project({
     "targets": {
         // Drift-gates MAGUS.md via git status: run alone, every time.
         "generate": {"skip_cache": "drift-gates MAGUS.md via git status; a replay would skip the check", "exclusive": true},
+        // index-generate renders `magus describe graph -o markdown`, so its output is a
+        // function of the WHOLE knowledge graph. Its declared inputs are the magusfiles,
+        // which is the only part of that a glob can name, so any other change leaves the
+        // key unmoved: a cache hit then replays a MAGUS.md built before it and REVERTS the
+        // committed one, which the drift gate above correctly reports as drift. Every other
+        // library carries the same opt-out; this project landed after the merge that added
+        // them and missed it.
+        "index-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
     },
 });
 
-// A pure library, so the pipeline is the Go lifecycle plus md-generate, matching
+// A pure library, so the pipeline is the Go lifecycle plus index-generate, matching
 // libs/diagnostics. Each target delegates to the go spell's ops.
 
 export fun preflight(ctx: magus\Context, args: [str]) > void {}
@@ -40,18 +48,18 @@ export fun preflight(ctx: magus\Context, args: [str]) > void {}
 // Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
-    gomod\replaceWorkspaceModules(ctx, go, "libs/orphanator");
+    gomod\replaceWorkspaceModules(ctx, go, "libs/testsprawl");
     final clean_before = vcs\isDirty(["MAGUS.md"]) == false;
-    ctx.needs(md_generate);
+    ctx.needs(index_generate);
     if (ctx.has_charm("rw")) { return; }
 
     if (clean_before and vcs\isDirty(["MAGUS.md"])) {
-        throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/orphanator` and commit";
+        throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/testsprawl` and commit";
     }
 }
 
 // Renders MAGUS.md (target catalog plus graph) from this magusfile.
-export fun md_generate(ctx: magus\Context, args: [str]) > void {
+export fun index_generate(ctx: magus\Context, args: [str]) > void {
     final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs\writeFile("MAGUS.md", doc + "\n");
 }

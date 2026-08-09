@@ -27,7 +27,7 @@ magus run release
 ```text
 release: magus - at v0.3.0, next: patch v0.3.1 | minor v0.4.0 | major v1.0.0
 release: libs/gopherbuzz - unreleased, next: patch v0.0.1 | minor v0.1.0 | major v1.0.0
-release: libs/orphanator - unreleased, next: patch v0.0.1 | minor v0.1.0 | major v1.0.0
+release: libs/testsprawl - unreleased, next: patch v0.0.1 | minor v0.1.0 | major v1.0.0
 ```
 
 magus computes the three candidates and stops there. Which one a change deserves
@@ -41,19 +41,19 @@ module shows up the moment it becomes a project, and there is no list to maintai
 Name it as `<module>@<version>`, using the key the survey prints:
 
 ```bash
-magus run release:cd -- libs/orphanator@0.1.0
+magus run release:cd -- libs/testsprawl@0.1.0
 ```
 
 Drop the `cd` charm for a dry run. It runs every check, prints every action, and
 changes nothing:
 
 ```bash
-magus run release -- libs/orphanator@0.1.0
+magus run release -- libs/testsprawl@0.1.0
 ```
 
 ```text
 release: DRY RUN - add the cd charm to execute
-release: tag libs/orphanator/v0.1.0
+release: tag libs/testsprawl/v0.1.0
 release: dry run only - nothing was tagged or written
 ```
 
@@ -91,7 +91,7 @@ development inside one repo.
 
 A module the root's `go.mod` does not require is tag-only, so step 2 skips it.
 That covers a module in another language, and equally a Go module nothing imports:
-`libs/orphanator` gets compiled into a golangci-lint binary, so the root has no
+`libs/testsprawl` gets compiled into a golangci-lint binary, so the root has no
 require line to point anywhere.
 
 ## What it refuses
@@ -152,7 +152,7 @@ release.
 ### Which tags the workflow reacts to
 
 Only a root `vX.Y.Z` tag triggers the release workflow. `release.yaml` matches
-`v*`, and `libs/orphanator/v0.1.0` does not start with `v`, so pushing it
+`v*`, and `libs/testsprawl/v0.1.0` does not start with `v`, so pushing it
 publishes no binaries and no images. A library tag exists to make the module
 resolvable by `go get`, which needs no artifacts. Push it like any other tag and
 consumers can require it.

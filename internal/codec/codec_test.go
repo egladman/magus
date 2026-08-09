@@ -114,7 +114,7 @@ func TestXzDecompress(t *testing.T) {
 	require.NoError(t, err, "xz Write")
 	require.NoError(t, xw.Close(), "xz Close")
 
-	// Decompress with the json.
+	// Decompress with the codec under test.
 	r, err := NewXzReader(bytes.NewReader(buf.Bytes()))
 	require.NoError(t, err, "NewXzReader")
 	defer r.Close()
@@ -137,7 +137,7 @@ func TestXzCrossCompatRead(t *testing.T) {
 	require.NoError(t, xw.Close(), "xz Close")
 	compressed := buf.Bytes()
 
-	// Decode with json.
+	// Decode with the codec under test.
 	r, err := NewXzReader(bytes.NewReader(compressed))
 	require.NoError(t, err, "NewXzReader")
 	codecGot, err := io.ReadAll(r)
@@ -349,4 +349,57 @@ func formatInt(n int) string {
 		n /= 10
 	}
 	return string(buf[pos:])
+}
+
+// A stream cut mid-frame must FAIL, on every build. A reader that reports io.EOF for a
+// truncated frame hands a short read back as a success, and the caller above it
+// (std/archive.go extractTar) then reports a complete-looking archive with files missing
+// - a silently corrupt cache restore, which is the worst outcome this package can produce.
+//
+// This is not hypothetical and it is not symmetric across builds: the cgo zstd path
+// discarded ZSTD_decompressStream's hint and returned 393216 of 1200000 bytes with a nil
+// error, while the pure-Go path on the same input returned io.ErrUnexpectedEOF. It shipped
+// because the -tags libzstd,liblzma build is not exercised by the default test run - so
+// this test only earns its keep when CI runs BOTH tag sets.
+func TestTruncatedStreamIsAnError(t *testing.T) {
+	want := testPayload(1024 * 1024)
+
+	t.Run("zstd", func(t *testing.T) {
+		var buf bytes.Buffer
+		w, err := NewZstdWriter(&buf, -1, 1)
+		require.NoError(t, err, "NewZstdWriter")
+		_, err = w.Write(want)
+		require.NoError(t, err, "zstd Write")
+		require.NoError(t, w.Close(), "zstd Close")
+
+		full := buf.Bytes()
+		require.Greater(t, len(full), 8, "need a stream long enough to cut")
+		r, err := NewZstdReader(bytes.NewReader(full[:len(full)/2]), 1)
+		require.NoError(t, err, "NewZstdReader")
+		defer r.Close()
+
+		got, err := io.ReadAll(r)
+		require.Error(t, err, "a truncated zstd frame read back as success with %d of %d bytes", len(got), len(want))
+		assert.ErrorIs(t, err, io.ErrUnexpectedEOF)
+		assert.Less(t, len(got), len(want), "a truncated stream cannot yield the whole payload")
+	})
+
+	t.Run("xz", func(t *testing.T) {
+		var buf bytes.Buffer
+		xw, err := xz.NewWriter(&buf)
+		require.NoError(t, err, "xz.NewWriter")
+		_, err = xw.Write(want)
+		require.NoError(t, err, "xz Write")
+		require.NoError(t, xw.Close(), "xz Close")
+
+		full := buf.Bytes()
+		require.Greater(t, len(full), 8, "need a stream long enough to cut")
+		r, err := NewXzReader(bytes.NewReader(full[:len(full)/2]))
+		require.NoError(t, err, "NewXzReader")
+		defer r.Close()
+
+		got, err := io.ReadAll(r)
+		require.Error(t, err, "a truncated xz stream read back as success with %d of %d bytes", len(got), len(want))
+		assert.Less(t, len(got), len(want), "a truncated stream cannot yield the whole payload")
+	})
 }
