@@ -1,13 +1,13 @@
 ---
 title: crypto module
 aliases: [modules/crypto]
-description: Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop).
+description: Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop) and Ed25519 signing.
 tags: [crypto, module, stdlib, magusfile]
 ---
 
 # crypto
 
-Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop).
+Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop) and Ed25519 signing.
 
 > **Naming convention:** import the module under its bare name (`import "crypto"`), reach members with a backslash, and call methods in `camelCase`: `crypto\someMethod`.
 
@@ -17,7 +17,7 @@ Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop).
 
 Return the lowercase hex SHA-256 digest of data.
 
-**Signature:** `crypto\sha256Hex(data) → string`[^buzz-stdlib-crypto-sha256_hex] · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L121)
+**Signature:** `crypto\sha256Hex(data) → string`[^buzz-stdlib-crypto-sha256_hex] · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L165)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -29,7 +29,7 @@ Return the lowercase hex SHA-256 digest of data.
 
 Return the lowercase hex SHA-256 digest of the file at path.
 
-**Signature:** `crypto\sha256File(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L126)
+**Signature:** `crypto\sha256File(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L170)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -41,7 +41,7 @@ Return the lowercase hex SHA-256 digest of the file at path.
 
 Return the lowercase hex SHA-512 digest of data.
 
-**Signature:** `crypto\sha512Hex(data) → string`[^buzz-stdlib-crypto-sha512_hex] · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L131)
+**Signature:** `crypto\sha512Hex(data) → string`[^buzz-stdlib-crypto-sha512_hex] · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L175)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -53,7 +53,7 @@ Return the lowercase hex SHA-512 digest of data.
 
 Return the lowercase hex SHA-512 digest of the file at path.
 
-**Signature:** `crypto\sha512File(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L136)
+**Signature:** `crypto\sha512File(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L180)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -65,7 +65,7 @@ Return the lowercase hex SHA-512 digest of the file at path.
 
 Return the lowercase hex SHA-1 digest of data. For interop with legacy/git checksums only - SHA-1 is not collision-resistant; use sha256 for anything security-relevant.
 
-**Signature:** `crypto\sha1Hex(data) → string`[^buzz-stdlib-crypto-sha1_hex] · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L141)
+**Signature:** `crypto\sha1Hex(data) → string`[^buzz-stdlib-crypto-sha1_hex] · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L185)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -77,7 +77,7 @@ Return the lowercase hex SHA-1 digest of data. For interop with legacy/git check
 
 Return the lowercase hex SHA-1 digest of the file at path. For interop with legacy/git checksums only - SHA-1 is not collision-resistant; use sha256 for anything security-relevant.
 
-**Signature:** `crypto\sha1File(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L146)
+**Signature:** `crypto\sha1File(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L190)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -85,11 +85,67 @@ Return the lowercase hex SHA-1 digest of the file at path. For interop with lega
 
 **Returns:** string
 
+### sign
+
+Sign data with the private key in the named environment variable and return the lowercase hex signature. alg is "ed25519". The key is NAMED, never passed: a value that never enters Buzz cannot be interpolated into a log.
+
+**Signature:** `crypto\sign(alg, data, key_env) → string` · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L249)
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `alg` | `string` |  | |
+| `data` | `string` |  | |
+| `key_env` | `string` |  | |
+
+**Returns:** string
+
+### signFile
+
+Sign the file at path, write the detached signature to path + ".sig", and return the lowercase hex signature. alg is "ed25519".
+
+**Signature:** `crypto\signFile(alg, path, key_env) → string` · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L262)
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `alg` | `string` |  | |
+| `path` | `string` |  | |
+| `key_env` | `string` |  | |
+
+**Returns:** string
+
+### verify
+
+Report whether sig_hex is a valid signature over data for the hex public key pub_hex. alg is "ed25519".
+
+**Signature:** `crypto\verify(alg, data, sig_hex, pub_hex) → bool` · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L280)
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `alg` | `string` |  | |
+| `data` | `string` |  | |
+| `sig_hex` | `string` |  | |
+| `pub_hex` | `string` |  | |
+
+**Returns:** bool
+
+### publicKey
+
+Return the lowercase hex PUBLIC key for the private key in the named environment variable, so a publisher can print what its readers must pin. alg is "ed25519".
+
+**Signature:** `crypto\publicKey(alg, key_env) → string` · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L301)
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `alg` | `string` |  | |
+| `key_env` | `string` |  | |
+
+**Returns:** string
+
 ### md5Hex
 
 Return the lowercase hex MD5 digest of data. For interop with legacy checksum manifests only - MD5 is broken; use sha256 for anything security-relevant.
 
-**Signature:** `crypto\md5Hex(data) → string`[^buzz-stdlib-crypto-md5_hex] · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L151)
+**Signature:** `crypto\md5Hex(data) → string`[^buzz-stdlib-crypto-md5_hex] · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L195)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -101,7 +157,7 @@ Return the lowercase hex MD5 digest of data. For interop with legacy checksum ma
 
 Return the lowercase hex MD5 digest of the file at path. For interop with legacy checksum manifests only - MD5 is broken; use sha256 for anything security-relevant.
 
-**Signature:** `crypto\md5File(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L156)
+**Signature:** `crypto\md5File(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L200)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

@@ -75,6 +75,17 @@ func runModuleDecls(args []string) error {
 // object declared already), then an extern per method.
 func renderModuleDecls(mod std.Module) (string, error) {
 	var b strings.Builder
+	// Enums first: an object mirror may use one as a field type, and Buzz needs the
+	// declaration before the use.
+	enums, err := enumsFor(mod)
+	if err != nil {
+		return "", err
+	}
+	for _, e := range enums {
+		b.Write(renderBuzzEnumDecl(e))
+		b.WriteByte('\n')
+	}
+
 	mirrors, err := mirrorsFor(mod)
 	if err != nil {
 		return "", err
@@ -127,6 +138,11 @@ func externDecl(m std.Method) (string, error) {
 		// enforce, and {str: any} enforces nothing.
 		if a.Object != "" {
 			typ = a.Object
+		}
+		// Same rule for a closed set of strings: the enum is what the checker should
+		// enforce, and `str` enforces nothing.
+		if a.Enum != "" {
+			typ = a.Enum
 		}
 		p := a.Name + ": " + typ
 		if a.Optional {
@@ -335,6 +351,61 @@ func mirrorsFor(mod std.Module) ([]string, error) {
 		}
 	}
 	return order, nil
+}
+
+// enumsFor returns the enum declarations a module's signatures name, in first-use
+// order.
+//
+// Derived from the signatures rather than hand-listed, for the same reason
+// mirrorsFor is: an Arg.Enum naming a type whose declaration does not travel with it
+// produces a module whose extern references an undefined name. That parses (buzz.Parse
+// is syntax-only) and is then rejected at CHECK time, which drops the module's whole
+// declaration set with no codegen error saying why.
+//
+// This is why an enum reachable only from a signature needs collecting at all: the
+// types generator emits an enum into the mirror of the OBJECT whose field uses it, so
+// an enum no object references had nowhere to be declared.
+func enumsFor(mod std.Module) ([]boundaryEnum, error) {
+	seen := map[string]bool{}
+	var order []boundaryEnum
+	add := func(name, where string) error {
+		if name == "" || seen[name] {
+			return nil
+		}
+		e, ok := boundaryEnumNamed(name)
+		if !ok {
+			return fmt.Errorf("%s: enum %q is not declared in boundaryEnums", where, name)
+		}
+		seen[name] = true
+		order = append(order, e)
+		return nil
+	}
+	for _, m := range sortedMethods(mod) {
+		for _, a := range m.Args {
+			if err := add(a.Enum, m.Name); err != nil {
+				return nil, err
+			}
+		}
+		for _, r := range m.Returns {
+			if err := add(r.Enum, m.Name); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return order, nil
+}
+
+// renderBuzzEnumDecl renders one enum as its Buzz declaration. It matches what the
+// types generator emits into an object mirror, so a reader sees one form wherever an
+// enum is declared.
+func renderBuzzEnumDecl(e boundaryEnum) []byte {
+	var b bytes.Buffer
+	fmt.Fprintf(&b, "export enum<str> %s {\n", e.Name)
+	for _, c := range e.Cases {
+		fmt.Fprintf(&b, "    %s = %q,\n", c.Name, c.Value)
+	}
+	fmt.Fprintln(&b, "}")
+	return b.Bytes()
 }
 
 // sortedMethods orders a module's methods by name. Both the mirror walk and the extern

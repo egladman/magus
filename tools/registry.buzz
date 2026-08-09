@@ -1,0 +1,216 @@
+// registry.buzz - aggregate endoflife.date into one signed file, so no magus user
+// ever reads that API.
+//
+// This is Buzz rather than Go on purpose, and docs/scope.md is where the reason is
+// written down: "The binary supplies primitives. You supply knowledge about the
+// world." Which upstream to read, which of its fields matter, and what counts as
+// stale are knowledge about the world. They belong beside tools/audit.buzz, in a
+// file anyone can read and change without rebuilding magus - not compiled into the
+// binary where changing them means cutting a release.
+//
+// Three modes, because the split is what makes the output checkable:
+//
+//	REGISTRY_MODE=fetch   magus buzz tools/registry.buzz   download into ./upstream
+//	REGISTRY_MODE=build   magus buzz tools/registry.buzz   transform -> the signed pair
+//	REGISTRY_MODE=verify  magus buzz tools/registry.buzz   rebuild and diff the published file
+//
+// The mode is an environment variable because `magus buzz` passes no arguments to a
+// script; every other knob here is one too, so they stay consistent.
+//
+// fetch is the only one that touches the network. build reads files and nothing
+// else, so the same inputs always give the same bytes - which is the only thing
+// that makes verify prove anything. A stranger can run verify against our published
+// file and get a diff rather than a promise.
+//
+// Signed with MAGUS_REGISTRY_KEY, never MAGUS_SIGNING_KEY. The release key is
+// reachable from exactly one job on a v* tag and release.yaml records that
+// quarantine; a job whose input is several hundred third-party HTTP responses is
+// the last place it should appear. crypto\ed25519Sign takes the NAME of the
+// variable rather than the key, so the key never becomes a Buzz value that could be
+// interpolated into a log.
+namespace registry;
+
+import "std";
+import "fs";
+import "os";
+import "http";
+import "yaml";
+import "serialize";
+import "crypto";
+
+// UPSTREAM is the API this republishes. One machine reads it once a day.
+final UPSTREAM = "https://endoflife.date/api/v1/products";
+
+// SCHEMA_VERSION must match internal/registry.SchemaVersion. Additive only.
+final SCHEMA_VERSION = 1;
+
+// KEY_ENV names the signing key. Named, never held: see the header.
+final KEY_ENV = "MAGUS_REGISTRY_KEY";
+
+// fetchAll downloads the product list and every product into dir, one file each.
+//
+// Kept apart from the transform so a network failure stops here rather than being
+// folded into a build that would then publish a half-refreshed snapshot.
+fun fetchAll(dir: str) > int {
+    fs\makeDirectory(dir);
+    final listBody = http\get(UPSTREAM + "/", opts: {"fail": true}).body;
+    final list = serialize\jsonDecode(listBody);
+    var count = 0;
+    foreach (entry in list.q("result").list()) {
+        final slug = entry.q("name").stringValue();
+        if (slug == "") { continue; }
+        final body = http\get(UPSTREAM + "/" + slug, opts: {"fail": true}).body;
+        fs\writeFile(dir + "/" + slug + ".json", content: body);
+        count = count + 1;
+    }
+    return count;
+}
+
+// productSlugs lists the cached responses, sorted, so the output does not depend on
+// what order the filesystem hands them back.
+fun productSlugs(dir: str) > [str] {
+    var names: [str] = mut [<str>];
+    foreach (name in fs\list(dir)) {
+        if (name.endsWith(".json")) { names.append(name); }
+    }
+    return names.sort(fun (a: str, b: str) > bool { return a < b; });
+}
+
+// buildDoc is the pure transform: files in, one document out. It reads no clock and
+// sends no request, so two runs over the same inputs produce identical bytes.
+fun buildDoc(upstreamDir: str, releasesDir: str, expiresAt: str) > {str: any} {
+    var eol: {str: any} = mut {};
+    var inputs: [{str: any}] = mut [<{str: any}>];
+    var newest = "";
+
+    foreach (name in productSlugs(upstreamDir)) {
+        final path = upstreamDir + "/" + name;
+        final raw = fs\readFile(path);
+        final doc = serialize\jsonDecode(raw);
+        final result = doc.q("result");
+        var slug = result.q("name").stringValue();
+        if (slug == "") { slug = name.replace(".json", with: ""); }
+
+        var cycles: [{str: any}] = mut [<{str: any}>];
+        final releases = result.q("releases").list();
+        if (releases != null) {
+            foreach (r in releases) {
+                cycles.append(mut {
+                    "cycle": r.q("name").stringValue(),
+                    "eol": r.q("eolFrom").stringValue(),
+                    "lts": r.q("isLts").booleanValue(),
+                    "maintained": r.q("isMaintained").booleanValue(),
+                });
+            }
+        }
+        eol[slug] = mut {"label": result.q("label").stringValue(), "cycles": cycles};
+
+        // Record what this was built from. The digests are what a third party
+        // rebuilds against; they prove the file follows from its STATED inputs, not
+        // that those inputs match what upstream says today.
+        final lastModified = doc.q("last_modified").stringValue();
+        inputs.append(mut {
+            "slug": slug,
+            "sha256": crypto\sha256File(path),
+            "last_modified": lastModified,
+        });
+        if (lastModified > newest) { newest = lastModified; }
+    }
+
+    // generated_at is DERIVED from the newest input, never read from the clock:
+    // rebuilding an old snapshot has to reproduce the old file exactly, and now()
+    // would make that impossible.
+    var doc: {str: any} = mut {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": newest,
+        "expires_at": expiresAt,
+        "sources": mut {"eol": mut {"name": "endoflife.date", "url": "https://endoflife.date"}},
+        "inputs": inputs,
+        "eol": eol,
+    };
+    if (releasesDir != "") { doc["releases"] = loadReleases(releasesDir); }
+    return doc;
+}
+
+// loadReleases projects releases/*.yaml into the registry, newest first. The same
+// list public/release/index.json serves, carried here so a new binary needs one
+// file rather than two half-synced ones.
+fun loadReleases(dir: str) > [{str: any}] {
+    var names: [str] = mut [<str>];
+    foreach (name in fs\list(dir)) {
+        if (name.endsWith(".yaml")) { names.append(name); }
+    }
+    // Newest first, which for v0.N.M filenames is a reverse sort.
+    final ordered = names.sort(fun (a: str, b: str) > bool { return a > b; });
+
+    var entries: [{str: any}] = mut [<{str: any}>];
+    foreach (name in ordered) {
+        final doc = serialize\Boxed.init(yaml\parse(fs\readFile(dir + "/" + name)));
+        final version = doc.q("version").stringValue();
+        if (version == "") { continue; }
+        var artifacts: [{str: any}] = mut [<{str: any}>];
+        final list = doc.q("artifacts").list();
+        if (list != null) {
+            foreach (a in list) {
+                artifacts.append(mut {
+                    "name": a.q("name").stringValue(),
+                    "platform": a.q("platform").stringValue(),
+                    "size": a.q("size").stringValue(),
+                    "sha256": a.q("sha256").stringValue(),
+                });
+            }
+        }
+        var entry: {str: any} = mut {"version": version, "artifacts": artifacts};
+        if (doc.q("yanked").booleanValue()) { entry["yanked"] = true; }
+        entries.append(entry);
+    }
+    return entries;
+}
+
+// encode renders the document. jsonEncode sorts keys, which is what makes the
+// bytes stable across runs and across machines.
+fun encode(doc: {str: any}) > str {
+    return serialize\jsonEncode(serialize\Boxed.init(doc)) + "\n";
+}
+
+export fun main() > void {
+    final mode = os\env("REGISTRY_MODE") ?? "build";
+    final upstreamDir = os\env("REGISTRY_UPSTREAM") ?? "upstream";
+    final releasesDir = os\env("REGISTRY_RELEASES") ?? "releases";
+    final outDir = os\env("REGISTRY_OUT") ?? "docs/gen/public/registry";
+    final expiresAt = os\env("REGISTRY_EXPIRES") ?? "";
+
+    if (mode == "fetch") {
+        final n = fetchAll(upstreamDir);
+        std\print("fetched {n} product(s) into {upstreamDir}");
+        return;
+    }
+
+    if (expiresAt == "") {
+        throw "registry: REGISTRY_EXPIRES is required (RFC3339); it is the bound on replaying an old copy, so there is no safe default to guess";
+    }
+    final body = encode(buildDoc(upstreamDir, releasesDir, expiresAt));
+
+    if (mode == "verify") {
+        final published = fs\readFile(outDir + "/index.json");
+        if (published == body) {
+            std\print("{outDir}/index.json reproduces byte-for-byte from the recorded inputs");
+            return;
+        }
+        throw "registry: {outDir}/index.json does NOT reproduce from the recorded inputs";
+    }
+
+    fs\makeDirectory(outDir);
+    final path = outDir + "/index.json";
+    fs\writeFile(path, content: body);
+    std\print("wrote {path} ({body.len()} bytes)");
+
+    if (os\env("REGISTRY_NO_SIGN") != null) {
+        std\print("REGISTRY_NO_SIGN set; leaving the file unsigned");
+        return;
+    }
+    crypto\signFile(.Ed25519, path: path, key_env: KEY_ENV);
+    std\print("signed {path} (readers pin: {crypto\publicKey(.Ed25519, key_env: KEY_ENV)})");
+}
+
+main();

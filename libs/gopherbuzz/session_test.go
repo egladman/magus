@@ -604,3 +604,77 @@ export fun who() > str { return "beta"; }
 	require.NoError(t, err, "beta\\who")
 	assert.Equal(t, "beta", v.String(), "beta\\who() (beta's shared export was dropped from its namespace)")
 }
+
+// TestNativeModuleEnumIsAValueNotJustAType covers the first of two breaks that made
+// an inferred enum case reach a host method empty.
+//
+// A native module registers a Go map for the runtime and a declaration source for the
+// checker, and resolveImport deliberately does not EXECUTE that source - executing
+// would redefine the functions the native value already provides. An enum has no
+// native counterpart to collide with, and skipping it left the compiler's lowering of
+// `.case` (a real member lookup, ns\Enum.case) with nothing to find.
+//
+// Upstream Buzz never hits this: its stdlib is Buzz SOURCE that gets executed, so its
+// enums are ordinary values. This is the behaviour being restored.
+func TestNativeModuleEnumIsAValueNotJustAType(t *testing.T) {
+	ctx := context.Background()
+	s := buzz.NewSession(ctx, buzz.WithEmbedded())
+	defer s.Close()
+
+	mod := vm.NewMap()
+	mod.MapSet("pick", vm.DirectValue("pick", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		return args[0], nil
+	}))
+	s.SetNativeModule("demo/sign", mod)
+	s.SetModuleDecls("demo/sign", `
+export enum<str> SignAlgorithm {
+    Ed25519 = "ed25519",
+}
+
+export extern fun pick(alg: SignAlgorithm) > SignAlgorithm;
+`)
+
+	require.NoError(t, s.Exec(ctx, `
+import "demo/sign";
+final qualified = sign\SignAlgorithm.Ed25519;
+final inferred = sign\pick(.Ed25519);
+`), "Exec")
+
+	qualified, ok := s.Globals()["qualified"]
+	require.True(t, ok)
+	require.False(t, qualified.IsNull(), "a declared enum must be reachable as a value, not null")
+
+	inferred, ok := s.Globals()["inferred"]
+	require.True(t, ok)
+	backing, isEnum := inferred.EnumValue()
+	require.True(t, isEnum, "an inferred case must arrive as an enum value")
+	assert.Equal(t, "ed25519", backing.AsString())
+}
+
+// TestNativeModuleEnumRejectsAnUnknownCase: the point of declaring the enum is that a
+// case it does not have fails at CHECK time, not as an empty string at the host.
+func TestNativeModuleEnumRejectsAnUnknownCase(t *testing.T) {
+	ctx := context.Background()
+	s := buzz.NewSession(ctx, buzz.WithEmbedded())
+	defer s.Close()
+
+	mod := vm.NewMap()
+	mod.MapSet("pick", vm.DirectValue("pick", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		return args[0], nil
+	}))
+	s.SetNativeModule("demo/sign", mod)
+	s.SetModuleDecls("demo/sign", `
+export enum<str> SignAlgorithm {
+    Ed25519 = "ed25519",
+}
+
+export extern fun pick(alg: SignAlgorithm) > SignAlgorithm;
+`)
+
+	err := s.Exec(ctx, `
+import "demo/sign";
+final bad = sign\pick(.Sha256);
+`)
+	require.Error(t, err, "an unknown case must not reach the host")
+	assert.Contains(t, err.Error(), `has no case "Sha256"`)
+}

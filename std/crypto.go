@@ -2,6 +2,7 @@ package std
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/md5"  //nolint:gosec // G501: MD5 is exposed for interop with legacy checksum manifests, not security.
 	"crypto/sha1" //nolint:gosec // G505: SHA-1 is exposed for interop with legacy/git checksums, not security.
 	"crypto/sha256"
@@ -11,6 +12,7 @@ import (
 	"hash"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/egladman/magus/internal/sandbox"
 )
@@ -21,12 +23,25 @@ func init() { Register(Crypto) }
 
 // Crypto is the "crypto" host module: content digests for checksum manifests
 // (SHA256SUMS for release assets) and verifying downloads. Digests only - not a
-// general crypto toolkit (no HMAC, encryption, or signing). SHA-256/512 are the
-// strong defaults; SHA-1 and MD5 exist for interop with legacy checksums and are
-// not collision-resistant - never use them for anything security-relevant.
+// general crypto toolkit (no HMAC and no encryption). SHA-256/512 are the strong
+// defaults; SHA-1 and MD5 exist for interop with legacy checksums and are not
+// collision-resistant - never use them for anything security-relevant.
+//
+// Signing is here so a magusfile can publish a signed artifact without a Go program
+// in the middle. Two things about its shape:
+//
+// The ALGORITHM is a parameter rather than part of the method name, so a second
+// algorithm is a case in signAlgorithm rather than four more methods. It is a
+// validated string and not an enum only because the host-module descriptor has no
+// enum tag - Buzz's own stdlib does this properly with HashAlgorithm.Sha256, and
+// matching that would mean teaching the binding generator about enums first.
+//
+// The KEY is named by environment variable rather than passed as a value: a key
+// that never becomes a Buzz string cannot be interpolated into a log line, an
+// error, or a captured run output.
 var Crypto = Module{
 	Name: "crypto",
-	Doc:  "Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop).",
+	Doc:  "Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop) and Ed25519 signing.",
 	Methods: []Method{
 		{
 			Name:    "sha256_hex",
@@ -69,6 +84,35 @@ var Crypto = Module{
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    CryptoSha1File,
+		},
+		{
+			Name: "sign",
+			Doc: "Sign data with the private key in the named environment variable and return the lowercase hex signature. alg is \"ed25519\". " +
+				"The key is NAMED, never passed: a value that never enters Buzz cannot be interpolated into a log.",
+			Args:    []Arg{{Name: "alg", Type: TypeString, Enum: "SignAlgorithm"}, {Name: "data", Type: TypeString}, {Name: "key_env", Type: TypeString}},
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    CryptoSign,
+		},
+		{
+			Name:    "sign_file",
+			Doc:     "Sign the file at path, write the detached signature to path + \".sig\", and return the lowercase hex signature. alg is \"ed25519\".",
+			Args:    []Arg{{Name: "alg", Type: TypeString, Enum: "SignAlgorithm"}, {Name: "path", Type: TypeString}, {Name: "key_env", Type: TypeString}},
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    CryptoSignFile,
+		},
+		{
+			Name:    "verify",
+			Doc:     "Report whether sig_hex is a valid signature over data for the hex public key pub_hex. alg is \"ed25519\".",
+			Args:    []Arg{{Name: "alg", Type: TypeString, Enum: "SignAlgorithm"}, {Name: "data", Type: TypeString}, {Name: "sig_hex", Type: TypeString}, {Name: "pub_hex", Type: TypeString}},
+			Returns: []Ret{{Type: TypeBool}},
+			Impl:    CryptoVerify,
+		},
+		{
+			Name:    "public_key",
+			Doc:     "Return the lowercase hex PUBLIC key for the private key in the named environment variable, so a publisher can print what its readers must pin. alg is \"ed25519\".",
+			Args:    []Arg{{Name: "alg", Type: TypeString, Enum: "SignAlgorithm"}, {Name: "key_env", Type: TypeString}},
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    CryptoPublicKey,
 		},
 		{
 			Name:    "md5_hex",
@@ -155,4 +199,113 @@ func CryptoMd5Hex(_ context.Context, data string) (string, error) {
 // CryptoMd5File returns the lowercase hex MD5 digest of the file at path (legacy interop).
 func CryptoMd5File(ctx context.Context, path string) (string, error) {
 	return hashFile(ctx, "crypto.md5_file", md5.New, path)
+}
+
+// SignEd25519 is the only algorithm signing accepts today. It is a string rather
+// than a typed constant because the host-module descriptor has no enum tag.
+const SignEd25519 = "ed25519"
+
+// checkAlg rejects an unknown algorithm by NAME, listing what is accepted. A typo
+// in a string parameter is the cost of not having an enum here, so the error has to
+// carry what an enum would have offered as completion.
+func checkAlg(alg string) error {
+	if alg != SignEd25519 {
+		return fmt.Errorf("crypto: unknown signing algorithm %q (want %q)", alg, SignEd25519)
+	}
+	return nil
+}
+
+// signingKey reads the private key named by keyEnv for the given algorithm.
+//
+// Taking the NAME rather than the key is the whole point of this shape. magus
+// captures the output of every run, and a magusfile that had to hold a signing key
+// in a variable would be one interpolation away from writing it into a log that
+// outlives the build. The key is read here, used here, and never crosses into Buzz.
+func signingKey(alg, keyEnv string) (ed25519.PrivateKey, error) {
+	if err := checkAlg(alg); err != nil {
+		return nil, err
+	}
+	if keyEnv == "" {
+		return nil, fmt.Errorf("crypto: key_env is required (name the variable holding the key, not the key)")
+	}
+	keyHex := os.Getenv(keyEnv)
+	if keyHex == "" {
+		return nil, fmt.Errorf("crypto: %s is not set", keyEnv)
+	}
+	raw, err := hex.DecodeString(strings.TrimSpace(keyHex))
+	if err != nil {
+		// Deliberately does not echo the value: a decode error on a secret must not
+		// print the secret back.
+		return nil, fmt.Errorf("crypto: %s is not valid hex", keyEnv)
+	}
+	if len(raw) != ed25519.PrivateKeySize {
+		return nil, fmt.Errorf("crypto: %s must be %d bytes (%d hex chars), got %d bytes",
+			keyEnv, ed25519.PrivateKeySize, ed25519.PrivateKeySize*2, len(raw))
+	}
+	return ed25519.PrivateKey(raw), nil
+}
+
+// CryptoSign signs data with the key named by keyEnv, returning hex.
+func CryptoSign(_ context.Context, alg, data, keyEnv string) (string, error) {
+	key, err := signingKey(alg, keyEnv)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(ed25519.Sign(key, []byte(data))), nil
+}
+
+// CryptoSignFile signs the file at path and writes path + ".sig".
+//
+// The signature is written as RAW bytes, not hex: that is the format every reader
+// of a magus signature already expects, from the installer's openssl pkeyutl to
+// internal/selfupdate. The hex return is for printing.
+func CryptoSignFile(ctx context.Context, alg, path, keyEnv string) (string, error) {
+	key, err := signingKey(alg, keyEnv)
+	if err != nil {
+		return "", err
+	}
+	full := resolvePath(ctx, path)
+	data, err := os.ReadFile(full)
+	if err != nil {
+		return "", fmt.Errorf("crypto.sign_file: read %s: %w", path, err)
+	}
+	sig := ed25519.Sign(key, data)
+	if err := os.WriteFile(full+".sig", sig, 0o644); err != nil {
+		return "", fmt.Errorf("crypto.sign_file: write %s.sig: %w", path, err)
+	}
+	return hex.EncodeToString(sig), nil
+}
+
+// CryptoVerify reports whether sigHex verifies data under pubHex.
+func CryptoVerify(_ context.Context, alg, data, sigHex, pubHex string) (bool, error) {
+	if err := checkAlg(alg); err != nil {
+		return false, err
+	}
+	sig, err := hex.DecodeString(strings.TrimSpace(sigHex))
+	if err != nil {
+		return false, fmt.Errorf("crypto.verify: signature is not hex: %w", err)
+	}
+	pub, err := hex.DecodeString(strings.TrimSpace(pubHex))
+	if err != nil {
+		return false, fmt.Errorf("crypto.verify: public key is not hex: %w", err)
+	}
+	// ed25519.Verify panics on a wrong-length key, so the length is checked rather
+	// than discovered.
+	if len(pub) != ed25519.PublicKeySize {
+		return false, fmt.Errorf("crypto.verify: public key is %d bytes, want %d", len(pub), ed25519.PublicKeySize)
+	}
+	return ed25519.Verify(ed25519.PublicKey(pub), []byte(data), sig), nil
+}
+
+// CryptoPublicKey returns the hex public half of the key named by keyEnv.
+func CryptoPublicKey(_ context.Context, alg, keyEnv string) (string, error) {
+	key, err := signingKey(alg, keyEnv)
+	if err != nil {
+		return "", err
+	}
+	pub, ok := key.Public().(ed25519.PublicKey)
+	if !ok {
+		return "", fmt.Errorf("crypto: %s did not yield an ed25519 public half", keyEnv)
+	}
+	return hex.EncodeToString(pub), nil
 }

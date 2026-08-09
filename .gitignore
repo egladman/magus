@@ -44,6 +44,13 @@
 /docs/gen/public/release/*
 !/docs/gen/public/release/index.json
 !/docs/gen/public/release/index.json.sig
+# The signed registry, tracked for the same reason: only a job holding
+# MAGUS_REGISTRY_KEY can produce it, and the site render must copy it rather than
+# rebuild it. registry.yaml opens the pull request that lands it.
+!/docs/gen/public/registry/
+/docs/gen/public/registry/*
+!/docs/gen/public/registry/index.json
+!/docs/gen/public/registry/index.json.sig
 console/gen/
 
 # The assembled deploy tree: `magus run deploy-generate .` writes it from the two gen/ trees
@@ -129,3 +136,9 @@ coverage.hand.out
 # artifact worth versioning.
 .claude/settings.json
 .claude/launch.json
+
+# Fetched upstream responses the registry aggregator reads. Not committed: the
+# published file records each response digest, which is what -verify compares
+# against, and archiving several hundred raw responses is a cost this project has
+# not priced. See docs/scope.md.
+/upstream/

@@ -128,6 +128,11 @@ var boundaryEnums = []boundaryEnum{
 	// constant carries, which is why the two are separate: "up-to-date" and
 	// "both-deleted" are perfectly good JSON and impossible identifiers.
 	{
+		Name:  "SignAlgorithm",
+		Type:  reflect.TypeFor[types.SignAlgorithm](),
+		Cases: []enumCase{{"Ed25519", "ed25519"}},
+	},
+	{
 		Name:  "DoctorCheckStatus",
 		Type:  reflect.TypeFor[types.DoctorCheckStatus](),
 		Cases: []enumCase{{"none", ""}, {"ok", "ok"}, {"fail", "fail"}, {"advice", "advice"}},
@@ -246,4 +251,16 @@ func boundaryTypeNamed(name string) (boundaryType, bool) {
 		}
 	}
 	return boundaryType{}, false
+}
+
+// boundaryEnumNamed finds a declared enum by its Buzz name. The counterpart to
+// boundaryTypeNamed, for the generator that has to declare an enum a signature
+// references.
+func boundaryEnumNamed(name string) (boundaryEnum, bool) {
+	for _, e := range boundaryEnums {
+		if e.Name == name {
+			return e, true
+		}
+	}
+	return boundaryEnum{}, false
 }

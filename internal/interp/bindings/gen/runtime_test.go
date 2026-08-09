@@ -55,3 +55,86 @@ func TestAnyMapValNestsBuzzObject(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, int64(3), minor.AsInt())
 }
+
+// TestStrUnwrapsAnEnumCase covers the second of two breaks that made an inferred
+// enum case reach a host method empty.
+//
+// The compiler lowers both `Enum.case` and an inferred `.case` to the enum MEMBER,
+// so a host method declaring an enum argument is handed an enum value, not a str.
+// Str returned "" for it, and the host then reported a supplied argument as unset -
+// exactly the failure vm.Value.EnumValue's doc calls "the one failure mode a typed
+// enum was adopted to prevent". It had been fixed on the decode path and missed here.
+func TestStrUnwrapsAnEnumCase(t *testing.T) {
+	ctx := context.Background()
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	defer sess.Close()
+
+	require.NoError(t, sess.Exec(ctx, `
+		enum<str> SignAlgorithm { Ed25519 = "ed25519" }
+		final picked = SignAlgorithm.Ed25519;
+	`))
+	picked := sess.GetGlobal("picked")
+	require.False(t, picked.IsStr(), "an enum case is not a str; that is the whole trap")
+
+	assert.Equal(t, "ed25519", Str([]vm.Value{picked}, 0),
+		"a str-backed enum case must cross as its VALUE")
+
+	// The ordinary cases still behave.
+	assert.Equal(t, "plain", Str([]vm.Value{vm.StrValue("plain")}, 0))
+	assert.Equal(t, "", Str([]vm.Value{vm.IntValue(7)}, 0), "a non-str, non-enum is still empty")
+	assert.Equal(t, "", Str(nil, 0), "a missing arg is still empty")
+}
+
+// TestStrUnwrapsOnlyStrBackedEnums: an int-backed enum has no string to give, so it
+// must read as empty rather than as some rendering of the number.
+func TestStrUnwrapsOnlyStrBackedEnums(t *testing.T) {
+	ctx := context.Background()
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	defer sess.Close()
+
+	require.NoError(t, sess.Exec(ctx, `
+		enum Level { low, high }
+		final picked = Level.high;
+	`))
+	assert.Equal(t, "", Str([]vm.Value{sess.GetGlobal("picked")}, 0))
+}
+
+// BenchmarkStr guards the hot path. Str runs for EVERY string argument of every
+// host call, so the enum unwrap added to it is the one change in that area that
+// could cost something measurable.
+//
+// The str case is what to watch: it is the overwhelmingly common one, and it now
+// runs a tag check before the IsStr it always ran. The enum case is rarer and pays
+// one extra branch plus the unwrap by definition.
+func BenchmarkStr(b *testing.B) {
+	ctx := context.Background()
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	defer sess.Close()
+	if err := sess.Exec(ctx, `
+		enum<str> Alg { Ed25519 = "ed25519" }
+		final picked = Alg.Ed25519;
+	`); err != nil {
+		b.Fatal(err)
+	}
+
+	cases := []struct {
+		name string
+		args []vm.Value
+	}{
+		{"str", []vm.Value{vm.StrValue("ed25519")}},
+		{"enum", []vm.Value{sess.GetGlobal("picked")}},
+		{"absent", nil},
+	}
+	for _, c := range cases {
+		b.Run(c.name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				sink = Str(c.args, 0)
+			}
+		})
+	}
+}
+
+// sink defeats dead-store elimination of the benchmarked call.
+var sink string

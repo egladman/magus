@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2569,
-  "edge_count": 6024,
+  "node_count": 2580,
+  "edge_count": 6047,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -2110,7 +2110,7 @@
       "source": "tools",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "4",
+        "dir_files": "5",
         "dir_languages": "buzz"
       }
     },
@@ -7567,6 +7567,15 @@
       "kind": "file",
       "label": "tools/drift.buzz",
       "source": "tools/drift.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
+      "id": "file:tools/registry.buzz",
+      "kind": "file",
+      "label": "tools/registry.buzz",
+      "source": "tools/registry.buzz",
       "attrs": {
         "language": "buzz"
       }
@@ -18916,6 +18925,50 @@
       }
     },
     {
+      "id": "function:tools/registry.buzz:buildDoc",
+      "kind": "function",
+      "label": "buildDoc",
+      "doc": "buildDoc is the pure transform: files in, one document out. It reads no clock and sends no request, so two runs over the same inputs produce identical bytes.",
+      "source": "tools/registry.buzz:81"
+    },
+    {
+      "id": "function:tools/registry.buzz:encode",
+      "kind": "function",
+      "label": "encode",
+      "doc": "encode renders the document. jsonEncode sorts keys, which is what makes the bytes stable across runs and across machines.",
+      "source": "tools/registry.buzz:172"
+    },
+    {
+      "id": "function:tools/registry.buzz:fetchAll",
+      "kind": "function",
+      "label": "fetchAll",
+      "doc": "fetchAll downloads the product list and every product into dir, one file each.  Kept apart from the transform so a network failure stops here rather than being folded into a build that would then publish a half-refreshed snapshot.",
+      "source": "tools/registry.buzz:54"
+    },
+    {
+      "id": "function:tools/registry.buzz:loadReleases",
+      "kind": "function",
+      "label": "loadReleases",
+      "doc": "loadReleases projects releases/*.yaml into the registry, newest first. The same list public/release/index.json serves, carried here so a new binary needs one file rather than two half-synced ones.",
+      "source": "tools/registry.buzz:138"
+    },
+    {
+      "id": "function:tools/registry.buzz:main",
+      "kind": "function",
+      "label": "main",
+      "source": "tools/registry.buzz:176",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:tools/registry.buzz:productSlugs",
+      "kind": "function",
+      "label": "productSlugs",
+      "doc": "productSlugs lists the cached responses, sorted, so the output does not depend on what order the filesystem hands them back.",
+      "source": "tools/registry.buzz:71"
+    },
+    {
       "id": "function:tools/toolchain.buzz:eolFor",
       "kind": "function",
       "label": "eolFor",
@@ -20129,6 +20182,15 @@
       }
     },
     {
+      "id": "method:crypto.public_key",
+      "kind": "method",
+      "label": "crypto.public_key",
+      "doc": "Return the lowercase hex PUBLIC key for the private key in the named environment variable, so a publisher can print what its readers must pin. alg is \"ed25519\".",
+      "attrs": {
+        "buzz": "crypto\\publicKey(alg, key_env) → string"
+      }
+    },
+    {
       "id": "method:crypto.sha1_file",
       "kind": "method",
       "label": "crypto.sha1_file",
@@ -20180,6 +20242,33 @@
       "doc": "Return the lowercase hex SHA-512 digest of data.",
       "attrs": {
         "buzz": "crypto\\sha512Hex(data) → string"
+      }
+    },
+    {
+      "id": "method:crypto.sign",
+      "kind": "method",
+      "label": "crypto.sign",
+      "doc": "Sign data with the private key in the named environment variable and return the lowercase hex signature. alg is \"ed25519\". The key is NAMED, never passed: a value that never enters Buzz cannot be interpolated into a log.",
+      "attrs": {
+        "buzz": "crypto\\sign(alg, data, key_env) → string"
+      }
+    },
+    {
+      "id": "method:crypto.sign_file",
+      "kind": "method",
+      "label": "crypto.sign_file",
+      "doc": "Sign the file at path, write the detached signature to path + \".sig\", and return the lowercase hex signature. alg is \"ed25519\".",
+      "attrs": {
+        "buzz": "crypto\\signFile(alg, path, key_env) → string"
+      }
+    },
+    {
+      "id": "method:crypto.verify",
+      "kind": "method",
+      "label": "crypto.verify",
+      "doc": "Report whether sig_hex is a valid signature over data for the hex public key pub_hex. alg is \"ed25519\".",
+      "attrs": {
+        "buzz": "crypto\\verify(alg, data, sig_hex, pub_hex) → bool"
       }
     },
     {
@@ -21494,7 +21583,7 @@
       "id": "module:crypto",
       "kind": "module",
       "label": "crypto",
-      "doc": "Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop)."
+      "doc": "Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop) and Ed25519 signing."
     },
     {
       "id": "module:encoding",
@@ -28768,6 +28857,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "tools/drift.buzz"
+    },
+    {
+      "source": "dir:tools",
+      "target": "file:tools/registry.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "tools/registry.buzz"
     },
     {
       "source": "dir:tools",
@@ -59218,6 +59315,110 @@
       "provenance": "tools/drift.buzz"
     },
     {
+      "source": "file:tools/registry.buzz",
+      "target": "function:tools/registry.buzz:buildDoc",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "tools/registry.buzz"
+    },
+    {
+      "source": "file:tools/registry.buzz",
+      "target": "function:tools/registry.buzz:encode",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "tools/registry.buzz"
+    },
+    {
+      "source": "file:tools/registry.buzz",
+      "target": "function:tools/registry.buzz:fetchAll",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "tools/registry.buzz"
+    },
+    {
+      "source": "file:tools/registry.buzz",
+      "target": "function:tools/registry.buzz:loadReleases",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "tools/registry.buzz"
+    },
+    {
+      "source": "file:tools/registry.buzz",
+      "target": "function:tools/registry.buzz:main",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "tools/registry.buzz"
+    },
+    {
+      "source": "file:tools/registry.buzz",
+      "target": "function:tools/registry.buzz:productSlugs",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "tools/registry.buzz"
+    },
+    {
+      "source": "file:tools/registry.buzz",
+      "target": "import:crypto",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "tools/registry.buzz"
+    },
+    {
+      "source": "file:tools/registry.buzz",
+      "target": "import:fs",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "tools/registry.buzz"
+    },
+    {
+      "source": "file:tools/registry.buzz",
+      "target": "import:http",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "tools/registry.buzz"
+    },
+    {
+      "source": "file:tools/registry.buzz",
+      "target": "import:os",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "tools/registry.buzz"
+    },
+    {
+      "source": "file:tools/registry.buzz",
+      "target": "import:serialize",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "tools/registry.buzz"
+    },
+    {
+      "source": "file:tools/registry.buzz",
+      "target": "import:std",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "tools/registry.buzz"
+    },
+    {
+      "source": "file:tools/registry.buzz",
+      "target": "import:yaml",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "tools/registry.buzz"
+    },
+    {
       "source": "file:tools/toolchain.buzz",
       "target": "function:tools/toolchain.buzz:eolFor",
       "relation": "contains",
@@ -64890,6 +65091,46 @@
       "provenance": "tools/drift.buzz"
     },
     {
+      "source": "function:tools/registry.buzz:buildDoc",
+      "target": "function:tools/registry.buzz:loadReleases",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "tools/registry.buzz"
+    },
+    {
+      "source": "function:tools/registry.buzz:buildDoc",
+      "target": "function:tools/registry.buzz:productSlugs",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "tools/registry.buzz"
+    },
+    {
+      "source": "function:tools/registry.buzz:main",
+      "target": "function:tools/registry.buzz:buildDoc",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "tools/registry.buzz"
+    },
+    {
+      "source": "function:tools/registry.buzz:main",
+      "target": "function:tools/registry.buzz:encode",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "tools/registry.buzz"
+    },
+    {
+      "source": "function:tools/registry.buzz:main",
+      "target": "function:tools/registry.buzz:fetchAll",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "tools/registry.buzz"
+    },
+    {
       "source": "function:tools/toolchain.buzz:observe",
       "target": "function:tools/toolchain.buzz:eolFor",
       "relation": "calls",
@@ -65085,6 +65326,13 @@
     },
     {
       "source": "module:crypto",
+      "target": "method:crypto.public_key",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:crypto",
       "target": "method:crypto.sha1_file",
       "relation": "contains",
       "confidence": "extracted",
@@ -65121,6 +65369,27 @@
     {
       "source": "module:crypto",
       "target": "method:crypto.sha512_hex",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:crypto",
+      "target": "method:crypto.sign",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:crypto",
+      "target": "method:crypto.sign_file",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:crypto",
+      "target": "method:crypto.verify",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1

@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/registry"
 	"github.com/egladman/magus/types"
 )
 
@@ -96,5 +98,71 @@ func roughly(d time.Duration) string {
 		return fmt.Sprintf("%d hours", int(d.Hours()))
 	default:
 		return "under an hour"
+	}
+}
+
+// checkRegistryFreshness is where staleness prompts, deliberately instead of a
+// note appended to a correct answer. A row that reads `2028-04-30 (41d)` has
+// already told the truth, and 41 days of drift changes nothing the reader is doing
+// this minute - so a nag there is one they learn to filter, which teaches them to
+// filter the never-synced hint too.
+//
+// It carries NO Fix, deliberately, and that is a departure from the design that
+// specified one. A Fix is what `magus doctor --fix` RUNS, and refreshing the registry
+// sends a request - so wiring it here would make a repair command fetch from our
+// domain on behalf of someone who asked for neither. That is precisely the consent
+// rule the registry package doc states: a command whose purpose IS the network may
+// fetch, and every other command reads the local cache. `doctor --fix` is a repair
+// command, not a network one.
+//
+// It also broke in practice before it broke in principle: with no registry key pinned
+// yet, the fix failed and took `doctor --fix` down with it for every user, over a
+// state - never synced - that is normal on a fresh install rather than a defect.
+//
+// So the command is named in the message and the human runs it.
+func (r *runner) checkRegistryFreshness() types.DoctorCheck {
+	const name = "registry"
+
+	cached, err := registry.Load()
+	if err != nil {
+		return types.DoctorCheck{Name: name, Status: types.DoctorFail, Message: err.Error()}
+	}
+	if len(cached) == 0 {
+		// Every source declined. magus ships a built-in one, so an empty list can only
+		// mean someone said no on purpose - and telling them to sync is the nag this
+		// design exists to avoid.
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "declined"}
+	}
+
+	var never, stale []string
+	for _, c := range cached {
+		switch c.State {
+		case registry.StateNeverSynced:
+			never = append(never, c.Source.Name)
+		case registry.StateStale:
+			stale = append(stale, fmt.Sprintf("%s (%s old)", c.Source.Name, roughly(c.Age)))
+		}
+	}
+	switch {
+	case len(never) > 0:
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorAdvice,
+			Message: fmt.Sprintf("never synced: %s", strings.Join(never, ", ")),
+			Details: []string{"run `magus self refresh` to fill it in; that fetches a data file and does not upgrade magus"},
+		}
+	case len(stale) > 0:
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorAdvice,
+			Message: fmt.Sprintf("data is older than its window: %s", strings.Join(stale, ", ")),
+			Details: []string{
+				"run `magus self refresh` to update it",
+				"age is measured from the publisher's generated_at, so this may instead mean the publisher stopped",
+			},
+		}
+	default:
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorOK,
+			Message: fmt.Sprintf("%d source(s), all fresh", len(cached)),
+		}
 	}
 }
