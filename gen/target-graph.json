@@ -534,7 +534,7 @@
         },
         {
           "name": "format",
-          "doc": "Regenerates, then formats Go and tidies `go.mod`.",
+          "doc": "Regenerates, then formats Go, tidies `go.mod`, and formats Markdown.",
           "dependencies": [
             "generate"
           ],
@@ -544,6 +544,12 @@
               "ops": [
                 "go-fmt",
                 "go-mod-tidy"
+              ]
+            },
+            {
+              "spell": "markdown",
+              "ops": [
+                "dprint"
               ]
             }
           ]
@@ -954,6 +960,14 @@
           "name": "format",
           "dependencies": [
             "generate"
+          ],
+          "spells": [
+            {
+              "spell": "markdown",
+              "ops": [
+                "dprint"
+              ]
+            }
           ]
         },
         {
@@ -984,7 +998,7 @@
         },
         {
           "name": "lint",
-          "doc": "lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json).",
+          "doc": "lint runs the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json).",
           "dependencies": [
             "format",
             "conventions"
@@ -1299,6 +1313,12 @@
                 "go-fmt",
                 "go-mod-tidy"
               ]
+            },
+            {
+              "spell": "markdown",
+              "ops": [
+                "dprint"
+              ]
             }
           ]
         },
@@ -1413,6 +1433,12 @@
               "ops": [
                 "go-fmt",
                 "go-mod-tidy"
+              ]
+            },
+            {
+              "spell": "markdown",
+              "ops": [
+                "dprint"
               ]
             }
           ]
