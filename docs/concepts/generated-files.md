@@ -177,5 +177,5 @@ ignore file is a list that rots silently, because nothing checks it against the 
    copy of that check is redundant and drifts from the real directive.
 
 magus's own repository applies all of this, including one place where it deliberately
-does not. See [Generated files in this repository](/development/contributing/) in the
+does not. See [Generated files in this repository](../../development/contributing/) in the
 contributor docs for the worked example.

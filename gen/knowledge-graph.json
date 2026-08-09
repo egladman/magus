@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2539,
-  "edge_count": 5790,
+  "edge_count": 5792,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -7702,7 +7702,7 @@
       "kind": "function",
       "label": "build",
       "doc": "build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed. The `rw` charm (`build:rw`) keeps the result instead of gating. esbuild is pinned (mise), so the output is byte-stable and the gate holds.",
-      "source": "console/magusfile.buzz:126",
+      "source": "console/magusfile.buzz:127",
       "attrs": {
         "exported": "true"
       }
@@ -7712,7 +7712,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the build-plus-drift-gate, and the advisory audit, all first-class ci steps.",
-      "source": "console/magusfile.buzz:171",
+      "source": "console/magusfile.buzz:176",
       "attrs": {
         "exported": "true"
       }
@@ -7722,14 +7722,14 @@
       "kind": "function",
       "label": "install",
       "doc": "pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason. Always let pnpm validate the install. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready, handing the missing packages straight to tsc/esbuild. Reached once per invocation through preflight, which every target below already needs, so the unconditional --frozen-lockfile costs about a second on a warm tree and never races itself.",
-      "source": "console/magusfile.buzz:74"
+      "source": "console/magusfile.buzz:75"
     },
     {
       "id": "function:console/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.",
-      "source": "console/magusfile.buzz:140",
+      "source": "console/magusfile.buzz:145",
       "attrs": {
         "exported": "true"
       }
@@ -7738,7 +7738,7 @@
       "id": "function:console/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "console/magusfile.buzz:66",
+      "source": "console/magusfile.buzz:67",
       "attrs": {
         "exported": "true"
       }
@@ -7748,7 +7748,7 @@
       "kind": "function",
       "label": "security",
       "doc": "security audits the dependency tree against the npm advisory database.  --prod, not the whole tree, and that is the whole design. An unscoped audit reports the dev toolchain too - today a stylelint -> table -> ajv -> fast-uri advisory - which never reaches a browser and cannot be fixed from here. A gate that fails on something you cannot act on is a gate that gets muted, which is how six stale skip_cache workarounds happened. This fails only on what actually ships.  It is NOT folded into lint: lint is cache",
-      "source": "console/magusfile.buzz:164",
+      "source": "console/magusfile.buzz:169",
       "attrs": {
         "exported": "true"
       }
@@ -7758,7 +7758,7 @@
       "kind": "function",
       "label": "test",
       "doc": "test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests) and renders a line-coverage badge from the run.  The suite runs Node THREE times on purpose and that split is load-bearing: happy-dom installs localStorage/sessionStorage as getter-only, and several tests stub them by assignment, so applying the DOM setup globally (one --import for everything) breaks them. Unifying the runs was tried and reverted.  Which is why the figure needs cov.lcovMergePercent rather than",
-      "source": "console/magusfile.buzz:102",
+      "source": "console/magusfile.buzz:103",
       "attrs": {
         "exported": "true"
       }
@@ -29264,6 +29264,14 @@
     },
     {
       "source": "doc:docs/changelog.md",
+      "target": "diagnostic:MGS4003",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/changelog.md"
+    },
+    {
+      "source": "doc:docs/changelog.md",
       "target": "diagnostic:MGS6001",
       "relation": "documents",
       "confidence": "inferred",
@@ -40577,6 +40585,14 @@
     {
       "source": "file:console/magusfile.buzz",
       "target": "import:project/../libs/textsearch",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "console/magusfile.buzz"
+    },
+    {
+      "source": "file:console/magusfile.buzz",
+      "target": "import:vcs",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,

@@ -366,7 +366,7 @@ func VcsDirtyDiff(ctx context.Context, paths []string) (string, error) {
 	}
 	diff, err := v.DirtyDiff(ctx, dir, paths)
 	if err != nil {
-		return "", nil
+		return "", nil //nolint:nilerr // deliberate: a diagnostic must not become the failure
 	}
 	return diff, nil
 }

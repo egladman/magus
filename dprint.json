@@ -12,5 +12,9 @@
   // that project's directory.
   "extends": "./dprint-base.json",
   "includes": ["./*.md", "./benchmarks/**/*.md", "./tapes/**/*.md"],
-  "excludes": ["./MAGUS.md", "./CHANGELOG.md"]
+  // MAGUS.md is generated outright. AGENTS.md and CHANGELOG.md are HYBRIDS: hand-authored
+  // prose with a generated block inside (magus agent install, changelog-generate), so
+  // formatting them oscillates - dprint rewrites the block, the generator puts it back.
+  // Excluded until those generators emit dprint-normal output.
+  "excludes": ["./MAGUS.md", "./CHANGELOG.md", "./AGENTS.md"]
 }

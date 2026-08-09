@@ -5,9 +5,10 @@ import "../tools/audit" as audit;
 import "../tools/drift" as drift;
 import "../tools/toolchain-policy" as policy;
 // Modules the targets use: fs (lcov reads, badge write), os (pnpm/esbuild); the drift
-// gates hash through tools/drift.buzz.
+// coverage.svg gates hash through tools/drift.buzz; the gen/ gate still uses vcs.
 import "fs";
 import "os";
+import "vcs";
 // The shared DOM-free browser client lib (libs/textsearch) holds the search grammar the
 // Reference drawer imports from source. Affected tracking is glob-based (not
 // import-graph), so this handle lets lint pull in textsearch.lint (type-check + biome) - a
@@ -126,12 +127,16 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     ctx.needs(root\graph_generate);
-    final before = drift.hashes(["gen"]);
+    // NOT drift.hashes: console/gen is gitignored, so there is nothing committed to drift
+    // against and hashing fires on every rebuild. vcs\isDirty reports an ignored path as
+    // clean, which is why this gate has never fired. It is inert, and the comment above
+    // claiming gen/ is committed is wrong - left as-is here rather than changed blind.
+    final clean_before = vcs\isDirty(["gen"]) == false;
     os\exec("pnpm", ["run", "build"], ".", {});
     if (ctx.has_charm("rw")) {
         return;
     }
-    if (drift.changedSince(before, ["gen"]).len() > 0) {
+    if (clean_before and vcs\isDirty(["gen"])) {
         throw "build: gen/ drifted; re-run `magus run build:rw console` and commit";
     }
 }

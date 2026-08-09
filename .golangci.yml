@@ -275,6 +275,14 @@ linters:
 formatters:
   enable:
     - gofmt
+  settings:
+    gofmt:
+      # simplify: false to match what `format:rw` actually applies. golangci-lint defaults
+      # it ON (gofmt -s), but the go-fmt op runs plain `gofmt -w`, so leaving it on makes
+      # the gate demand a rewrite the formatter will not perform - lint failing on
+      # something format cannot fix. Adopting -s is a separate decision; it belongs in the
+      # spell's op first, so the two stay in agreement.
+      simplify: false
 
 # Report every finding. golangci-lint defaults to max-issues-per-linter: 50 and
 # max-same-issues: 3, which silently hides repeated findings (e.g. a pervasive
