@@ -6,7 +6,6 @@
   "node_count": 2515,
   "edge_count": 5722,
   "source_base": "https://github.com/egladman/magus/blob/main",
-  "catalog_fingerprint": "8515100b664d7c44",
   "nodes": [
     {
       "id": "charm:amd64",
