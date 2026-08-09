@@ -801,6 +801,14 @@ func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
 			if !s.loadedPaths[key] {
 				s.loadedPaths[key] = true
 				s.collectImportedModule(boundName, src)
+				// An enum the declarations export needs a runtime VALUE on the module,
+				// not only a type for the checker. The compiler lowers an inferred case
+				// to `ns\Enum.case` (compiler.go, EnumCaseExpr), which is a real member
+				// lookup on this map - so without this the case resolves to null and the
+				// host receives an empty string. Set it on v: the namespace is not bound
+				// in env until after this point, which is why it has to be the module
+				// value in hand rather than a lookup by name.
+				declareEnumValues(v, src, s.embedded)
 			}
 		}
 		if len(imp.Only) > 0 {
@@ -952,6 +960,41 @@ func (s *Session) collectImportedModule(boundName, src string) {
 				}
 				s.importedModuleFuncs[boundName] = append(s.importedModuleFuncs[boundName], d)
 			}
+		}
+	}
+}
+
+// declareEnumValues copies every exported enum in a module's declaration source onto
+// the module value as a runtime enum.
+//
+// Only enums. The declarations also carry externs and object mirrors, and executing
+// those would redefine what the native module already provides - which is exactly why
+// resolveImport collects the source instead of running it. An enum has no native
+// counterpart to collide with, so it is the one declaration that must also exist at
+// run time for the code the compiler emits to find anything.
+//
+// Upstream Buzz has no equivalent gap: its stdlib is Buzz SOURCE that gets executed,
+// so its enums are ordinary values. This restores that behaviour for a host module
+// bound as a Go map.
+//
+// Cost is one parse of the declaration source that collectImportedModule has already
+// done, once per module per session, and a map insert per enum. Nothing runs per call.
+func declareEnumValues(mod vmpackage.Value, src string, embedded bool) {
+	prog, err := parseModed(src, !embedded)
+	if err != nil {
+		return
+	}
+	for _, stmt := range prog.Stmts {
+		d, isEnum := stmt.(*ast.EnumDecl)
+		if !isEnum || !d.IsExported {
+			continue
+		}
+		values, valErr := enumCaseValues(d)
+		if valErr != nil {
+			continue // a non-literal case is reported by the checker, not here
+		}
+		if _, taken := mod.MapGet(d.Name); !taken {
+			mod.MapSet(d.Name, vmpackage.EnumDefValue(d.Name, d.Cases, values))
 		}
 	}
 }

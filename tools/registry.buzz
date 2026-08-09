@@ -209,8 +209,8 @@ export fun main() > void {
         std\print("REGISTRY_NO_SIGN set; leaving the file unsigned");
         return;
     }
-    crypto\signFile("ed25519", path: path, key_env: KEY_ENV);
-    std\print("signed {path} (readers pin: {crypto\publicKey("ed25519", key_env: KEY_ENV)})");
+    crypto\signFile(.Ed25519, path: path, key_env: KEY_ENV);
+    std\print("signed {path} (readers pin: {crypto\publicKey(.Ed25519, key_env: KEY_ENV)})");
 }
 
 main();

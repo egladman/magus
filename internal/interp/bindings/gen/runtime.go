@@ -21,7 +21,17 @@ func Str(args []vm.Value, n int) string {
 	if n >= len(args) {
 		return ""
 	}
-	if v := args[n]; v.IsStr() {
+	v := args[n]
+	// A str-backed ENUM case crosses as the case's value. The compiler lowers both
+	// `Enum.case` and an inferred `.case` to the enum member, so a host method
+	// declaring an enum argument receives the enum value rather than a str - and
+	// without this it read as "" and the host reported the argument as unset. That is
+	// the failure mode vm.Value.EnumValue's own doc names: an enum decoding to nothing,
+	// silently, which is the thing a typed enum was adopted to prevent.
+	if inner, isEnum := v.EnumValue(); isEnum {
+		v = inner
+	}
+	if v.IsStr() {
 		return v.AsString()
 	}
 	return ""
