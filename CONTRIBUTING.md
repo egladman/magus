@@ -143,11 +143,24 @@ fallback; never gate behavior on a fast path.
 
 The docs site under `docs/` renders into `docs/gen/`, which is **not** committed.
 `.github/workflows/cd.yaml` renders it on every push to `main` and publishes
-that. Render locally to check your change:
+that. To look at your change, use the dev server rather than opening a file:
 
 ```sh
-magus run generate:rw docs   # re-render into docs/gen/, then open it
+magus run build docs
+magus run build console
+magus run serve .
 ```
+
+`serve` is the workspace-root loop for both deployables at once. It hosts one
+server with the GitHub Pages layout - `/` is `docs/gen`, `/console/` is
+`console/gen` - and re-renders the affected tree when you edit a source, so a
+reload shows the change with no restart. It refuses to start until both `gen/`
+trees exist, which is what the two builds above are for; a docs-only change
+still needs the console one, once.
+
+Reach for `magus run generate docs` when you want the drift gate and the
+integrity, orphan, and abandoned-URL checks rather than a preview. It is the
+slower path, and it is what CI runs.
 
 It was committed for years. The reason it no longer is: every page embeds the
 commit that last touched its source, so committing a source change immediately
