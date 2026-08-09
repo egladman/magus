@@ -110,6 +110,14 @@ runs:
       shell: bash
       working-directory: .setup-magus-install
       env:
+        # The release keyring, one key per whitespace-separated word, mirroring
+        # internal/selfupdate/release-keys.json. Add a key here when you add one there;
+        # TestReleaseTrustAnchorMatchesInstallerAndCI fails when they disagree.
+        #
+        # Note this value does not currently reach the installer: docs/gen/install
+        # assigns its own copy unconditionally, and the copy that runs is the one sparse
+        # -checked-out from the default branch above. The test is what keeps the two
+        # equal, so the pin is documentation rather than enforcement.
         MAGUS_RELEASE_PUBKEY_HEX: ffbb8fa6f36274defd12888093c6a322c2532bc545016f495ab4955decb66779
         GIT_REF: ${{ inputs.git-ref }}
         STRATEGY: ${{ inputs.installation-strategy }}
@@ -159,7 +167,7 @@ runs:
     # Everything below only runs when there's no prebuilt binary. This action
     # never installs liblzma-dev/libzstd-dev/pkg-config: the bootstrap build
     # is CGO_ENABLED=0 (see "Build magus from source" below) and never
-    # touches internal/codec's cgo path. A caller whose own downstream step
+    # touches internal/compress's cgo path. A caller whose own downstream step
     # needs a real cgo build - cd.yaml's release-<platform> jobs, ci.yaml's
     # "ci" job - installs those itself. Keying that on installation-strategy
     # would be wrong: it has nothing to do with what the caller does after
@@ -241,7 +249,7 @@ runs:
       shell: bash
       working-directory: ${{ inputs.source-path != '' && inputs.source-path || '.setup-magus-src' }}
       # CGO_ENABLED=0: the bootstrap magus only orchestrates builds (it never needs
-      # internal/codec's cgo xz/zstd fast path), so build it pure-Go. This keeps the
+      # internal/compress's cgo xz/zstd fast path), so build it pure-Go. This keeps the
       # bootstrap off pkg-config/liblzma/libzstd entirely - on Windows the default
       # cgo build otherwise grabs Strawberry Perl's broken pkg-config and fails before
       # the real release-build (which sets up the mingw toolchain) ever runs.

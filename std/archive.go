@@ -22,7 +22,7 @@ import (
 	pgzip "github.com/klauspost/pgzip"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/compress"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/types"
@@ -447,7 +447,7 @@ func compressTarGz(ctx context.Context, src, dest string, threads, level int, ma
 
 func compressTarZst(ctx context.Context, src, dest string, threads, level int, maxSize int64, followSymlinks bool) ([]string, int64, int64, error) {
 	return compressTar(ctx, src, dest, threads, level, maxSize, followSymlinks, func(w io.Writer) (io.WriteCloser, error) {
-		return codec.NewZstdWriter(w, level, threads)
+		return compress.NewZstdWriter(w, level, threads)
 	})
 }
 
@@ -642,7 +642,7 @@ func extractBzip2d(ctx context.Context, f *os.File, dest string, strip int, maxS
 }
 
 func extractXzd(ctx context.Context, f *os.File, dest string, strip int, maxSize int64) ([]string, int64, error) {
-	xr, err := codec.NewXzReader(f)
+	xr, err := compress.NewXzReader(f)
 	if err != nil {
 		return nil, 0, fmt.Errorf("xz: %w", err)
 	}
@@ -659,7 +659,7 @@ func extractXzd(ctx context.Context, f *os.File, dest string, strip int, maxSize
 }
 
 func extractZstdd(ctx context.Context, f *os.File, dest string, strip int, maxSize int64, threads int) ([]string, int64, error) {
-	zr, err := codec.NewZstdReader(f, threads)
+	zr, err := compress.NewZstdReader(f, threads)
 	if err != nil {
 		return nil, 0, fmt.Errorf("zstd: %w", err)
 	}

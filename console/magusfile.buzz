@@ -89,6 +89,23 @@ fun install() > void {
 // their LF/LH would count those files once per process and report a number that is not about
 // anything. The merge unions DA: records instead, so a line is found once and hit if any run hit it.
 //
+// Two flags in the test script exist ONLY to make the figure deterministic, because a badge is a
+// committed artifact and the gate below fails on any drift - a measurement that wobbles by a line is
+// a gate that fails on whichever value it was not given. Consecutive runs of an unchanged tree
+// reported 49.1% and 49.2%.
+//
+//   --splitting (esbuild): without it every test bundle inlines its own copy of each shared module,
+//   and merging those copies back through their sourcemaps is order-sensitive - tabs.ts and
+//   commands.ts moved by a line or two per run. Splitting emits each shared module into ONE chunk.
+//
+//   --experimental-test-isolation=none (node): runs a launch's test FILES in one process instead of
+//   one process each, so there is no cross-process coverage merge to lose a record in. With
+//   isolation on, card.ts alternated between 110 and 115 covered lines. --test-concurrency=1 does
+//   NOT fix that - it serializes the processes without removing the merge.
+//
+// This does not unify the three launches described above; each still runs separately, for the
+// localStorage reason. It only stops each launch from forking per file.
+//
 // Both --sourcemap (esbuild, in the test script) and --enable-source-maps (node) are required. With
 // only the first, Node reads the sourcemap for stack traces alone and every record stays
 // SF:.testcache/<bundle>.js - a coverage figure about the bundle rather than the source.

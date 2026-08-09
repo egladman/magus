@@ -632,6 +632,41 @@ export interface VolatilityView {
   targets: VolatilityRowView[];
 }
 
+// ---- toolchain view-model (magus.tool.v1) ----------------------------------
+//
+// One row per binary a project's spells drive. The three windows stay separate all the
+// way to the table because the first question about a failing bound is who set it - the
+// spell (what its ops need to run at all) or this project (what it has qualified) - and
+// the CLI diagnostic cannot say, since the intersection discards provenance.
+
+export interface ToolRowView {
+  project: string;
+  bin: string;
+  spell: string;
+  installed: string; // "" when the tool is absent or printed nothing version-shaped
+  spellWindow: string; // rendered window, "" when unconstrained
+  workspaceWindow: string;
+  effectiveWindow: string;
+  verdict: "inside" | "too old" | "too new" | "unknown";
+  code: string; // MGS3005 / MGS3006, "" when satisfied
+  probedAtMs: number; // 0 when never probed
+}
+
+export interface ToolsView {
+  rows: ToolRowView[];
+  violations: number;
+}
+
+// renderWindow turns a wire window into the notation the docs use. `below` is the first
+// version REJECTED, so it renders as "< x" and never as a max.
+export const renderWindow = (b: { min: string; below: string } | undefined): string => {
+  if (!b) return "";
+  const parts: string[] = [];
+  if (b.min) parts.push(">= " + b.min);
+  if (b.below) parts.push("< " + b.below);
+  return parts.join(", ");
+};
+
 export interface InsightView {
   commits: number; // the git-history window shared by the four VCS lenses
   hotspots: HotspotNodeView[];
@@ -849,6 +884,7 @@ export interface DashboardState {
   metrics: MetricsView | null;
   samples: SampleView[];
   insight: InsightView | null;
+  tools: ToolsView | null;
   // Agent traffic seen in the recent window (mapAgentActivity). null until the activity poll has
   // produced a frame, or when the daemon serves no trail.
   agents: AgentActivityView | null;
@@ -875,6 +911,7 @@ export function initialState(): DashboardState {
     metrics: null,
     samples: [],
     insight: null,
+    tools: null,
     agents: null,
     logLines: [],
     observingSince: null,

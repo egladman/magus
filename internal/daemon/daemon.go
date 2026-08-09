@@ -32,6 +32,7 @@ import (
 	metricshandler "github.com/egladman/magus/internal/handler/metrics"
 	"github.com/egladman/magus/internal/handler/status"
 	tokenhandler "github.com/egladman/magus/internal/handler/token"
+	toolhandler "github.com/egladman/magus/internal/handler/tool"
 	"github.com/egladman/magus/internal/handler/trailrpc"
 	viewer "github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/httpx"
@@ -45,6 +46,7 @@ import (
 	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1/metricsv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/status/v1/statusv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1/tokenv1connect"
+	"github.com/egladman/magus/proto/gen/go/magus/tool/v1/toolv1connect"
 	"github.com/egladman/magus/types"
 )
 
@@ -340,6 +342,19 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			httpServer.Handle(statusPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, statusConnectHandler))))
 			shareGuarded[statusPath] = statusConnectHandler
 			log.InfoContext(ctx, "[BRIDGE] status service mounted", slog.String("path", statusPath))
+
+			// Tool Connect service: the toolchain view - which binaries this workspace's
+			// spells drive, what each reported, and the window it is held to.
+			//
+			// Deliberately NOT in shareGuarded, unlike every other read service here.
+			// Read-only is not the bar for that surface: every other entry answers from
+			// memory or disk, and this one EXECS argv the spells declare. A share is a
+			// token handed to a phone on the LAN, not a remote handle for spawning
+			// processes on the operator's machine. The console reaches it over the
+			// authenticated loopback route.
+			toolPath, toolConnectHandler := toolv1connect.NewToolServiceHandler(toolhandler.NewService(opts.Magus))
+			httpServer.Handle(toolPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, toolConnectHandler))))
+			log.InfoContext(ctx, "[BRIDGE] tool service mounted", slog.String("path", toolPath))
 
 			// Insight Connect service: the typed twin of the JSON /api/v1/insight route, reading
 			// the SAME cached scan through the same console service. The console dashboard reads

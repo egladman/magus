@@ -175,7 +175,7 @@ you to avoid it is a compromise, and a tension.
 
 That page spent a long time discouraging `go install` for a cosmetic reason: it
 cannot pass the `-ldflags` that stamp the version. Underneath, the command failed
-outright on most clean machines. `internal/codec` gated the native xz and zstd
+outright on most clean machines. `internal/compress` gated the native xz and zstd
 implementations on the `cgo` build tag, `CGO_ENABLED` defaults to 1 wherever a C
 compiler exists, and an ordinary install then demanded `liblzma` and `libzstd`
 headers through pkg-config before dying without naming magus or the fix. No

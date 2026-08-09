@@ -11,6 +11,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -55,19 +56,9 @@ const (
 // overridable at creation (including "never"), matching the locked design.
 const DefaultConnectorTTL = 90 * 24 * time.Hour
 
-// connectorStoreVersion is the on-disk schema version, so a newer store written
-// by a future magus is detected on load rather than silently misread.
+// connectorStoreVersion is the on-disk schema version, so a record written by a
+// future magus is detected on load rather than silently misread.
 const connectorStoreVersion = 1
-
-// Store-lock tuning: the critical section (re-read, marshal, atomic rename) is
-// sub-millisecond, so real contention practically never approaches the wait,
-// and a lock file older than lockStaleAfter can only be one a crashed process
-// orphaned - never a live holder - so it is safe to steal.
-const (
-	lockRetryDelay = 20 * time.Millisecond
-	lockMaxWait    = 2 * time.Second
-	lockStaleAfter = 30 * time.Second
-)
 
 // ErrConnectorExists is returned by Create when a token with the given name is
 // already present; ErrConnectorNotFound by Revoke when nothing matches.
@@ -92,86 +83,123 @@ func (c ConnectorToken) expired(now time.Time) bool {
 	return !c.Expires.IsZero() && now.After(c.Expires)
 }
 
-// connectorFile is the JSON wire shape of the store.
-type connectorFile struct {
-	Version int              `json:"version"`
-	Tokens  []ConnectorToken `json:"tokens"`
+// connectorRecord is the JSON wire shape of one token file.
+type connectorRecord struct {
+	Version int `json:"version"`
+	ConnectorToken
 }
 
-// ConnectorStore is the on-disk set of connector tokens at
-// <UserStateDir>/magus/connectors.json. Load it, mutate via Create/Revoke
-// (which persist under a cross-process lock), or read via List/Verify. The
-// in-memory snapshot is guarded by mu so List/Verify on one shared store are
-// safe against a concurrent Create/Revoke in the same process.
+// ConnectorStore is the on-disk set of connector tokens: one file per token in
+// <UserStateDir>/magus/connectors.d/. Load it, mutate via Create/Revoke, or read
+// via List/Verify. The in-memory snapshot is guarded by mu so List/Verify on one
+// shared store are safe against a concurrent Create/Revoke in the same process.
+//
+// A DIRECTORY rather than the single connectors.json it replaces, and the payoff
+// is that the cross-process lock is gone rather than any change in what is stored.
+// One array in one file made every mutation a read-modify-write, so Create and
+// Revoke needed a lock file, a retry loop, and a stale-lock steal heuristic to
+// avoid losing an entry. One file per token makes Create an O_EXCL create - which
+// is also the uniqueness check, for free - and Revoke an unlink. Neither reads the
+// other tokens, so there is nothing left to serialize.
+//
+// It is also the ergonomics: revoking is `rm connectors.d/<name>.json`, which
+// works when magus does not.
 type ConnectorStore struct {
-	path string
+	dir string
 
-	mu   sync.RWMutex
-	file connectorFile
+	mu     sync.RWMutex
+	tokens []ConnectorToken
 }
 
-// connectorStorePath returns the absolute path to the connector token store,
-// <UserStateDir>/magus/connectors.json.
-func connectorStorePath() (string, error) {
+// connectorsDir returns <UserStateDir>/magus/connectors.d.
+func connectorsDir() (string, error) {
 	dir, err := config.UserStateDir()
 	if err != nil {
 		return "", fmt.Errorf("auth: locate state dir: %w", err)
 	}
-	return filepath.Join(dir, "magus", "connectors.json"), nil
+	return filepath.Join(dir, "magus", "connectors.d"), nil
 }
 
-// LoadConnectorStore reads the connector store. A missing file is not an error:
-// it returns an empty store ready to Create into.
+// LoadConnectorStore reads the connector store, migrating a legacy
+// connectors.json first. A missing directory is not an error: it returns an empty
+// store ready to Create into.
 func LoadConnectorStore() (*ConnectorStore, error) {
-	path, err := connectorStorePath()
+	dir, err := connectorsDir()
 	if err != nil {
 		return nil, err
 	}
-	file, err := readConnectorFile(path)
+	if err := migrateLegacyConnectors(dir); err != nil {
+		return nil, err
+	}
+	tokens, err := readConnectorDir(dir)
 	if err != nil {
 		return nil, err
 	}
-	return &ConnectorStore{path: path, file: file}, nil
+	return &ConnectorStore{dir: dir, tokens: tokens}, nil
 }
 
-// readConnectorFile reads and parses the store file. A missing file yields an
-// empty store. It rejects a file whose permissions are looser than 0600
-// (mirroring the cli token's guard against an accidentally world-readable
-// secret file) and one whose version is newer than this magus understands.
-func readConnectorFile(path string) (connectorFile, error) {
-	file := connectorFile{Version: connectorStoreVersion}
-
-	info, err := os.Stat(path)
+// readConnectorDir reads every *.json in dir, newest schema check included,
+// sorted by name so List and the CLI table are stable.
+//
+// A malformed file is an ERROR, not a skip. Skipping would silently stop a token
+// working, which reads to its owner as a revocation nobody performed; failing
+// names the file, and the fix is the same `rm` that revokes.
+func readConnectorDir(dir string) ([]ConnectorToken, error) {
+	entries, err := os.ReadDir(dir)
 	if errors.Is(err, os.ErrNotExist) {
-		return file, nil
+		return nil, nil
 	}
 	if err != nil {
-		return connectorFile{}, fmt.Errorf("auth: stat connector store: %w", err)
+		return nil, fmt.Errorf("auth: read connector store %s: %w", dir, err)
+	}
+	var tokens []ConnectorToken
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		rec, err := readConnectorRecord(filepath.Join(dir, e.Name()))
+		if err != nil {
+			return nil, err
+		}
+		tokens = append(tokens, rec)
+	}
+	sort.Slice(tokens, func(i, j int) bool { return tokens[i].Name < tokens[j].Name })
+	return tokens, nil
+}
+
+// readConnectorRecord reads one token file. It rejects permissions looser than
+// 0600 (mirroring the cli token's guard against an accidentally world-readable
+// secret file) and a version newer than this magus understands.
+func readConnectorRecord(path string) (ConnectorToken, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return ConnectorToken{}, fmt.Errorf("auth: stat %s: %w", path, err)
 	}
 	if perm := info.Mode().Perm(); perm&0o077 != 0 {
-		return connectorFile{}, types.DiagnosticErrorf(types.InsecureTokenPermissions, "auth: connector store %s has insecure permissions %#o (want 0600); fix with: chmod 600 %s", path, perm, path)
+		return ConnectorToken{}, types.DiagnosticErrorf(types.InsecureTokenPermissions, "auth: connector token %s has insecure permissions %#o (want 0600); fix with: chmod 600 %s", path, perm, path)
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return connectorFile{}, fmt.Errorf("auth: read connector store: %w", err)
+		return ConnectorToken{}, fmt.Errorf("auth: read %s: %w", path, err)
 	}
-	if err := json.Unmarshal(raw, &file); err != nil {
-		return connectorFile{}, fmt.Errorf("auth: parse connector store %s: %w", path, err)
+	var rec connectorRecord
+	if err := json.Unmarshal(raw, &rec); err != nil {
+		return ConnectorToken{}, fmt.Errorf("auth: parse connector token %s: %w (remove the file to discard it)", path, err)
 	}
-	if file.Version > connectorStoreVersion {
-		return connectorFile{}, types.DiagnosticErrorf(types.ConnectorStoreTooNew, "auth: connector store %s is version %d, newer than this magus supports (%d); upgrade magus", path, file.Version, connectorStoreVersion)
+	if rec.Version > connectorStoreVersion {
+		return ConnectorToken{}, types.DiagnosticErrorf(types.ConnectorStoreTooNew, "auth: connector token %s is version %d, newer than this magus supports (%d); upgrade magus", path, rec.Version, connectorStoreVersion)
 	}
-	return file, nil
+	return rec.ConnectorToken, nil
 }
 
 // List returns the stored connector records (hashes and fingerprints, never the
-// secrets), in stored order. The slice is a copy, so a caller cannot mutate the
+// secrets), sorted by name. The slice is a copy, so a caller cannot mutate the
 // store's in-memory state.
 func (s *ConnectorStore) List() []ConnectorToken {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]ConnectorToken, len(s.file.Tokens))
-	copy(out, s.file.Tokens)
+	out := make([]ConnectorToken, len(s.tokens))
+	copy(out, s.tokens)
 	return out
 }
 
@@ -183,8 +211,8 @@ func (s *ConnectorStore) List() []ConnectorToken {
 // lose the new entry or duplicate a name.
 func (s *ConnectorStore) Create(name string, expires time.Time) (secret string, c ConnectorToken, err error) {
 	name = strings.TrimSpace(name)
-	if name == "" {
-		return "", ConnectorToken{}, fmt.Errorf("auth: connector name is required")
+	if err := validConnectorName(name); err != nil {
+		return "", ConnectorToken{}, err
 	}
 
 	secret, err = mintToken()
@@ -203,19 +231,90 @@ func (s *ConnectorStore) Create(name string, expires time.Time) (secret string, 
 		c.Expires = expires.UTC()
 	}
 
-	err = s.mutate(func(f *connectorFile) error {
-		for _, t := range f.Tokens {
-			if t.Name == name {
-				return fmt.Errorf("%w: %q", ErrConnectorExists, name)
-			}
-		}
-		f.Tokens = append(f.Tokens, c)
-		return nil
-	})
-	if err != nil {
+	if err := writeConnectorRecord(s.dir, name, c); err != nil {
 		return "", ConnectorToken{}, err
 	}
+	s.mu.Lock()
+	s.tokens = append(s.tokens, c)
+	sort.Slice(s.tokens, func(i, j int) bool { return s.tokens[i].Name < s.tokens[j].Name })
+	s.mu.Unlock()
 	return secret, c, nil
+}
+
+// writeConnectorRecord publishes dir/<name>.json, failing with ErrConnectorExists
+// if the name is taken.
+//
+// Write a complete temp file, then hard-link it to the final name. Both halves are
+// load-bearing:
+//
+//   - The temp name does not end in .json, so readConnectorDir never globs it. A
+//     concurrent reader sees the record only once it is whole.
+//   - os.Link is atomic and fails with EEXIST, so it publishes the record AND
+//     performs the duplicate-name check that the old array scan needed a
+//     cross-process lock to do.
+//
+// Creating the final path with O_EXCL and writing into it afterwards looks simpler
+// and is wrong: it publishes an empty file first, and a reader loading the store in
+// that window fails to parse it. That is not a crash-only window - it is every
+// concurrent read, which is what TestConcurrentCreateNoLostUpdates caught.
+func writeConnectorRecord(dir, name string, c ConnectorToken) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("auth: create connector store %s: %w", dir, err)
+	}
+	data, err := json.MarshalIndent(connectorRecord{Version: connectorStoreVersion, ConnectorToken: c}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("auth: encode connector token: %w", err)
+	}
+
+	// os.CreateTemp opens at 0600, which is the mode the record has to keep.
+	tmp, err := os.CreateTemp(dir, ".tmp-*")
+	if err != nil {
+		return fmt.Errorf("auth: create connector token: %w", err)
+	}
+	defer os.Remove(tmp.Name()) // the link is what publishes; the temp is always litter
+	if _, err := tmp.Write(append(data, '\n')); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("auth: write %s: %w", tmp.Name(), err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("auth: write %s: %w", tmp.Name(), err)
+	}
+
+	path := connectorPath(dir, name)
+	if err := os.Link(tmp.Name(), path); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return fmt.Errorf("%w: %q", ErrConnectorExists, name)
+		}
+		return fmt.Errorf("auth: publish %s: %w", path, err)
+	}
+	return nil
+}
+
+// connectorPath is the file one token lives in.
+func connectorPath(dir, name string) string { return filepath.Join(dir, name+".json") }
+
+// validConnectorName keeps a name usable as a filename. The name became a path
+// component when the store became a directory, so a name carrying a slash or a
+// leading dot is now a traversal or a hidden file rather than a cosmetic problem.
+func validConnectorName(name string) error {
+	if name == "" {
+		return fmt.Errorf("auth: connector name is required")
+	}
+	if len(name) > 64 {
+		return fmt.Errorf("auth: connector name %q is longer than 64 characters", name)
+	}
+	if strings.HasPrefix(name, ".") {
+		return fmt.Errorf("auth: connector name %q may not start with a dot", name)
+	}
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '-', r == '_', r == '.':
+		default:
+			return fmt.Errorf("auth: connector name %q may only hold letters, digits, dot, dash, and underscore", name)
+		}
+	}
+	return nil
 }
 
 // Revoke deletes the record matching nameOrFingerprint, resolved as: an exact
@@ -229,20 +328,67 @@ func (s *ConnectorStore) Revoke(nameOrFingerprint string) (ConnectorToken, error
 		return ConnectorToken{}, ErrConnectorNotFound
 	}
 
-	var removed ConnectorToken
-	err := s.mutate(func(f *connectorFile) error {
-		idx, err := indexConnector(f.Tokens, q)
-		if err != nil {
-			return err
-		}
-		removed = f.Tokens[idx]
-		f.Tokens = append(f.Tokens[:idx], f.Tokens[idx+1:]...)
-		return nil
-	})
+	// Resolve against the CURRENT directory, not the snapshot: another process may
+	// have minted or revoked a token since this store was loaded, and a stale
+	// snapshot would either miss a match or delete the wrong file.
+	tokens, err := readConnectorDir(s.dir)
 	if err != nil {
 		return ConnectorToken{}, err
 	}
+	idx, err := indexConnector(tokens, q)
+	if err != nil {
+		return ConnectorToken{}, err
+	}
+	removed := tokens[idx]
+	if err := os.Remove(connectorPath(s.dir, removed.Name)); err != nil {
+		return ConnectorToken{}, fmt.Errorf("auth: revoke %s: %w", removed.Name, err)
+	}
+	s.mu.Lock()
+	s.tokens = append(tokens[:idx], tokens[idx+1:]...)
+	s.mu.Unlock()
 	return removed, nil
+}
+
+// migrateLegacyConnectors splits a pre-directory connectors.json into dir, once.
+// The old file is renamed rather than deleted: it holds hashes rather than
+// secrets, so keeping it costs nothing and makes the migration reversible if a
+// name did not survive the move.
+//
+// A name that is not a legal filename falls back to its fingerprint, and the real
+// name stays inside the record. Names were unconstrained before the store became
+// a directory, so this is not hypothetical.
+func migrateLegacyConnectors(dir string) error {
+	legacy := filepath.Join(filepath.Dir(dir), "connectors.json")
+	raw, err := os.ReadFile(legacy)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("auth: read %s: %w", legacy, err)
+	}
+	var file struct {
+		Version int              `json:"version"`
+		Tokens  []ConnectorToken `json:"tokens"`
+	}
+	if err := json.Unmarshal(raw, &file); err != nil {
+		return fmt.Errorf("auth: parse %s: %w", legacy, err)
+	}
+	if file.Version > connectorStoreVersion {
+		return types.DiagnosticErrorf(types.ConnectorStoreTooNew, "auth: connector store %s is version %d, newer than this magus supports (%d); upgrade magus", legacy, file.Version, connectorStoreVersion)
+	}
+	for _, t := range file.Tokens {
+		name := t.Name
+		if validConnectorName(name) != nil {
+			name = t.Fingerprint
+		}
+		if err := writeConnectorRecord(dir, name, t); err != nil && !errors.Is(err, ErrConnectorExists) {
+			return err
+		}
+	}
+	if err := os.Rename(legacy, legacy+".migrated"); err != nil {
+		return fmt.Errorf("auth: retire %s: %w", legacy, err)
+	}
+	return nil
 }
 
 // indexConnector resolves q to an index in tokens: an exact name, then an exact
@@ -283,7 +429,7 @@ func (s *ConnectorStore) Verify(presented string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	match := false
-	for _, t := range s.file.Tokens {
+	for _, t := range s.tokens {
 		if t.expired(now) {
 			continue
 		}
@@ -294,73 +440,6 @@ func (s *ConnectorStore) Verify(presented string) bool {
 		}
 	}
 	return match
-}
-
-// mutate re-reads the store from disk, applies fn, and writes it back
-// atomically - all while holding a cross-process lock. Re-reading inside the
-// lock is what closes the lost-update race: a mutation always builds on the
-// latest on-disk state, never a snapshot that a concurrent writer has since
-// superseded. On success it also refreshes the receiver's in-memory snapshot.
-func (s *ConnectorStore) mutate(fn func(*connectorFile) error) error {
-	unlock, err := lockStore(s.path)
-	if err != nil {
-		return err
-	}
-	defer unlock()
-
-	fresh, err := readConnectorFile(s.path)
-	if err != nil {
-		return err
-	}
-	if err := fn(&fresh); err != nil {
-		return err
-	}
-	fresh.Version = connectorStoreVersion
-	data, err := json.MarshalIndent(fresh, "", "  ")
-	if err != nil {
-		return fmt.Errorf("auth: encode connector store: %w", err)
-	}
-	if err := atomicWriteSecret(s.path, append(data, '\n')); err != nil {
-		return err
-	}
-	s.mu.Lock()
-	s.file = fresh
-	s.mu.Unlock()
-	return nil
-}
-
-// lockStore acquires an exclusive cross-process lock for the store by creating a
-// sibling .lock file with O_EXCL, retrying briefly if another process holds it.
-// The returned func releases the lock. It serializes Create/Revoke so their
-// read-modify-write cannot interleave and lose data.
-func lockStore(storePath string) (func(), error) {
-	lockPath := storePath + ".lock"
-	if err := os.MkdirAll(filepath.Dir(lockPath), 0o700); err != nil {
-		return nil, fmt.Errorf("auth: create state dir: %w", err)
-	}
-	deadline := time.Now().Add(lockMaxWait)
-	for {
-		f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-		if err == nil {
-			_ = f.Close()
-			return func() { _ = os.Remove(lockPath) }, nil
-		}
-		if !errors.Is(err, os.ErrExist) {
-			return nil, fmt.Errorf("auth: acquire connector store lock: %w", err)
-		}
-		// Self-heal a lock orphaned by a crashed holder: the critical section is
-		// sub-millisecond, so a lock file older than lockStaleAfter cannot belong
-		// to a live process. Steal it (remove + retry); O_EXCL still arbitrates if
-		// another process races the same steal, so at most one winner proceeds.
-		if info, statErr := os.Stat(lockPath); statErr == nil && time.Since(info.ModTime()) > lockStaleAfter {
-			_ = os.Remove(lockPath)
-			continue
-		}
-		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("auth: connector store is locked by another magus process; if none is running, remove %s", lockPath)
-		}
-		time.Sleep(lockRetryDelay)
-	}
 }
 
 // mintToken generates a fresh connector token in the mgs_ format: a 256-bit

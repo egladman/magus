@@ -40,19 +40,21 @@ const ListProjectsContract = "list_projects"
 //
 // The record crosses INTO magus as a Buzz object (the generated mirror reads the
 // buzz tags and the field names) and is marshalled back out as JSON by the provider
-// cache, keyed by Go field name. So a rename here is a wire change in two directions:
-// regenerate the mirror, and bump providerCacheVersion so existing entries miss.
+// cache, keyed by the json tags below. Those tags are not decoration: without them
+// the cache encoded under Go field names, which musttag could not see and a reader
+// could not predict. So a rename here is a wire change in two directions - regenerate
+// the mirror, and bump providerCacheVersion so existing entries miss.
 type ProvidedProject struct {
 	// Path is the project's directory relative to the WORKSPACE ROOT, forward
 	// slashes. Required. It must stay inside the root and must not be "." - the root
 	// project is the one the magusfile that wired the provider already owns.
-	Path string
+	Path string `json:"path"`
 	// Name is the human label, for a foreign tool whose project name is not its
 	// directory (an nx project named "@acme/ui" rooted at libs/ui). Empty derives
 	// one from the path, exactly as a magusfile-declared project does.
-	Name string
+	Name string `json:"name"`
 	// Spells names the spells to bind, contributing their ops, sources and outputs.
-	Spells []string
+	Spells []string `json:"spells"`
 	// DependsOn names upstream projects, resolved exactly as magus\project's
 	// "depends_on" is: a bare path is workspace-relative, a dot-relative one is
 	// relative to this project.
@@ -62,7 +64,7 @@ type ProvidedProject struct {
 	// lowerCamel default would silently rename the key the decoder reads. (The
 	// host-returned ProjectEntry mirror spells the same concept dependsOn because it
 	// mirrors a returned struct, not an authored map.)
-	DependsOn []string `buzz:"depends_on"`
+	DependsOn []string `buzz:"depends_on" json:"depends_on"`
 	// Sources and Outputs are globs relative to THIS PROJECT'S directory, not to the
 	// workspace root - the same anchor magus\project's options use, and the anchor
 	// baseStep joins against the project path. A provider reporting a foreign tool's
@@ -72,8 +74,8 @@ type ProvidedProject struct {
 	// The anchor also bounds what is expressible: an output the foreign tool writes
 	// OUTSIDE the project directory (nx's dist/{projectRoot} convention) has no
 	// project-relative spelling and cannot be declared here.
-	Sources []string
-	Outputs []string
+	Sources []string `json:"sources"`
+	Outputs []string `json:"outputs"`
 	// Exclusive marks the project as must-not-run-alongside-peers in a batch.
-	Exclusive bool
+	Exclusive bool `json:"exclusive"`
 }

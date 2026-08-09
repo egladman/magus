@@ -20,6 +20,7 @@ import { StatusSchema, StatusService, type Status } from "../../gen/magus/status
 import { MetricsService } from "../../gen/magus/metrics/v1/metrics_pb";
 import { ActivityService, Kind } from "../../gen/magus/activity/v1/activity_pb";
 import { InsightService } from "../../gen/magus/insight/v1/insight_pb";
+import { ToolService, Verdict } from "../../gen/magus/tool/v1/tool_pb";
 import {
   authHeaders,
   createDaemonTransport,
@@ -38,6 +39,8 @@ import {
   type AgentEventWire,
   type DashboardState,
   type SampleView,
+  type ToolRowView,
+  renderWindow,
 } from "./state";
 
 const GRID_MAX = 7 * 52; // ~a GitHub year of columns; the rolling sample window
@@ -58,6 +61,21 @@ export interface TransportCallbacks {
   onStatusError(host: string): void;
 }
 
+// verdictLabel maps the wire enum to the word the table shows. UNKNOWN stays its own
+// label rather than collapsing into "inside": "we could not check" must not read as fine.
+const verdictLabel = (v: Verdict): "inside" | "too old" | "too new" | "unknown" => {
+  switch (v) {
+    case Verdict.TOO_OLD:
+      return "too old";
+    case Verdict.TOO_NEW:
+      return "too new";
+    case Verdict.INSIDE:
+      return "inside";
+    default:
+      return "unknown";
+  }
+};
+
 export class DashboardTransport {
   private store: Store<DashboardState>;
   private cb: TransportCallbacks;
@@ -74,6 +92,8 @@ export class DashboardTransport {
   private activityHost: string | null = null;
   private activityTimer: ReturnType<typeof setInterval> | null = null;
 
+  private toolsHost: string | null = null;
+  private toolsTimer: ReturnType<typeof setInterval> | null = null;
   private insightHost: string | null = null;
   private insightAbort: AbortController | null = null;
   private insightTimer: ReturnType<typeof setInterval> | null = null;
@@ -95,6 +115,7 @@ export class DashboardTransport {
     this.connectStatus(host);
     this.startMetrics(host);
     this.startInsight(host);
+    this.startTools(host);
     this.startActivity(host);
     void this.fetchObservingSince(host);
   }
@@ -110,6 +131,7 @@ export class DashboardTransport {
     }
     this.stopMetrics();
     this.stopInsight();
+    this.stopTools();
     this.stopActivity();
   }
 
@@ -276,6 +298,67 @@ export class DashboardTransport {
     } catch {
       // A daemon without a trail, an older daemon without the host/session fields, or a blip: keep
       // whatever is on screen and let the next poll retry. The tile has its own empty state.
+    }
+  }
+
+  // ---- toolchain (on-demand ConnectRPC poll) -------------------------------
+  //
+  // Polled on the same modest cadence as insight, and for a stronger reason: behind this
+  // RPC the daemon FORKS a version probe per declared tool, cached there behind a TTL. A
+  // fast poll would turn a left-open dashboard into a fork loop, so the tile shows the
+  // probe's age instead of pretending the reading is live.
+
+  private startTools(host: string): void {
+    this.stopTools();
+    this.toolsHost = host;
+    void this.fetchTools();
+    this.toolsTimer = setInterval(() => void this.fetchTools(), getPollMs());
+  }
+
+  private stopTools(): void {
+    this.toolsHost = null;
+    if (this.toolsTimer) {
+      clearInterval(this.toolsTimer);
+      this.toolsTimer = null;
+    }
+  }
+
+  // refreshTools forces an out-of-band refetch (the section's refresh button). It does not
+  // bypass the daemon's probe TTL, so pressing it repeatedly costs nothing.
+  refreshTools(): void {
+    if (this.toolsHost) void this.fetchTools();
+  }
+
+  private async fetchTools(): Promise<void> {
+    if (this.stopped) return;
+    const host = this.toolsHost;
+    if (!host) return;
+    try {
+      const client = createClient(ToolService, createDaemonTransport(host, getLiveToken()));
+      const resp = await client.listTools({});
+      const rows: ToolRowView[] = [];
+      for (const proj of resp.projects) {
+        for (const tool of proj.tools) {
+          rows.push({
+            project: proj.path,
+            bin: tool.bin,
+            spell: tool.spell,
+            installed: tool.installedVersion,
+            spellWindow: renderWindow(tool.spellBounds),
+            workspaceWindow: renderWindow(tool.workspaceBounds),
+            effectiveWindow: renderWindow(tool.effective),
+            verdict: verdictLabel(tool.verdict),
+            code: tool.diagnosticCode,
+            probedAtMs: tool.probedAt
+              ? Number(tool.probedAt.seconds) * 1000 + Math.floor(tool.probedAt.nanos / 1e6)
+              : 0,
+          });
+        }
+      }
+      const violations = rows.filter((r) => r.code !== "").length;
+      this.store.set({ tools: { rows, violations } });
+    } catch {
+      // A network blip or a daemon with no workspace: leave the prior view in place.
     }
   }
 

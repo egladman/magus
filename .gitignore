@@ -28,6 +28,22 @@
 # is because .github/actions/setup-magus sparse-checks-out this exact path from the default
 # branch - moving it would break that action for every caller pinned to an older tag.
 !/docs/gen/install
+# docs/gen/public/release/index.json is the release manifest `magus self update`
+# fetches, and index.json.sig is its detached Ed25519 signature. Both are tracked for
+# the same reason: signing needs MAGUS_SIGNING_KEY, which only a v* tag build holds,
+# while the site renders on every push to main - so a rendered index.json would
+# overwrite the signed one and put the .sig back to 404ing. `magus-utils release-index`
+# writes the pair at release time and release.yaml opens a PR carrying it.
+#
+# Four lines rather than two, because of the same rule the comment above notes: a
+# negation cannot reach inside an excluded DIRECTORY, so every parent has to be
+# re-included and then re-excluded on the way down.
+!/docs/gen/public/
+/docs/gen/public/*
+!/docs/gen/public/release/
+/docs/gen/public/release/*
+!/docs/gen/public/release/index.json
+!/docs/gen/public/release/index.json.sig
 console/gen/
 
 # The assembled deploy tree: `magus run deploy-generate .` writes it from the two gen/ trees
@@ -51,7 +67,7 @@ coverage.hand.out
 /langservice-manifest
 /buzz-playground
 
-# golangci-lint binary built from libs/orphanator/.custom-gcl.yml, carrying the
+# golangci-lint binary built from libs/testsprawl/.custom-gcl.yml, carrying the
 # in-repo linters. Rebuilt from source, never committed.
 /custom-gcl
 

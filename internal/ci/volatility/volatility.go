@@ -130,6 +130,11 @@ func lastPassTime(s forecast.Stats) time.Time {
 }
 
 func recordOutcome(s forecast.Stats, o forecast.Outcome) forecast.Stats {
+	// The duration model is fed here, from the same outcome volatility reads, because
+	// this is the one place that sees every executed target. forecast.Update ingests a
+	// batch nobody builds, so without this the forecaster learned nothing.
+	s = forecast.ApplyDuration(s, o.DurationMs, o.At)
+
 	s.RecentOutcomes = append(s.RecentOutcomes, o)
 	if len(s.RecentOutcomes) > forecast.OutcomeWindow {
 		s.RecentOutcomes = s.RecentOutcomes[len(s.RecentOutcomes)-forecast.OutcomeWindow:]

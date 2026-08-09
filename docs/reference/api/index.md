@@ -25,6 +25,7 @@ Start the daemon with `magus server start`. See [the console reference](../conso
 | [MetricsService](metrics.md) | 2 | `magus.metrics.v1` |
 | [StatusService](status.md) | 2 | `magus.status.v1` |
 | [TokenService](token.md) | 2 | `magus.token.v1` |
+| [ToolService](tool.md) | 1 | `magus.tool.v1` |
 | [ViewerService](viewer.md) | 3 | `magus.viewer.v1` |
 
 ## Calling a method without a generated client

@@ -36,6 +36,7 @@ var describeAlias = map[string]string{
 	"module": "module", "modules": "module",
 	"mcp-tool": "mcp-tool", "mcp-tools": "mcp-tool",
 	"file": "file", "files": "file",
+	"tool": "tool", "tools": "tool",
 }
 
 func describeCmd(ctx context.Context, root string, args []string) error {
@@ -64,6 +65,8 @@ func describeCmd(ctx context.Context, root string, args []string) error {
 		return describeMCPTools(rest)
 	case "file":
 		return describeFiles(ctx, root, rest)
+	case "tool":
+		return describeTools(ctx, root, rest)
 	default:
 		if noun == "knowledge" {
 			// Removed noun: the knowledge-graph export moved to the graph home.
@@ -101,6 +104,7 @@ func describeUsage() {
 	fmt.Fprintln(os.Stderr, "  module       magus stdlib modules; `module <name>` lists its methods + signatures")
 	fmt.Fprintln(os.Stderr, "  mcp-tool     tools exposed to AI agents via the MCP daemon")
 	fmt.Fprintln(os.Stderr, "  file         classify paths against declared globs: generated output, source, or unclaimed")
+	fmt.Fprintln(os.Stderr, "  tool         binaries the spells drive, their probed versions, and the window each is held to")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Each noun accepts -o text|json|yaml|name|wide|template=<go-template>")
 	fmt.Fprintln(os.Stderr, "See also: `magus config view` for runtime configuration; `magus graph` for")

@@ -61,6 +61,31 @@ exec magus describe mcp-tools -o yaml
 exec magus describe mcp-tools -o jsonl
 exec magus describe mcp-tools -o name
 
+# -- tools -------------------------------------------------------------------
+# The acme spell declares a probeable tool whose binary does not exist here, so this
+# also pins the state that matters most: a probe that cannot run reports "not found"
+# and "unprobed", NOT an empty version that reads as "checked, nothing wrong".
+exec magus describe tools
+stdout 'acme-tool'
+stdout 'not found'
+stdout 'unprobed'
+exec magus describe tools -o json
+# installed_version is omitempty and genuinely absent here. probe_error is what carries
+# the reason, and a consumer must be able to tell "could not run" from "ran, said nothing".
+stdout '"probe_error"'
+stdout '"verdict": "unprobed"'
+exec magus describe tools -o yaml
+stdout 'tools:'
+exec magus describe tools -o jsonl
+stdout '"bin"'
+exec magus describe tools -o name
+stdout '\./acme-tool'
+# Naming a project narrows it; naming one that does not exist is an error, not silence.
+exec magus describe tools .
+stdout 'acme-tool'
+! exec magus describe tools nope
+stderr 'unknown project'
+
 # -o template renders against the SAME shape as -o json, keyed by json tag. A bare
 # -o template documents the available fields instead of rendering, which is what makes
 # the tag-vs-Go-field distinction discoverable.
@@ -93,3 +118,6 @@ fun lint(target: Target) > Command {
     return Command{bin = "acme", args = ["lint", "."]};
 }
 export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }
+export fun mgs_getTools() > {str: Tool} {
+    return {"acme-tool": Tool{probe = Command{bin = "acme-tool", args = ["--version"]}}};
+}

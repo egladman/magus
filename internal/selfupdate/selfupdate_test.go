@@ -10,10 +10,12 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -26,7 +28,7 @@ import (
 )
 
 // makeTestKey generates a fresh ephemeral Ed25519 key pair for tests.
-// Do NOT use the production private key; the public half is injectable via Options.PubKey.
+// Do NOT use the production private key; the public half is injectable via Options.Keys.
 func makeTestKey(t *testing.T) (ed25519.PublicKey, ed25519.PrivateKey) {
 	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
@@ -81,7 +83,7 @@ func TestFetchAndVerifyIndex_Valid(t *testing.T) {
 	indexData, sigData := buildIndex(t, priv, releases)
 	srv := startIndexServer(t, indexData, sigData)
 
-	opts := Options{PubKey: pub, HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
+	opts := Options{Keys: ringOf(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
 	idx, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.NoError(t, err)
 	require.Equal(t, ReleaseIndex{
@@ -101,7 +103,7 @@ func TestFetchAndVerifyIndex_BadSig(t *testing.T) {
 	badSig := ed25519.Sign(wrongPriv, indexData)
 	srv := startIndexServer(t, indexData, badSig)
 
-	opts := Options{PubKey: pub, HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
+	opts := Options{Keys: ringOf(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
 	_, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "signature check failed")
@@ -124,31 +126,31 @@ func TestFetchAndVerifyIndex_Unreachable(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	opts := Options{PubKey: pub, HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
+	opts := Options{Keys: ringOf(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
 	_, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.Error(t, err, "unreachable index must return an error, not succeed")
 	// Must not silently fall back to anything.
 	assert.Contains(t, err.Error(), "unreachable")
 }
 
-func TestFetchAndVerifyIndex_NilPubKey(t *testing.T) {
+func TestFetchAndVerifyIndex_EmptyKeyring(t *testing.T) {
 	t.Parallel()
-	opts := Options{PubKey: nil, DiscoveryURL: "http://127.0.0.1:0/index.json"}
+	opts := Options{Keys: nil, DiscoveryURL: "http://127.0.0.1:0/index.json"}
 	_, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no public key")
+	assert.Contains(t, err.Error(), "no release key")
 }
 
-// TestFetchAndVerifyIndex_WrongLengthPubKey proves that a non-nil PubKey of
+// TestFetchAndVerifyIndex_WrongLengthKey proves that a key of
 // the wrong length fails closed with an error instead of reaching
 // ed25519.Verify, which panics on any non-nil, non-32-byte key.
-func TestFetchAndVerifyIndex_WrongLengthPubKey(t *testing.T) {
+func TestFetchAndVerifyIndex_WrongLengthKey(t *testing.T) {
 	t.Parallel()
-	opts := Options{PubKey: make([]byte, 16), DiscoveryURL: "http://127.0.0.1:0/index.json"}
+	opts := Options{Keys: badRing(16), DiscoveryURL: "http://127.0.0.1:0/index.json"}
 	require.NotPanics(t, func() {
 		_, err := FetchAndVerifyIndex(context.Background(), opts)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid public key length")
+		assert.Contains(t, err.Error(), "want 32")
 	})
 }
 
@@ -160,7 +162,7 @@ func TestFetchAndVerifyIndex_WrongSchemaVersion(t *testing.T) {
 	sig := ed25519.Sign(priv, data)
 	srv := startIndexServer(t, data, sig)
 
-	opts := Options{PubKey: pub, HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
+	opts := Options{Keys: ringOf(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
 	_, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "schema_version")
@@ -465,7 +467,7 @@ func TestFetchAndVerifyManifestValid(t *testing.T) {
 
 	m, err := FetchAndVerifyManifest(
 		context.Background(), srv.URL+"/sums", srv.URL+"/sig",
-		Options{PubKey: pub},
+		Options{Keys: ringOf(pub)},
 	)
 	require.NoError(t, err)
 	require.Equal(t, Manifest{
@@ -495,7 +497,7 @@ func TestFetchAndVerifyManifestBadSig(t *testing.T) {
 
 	_, err = FetchAndVerifyManifest(
 		context.Background(), srv.URL+"/sums", srv.URL+"/sig",
-		Options{PubKey: pub},
+		Options{Keys: ringOf(pub)},
 	)
 	assert.Error(t, err, "expected signature failure")
 }
@@ -552,9 +554,9 @@ func TestCheckParentWritable(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-// TestDownloadVerifyNilPubKeyFallsBack verifies that Options with nil PubKey
+// TestDownloadVerifyEmptyKeyringFallsBack verifies that Options with an empty keyring
 // does not panic on ed25519.Verify. The nil guard returns an error instead.
-func TestDownloadVerifyNilPubKeyFallsBack(t *testing.T) {
+func TestDownloadVerifyEmptyKeyringFallsBack(t *testing.T) {
 	t.Parallel()
 	hash := strings.Repeat("a", 64)
 	manifest := []byte(fmt.Sprintf("version: v1.0.0\n%s  file.tar.gz\n", hash))
@@ -574,13 +576,13 @@ func TestDownloadVerifyNilPubKeyFallsBack(t *testing.T) {
 		context.Background(), srv.URL+"/sums", srv.URL+"/sig",
 		Options{},
 	)
-	assert.Error(t, err, "expected error with nil PubKey")
+	assert.Error(t, err, "expected error with an empty keyring")
 }
 
-// TestFetchAndVerifyManifestWrongLengthPubKey proves that a non-nil PubKey of
+// TestFetchAndVerifyManifestWrongLengthKey proves that a key of
 // the wrong length fails closed with an error instead of reaching
 // ed25519.Verify, which panics on any non-nil, non-32-byte key.
-func TestFetchAndVerifyManifestWrongLengthPubKey(t *testing.T) {
+func TestFetchAndVerifyManifestWrongLengthKey(t *testing.T) {
 	t.Parallel()
 	hash := strings.Repeat("a", 64)
 	manifest := []byte(fmt.Sprintf("version: v1.0.0\n%s  file.tar.gz\n", hash))
@@ -599,10 +601,10 @@ func TestFetchAndVerifyManifestWrongLengthPubKey(t *testing.T) {
 	require.NotPanics(t, func() {
 		_, err := FetchAndVerifyManifest(
 			context.Background(), srv.URL+"/sums", srv.URL+"/sig",
-			Options{PubKey: make(ed25519.PublicKey, 8)},
+			Options{Keys: badRing(8)},
 		)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid public key length")
+		assert.Contains(t, err.Error(), "want 32")
 	})
 }
 
@@ -624,7 +626,7 @@ func TestDiscoveryURLOverride(t *testing.T) {
 	// Serve from a custom (non-default) server to prove the override works.
 	srv := startIndexServer(t, indexData, sigData)
 
-	opts := Options{PubKey: pub, HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
+	opts := Options{Keys: ringOf(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
 	idx, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.NoError(t, err)
 	require.Len(t, idx.Releases, 1)
@@ -648,7 +650,7 @@ func TestDiscoveryURLFromEnv(t *testing.T) {
 
 	t.Setenv("MAGUS_UPDATE_URL", srv.URL+"/index.json")
 
-	opts := Options{PubKey: pub, HTTPClient: srv.Client()} // DiscoveryURL intentionally empty
+	opts := Options{Keys: ringOf(pub), HTTPClient: srv.Client()} // DiscoveryURL intentionally empty
 	idx, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.NoError(t, err)
 	assert.Equal(t, "v7.0.0", idx.Releases[0].Version)
@@ -673,7 +675,7 @@ func TestCompare_DetectsIndexDowngradeAgainstRunning(t *testing.T) {
 	indexData, sigData := buildIndex(t, priv, releases)
 	srv := startIndexServer(t, indexData, sigData)
 
-	opts := Options{PubKey: pub, HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
+	opts := Options{Keys: ringOf(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
 	idx, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.NoError(t, err)
 
@@ -755,4 +757,69 @@ func TestFetchAndVerifyTarball_OK(t *testing.T) {
 	r, err := FetchAndVerifyTarball(context.Background(), srv.URL+"/asset", assetName, m, Options{})
 	require.NoError(t, err)
 	assert.NotNil(t, r)
+}
+
+// A signed source must be https. The signature makes plaintext survivable, not
+// acceptable: a downgrade nobody is told about is how a quiet failure starts, so this is
+// an error rather than a warning.
+//
+// Loopback is exempt, the carve-out Docker, pip and the Go module proxy all make - a
+// packet that never leaves the host has no network attacker to protect it from, and it is
+// what lets this package's own tests drive the real path.
+func TestRequireHTTPSRefusesPlaintextExceptLoopback(t *testing.T) {
+	for _, tc := range []struct {
+		url string
+		ok  bool
+	}{
+		{"https://eli.gladman.cc/magus/public/release/index.json", true},
+		{"http://eli.gladman.cc/magus/public/release/index.json", false},
+		{"http://example.internal/index.json", false},
+		{"ftp://example.internal/index.json", false},
+		{"http://127.0.0.1:8080/index.json", true},
+		{"http://[::1]:8080/index.json", true},
+		{"http://localhost:8080/index.json", true},
+	} {
+		err := requireHTTPS(tc.url)
+		if tc.ok && err != nil {
+			t.Errorf("requireHTTPS(%q) = %v, want accepted", tc.url, err)
+		}
+		if !tc.ok && err == nil {
+			t.Errorf("requireHTTPS(%q) accepted a plaintext source off-host", tc.url)
+		}
+	}
+}
+
+// The transport floor matches what the install script demands of curl, so the two paths
+// that can install magus agree about what they will speak.
+func TestHTTPClientSetsTheTLSFloor(t *testing.T) {
+	tr, ok := Options{}.httpClient().Transport.(*http.Transport)
+	if !ok {
+		t.Fatal("default client must carry its own transport, not inherit an unstated default")
+	}
+	if got := tr.TLSClientConfig.MinVersion; got != tls.VersionTLS12 {
+		t.Errorf("MinVersion = %#x, want TLS 1.2 (%#x)", got, tls.VersionTLS12)
+	}
+}
+
+// A redirect may not leave https. The release tarball 302s from github.com to
+// release-assets.githubusercontent.com, so redirects are on the normal path and an http
+// hop would be a silent downgrade partway through a download.
+func TestRedirectMayNotLeaveHTTPS(t *testing.T) {
+	check := Options{}.httpClient().CheckRedirect
+	req := func(raw string) *http.Request {
+		u, err := url.Parse(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &http.Request{URL: u}
+	}
+	if err := check(req("https://release-assets.githubusercontent.com/x"), nil); err != nil {
+		t.Errorf("an https redirect must be followed: %v", err)
+	}
+	if err := check(req("http://evil.example/x"), nil); err == nil {
+		t.Error("a redirect to http off-host must be refused")
+	}
+	if err := check(req("http://127.0.0.1:9/x"), nil); err != nil {
+		t.Errorf("a loopback redirect stays allowed: %v", err)
+	}
 }

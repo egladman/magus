@@ -11,6 +11,15 @@ TARGET_ARCH="${TARGET_ARCH:-$(uname -m)}"
 
 INSTALL_PREFIX="${INSTALL_PREFIX:-${HOME:?}/.local}"
 
+# Every key a magus binary trusts, newline-separated, mirroring the ring in
+# internal/selfupdate/release-keys.json - TestReleaseTrustAnchorMatchesInstallerAndCI
+# fails if the two disagree. Accepting the whole ring is what stops a key rotation
+# stranding fresh installs while self update keeps working.
+#
+# Revocation is deliberately NOT honoured here. It lives in the signed release index,
+# and a first install has no prior trust to withdraw and no installed binary to strand.
+# A revoked key is deleted from this list instead, which is the same outcome by the
+# only means an installer with no state can achieve.
 MAGUS_RELEASE_PUBKEY_HEX="ffbb8fa6f36274defd12888093c6a322c2532bc545016f495ab4955decb66779"
 
 SHORTHAND="${SHORTHAND:-true}"
@@ -241,27 +250,34 @@ verify_metadata() {
 
     log "Verifying release metadata signature..."
 
-    printf '302a300506032b6570032100%s' \
-        "${MAGUS_RELEASE_PUBKEY_HEX}" \
-        | xxd -r -p > pub.der
+    # Try each key in the ring. SHA256SUMS names no signer - it stays a plain
+    # sha256sum(1) file - so which key signed it is discovered, not declared.
+    # shellcheck disable=SC2086  # unquoted on purpose: the ring is one key per word
+    for key_hex in ${MAGUS_RELEASE_PUBKEY_HEX}; do
+        printf '302a300506032b6570032100%s' "${key_hex}" | xxd -r -p > pub.der
 
-    {
-        echo "-----BEGIN PUBLIC KEY-----"
-        openssl base64 -A < pub.der
-        echo
-        echo "-----END PUBLIC KEY-----"
-    } > pub.pem
+        {
+            echo "-----BEGIN PUBLIC KEY-----"
+            openssl base64 -A < pub.der
+            echo
+            echo "-----END PUBLIC KEY-----"
+        } > pub.pem
 
-    openssl pkeyutl \
-        -verify \
-        -pubin \
-        -inkey pub.pem \
-        -rawin \
-        -in SHA256SUMS \
-        -sigfile SHA256SUMS.sig \
-        || die "release metadata signature verification failed"
+        if openssl pkeyutl \
+            -verify \
+            -pubin \
+            -inkey pub.pem \
+            -rawin \
+            -in SHA256SUMS \
+            -sigfile SHA256SUMS.sig \
+            >/dev/null 2>&1
+        then
+            log "Release metadata signature verified (key $(printf '%.16s' "${key_hex}")...)."
+            return
+        fi
+    done
 
-    log "Release metadata signature verified."
+    die "release metadata signature verification failed: SHA256SUMS.sig matches none of the keys this installer trusts"
 }
 
 # Downloads the release artifact after metadata has been authenticated.
@@ -271,13 +287,19 @@ download_artifact() {
     release_url="${1:?}"
     version="$(release_version "$release_url")"
 
-    # The static archive is the unsuffixed one, matching the container tags (`latest` is
-    # static, `latest-cgo` is cgo). VARIANT=cgo opts into the glibc build.
-    suffix=""
-    if [ "$VARIANT" != "static" ]; then
-        suffix="-cgo"
-    fi
-    artifact="magus_${version}_${OS}_${ARCH}${suffix}.tar.gz"
+    # The asset name is READ OUT of the signed manifest rather than reconstructed here.
+    # SHA256SUMS is already downloaded and its signature already verified at this point,
+    # so it is both authoritative and trusted, and it is the only source that cannot go
+    # stale: this script is served from main and installs older releases, whose naming
+    # this file has now been wrong about twice.
+    #
+    # The two spellings it has to span: v0.3.0 and earlier published `-static`, later
+    # releases publish `_static`, and in BOTH the bare name is the dynamic build. The
+    # old code asked for the bare name whenever VARIANT=static, so the default install
+    # silently fetched a dynamically linked binary; its other branch asked for `-cgo`,
+    # a token no release has ever produced.
+    artifact="$(select_artifact "$version")" ||
+        die "no ${VARIANT} archive for ${OS}/${ARCH} in the signed manifest for ${version}"
 
     printf 'Downloading %s...\n' "$artifact" >&2
 
@@ -286,6 +308,39 @@ download_artifact() {
         -o "${work_dir}/${artifact}"
 
     printf '%s\n' "$artifact"
+}
+
+# select_artifact prints the asset name for this platform and VARIANT, chosen from the
+# verified SHA256SUMS. Static prefers the current `_static` spelling and falls back to
+# the pre-v0.4.0 `-static`; dynamic is the bare name in both eras.
+select_artifact() {
+    # Usage: select_artifact <version>
+
+    version="${1:?}"
+    base="magus_${version}_${OS}_${ARCH}"
+
+    if [ "$VARIANT" = "static" ]; then
+        for candidate in "${base}_static.tar.gz" "${base}-static.tar.gz"; do
+            if manifest_has "$candidate"; then
+                printf '%s\n' "$candidate"
+                return 0
+            fi
+        done
+        return 1
+    fi
+
+    manifest_has "${base}.tar.gz" || return 1
+    printf '%s\n' "${base}.tar.gz"
+}
+
+# manifest_has reports whether the verified manifest lists exactly this asset.
+manifest_has() {
+    # Usage: manifest_has <asset>
+
+    awk -v asset="${1:?}" '
+        ($2 == asset || $2 == "*" asset) { found = 1 }
+        END { exit found ? 0 : 1 }
+    ' "${work_dir}/SHA256SUMS"
 }
 
 verify_artifact() {
@@ -350,10 +405,20 @@ install_release() {
 
     mkdir -p "${INSTALL_PREFIX}/bin"
 
+    # The archive carries the binary plus its paperwork (LICENSE, README.md,
+    # THIRD-PARTY-NOTICES, BUILDINFO). Check the member list against that allowlist
+    # rather than for equality with "magus": equality was correct until the paperwork
+    # was added and then rejected every release. An allowlist still refuses the thing
+    # the check is for - a verified archive that carries a member nobody expected -
+    # and only `magus` is ever extracted.
     archive_members="$(tar -tzf "$archive")" ||
         die "cannot inspect verified archive"
-    [ "$archive_members" = "magus" ] ||
-        die "verified archive must contain exactly one regular magus binary"
+    printf '%s\n' "$archive_members" | grep -qx 'magus' ||
+        die "verified archive does not contain a magus binary"
+    unexpected="$(printf '%s\n' "$archive_members" |
+        grep -vx -e 'magus' -e 'LICENSE' -e 'README.md' -e 'THIRD-PARTY-NOTICES' -e 'BUILDINFO' || true)"
+    [ -z "$unexpected" ] ||
+        die "verified archive carries unexpected members: $(printf '%s' "$unexpected" | tr '\n' ' ')"
 
     tar -xzf "$archive" magus ||
         die "cannot extract verified magus binary"

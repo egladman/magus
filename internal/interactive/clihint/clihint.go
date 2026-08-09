@@ -11,9 +11,11 @@
 // It is nested under internal/interactive - the hints home (interactive.Emit and
 // the "did you mean" suggester) - since these command references exist to be shown
 // in hints; keeping it here rather than a top-level package co-locates the two.
-// It stays a stdlib-only leaf (it does NOT import its parent interactive, which pulls
-// in project/codec/types), so both the low-level cache handler and the CLI can depend
-// on it without a cycle.
+// It stays a stdlib-only leaf: it does NOT import its parent interactive, which pulls in
+// project, vcs and internal/graph/dependency. That is about WEIGHT, not cycles - there is
+// no cycle to avoid here, and `go list -deps ./internal/cache` already reaches
+// internal/interactive through internal/proc/run. The point is that a package needing
+// nothing but command strings should not acquire that dependency set to get them.
 package clihint
 
 import "strings"

@@ -48,7 +48,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | project | 10+ | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
 | target | 100+ | `magus query kind:target` | `content-generate`, `site-generate`, `generate` |
 | spell | 10+ | `magus query kind:spell` | `go`, `markdown`, `typescript` |
-| op | 50+ | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-tidy` |
+| op | 50+ | `magus query kind:op` | `go-build`, `go-test`, `go-fmt` |
 | tool | 10+ | `magus query kind:tool` | `sh`, `go`, `pnpm` |
 | charm | 10+ | `magus query kind:charm` | `rw`, `cd`, `stable` |
 | module | 20+ | `magus query kind:module` | `fs`, `charm`, `magus` |
@@ -63,14 +63,14 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 36 | `magus query project:.` | `generate`, `image-build`, `format` |
+| . | 37 | `magus query project:.` | `generate`, `image-build`, `format` |
 | console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 4 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
 | evals | 4 | `magus query project:evals` | `lint`, `preflight`, `ci` |
 | libs/diagnostics | 8 | `magus query project:libs/diagnostics` | `format`, `build`, `generate` |
 | libs/gopherbuzz | 10 | `magus query project:libs/gopherbuzz` | `format`, `build`, `generate` |
-| libs/orphanator | 8 | `magus query project:libs/orphanator` | `format`, `build`, `generate` |
+| libs/testsprawl | 8 | `magus query project:libs/testsprawl` | `format`, `build`, `generate` |
 | libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `generate`, `preflight` |
 | proto | 3 | `magus query project:proto` | `generate`, `lint`, `ci` |
 
@@ -78,6 +78,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Target | What it does |
 |---|---|
+| `go-build` | Compiles the version-stamped magus binary. |
 | `dogfood` | Compiles magus-dev, the binary THIS worktree points its own git tooling at. |
 | `image-registries` | Reports the registries `magus run image-build` under the SAME charms will push to, and whether the credentials each one needs are actually present in the environment. |
 | `image-login` | Logs in to every registry the active mode publishes to, resolving each one's credentials through the workspace's secret provider. |
@@ -101,7 +102,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `ci-shard` | Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed. |
 | `deploy-generate` | deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/. |
 | `serve` | serve is the workspace-root dev loop for BOTH deployables. |
-| `go-build` | Compiles the version-stamped magus binary. |
 | `image-build` | Two axes, one charm each. |
 | `security` | Gates on dependency LICENSE terms, which is a separate question from image_scan's vulnerability pass even though both drive trivy. |
 | `man-generate` | Renders the roff man pages into manpage/ (repo root). |
@@ -114,6 +114,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `buzz-test` | Runs the in-file `test "..." {}` blocks in this repo's own root Buzz modules, through magus's embedded engine. |
 | `lint-build` | Builds ./custom-gcl, the golangci-lint carrying this repo's own linters. |
 | `completion-test` | Exercises the completion scripts magus SHIPS, each inside the official image for its shell. |
+| `compress-cgo-test` | Runs internal/compress's tests under the CGO tags, which the ordinary test target cannot reach. |
 
 ## Project: console
 
@@ -195,7 +196,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `preflight` |  |
 | `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
 
-## Project: libs/orphanator
+## Project: libs/testsprawl
 
 | Target | What it does |
 |---|---|
@@ -206,7 +207,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `test` |  |
 | `ci` | The anchor `magus affected ci` keys off; fans out lint/build/test after format. |
 | `preflight` |  |
-| `md-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
+| `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
 
 ## Project: libs/textsearch
 

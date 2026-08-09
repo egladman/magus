@@ -146,12 +146,25 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   A spell declares what its ops need with `supported = VersionBounds{min = "1.21"}`, a
   workspace declares its own policy with `magus.project({"tools": {"node": {"min": "22",
   "below": "25"}}})`, and the two intersect so neither can loosen the other. Outside the
-  window fails before the op forks, as MGS3005 (below the minimum) or MGS3006 (at or
-  above the ceiling). The version already fed the cache key, so the probe was running on
-  every build regardless; this compares its result against something you declared. `min`
+  window fails before the run does any work, as MGS3005 (below the minimum) or MGS3006 (at
+  or above the ceiling); enforcement follows the declaration, so a project whose targets
+  shell out instead of dispatching a spell op is held to its window all the same. The
+  version already fed the cache key, so the probe was running on every build regardless;
+  this compares its result against something you declared. `min`
   is inclusive and `below` is exclusive, both plain versions rather than a constraint
   range, because a range language puts a syntax between you and the two cases that
   matter. magus never learns which versions exist upstream and never selects one.
+- **`magus describe tool[s]`, and a Toolchain tile in the console.** Until now you could
+  only see the window a build is held to by failing one, and the diagnostic named the tool
+  that broke the rule without listing the rest. Both surfaces read the same state - the
+  probed version, the spell's `supported`, the project's `tools` key - and report the
+  verdict the CLI would raise for the same pair, so a page and a terminal cannot disagree.
+  The spell's window and the workspace's stay separate columns: the first question about a
+  failing bound is who set it, and the intersection has already thrown that away by the
+  time a diagnostic exists. The console reads it over a new `magus.tool.v1` service. A
+  probe forks a process, so the daemon caches each reading for a minute and every row
+  carries its age instead of implying it is live. magus still never learns which versions
+  exist upstream, never selects one, and carries no end-of-life data.
 - **`opts.quiet` on `os\exec`, `os\exec_sh`, and `vcs\cmd`.** Captures output without
   echoing it, matching what `magus\cmd` and friends already accepted. Read in the one
   path all three share, so they cannot drift into different option sets.
@@ -776,6 +789,11 @@ proc forward failed` line). This is routine when multiple worktrees run differen
 - Local spell imports resolve workspace-root-first with walk-up accrual; a name
   collision between an ancestor and a descendant spell is flagged (MGS1002) and
   suppressed only with an acknowledged `spells.allow_shadow` reason.
+
+## [v0.3.0] - 2026-07-25
+
+See the full changelog at
+https://github.com/egladman/magus/compare/v0.2.1...v0.3.0
 
 ## [v0.2.1] - 2026-07-19
 

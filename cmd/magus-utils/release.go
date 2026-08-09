@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/selfupdate"
 	"gopkg.in/yaml.v3"
 )
 
@@ -59,12 +61,65 @@ type ReleaseArtifact struct {
 	SHA256 string `yaml:"sha256" json:"sha256"`
 }
 
-// ReleaseIndex is the machine-readable index emitted at
-// gen/public/release/index.json. The URL and schema are frozen at birth;
+// ReleaseIndex is the machine-readable index served at public/release/index.json
+// and read by `magus self update`. The URL and schema are frozen at birth;
 // additive changes only.
 type ReleaseIndex struct {
-	SchemaVersion int               `json:"schema_version"`
-	Releases      []ReleaseManifest `json:"releases"`
+	SchemaVersion int      `json:"schema_version"`
+	KeyID         string   `json:"key_id"`
+	Revoked       []string `json:"revoked,omitzero"`
+	// ExpiresAt is how long a client may trust this file. It is the bound on replaying
+	// an old index that names no revocation, so it is not optional; see ReleaseIndex in
+	// internal/selfupdate for what it does and does not buy.
+	ExpiresAt string         `json:"expires_at,omitzero"`
+	Releases  []IndexRelease `json:"releases"`
+}
+
+// IndexValidity is how long a signed index is good for. Long, because nothing
+// republishes it on a timer: a release does, and the Release index workflow does on
+// demand. `magus doctor` warns as the deadline approaches, which is the part that
+// makes the window survivable without a cron holding the signing key.
+const IndexValidity = 180 * 24 * time.Hour
+
+// IndexRelease is one release as the index publishes it: the version, and the
+// artifacts a client can name and pin. The manifest's prose - date, notes, body -
+// is deliberately absent. Nothing reads it here, it ships in the Atom feed and in
+// the release YAML, and every byte of this file is covered by index.json.sig.
+// omitzero, not omitempty: these bytes are signed, so they must not depend on how
+// the binary that wrote them was built. Under GOEXPERIMENT=jsonv2, omitempty means
+// "empty JSON value" and false is not one, so the same struct encodes to
+// `"yanked":false` there and to nothing under v1 - two different signatures for one
+// release. omitzero means the zero value in both.
+type IndexRelease struct {
+	Version   string            `json:"version"`
+	Yanked    bool              `json:"yanked,omitzero"`
+	Artifacts []ReleaseArtifact `json:"artifacts"`
+}
+
+// buildIndex projects manifests (newest-first, as loadManifests returns them) onto the
+// served schema. keyID and expiresAt are passed in rather than read from the ring and
+// the clock here, so the transform stays a pure function of its inputs: the same
+// arguments must give byte-identical output, or nothing downstream can be compared.
+func buildIndex(manifests []ReleaseManifest, keyID, expiresAt string, revoked []string) ReleaseIndex {
+	idx := ReleaseIndex{
+		SchemaVersion: 1,
+		KeyID:         keyID,
+		Revoked:       revoked,
+		ExpiresAt:     expiresAt,
+		Releases:      make([]IndexRelease, 0, len(manifests)),
+	}
+	for _, m := range manifests {
+		artifacts := m.Artifacts
+		if artifacts == nil {
+			artifacts = []ReleaseArtifact{} // "artifacts":[] rather than null
+		}
+		idx.Releases = append(idx.Releases, IndexRelease{
+			Version:   m.Version,
+			Yanked:    m.Yanked,
+			Artifacts: artifacts,
+		})
+	}
+	return idx
 }
 
 // loadManifests reads all releases/*.yaml files from dir, sorted newest-first
@@ -137,8 +192,10 @@ func parseSemver(v string) [3]int {
 	return out
 }
 
-// runCut writes a releases/v<version>.yaml manifest from the built artifacts
-// in artifactsDir and the Unreleased section of CHANGELOG.md.
+// runCut moves the Unreleased section of CHANGELOG.md into a
+// releases/v<version>.yaml manifest, alongside the size and SHA-256 of every
+// artifact in artifactsDir. The changelog's [Unreleased] is emptied by the same
+// call, because the manifest now owns that text.
 //
 // Usage: magus-utils cut -version v0.2.0 -artifacts ./dist -changelog ./CHANGELOG.md -out ./releases
 //
@@ -204,19 +261,16 @@ func runCut(args []string) error {
 			SHA256:   digest,
 		})
 	}
-	// Guard: require at least one binary or checksum artifact before appending the .pem.
 	// An empty artifacts list means the directory contained no release assets, which is
 	// almost certainly a path mistake rather than a valid hollow release.
+	//
+	// magus-release.pem used to be appended here, sizeless and hashless. No release
+	// since v0.1.0 has published such an asset - release.yaml uploads the tarballs and
+	// the SHA256SUMS pair, nothing else - so the entry named a download that 404s, in a
+	// file whose whole purpose is telling a client what it may fetch.
 	if len(artifacts) == 0 {
 		return fmt.Errorf("no release artifacts found in %s (expected *.tar.gz or SHA256SUMS)", artifactsDir)
 	}
-	// Add the release signing key (not a binary artifact; no size/sha256 needed here).
-	artifacts = append(artifacts, ReleaseArtifact{
-		Name:     "magus-release.pem",
-		Platform: "",
-		Size:     "",
-		SHA256:   "",
-	})
 
 	m := ReleaseManifest{
 		Version:   version,
@@ -242,7 +296,42 @@ func runCut(args []string) error {
 		return fmt.Errorf("write %s: %w", outPath, err)
 	}
 	fmt.Printf("wrote %s\n", outPath)
+
+	// The manifest now OWNS this text, and CHANGELOG.md is generated back out of the
+	// manifests, so leaving [Unreleased] populated would print the same entries twice:
+	// once under Unreleased and once under the version that just shipped them.
+	if err := clearUnreleased(changelogPath); err != nil {
+		return fmt.Errorf("clear unreleased: %w", err)
+	}
 	return nil
+}
+
+// clearUnreleased empties the [Unreleased] section of CHANGELOG.md, leaving the
+// heading and one blank line. Everything from the next "## " heading on is kept.
+func clearUnreleased(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(data), "\n")
+	var out []string
+	skipping := false
+	for _, line := range lines {
+		if strings.HasPrefix(line, "## ") {
+			rest := line[3:]
+			if closeIdx := strings.Index(rest, "]"); strings.HasPrefix(rest, "[") && closeIdx >= 0 &&
+				strings.EqualFold(rest[1:closeIdx], "unreleased") {
+				out = append(out, line, "")
+				skipping = true
+				continue
+			}
+			skipping = false
+		}
+		if !skipping {
+			out = append(out, line)
+		}
+	}
+	return os.WriteFile(path, []byte(strings.Join(out, "\n")), 0o644)
 }
 
 // runMigrate reads CHANGELOG.md and writes a releases/*.yaml for every released
@@ -299,32 +388,32 @@ func runMigrate(args []string) error {
 	return nil
 }
 
-// runReleaseIndex reads the render-emitted docs/gen/public/release/index.json and
-// signs those exact bytes into index.json.sig. The renderer is the single source of
-// truth for the served file; this tool only adds the signature so the sig covers the
-// bytes the client actually downloads. Signing requires MAGUS_SIGNING_KEY to be set.
+// runReleaseIndex builds index.json from releases/*.yaml and signs those exact
+// bytes into index.json.sig. Both land in outDir, which is the tracked
+// docs/gen/public/release/ - the site render copies that directory out verbatim
+// rather than regenerating it, so the signature covers the bytes a client
+// downloads.
 //
-// Usage: magus-utils release-index -served ./docs/gen/public/release [-no-sign]
+// Usage: magus-utils release-index -releases ./releases -out ./docs/gen/public/release [-expires <RFC3339>] [-no-sign]
 //
-// The -releases and -out flags are accepted but ignored (kept for backward compat with
-// any existing CI invocations; a future cleanup may remove them).
+// This tool, and not the docs render, emits the file BECAUSE of the signature.
+// index.json is rendered on every main push and signed only on a tag, so a
+// renderer that could write it would overwrite a signed file with an unsigned one
+// the next time anything merged.
 func runReleaseIndex(args []string) error {
-	var servedDir string
+	var releasesDir, outDir, expiresAt string
 	var skipSign bool
 	for i := 0; i < len(args)-1; i++ {
 		switch args[i] {
-		case "-served":
-			servedDir = args[i+1]
-			i++
-		// Accept -out as an alias for -served (backward compat).
-		case "-out":
-			if servedDir == "" {
-				servedDir = args[i+1]
-			}
-			i++
-		// Accept -releases (no longer used; kept for backward compat).
 		case "-releases":
-			i++ // consume the value and ignore
+			releasesDir = args[i+1]
+			i++
+		case "-out":
+			outDir = args[i+1]
+			i++
+		case "-expires":
+			expiresAt = args[i+1]
+			i++
 		}
 	}
 	for _, a := range args {
@@ -332,28 +421,54 @@ func runReleaseIndex(args []string) error {
 			skipSign = true
 		}
 	}
-	if servedDir == "" {
-		return fmt.Errorf("usage: magus-utils release-index -served ./docs/gen/public/release [-no-sign]")
+	if releasesDir == "" || outDir == "" {
+		return fmt.Errorf("usage: magus-utils release-index -releases ./releases -out ./docs/gen/public/release [-expires <RFC3339>] [-no-sign]")
 	}
 
-	idxPath := filepath.Join(servedDir, "index.json")
-	// Read the render-emitted file. This is the exact JSON the client downloads, so the
-	// signature covers what is actually served - not a re-rendered Go-side copy.
-	data, err := os.ReadFile(idxPath)
+	manifests, err := loadManifests(releasesDir)
 	if err != nil {
-		return fmt.Errorf("read %s: %w (run `magus run generate docs` first)", idxPath, err)
+		return err
 	}
-	fmt.Printf("signing %s (%d bytes)\n", idxPath, len(data))
+	if len(manifests) == 0 {
+		return fmt.Errorf("no release manifests in %s; an empty index would strand every client", releasesDir)
+	}
+	// The index names the key that will sign it, and lists the keys no client may
+	// accept. Both come from the ring this binary embeds, so they cannot disagree with
+	// what a magus built from the same commit trusts.
+	active, err := selfupdate.ReleaseKeys.Active()
+	if err != nil {
+		return err
+	}
+	if expiresAt == "" {
+		expiresAt = time.Now().UTC().Add(IndexValidity).Format(time.RFC3339)
+	} else if _, err := time.Parse(time.RFC3339, expiresAt); err != nil {
+		return fmt.Errorf("-expires %q is not RFC3339: %w", expiresAt, err)
+	}
+	data, err := json.Marshal(buildIndex(manifests, active.ID, expiresAt, selfupdate.ReleaseKeys.RevokedIDs()))
+	if err != nil {
+		return fmt.Errorf("marshal index: %w", err)
+	}
+	data = append(data, '\n')
+
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", outDir, err)
+	}
+	idxPath := filepath.Join(outDir, "index.json")
+	if err := os.WriteFile(idxPath, data, 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", idxPath, err)
+	}
+	fmt.Printf("wrote %s (%d releases, %d bytes)\n", idxPath, len(manifests), len(data))
 
 	if skipSign {
 		return nil
 	}
 
-	// Sign with MAGUS_SIGNING_KEY (same format as runSign).
+	// An unset key is fatal rather than a warning. A release job that quietly skipped
+	// the signature is how index.json.sig came to 404 for every user of v0.3.0; a
+	// caller that genuinely wants the unsigned file asks for it with -no-sign.
 	keyHex := os.Getenv("MAGUS_SIGNING_KEY")
 	if keyHex == "" {
-		fmt.Fprintf(os.Stderr, "MAGUS_SIGNING_KEY not set; skipping index.json.sig\n")
-		return nil
+		return fmt.Errorf("MAGUS_SIGNING_KEY is not set; pass -no-sign to write index.json without a signature")
 	}
 	keyBytes, err := hex.DecodeString(keyHex)
 	if err != nil {
@@ -363,10 +478,20 @@ func runReleaseIndex(args []string) error {
 		return fmt.Errorf("MAGUS_SIGNING_KEY must be %d bytes (%d hex chars), got %d bytes",
 			ed25519.PrivateKeySize, ed25519.PrivateKeySize*2, len(keyBytes))
 	}
-	sig := ed25519.Sign(ed25519.PrivateKey(keyBytes), data)
 	sigPath := idxPath + ".sig"
-	if err := os.WriteFile(sigPath, sig, 0o644); err != nil {
+	if err := os.WriteFile(sigPath, ed25519.Sign(ed25519.PrivateKey(keyBytes), data), 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", sigPath, err)
+	}
+
+	// Self-check against the key BINARIES carry, not against the one that just signed:
+	// that is the only pair whose disagreement strands clients, and it is what
+	// release_sign() checks for SHA256SUMS.
+	pubKey, err := releaseVerifyKey()
+	if err != nil {
+		return err
+	}
+	if err := verifyIndexSigFile(outDir, pubKey); err != nil {
+		return err
 	}
 	fmt.Printf("signed %s -> %s\n", idxPath, sigPath)
 	return nil
@@ -416,9 +541,10 @@ func runGenerateChangelog(args []string) error {
 	// we strip it here so the released-section separator ("\n## [...]") produces
 	// exactly one blank line between them, matching the original Keep-a-Changelog
 	// format.
+	// TrimRight rather than != "": the section a freshly cut release leaves behind is
+	// newlines only, and writing those back adds a blank line per release.
 	b.WriteString("## [Unreleased]\n")
-	if unreleased != "" {
-		trimmed := strings.TrimRight(unreleased, "\n")
+	if trimmed := strings.TrimRight(unreleased, "\n"); trimmed != "" {
 		b.WriteString(trimmed)
 		b.WriteString("\n")
 	}
@@ -665,7 +791,10 @@ func platformFromName(name, version string) string {
 	// mid is e.g. "linux_amd64", or "linux_amd64_static" for the marked variant. Strip a
 	// trailing variant token first: both variants describe the SAME platform, and without
 	// this the SplitN below yields "linux/amd64_static" as the platform string.
-	for _, variant := range []string{"_static", "_dynamic"} {
+	// Both separators, because the scheme changed: releases through v0.3.0 wrote
+	// `-static` / `-cgo`, later ones write `_static`. Stripping only the current spelling
+	// yields "darwin/arm64-static" as a platform for every asset already published.
+	for _, variant := range []string{"_static", "_dynamic", "-static", "-dynamic", "-cgo"} {
 		mid = strings.TrimSuffix(mid, variant)
 	}
 	parts := strings.SplitN(mid, "_", 2)

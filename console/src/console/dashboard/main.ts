@@ -44,6 +44,7 @@ import { servicesTile } from "./tiles/services";
 import { configTile } from "./tiles/config";
 import { ganttTile } from "./tiles/gantt";
 import { insightSection } from "./tiles/insight";
+import { toolchainTile } from "./tiles/toolchain";
 import { mountAlertRail } from "./tiles/alerts";
 import { mountSplitHandle } from "./tiles/split";
 import { mountRotator, type Rotator } from "./tiles/rotator";
@@ -308,6 +309,12 @@ function mountTiles(): void {
   ];
   for (const t of ordered) host.append(t.el);
 
+  // The Toolchain tile: which binaries this workspace drives and the window each is held
+  // to, from magus.tool.v1. Sits beside Insight because both answer "what is this repo
+  // like" rather than "what is happening right now", and both ride an on-demand poll.
+  const toolchain = toolchainTile();
+  host.append(toolchain.el);
+
   // The Insight section: the five VCS/run-outcome lenses, fed by the on-demand
   // /api/v1/insight poll. Its refresh button forces an out-of-band refetch.
   const insight = insightSection(() => transport.refreshInsight());
@@ -330,7 +337,7 @@ function mountTiles(): void {
   const split = mountSplitHandle(host);
   host.append(split.el);
 
-  tiles = [header, ...ordered, ...insight.tiles];
+  tiles = [header, ...ordered, toolchain, ...insight.tiles];
 
   // Chrome first, then tiles: the panels are revealed before a chart tile builds.
   tileDisposers.push(store.subscribe(renderStatusBar));
@@ -392,6 +399,7 @@ function mountTiles(): void {
   // above already have (mountTiles rebuilds the whole panel host on re-mount).
   const boardEls: HTMLElement[] = [
     ...ordered.map((t) => t.el),
+    toolchain.el,
     insight.el,
     ...insight.tiles.map((t) => t.el),
   ];

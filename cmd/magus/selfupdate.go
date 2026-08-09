@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"crypto/ed25519"
 	"errors"
 	"flag"
 	"fmt"
@@ -21,17 +20,17 @@ import (
 
 // Overridable for tests (unexported; test files set them directly).
 var (
-	overridePubKey       []byte
+	overrideKeys         selfupdate.Keyring
 	overrideClient       *http.Client
 	overrideDiscoveryURL string
 )
 
 func activeOpts() selfupdate.Options {
 	opts := selfupdate.Options{DiscoveryURL: overrideDiscoveryURL, HTTPClient: overrideClient}
-	if overridePubKey != nil {
-		opts.PubKey = ed25519.PublicKey(overridePubKey)
+	if overrideKeys != nil {
+		opts.Keys = overrideKeys
 	} else {
-		opts.PubKey = selfupdate.PubKey
+		opts.Keys = selfupdate.ReleaseKeys
 	}
 	return opts
 }
@@ -98,11 +97,12 @@ func archToken(goarch, goarm string) string {
 	if goarch != "arm" {
 		return goarch
 	}
-	// CD publishes exactly two 32-bit ARM assets (.github/workflows/cd.yaml), so only
-	// those two names may be requested. Every other input - no recorded level, or a
-	// level such as 5 that the release does not build - resolves to armv6, which also
-	// runs on ARMv7 hardware. Echoing the level back as "armv5" would name an asset
-	// that does not exist, turning a working update into a download failure.
+	// A release publishes at most two 32-bit ARM assets (.github/workflows/release.yaml,
+	// which currently publishes neither), so only those two names may be requested.
+	// Every other input - no recorded level, or a level such as 5 that the release does
+	// not build - resolves to armv6, which also runs on ARMv7 hardware. Echoing the level
+	// back as "armv5" would name an asset that does not exist, turning a working update
+	// into a download failure.
 	if level, _, _ := strings.Cut(goarm, ","); level == "7" {
 		return "armv7"
 	}
@@ -169,6 +169,11 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("fetch release index: %w", err)
 	}
+
+	// Everything fetched from here on is verified against the ring MINUS whatever the
+	// signed index revoked. A binary built trusting a key the publisher has since
+	// revoked learns about it here and nowhere else.
+	opts.Keys = opts.Keys.Without(idx.Revoked)
 
 	rel, err := selfupdate.SelectRelease(idx, targetVer)
 	if err != nil {

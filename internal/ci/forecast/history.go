@@ -144,6 +144,15 @@ func (h *History) PredictDuration(project, target string, tags []string) time.Du
 }
 
 // resolvePrediction returns (p75, hitCount, missCount, hitRate) for the best matching tier.
+//
+// Tier 3 is the tier the record path fills. Tiers 1-2 read Buckets, keyed by tags Tags()
+// derives from the changed-file list - known at plan time, not at record time. Filling
+// them means threading the affected set onto the outcome, a real change to what the
+// record path knows.
+//
+// HitCount/MissCount stay unfed for the same shape of reason: a cache hit executes no
+// target, so no outcome exists. hitRate stays 0 and no hit discount applies, which
+// over-predicts - the safe direction for a shard planner.
 func (h *History) resolvePrediction(project, target string, tags []string) (p75 int64, hitCount, missCount int, hitRate float64) {
 	if targets, ok := h.Projects[project]; ok {
 		if s, ok := targets[target]; ok {
@@ -211,6 +220,27 @@ type ShardSample struct {
 	NShards int
 }
 
+// ApplyDuration folds one measured run into a target's duration statistics.
+//
+// Exported because the record path lives in internal/ci/volatility, which sees every
+// executed target, while Update ingests a batch nobody builds. The two were wired to
+// different fields: run.go measured a duration into Outcome.DurationMs, nothing read it,
+// and resolvePrediction returned DefaultDurationMs forever, so LPT packed uniform
+// weights. One definition of "duration to p75" now, so they cannot drift apart again.
+//
+// at is what Merge resolves collisions on. Left zero, per-shard histories compared equal
+// and merge-history kept whichever file it read first.
+func ApplyDuration(st Stats, durationMs int64, at time.Time) Stats {
+	if durationMs <= 0 {
+		return st // an unmeasured run is not a sample; a zero would drag p75 down
+	}
+	st.Recent = appendCapped(st.Recent, durationMs)
+	st.Samples++
+	st.LastUpdated = at
+	st.P75Ms = percentile(st.Recent, 0.75)
+	return st
+}
+
 // Update folds project and shard samples into h, recomputing percentiles, hit rates, and workspace fallback.
 func (h *History) Update(now time.Time, projectSamples []Sample, shardSamples []ShardSample) {
 	if h.Projects == nil {
@@ -248,10 +278,7 @@ func (h *History) Update(now time.Time, projectSamples []Sample, shardSamples []
 		} else {
 			advanceHitWindow(&st.HitCount, &st.MissCount, false)
 			st.HitRate = hitRate(st.HitCount, st.MissCount)
-			st.Recent = appendCapped(st.Recent, s.DurationMs)
-			st.Samples++
-			st.LastUpdated = now
-			st.P75Ms = percentile(st.Recent, 0.75)
+			st = ApplyDuration(st, s.DurationMs, now)
 			if len(s.Tags) > 0 {
 				if st.Buckets == nil {
 					st.Buckets = make(map[string]BucketStats)

@@ -75,7 +75,7 @@ internally to fingerprint an unstamped build, so a go-backend install presents
 itself to magus as a development binary rather than the release it came from.
 
 It used to fail outright on many clean machines, and the fix is worth knowing about
-if you are packaging magus. `internal/codec` selected its implementation on the
+if you are packaging magus. `internal/compress` selected its implementation on the
 `cgo` build tag, and `CGO_ENABLED` defaults to 1 wherever a C compiler is present,
 which covers a typical Linux dev box and any Mac with the Xcode command line tools.
 That path needs `liblzma` and `libzstd` development headers discoverable by

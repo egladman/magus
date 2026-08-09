@@ -10,6 +10,9 @@
           "name": "go-build",
           "declared": "go_build",
           "doc": "Compiles the version-stamped magus binary.",
+          "dependencies": [
+            "spells-generate"
+          ],
           "spells": [
             {
               "spell": "go",
@@ -393,6 +396,9 @@
         {
           "name": "watch",
           "doc": "Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.",
+          "dependencies": [
+            "spells-generate"
+          ],
           "spells": [
             {
               "spell": "go",
@@ -478,19 +484,19 @@
           "reads_files": [
             {
               "project": ".",
-              "glob": "libs/orphanator/.custom-gcl.yml"
+              "glob": "libs/testsprawl/.custom-gcl.yml"
             },
             {
               "project": ".",
-              "glob": "libs/orphanator/go.mod"
+              "glob": "libs/testsprawl/go.mod"
             },
             {
               "project": ".",
-              "glob": "libs/orphanator/go.sum"
+              "glob": "libs/testsprawl/go.sum"
             },
             {
               "project": ".",
-              "glob": "libs/orphanator/**/*.go"
+              "glob": "libs/testsprawl/**/*.go"
             }
           ]
         },
@@ -524,11 +530,11 @@
           "reads_files": [
             {
               "project": ".",
-              "glob": "libs/orphanator/.custom-gcl.yml"
+              "glob": "libs/testsprawl/.custom-gcl.yml"
             },
             {
               "project": ".",
-              "glob": "libs/orphanator/**/*.go"
+              "glob": "libs/testsprawl/**/*.go"
             }
           ]
         },
@@ -561,6 +567,7 @@
             "lint",
             "build",
             "test",
+            "compress-cgo-test",
             "completion-test",
             "security"
           ]
@@ -586,6 +593,28 @@
               "project": ".",
               "glob": "cmd/magus/completions/*"
             }
+          ]
+        },
+        {
+          "name": "compress-cgo-test",
+          "declared": "compress_cgo_test",
+          "doc": "Runs internal/compress's tests under the CGO tags, which the ordinary test target cannot reach.",
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-test"
+              ]
+            }
+          ],
+          "reads_files": [
+            {
+              "project": ".",
+              "glob": "internal/compress/*.go"
+            }
+          ],
+          "exec_overrides": [
+            "env:CGO_ENABLED=1"
           ]
         },
         {
@@ -1399,8 +1428,8 @@
       ]
     },
     {
-      "path": "libs/orphanator",
-      "name": "libs/orphanator",
+      "path": "libs/testsprawl",
+      "name": "libs/testsprawl",
       "engine": "buzz",
       "nodes": [
         {
@@ -1411,15 +1440,15 @@
           "doc": "Regenerates MAGUS.md and fails on drift.",
           "dependencies": [
             "preflight",
-            "md-generate"
+            "index-generate"
           ],
           "charms": [
             "rw"
           ]
         },
         {
-          "name": "md-generate",
-          "declared": "md_generate",
+          "name": "index-generate",
+          "declared": "index_generate",
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
         },
         {
