@@ -139,12 +139,19 @@ func TestPrintStatusCompactTruncatesLongLabel(t *testing.T) {
 	}
 }
 
-// TestStartupNoArgsReturnsExitZero locks the shape of startup(): when args
-// is empty it prints usage and returns exit code 0 without dispatching.
-// This is the cheapest assertion that exercises the full pre-dispatch path
-// without requiring a workspace fixture, so it doubles as a guard against
-// the refactor accidentally calling os.Exit directly.
-func TestStartupNoArgsReturnsExitZero(t *testing.T) {
+// TestStartupNoSubcommandExitsUsage locks the shape of startup(): with no
+// subcommand it prints usage and returns exitUsage WITHOUT dispatching. This is the
+// cheapest assertion that exercises the full pre-dispatch path without a workspace
+// fixture, so it doubles as a guard against the refactor accidentally calling
+// os.Exit directly.
+//
+// It asserted 0 until the exit-code contract in helpers.go was applied here: no
+// subcommand is a wrong invocation, not work that succeeded, and returning 0 made
+// `magus $CMD` with an empty CMD a green step in anything that builds its argv
+// dynamically. An EXPLICIT help flag still exits 0 - see the subtest - because there
+// the usage text IS what was asked for, and conflating the two is the easy mistake:
+// both reach this branch with no subcommand left to run.
+func TestStartupNoSubcommandExitsUsage(t *testing.T) {
 	// Isolate socket discovery from the host: clearing MAGUS_DAEMON_SOCKET is not
 	// enough, because startup still scans proc.SockDir() for the stable daemon
 	// socket. Point that dir (XDG_RUNTIME_DIR/magus) at an empty temp dir so a real
@@ -157,8 +164,23 @@ func TestStartupNoArgsReturnsExitZero(t *testing.T) {
 	if res.cleanup != nil {
 		t.Cleanup(res.cleanup)
 	}
-	require.Equal(t, 0, code, "startup(nil) exit code")
+	require.Equal(t, exitUsage, code, "startup(nil) exit code")
 	assert.Empty(t, res.sub, "startup(nil) sub should be empty (no dispatch)")
+
+	// An explicit global help flag lands in the SAME no-subcommand branch and must
+	// still exit 0: the flag package has already printed usage, and that is the work
+	// the caller asked for.
+	for _, flagName := range []string{"-h", "--help"} {
+		t.Run(flagName, func(t *testing.T) {
+			t.Setenv("MAGUS_DAEMON_SOCKET", "")
+			t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+			res, code := startup(context.Background(), []string{flagName})
+			if res.cleanup != nil {
+				t.Cleanup(res.cleanup)
+			}
+			assert.Equal(t, 0, code, "an explicit %s exits 0, not exitUsage", flagName)
+		})
+	}
 }
 
 func TestCellState(t *testing.T) {
