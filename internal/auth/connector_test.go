@@ -87,19 +87,22 @@ func (s *ConnectorSuite) TestPersistenceAcrossLoads() {
 	require.Len(t, reloaded.List(), 1)
 	assert.True(t, reloaded.Verify(secret))
 
-	path, err := connectorStorePath()
-	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(s.stateDir, "magus", "connectors.json"), path)
+	// One file per token, named after the token, so revoking is an rm.
+	path := filepath.Join(s.stateDir, "magus", "connectors.d", "ide.json")
 	info, err := os.Stat(path)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "store perms")
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "token file perms")
+
+	dir, err := os.Stat(filepath.Dir(path))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o700), dir.Mode().Perm(), "store dir perms")
 }
 
 func (s *ConnectorSuite) TestLoadRejectsInsecurePerms() {
 	t := s.T()
 	_, _, err := s.store().Create("x", time.Time{})
 	require.NoError(t, err)
-	path, _ := connectorStorePath()
+	path := filepath.Join(s.stateDir, "magus", "connectors.d", "x.json")
 	require.NoError(t, os.Chmod(path, 0o644))
 
 	_, err = LoadConnectorStore()
@@ -197,9 +200,10 @@ func (s *ConnectorSuite) TestVerifyTwoTier() {
 	assert.False(t, VerifyBearer("mgs_not_a_real_token"), "garbage accepted")
 }
 
-// TestConcurrentCreateNoLostUpdates proves the store lock closes the
-// read-modify-write race: N processes each loading, appending, and saving
-// independently must all survive, not clobber each other last-writer-wins.
+// TestConcurrentCreateNoLostUpdates proves N independent creates all survive.
+// It used to prove the store lock closed a read-modify-write race; there is no
+// longer a read-modify-write to race, because each create writes its own file and
+// reads nobody else's. The test stays because the PROPERTY is what mattered.
 func (s *ConnectorSuite) TestConcurrentCreateNoLostUpdates() {
 	t := s.T()
 	const n = 8
@@ -225,34 +229,80 @@ func (s *ConnectorSuite) TestConcurrentCreateNoLostUpdates() {
 	assert.Len(t, s.store().List(), n, "concurrent creates lost entries")
 }
 
-// TestStaleLockIsStolen proves a lock file orphaned by a crashed process (old
-// mtime) is stolen rather than bricking every future mutation.
-func (s *ConnectorSuite) TestStaleLockIsStolen() {
+// TestConcurrentCreateNeedsNoLockFile is the other half: the directory layout
+// removed the lock, so nothing may be left behind to strand a later mutation the
+// way an orphaned lock file once did.
+func (s *ConnectorSuite) TestConcurrentCreateNeedsNoLockFile() {
 	t := s.T()
-	path, err := connectorStorePath()
+	_, _, err := s.store().Create("first", time.Time{})
 	require.NoError(t, err)
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
 
-	lock := path + ".lock"
-	require.NoError(t, os.WriteFile(lock, nil, 0o600))
-	old := time.Now().Add(-time.Hour)
-	require.NoError(t, os.Chtimes(lock, old, old))
+	entries, err := os.ReadDir(filepath.Join(s.stateDir, "magus", "connectors.d"))
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "first.json", entries[0].Name(), "a create left something besides the token behind")
+}
 
-	_, _, err = s.store().Create("after-crash", time.Time{})
-	require.NoError(t, err, "Create did not steal the stale lock")
-	assert.Len(t, s.store().List(), 1)
+// TestRevokeByRemovingTheFile is the ergonomic the directory exists for: the store
+// must agree with the filesystem, so `rm` is a revoke even when magus is not
+// available to perform one.
+func (s *ConnectorSuite) TestRevokeByRemovingTheFile() {
+	t := s.T()
+	secret, _, err := s.store().Create("byhand", time.Time{})
+	require.NoError(t, err)
+	require.True(t, s.store().Verify(secret))
+
+	require.NoError(t, os.Remove(filepath.Join(s.stateDir, "magus", "connectors.d", "byhand.json")))
+	assert.False(t, s.store().Verify(secret), "a removed file must stop verifying")
+	assert.Empty(t, s.store().List())
+}
+
+// TestCreateRejectsUnsafeName: the name became a path component when the store
+// became a directory, so a slash is a traversal rather than a cosmetic problem.
+func (s *ConnectorSuite) TestCreateRejectsUnsafeName() {
+	t := s.T()
+	for _, name := range []string{"../escape", "a/b", ".hidden", "has space", "sub/../x"} {
+		_, _, err := s.store().Create(name, time.Time{})
+		require.Error(t, err, "Create accepted unsafe name %q", name)
+	}
+}
+
+// TestMigratesLegacyStore moves a pre-directory connectors.json into the
+// directory once, keeping every token verifiable across the change.
+func (s *ConnectorSuite) TestMigratesLegacyStore() {
+	t := s.T()
+	dir := filepath.Join(s.stateDir, "magus")
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	legacy := filepath.Join(dir, "connectors.json")
+	require.NoError(t, os.WriteFile(legacy, []byte(`{"version":1,"tokens":[
+		{"name":"claude-code","sha256":"aa","fingerprint":"aa","created":"2026-07-14T17:35:33Z","expires":"0001-01-01T00:00:00Z"},
+		{"name":"has space","sha256":"bb","fingerprint":"bbbbbbbb","created":"2026-07-14T17:35:33Z","expires":"0001-01-01T00:00:00Z"}
+	]}`), 0o600))
+
+	list := s.store().List()
+	require.Len(t, list, 2, "both legacy tokens must survive")
+	assert.Equal(t, "claude-code", list[0].Name)
+	assert.Equal(t, "has space", list[1].Name, "the record keeps the real name")
+
+	// A name that is not a legal filename falls back to its fingerprint.
+	assert.FileExists(t, filepath.Join(dir, "connectors.d", "claude-code.json"))
+	assert.FileExists(t, filepath.Join(dir, "connectors.d", "bbbbbbbb.json"))
+
+	// The old file is retired rather than deleted, and the migration runs once.
+	assert.NoFileExists(t, legacy)
+	assert.FileExists(t, legacy+".migrated")
+	assert.Len(t, s.store().List(), 2, "a second load must not re-migrate or duplicate")
 }
 
 // TestRejectsNewerStoreVersion confirms a store written by a hypothetical future
 // magus (higher schema version) is refused rather than silently misread.
 func (s *ConnectorSuite) TestRejectsNewerStoreVersion() {
 	t := s.T()
-	path, err := connectorStorePath()
-	require.NoError(t, err)
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
-	require.NoError(t, os.WriteFile(path, []byte(`{"version":999,"tokens":[]}`), 0o600))
+	dir := filepath.Join(s.stateDir, "magus", "connectors.d")
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "future.json"), []byte(`{"version":999,"name":"future"}`), 0o600))
 
-	_, err = LoadConnectorStore()
+	_, err := LoadConnectorStore()
 	assert.Error(t, err, "load accepted a store version newer than supported")
 	assert.ErrorIs(t, err, types.ConnectorStoreTooNew, "the error carries MGS9003")
 }
