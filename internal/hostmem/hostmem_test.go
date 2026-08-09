@@ -1,3 +1,8 @@
+// hostmem_test.go deliberately has no hostmem.go beside it. Both readings it covers are
+// platform-split across total_{darwin,linux,other}.go and available_{darwin,linux,other}.go,
+// and what these tests assert is the RELATIONSHIP between the two - which belongs to
+// neither file. Splitting it per reader would lose the only assertion worth making on an
+// arbitrary host.
 package hostmem
 
 import (

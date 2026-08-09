@@ -6,8 +6,7 @@ package codec
 
 import "io"
 
-// json.go owns the exported surface of the streaming compression codecs. Each
-// codec has two implementations selected at build time: a cgo path backed by
+// Each codec has two implementations selected at build time: a cgo path backed by
 // libzstd/liblzma (zstd_cgo.go, xz_cgo.go) and a pure-Go fallback
 // (zstd_other.go, xz_other.go). The wrappers below delegate to whichever
 // implementation the build selected, so callers get one documented API

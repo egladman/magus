@@ -1,6 +1,9 @@
-// Package agent owns Magus's provider-neutral agent-skill artifact. Command
-// packages supply embedded source files; this package renders, installs, and
-// verifies the generated surface without knowing about a particular CLI host.
+// Package agent owns the two provider-neutral halves of Magus's agent surface: the
+// agent-skill artifact (this file - command packages supply embedded source files, and
+// this package renders, installs and verifies the generated surface without knowing about
+// a particular CLI host), and the guard verdict wire contract (guard.go, which lives here
+// because `package main` cannot be imported, so a parity check outside cmd/magus would
+// otherwise have to restate it).
 package agent
 
 import (
