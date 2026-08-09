@@ -21,6 +21,10 @@ func (v hgVCS) Name() string     { return "hg" }
 func (v hgVCS) Claims() []string { return []string{".hg"} }
 func (v hgVCS) Base() string     { return "tip" }
 
+// ParentRef is the first parent of the working directory. `p1(.)` names it
+// explicitly; a bare `.^` is p1 too but reads as a typo next to git's form.
+func (v hgVCS) ParentRef() string { return "p1(.)" }
+
 // IsSecondaryCheckout reports whether dir is an `hg share` checkout: the share
 // extension writes .hg/sharedpath naming the source repo's store, so the working
 // copy re-exposes the shared repo's files. A standalone repo has no sharedpath.
@@ -101,7 +105,7 @@ func (v hgVCS) Bisect(ctx context.Context, dir string, opts types.BisectOptions)
 		return types.Culprit{}, err
 	}
 	info, _ := v.commitInfo(ctx, dir, sha)
-	return types.Culprit{SHA: sha, Info: info}, nil
+	return types.Culprit{ID: sha, Info: info}, nil
 }
 
 func (v hgVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) {
@@ -119,9 +123,9 @@ func (v hgVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) 
 		return types.VCSMeta{}, fmt.Errorf("hg status: %w", err)
 	}
 	return types.VCSMeta{
-		ShortHash:  shortHash,
-		Hash:       hash,
-		Branch:     branch,
+		Short:      shortHash,
+		ID:         hash,
+		Ref:        branch,
 		CommitDate: commitDate,
 		IsDirty:    dirtyOut != "",
 	}, nil

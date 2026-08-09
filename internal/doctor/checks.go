@@ -1604,7 +1604,7 @@ func (r *runner) checkSelfStalingOutputs(projects []*types.Project) types.Doctor
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: fmt.Sprintf("%s cannot report tracked paths; skipped", res.VCS.Name())}
 	}
 	meta, err := res.VCS.Metadata(r.runCtx(), r.root)
-	if err != nil || meta.Hash == "" {
+	if err != nil || meta.ID == "" {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no commit yet; nothing to check"}
 	}
 
@@ -1697,12 +1697,12 @@ func fileRecordsCommit(path string, meta types.VCSMeta) bool {
 	if bytes.IndexByte(head, 0) >= 0 {
 		return false
 	}
-	if meta.Hash != "" && bytes.Contains(data, []byte(meta.Hash)) {
+	if meta.ID != "" && bytes.Contains(data, []byte(meta.ID)) {
 		return true
 	}
 	// The short hash only counts when it is not part of a longer hex run, or every file
 	// holding any 7-hex-digit substring of a longer id would match.
-	return meta.ShortHash != "" && containsShortHash(data, meta.ShortHash)
+	return meta.Short != "" && containsShortHash(data, meta.Short)
 }
 
 // containsShortHash finds the short hash as a standalone hex token: the byte on each side

@@ -18,7 +18,7 @@ const (
 )
 
 func testMeta() types.VCSMeta {
-	return types.VCSMeta{Hash: testFullHash, ShortHash: testShortHash}
+	return types.VCSMeta{ID: testFullHash, Short: testShortHash}
 }
 
 // TestContainsShortHash pins the token rule. An abbreviated hash is only a match when it

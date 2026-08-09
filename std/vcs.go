@@ -279,7 +279,7 @@ func VcsRef(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return meta.Branch, nil
+	return meta.Ref, nil
 }
 
 // VcsStatus reports the working tree's uncommitted state as a typed Status.
