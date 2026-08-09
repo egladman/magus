@@ -39,6 +39,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -60,22 +61,28 @@ const (
 	DefaultDiscoveryURL = "https://eli.gladman.cc/magus/public/release/index.json"
 )
 
-// Options configures an update operation. PubKey is required; manifest verification fails closed when nil.
+// Options configures an update operation. Keys is required; verification fails
+// closed when it is empty.
 type Options struct {
-	PubKey       ed25519.PublicKey
+	// Keys is the ring a signature may come from, normally ReleaseKeys. After the
+	// signed index has been read it is narrowed by Keyring.Without(idx.Revoked), so a
+	// key the publisher revoked cannot verify anything fetched afterwards.
+	Keys         Keyring
 	HTTPClient   *http.Client
 	DiscoveryURL string // overrides DefaultDiscoveryURL; also MAGUS_UPDATE_URL env var
 }
 
-// checkPubKey fails closed unless pk is present and exactly ed25519.PublicKeySize
-// bytes. ed25519.Verify panics on any other non-nil length, so every call site
-// that verifies a signature must check this first.
-func checkPubKey(pk ed25519.PublicKey) error {
-	if pk == nil {
-		return errors.New("no public key: set Options.PubKey or embed a release key")
+// checkKeys fails closed unless the ring holds at least one key of the right length.
+// ed25519.Verify panics on any other non-nil length, so every call site that verifies
+// a signature must check this first.
+func checkKeys(ring Keyring) error {
+	if len(ring) == 0 {
+		return errors.New("no release key: set Options.Keys")
 	}
-	if len(pk) != ed25519.PublicKeySize {
-		return fmt.Errorf("invalid public key length: got %d bytes, want %d", len(pk), ed25519.PublicKeySize)
+	for _, key := range ring {
+		if len(key.Pub) != ed25519.PublicKeySize {
+			return fmt.Errorf("release key %s is %d bytes, want %d", key.ID, len(key.Pub), ed25519.PublicKeySize)
+		}
 	}
 	return nil
 }
@@ -153,8 +160,21 @@ func (o Options) discoveryURL() string {
 // ReleaseIndex is the JSON shape of gen/public/release/index.json (schema_version 1).
 // Schema is frozen at birth; additive changes only.
 type ReleaseIndex struct {
-	SchemaVersion int            `json:"schema_version"`
-	Releases      []IndexRelease `json:"releases"`
+	SchemaVersion int `json:"schema_version"`
+	// KeyID names the key that signed this file. It is a cross-check, never the thing
+	// that selects a key: an attacker controls it exactly as much as the rest of the
+	// payload, so it is compared against the key that actually verified.
+	KeyID string `json:"key_id"`
+	// Revoked lists fingerprints no signature may come from. It is only believed when
+	// the index carrying it was itself signed by a key not on the list - which is what
+	// a standby key buys, and what makes a revocation an attacker cannot forge.
+	Revoked []string `json:"revoked,omitzero"`
+	// ExpiresAt bounds the one hole revocation cannot close: an attacker holding a
+	// compromised key serving an OLD index that names no revocation. Past it the client
+	// refuses the file rather than trusting a stale one, turning an indefinite
+	// compromise into a denial of service. RFC3339; empty means no bound.
+	ExpiresAt string         `json:"expires_at,omitzero"`
+	Releases  []IndexRelease `json:"releases"`
 }
 
 // IndexRelease represents one entry inside ReleaseIndex.Releases. The index
@@ -180,7 +200,7 @@ type IndexArtifact struct {
 // If the index is unreachable, FetchAndVerifyIndex returns an error and stops.
 // There is no silent fallback.
 func FetchAndVerifyIndex(ctx context.Context, opts Options) (*ReleaseIndex, error) {
-	if err := checkPubKey(opts.PubKey); err != nil {
+	if err := checkKeys(opts.Keys); err != nil {
 		return nil, err
 	}
 	indexURL := opts.discoveryURL()
@@ -201,8 +221,9 @@ func FetchAndVerifyIndex(ctx context.Context, opts Options) (*ReleaseIndex, erro
 	if err != nil {
 		return nil, fmt.Errorf("release index unreachable (%s): %w", indexURL, err)
 	}
-	if !ed25519.Verify(opts.PubKey, indexBytes, sigBytes) {
-		return nil, errors.New("index signature check failed: index.json.sig does not match index.json")
+	signer, err := opts.Keys.Verify(indexBytes, sigBytes)
+	if err != nil {
+		return nil, fmt.Errorf("index signature check failed: %w", err)
 	}
 
 	var idx ReleaseIndex
@@ -212,10 +233,41 @@ func FetchAndVerifyIndex(ctx context.Context, opts Options) (*ReleaseIndex, erro
 	if idx.SchemaVersion != 1 {
 		return nil, fmt.Errorf("unsupported release index schema_version %d (want 1)", idx.SchemaVersion)
 	}
+	if idx.KeyID != "" && idx.KeyID != signer.ID {
+		return nil, fmt.Errorf("release index says it was signed by key %s but key %s is what verified it", idx.KeyID, signer.ID)
+	}
+	// A revoked key cannot vouch for its own standing. Refusing here is what forces a
+	// real revocation to be signed by a DIFFERENT key - the standby one - which is the
+	// only version of this an attacker holding the compromised key cannot produce.
+	if slices.Contains(idx.Revoked, signer.ID) {
+		return nil, fmt.Errorf("release index is signed by key %s, which the index itself revokes", signer.ID)
+	}
+	if err := checkNotExpired(idx.ExpiresAt); err != nil {
+		return nil, err
+	}
 	if len(idx.Releases) == 0 {
 		return nil, errors.New("release index contains no releases")
 	}
 	return &idx, nil
+}
+
+// checkNotExpired refuses an index past its declared lifetime. An unparseable
+// expires_at is refused too: the field exists to bound how long a stale index can be
+// replayed, so a client that cannot read it has no bound at all.
+func checkNotExpired(expiresAt string) error {
+	if expiresAt == "" {
+		return nil
+	}
+	deadline, err := time.Parse(time.RFC3339, expiresAt)
+	if err != nil {
+		return fmt.Errorf("release index expires_at %q is not RFC3339: %w", expiresAt, err)
+	}
+	if now := time.Now(); now.After(deadline) {
+		return fmt.Errorf("release index expired at %s (%d days ago); it is republished on release, "+
+			"so this is either a stale mirror or a replay - reinstall from https://eli.gladman.cc/magus/setup/",
+			expiresAt, int(now.Sub(deadline).Hours()/24))
+	}
+	return nil
 }
 
 // SelectRelease returns the IndexRelease for the requested tag from idx.
@@ -318,7 +370,7 @@ func FindAssets(rel *IndexRelease, assetName string) (Assets, error) {
 
 // FetchAndVerifyManifest downloads and Ed25519-verifies the SHA256SUMS file.
 func FetchAndVerifyManifest(ctx context.Context, sumsURL, sigURL string, opts Options) (*Manifest, error) {
-	if err := checkPubKey(opts.PubKey); err != nil {
+	if err := checkKeys(opts.Keys); err != nil {
 		return nil, err
 	}
 	// Signature first, for the reason given in FetchAndVerifyIndex.
@@ -330,8 +382,11 @@ func FetchAndVerifyManifest(ctx context.Context, sumsURL, sigURL string, opts Op
 	if err != nil {
 		return nil, fmt.Errorf("download SHA256SUMS: %w", err)
 	}
-	if !ed25519.Verify(opts.PubKey, sumsBytes, sigBytes) {
-		return nil, errors.New("signature check failed: SHA256SUMS.sig does not match SHA256SUMS")
+	// SHA256SUMS names no signer - it is a sha256sum(1)-compatible file and stays one -
+	// so the ring is tried. The caller has already narrowed it by the index's revoked[],
+	// which is what stops a revoked key vouching for the artifact hashes.
+	if _, err := opts.Keys.Verify(sumsBytes, sigBytes); err != nil {
+		return nil, fmt.Errorf("signature check failed: SHA256SUMS.sig does not match SHA256SUMS: %w", err)
 	}
 	return ParseManifest(sumsBytes)
 }

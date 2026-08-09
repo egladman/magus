@@ -65,9 +65,21 @@ type ReleaseArtifact struct {
 // and read by `magus self update`. The URL and schema are frozen at birth;
 // additive changes only.
 type ReleaseIndex struct {
-	SchemaVersion int            `json:"schema_version"`
-	Releases      []IndexRelease `json:"releases"`
+	SchemaVersion int      `json:"schema_version"`
+	KeyID         string   `json:"key_id"`
+	Revoked       []string `json:"revoked,omitzero"`
+	// ExpiresAt is how long a client may trust this file. It is the bound on replaying
+	// an old index that names no revocation, so it is not optional; see ReleaseIndex in
+	// internal/selfupdate for what it does and does not buy.
+	ExpiresAt string         `json:"expires_at,omitzero"`
+	Releases  []IndexRelease `json:"releases"`
 }
+
+// IndexValidity is how long a signed index is good for. Long, because nothing
+// republishes it on a timer: a release does, and the Release index workflow does on
+// demand. `magus doctor` warns as the deadline approaches, which is the part that
+// makes the window survivable without a cron holding the signing key.
+const IndexValidity = 180 * 24 * time.Hour
 
 // IndexRelease is one release as the index publishes it: the version, and the
 // artifacts a client can name and pin. The manifest's prose - date, notes, body -
@@ -84,10 +96,18 @@ type IndexRelease struct {
 	Artifacts []ReleaseArtifact `json:"artifacts"`
 }
 
-// buildIndex projects manifests (newest-first, as loadManifests returns them)
-// onto the served schema.
-func buildIndex(manifests []ReleaseManifest) ReleaseIndex {
-	idx := ReleaseIndex{SchemaVersion: 1, Releases: make([]IndexRelease, 0, len(manifests))}
+// buildIndex projects manifests (newest-first, as loadManifests returns them) onto the
+// served schema. keyID and expiresAt are passed in rather than read from the ring and
+// the clock here, so the transform stays a pure function of its inputs: the same
+// arguments must give byte-identical output, or nothing downstream can be compared.
+func buildIndex(manifests []ReleaseManifest, keyID, expiresAt string, revoked []string) ReleaseIndex {
+	idx := ReleaseIndex{
+		SchemaVersion: 1,
+		KeyID:         keyID,
+		Revoked:       revoked,
+		ExpiresAt:     expiresAt,
+		Releases:      make([]IndexRelease, 0, len(manifests)),
+	}
 	for _, m := range manifests {
 		artifacts := m.Artifacts
 		if artifacts == nil {
@@ -374,14 +394,14 @@ func runMigrate(args []string) error {
 // rather than regenerating it, so the signature covers the bytes a client
 // downloads.
 //
-// Usage: magus-utils release-index -releases ./releases -out ./docs/gen/public/release [-no-sign]
+// Usage: magus-utils release-index -releases ./releases -out ./docs/gen/public/release [-expires <RFC3339>] [-no-sign]
 //
 // This tool, and not the docs render, emits the file BECAUSE of the signature.
 // index.json is rendered on every main push and signed only on a tag, so a
 // renderer that could write it would overwrite a signed file with an unsigned one
 // the next time anything merged.
 func runReleaseIndex(args []string) error {
-	var releasesDir, outDir string
+	var releasesDir, outDir, expiresAt string
 	var skipSign bool
 	for i := 0; i < len(args)-1; i++ {
 		switch args[i] {
@@ -391,6 +411,9 @@ func runReleaseIndex(args []string) error {
 		case "-out":
 			outDir = args[i+1]
 			i++
+		case "-expires":
+			expiresAt = args[i+1]
+			i++
 		}
 	}
 	for _, a := range args {
@@ -399,7 +422,7 @@ func runReleaseIndex(args []string) error {
 		}
 	}
 	if releasesDir == "" || outDir == "" {
-		return fmt.Errorf("usage: magus-utils release-index -releases ./releases -out ./docs/gen/public/release [-no-sign]")
+		return fmt.Errorf("usage: magus-utils release-index -releases ./releases -out ./docs/gen/public/release [-expires <RFC3339>] [-no-sign]")
 	}
 
 	manifests, err := loadManifests(releasesDir)
@@ -409,7 +432,19 @@ func runReleaseIndex(args []string) error {
 	if len(manifests) == 0 {
 		return fmt.Errorf("no release manifests in %s; an empty index would strand every client", releasesDir)
 	}
-	data, err := json.Marshal(buildIndex(manifests))
+	// The index names the key that will sign it, and lists the keys no client may
+	// accept. Both come from the ring this binary embeds, so they cannot disagree with
+	// what a magus built from the same commit trusts.
+	active, err := selfupdate.ReleaseKeys.Active()
+	if err != nil {
+		return err
+	}
+	if expiresAt == "" {
+		expiresAt = time.Now().UTC().Add(IndexValidity).Format(time.RFC3339)
+	} else if _, err := time.Parse(time.RFC3339, expiresAt); err != nil {
+		return fmt.Errorf("-expires %q is not RFC3339: %w", expiresAt, err)
+	}
+	data, err := json.Marshal(buildIndex(manifests, active.ID, expiresAt, selfupdate.ReleaseKeys.RevokedIDs()))
 	if err != nil {
 		return fmt.Errorf("marshal index: %w", err)
 	}
@@ -451,9 +486,9 @@ func runReleaseIndex(args []string) error {
 	// Self-check against the key BINARIES carry, not against the one that just signed:
 	// that is the only pair whose disagreement strands clients, and it is what
 	// release_sign() checks for SHA256SUMS.
-	pubKey := selfupdate.PubKey
-	if overrideVerifyPubKey != nil {
-		pubKey = overrideVerifyPubKey
+	pubKey, err := releaseVerifyKey()
+	if err != nil {
+		return err
 	}
 	if err := verifyIndexSigFile(outDir, pubKey); err != nil {
 		return err

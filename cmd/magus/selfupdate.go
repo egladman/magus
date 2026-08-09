@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"crypto/ed25519"
 	"errors"
 	"flag"
 	"fmt"
@@ -21,17 +20,17 @@ import (
 
 // Overridable for tests (unexported; test files set them directly).
 var (
-	overridePubKey       []byte
+	overrideKeys         selfupdate.Keyring
 	overrideClient       *http.Client
 	overrideDiscoveryURL string
 )
 
 func activeOpts() selfupdate.Options {
 	opts := selfupdate.Options{DiscoveryURL: overrideDiscoveryURL, HTTPClient: overrideClient}
-	if overridePubKey != nil {
-		opts.PubKey = ed25519.PublicKey(overridePubKey)
+	if overrideKeys != nil {
+		opts.Keys = overrideKeys
 	} else {
-		opts.PubKey = selfupdate.PubKey
+		opts.Keys = selfupdate.ReleaseKeys
 	}
 	return opts
 }
@@ -170,6 +169,11 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("fetch release index: %w", err)
 	}
+
+	// Everything fetched from here on is verified against the ring MINUS whatever the
+	// signed index revoked. A binary built trusting a key the publisher has since
+	// revoked learns about it here and nowhere else.
+	opts.Keys = opts.Keys.Without(idx.Revoked)
 
 	rel, err := selfupdate.SelectRelease(idx, targetVer)
 	if err != nil {

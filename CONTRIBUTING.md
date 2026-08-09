@@ -386,29 +386,73 @@ both helpers pick them up automatically.
 
 ## Release-signing key rotation
 
-The release public key has a few intentional, reviewable copies: the binary's
-`internal/selfupdate/release.pub`, `docs/gen/install`, the setup action, and
-the download guide. `TestReleaseTrustAnchorMatchesInstallerAndCI` makes a
-mismatch between those copies fail CI. Never put the private Ed25519 seed in
-the repository or a release artifact.
+magus trusts a KEYRING, not a key: `internal/selfupdate/release-keys.json` lists
+every Ed25519 public key a signature may come from, each with a state. Signing
+uses exactly one; verification accepts any that is not revoked. The ring has
+reviewable copies in `docs/gen/install`, the setup action, and the download
+guide, and `TestReleaseTrustAnchorMatchesInstallerAndCI` fails CI when they
+disagree. Never put a private Ed25519 seed in the repository or a release
+artifact.
 
-For a planned rotation, create a compatibility release signed with the current
-key but built with the replacement public key. Users who install that release
-can verify later releases signed by the replacement key. Then move the
-`MAGUS_SIGNING_KEY` secret to the replacement private key and publish future
-releases with it. Update every public-key copy above in the same change, run
-the trust-anchor test, and dry-run the installer before publishing.
+| state | signs | verifies |
+| --- | --- | --- |
+| `active` | yes | yes |
+| `standby` | no | yes |
+| `retired` | no | yes |
+| `revoked` | no | no |
 
-The served release index is signed with the same key, so a rotation strands
-`magus self update` until it is re-signed: `docs/gen/public/release/index.json.sig`
-still carries the old key's signature, which the replacement binary rejects. Run
-the Release index workflow after moving the secret. It is manual for this reason -
-the moments the index has to change without a version being cut are a rotation, a
-corrected manifest, and a yank.
+The fingerprint is derived from the key (`KeyID`, the first 16 hex digits of its
+SHA-256), never written down, so an entry cannot name a key it does not hold.
 
-A compromised key cannot be revoked from binaries that already trust it: those
-binaries cannot distinguish a legitimate replacement from an attacker-signed
-one. Treat that as an incident: stop using the compromised signing secret,
-publish the replacement binary and public key through an independent trusted
-channel, and ask affected users to reinstall manually. Do not describe that
-path as an automatic update.
+**A planned rotation, which is why the ring exists.** The old procedure was a
+chain: ship a compatibility release signed by the current key that embeds the
+replacement. It only worked for someone who passed THROUGH that release, and
+`SelectRelease` takes the newest by default - so anyone a version or two behind
+jumped straight to a signature their binary had never been told to trust and was
+stranded with no in-band way back. The rotation was correct on paper and skipped
+exactly the people who most needed it.
+
+Instead, ship the replacement as `standby` long before it signs anything:
+
+1. Generate the keypair. Add the public half to `release-keys.json` as `standby`,
+   and to the installer and setup action. Run the trust-anchor test.
+
+   Rebuild with `--no-cache`. `release-keys.json` is embedded but matches none of
+   the go spell's source globs, so an ordinary `magus run build` reports `cached`
+   and leaves a binary carrying the old ring. Shell completions have the same gap.
+2. Release normally, more than once. Every binary in the field now trusts a key
+   that has signed nothing.
+3. When you are ready, flip `standby` to `active` and the old entry to `retired`,
+   and move the `MAGUS_SIGNING_KEY` secret to the replacement private key.
+4. Run the **Release index** workflow. The served index is signed with the same
+   key, so until it is re-signed `docs/gen/public/release/index.json.sig` still
+   carries the old signature and `magus self update` refuses it. That workflow is
+   manual precisely for this: a rotation, a corrected manifest, and a yank are the
+   moments the index must change without a version being cut.
+5. Drop a `retired` entry entirely once nothing you still need to verify was signed
+   by it.
+
+**Revoking a compromised key.** Set its state to `revoked` and delete it from the
+installer and the setup action, then run the Release index workflow. Its
+fingerprint is published in the signed index's `revoked[]`, and a client refuses
+any signature from a listed key.
+
+This is worth stating precisely, because it is easy to overclaim. Revocation only
+works because the revoking index is signed by a DIFFERENT key - the standby one -
+which an attacker holding the compromised key does not have. Signing a revocation
+with the revoked key would prove nothing, so the client refuses an index that
+revokes its own signer.
+
+What it does NOT fix: an attacker holding the `active` key signs whatever they
+like, and binaries trusting that key accept it until they see a revocation. The
+residual hole is that the attacker can keep serving an OLD index carrying no
+revocation. `expires_at` is what bounds that - past it the client refuses the file
+rather than trusting a stale one, converting an indefinite compromise into a
+denial of service, which is the right trade. It is 180 days, and nothing
+republishes on a timer: `magus doctor` warns as the deadline approaches and the
+Release index workflow is the remedy.
+
+If the compromise is real, treat it as an incident rather than a procedure: stop
+using the signing secret, publish the replacement binary and public key through an
+independent trusted channel, and ask affected users to reinstall manually. Do not
+describe that path as an automatic update.

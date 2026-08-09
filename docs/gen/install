@@ -11,6 +11,15 @@ TARGET_ARCH="${TARGET_ARCH:-$(uname -m)}"
 
 INSTALL_PREFIX="${INSTALL_PREFIX:-${HOME:?}/.local}"
 
+# Every key a magus binary trusts, newline-separated, mirroring the ring in
+# internal/selfupdate/release-keys.json - TestReleaseTrustAnchorMatchesInstallerAndCI
+# fails if the two disagree. Accepting the whole ring is what stops a key rotation
+# stranding fresh installs while self update keeps working.
+#
+# Revocation is deliberately NOT honoured here. It lives in the signed release index,
+# and a first install has no prior trust to withdraw and no installed binary to strand.
+# A revoked key is deleted from this list instead, which is the same outcome by the
+# only means an installer with no state can achieve.
 MAGUS_RELEASE_PUBKEY_HEX="ffbb8fa6f36274defd12888093c6a322c2532bc545016f495ab4955decb66779"
 
 SHORTHAND="${SHORTHAND:-true}"
@@ -241,27 +250,34 @@ verify_metadata() {
 
     log "Verifying release metadata signature..."
 
-    printf '302a300506032b6570032100%s' \
-        "${MAGUS_RELEASE_PUBKEY_HEX}" \
-        | xxd -r -p > pub.der
+    # Try each key in the ring. SHA256SUMS names no signer - it stays a plain
+    # sha256sum(1) file - so which key signed it is discovered, not declared.
+    # shellcheck disable=SC2086  # unquoted on purpose: the ring is one key per word
+    for key_hex in ${MAGUS_RELEASE_PUBKEY_HEX}; do
+        printf '302a300506032b6570032100%s' "${key_hex}" | xxd -r -p > pub.der
 
-    {
-        echo "-----BEGIN PUBLIC KEY-----"
-        openssl base64 -A < pub.der
-        echo
-        echo "-----END PUBLIC KEY-----"
-    } > pub.pem
+        {
+            echo "-----BEGIN PUBLIC KEY-----"
+            openssl base64 -A < pub.der
+            echo
+            echo "-----END PUBLIC KEY-----"
+        } > pub.pem
 
-    openssl pkeyutl \
-        -verify \
-        -pubin \
-        -inkey pub.pem \
-        -rawin \
-        -in SHA256SUMS \
-        -sigfile SHA256SUMS.sig \
-        || die "release metadata signature verification failed"
+        if openssl pkeyutl \
+            -verify \
+            -pubin \
+            -inkey pub.pem \
+            -rawin \
+            -in SHA256SUMS \
+            -sigfile SHA256SUMS.sig \
+            >/dev/null 2>&1
+        then
+            log "Release metadata signature verified (key $(printf '%.16s' "${key_hex}")...)."
+            return
+        fi
+    done
 
-    log "Release metadata signature verified."
+    die "release metadata signature verification failed: SHA256SUMS.sig matches none of the keys this installer trusts"
 }
 
 # Downloads the release artifact after metadata has been authenticated.

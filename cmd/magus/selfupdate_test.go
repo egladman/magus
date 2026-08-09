@@ -131,15 +131,15 @@ func newTestFixture(t *testing.T, tag string, manifestVersion ...string) *testFi
 // URLs (github.com/egladman/magus/releases/download/...) to the artifact server.
 func (fx *testFixture) activate(t *testing.T) {
 	t.Helper()
-	prevKey := overridePubKey
+	prevKey := overrideKeys
 	prevClient := overrideClient
 	prevBase := overrideDiscoveryURL
 	t.Cleanup(func() {
-		overridePubKey = prevKey
+		overrideKeys = prevKey
 		overrideClient = prevClient
 		overrideDiscoveryURL = prevBase
 	})
-	overridePubKey = fx.pub
+	overrideKeys = selfupdate.Keyring{{ID: selfupdate.KeyID(fx.pub), State: selfupdate.KeyActive, Pub: fx.pub}}
 	overrideDiscoveryURL = fx.indexSrv.URL + "/index.json"
 
 	// Build a client that redirects GitHub release asset fetches to the artifact server.
@@ -325,7 +325,7 @@ func TestSelfUpdate_BadSignature(t *testing.T) {
 	setVersion(t, "v0.3.0")
 
 	badPub, _, _ := ed25519.GenerateKey(rand.Reader)
-	overridePubKey = badPub
+	overrideKeys = selfupdate.Keyring{{ID: selfupdate.KeyID(badPub), State: selfupdate.KeyActive, Pub: badPub}}
 
 	err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"})
 	require.Error(t, err, "expected signature verification to fail")
@@ -349,15 +349,15 @@ func TestSelfUpdate_IndexUnreachable(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	prevKey := overridePubKey
+	prevKey := overrideKeys
 	prevClient := overrideClient
 	prevBase := overrideDiscoveryURL
 	t.Cleanup(func() {
-		overridePubKey = prevKey
+		overrideKeys = prevKey
 		overrideClient = prevClient
 		overrideDiscoveryURL = prevBase
 	})
-	overridePubKey = pub
+	overrideKeys = selfupdate.Keyring{{ID: selfupdate.KeyID(pub), State: selfupdate.KeyActive, Pub: pub}}
 	overrideClient = srv.Client()
 	overrideDiscoveryURL = srv.URL + "/index.json"
 	setVersion(t, "v0.3.0")

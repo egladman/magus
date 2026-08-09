@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/selfupdate"
@@ -69,7 +70,7 @@ func TestReleaseIndexSignAndVerify(t *testing.T) {
 			},
 		},
 	}
-	data, err := json.Marshal(buildIndex(manifests))
+	data, err := json.Marshal(buildIndex(manifests, "testkeyid", "2099-01-01T00:00:00Z", nil))
 	require.NoError(t, err)
 	data = append(data, '\n')
 
@@ -104,19 +105,24 @@ func TestBuildIndexEmitsOnlyTheServedSchema(t *testing.T) {
 		},
 		{Version: "v0.1.0", Date: "2026-07-05", Body: "### Added\n\n- initial", Yanked: true},
 	}
-	data, err := json.Marshal(buildIndex(manifests))
+	data, err := json.Marshal(buildIndex(manifests, "testkeyid", "2099-01-01T00:00:00Z", []string{"deadbeefdeadbeef"}))
 	require.NoError(t, err)
-	require.Equal(t, `{"schema_version":1,"releases":[`+
+	require.Equal(t, `{"schema_version":1,"key_id":"testkeyid","revoked":["deadbeefdeadbeef"],"expires_at":"2099-01-01T00:00:00Z","releases":[`+
 		`{"version":"v0.2.0","artifacts":[{"name":"magus_v0.2.0_linux_amd64_static.tar.gz","platform":"linux/amd64","size":"12","sha256":"ab"}]},`+
 		`{"version":"v0.1.0","yanked":true,"artifacts":[]}`+
 		`]}`, string(data))
+}
+
+// buildIndexForTest fills in the signer and lifetime a caller does not care about.
+func buildIndexForTest(manifests []ReleaseManifest) ReleaseIndex {
+	return buildIndex(manifests, "testkeyid", "2099-01-01T00:00:00Z", nil)
 }
 
 // TestBuildIndexParsesAsTheClientReadsIt runs the emitted bytes through the
 // reader in internal/selfupdate. The two schemas are declared in different
 // packages, so nothing but this stops them drifting apart.
 func TestBuildIndexParsesAsTheClientReadsIt(t *testing.T) {
-	data, err := json.Marshal(buildIndex([]ReleaseManifest{
+	data, err := json.Marshal(buildIndexForTest([]ReleaseManifest{
 		{Version: "v0.2.0", Artifacts: []ReleaseArtifact{{Name: "magus_v0.2.0_linux_amd64_static.tar.gz"}}},
 		{Version: "v0.3.0", Yanked: true},
 	}))
@@ -150,24 +156,57 @@ func mustLoadShippedManifests(t *testing.T) []ReleaseManifest {
 // index.json.sig covers these exact bytes, so a gate allowed to REWRITE the file
 // would silently invalidate the signature it is meant to protect. Comparing can
 // only ever report.
+//
+// The rebuild reuses the served file's own key_id and expires_at. Those are not
+// functions of the manifests - one is who signed, the other is a clock reading - so
+// asserting them here would only assert that time had not passed.
 func TestServedIndexMatchesTheManifests(t *testing.T) {
-	want, err := json.Marshal(buildIndex(mustLoadShippedManifests(t)))
-	require.NoError(t, err)
 	got, err := os.ReadFile(filepath.Join(servedIndexDir, "index.json"))
+	require.NoError(t, err)
+	var served ReleaseIndex
+	require.NoError(t, json.Unmarshal(got, &served))
+
+	want, err := json.Marshal(buildIndex(mustLoadShippedManifests(t), served.KeyID, served.ExpiresAt, served.Revoked))
 	require.NoError(t, err)
 	require.Equal(t, string(want)+"\n", string(got),
 		"docs/gen/public/release/index.json is stale: re-run `magus-utils release-index` and re-sign it")
 }
 
-// TestServedIndexSignatureVerifies proves the published pair is one a shipped
-// binary can verify - the failure that made `magus self update` exit 1 for every
-// user of v0.3.0. Only a tag build (or the release-index workflow) holds the key,
-// so the signature arrives after the index; the skip is that window and nothing else.
-func TestServedIndexSignatureVerifies(t *testing.T) {
-	if _, err := os.Stat(filepath.Join(servedIndexDir, "index.json.sig")); os.IsNotExist(err) {
+// TestServedIndexIsSignedByTheRing proves the published pair is one a shipped binary
+// can verify - the failure that made `magus self update` exit 1 for every user of
+// v0.3.0 - and that it names the key that actually signed it. Only a tag build (or the
+// release-index workflow) holds the key, so the signature arrives after the index; the
+// skip is that window and nothing else.
+func TestServedIndexIsSignedByTheRing(t *testing.T) {
+	sig, err := os.ReadFile(filepath.Join(servedIndexDir, "index.json.sig"))
+	if os.IsNotExist(err) {
 		t.Skip("index.json.sig not committed yet; run the release-index workflow")
 	}
-	require.NoError(t, verifyIndexSigFile(servedIndexDir, selfupdate.PubKey))
+	require.NoError(t, err)
+	data, err := os.ReadFile(filepath.Join(servedIndexDir, "index.json"))
+	require.NoError(t, err)
+
+	signer, err := selfupdate.ReleaseKeys.Verify(data, sig)
+	require.NoError(t, err)
+	var served ReleaseIndex
+	require.NoError(t, json.Unmarshal(data, &served))
+	require.Equal(t, signer.ID, served.KeyID, "the index must name the key that signed it")
+}
+
+// TestServedIndexHasNotExpired is the warning the doctor check gives interactively,
+// as a gate: an index past expires_at is refused by every client, so it must never be
+// the thing sitting in the repository.
+func TestServedIndexHasNotExpired(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(servedIndexDir, "index.json"))
+	require.NoError(t, err)
+	var served ReleaseIndex
+	require.NoError(t, json.Unmarshal(data, &served))
+	require.NotEmpty(t, served.ExpiresAt, "an index with no expires_at can be replayed forever")
+
+	deadline, err := time.Parse(time.RFC3339, served.ExpiresAt)
+	require.NoError(t, err)
+	require.True(t, time.Now().Before(deadline),
+		"the served index expired at %s: run the Release index workflow", served.ExpiresAt)
 }
 
 // TestShippedManifestsPinEveryArtifact guards the defect that made the served

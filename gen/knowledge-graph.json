@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2531,
-  "edge_count": 5773,
+  "edge_count": 5774,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -28673,6 +28673,14 @@
       "source": "doc:CONTRIBUTING.md",
       "target": "diagnostic:MGS1021",
       "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CONTRIBUTING.md"
+    },
+    {
+      "source": "doc:CONTRIBUTING.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "CONTRIBUTING.md"

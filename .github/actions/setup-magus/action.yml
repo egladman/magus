@@ -110,6 +110,14 @@ runs:
       shell: bash
       working-directory: .setup-magus-install
       env:
+        # The release keyring, one key per whitespace-separated word, mirroring
+        # internal/selfupdate/release-keys.json. Add a key here when you add one there;
+        # TestReleaseTrustAnchorMatchesInstallerAndCI fails when they disagree.
+        #
+        # Note this value does not currently reach the installer: docs/gen/install
+        # assigns its own copy unconditionally, and the copy that runs is the one sparse
+        # -checked-out from the default branch above. The test is what keeps the two
+        # equal, so the pin is documentation rather than enforcement.
         MAGUS_RELEASE_PUBKEY_HEX: ffbb8fa6f36274defd12888093c6a322c2532bc545016f495ab4955decb66779
         GIT_REF: ${{ inputs.git-ref }}
         STRATEGY: ${{ inputs.installation-strategy }}
