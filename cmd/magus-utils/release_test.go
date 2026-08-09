@@ -464,3 +464,22 @@ func writeManifestFile(t *testing.T, dir string, m ReleaseManifest) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, m.Version+".yaml"), data, 0o644))
 }
+
+// The asset naming scheme changed at v0.4.0: releases up to v0.3.0 wrote `-static` and
+// `-cgo`, later ones write `_static`. platformFromName has to read both, or every asset
+// already published gets a platform like "darwin/arm64-static" - which is not a platform,
+// and is what the release index would then advertise.
+func TestPlatformFromNameReadsBothVariantSpellings(t *testing.T) {
+	for _, tc := range []struct{ name, version, want string }{
+		{"magus_v0.4.0_linux_amd64_static.tar.gz", "v0.4.0", "linux/amd64"},
+		{"magus_v0.4.0_linux_amd64.tar.gz", "v0.4.0", "linux/amd64"},
+		{"magus_v0.3.0_darwin_arm64-static.tar.gz", "v0.3.0", "darwin/arm64"},
+		{"magus_v0.3.0_darwin_arm64.tar.gz", "v0.3.0", "darwin/arm64"},
+		{"magus_v0.2.0_linux_amd64-cgo.tar.gz", "v0.2.0", "linux/amd64"},
+		{"SHA256SUMS", "v0.3.0", ""},
+	} {
+		if got := platformFromName(tc.name, tc.version); got != tc.want {
+			t.Errorf("platformFromName(%q) = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}

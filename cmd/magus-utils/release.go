@@ -665,7 +665,10 @@ func platformFromName(name, version string) string {
 	// mid is e.g. "linux_amd64", or "linux_amd64_static" for the marked variant. Strip a
 	// trailing variant token first: both variants describe the SAME platform, and without
 	// this the SplitN below yields "linux/amd64_static" as the platform string.
-	for _, variant := range []string{"_static", "_dynamic"} {
+	// Both separators, because the scheme changed: releases through v0.3.0 wrote
+	// `-static` / `-cgo`, later ones write `_static`. Stripping only the current spelling
+	// yields "darwin/arm64-static" as a platform for every asset already published.
+	for _, variant := range []string{"_static", "_dynamic", "-static", "-dynamic", "-cgo"} {
 		mid = strings.TrimSuffix(mid, variant)
 	}
 	parts := strings.SplitN(mid, "_", 2)
