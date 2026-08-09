@@ -6,45 +6,45 @@ body: |-
 artifacts:
     - name: magus_v0.2.1_darwin_amd64-static.tar.gz
       platform: darwin/amd64
-      size: ""
-      sha256: ""
+      size: "12782287"
+      sha256: "f6b66f857b724cd64ca08cefde1f65600864adf0755c7242f7875432b63770ed"
     - name: magus_v0.2.1_darwin_arm64-static.tar.gz
       platform: darwin/arm64
-      size: ""
-      sha256: ""
+      size: "11807875"
+      sha256: "4a4c35d3bf98e3f2ee28797e5268d8b09c9b85b74368ed18504c3f78f48941a8"
     - name: magus_v0.2.1_darwin_arm64.tar.gz
       platform: darwin/arm64
-      size: ""
-      sha256: ""
+      size: "11393416"
+      sha256: "6bdac2d0711bfbe89db5d193d32d145ad3a31938d6c832d87c94a5d872025fb4"
     - name: magus_v0.2.1_linux_amd64-static.tar.gz
       platform: linux/amd64
-      size: ""
-      sha256: ""
+      size: "12598157"
+      sha256: "5940ae770e62ff1a5b3e2fcf3c92f01f30b5d43969b0085def4f90f9172b8f37"
     - name: magus_v0.2.1_linux_amd64.tar.gz
       platform: linux/amd64
-      size: ""
-      sha256: ""
+      size: "12339382"
+      sha256: "3d0781086d3c9fdd2b340431573a0349c6bbf0121b6bae45297c0f69152c9c35"
     - name: magus_v0.2.1_linux_arm64-static.tar.gz
       platform: linux/arm64
-      size: ""
-      sha256: ""
+      size: "11369772"
+      sha256: "f958662ae906f353ff2a4dc85f18f03fb0dd7c993bdf709332509f4a90ed0bcf"
     - name: magus_v0.2.1_linux_arm64.tar.gz
       platform: linux/arm64
-      size: ""
-      sha256: ""
+      size: "11125703"
+      sha256: "2c1a0ec69e81db78bed14188c7479f77b6290ca77a1bffc3e0386206acfcd497"
     - name: magus_v0.2.1_windows_amd64-static.tar.gz
       platform: windows/amd64
-      size: ""
-      sha256: ""
+      size: "12192238"
+      sha256: "514f7b36610bc7870950a560e52c6514e2f996ff986690c81991448254048628"
     - name: magus_v0.2.1_windows_amd64.tar.gz
       platform: windows/amd64
-      size: ""
-      sha256: ""
+      size: "11960846"
+      sha256: "45a0194594fd45457cde6b11aab335769105b4148d35f7ec79372234ef4623f1"
     - name: SHA256SUMS
-      platform: 
-      size: ""
-      sha256: ""
+      platform: ""
+      size: "924"
+      sha256: "cb0c71c9ebba8b17980f9235392fccfec24860e06ea07a7f56a8155d18ccf49c"
     - name: SHA256SUMS.sig
-      platform: 
-      size: ""
-      sha256: ""
+      platform: ""
+      size: "64"
+      sha256: "d24bca077eed9950f71a22f1acee71e3550e65fd8493290d8c50eee01da9c0f4"

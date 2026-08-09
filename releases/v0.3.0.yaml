@@ -1,0 +1,50 @@
+version: v0.3.0
+date: "2026-07-25"
+body: |-
+    See the full changelog at
+    https://github.com/egladman/magus/compare/v0.2.1...v0.3.0
+artifacts:
+    - name: SHA256SUMS
+      platform: ""
+      size: "924"
+      sha256: "32efbc0100926e93c0abb80fa68ffaf0f8b015abe3e283e8568c66fda752fe5f"
+    - name: SHA256SUMS.sig
+      platform: ""
+      size: "64"
+      sha256: "33be8d2664defe742e13a6335cda9436a6146a8b53b5f8496cd393e4881e3230"
+    - name: magus_v0.3.0_darwin_amd64-static.tar.gz
+      platform: darwin/amd64
+      size: "12874430"
+      sha256: "5589a89438cf61cafc7f681e2be3cbf672e9cbb93c7e5475d226ef22d19669b0"
+    - name: magus_v0.3.0_darwin_arm64-static.tar.gz
+      platform: darwin/arm64
+      size: "11933472"
+      sha256: "c3b0e562ebc9f6122eaadcb31eb5fc40b42fcc357553d13d43a5e1783b555cdb"
+    - name: magus_v0.3.0_darwin_arm64.tar.gz
+      platform: darwin/arm64
+      size: "11456358"
+      sha256: "b0cd65d48bc432ebd4315f0e54ed782a5c0ebb580c5f7d060acf9153023026e1"
+    - name: magus_v0.3.0_linux_amd64-static.tar.gz
+      platform: linux/amd64
+      size: "12640120"
+      sha256: "49b6eb02894d5318f9ffff1b029e2034fe94486fcf6325b98eb30db9b9375a14"
+    - name: magus_v0.3.0_linux_amd64.tar.gz
+      platform: linux/amd64
+      size: "12408488"
+      sha256: "7fd0dfd5c56581ad1312453e456ab0ced48124ae515ced85bfd419394cc1ab7e"
+    - name: magus_v0.3.0_linux_arm64-static.tar.gz
+      platform: linux/arm64
+      size: "11440798"
+      sha256: "c48a5b46fb8e9766bf49beb915d08687dd0716a85e6ff76e2b8b1c1fcfcb398f"
+    - name: magus_v0.3.0_linux_arm64.tar.gz
+      platform: linux/arm64
+      size: "11249269"
+      sha256: "8e59cbeeefccf3d93e004a3c042fc3bab24ccdbfbac0dc5e0108b042a0373b37"
+    - name: magus_v0.3.0_windows_amd64-static.tar.gz
+      platform: windows/amd64
+      size: "12267526"
+      sha256: "481f7e827b00b828bffa47b39ce9cd8538d860ad938e370869b998747d12647c"
+    - name: magus_v0.3.0_windows_amd64.tar.gz
+      platform: windows/amd64
+      size: "12036401"
+      sha256: "7d522cb9b7b2576aff7753358ab7bd03fca60eaaa60481ddc2ca5955cf69632a"

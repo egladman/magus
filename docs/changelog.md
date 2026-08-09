@@ -751,6 +751,11 @@ proc forward failed` line). This is routine when multiple worktrees run differen
   collision between an ancestor and a descendant spell is flagged (MGS1002) and
   suppressed only with an acknowledged `spells.allow_shadow` reason.
 
+## [v0.3.0] - 2026-07-25
+
+See the full changelog at
+https://github.com/egladman/magus/compare/v0.2.1...v0.3.0
+
 ## [v0.2.1] - 2026-07-19
 
 See the full changelog at
