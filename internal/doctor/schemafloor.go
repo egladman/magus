@@ -100,12 +100,12 @@ func (r *runner) checkSchemaFloor(projects []*types.Project) types.DoctorCheck {
 			Message: fmt.Sprintf("required_version %q is not a constraint this check can evaluate", declared),
 			Details: details}
 	}
-	if c.Check(needV) && !c.Check(predecessor(needV)) {
+	if c.Check(needV) && !c.Check(highestBelow(needV)) {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK,
 			Message: fmt.Sprintf("required_version %q covers %d version-gated key(s)", declared, len(used)),
 			Details: details}
 	}
-	if c.Check(predecessor(needV)) {
+	if c.Check(highestBelow(needV)) {
 		return types.DoctorCheck{
 			Name:   name,
 			Status: types.DoctorAdvice,
@@ -119,18 +119,28 @@ func (r *runner) checkSchemaFloor(projects []*types.Project) types.DoctorCheck {
 		Details: details}
 }
 
-// predecessor returns the version immediately below v for the purpose of "does this
-// constraint admit anything older": the previous patch, or the previous minor's .0 when
-// v is itself a .0. Approximate on purpose - it only has to produce a version that IS
-// older than v, so a constraint that admits it is demonstrably too loose.
-func predecessor(v *semver.Version) *semver.Version {
+// highestBelow returns the GREATEST version below v, so that "does this constraint admit
+// anything older than v" can be answered with a single probe.
+//
+// Greatest, not merely "some older version", and that distinction is the whole check.
+// Probing the previous minor's .0 - v0.4.0 -> v0.3.0 - answers a narrower question than
+// the one being asked: `>= 0.3.5` rejects 0.3.0, so the check reported OK while the
+// declared floor still admitted 0.3.5 through 0.3.9, none of which can load the
+// workspace. Any floor set INSIDE the previous series was invisible.
+//
+// Patch is the finest granularity a release can occupy, so decrementing it is exact.
+// Below a .0 there is no greatest patch, so the probe uses one no release will reach;
+// a constraint admitting it admits everything in that series.
+func highestBelow(v *semver.Version) *semver.Version {
+	// Beyond any real release, and far below the uint64 the field holds.
+	const unreachablePatch = uint64(1) << 40
 	switch {
 	case v.Patch() > 0:
 		return semver.New(v.Major(), v.Minor(), v.Patch()-1, "", "")
 	case v.Minor() > 0:
-		return semver.New(v.Major(), v.Minor()-1, 0, "", "")
+		return semver.New(v.Major(), v.Minor()-1, unreachablePatch, "", "")
 	case v.Major() > 0:
-		return semver.New(v.Major()-1, 0, 0, "", "")
+		return semver.New(v.Major()-1, unreachablePatch, unreachablePatch, "", "")
 	default:
 		return semver.New(0, 0, 0, "", "")
 	}

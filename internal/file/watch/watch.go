@@ -257,6 +257,11 @@ func (w *Watcher) loop(ctx context.Context, cfg watchConfig) {
 
 		case err, ok := <-w.n.Errors():
 			if !ok {
+				// flushFinal, exactly as the Events arm does. Both backends close errors
+				// BEFORE events (LIFO defers), so this is the arm that actually wins on a
+				// notifier shutting itself down - and returning bare here dropped the
+				// pending batch plus whatever was still buffered in Events().
+				flushFinal()
 				return
 			}
 			select {

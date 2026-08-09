@@ -189,3 +189,18 @@ func TestClampPrefixesDropsOverlongEntries(t *testing.T) {
 	t.Parallel()
 	assert.Empty(t, ClampPrefixes([]string{strings.Repeat("x", maxFieldLen+1)}))
 }
+
+// An unknown level must not render as the quietest token. This function decides how
+// loudly a finding is reported, so a level added upstream, or an int a spell handed in,
+// silently becoming "notice" is a downgrade nobody asked for and nobody would see.
+func TestLevelStringDoesNotDowngradeAnUnknownLevel(t *testing.T) {
+	for _, l := range []Level{Level(99), Level(-1)} {
+		if got := l.String(); got == "notice" {
+			t.Errorf("Level(%d).String() = %q; an unenumerated level must not read as the least severe one", l, got)
+		}
+	}
+	// The three real levels still render as their provider tokens.
+	if got := LevelNotice.String(); got != "notice" {
+		t.Errorf("LevelNotice.String() = %q, want notice", got)
+	}
+}
