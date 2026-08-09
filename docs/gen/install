@@ -271,13 +271,19 @@ download_artifact() {
     release_url="${1:?}"
     version="$(release_version "$release_url")"
 
-    # The static archive is the unsuffixed one, matching the container tags (`latest` is
-    # static, `latest-cgo` is cgo). VARIANT=cgo opts into the glibc build.
-    suffix=""
-    if [ "$VARIANT" != "static" ]; then
-        suffix="-cgo"
-    fi
-    artifact="magus_${version}_${OS}_${ARCH}${suffix}.tar.gz"
+    # The asset name is READ OUT of the signed manifest rather than reconstructed here.
+    # SHA256SUMS is already downloaded and its signature already verified at this point,
+    # so it is both authoritative and trusted, and it is the only source that cannot go
+    # stale: this script is served from main and installs older releases, whose naming
+    # this file has now been wrong about twice.
+    #
+    # The two spellings it has to span: v0.3.0 and earlier published `-static`, later
+    # releases publish `_static`, and in BOTH the bare name is the dynamic build. The
+    # old code asked for the bare name whenever VARIANT=static, so the default install
+    # silently fetched a dynamically linked binary; its other branch asked for `-cgo`,
+    # a token no release has ever produced.
+    artifact="$(select_artifact "$version")" ||
+        die "no ${VARIANT} archive for ${OS}/${ARCH} in the signed manifest for ${version}"
 
     printf 'Downloading %s...\n' "$artifact" >&2
 
@@ -286,6 +292,39 @@ download_artifact() {
         -o "${work_dir}/${artifact}"
 
     printf '%s\n' "$artifact"
+}
+
+# select_artifact prints the asset name for this platform and VARIANT, chosen from the
+# verified SHA256SUMS. Static prefers the current `_static` spelling and falls back to
+# the pre-v0.4.0 `-static`; dynamic is the bare name in both eras.
+select_artifact() {
+    # Usage: select_artifact <version>
+
+    version="${1:?}"
+    base="magus_${version}_${OS}_${ARCH}"
+
+    if [ "$VARIANT" = "static" ]; then
+        for candidate in "${base}_static.tar.gz" "${base}-static.tar.gz"; do
+            if manifest_has "$candidate"; then
+                printf '%s\n' "$candidate"
+                return 0
+            fi
+        done
+        return 1
+    fi
+
+    manifest_has "${base}.tar.gz" || return 1
+    printf '%s\n' "${base}.tar.gz"
+}
+
+# manifest_has reports whether the verified manifest lists exactly this asset.
+manifest_has() {
+    # Usage: manifest_has <asset>
+
+    awk -v asset="${1:?}" '
+        ($2 == asset || $2 == "*" asset) { found = 1 }
+        END { exit found ? 0 : 1 }
+    ' "${work_dir}/SHA256SUMS"
 }
 
 verify_artifact() {
@@ -350,10 +389,20 @@ install_release() {
 
     mkdir -p "${INSTALL_PREFIX}/bin"
 
+    # The archive carries the binary plus its paperwork (LICENSE, README.md,
+    # THIRD-PARTY-NOTICES, BUILDINFO). Check the member list against that allowlist
+    # rather than for equality with "magus": equality was correct until the paperwork
+    # was added and then rejected every release. An allowlist still refuses the thing
+    # the check is for - a verified archive that carries a member nobody expected -
+    # and only `magus` is ever extracted.
     archive_members="$(tar -tzf "$archive")" ||
         die "cannot inspect verified archive"
-    [ "$archive_members" = "magus" ] ||
-        die "verified archive must contain exactly one regular magus binary"
+    printf '%s\n' "$archive_members" | grep -qx 'magus' ||
+        die "verified archive does not contain a magus binary"
+    unexpected="$(printf '%s\n' "$archive_members" |
+        grep -vx -e 'magus' -e 'LICENSE' -e 'README.md' -e 'THIRD-PARTY-NOTICES' -e 'BUILDINFO' || true)"
+    [ -z "$unexpected" ] ||
+        die "verified archive carries unexpected members: $(printf '%s' "$unexpected" | tr '\n' ' ')"
 
     tar -xzf "$archive" magus ||
         die "cannot extract verified magus binary"
