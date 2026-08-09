@@ -1,14 +1,10 @@
 ---
-title: Package managers and source builds
-description: Install magus through mise via the ubi backend, or build it from source, and the tradeoffs each route makes against the signed-release guarantee.
-tags: [mise, ubi, aqua, package-manager, build-from-source, noselfupdate]
+title: mise
+description: Install magus through mise via the ubi backend, and why the aqua and go backends are not the route to take.
+tags: [mise, ubi, aqua, package-manager, go-install]
 ---
 
-# Package managers and source builds
-
-Both routes on this page trade something away against the [install script](../download.md#install). Read the caveats before choosing one.
-
-## mise
+# mise
 
 magus installs through [mise](https://mise.jdx.dev) with no plugin, via its
 [ubi](https://mise.jdx.dev/dev-tools/backends/ubi.html) backend, which pulls the
@@ -43,7 +39,7 @@ defaults to the static build; ubi resolves to the dynamically linked one where a
 release publishes both. `darwin/amd64` currently ships only a static build, so
 that is what it gets there.
 
-### Why not aqua, or the go backend?
+## Why not aqua, or the go backend?
 
 [aqua](https://mise.jdx.dev/dev-tools/backends/aqua.html) is mise's preferred
 backend where a tool is registered, and it is the better target long-term because
@@ -54,26 +50,44 @@ upstream pull request to
 [aquaproj/aqua-registry](https://github.com/aquaproj/aqua-registry), and it would
 close the verification gap above.
 
-The `go` backend resolves and compiles, but do not use it for an install you
-intend to keep:
+The `go` backend resolves and compiles. It is documented here because people find
+it anyway, not because it is supported.
+
+> **Not the golden path, and not a route to adopt.** magus is a build tool, and a
+> build tool installed through the package manager of a toolchain it manages puts
+> a circle in your foundation: you need a working Go toolchain to obtain the thing
+> you use to manage Go builds, and when something breaks the remedy is to upgrade
+> the toolchain you were using magus to pin. Those failures are oblique, hard to
+> guard against, and there is usually nowhere sensible to attach an error message
+> explaining what happened. The same objection applies to installing any build
+> tool with npm, cargo, or pip. Use the [install script](../setup.md#install).
 
 ```bash
 # builds, but reports: magus unknown (unknown) built unknown
 mise use -g go:github.com/egladman/magus/cmd/magus@latest
 ```
 
+Two concrete problems on top of the structural one.
+
 `go install` cannot pass the `-ldflags` that stamp the version, commit, and build
 date. `unknown` is not cosmetic - it is the dev-build sentinel magus keys on
 internally to fingerprint an unstamped build, so a go-backend install presents
 itself to magus as a development binary rather than the release it came from.
-Use it to try magus, not to run it.
 
-## Build from source
+It used to fail outright on many clean machines, and the fix is worth knowing about
+if you are packaging magus. `internal/codec` selected its implementation on the
+`cgo` build tag, and `CGO_ENABLED` defaults to 1 wherever a C compiler is present,
+which covers a typical Linux dev box and any Mac with the Xcode command line tools.
+That path needs `liblzma` and `libzstd` development headers discoverable by
+pkg-config, so without them the build died at the pkg-config step with an error
+naming neither magus nor the fix. It was invisible from a maintainer's machine,
+where the headers are always present.
+
+The native codec is now opt-in, one tag per system library, so every build that does
+not ask for it gets the pure-Go implementation that static releases have always
+shipped. Only the dynamically linked release asset asks:
 
 ```sh
-git clone https://github.com/egladman/magus
-cd magus
-go build -o magus ./cmd/magus
+go build -tags liblzma,libzstd ./cmd/magus
 ```
 
-Add `-tags noselfupdate` to disable the self-update subcommand (for distro-packaged builds).

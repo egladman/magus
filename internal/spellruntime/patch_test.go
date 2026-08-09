@@ -256,7 +256,8 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Name:  "go",
 		Needs: []string{"**/*.go", "**/*.txtar", "**/*.s", "**/*.S", "**/*.c", "**/*.h", "go.mod", "go.sum", "go.work", "go.work.sum"},
 		Tools: map[string]spells.Tool{
-			"go":            {Probe: spells.Command{Bin: "go", Args: []string{"version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}},
+			"go": {Probe: spells.Command{Bin: "go", Args: []string{"version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch},
+				Supported: spells.VersionBounds{Min: "1.21"}},
 			"golangci-lint": {Probe: spells.Command{Bin: "golangci-lint", Args: []string{"--version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}},
 			"govulncheck":   {Probe: spells.Command{Bin: "govulncheck", Args: []string{"-version"}}},
 		},

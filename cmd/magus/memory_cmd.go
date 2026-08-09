@@ -157,7 +157,7 @@ func memoryPut(root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "only a decision or plan may carry a short why in --body.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Examples:")
-			fmt.Fprintln(os.Stderr, "  magus memory put installer-key --type decision --ref 'doc: docs/guides/download.md#verification' --body 'Keep one bootstrap key; rotation ships a compatibility release first.'")
+			fmt.Fprintln(os.Stderr, "  magus memory put installer-key --type decision --ref 'doc: docs/setup.md#verification' --body 'Keep one bootstrap key; rotation ships a compatibility release first.'")
 			fmt.Fprintln(os.Stderr, "  magus memory put next-release --type plan --ref 'command: magus affected ci' --status active --body 'Run the release gate after docs regenerate.'")
 			fs.PrintDefaults()
 		}

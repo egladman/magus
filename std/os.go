@@ -69,7 +69,7 @@ var Os = Module{
 	Methods: []Method{
 		{
 			Name: "exec",
-			Doc:  "Run cmd directly (no shell; args are never shell-interpolated). Output streams live and is captured. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. Optional dir runs cmd there (relative to the target's cwd). opts.stdin is fed to the process as standard input - pipe by passing a prior call's stdout.",
+			Doc:  "Run cmd directly (no shell; args are never shell-interpolated). Output streams live and is captured. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. Optional dir runs cmd there (relative to the target's cwd). opts.stdin is fed to the process as standard input - pipe by passing a prior call's stdout. opts.quiet captures the output without echoing it to the console.",
 			Args: []Arg{
 				{Name: "cmd", Type: TypeString},
 				{Name: "args", Type: TypeStringSlice, Optional: true},
@@ -81,7 +81,7 @@ var Os = Module{
 		},
 		{
 			Name: "exec_sh",
-			Doc:  "Run line through a shell - for pipes, redirection, globs, and variable expansion. Default shell is /bin/sh (cmd on Windows); pass opts.shell (e.g. \"bash\") to override, resolved via PATH. A shell line is written in the platform shell's dialect, so sh and cmd lines are not portable across OSes - for cross-platform logic prefer os.exec plus the fs/os helpers. Same result and raise semantics as exec (opts.stdin and opts.allow_failure included); optional dir runs the shell there.",
+			Doc:  "Run line through a shell - for pipes, redirection, globs, and variable expansion. Default shell is /bin/sh (cmd on Windows); pass opts.shell (e.g. \"bash\") to override, resolved via PATH. A shell line is written in the platform shell's dialect, so sh and cmd lines are not portable across OSes - for cross-platform logic prefer os.exec plus the fs/os helpers. Same result and raise semantics as exec (opts.stdin, opts.allow_failure, and opts.quiet included); optional dir runs the shell there.",
 			Args: []Arg{
 				{Name: "line", Type: TypeString},
 				{Name: "dir", Type: TypeString, Optional: true},
@@ -312,6 +312,16 @@ func optStringDefault(opts map[string]any, key, def string) string {
 // os.with_env overrides ride ctx (withEnvKey). label/cmd name the command in the
 // raise message. A non-zero exit raises unless opts.allow_failure is true, which
 // returns the object instead; a sandbox exec denial always propagates.
+//
+// opts.quiet keeps the capture and drops the live streaming, which is what a caller
+// consuming a value rather than watching a build wants. It is read HERE, the one path
+// os.exec, os.exec_sh, and vcs.cmd all share, so the three cannot offer different
+// option sets by accident - and it spells the option the same way the magus.* methods
+// already do.
+//
+// Without it a chatty command has no quiet form at all: `git ls-remote --tags` against
+// nodejs/node is 954 lines, streamed in full before the caller sees its own output.
+// Capture stays on regardless, so a quiet call still returns stdout.
 func runResult(ctx context.Context, name string, args []string, dir, label, cmd string, opts map[string]any) (types.ExecResult, error) {
 	overrides, _ := ctx.Value(withEnvKey{}).([]string)
 	res, err := run.Exec(ctx, name, args, run.ExecOptions{
@@ -319,6 +329,7 @@ func runResult(ctx context.Context, name string, args []string, dir, label, cmd 
 		Env:     overrides,
 		Stdin:   optStringDefault(opts, "stdin", ""),
 		Capture: true,
+		Quiet:   optBoolDefault(opts, "quiet", false),
 	})
 	if err != nil && errors.Is(err, types.ExecDenied) {
 		return types.ExecResult{}, err

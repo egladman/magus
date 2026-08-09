@@ -23,6 +23,11 @@ Change a file and magus works out which projects it reaches, rebuilds only those
 
 ## Why magus exists
 
+magus is the tool you type all day: build, test, lint, and ask the repo a
+question. Two problems shape everything else on this page. The first is what
+those commands cost you in time. The second is what they need you to already
+know.
+
 The tools you run in a monorepo, you run all day. Build, test, lint, switch
 branches, do it again. So friction compounds fast. A few wasted seconds a run,
 one flaky target, a teammate's botched merge that starts failing on your
@@ -107,7 +112,7 @@ sh install.sh
 
 Reviewing the downloaded script before executing it lets you audit the URL, verification,
 and installation steps instead of piping an unreviewed network response directly to your shell.
-See the [Download guide](docs/guides/download.md) for platform details, verification, and updates.
+See the [Install guide](docs/setup.md) for platform details, verification, and updates.
 
 ### A first look
 

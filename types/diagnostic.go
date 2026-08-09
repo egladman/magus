@@ -125,8 +125,14 @@ const (
 	// code - so it sits beside it rather than in a family of its own.
 	ToolNotReady DiagnosticCode = "MGS3004"
 	// ToolTooOld is the fourth question about a tool: it exists, it reports a version,
-	// it is usable - and that version is older than the spell's ops work against.
-	ToolTooOld                DiagnosticCode = "MGS3005"
+	// it is usable - and that version is below the declared minimum.
+	ToolTooOld DiagnosticCode = "MGS3005"
+	// ToolTooNew is ToolTooOld's other side: the version is at or above a ceiling the
+	// spell or the workspace excludes. A separate code rather than a shared "version
+	// rejected" because the remediation is the opposite one, and because folding both
+	// into MGS3005 is exactly the defect this pair replaced - a too-new binary being
+	// told it was too old.
+	ToolTooNew                DiagnosticCode = "MGS3006"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -167,7 +173,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,
-	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld,
+	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits, DaemonRequired,
