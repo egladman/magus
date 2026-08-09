@@ -213,13 +213,30 @@ func TestParseChangesByCommitEmpty(t *testing.T) {
 
 // gitDivergedOrigin builds an origin repository with `trunk` commits of shared history, a
 // branch "feat" cut from its tip carrying one commit of its own, and three further commits
-// on "main" past the branch point. It returns the repository path.
+// on "main" past the branch point. It returns the repository path and the number of
+// commits reachable from main, which the fixture knows exactly because it made them.
+//
+// Returning the count matters more than it looks. A caller that wants "the full history"
+// would otherwise shell out to `git rev-list --count HEAD`, walking every object in the
+// repository to re-measure a number this function already determined - and that walk is
+// the most object-hungry thing in these tests. It failed once in CI with
+//
+//	error: Could not read <sha>
+//	fatal: Failed to traverse parents of commit <sha>
+//
+// which is the signature of a loose object file that was written and then could not be
+// read back (reproduced exactly by deleting one file from .git/objects). Nothing in the
+// test touches the origin between building it and counting it, the shallow clone provably
+// leaves the origin's .git unchanged, and a redirected GIT_OBJECT_DIRECTORY reports
+// different errors - so the surviving explanation is the runner losing a write under
+// load, on the shard this repo has already measured at 7.5GB+6.1GB on a 16GB box. No
+// assertion can make that correct; not depending on those objects is the available fix.
 //
 // The trunk is what makes a bounded clone measurable. With a short shared history, any
 // fetch deep enough to reach the branch point also reaches the root, so the repository
 // stops being shallow and a test cannot tell a bounded recovery from `git fetch
 // --unshallow`. Keep `trunk` well above the ladder's first rung.
-func gitDivergedOrigin(t *testing.T, trunk int) string {
+func gitDivergedOrigin(t *testing.T, trunk int) (string, int) {
 	t.Helper()
 	origin := t.TempDir()
 	gitInitRepo(t, origin, map[string]string{"magus.yaml": "version: 1\n"})
@@ -239,10 +256,12 @@ func gitDivergedOrigin(t *testing.T, trunk int) string {
 	// main moves on past the branch point, so the merge base is neither branch's tip and
 	// the diff has post-branch-point commits it must exclude.
 	gitRun(t, origin, "checkout", "-q", "main")
-	for i := range 3 {
+	const pastBranchPoint = 3
+	for i := range pastBranchPoint {
 		commit(fmt.Sprintf("main-%d.txt", i))
 	}
-	return origin
+	// gitInitRepo's own commit, the trunk, then the three above. "feat" is not on main.
+	return origin, 1 + trunk + pastBranchPoint
 }
 
 // gitCloneShallow clones branch "feat" from origin at depth, single-branch: the shape a CI
@@ -296,9 +315,8 @@ func gitCommitCount(t *testing.T, dir string) int {
 // back from a clone that never had the merge base to begin with - and the recovery must
 // stay bounded rather than quietly turning into `git fetch --unshallow`.
 func TestDiffRecoversMergeBaseInShallowClone(t *testing.T) {
-	origin := gitDivergedOrigin(t, 40)
+	origin, full := gitDivergedOrigin(t, 40)
 	clone := gitCloneShallow(t, origin, 1)
-	full := gitCommitCount(t, origin)
 
 	// An uncommitted edit too, so the recovered merge base is exercised against the work
 	// tree the same way a real `magus affected` run sees it.
@@ -324,7 +342,7 @@ func TestDiffRecoversMergeBaseInShallowClone(t *testing.T) {
 // any checkout deeper than its first rung, and a later rung failing left the repository
 // holding less history than it was cloned with.
 func TestRecoverMergeBaseNeverShortens(t *testing.T) {
-	origin := gitDivergedOrigin(t, 40)
+	origin, _ := gitDivergedOrigin(t, 40)
 	const depth = 36 // deeper than the ladder's first rung (32), shallower than the divergence
 	clone := gitCloneShallow(t, origin, depth)
 	before := gitCommitCount(t, clone)
@@ -342,7 +360,7 @@ func TestRecoverMergeBaseNeverShortens(t *testing.T) {
 // test. A full clone that cannot find a merge base has a bad ref, not missing history, and
 // no read-only query should fetch into it.
 func TestRecoverMergeBaseSkipsFullClone(t *testing.T) {
-	origin := gitDivergedOrigin(t, 3)
+	origin, _ := gitDivergedOrigin(t, 3)
 	clone := gitCloneShallow(t, origin, 0)
 	require.Empty(t, gitOutput(t, clone, "for-each-ref", "--format=%(refname)", "refs/remotes/origin/main"),
 		"single-branch clone must lack the base ref, so merge-base fails for a reason recovery could fix")
@@ -357,7 +375,8 @@ func TestRecoverMergeBaseSkipsFullClone(t *testing.T) {
 // Neither may be guessed at, because the segment reaches `git fetch` as a repository
 // argument - a URL sink.
 func TestRecoverMergeBaseUnusableBase(t *testing.T) {
-	clone := gitCloneShallow(t, gitDivergedOrigin(t, 3), 1)
+	shortOrigin, _ := gitDivergedOrigin(t, 3)
+	clone := gitCloneShallow(t, shortOrigin, 1)
 	assert.Empty(t, gitVCS{}.recoverMergeBase(t.Context(), clone, "deadbeef"))
 	assert.Empty(t, gitVCS{}.recoverMergeBase(t.Context(), clone, "refs/remotes/origin/main"))
 }
