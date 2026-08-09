@@ -561,6 +561,7 @@
             "lint",
             "build",
             "test",
+            "codec-cgo-test",
             "completion-test",
             "security"
           ]
@@ -586,6 +587,28 @@
               "project": ".",
               "glob": "cmd/magus/completions/*"
             }
+          ]
+        },
+        {
+          "name": "codec-cgo-test",
+          "declared": "codec_cgo_test",
+          "doc": "Runs internal/codec's tests against the CGO codecs, which the ordinary test target cannot reach.",
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-test"
+              ]
+            }
+          ],
+          "reads_files": [
+            {
+              "project": ".",
+              "glob": "internal/codec/*.go"
+            }
+          ],
+          "exec_overrides": [
+            "env:CGO_ENABLED=1"
           ]
         },
         {

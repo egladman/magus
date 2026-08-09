@@ -48,7 +48,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | project | 10+ | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
 | target | 100+ | `magus query kind:target` | `content-generate`, `site-generate`, `generate` |
 | spell | 10+ | `magus query kind:spell` | `go`, `typescript`, `markdown` |
-| op | 50+ | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-tidy` |
+| op | 50+ | `magus query kind:op` | `go-build`, `go-test`, `go-fmt` |
 | tool | 10+ | `magus query kind:tool` | `sh`, `go`, `pnpm` |
 | charm | 10+ | `magus query kind:charm` | `rw`, `cd`, `stable` |
 | module | 20+ | `magus query kind:module` | `fs`, `charm`, `magus` |
@@ -63,7 +63,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 36 | `magus query project:.` | `generate`, `image-build`, `lint` |
+| . | 37 | `magus query project:.` | `generate`, `image-build`, `lint` |
 | console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 4 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |

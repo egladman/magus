@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2530,
-  "edge_count": 5771,
+  "node_count": 2532,
+  "edge_count": 5776,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -16334,7 +16334,17 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.",
-      "source": "magusfile.buzz:1761",
+      "source": "magusfile.buzz:1791",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:magusfile.buzz:codec_cgo_test",
+      "kind": "function",
+      "label": "codec_cgo_test",
+      "doc": "Runs internal/codec's tests against the CGO codecs, which the ordinary test target cannot reach.  `go-test` runs with no build tags, so it compiles zstd_other.go and xz_other.go and never the ~470 lines of zstd_cgo.go and xz_cgo.go - which are exactly the files a release binary ships (`release-build` passes -tags liblzma,libzstd). The coverage figure hid it: internal/codec read 78.9% while the shipped half was at zero.  That gap cost real correctness. The cgo zstd reader discarded ZSTD_decompressStream's hi",
+      "source": "magusfile.buzz:1779",
       "attrs": {
         "exported": "true"
       }
@@ -16378,7 +16388,7 @@
       "kind": "function",
       "label": "deploy_generate",
       "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/.  It lives here rather than in the Pages workflow because that workflow is meant to be thin - set up a toolchain, name targets, upload the artifact - and the layout below is portable logic that would otherwise be GitHub-specific shell. It is also what makes the deploy reproducible locally: run the same three commands, then serve gen/site, and what you see is what publishe",
-      "source": "magusfile.buzz:1900",
+      "source": "magusfile.buzz:1930",
       "attrs": {
         "exported": "true"
       }
@@ -16579,7 +16589,7 @@
       "kind": "function",
       "label": "missing_input",
       "doc": "missing_input phrases a deploy-generate precondition that ANOTHER project owns.  Naming one single-project command teaches the wrong habit: the reader runs it, gets the next precondition, runs another, and learns the set by failing once per producer. So name every producer in one command. `magus run <target> [project...]` takes a LIST - `magus run build docs console` is one dispatch over both - which is the idiom this message teaches.  Deliberately NOT \"magus affected build\" or \"magus run build /\". Both wou",
-      "source": "magusfile.buzz:1861"
+      "source": "magusfile.buzz:1891"
     },
     {
       "id": "function:magusfile.buzz:mocks_generate",
@@ -16633,7 +16643,7 @@
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json. Always let pnpm validate the install, matching console/magusfile.buzz. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready and handed the missing packages to esbuild. On a warm tree --frozen-lockfile is about a second and",
-      "source": "magusfile.buzz:1823"
+      "source": "magusfile.buzz:1853"
     },
     {
       "id": "function:magusfile.buzz:release",
@@ -16676,7 +16686,7 @@
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:1835"
+      "source": "magusfile.buzz:1865"
     },
     {
       "id": "function:magusfile.buzz:resolvable",
@@ -16706,7 +16716,7 @@
       "kind": "function",
       "label": "serve",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than",
-      "source": "magusfile.buzz:1949",
+      "source": "magusfile.buzz:1979",
       "attrs": {
         "exported": "true"
       }
@@ -21856,7 +21866,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "target_count": "36"
+        "target_count": "37"
       }
     },
     {
@@ -22149,6 +22159,17 @@
       "source": ".",
       "attrs": {
         "declared_as": "ci_shard",
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:.:codec-cgo-test",
+      "kind": "target",
+      "label": "codec-cgo-test",
+      "doc": "Runs internal/codec's tests against the CGO codecs, which the ordinary test target cannot reach.",
+      "source": ".",
+      "attrs": {
+        "declared_as": "codec_cgo_test",
         "engine": "buzz"
       }
     },
@@ -53057,6 +53078,14 @@
     },
     {
       "source": "file:magusfile.buzz",
+      "target": "function:magusfile.buzz:codec_cgo_test",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:commit",
       "relation": "contains",
       "confidence": "extracted",
@@ -64599,6 +64628,14 @@
     },
     {
       "source": "project:.",
+      "target": "target:.:codec-cgo-test",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
       "target": "target:.:completion-test",
       "relation": "contains",
       "confidence": "extracted",
@@ -66331,6 +66368,14 @@
     },
     {
       "source": "target:.:ci",
+      "target": "target:.:codec-cgo-test",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:ci",
       "target": "target:.:completion-test",
       "relation": "depends_on",
       "confidence": "extracted",
@@ -66357,6 +66402,22 @@
       "source": "target:.:ci",
       "target": "target:.:test",
       "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:codec-cgo-test",
+      "target": "op:go:go-test",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:codec-cgo-test",
+      "target": "spell:go",
+      "relation": "uses",
       "confidence": "extracted",
       "score": 1,
       "provenance": "."
