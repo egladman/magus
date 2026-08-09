@@ -303,9 +303,12 @@ var goldenBuiltins = map[string]spells.Descriptor{
 	},
 	"markdown": {
 		Name:   "markdown",
-		Needs:  []string{"**/*.md", "**/*.MD", "**/*.markdown", ".markdownlint.json", ".markdownlint.yaml"},
+		Needs:  []string{"**/*.md", "**/*.MD", "**/*.markdown", ".markdownlint.json", ".markdownlint.yaml", "dprint.json"},
 		Claims: []string{"**/*.md", "**/*.mdx"},
 		Ops: map[string]spells.Op{
+			"dprint": {Command: spells.Command{Bin: "dprint", Args: []string{"check"}, Charms: map[string]spells.Charm{
+				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "fmt"}}},
+			}}},
 			"markdownlint": {Command: spells.Command{Bin: "markdownlint", Args: []string{"**/*.md", "**/*.mdx"}}},
 			"prettier": {Command: spells.Command{Bin: "prettier", Args: []string{"--check", "--no-error-on-unmatched-pattern", "**/*.md", "**/*.mdx"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "--write"}}},

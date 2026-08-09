@@ -933,21 +933,15 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
         // magusfile, which is what actually survives into the log. A name alone was
         // not enough twice running: the drift that sent us here turned out to be a
         // daemon auth token captured into a docs example, invisible from a filename.
-        // git only (hg and jj take different arguments), never fatal - a diagnostic
-        // must not become the failure.
-        if (vcs\name() == "git") {
-            final d = vcs\cmd(["diff", "--unified=1", "--"] + changed,
-                opts: {"allow_failure": true});
-            var body = d.stdout;
-            // gen/knowledge-graph.json is 2.2MB on one line; bound it so a generated
-            // JSON cannot bury a small, readable drift somewhere else in the list.
-            if (body.len() > 4000) {
-                body = body.sub(0, len: 4000)
-                    + "\n... truncated; `magus query output <ref>` has it all";
-            }
-            if (body != "") {
-                magus\info("generate: what changed on this runner:\n" + body);
-            }
+        var body = vcs\dirtyDiff(changed);
+        // gen/knowledge-graph.json is 2.2MB on one line; bound it so a generated
+        // JSON cannot bury a small, readable drift somewhere else in the list.
+        if (body.len() > 4000) {
+            body = body.sub(0, len: 4000)
+                + "\n... truncated; `magus query output <ref>` has it all";
+        }
+        if (body != "") {
+            magus\info("generate: what changed on this runner:\n" + body);
         }
         // Two causes land here and they have different owners: output that was never
         // regenerated, and a generator that does not emit the same bytes twice. Only a

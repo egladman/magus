@@ -228,7 +228,7 @@ func TestDiffGitIncludesWorkingTree(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("v2\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "new.txt"), []byte("new\n"), 0o644))
 
-	files, err := gitVCS{}.Diff(context.Background(), dir, base)
+	files, err := gitVCS{}.ChangedFiles(context.Background(), dir, base)
 	require.NoError(t, err, "Diff")
 	assert.Contains(t, files, "tracked.txt", "uncommitted edit to a tracked file must be in the diff")
 	assert.Contains(t, files, "new.txt", "untracked new file must be in the diff")
@@ -298,7 +298,7 @@ func TestInstallableAndInstaller(t *testing.T) {
 func TestDiffRejectsFlagLikeBase(t *testing.T) {
 	drivers := []types.VCSDriver{gitVCS{}, hgVCS{}, jjVCS{}}
 	for _, v := range drivers {
-		_, err := v.Diff(context.Background(), t.TempDir(), "-rf")
+		_, err := v.ChangedFiles(context.Background(), t.TempDir(), "-rf")
 		require.Errorf(t, err, "%s.Diff with flag-like base should error", v.Name())
 		assert.Containsf(t, err.Error(), "looks like a flag", "%s.Diff error", v.Name())
 	}

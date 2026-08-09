@@ -19,11 +19,11 @@ type VCSDriver interface {
 	// against the backend's on-disk signature; no process is spawned.
 	IsSecondaryCheckout(dir string) bool
 	Base() string
-	// Root, Diff, and Metadata operate on the repository containing dir. An empty
+	// Root, ChangedFiles, and Metadata operate on the repository containing dir. An empty
 	// dir uses the process working directory. Passing an explicit dir is required
 	// for correctness when work runs concurrently, since the process cwd is global.
 	Root(ctx context.Context, dir string) (string, error)
-	Diff(ctx context.Context, dir, base string) ([]string, error)
+	ChangedFiles(ctx context.Context, dir, base string) ([]string, error)
 	Bisect(ctx context.Context, dir string, opts BisectOptions) (Culprit, error)
 	DiffCommands(ctx context.Context, dir, base string) (DiffCommandHints, error)
 	Metadata(ctx context.Context, dir string) (VCSMeta, error)
@@ -37,6 +37,16 @@ type VCSDriver interface {
 	// nil when clean. Dirty is defined in terms of this; callers that report *what*
 	// changed use these lines.
 	DirtyFiles(ctx context.Context, dir string, paths []string) ([]string, error)
+	// DirtyDiff is DirtyFiles with the CONTENT: the working tree's uncommitted changes
+	// to those paths, as the backend's own unified diff, empty when nothing changed.
+	// Callers that must show WHY a file changed use this; the ones that only need the
+	// names use DirtyFiles.
+	//
+	// Parity here means every backend answers the question, not that the bytes match:
+	// git, hg, and jj each emit their native diff header, and no wrapper can reconcile
+	// those without lying about what ran. Context width follows the backend's own flag
+	// where it has one.
+	DirtyDiff(ctx context.Context, dir string, paths []string) (string, error)
 	// FindCommit looks up a revision (a VCS-native rev expression; empty means
 	// the current revision) and returns its normalized Commit.
 	FindCommit(ctx context.Context, dir, rev string) (Commit, error)

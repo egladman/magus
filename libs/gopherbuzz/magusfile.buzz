@@ -67,10 +67,8 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
         // Print the diff, not just the verdict. This gate fires where its reader has
         // a CI log and no tree, and the index carries workspace-wide counts, so
         // "drifted" alone cannot say whether a count moved or a whole section did.
-        if (vcs\name() == "git") {
-            final d = vcs\cmd(["diff", "--unified=1", "--", "MAGUS.md"], opts: {"allow_failure": true});
-            if (d.stdout != "") { magus\info("generate: what changed on this runner:\n" + d.stdout); }
-        }
+        final body = vcs\dirtyDiff(["MAGUS.md"]);
+        if (body != "") { magus\info("generate: what changed on this runner:\n" + body); }
         throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/gopherbuzz` and commit" + drift.secondCause;
     }
 }

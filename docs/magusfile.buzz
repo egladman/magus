@@ -306,26 +306,17 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     if (moved.len() > 0) {
         // Print the diff, not just the names: a name alone still leaves the reader
         // guessing WHY a file they regenerated locally came out different on a runner,
-        // and CI is where this mostly fires. git only: hg and jj take different
-        // arguments, and
-        // a diagnostic must never be the thing that fails the build, so a backend
-        // that cannot answer just prints nothing.
-        if (vcs\name() == "git") {
-            // magus\info, NOT the command's own streamed output: a tool's stdout
-            // goes to the run log and the console shows only "likely diagnostics",
-            // which dropped this diff entirely on the first attempt. What a
-            // magusfile prints itself is what a reader actually sees.
-            final d = vcs\cmd(["diff", "--unified=1", "--"] + moved,
-                opts: {"allow_failure": true});
-            var body = d.stdout;
-            // A generated JSON file is one enormous line; bound it so the useful
-            // case (a small markdown drift) is not buried by the useless one.
-            if (body.len() > 4000) {
-                body = body.sub(0, len: 4000) + "\n... truncated; `magus query output <ref>` has it all";
-            }
-            if (body != "") {
-                magus\info("generate: what changed on this runner:\n" + body);
-            }
+        // and CI is where this mostly fires. magus\info, NOT the command's own streamed
+        // output: a tool's stdout goes to the run log and the console shows only "likely
+        // diagnostics", which dropped this diff entirely on the first attempt.
+        var body = vcs\dirtyDiff(moved);
+        // A generated JSON file is one enormous line; bound it so the useful
+        // case (a small markdown drift) is not buried by the useless one.
+        if (body.len() > 4000) {
+            body = body.sub(0, len: 4000) + "\n... truncated; `magus query output <ref>` has it all";
+        }
+        if (body != "") {
+            magus\info("generate: what changed on this runner:\n" + body);
         }
         throw "generate: regeneration changed " + moved.join(", ")
             + "; re-run `magus run generate:rw docs` and commit" + drift.secondCause;
