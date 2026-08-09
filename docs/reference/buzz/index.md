@@ -46,7 +46,7 @@ These are the runtime utility modules. Import each under its bare name - `import
 
 | Module | Description |
 |--------|-------------|
-| [`crypto`](crypto.md) | Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop). |
+| [`crypto`](crypto.md) | Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop) and Ed25519 signing. |
 
 ## Networking
 
