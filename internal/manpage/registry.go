@@ -16,6 +16,9 @@ var All = []Command{
 	affectedCommand,
 	insightCommand,
 	graphCommand,
+	queryCommand,
+	explainCommand,
+	pathCommand,
 	watchCommand,
 	statusCommand,
 	doctorCommand,
@@ -302,6 +305,140 @@ doc coverage from the knowledge graph - is magus graph stats; the report embeds 
 		{"Rising vs cooling activity", "magus insight trend --since 90d"},
 		{"Flaky (volatile) targets", "magus insight volatility"},
 		{"Whole-workspace report (all lenses)", "magus insight report --workspace"},
+	},
+}
+
+var queryCommand = Command{
+	Name:        "query",
+	Short:       "Search the knowledge graph, and retrieve a run's output or journal by id",
+	Description: "Resolve search terms to knowledge-graph nodes and return the ranked matches plus their neighborhood; also retrieves a target's captured output by ref and a run's journal by invocation id.",
+	Tags:        []string{"cli", "magus query", "query", "knowledge graph", "search", "output", "reference", "invocation", "journal", "audit"},
+	Long: `Ask the workspace what it knows. query resolves terms to nodes in the
+knowledge graph and returns the ranked matches plus the induced subgraph around
+them, collected up to a node budget. Its siblings explain and path read the same
+graph: explain shows one node's context, path connects two nodes.
+
+Terms are free text plus field filters, and they compose: kind:spell, project:pkg/foo,
+relation:uses, id:build, and negation with a leading dash (-kind:op). A bare word
+matches names and documentation.
+
+query is also the retrieval verb for the two ids magus prints, each an EXPLICIT
+subcommand rather than a shape-routed positional, so a search term can never collide
+with an id:
+
+  output <ref>       One target execution's captured output, by the reference id
+                     shown when the target ran (out1a2b3c). The default prints the
+                     exact bytes, so it pipes anywhere. --meta shows the run's
+                     identity instead - descriptor, lineage, cache key, and the
+                     digests of the key's component classes, which is the
+                     machine-comparable half of a works-on-my-machine report.
+                     --attempts lists the ref's stored executions, --publish uploads
+                     the output to the remote cache as a signed bundle, and --open
+                     hands the bytes to the browser log viewer in a URL fragment
+                     (delivered privately; never uploaded).
+  invocation <id>    One run's journal, by the invocation id shown as inv: in
+                     query output <ref> --meta. --secrets narrows it to the
+                     credential reads - which references the run reached for and
+                     through which provider, never the value - which is how an audit
+                     answers "what did this run touch". Run logs are trimmed to a cap
+                     by the daemon's RotateLogs job, so this answers for recent runs
+                     rather than forever.
+
+The graph is cache-backed under <cache>/knowledge and only shards whose sources
+changed are rebuilt, so a query is cheap to repeat; --refresh forces a full rebuild.`,
+	Usage: "magus query <terms> [flags]",
+	BuildFlags: func(fs *flag.FlagSet) {
+		fs.Int("budget", 0, "Max nodes in the returned neighborhood (default 50)")
+		fs.String("kind", "", "Restrict matches to these node kinds (comma-separated)")
+		fs.Bool("refresh", false, "Force a full graph rebuild before querying")
+		fs.Bool("global", false, "Query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace")
+		fs.Bool("meta", false, "output <ref>: show the run's identity - descriptor, lineage, cache key, component digests")
+		fs.Bool("attempts", false, "output <ref>: list the ref's stored executions (newest first)")
+		fs.Bool("publish", false, "output <ref>: upload this run's output to the remote cache as a signed bundle")
+		fs.Bool("open", false, "output <ref>: open the captured output in the browser log viewer (delivered privately)")
+		fs.Bool("print", false, "With --open, print the viewer URL instead of launching a browser")
+		fs.String("url", "", "With --open, base URL of the log viewer page (override for a self-hosted mirror)")
+		fs.Bool("secrets", false, "invocation <id>: list only the credential reads (reference and provider, never the value)")
+	},
+	Children: []Command{
+		{Name: "output", Short: "Retrieve one target execution's captured output by reference id"},
+		{Name: "invocation", Short: "Read one run's journal by invocation id (--secrets for the credential reads)"},
+	},
+	Examples: []Example{
+		{"Find a spell by name", "magus query kind:spell go"},
+		{"What uses this target", "magus query relation:uses id:build"},
+		{"Everything but ops", "magus query docker -kind:op"},
+		{"Print a run's captured output", "magus query output out1a2b3c"},
+		{"Compare a run's cache key", "magus query output out1a2b3c --meta"},
+		{"Audit a run's credential reads", "magus query invocation invmsm3vcou1 --secrets"},
+	},
+}
+
+var explainCommand = Command{
+	Name:        "explain",
+	Short:       "Show one knowledge-graph node's context: data, edges, and reach",
+	Description: "Show a single knowledge-graph node in context: its data, its incoming and outgoing edges with provenance, and how many nodes reach it.",
+	Tags:        []string{"cli", "magus explain", "explain", "knowledge graph", "node", "edges", "provenance", "impact"},
+	Long: `explain shows one node's context: its data, its incoming and outgoing
+edges with provenance, and how many nodes reach it. Where query finds candidates,
+explain is what you run on the one you picked.
+
+The argument is a node ID (target:pkg/foo:build) or a name that resolves to one
+(build). Names are convenient and IDs are unambiguous; when a name matches more than
+one node, resolve it with query first and pass the ID.
+
+Two parts of the output are worth knowing about. Every edge carries its PROVENANCE -
+what declared it, so a surprising relationship can be traced to the file that created
+it rather than taken on faith. And the reach count answers the blast-radius question
+directly: how many nodes can arrive at this one.
+
+The graph is cache-backed under <cache>/knowledge and only shards whose sources
+changed are rebuilt; --refresh forces a full rebuild.`,
+	Usage: "magus explain <node-id-or-name> [flags]",
+	BuildFlags: func(fs *flag.FlagSet) {
+		fs.Bool("refresh", false, "Force a full graph rebuild before explaining")
+		fs.Bool("global", false, "Resolve across the workspaces registered in config (knowledge.workspaces)")
+	},
+	Examples: []Example{
+		{"A target in full", "magus explain target:pkg/api:build"},
+		{"Resolve by bare name", "magus explain build"},
+		{"A spell's context", "magus explain spell:go"},
+		{"As a record", "magus explain build -o json"},
+	},
+}
+
+var pathCommand = Command{
+	Name:        "path",
+	Short:       "Connect two knowledge-graph nodes: the shortest chain of edges between them",
+	Description: "Find the shortest chain of edges connecting two knowledge-graph nodes, walking edges in either direction, with each hop's relation named.",
+	Tags:        []string{"cli", "magus path", "path", "knowledge graph", "shortest path", "relationship", "coupling"},
+	Long: `path connects two nodes: the shortest chain of edges between them (edges
+walked in either direction), with each hop's relation.
+
+It answers the question the other two verbs cannot: not "what is this" or "what does
+this touch", but "how are these two related at all". That is the question worth asking
+when a change to one thing breaks a seemingly unrelated other, or when you suspect two
+projects are coupled and want the chain rather than a hunch. Each hop names its
+relation, so the answer is a mechanism you can check and not just a claim that a
+connection exists.
+
+Edges are walked in EITHER direction, which is what makes it useful and is also its
+main caveat: a returned chain proves the two nodes are connected in the graph, not that
+influence flows from one to the other. Read the hop relations to see which way each
+link actually points.
+
+Each argument is a node ID (target:pkg/foo:build) or a name that resolves to one.
+The graph is cache-backed under <cache>/knowledge; --refresh forces a full rebuild.`,
+	Usage: "magus path <a> <b> [flags]",
+	BuildFlags: func(fs *flag.FlagSet) {
+		fs.Bool("refresh", false, "Force a full graph rebuild before pathfinding")
+		fs.Bool("global", false, "Resolve endpoints across the workspaces registered in config (knowledge.workspaces)")
+	},
+	Examples: []Example{
+		{"How are two projects related", "magus path pkg/api pkg/web"},
+		{"From a spell to a diagnostic", "magus path spell:go MGS3003"},
+		{"Between two targets by ID", "magus path target:pkg/api:build target:pkg/web:test"},
+		{"As a record", "magus path pkg/api pkg/web -o json"},
 	},
 }
 

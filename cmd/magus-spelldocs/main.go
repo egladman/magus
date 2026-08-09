@@ -79,6 +79,12 @@ var spellMeta = map[string]spellInfo{
 		intro:       "The `markdown` spell lints and formats Markdown. `markdownlint` enforces style, and `prettier` checks formatting; the `rw` charm turns the check into an in-place rewrite.",
 		tags:        []string{"markdown", "docs", "prettier", "lint"},
 	},
+	"podman": {
+		dir: "podman", language: "OCI containers",
+		description: "Podman spell: image build, push, manifest assembly, and run for the podman runtime.",
+		intro:       "The `podman` spell forks the `podman` CLI. It is separate from `docker` rather than a bin substitution because podman has no `buildx`: multi-platform images are `podman build --platform` plus `podman manifest`, so the two runtimes need different ops rather than the same ops with a different binary.",
+		tags:        []string{"podman", "container", "image", "oci", "buildah"},
+	},
 	"docker": {
 		dir: "docker", language: "Docker",
 		description: "Docker spell: image build, build-check, buildx, and hadolint Dockerfile linting.",

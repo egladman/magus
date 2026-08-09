@@ -44,8 +44,9 @@ how:
   the secret, behind whatever authentication it already enforces.
 - **The blast radius of a compromised machine shrinks to what an attacker can unlock**,
   rather than everything you have ever exported or written to a file.
-- **Reaching for a credential is recorded.** Every read lands in the invocation journal
-  with its reference and provider, so "what did this run touch" has an answer.
+- **Reaching for a credential is recorded, and readable.** Every read lands in the run's
+  journal with its reference and provider, and `magus query invocation <id> --secrets`
+  reads it back, so "what did this run touch" has an answer you can actually get.
 
 This is what makes running integration tests against real infrastructure from a laptop a
 reasonable thing to do rather than a thing you get away with. The credential is scoped to
@@ -136,8 +137,8 @@ the load fails saying why.
 
 ## Providers
 
-Where a secret comes from is a provider's job. magus ships one and treats everything
-else as a spell.
+Where a secret comes from is a provider's job. magus ships the built-in environment
+provider plus two spells, and treats everything else as a spell you write.
 
 ### The built-in environment provider
 
@@ -185,6 +186,67 @@ exporting tokens into a shell while CI keeps using the environment.
 magus ships this one at `spells/onepassword/`, imported by path because a spell that
 imports a host module cannot be compiled into the binary. Copy it as the starting point
 for any backend with a CLI that prints a secret to stdout.
+
+#### The GitHub Actions provider
+
+magus also ships `spells/github/actions`, the same spell that carries the Actions cache
+backend and CI provider. Wire it as a third contract:
+
+```buzz
+import "spells/github/actions" as github;
+
+if (os\env("GITHUB_ACTIONS") == "true") {
+    magus\secret.provider(github);
+}
+```
+
+It exists because an Actions secret is **write-only**. Nothing running inside a job can
+fetch one; interpolating it into a step's `env:` block is the only path there has ever
+been, and the built-in environment provider already reads that. So this provider does the
+two things a platform-neutral one structurally cannot.
+
+**It mints OIDC tokens.** A reference prefixed `oidc:` is an audience, and magus requests
+a short-lived token from the runner's own endpoint:
+
+```buzz
+final token = magus\secret.read("oidc:sts.amazonaws.com");
+```
+
+This is the only credential on a runner that is genuinely fetched rather than injected,
+which is what lets a repository hold no long-lived cloud key at all. It needs the
+permission, which is off by default:
+
+```yaml
+permissions:
+  id-token: write
+```
+
+A job without it is given no endpoint, and the error says so rather than naming an unset
+variable.
+
+**It reads an injected variable, and says which line to add when one is missing.** A bare
+reference is an environment variable name, as with the built-in provider, but the failure
+is a workflow edit rather than a shell one, so the error is the snippet to paste:
+
+```text
+github-actions: $DOCKERHUB_TOKEN is not set in this step's environment.
+  An Actions secret is only readable through the workflow file - nothing
+  running inside the job can fetch one. Add it to the step:
+      env:
+        DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+```
+
+Every value it resolves is also registered with the runner via `::add-mask::`, so GitHub
+masks it in **every** step's log rather than only in the output magus captures. The
+runner already does this automatically for anything interpolated from `secrets.*`; it
+does not for a step output injected into `env:`, and it cannot for a token minted
+mid-job, which is where this earns its place.
+
+That command necessarily carries the secret in the clear, so it is gated on running under
+Actions. The gate is an ordinary environment variable and therefore spoofable, which is
+safe only because of an invariant the spell states and future changes must keep: every
+value that reaches it was derived from the same environment the gate reads, so whoever
+can spoof it can only be shown what they already supplied.
 
 #### Setup, and being honest about it
 
@@ -297,8 +359,9 @@ Three rules, and each exists because the alternative is infuriating.
 calls `magus\secret.read`, never at magusfile evaluation. This matters more than it
 sounds: a magusfile that read a secret at the top level would prompt on `magus ls`, on
 `magus describe`, on every command in the workspace. Keep reads inside target bodies, and
-keep the _act of authenticating_ in its own target rather than as a side effect of a
-build - see the convention below.
+keep the _act of authenticating_ out of a build target's side effects - see
+[Authenticating](#authenticating-and-the--login-convention) below for when that means a
+separate target and when it just means logging in after the push tells you to.
 
 The same rule applies to reporting. `magus run image-registries` lists what a publish
 needs and resolves nothing; only `image-registries:cd,verify` - a user explicitly asking
@@ -308,7 +371,7 @@ the single most annoying thing this feature could do.
 **Every wait is announced before it happens.** A provider that prompts prints first:
 
 ```text
-secret: waiting on onepassword for "Private/Docker Hub/credential" (timeout 90s)
+secret: waiting on onepassword for "Private/Docker Hub/credential" (timeout 60s)
 ```
 
 An unexplained biometric prompt in the middle of a build is a trust failure, not a UX
@@ -317,7 +380,7 @@ did. The line names what is waiting, what it wants, and how long it will wait. T
 [journal](#what-magus-does-with-a-resolved-value) records the read afterwards; this is the
 half you can see while the dialog is on screen.
 
-**No terminal means fail fast, not wait.** With a TTY, magus allows 90 seconds for you to
+**No terminal means fail fast, not wait.** With a TTY, magus allows 60 seconds for you to
 answer an unlock. Without one, it allows 10 - because a provider that would prompt cannot,
 so it either answers from a cached session immediately or it is going to block until
 something else kills it. The error says which situation you are in:
@@ -332,14 +395,27 @@ Both budgets are configurable, per workspace:
 ```yaml
 # magus.yaml
 secret:
-  timeout: 60s              # waiting for a person to complete an unlock
+  interactive_timeout: 60s  # waiting for a person to complete an unlock
   unattended_timeout: 10s   # waiting for a machine, with no terminal to prompt on
 ```
 
-Each also has a `MAGUS_SECRET_TIMEOUT` / `MAGUS_SECRET_UNATTENDED_TIMEOUT` environment
-variable and a `--secret-timeout` / `--secret-unattended-timeout` flag. Raise the
-unattended one if a service-account backend is genuinely slow; raising it to hide a
-missing credential just moves the failure later.
+Each also has an environment variable and a flag:
+
+| Config key                   | Environment variable               | Flag                           |
+| ---------------------------- | ---------------------------------- | ------------------------------ |
+| `secret.interactive_timeout` | `MAGUS_SECRET_INTERACTIVE_TIMEOUT` | `--secret-interactive-timeout` |
+| `secret.unattended_timeout`  | `MAGUS_SECRET_UNATTENDED_TIMEOUT`  | `--secret-unattended-timeout`  |
+
+Raise the unattended one if a service-account backend is genuinely slow; raising it to
+hide a missing credential just moves the failure later.
+
+> This page named the interactive one `timeout` / `MAGUS_SECRET_TIMEOUT` /
+> `--secret-timeout` for several releases. None of those ever existed. The flag and the
+> variable fail loudly - a parse error, and `magus doctor` reporting an unknown `MAGUS_*`
+> name - but an unrecognized **config key** is only a warning, so a `magus.yaml` copied
+> from the old text left the budget at its default while looking set. The table above is
+> generated from the same source as [the config reference](../reference/config.md); trust
+> it over any prose.
 
 That is deliberately not phrased as a timeout. "Timed out" invites a retry; "there is
 nobody to ask" tells you to wire a service account. In CI the failure arrives in seconds
@@ -373,19 +449,125 @@ GHCR_TOKEN=... magus run image-login:cd
 Scoped to one invocation, no provider selected so the built-in environment provider
 serves it, and nothing persists after the process exits.
 
-### The `-login` convention
+### Authenticating, and the `-login` convention
 
-Give authentication its own target, named `<area>-login`:
+Most workspaces should not need a login step at all. Authenticate when the tool tells you
+to: run the build, let the push fail, log in, run it again. The re-run is cheap because
+everything before the push replays from cache, so being reactive costs a few seconds
+rather than a rebuild - and nobody has to know a convention exists in order to get it
+right.
+
+That works because the failure teaches the fix. A command op declares `hints`, so the
+tool's own error is classified into a next step:
+
+```text
+denied: requested access to the resource is denied
+hint: the registry accepted you but not this repository; check the image name and that
+      the token may push to it
+```
+
+The bundled `docker` spell declares these for `docker-buildx`, the op that pushes. Any
+spell can, and it is static data like `args` - describable, and not charm-patchable:
+
+```buzz
+Command{
+    bin = "docker",
+    args = ["buildx", "build"],
+    hints = [
+        Hint{@"match" = "authentication required",
+             then = "not authenticated to the registry; run `docker login <registry>` and re-run"},
+    ],
+}
+```
+
+Matching is a plain substring against the tail of the failed command's output, and the
+first declared match wins - so order specific before general. See
+[Writing a spell](../guides/authoring-spells.md).
+
+Where that is not enough, give authentication its own target named `<area>-login`:
 
 ```sh
 magus run image-login:cd     # authenticates, and does nothing else
 magus run image-build:cd     # builds and pushes, assuming you already did
 ```
 
-Every property above depends on this split. A build target that authenticates as a side
-effect cannot be lazy, cannot be run without credentials, and gives no honest place to
-announce a wait. Separating them means the expensive, interactive, privileged step is one
-you asked for by name.
+Two situations earn it. **Several registries at once**, where one target authenticates to
+all of them and you would otherwise discover them one failure at a time. And an
+**unattended runner**, where there is no human to read a hint and you want authentication
+as an explicit, ordered step that fails early rather than at the push.
+
+Be clear-eyed about what such a target is. It has no inputs, produces no output, can never
+be cached, and mutates ambient state on the machine rather than in your repo - it is a
+mode switch that magus runs, not a unit of work. That is a reasonable thing to keep in a
+magusfile, and it is not a pattern to reach for by default. If you do keep one, it MUST
+declare `skip_cache` with a reason, for the reason the section above gives:
+
+```buzz
+"image-login": {"skip_cache": "authenticates to a registry per invocation; a replay would reuse stale credentials"},
+```
+
+[MGS1026](../reference/codes/magusfile/MGS1026.md) reports a target that reads a
+credential and is still cacheable, so forgetting this is caught rather than discovered as
+a login that reports success without authenticating.
+
+### A target that reads a secret must not be cacheable
+
+This is the one limit on this page that can produce a wrong build rather than a leaked
+log line, and the `-login` convention above is what makes it dangerous.
+
+**A resolved credential contributes nothing to the cache key.** The key is a function of
+the [hashed `Step` fields](cache.md#the-cache-key) - sources, charms, args, allow-listed
+env, dependencies, spell version, tool versions - and a value returned by
+`magus\secret.read` is none of them. That is the right design: hashing a credential would
+write it into cache metadata and partition your cache per rotation. But it has a
+consequence you have to handle yourself.
+
+Rotating or revoking a credential invalidates nothing. And an authentication target is
+the worst possible shape for that, precisely because the split above made it a good one:
+its sources almost never change, so it becomes a permanent cache hit that never contacts
+the provider, never authenticates, and **reports success**. The push that follows fails
+with the registry's own 401, far from the cause, on a pipeline whose login step is green.
+
+So declare it, with the reason:
+
+```buzz
+magus\project({
+    "targets": {
+        "image-login": {"skip_cache": "authenticates to a registry per invocation; a replay would reuse stale credentials"},
+    },
+})
+```
+
+That is magus's own declaration, verbatim. `skip_cache` takes a reason string rather than
+a boolean on purpose - see [Cache](cache.md) - and this is the case the requirement was
+written for.
+
+The same applies to any target whose output is a function of a credential, not only a
+login: a signed artifact, a fetch from a private registry, a deploy. If revoking the
+credential should change what the target produces, the target cannot be replayable.
+
+> A cached artifact built with a credential that was revoked an hour later stays valid
+> and replayable, and with a [remote cache](cache/remote.md) it propagates to every
+> machine that trusts the pushing key. Nothing about credential validity is an input to
+> anything. This is the same trade every content-addressed build system makes; it is
+> stated here because the mitigation is yours to apply.
+
+## Secrets and the sandbox
+
+Two documented mechanisms meet here, and the interaction decides whether a command gets
+its credential at all.
+
+The [sandbox](sandbox.md) rebuilds a child's environment from an allowlist rather than
+inheriting it, and that allowlist deliberately drops exactly the variables a credential
+would live in. `Command.secrets` injects a resolved credential into a child's
+environment. Both are true, and the order settles it: **scrubbing builds the base
+environment, and declared secrets are layered on top of it afterwards.** A secret a
+command declares always reaches that command, whatever the passthrough allowlist says,
+and it reaches no other process.
+
+The reverse is also worth stating: a credential your magusfile read with `os\env` rather
+than through a provider is subject to the allowlist like any other variable, and with the
+sandbox enabled it will not reach a subprocess unless you passed it through.
 
 ## Handing a secret to a container build
 
@@ -422,13 +604,40 @@ the way out.
   entirely, and a quiet capture has no live tap at all - so each is redacted at its own
   point rather than at one shared choke point. The mask is a fixed `***`, so it does
   not leak the value's length.
-- **Records the read in the invocation journal.** A `secret` event carries the reference
-  and the provider that served it - never the value - so an audit can answer which
-  credentials a run reached for and through which backend.
-- **Memoizes it per reference.** A provider that shells out is usually invoked once per
-  reference rather than once per call site. Usually, not always: two targets resolving
-  the same reference at the same moment can both miss the memo and both invoke the
-  provider, which for an interactive backend means two unlock prompts.
+- **Records the read in the run's journal, where you can read it back.** A `secret` event
+  carries the reference and the provider that served it - never the value. Every run has
+  an invocation id, shown as `inv:` in `magus query output <ref> --meta`, and that id
+  answers the audit question directly:
+
+  ```sh
+  magus query invocation <id> --secrets
+  ```
+
+  ```text
+  inv:     invmsm5rgk21
+  command: magus run image-login:cd .
+  status:  pass
+
+  secrets: 1 credential read(s)
+    14:50:50  . image-login              read secret "GHCR_TOKEN" via onepassword
+  ```
+
+  Drop `--secrets` for the whole event stream, or add `-o json` for a record. Run logs are
+  trimmed to a cap by the daemon's `RotateLogs` job, so this answers for recent runs
+  rather than forever; export what an auditor needs to keep.
+- **Memoizes it per reference and per provider.** A provider that shells out is invoked
+  once per reference, not once per call site, and two targets resolving the same
+  reference at the same moment collapse into a single invocation rather than two unlock
+  prompts. The memo is keyed by provider as well as reference, so a magusfile that reads
+  before selecting a provider cannot memoize the built-in answer and then serve it under
+  a declared one.
+- **Holds the value for as long as the workspace is open, not for one run.** That scope
+  is deliberate - a magusfile is evaluated once during preload and again during the run,
+  and a narrower scope made a single command prompt twice. The cost is that the daemon
+  keeps a workspace open for as long as it serves it, so on a machine running `magus
+server start` a resolved credential is resident in that process until it restarts, and
+  would appear in a heap or core dump. A one-shot CLI invocation holds it for the life of
+  that process only. Nothing is written to disk in either case.
 
 ## Why a secret is a `str` and not its own type
 
@@ -469,11 +678,12 @@ guarantee described as total changes what people are willing to risk.
   splits the value defeats it.
 - **It cannot see across a write boundary.** A secret straddling two separate writes
   from a child process is redacted only if both halves land in one write.
-- **Very short values are not redacted at all, and you are not told.** Below four
-  characters, masking every occurrence would shred ordinary output while protecting
-  something that was never a credential - so magus declines. The internal report for it
-  is not currently wired to anything, so a credential this short is silently
-  unprotected. Do not rely on a warning.
+- **Very short values are not redacted at all.** Below four characters, masking every
+  occurrence would shred ordinary output while protecting something that was never a
+  credential - so magus declines. It does say so:
+  [MGS2011](../reference/codes/sandbox/MGS2011.md) names the reference and the threshold
+  at the moment of the read. The value is still unprotected; the warning is the only
+  thing magus can offer, and it is on the run log rather than a build failure.
 - **magus cannot stop a process from doing what it likes with a value you gave it.**
   Redaction covers what magus captures, not what a tool writes to a file of its own.
 

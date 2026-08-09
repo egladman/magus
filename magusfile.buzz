@@ -1625,6 +1625,24 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void {
     foreach (mod in ["badge.buzz", "coverage.buzz"]) {
         magus\cmd("buzz", args: ["-t", mod]);
     }
+    // Spell sources and the docs libraries carry ~90 more `test "..." {}` blocks that
+    // nothing ran until 2026-08-09. That gap is why a broken escaper shipped: every one
+    // of those files HAD tests, they passed, and no target invoked them.
+    //
+    // Two mechanical details, both learned the hard way. `--embedded` is required: these
+    // files import magus/spell and the host modules, and without it `magus buzz` runs
+    // upstream-strict and rejects the positional-argument style every one of them uses.
+    // The docs libraries need `dir`, because they import each other by relative path
+    // (`lib/text`) and resolve it from the docs project root.
+    foreach (spell in ["spells/github/actions/spell.buzz", "spells/gitlab/ci/spell.buzz",
+                       "spells/golang/gomod.buzz"]) {
+        magus\cmd("buzz", args: ["-t", "--embedded", spell]);
+    }
+    foreach (lib in ["lib/text.buzz", "lib/dom.buzz", "lib/feed.buzz", "lib/html.buzz",
+                     "lib/csp.buzz", "lib/url.buzz", "lib/date.buzz", "lib/glossary.buzz",
+                     "lib/conventions.buzz"]) {
+        magus\cmd("buzz", args: ["-t", "--embedded", lib], opts: {"dir": "docs"});
+    }
 }
 
 // This project deliberately declares NO preflight, and the reason is worth keeping: doctor
@@ -1713,7 +1731,17 @@ export fun format(ctx: magus\Context, args: [str]) > void {
     ctx.needs(generate);
     go["go-fmt"](ctx);
     go["go-mod-tidy"](ctx);
-    markdown["dprint"](ctx);
+    // Scope dprint by ARGV, not by its config. dprint discovers a nested dprint.json and
+    // formats that subtree under its own config, and neither this project's `includes`
+    // nor an explicit --config prunes it - measured: a bare run here reaches 164 files,
+    // 143 of them under docs/. That is the root target writing into descendant projects,
+    // which magus rejects as MGS3001, and it stayed invisible only while every child's
+    // markdown happened to be formatted already.
+    //
+    // Passing paths scopes it (10 files, none in a child project). The excludes in
+    // dprint.json still apply, so MAGUS.md and CHANGELOG.md stay out. Keep this list in
+    // step with that file's `includes`.
+    markdown["dprint"](ctx, {"args": ["./*.md", "./benchmarks/**/*.md", "./tapes/**/*.md"]});
 }
 
 // Runs the CI gates through their declared dependencies.
@@ -1776,6 +1804,11 @@ export fun completion_test(ctx: magus\Context, args: [str]) > void {
 // about docker, for the same reason: quietly skipping on a missing tool is how the
 // untested half got here. CI already installs both -dev packages, and a host that cannot
 // build this cannot build a release.
+// The name diverges from the workspace's `test` convention on purpose, and magus's own
+// conformance advice flags it. It is not the same work: this compiles with cgo and the
+// liblzma/libzstd build tags, covers one package, and has a hard pkg-config precondition.
+// A charm variant (`test:cgo`) cannot express it either - charms patch argv, and the
+// distinguishing input here is CGO_ENABLED in the environment.
 export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void {
     // Narrow: affected reaches this only when the codecs or their tests move.
     ctx.readsFiles("internal/compress/*.go");

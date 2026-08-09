@@ -303,6 +303,7 @@ func buzzValueMagusTargetGraphNode(v types.TargetGraphNode) vm.Value {
 		itemsReadsFiles[indexReadsFiles] = buzzValueMagusInputRef(v.ReadsFiles[indexReadsFiles])
 	}
 	out.MapSet("readsFiles", vm.ListValue(itemsReadsFiles))
+	out.MapSet("readsSecrets", vm.BoolValue(v.ReadsSecrets))
 	itemsWritesFiles := make([]vm.Value, len(v.WritesFiles))
 	for indexWritesFiles := range v.WritesFiles {
 		itemsWritesFiles[indexWritesFiles] = buzzValueMagusOutputRef(v.WritesFiles[indexWritesFiles])

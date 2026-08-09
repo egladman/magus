@@ -33,7 +33,15 @@ export fun mgs_listManifests() > [Path] { return [Path{value = "Cargo.toml"}]; }
 
 fun cargoBuild(target: Target) > Command { return Command{bin = "cargo", args = ["build", "--release"]}; }
 fun cargoClean(target: Target) > Command { return Command{bin = "cargo", args = ["clean"]}; }
-fun cargoClippy(target: Target) > Command { return Command{bin = "cargo", args = ["clippy", "--", "-D", "warnings"]}; }
+// clippy and rustfmt ship as rustup COMPONENTS, not with the toolchain, so a fresh
+// machine fails with "no such command" - which reads as a broken build rather than a
+// one-line install. cargo prints the same shape for a genuine typo, so the advice names
+// the component rather than asserting what went wrong.
+final RUSTUP_COMPONENT_HINTS = [
+    Hint{contains = "no such command",
+         advise = "cargo subcommands like clippy and rustfmt are rustup components; install with `rustup component add clippy` (or rustfmt)"},
+];
+fun cargoClippy(target: Target) > Command { return Command{bin = "cargo", args = ["clippy", "--", "-D", "warnings"], hints = RUSTUP_COMPONENT_HINTS}; }
 fun cargoFmt(target: Target) > Command {
     final args = ["fmt", "--", "--check"];
     // rw turns the check into a write by dropping --check then -- (`cargo fmt`).

@@ -50,6 +50,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		attempts    bool
 		meta        bool
 		publish     bool
+		secretsOnly bool
 	)
 	pos, err := cmdParse("query", args, func(fs *flag.FlagSet) {
 		fs.IntVar(&budget, "budget", 0, "max nodes in the returned neighborhood (default 50)")
@@ -61,10 +62,12 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		fs.StringVar(&viewerBase, "url", defaultLogViewerURL, "with --open, base URL of the log viewer page (override for a self-hosted mirror)")
 		fs.BoolVar(&attempts, "attempts", false, "with `output <ref>`, list the ref's stored executions (newest first) instead of printing output")
 		fs.BoolVar(&meta, "meta", false, "with `output <ref>`, show the run's identity instead of its output: descriptor, lineage, cache key, component digests")
+		fs.BoolVar(&secretsOnly, "secrets", false, "with `invocation <id>`, list only the credential reads: which references this run reached for, and through which provider")
 		fs.BoolVar(&publish, "publish", false, "with `output <ref>`, upload this run's output to the remote cache as a signed bundle so a teammate can resolve the same ref (failing runs are never shared automatically)")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus query <terms> [flags]")
 			fmt.Fprintln(os.Stderr, "       magus query output <ref> [-o json] [--open] [--attempts] [--meta] [--publish]")
+			fmt.Fprintln(os.Stderr, "       magus query invocation <id> [-o json] [--secrets]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, types.KnowledgeQueryDefinition)
 			fmt.Fprintln(os.Stderr, "")
@@ -79,6 +82,11 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintf(os.Stderr, "  %-38s open it in the browser log viewer\n", clihint.QueryOutput.With("out1a2b3c", "--open"))
 			fmt.Fprintf(os.Stderr, "  %-38s list the ref's stored executions\n", clihint.QueryOutput.With("out1a2b3c", "--attempts"))
 			fmt.Fprintf(os.Stderr, "  %-38s the run's identity + cache-key digests\n", clihint.QueryOutput.With("out1a2b3c", "--meta"))
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintf(os.Stderr, "`%s <id>` reads one run's journal back by the id shown as\n", clihint.QueryInvocation.Leaf())
+			fmt.Fprintf(os.Stderr, "`inv:` in %s:\n", clihint.QueryOutput.With("<ref>", "--meta"))
+			fmt.Fprintf(os.Stderr, "  %-38s the run's events, newest last\n", clihint.QueryInvocation.With("invmsm3vcou1"))
+			fmt.Fprintf(os.Stderr, "  %-38s only the credential reads (audit)\n", clihint.QueryInvocation.With("invmsm3vcou1", "--secrets"))
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--open respects the BROWSER environment variable to pick the browser")
 			fmt.Fprintln(os.Stderr, "(e.g. BROWSER=firefox); otherwise it uses your desktop's default handler.")
@@ -119,6 +127,34 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 			return errSilent{exitCode: 2}
 		}
 		return queryOutputRef(ctx, root, ref, outputRefOpts{open: open, printURL: printURL, viewerBase: viewerBase, attempts: attempts, meta: meta, publish: publish, out: outOpts})
+	}
+	// `magus query invocation <id>` - the sibling of `query output <ref>`, and explicit for
+	// the same reason: an id is shape-routed nowhere, so a search term cannot collide with one.
+	if len(pos) >= 1 && pos[0] == clihint.QueryInvocation.Leaf() {
+		if len(pos) != 2 {
+			fmt.Fprintf(os.Stderr, "%s: expected exactly one invocation id (e.g. %s)\n",
+				clihint.QueryInvocation, clihint.QueryInvocation.With("invmsm3vcou1"))
+			return errSilent{exitCode: 2}
+		}
+		inv := pos[1]
+		if !cache.LooksLikeInvocationID(inv) {
+			fmt.Fprintf(os.Stderr, "magus query invocation: %q is not an invocation id (expected inv<id>, e.g. invmsm3vcou1); a run prints one as `inv:` in %s\n",
+				inv, clihint.QueryOutput.With("<ref> --meta"))
+			return errSilent{exitCode: 2}
+		}
+		outOpts, oerr := outputOptionsOrDefault()
+		if oerr != nil {
+			return oerr
+		}
+		return queryInvocation(ctx, root, inv, secretsOnly, outOpts)
+	}
+	// An invocation id handed to the graph grammar finds nothing and reports `matches: 0`,
+	// which reads as "that run does not exist" rather than "wrong command". magus printed the
+	// id, so it can recognize it coming back.
+	if len(pos) == 1 && cache.LooksLikeInvocationID(pos[0]) {
+		fmt.Fprintf(os.Stderr, "magus query: %q is an invocation id, not a graph term. Read it with: %s\n",
+			pos[0], clihint.QueryInvocation.With(pos[0]))
+		return errSilent{exitCode: 2}
 	}
 	if open || printURL || attempts || meta || publish {
 		// --open/--print/--attempts/--meta only apply to `query output <ref>`. Set on a graph
@@ -307,6 +343,112 @@ func listOutputAttempts(ctx context.Context, m *magus.Magus, ref string, out Out
 // outputMetaRecord is the -o json/yaml projection of `query output <ref> --meta`: the
 // stored descriptor, the producing invocation's lineage when its run log survives, and
 // the cache key's component-class digests when the run persisted its key inputs.
+// invocationRecord is the machine-readable projection of one run: its header plus the events
+// an audit cares about. The events are already redacted - journal.Emit scrubs Text on the way
+// in - and a secret event carries only the reference and the provider by construction.
+type invocationRecord struct {
+	journal.Invocation
+	Secrets []journal.Event `json:"secrets,omitempty"`
+	Events  []journal.Event `json:"events,omitempty"`
+}
+
+// queryInvocation reads one run's journal back. `--secrets` narrows it to the credential
+// reads, which is the question the secrets page promises an answer to: "which credentials did
+// this run reach for, and through which backend".
+//
+// This exists because the events were written and unreachable. The reference and provider were
+// recorded on every read, docs/concepts/secrets.md offered that as the audit trail, and the id
+// magus prints (`inv:`) resolved to nothing - so the trail was a claim rather than a record.
+func queryInvocation(ctx context.Context, root, inv string, secretsOnly bool, out OutputOptions) error {
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return err
+	}
+	header, events, err := m.InvocationEventsByID(inv)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			// Aged out is the ordinary case, not a typo, so say which it might be. The cap is
+			// the daemon's RotateLogs job; a missing log is indistinguishable from a bad id.
+			fmt.Fprintf(os.Stderr, "magus query invocation: no run log for %q; it may have aged out of the cache, or the id is mistyped\n", inv)
+			return errSilent{exitCode: 2}
+		}
+		return fmt.Errorf("magus query invocation: read run log for %s: %w", inv, err)
+	}
+
+	var secrets []journal.Event
+	for _, e := range events {
+		if e.Kind == journal.KindSecret {
+			secrets = append(secrets, e)
+		}
+	}
+
+	switch out.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		rec := invocationRecord{Invocation: header, Secrets: secrets}
+		if !secretsOnly {
+			rec.Events = events
+		}
+		return emitFormatted(out, rec)
+	case outputName:
+		fmt.Println(header.ID)
+		return nil
+	}
+
+	fmt.Printf("inv:     %s\n", header.ID)
+	if len(header.Command.Arguments) > 0 {
+		fmt.Printf("command: magus %s\n", strings.Join(header.Command.Arguments, " "))
+	}
+	if header.Command.Cwd != "" {
+		fmt.Printf("cwd:     %s\n", header.Command.Cwd)
+	}
+	if header.StartedMs > 0 {
+		line := time.UnixMilli(header.StartedMs).Format("2006-01-02 15:04:05")
+		if header.FinishedMs > header.StartedMs {
+			line += fmt.Sprintf(" (%s)", (time.Duration(header.FinishedMs-header.StartedMs) * time.Millisecond).Round(time.Millisecond))
+		}
+		fmt.Printf("started: %s\n", line)
+	}
+	if header.Status != "" {
+		fmt.Printf("status:  %s\n", header.Status)
+	}
+	if header.MagusVersion != "" {
+		fmt.Printf("magus:   %s\n", header.MagusVersion)
+	}
+
+	fmt.Println()
+	if len(secrets) == 0 {
+		// Say it plainly rather than printing an empty heading. "No credential reads" is a
+		// real audit answer, and the reader must be able to tell it apart from "not recorded".
+		fmt.Println("secrets: no credential was resolved during this run")
+	} else {
+		fmt.Printf("secrets: %d credential read(s)\n", len(secrets))
+		for _, e := range secrets {
+			where := e.Project
+			if e.Target != "" {
+				where += " " + e.Target
+			}
+			fmt.Printf("  %s  %-28s %s\n", time.UnixMilli(e.Ts).Format("15:04:05"), where, e.Text)
+		}
+	}
+	if secretsOnly {
+		return nil
+	}
+
+	fmt.Println()
+	fmt.Printf("events:  %d\n", len(events))
+	for _, e := range events {
+		if e.Kind == journal.KindOutput {
+			continue // the captured bytes belong to `query output <ref>`, not here
+		}
+		detail := e.Text
+		if e.Status != "" {
+			detail = strings.TrimSpace(e.Status + " " + detail)
+		}
+		fmt.Printf("  %s  %-9s %s\n", time.UnixMilli(e.Ts).Format("15:04:05"), e.Kind, detail)
+	}
+	return nil
+}
+
 type outputMetaRecord struct {
 	cache.OutputDescriptor
 	Invocation   *journal.Invocation `json:"invocation,omitempty"`

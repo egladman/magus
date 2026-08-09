@@ -56,6 +56,79 @@ guesses about. magus gives them the same fix. Query the
 [targets](docs/concepts/targets.md) instead of raw tools, and let `magus affected ci`
 prove what a change touched. For agents, see [Agents](docs/guides/agents.md).
 
+## Who this is for
+
+If any of these is your week, the rest of this page is worth your time:
+
+- **You run more than one language in one repo**, and your task runner was built
+  for one of them.
+- **Your CI runs everything on every commit**, you know most of it was pointless,
+  and you cannot prove which part.
+- **You inherited the build.** Whoever wrote it has gone, and you need to change
+  one step without discovering what else it fed.
+- **Your agent greps and guesses.** It is fast, it is confident, and it is wrong
+  in ways that take longer to catch than to fix.
+- **You have a `.env` full of tokens** you keep meaning to clean up, in a shell
+  where everything you launch inherits them.
+- **Someone asked why a target rebuilt** and the honest answer was a shrug.
+- **You stopped trusting the cache** and turned it off, and now everything is
+  slow and at least it is honest.
+- **A merge changed the lockfile and nothing told you.** Your next command ran
+  against stale dependencies and failed somewhere unrelated, and the fix was a
+  command nobody printed.
+- **Your task runner installs through the package manager it is supposed to be
+  running.** When it breaks you fix it by upgrading the toolchain you were using
+  it to pin.
+- **Generated files keep landing in review** and nobody agrees which are safe to
+  edit by hand.
+- **Getting the build working is its own project**, and it was supposed to be
+  the thing that let you work on the other one.
+
+There is one shape under all of them: a question about your own repository that
+something already knows and nothing will tell you.
+
+Two of those waste whole afternoons, so here is what magus does about them.
+
+**The stale install.** magus runs your package manager's install as a _step of
+the build_, not as something you are expected to remember after a merge. It does
+not try to work out whether the install is needed, and that is deliberate: the
+obvious check - does `node_modules` exist - is wrong in the case that matters,
+because an interrupted install leaves a directory that exists and is incomplete.
+So the install runs every time and lets the package manager be the judge. That
+costs about a second on a warm tree and fails loudly when the lockfile and the
+manifest disagree.
+
+**The bootstrap loop.** magus is one statically linked binary and installs
+through none of the toolchains it drives. A task orchestrator that arrives
+through the package manager it orchestrates has put itself downstream of the
+thing it is meant to control: the failures arrive oblique, there is rarely
+anywhere sensible to attach an error explaining them, and the repair is to
+upgrade the runtime you adopted the tool to pin. That boundary is stated as a
+rule in [Scope](docs/scope.md), not as a preference.
+
+### Who it is not for
+
+Stated plainly, because a list of strengths on its own is advertising:
+
+- **One project, one language.** Use that language's own tooling. magus earns
+  its place between projects; with one, it is ceremony.
+- **You need a build farm.** There is no remote execution. magus caches results
+  and shares them; it does not run your work on someone else's machine.
+- **You want your toolchain versions installed for you.** magus compares what
+  ran against what you declared and stops there. It will not select, install, or
+  switch a version - see [Scope](docs/scope.md).
+- **You need a sandbox that fails on undeclared reads.** magus's sandbox is a
+  supply-chain defense: off by default, with no kernel layer on macOS. If you
+  want Bazel's hermeticity guarantee, magus does not offer it and should not be
+  read as claiming it - see [Sandbox](docs/concepts/sandbox.md).
+- **You want your build steps to run in containers.** magus will not require a
+  container runtime, because a task orchestrator that needs one cannot be used to
+  bootstrap the machine it runs on - and it offers no opt-in container isolation
+  either. (The `container` charm changes what a target _produces_, an image
+  instead of a binary; the build still runs on the host.) If a fixed execution
+  environment is what you are buying, a container-native runner is the better
+  tool - the reasoning is in [Scope](docs/scope.md).
+
 ## How it works
 
 Four ideas carry most of the tool. Each has a deeper page; this is the short version.

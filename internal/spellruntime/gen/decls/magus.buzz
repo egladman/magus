@@ -312,6 +312,7 @@ export object TargetGraphNode {
     spells: [TargetSpellUse] = [],
     crossDependencies: [CrossTargetRef] = [],
     readsFiles: [InputRef] = [],
+    readsSecrets: bool = false,
     writesFiles: [OutputRef] = [],
     modifiesExistingFiles: [UpdateRef] = [],
     execOverrides: [str] = [],

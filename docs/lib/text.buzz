@@ -177,6 +177,33 @@ test "escapeAttr escapes the attribute-dangerous characters" {
     assert\equal(escapeAttr("x\"y<z"), "x&quot;y&lt;z", "quote and less-than");
 }
 
+// EVERY occurrence. The fixture above has exactly one of each character, and that is the
+// shape that hid a real defect: str.replace substituted only the FIRST match until
+// 2026-08-09, so an attribute value with two ampersands shipped the second one raw -
+// which in an attribute is a correctness bug, not a cosmetic one. Character coverage was
+// never the missing axis; repetition was.
+test "escapeAttr escapes EVERY occurrence, not just the first" {
+    assert\equal(escapeAttr("&a&b&"), "&amp;a&amp;b&amp;", "ampersands at both edges and between");
+    assert\equal(escapeAttr("&&"), "&amp;&amp;", "adjacent ampersands");
+    assert\equal(escapeAttr("\"a\"<b<"), "&quot;a&quot;&lt;b&lt;", "repeated quote and less-than");
+    // Ampersand first, so the & introduced by &quot;/&lt; is never rescanned.
+    assert\equal(escapeAttr("<&\""), "&lt;&amp;&quot;", "no double-encoding of introduced entities");
+}
+
+// decodeEntities had NO test at all, despite being six chained substitutions on the
+// path that builds every page description (docs/engine/meta.buzz). It is the inverse of
+// the escapers above and carries the mirror-image ordering hazard, so it gets the same
+// repetition fixture.
+test "decodeEntities decodes EVERY occurrence, ampersand last" {
+    assert\equal(decodeEntities("&lt;a&gt;&lt;b&gt;"), "<a><b>", "repeated angle entities");
+    assert\equal(decodeEntities("&amp;&amp;"), "&&", "adjacent ampersand entities");
+    assert\equal(decodeEntities("&quot;a&quot;"), "\"a\"", "repeated quote entities");
+    // &amp; is decoded LAST, the opposite of the escape direction: decoding it first
+    // would turn the literal text "&amp;lt;" into "<" instead of "&lt;".
+    assert\equal(decodeEntities("&amp;lt;"), "&lt;", "an escaped entity survives one decode");
+    assert\equal(decodeEntities("no entities here"), "no entities here", "no-op on plain text");
+}
+
 test "sharedTagCount counts common bar-joined tags" {
     assert\equal(sharedTagCount("a||b||c", "b||c||d"), 2, "b and c shared");
     assert\equal(sharedTagCount("a", "b"), 0, "none shared");

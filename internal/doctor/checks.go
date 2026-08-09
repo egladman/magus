@@ -810,6 +810,57 @@ func (r *runner) checkUnreachedFootprintDecls(projects []*types.Project) types.D
 	}
 }
 
+// checkCacheableSecretReads is MGS1026: a target whose body calls magus\secret.read but which
+// is still cacheable. A resolved credential contributes nothing to the cache key - deliberately,
+// since hashing one would write it into cache metadata and partition the cache per rotation -
+// so rotating or revoking the credential invalidates nothing.
+//
+// The failure that produces is silent and green, which is why this is worth a check rather than
+// a paragraph. An authentication target's sources almost never change, so it becomes a permanent
+// cache hit that never contacts the provider, never authenticates, and reports success; the push
+// that follows fails with the registry's own 401, far from the cause. The `-login` convention
+// magus recommends makes it MORE likely, not less, by giving authentication its own small target.
+//
+// A warning rather than a load error: a target may read a credential and legitimately produce a
+// cacheable artifact from it, and only the author knows. The remedy is one line - skip_cache with
+// a reason - and the reason string is what makes the decision auditable later.
+func (r *runner) checkCacheableSecretReads(projects []*types.Project) types.DoctorCheck {
+	const name = "cacheable secret reads"
+	var details []string
+	for _, p := range projects {
+		for _, f := range magusfileSourcesInDir(p.Dir) {
+			data, err := os.ReadFile(f)
+			if err != nil {
+				continue
+			}
+			for _, n := range describe.Extract(string(data)) {
+				if !n.ReadsSecrets {
+					continue
+				}
+				if pol, ok := p.TargetPolicies[n.Name]; ok && pol.SkipCache {
+					continue // declared uncacheable; the author already answered this
+				}
+				details = append(details, fmt.Sprintf("%s: target %q reads a secret and is cacheable (%s)",
+					p.Path, n.Name, r.relPath(f)))
+			}
+		}
+	}
+	if len(details) == 0 {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no cacheable target reads a credential"}
+	}
+	slices.Sort(details)
+	return types.DoctorCheck{
+		Name:   name,
+		Status: types.DoctorFail,
+		Message: fmt.Sprintf(
+			"%d target(s) read a credential but may replay from cache, so a rotated or revoked credential "+
+				"invalidates nothing and the target reports success without authenticating; declare "+
+				"skip_cache with a reason (see %s)",
+			len(details), types.CodeURL(types.CacheableSecretRead)),
+		Details: details,
+	}
+}
+
 // checkRedundantFootprintGlobs is MGS1005: a per-target output glob already
 // present project-wide. Explicit inputs intentionally do not participate because
 // they narrow a target's source footprint even when a glob is also project-wide.

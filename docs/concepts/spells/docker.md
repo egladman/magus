@@ -70,6 +70,8 @@ export fun image_check(ctx: magus\Context, args: [str]) > void {
 
 ## docker-buildx
 
+buildx is the op that PUSHES (`--push`), so it is the one that meets a registry and the one that fails on authentication. Docker's own message is a complete diagnosis to anyone who already knows docker and an exit code to everyone else, so the hints turn it into the command to run. Registries disagree about the wording - Docker Hub says "authentication required", GHCR and most OCI registries say "unauthorized" or "denied" - so each phrasing gets an entry rather than one guess. This is what a workspace should reach for before a separate `<area>-login` target: the failure teaches the fix, so nobody has to know a convention in advance. See docs/concepts/secrets.md.
+
 **Command:** `docker buildx build`
 
 ### Example

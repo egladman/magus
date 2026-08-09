@@ -59,10 +59,18 @@ func TestStringMethodSemantics(t *testing.T) {
 		{"startsWith false", `return "hello".startsWith("lo");`, "false"},
 		{"endsWith true", `return "hello".endsWith("lo");`, "true"},
 		{"endsWith false", `return "hello".endsWith("he");`, "false"},
-		// replace is FIRST-occurrence-only, matching upstream Buzz. A replace-all
-		// regression here would silently corrupt every caller that relies on it.
-		{"replace replaces only the first occurrence", `return "a-a-a".replace("a", "b");`, "b-a-a"},
-		{"replace with empty needle is prepend", `return "ab".replace("", "x");`, "xab"},
+		// replace substitutes EVERY occurrence. These two lines asserted the opposite
+		// until 2026-08-09, justified as "matching upstream Buzz" - which was simply
+		// untrue: upstream's src/builtin/str.zig calls Zig's std.mem.replaceOwned, and
+		// that walks the whole string. The wrong claim is why the bug outlived review,
+		// so it is worth stating where the answer comes from rather than asserting it.
+		{"replace replaces every occurrence", `return "a-a-a".replace("a", "b");`, "b-b-b"},
+		// An empty needle has NO upstream answer to match: std.mem.replace advances its
+		// cursor by needle.len, so a zero-length needle never advances and upstream spins
+		// rather than returning. gopherbuzz takes Go's (and JavaScript's) reading -
+		// insert at every boundary - because it terminates and is the answer a reader
+		// coming from another language already expects.
+		{"replace with empty needle inserts at every boundary", `return "ab".replace("", "x");`, "xaxbx"},
 		{"split on separator", `return "a,b,,c".split(",");`, "[a, b, , c]"},
 		{"split with no separator splits on whitespace runs", "return \" a  b\\tc \".split();", "[a, b, c]"},
 		{"split separator absent yields whole string", `return "abc".split(",");`, "[abc]"},

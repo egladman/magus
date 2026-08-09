@@ -47,6 +47,98 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   prettier was dropped. Each project carries its own `dprint.json` extending a shared base,
   the way `biome.json` already does, and the markdown spell exposes a `dprint` op.
 
+- **A GitHub Actions secret provider**, as a third contract on the existing
+  `spells/github/actions` spell alongside the cache backend and the CI provider. Select
+  it with `magus\secret.provider(github)` under Actions. It exists because an Actions
+  secret is write-only - nothing inside a job can fetch one - so it does the two things
+  the platform-neutral built-in provider structurally cannot. An `oidc:<audience>`
+  reference mints a short-lived token from the runner's own endpoint, which is the only
+  credential on a runner that is genuinely fetched rather than injected and is what lets
+  a repository hold no long-lived cloud key; it requires `permissions: id-token: write`
+  and says so when that is missing. A bare reference reads the injected variable,
+  registers the value with the runner via `::add-mask::` so every later step's log is
+  masked too, and on a miss prints the exact `env:` block to paste instead of reporting
+  an unset variable. The OIDC request refuses a non-HTTPS endpoint, because an earlier
+  step can rewrite a job's environment through `$GITHUB_ENV` and the request token is
+  sent to whatever the endpoint names.
+
+- **Man pages for the three knowledge-graph verbs.** `query`, `explain`, and `path` had no
+  entry in the man-page registry, so none of them appeared in `docs/reference/manpage/`,
+  in the "See Also" list every other page carries, or in the man pages the binary ships.
+  `path` in particular - the verb that answers "how are these two things related at all",
+  which neither of the others can - was effectively undiscoverable unless you already knew
+  it existed.
+- **`magus query invocation <id>`**, a reader for the run journal. magus recorded a
+  `secret` event for every credential a run resolved - reference and provider, never the
+  value - and `docs/concepts/secrets.md` offered that as the answer to "which credentials
+  did this run touch". Nothing could read it: the invocation id magus prints as `inv:`
+  resolved to `matches: 0` against the graph grammar, so the audit trail was a claim with
+  no reader. `--secrets` narrows the stream to the credential reads; `-o json` emits the
+  record. Pasting a bare invocation id into `magus query` now says which command reads it
+  instead of reporting an empty search.
+
+- **Failure advice on a command op.** A spell declares
+  `hints = [Hint{contains = "...", advise = "..."}]`; when the command exits non-zero and
+  `contains` appears in its output, magus prints the advice through the run's own stderr,
+  so it lands in the log and the output ref beside the tool's error rather than only on a
+  terminal. Each stream is matched independently and only a real non-zero exit qualifies -
+  a cancelled run advises nothing. The bundled spells declare it where a tool's message
+  names a symptom rather than the fix: `docker-buildx` for the registry-auth and daemon
+  phrasings of BOTH docker and podman (podman commonly arrives through the `podman-docker`
+  shim, and the registry messages come from the OCI registry rather than from either tool,
+  so those are shared); the `go` build/run/test ops for `missing go.sum entry` and
+  `updates to go.mod needed`; every JS op for a stale install, covering pnpm, npm, yarn and
+  bun because each invented its own phrasing for the same fact; and `cargo-clippy` for a
+  missing rustup component. Hints are refused on service ops, where they could never fire.
+- **MGS1026: a cacheable target that reads a credential.** A resolved credential is
+  deliberately not part of the cache key, so rotating or revoking one invalidates nothing -
+  and an authentication target, whose sources almost never change, then becomes a permanent
+  cache hit that never contacts the provider and still reports success. The push that
+  follows fails with the registry's own 401, far from the cause. A doctor check now reports
+  the combination; `skip_cache` with a reason is the fix, and magus's own `image-login`
+  already declares it.
+
+### Changed
+
+- **The `-login` convention is demoted from "the convention" to a specific tool.** It was
+  presented as the way to authenticate, and it is a target with no inputs, no output, and
+  no cacheability - a mode switch rather than a unit of work, and the shape that produced
+  the MGS1026 hazard above. The documented default is now to authenticate when the tool
+  says to, since the re-run replays from cache and costs seconds. A `-login` target remains
+  the right answer for several registries at once, and for unattended runners where there
+  is no human to read a failure.
+
+### Fixed
+
+- **The root `format` target no longer writes into descendant projects.** dprint
+  discovers a nested `dprint.json` and formats that subtree under its own config, and
+  neither the parent's `includes` nor an explicit `--config` prunes it: a bare run from
+  the workspace root reached 164 files, 143 of them under `docs/`. That is a target
+  writing outside its project, which magus itself rejects as MGS3001, and it stayed
+  invisible while every child project's markdown happened to already be formatted.
+  Passing paths as argv scopes it (10 files, none in a child project), so the root call
+  now does. `dprint.json` had recorded this as unfixable; only the config route was ever
+  tested.
+- **Breaking, and silent until now: Buzz's `str.replace` substituted only the FIRST
+  occurrence.** Upstream Buzz replaces every one - `src/builtin/str.zig` hands the whole
+  string to Zig's `std.mem.replaceOwned` - so this was a gopherbuzz conformance bug, not
+  the upstream parity it was documented as. It was invisible because the callers that
+  care are escapers, which produce output that is merely wrong rather than failing: the
+  docs Atom feed and HTML escapers encoded only the first `&` of a document, the GitHub
+  Actions workflow-command escaper encoded only the first newline and let the runner end
+  the command at the second, and `slugifyProject` kept every separator after the first. A
+  test comment and a project note both asserted the old behavior was correct, which is
+  why it outlived review. `libs/gopherbuzz/testdata/66_str_replace_all.buzz` now pins the
+  upstream shape. **Do not add a `str.replaceAll`** - upstream has no such method, and
+  adding one would make gopherbuzz a superset whose scripts fail upstream silently.
+  (`pat.replace` and `pat.replaceAll` remain a correct pair and are unchanged.)
+- **Escaper tests now use multi-occurrence fixtures.** Every escaper in the tree was
+  tested with exactly one of each character, which is the shape that hid the bug above -
+  thoroughness was being measured across characters rather than across repetitions.
+- **`magus run buzz-test` now runs the spell and docs-library test blocks.** 142 in-file
+  `test "..." {}` blocks now execute in CI, up from 21. The rest were written, passing,
+  and invoked by nothing.
+
 ### Changed
 
 - **Generated-file drift is measured by content, not by asking whether the tree is clean.**

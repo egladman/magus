@@ -26,6 +26,7 @@ magus ships these spells. Import each with `import "magus/spell/<name>"`; follow
 | [`docker`](spells/docker.md) | Docker | 5 | Docker spell: image build, build-check, buildx, and hadolint Dockerfile linting. |
 | [`go`](spells/go.md) | Go | 13 | Go toolchain spell: build, test, vet, fmt, mod-tidy, golangci-lint, and govulncheck as magus ops. |
 | [`markdown`](spells/markdown.md) | Markdown | 4 | Markdown docs spell: markdownlint and prettier for linting and formatting prose. |
+| [`podman`](spells/podman.md) | OCI containers | 4 | Podman spell: image build, push, manifest assembly, and run for the podman runtime. |
 | [`python`](spells/python.md) | Python | 6 | Python toolchain spell: pytest, ruff check/format, and uv build/clean as magus ops. |
 | [`rust`](spells/rust.md) | Rust | 6 | Rust toolchain spell: cargo build, test, clippy, fmt, and clean as magus ops. |
 | [`typescript`](spells/typescript.md) | TypeScript | 11 | TypeScript toolchain spell: tsc, eslint, prettier, and vitest run through the project package manager. |
@@ -365,7 +366,7 @@ Read these spells under [`spells/`](https://github.com/egladman/magus/tree/HEAD/
 | Spell                                            | Role            | What it demonstrates                                                                                                                                                                               |
 | ------------------------------------------------ | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`buf`](../../spells/buf/spell.buzz)                | fork (built-in) | A **codegen producer**: `needs` (`.proto` + buf config) and `provides` (generated code), so editing a `.proto` reruns codegen and invalidates everything downstream of the generated files.        |
-| [`github-actions`](../../spells/github/actions/spell.buzz) | cache backend   | A **remote cache backend** over the GitHub Actions Cache API in pure Buzz: bearer auth, byte-level chunked upload/streamed download (the `http` byte primitives), wired with `magus\cache.remote`. |
+| [`github-actions`](../../spells/github/actions/spell.buzz) | cache backend, CI provider, secret provider | One vendor, three contracts, each inert outside Actions. A **remote cache backend** over the GitHub Actions Cache API in pure Buzz (bearer auth, byte-level chunked upload/streamed download via the `http` byte primitives, wired with `magus\cache.remote`); a **CI provider** emitting the `::` workflow commands (`magus\ci.provider`); and a **secret provider** that mints OIDC tokens and masks resolved values in the runner's log (`magus\secret.provider`). |
 | [`aws-s3`](../../spells/aws/s3-cache/spell.buzz)  | cache backend   | A **remote cache backend** for S3/MinIO/R2/B2 that signs every request with **AWS SigV4** via `crypto`'s keyed-hash primitives.                                                                    |
 
 ## See also

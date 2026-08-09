@@ -1,0 +1,79 @@
+.TH MAGUS-EXPLAIN 1 "" "magus" "magus Manual"
+.SH NAME
+magus\-explain \- Show one knowledge\-graph node's context: data, edges, and reach
+.SH SYNOPSIS
+.B magus
+.RI "explain <node\-id\-or\-name> [flags]"
+.SH DESCRIPTION
+explain shows one node's context: its data, its incoming and outgoing
+edges with provenance, and how many nodes reach it. Where query finds candidates,
+explain is what you run on the one you picked.
+.PP
+The argument is a node ID (target:pkg/foo:build) or a name that resolves to one
+(build). Names are convenient and IDs are unambiguous; when a name matches more than
+one node, resolve it with query first and pass the ID.
+.PP
+Two parts of the output are worth knowing about. Every edge carries its PROVENANCE \-
+what declared it, so a surprising relationship can be traced to the file that created
+it rather than taken on faith. And the reach count answers the blast\-radius question
+directly: how many nodes can arrive at this one.
+.PP
+The graph is cache\-backed under <cache>/knowledge and only shards whose sources
+changed are rebuilt; \-\-refresh forces a full rebuild.
+.SH OPTIONS
+.RS
+.TP
+\fB\-\-global\fR
+Resolve across the workspaces registered in config (knowledge.workspaces)
+.TP
+\fB\-\-refresh\fR
+Force a full graph rebuild before explaining
+.RE
+.SH EXAMPLES
+\fIA target in full\fR
+.PP
+.EX
+magus explain target:pkg/api:build
+.EE
+.PP
+\fIResolve by bare name\fR
+.PP
+.EX
+magus explain build
+.EE
+.PP
+\fIA spell's context\fR
+.PP
+.EX
+magus explain spell:go
+.EE
+.PP
+\fIAs a record\fR
+.PP
+.EX
+magus explain build -o json
+.EE
+.PP
+.SH SEE ALSO
+\fBmagus\fR(1),
+\fBmagus\-ls\fR(1),
+\fBmagus\-describe\fR(1),
+\fBmagus\-run\fR(1),
+\fBmagus\-x\fR(1),
+\fBmagus\-where\fR(1),
+\fBmagus\-affected\fR(1),
+\fBmagus\-insight\fR(1),
+\fBmagus\-graph\fR(1),
+\fBmagus\-query\fR(1),
+\fBmagus\-path\fR(1),
+\fBmagus\-watch\fR(1),
+\fBmagus\-status\fR(1),
+\fBmagus\-doctor\fR(1),
+\fBmagus\-config\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-completion\fR(1),
+\fBmagus\-man\fR(1),
+\fBmagus\-init\fR(1),
+\fBmagus\-self\fR(1),
+\fBmagus\-version\fR(1)
+.br

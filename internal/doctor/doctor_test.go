@@ -293,6 +293,39 @@ func TestCheckUnreachedFootprintDecls(t *testing.T) {
 	})
 }
 
+// TestCheckCacheableSecretReads is MGS1026. The case that matters is the SECOND one: a
+// cacheable target reading a credential replays and reports a successful login without ever
+// contacting the provider, so a check that cannot fail here is worth nothing.
+func TestCheckCacheableSecretReads(t *testing.T) {
+	run := func(magusfile string, policies map[string]types.Target) types.DoctorCheck {
+		root := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
+		r := &runner{root: root}
+		return r.checkCacheableSecretReads([]*types.Project{{Path: ".", Dir: root, TargetPolicies: policies}})
+	}
+	const readsSecret = "export fun login(ctx: magus\\Context, _a: [str]) > void { final t = magus\\secret.read(\"TOKEN\"); }\n"
+
+	t.Run("a target that reads no secret is clean", func(t *testing.T) {
+		got := run("export fun build(ctx: magus\\Context, _a: [str]) > void { ctx.readsFiles(\"src/**\"); }\n", nil)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+	})
+	t.Run("a cacheable secret read is flagged", func(t *testing.T) {
+		got := run(readsSecret, nil)
+		require.Equal(t, types.DoctorFail, got.Status, got.Message)
+		assert.Contains(t, got.Details[0], `target "login"`)
+		assert.Contains(t, got.Message, "skip_cache", "the message must name the remedy")
+	})
+	t.Run("skip_cache exempts it", func(t *testing.T) {
+		got := run(readsSecret, map[string]types.Target{"login": {SkipCache: true, SkipCacheReason: "authenticates per invocation"}})
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+	})
+	t.Run("a lookalike member is not a secret read", func(t *testing.T) {
+		// `.read` on anything that is not the magus\secret namespace must not trip it.
+		got := run("export fun build(ctx: magus\\Context, _a: [str]) > void { final t = fs\\file.read(\"x\"); }\n", nil)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+	})
+}
+
 func TestCheckRedundantFootprintGlobs(t *testing.T) {
 	r := &runner{root: t.TempDir()}
 	t.Run("no redundancy is clean", func(t *testing.T) {

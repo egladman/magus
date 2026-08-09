@@ -30,7 +30,7 @@ func TestCommandRender(t *testing.T) {
 // the drift test in cmd/magus keeps walking the full set.
 func TestAllRegistered(t *testing.T) {
 	declared := []Command{
-		Run, QueryOutput, GraphOpen, GraphExport, GraphStats, GraphBuild,
+		Run, QueryOutput, QueryInvocation, GraphOpen, GraphExport, GraphStats, GraphBuild,
 		ServerStart, ServerStop, ServerJob, Status, Watch, Affected,
 		DescribeTargets, DescribeProject, Ls, LsTargets, Where, MCPTokenGenerate,
 		SelfUpdate,

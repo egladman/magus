@@ -108,6 +108,7 @@ concepts/spells/docker/
 concepts/spells/go/
 concepts/spells/markdown/
 concepts/spells/md/
+concepts/spells/podman/
 concepts/spells/py/
 concepts/spells/python/
 concepts/spells/rs/
@@ -331,6 +332,7 @@ reference/codes/magusfile/MGS1022/
 reference/codes/magusfile/MGS1023/
 reference/codes/magusfile/MGS1024/
 reference/codes/magusfile/MGS1025/
+reference/codes/magusfile/MGS1026/
 reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
@@ -377,11 +379,14 @@ reference/manpage/magus-completion/
 reference/manpage/magus-config/
 reference/manpage/magus-describe/
 reference/manpage/magus-doctor/
+reference/manpage/magus-explain/
 reference/manpage/magus-graph/
 reference/manpage/magus-init/
 reference/manpage/magus-insight/
 reference/manpage/magus-ls/
 reference/manpage/magus-man/
+reference/manpage/magus-path/
+reference/manpage/magus-query/
 reference/manpage/magus-run/
 reference/manpage/magus-self/
 reference/manpage/magus-server/
@@ -439,6 +444,7 @@ tags/analysis/
 tags/annotations/
 tags/api/
 tags/argv/
+tags/audit/
 tags/auth/
 tags/authoring/
 tags/bash/
@@ -497,6 +503,7 @@ tags/error-codes/
 tags/errors/
 tags/eslint/
 tags/exec/
+tags/explain/
 tags/extension/
 tags/extraction/
 tags/filesystem/
@@ -538,6 +545,7 @@ tags/linux/
 tags/load/
 tags/logging/
 tags/logs/
+tags/magus-query/
 tags/magus-run/
 tags/magus-server/
 tags/magus-status/
@@ -571,6 +579,7 @@ tags/passthrough/
 tags/path/
 tags/permissions/
 tags/platform/
+tags/podman/
 tags/pool/
 tags/powershell/
 tags/prettier/
@@ -578,6 +587,7 @@ tags/project/
 tags/projects/
 tags/proto/
 tags/protobuf/
+tags/provenance/
 tags/provider/
 tags/pry/
 tags/pytest/

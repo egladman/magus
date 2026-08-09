@@ -1131,7 +1131,18 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 			if len(args) < 2 || !args[0].IsStr() || !args[1].IsStr() {
 				return Null, fmt.Errorf("str.replace: requires (str needle, str with)")
 			}
-			return StrValue(strings.Replace(str, args[0].AsString(), args[1].AsString(), 1)), nil
+			// EVERY occurrence, matching upstream: src/builtin/str.zig's replace calls
+			// Zig's std.mem.replaceOwned, which substitutes throughout. This substituted
+			// only the first for a long time, and the damage was quiet rather than loud -
+			// an escaper is the shape that hides it best. docs/lib/feed.buzz escapes HTML
+			// as s.replace("&", "&amp;").replace("<", "&lt;"), which encoded the FIRST
+			// ampersand of a document and left the rest raw; spells/github/actions
+			// escapeData encoded the first newline of a workflow command and let the
+			// runner end the command at the second. Nothing failed - the output was just
+			// wrong. .github/actions/advice/version-floor.buzz still carries the
+			// workaround it forced: .replace("\"", ...) written twice to strip two quotes,
+			// now a harmless no-op on the second call.
+			return StrValue(strings.ReplaceAll(str, args[0].AsString(), args[1].AsString())), nil
 		})
 	case "split":
 		return newDirect("str.split", func(_ context.Context, args []Value) (Value, error) {

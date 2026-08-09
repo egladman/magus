@@ -21,9 +21,12 @@ export fun raised(diff: str) > str {
     foreach (line in diff.split("\n")) {
         if (!line.startsWith("+required_version:")) { continue; }
         final value = line.sub("+required_version:".len()).trim();
-        // Buzz's replace swaps only the FIRST match, so each quote style is stripped
-        // from both ends explicitly rather than by a single global replace.
-        return value.replace("\"", with: "").replace("\"", with: "").replace("'", with: "").replace("'", with: "");
+        // One call per quote style. This used to be written twice per style, with a note
+        // saying "Buzz's replace swaps only the FIRST match" - which was true of
+        // gopherbuzz until 2026-08-09 and was never true of upstream Buzz, whose replace
+        // substitutes throughout. The doubled call was a workaround for that bug; it is
+        // the fingerprint to look for if you meet another one.
+        return value.replace("\"", with: "").replace("'", with: "");
     }
     return "";
 }
@@ -78,4 +81,12 @@ test "raised reads a newly set floor" {
 
 test "raised ignores an unrelated magus.yaml change" {
     std\assert(raised("+concurrency: 4\n-required_version: \">= 0.3.0\"\n") == "", message: "only additions of the key");
+}
+
+// Both quotes stripped, not just the opening one. Written as a repetition fixture on
+// purpose: the single-occurrence version of this test passed for as long as replace
+// substituted only the first match, because the doubled call above hid it.
+test "raised strips quotes from BOTH ends of the value" {
+    std\assert(raised("+required_version: \">= 0.4.0\"\n") == ">= 0.4.0", message: "double quotes both ends");
+    std\assert(raised("+required_version: '>= 0.4.0'\n") == ">= 0.4.0", message: "single quotes both ends");
 }

@@ -226,6 +226,14 @@ func (m *Magus) InvocationByID(inv string) (journal.Invocation, error) {
 	return cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg)).InvocationByID(inv)
 }
 
+// InvocationEventsByID resolves an invocation id to its run header AND the events behind it.
+// [Magus.InvocationByID] answers "what was this run"; this answers "what happened during it",
+// which is what an audit of a run's credential reads needs. Returns fs.ErrNotExist when the run
+// log has aged out.
+func (m *Magus) InvocationEventsByID(inv string) (journal.Invocation, []journal.Event, error) {
+	return cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg)).InvocationEventsByID(inv)
+}
+
 // TailLog returns the log-file path of the most recent cache entry for projectPath,
 // optionally restricted to target. Wraps fs.ErrNotExist when not found; [types.ErrNoCache] on Inspect.
 func (m *Magus) TailLog(projectPath, target string) (logPath string, err error) {

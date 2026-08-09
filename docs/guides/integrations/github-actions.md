@@ -216,6 +216,61 @@ no-op on a laptop. No remote calls, nothing to configure, nothing to turn off.
 See [Remote cache](../../concepts/cache/remote.md) for what gets stored, how entries are
 keyed, and the guarantees a shared cache does and does not give you.
 
+## Credentials
+
+The same spell carries a [secret provider](../../concepts/secrets.md). Select it only
+under Actions, since it resolves the environment a workflow injects:
+
+```buzz
+import "spells/github/actions" as github;
+
+if (os\env("GITHUB_ACTIONS") == "true") {
+    magus\secret.provider(github);
+}
+```
+
+You do not have to. With no provider selected, magus's built-in one already reads the
+environment, which is the only way to reach a repository secret - an Actions secret is
+write-only, and `${{ secrets.NAME }}` in a step's `env:` block is the whole mechanism.
+Selecting this spell buys two things the built-in cannot do.
+
+**Short-lived tokens instead of stored keys.** A reference prefixed `oidc:` is an
+audience, and magus mints a token from the runner's own endpoint:
+
+```buzz
+final token = magus\secret.read("oidc:sts.amazonaws.com");
+```
+
+That needs a permission which is off by default, and a job without it gets no endpoint at
+all:
+
+```yaml
+permissions:
+  id-token: write
+```
+
+This is how a repository holds no long-lived cloud credential. Nothing is stored, and the
+token expires on its own.
+
+**Better masking and better misses.** Every value the provider resolves is registered
+with the runner via `::add-mask::`, so GitHub redacts it across every later step rather
+than only in the output magus captures. The runner already does that automatically for
+anything interpolated from `secrets.*`, but not for a step output injected into `env:`,
+and it cannot for a token minted mid-job. And when a variable is missing, the error is
+the workflow line to add rather than a bare "not set":
+
+```text
+github-actions: $DOCKERHUB_TOKEN is not set in this step's environment.
+  An Actions secret is only readable through the workflow file - nothing
+  running inside the job can fetch one. Add it to the step:
+      env:
+        DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+```
+
+One rule to carry over from the [secrets page](../../concepts/secrets.md): a target that
+reads a credential must declare `skip_cache` with a reason, or it becomes a replay that
+reports a successful login without ever authenticating.
+
 ## Annotations and folded logs
 
 The same spell teaches magus how GitHub renders a job log:
