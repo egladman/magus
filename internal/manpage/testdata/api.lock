@@ -6,6 +6,7 @@ config cache.remote.trusted_keys
 config cache.size_mb
 config cache.write.enabled
 config ci.max_shards
+config ci.record_runs
 config ci.runner_pool_budget
 config concurrency
 config console.enabled

@@ -7,7 +7,8 @@
 //
 //	History:      version(int), updated_at(time), constants(Constants),
 //	              projects(map[string]map[string]Stats), setup([]int64),
-//	              alpha([]int64), workspace_fallback_ms(int64)
+//	              alpha([]int64), workspace_fallback_ms(int64),
+//	              runs([]Run)
 //	Constants:    setup_p50_ms(int64), alpha_ms(int64)
 //	Stats:        p75_ms(int64), samples(int), last_updated(time), recent([]int64),
 //	              buckets(map[string]BucketStats), hit_count(int), miss_count(int),
@@ -15,12 +16,37 @@
 //	              volatile_count(int), recent_outcomes([]Outcome)
 //	Outcome:      result(string: "pass"|"fail"|"volatile"), affected(bool),
 //	              duration_ms(int64), at(time), attempts(int)
+//	Run:          commit(string: a commit id), ref(string), target(string),
+//	              status(string: "passed"|"failed"), at(time)
 //
-// DO NOT add: source code, file contents, hashes, env vars, secrets, tokens,
-// commit SHAs, branch names, PR numbers, author identity, error messages, or
-// stdout/stderr captures. Any new field must be added to the allowlist in
-// TestHistorySchemaLock (history_test.go) with an explanation of why it is safe
-// to store in a shared cache.
+// DO NOT add: source code, file contents, env vars, secrets, tokens, PR numbers,
+// author identity, error messages, or stdout/stderr captures. Any new field must
+// be added to the allowlist in TestHistorySchemaLock (history_test.go) with an
+// explanation of why it is safe to store in a shared cache.
+//
+// COMMIT IDS AND REF NAMES are permitted, in Runs and nowhere else. This notice
+// forbade both outright until v5 added the run log, and that was the right default
+// while every field was a timing: the rule cost nothing, so it was worth keeping
+// absolute. It is a considered exception now, not an erosion:
+//
+//   - There is no content-free substitute. "The commit this branch last passed at"
+//     is a commit reference by definition. Withholding it does not make the store
+//     safer, it makes the feature impossible - and the feature is what stops a CI
+//     run from silently gating nothing.
+//   - Neither is content. A commit id NAMES a revision without revealing anything
+//     in it; a ref name is a label the same reader already sees on every ref.
+//     That is categorically different from the file contents, secrets, and captured
+//     output the list still refuses, all of which disclose what a repository holds.
+//   - The blast radius is one repository. This file rides a CI cache, and those are
+//     repository-scoped: GitHub Actions restores only from the same repo and its
+//     base branch. It is NOT written to magus's content-addressed remote cache,
+//     which is the store that can be shared across workspaces.
+//
+// Read that as a boundary, not a precedent. A field naming WHAT changed rather than
+// WHICH revision is the thing this notice exists to stop, and it still does.
+//
+// ci.record_runs turns the run log off for a workspace that will not accept even
+// this; see internal/config.CI.RecordRuns.
 
 package forecast
 
@@ -41,7 +67,8 @@ import (
 
 // HistoryVersion is the on-disk schema version.
 // v4 adds PassCount/FailCount/VolatileCount/RecentOutcomes; all prior versions load cleanly.
-const HistoryVersion = 4
+// v5 adds Runs, the per-branch log of end-to-end run outcomes.
+const HistoryVersion = 5
 
 // SampleWindow is the rolling window for duration percentiles (100 runs ≈ 5 CI days).
 const SampleWindow = 100
@@ -76,7 +103,60 @@ type History struct {
 	Setup               []int64                     `json:"setup"`                 // shard setup times for SetupP50Ms fitting
 	Alpha               []int64                     `json:"alpha"`                 // scheduling penalty observations
 	WorkspaceFallbackMs int64                       `json:"workspace_fallback_ms"` // workspace-wide p75 for new projects
+	// Runs is the rolling log of end-to-end runs, oldest first. See [Run]; query it
+	// with [History.PassedCommit].
+	Runs []Run `json:"runs,omitempty"`
 }
+
+// Run is one recorded end-to-end run of a target on a branch: what it ran at, how it
+// came out, and when.
+//
+// A LOG rather than counters, and deliberately not more of the PassCount/FailCount
+// pair on Stats below. Those are per (project, target) tallies - they answer "how
+// often does this target flap", which is a volatility question, and a tally cannot
+// answer any question about a PARTICULAR run. This does: which commit was verified,
+// which one broke it, how far back the last passing one is, whether a branch has been
+// red for one run or twenty. "Anything merged by a run that did not pass" is not
+// derivable from two integers, and it is exactly what an affected diff has to know.
+//
+// Ref and Target are ON the run rather than being keys above it, so a Run handed to
+// a caller says what it is without the caller also carrying the key it was filed
+// under. Both are read back as filters, and one flat window is enough because the
+// only caller that records is a run's aggregation step - a workspace recording every
+// ref at high volume could evict a quiet one's last pass and widen its next diff,
+// which is a reason to raise RunWindow if it ever happens, not to nest a map today
+// for a write pattern nothing here has.
+//
+// Ref, not Branch: it is types.VCSMeta.Ref, the movable name a backend points at the
+// current revision (git branch, hg named branch, jj bookmark), and it is what
+// vcs.ref() already hands a magusfile.
+//
+// Target is recorded rather than assumed. A workspace whose pipeline anchor is not
+// `ci` would otherwise read a run left by a different pipeline and treat a commit as
+// verified by a gate that never looked at it.
+type Run struct {
+	Commit string    `json:"commit"`
+	Ref    string    `json:"ref"`
+	Target string    `json:"target"`
+	Status RunStatus `json:"status"`
+	At     time.Time `json:"at"`
+}
+
+// RunStatus is how a run came out. "Passed"/"failed" rather than green/red or
+// success/failure: it is the word magus's own console prints ([pass], [fail]) and the
+// one Stats already counts with.
+type RunStatus string
+
+const (
+	RunPassed RunStatus = "passed"
+	RunFailed RunStatus = "failed"
+)
+
+// RunWindow is the rolling window of runs kept. Matched to SampleWindow
+// (roughly 5 CI days) because it answers the same kind of question over the same span,
+// and because the useful reads here - the last passing commit, the current red streak -
+// are all near the head of the log.
+const RunWindow = 100
 
 // Constants are the fitted scheduling-cost parameters: per-shard fixed cost and per-added-shard penalty.
 type Constants struct {
@@ -426,6 +506,26 @@ func (h *History) Merge(other *History) {
 			}
 		}
 	}
+	// Runs union rather than freshest-wins: two histories being merged describe
+	// different runs, not two readings of one, so keeping only the newer would discard
+	// the record of everything before it.
+	if len(other.Runs) > 0 {
+		seen := make(map[Run]struct{}, len(h.Runs))
+		for _, r := range h.Runs {
+			seen[r] = struct{}{}
+		}
+		for _, r := range other.Runs {
+			if _, dup := seen[r]; dup {
+				continue
+			}
+			seen[r] = struct{}{}
+			h.Runs = append(h.Runs, r)
+		}
+		slices.SortStableFunc(h.Runs, func(a, b Run) int { return a.At.Compare(b.At) })
+		if len(h.Runs) > RunWindow {
+			h.Runs = h.Runs[len(h.Runs)-RunWindow:]
+		}
+	}
 	if h.Version == 0 {
 		h.Version = other.Version
 	}
@@ -440,6 +540,80 @@ func (h *History) Merge(other *History) {
 			h.Alpha = other.Alpha
 		}
 	}
+}
+
+// RecordRun appends one end-to-end run to the log, trimming to [RunWindow].
+// Only a caller that knows how the WHOLE run came out may call it - in a sharded CI
+// run that is the aggregation job, never an individual shard, since no shard can see
+// its siblings' results.
+//
+// Failures are recorded, not just passes. A log with only passes cannot distinguish
+// "nothing has run on this ref" from "everything since has failed", and those want
+// opposite responses.
+//
+// Recording a passing run whose affected set was empty is deliberate: a run with
+// nothing to do is trivially passing, and skipping it would pin the last passing
+// commit at whichever one last touched something and grow every later diff without
+// bound.
+func (h *History) RecordRun(run Run, now time.Time) {
+	if run.Ref == "" || run.Commit == "" {
+		return
+	}
+	if run.At.IsZero() {
+		run.At = now
+	}
+	h.Runs = append(h.Runs, run)
+	if len(h.Runs) > RunWindow {
+		h.Runs = h.Runs[len(h.Runs)-RunWindow:]
+	}
+}
+
+// PassedCommit returns the commit ref most recently PASSED target at, and whether
+// any such run is on record. Runs of another ref or target are skipped rather than
+// ending the search, so a `ci` marker is not shadowed by a later `nightly` one.
+//
+// A false return is the ordinary case on a fresh workspace, a fork, or after the store
+// aged out. Callers must have an answer for it rather than treating it as a failure,
+// and must not fall back to a base that measures nothing - which is what comparing a
+// ref against itself does.
+func (h *History) PassedCommit(ref, target string) (string, bool) {
+	for i := len(h.Runs) - 1; i >= 0; i-- {
+		r := h.Runs[i]
+		if !r.matches(ref, target) || r.Status != RunPassed || r.Commit == "" {
+			continue
+		}
+		return r.Commit, true
+	}
+	return "", false
+}
+
+// FailedSince returns the runs of target on ref since its last passing one, oldest
+// first, and is empty when the most recent run passed. It is the "what is still
+// unverified" view the affected diff implies: every commit in it is one a passing run
+// never covered.
+func (h *History) FailedSince(ref, target string) []Run {
+	var out []Run
+	for i := len(h.Runs) - 1; i >= 0; i-- {
+		r := h.Runs[i]
+		if !r.matches(ref, target) {
+			continue
+		}
+		if r.Status == RunPassed {
+			break
+		}
+		out = append([]Run{r}, out...)
+	}
+	return out
+}
+
+// matches reports whether r is a run of the named ref and target. An empty filter
+// matches anything; an empty field on the run does too, so a record written before
+// either was populated is not silently invisible.
+func (r Run) matches(ref, target string) bool {
+	if ref != "" && r.Ref != "" && r.Ref != ref {
+		return false
+	}
+	return target == "" || r.Target == "" || r.Target == target
 }
 
 // Load reads the history file at path; a missing file is not an error (returns a zero History).

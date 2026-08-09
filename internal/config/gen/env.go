@@ -58,6 +58,9 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 			cfg.CI.RunnerPoolBudget = n
 		}
 	}
+	if v := getenv("MAGUS_CI_RECORD_RUNS"); v != "" {
+		cfg.CI.RecordRuns = parseBoolEnv(v, cfg.CI.RecordRuns)
+	}
 	if v := getenv("MAGUS_VOLATILITY_ENABLED"); v != "" {
 		cfg.Volatility.Enabled = parseBoolEnv(v, cfg.Volatility.Enabled)
 	}

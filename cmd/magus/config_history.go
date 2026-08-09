@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/ci/forecast"
@@ -23,6 +24,7 @@ func configHistoryCmd(ctx context.Context, _ string, cfg config.Config, args []s
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Subcommands:")
 		fmt.Fprintln(os.Stderr, "  import   merge runtime-history JSON files into the history (e.g. per-shard CI histories)")
+		fmt.Fprintln(os.Stderr, "  passed   record the commit a ref last completed a fully passing run at")
 		fmt.Fprintln(os.Stderr, "  dedup    measure cross-shard redundant builds from per-shard JSONL report files")
 		return flag.ErrHelp
 	}
@@ -31,11 +33,84 @@ func configHistoryCmd(ctx context.Context, _ string, cfg config.Config, args []s
 	switch sub {
 	case "import":
 		return runHistoryImport(ctx, cfg, rest)
+	case "passed":
+		return runHistoryPassed(ctx, cfg, rest)
 	case "dedup":
 		return runHistoryDedup(ctx, rest)
 	default:
-		return usagef("magus config history: unknown subcommand %q (choose: import, dedup)", sub)
+		return usagef("magus config history: unknown subcommand %q (choose: import, passed, dedup)", sub)
 	}
+}
+
+// runHistoryPassed records the commit a ref last completed a fully passing run at,
+// which `magus affected --base last-passed` then measures from.
+//
+// It is a SEPARATE subcommand from import rather than a flag on it, because the two are
+// asserted by different things. import merges what the shards measured, and each shard
+// only knows its own result; that the whole run passed is a fact only the aggregation
+// job holds. Folding it into import would also tie recording to having files to merge,
+// and a run whose affected set was empty has none while still being a passing run whose
+// commit the marker must advance past.
+func runHistoryPassed(ctx context.Context, cfg config.Config, args []string) error {
+	fs := flag.NewFlagSet("config history passed", flag.ContinueOnError)
+	bindDisplayFlags(fs)
+	historyPath := fs.String("history", cfg.HistoryPath, "Path to the history JSON to write (default: configured history_path)")
+	ref := fs.String("ref", "", "Ref the run was on (git branch, hg named branch, jj bookmark)")
+	commit := fs.String("commit", "", "Commit the run was at")
+	target := fs.String("target", "ci", "Target that ran")
+	status := fs.String("status", string(forecast.RunPassed), "How the run came out: passed or failed")
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage: magus config history passed --ref <name> --commit <id> [--target <name>] [--history <path>]")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Record that ref completed a fully passing run of target at commit. Only a")
+		fmt.Fprintln(os.Stderr, "caller that knows the WHOLE run passed may say so: in a sharded CI run that is")
+		fmt.Fprintln(os.Stderr, "the aggregation job, never an individual shard.")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "`magus affected <target> --base last-passed` then diffs from that commit, so a")
+		fmt.Fprintln(os.Stderr, "run that was cancelled or failed leaves its commits in the NEXT run's diff")
+		fmt.Fprintln(os.Stderr, "rather than being stepped over.")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Flags:")
+		fs.PrintDefaults()
+	}
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *historyPath == "" {
+		return errors.New("magus config history passed: --history is required (or set history_path in magus.yaml)")
+	}
+	if *ref == "" || *commit == "" {
+		return errors.New("magus config history passed: --ref and --commit are both required")
+	}
+	st := forecast.RunStatus(*status)
+	if st != forecast.RunPassed && st != forecast.RunFailed {
+		return usagef("magus config history passed: --status must be %q or %q, got %q",
+			forecast.RunPassed, forecast.RunFailed, *status)
+	}
+	// Skipped, not failed. A workspace that turned the run log off wired this step in
+	// anyway (it is inside the shipped action), and erroring would paint every run red
+	// for honoring its own configuration.
+	if !cfg.CI.RecordRuns {
+		slog.InfoContext(ctx, "config history passed: run log disabled by ci.record_runs; recording nothing",
+			slog.String("ref", *ref), slog.String("commit", *commit))
+		return nil
+	}
+
+	var hist forecast.History
+	if err := hist.Load(ctx, *historyPath); err != nil {
+		return err
+	}
+	hist.RecordRun(forecast.Run{Commit: *commit, Ref: *ref, Target: *target, Status: st}, time.Now())
+	if err := hist.Save(ctx, *historyPath); err != nil {
+		return err
+	}
+	slog.InfoContext(ctx, "config history run recorded",
+		slog.String("ref", *ref),
+		slog.String("commit", *commit),
+		slog.String("target", *target),
+		slog.String("status", string(st)),
+		slog.String("history_path", *historyPath))
+	return nil
 }
 
 // runHistoryImport folds one or more runtime-history JSON files into --history

@@ -21,6 +21,7 @@ func BindFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.BoolVar(&cfg.Cache.Remote.Insecure, "cache-remote-insecure", cfg.Cache.Remote.Insecure, "MAGUS_CACHE_REMOTE_INSECURE: Insecure disables remote-cache signature verification: unsigned artifacts are")
 	fs.IntVar(&cfg.CI.MaxShards, "ci-max-shards", cfg.CI.MaxShards, "MAGUS_CI_MAX_SHARDS")
 	fs.IntVar(&cfg.CI.RunnerPoolBudget, "ci-runner-pool-budget", cfg.CI.RunnerPoolBudget, "MAGUS_CI_RUNNER_POOL_BUDGET")
+	fs.BoolVar(&cfg.CI.RecordRuns, "ci-record-runs", cfg.CI.RecordRuns, "MAGUS_CI_RECORD_RUNS: RecordRuns keeps the per-branch run log (forecast.Run) in the history file:")
 	fs.BoolVar(&cfg.Volatility.Enabled, "volatility-enabled", cfg.Volatility.Enabled, "MAGUS_VOLATILITY_ENABLED")
 	fs.IntVar(&cfg.Volatility.BootstrapSamples, "volatility-bootstrap-samples", cfg.Volatility.BootstrapSamples, "MAGUS_VOLATILITY_BOOTSTRAP_SAMPLES")
 	fs.IntVar(&cfg.Volatility.MinSamples, "volatility-min-samples", cfg.Volatility.MinSamples, "MAGUS_VOLATILITY_MIN_SAMPLES")

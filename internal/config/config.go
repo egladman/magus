@@ -269,6 +269,18 @@ type CacheRemote struct {
 type CI struct {
 	MaxShards        int `json:"max_shards" yaml:"max_shards" validate:"shard_count"`           // max parallel shards; -1 = unlimited
 	RunnerPoolBudget int `json:"runner_pool_budget" yaml:"runner_pool_budget" validate:"gte=0"` // GHA matrix-level concurrency cap; 0 = no cap
+	// RecordRuns keeps the per-branch run log (forecast.Run) in the history file:
+	// which commit a branch passed or failed a target at, and when. On by default,
+	// because `--base last-passed` reads it and a CI run that cannot find its base
+	// gates less than it appears to.
+	//
+	// It is the break-glass switch for the one exception in history.go's cache-safety
+	// notice. That log is the only part of the history carrying a commit id or a
+	// branch name, so a workspace whose policy forbids either leaving the repository -
+	// however scoped the CI cache is - turns this off and gives up only the last-passed
+	// base, keeping every timing and volatility field. Off, magus records nothing and
+	// `--base last-passed` says so loudly rather than resolving to something arbitrary.
+	RecordRuns bool `json:"record_runs" yaml:"record_runs"`
 }
 
 // Volatility controls volatility detection and auto-retry for test runs.
@@ -530,7 +542,7 @@ func EnvVarDocs() []EnvVarDoc {
 // Defaults returns a Config populated with the magus built-in defaults.
 func Defaults() Config {
 	return Config{
-		CI: CI{MaxShards: 8},
+		CI: CI{MaxShards: 8, RecordRuns: true},
 		Daemon: Daemon{
 			Enabled: true,
 			Maintenance: Maintenance{
