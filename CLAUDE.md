@@ -71,7 +71,9 @@ LINK step is unshareable across worktrees and across commits within a worktree.
 Roughly 34 worktrees each rebuilding grew `~/Library/Caches/go-build` to 62 GB.
 Reclaim with `go clean -cache`.
 
-When you do need one: `magus run go_build .` writes `./magus`, and unlike
+When you do need one: `magus run go_build .` writes `./magus`. It regenerates the compiled
+built-in spells first (they are go:embed'd, so a link before that step bakes in stale
+bytecode - about 11s), and unlike
 `magus run build .` it skips the `format` -> `generate` -> `deploy-generate`
 chain that fails in a fresh worktree on a missing `docs/gen/index.html`. Then run
 `./magus <cmd>`. An existing `./magus` newer than the tree (`magus doctor`'s

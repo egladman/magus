@@ -355,9 +355,6 @@ func dispatchOp(ctx context.Context, ops map[string]spells.Op, tools map[string]
 	if err := checkReady(ctx, tools, op, req.Dir); err != nil {
 		return nil, err
 	}
-	if err := checkBounds(ctx, tools, req.Dir); err != nil {
-		return nil, err
-	}
 	opts := commandOpts{op: req.Target, cwd: req.Dir, args: project.ExtraArgs(ctx)}
 	// The reserved `scip` op writes its index into the cache, not the tree: magus
 	// hands it the destination via MAGUS_SYMBOL_INDEX so the spell command
@@ -684,97 +681,8 @@ func levenshtein(a, b string) int {
 	return row[len(b)]
 }
 
-// checkBounds rejects a tool whose version falls outside the window declared for it.
-//
 // It sits beside readiness because both answer "is this binary fit to run", and both
 // must resolve before the op forks - a too-old tool otherwise fails with whatever it
 // says about an unrecognized flag, which is the misleading failure readiness exists to
-// prevent, one question over.
-//
-// The window is the intersection of two declarations with different authority: the
-// spell says what its ops need to function, the workspace says what it has qualified.
-// They are combined HERE, the single comparison site, so no second check can ever know
-// only half the window.
-//
-// Every tool the spell declares is checked, NOT just the one this op forks - and that
-// is the difference between the window working and being decorative. Readiness resolves
-// through tools[op.Bin] because it asks whether the binary about to be executed can run.
-// A version window asks something else: the typescript spell declares `node` and every
-// one of its ops forks `pnpm`, so a lookup by op.Bin would gate nothing while looking
-// like it gated node. The node a build runs on is a fact about the build whichever
-// binary is on the argv.
-//
-// Sorted, so a spell violating two windows always reports the same one first.
-//
-// Memoized on the same basis as readiness: the probe forks, and the answer cannot
-// change mid-run in a way magus could act on. The workspace half is constant for a run,
-// so it does not belong in the memo key. Tools with no window are never probed here, so
-// this costs nothing until someone declares one.
-func checkBounds(ctx context.Context, tools map[string]spells.Tool, dir string) error {
-	for _, bin := range slices.Sorted(maps.Keys(tools)) {
-		if err := checkToolBounds(ctx, tools[bin], bin, dir); err != nil {
-			return err
-		}
-	}
-	return nil
-}
 
-func checkToolBounds(ctx context.Context, t spells.Tool, bin, dir string) error {
-	if t.Probe.Bin == "" {
-		return nil
-	}
-	bounds := t.Supported.Intersect(types.ToolBoundsFromContext(ctx, dir, bin))
-	if bounds.IsZero() {
-		return nil
-	}
-	key := "bounds\x00" + bin + "\x00" + dir
-	if cached, hit := readinessMemo.Load(key); hit {
-		if cached == nil {
-			return nil
-		}
-		err, _ := cached.(error)
-		return err
-	}
-	out := boundsVerdict(ctx, bounds, t.Probe, bin, dir)
-	readinessMemo.Store(key, out)
-	return out
-}
 
-func boundsVerdict(ctx context.Context, bounds spells.VersionBounds, probe spells.Command, tool, dir string) error {
-	raw, err := versionProber(ctx, probe, dir)
-	if err != nil {
-		// Unprobeable is not out of range - those are different failures and this
-		// function answers only the second. A tool that is genuinely missing still fails
-		// when dispatchOp forks it for real, right after this check, and run.Exec
-		// classifies that as MGS3003; swallowing the error here only stops this from
-		// mislabeling it as a version problem before the op reports the accurate one.
-		return nil //nolint:nilerr // probe failure is not a bounds violation; the real op exec fails it as MGS3003
-	}
-	got, ok := spells.ExtractVersion(raw)
-	if !ok {
-		return nil
-	}
-	// Two bounds, so which one failed is structural. The single-constraint form this
-	// replaced could only say "too old", and said it about a too-new binary too.
-	//
-	// The subject is the TOOL, never the op. Every declared tool is checked whichever op
-	// forks, so the failing binary is routinely not the one on the argv: a `tsc` op
-	// forks pnpm and fails on node. Naming the op here would point the reader at the
-	// wrong binary.
-	switch bounds.Check(got) {
-	case spells.VerdictTooOld:
-		return types.DiagnosticErrorf(types.ToolTooOld,
-			"%s %s is older than the supported range for this project (min %s)",
-			tool, got, bounds.Min)
-	case spells.VerdictTooNew:
-		return types.DiagnosticErrorf(types.ToolTooNew,
-			"%s %s is newer than the supported range for this project (below %s)",
-			tool, got, bounds.Below)
-	case spells.VerdictInside, spells.VerdictUnknown:
-		// Unknown is not a violation: an unparseable probed version, or a bound that
-		// slipped past decode validation, must not block an op over a comparison magus
-		// could not make.
-		return nil
-	}
-	return nil
-}

@@ -1,0 +1,102 @@
+syntax = "proto3";
+
+// Package magus.tool.v1 is the versioned wire contract for the toolchain view: which
+// binaries a workspace's spells drive, what version each one actually reported, and the
+// version window it is held to. It answers "is the toolchain this build ran on the one
+// this repo says it supports", which the CLI answers one op at a time (MGS3005/MGS3006)
+// and which nothing could answer for the workspace as a whole.
+//
+// Everything here is a READ of state magus already builds: the probe is a cache-key input
+// that runs on every build regardless, and the window comes from a spell's `supported`
+// plus a project's `tools` key. magus does not learn which versions exist upstream, does
+// not select one, and carries no end-of-life data - see docs/scope.md. A future eol field
+// would be an ADDITION to Tool, which proto3 permits without a wire break, so its absence
+// here costs nothing later.
+//
+// A sibling of magus.status.v1: status is "what is happening right now", this is "what is
+// this workspace built with". buf-breaking gates this file.
+package magus.tool.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Verdict is how a probed version sits in its window. Mirrors spells.Verdict.
+enum Verdict {
+  VERDICT_UNSPECIFIED = 0;
+  VERDICT_INSIDE = 1;    // satisfies every declared bound
+  VERDICT_TOO_OLD = 2;   // below min; the CLI raises MGS3005
+  VERDICT_TOO_NEW = 3;   // at or above below; the CLI raises MGS3006
+  // VERDICT_UNKNOWN means magus could not make the comparison: the probe failed, its
+  // output carried no version, or a bound is unparsable. Never a violation, and
+  // deliberately distinct from INSIDE - "we could not check" must not render as "fine".
+  VERDICT_UNKNOWN = 4;
+}
+
+// VersionBounds is a version window: an inclusive floor and an exclusive ceiling, each a
+// plain version. Mirrors spells.VersionBounds. Both empty means unconstrained.
+//
+// below is the first version REJECTED, not the last accepted, so a UI must not render it
+// as "max": below "25" accepts 24.19.0 and rejects 25.0.0.
+message VersionBounds {
+  string min = 1;
+  string below = 2;
+}
+
+// Tool is one binary a spell drives, as this workspace currently sees it.
+message Tool {
+  string bin = 1;    // the binary name, e.g. "go", "node"
+  string spell = 2;  // the spell that declares it, e.g. "go", "typescript"
+
+  // installed_version is what the probe extracted, canonical "vX.Y.Z". Empty when the
+  // tool is absent or printed nothing version-shaped; that is not a violation, so it
+  // pairs with VERDICT_UNKNOWN rather than a failure.
+  string installed_version = 3;
+
+  // The two declarations, kept SEPARATE rather than pre-merged, because the first
+  // question a reader has about a failing bound is who set it. The CLI diagnostic cannot
+  // say (Intersect discards provenance); a table has room to.
+  VersionBounds spell_bounds = 4;      // what the spell's ops need to function
+  VersionBounds workspace_bounds = 5;  // what this project declared in its magusfile
+  VersionBounds effective = 6;         // the intersection actually enforced, narrower wins
+
+  Verdict verdict = 7;
+  string diagnostic_code = 8;  // "MGS3005"/"MGS3006" when violated, else empty
+
+  // probed_at is when this version was read. A console page has no build to piggyback on,
+  // so the probe behind it may be older than the page; surfacing the age is honest where
+  // implying live is not.
+  google.protobuf.Timestamp probed_at = 9;
+
+  // Field 10 is deliberately unused. It briefly carried an "enforced" bool meant to say
+  // whether a window could actually fail a build here, computed as "some op of this spell
+  // forks this binary". That is the wrong question: checkBounds checks EVERY tool the
+  // spell declares whenever any of its ops dispatches, so enforcement turns on whether the
+  // project dispatches a spell op at all - which this handler cannot see. A field that is
+  // confidently wrong is worse than a missing one, so it is reserved until the
+  // target-resolution data needed to answer it is reachable.
+  reserved 10;
+  reserved "enforced";
+}
+
+// Project groups the tools one project drives, since a window is declared per project and
+// the same binary can be held to different bounds in different projects.
+message Project {
+  string path = 1;  // workspace-relative, "." for the root
+  string name = 2;
+  repeated Tool tools = 3;
+}
+
+// ToolService serves the toolchain view. Read-only: nothing here installs, selects, or
+// moves a version.
+service ToolService {
+  // ListTools returns every project's tools with their windows and verdicts.
+  rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
+}
+
+message ListToolsRequest {
+  // project narrows to one workspace-relative path; empty returns all of them.
+  string project = 1;
+}
+
+message ListToolsResponse {
+  repeated Project projects = 1;
+}

@@ -32,6 +32,7 @@ import "magus/spell/typescript";
 
 // badge renders the coverage SVG; cov extracts the percentage from the lcov report.
 import "../../badge" as badge;
+import "../../tools/toolchain-policy" as policy;
 import "../../coverage" as cov;
 
 // The badge is written into the ROOT project's assets/, not this project's own tree,
@@ -45,6 +46,9 @@ import "../../coverage" as cov;
 import "project/../.." as workspace;
 
 magus\project({
+    // The shared node window, by explicit import (tools/toolchain-policy.buzz).
+    // This project drives node; it declares no go window because it drives no Go.
+    "tools": {"node": policy.node},
     "spells": [typescript],
     // Affected/drift tracks this sources glob, not the import graph, so every input must
     // be named to be watched: the shared TypeScript, the build manifests (package.json +

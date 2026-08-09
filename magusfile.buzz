@@ -167,6 +167,15 @@ fun ld_flags() > str {
 // Compiles the version-stamped magus binary.
 export fun go_build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(gopherbuzz\build);
+    // The compiled built-in spells are go:embed'd into this binary, so the link has to
+    // happen AFTER they are regenerated. The cache key cannot express that on its own:
+    // spells/**/*.buzz is a project source, so editing a spell does invalidate this
+    // target, but the .bo it produces is an OUTPUT and never enters the key. Build before
+    // regenerating and the unchanged key then replays that binary - which is how a magus
+    // came out missing two tools its typescript spell had just been given. Ordering the
+    // dependency is the fix; declaring the .bo as an input is not, because ctx.readsFiles
+    // REPLACES a target's footprint rather than adding to it, and would drop **/*.go.
+    ctx.needs(spells_generate);
     go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
         "args": ["-trimpath",
             "-ldflags", ld_flags(),

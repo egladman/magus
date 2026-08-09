@@ -641,7 +641,69 @@ func (m *Magus) CurrentRevision(ctx context.Context) (revision string, dirty boo
 
 // toolVersionsByProject returns ProjectPath to "spell:version" entries for cache keys.
 // Probes are memoized by (spell, dir); failures record "spell:UNPROBED".
+// checkToolWindows fails the run when a probed tool falls outside the window its project
+// declares, intersected with what the declaring spell requires.
+//
+// It reports EVERY violation rather than the first: a run stopped by a toolchain mismatch
+// usually has more than one tool to fix, and finding them one rebuild at a time is the
+// experience the version window exists to replace.
+//
+// A tool with no recorded version is skipped, never failed. That covers an absent binary,
+// output carrying no version, and the case where tool-version probing is switched off
+// entirely - magus cannot compare what it did not read, and "could not check" must never
+// render as a violation.
+func checkToolWindows(projects []*types.Project, versions map[string]string) error {
+	var found []string
+	for _, p := range projects {
+		for _, s := range p.ResolvedSpells {
+			for _, tool := range s.ToolNames() {
+				t, ok := s.Tool(tool)
+				if !ok {
+					continue
+				}
+				window := t.Supported.Intersect(p.ToolBounds[tool])
+				if window.IsZero() {
+					continue
+				}
+				version, seen := versions[p.Path+"\x00"+s.Name()+"\x00"+tool]
+				if !seen {
+					continue
+				}
+				switch window.Check(version) {
+				case spells.VerdictTooOld:
+					found = append(found, fmt.Sprintf("%s: %s %s is older than the supported range (min %s)",
+						types.ProjectLabel(p.Path, p.Dir), tool, version, window.Min))
+				case spells.VerdictTooNew:
+					found = append(found, fmt.Sprintf("%s: %s %s is newer than the supported range (below %s)",
+						types.ProjectLabel(p.Path, p.Dir), tool, version, window.Below))
+				}
+			}
+		}
+	}
+	if len(found) == 0 {
+		return nil
+	}
+	slices.Sort(found)
+	code := types.ToolTooOld
+	if !strings.Contains(found[0], "older than") {
+		code = types.ToolTooNew
+	}
+	return types.DiagnosticErrorf(code, "toolchain outside the declared window:\n  %s",
+		strings.Join(found, "\n  "))
+}
+
 func (m *Magus) toolVersionsByProject(ctx context.Context, projects []*types.Project) map[string][]string {
+	return m.probeTools(ctx, projects, nil)
+}
+
+// probeTools is toolVersionsByProject with an optional second output: when extracted is
+// non-nil it also records each tool's full parsed version, keyed "project\x00spell\x00tool".
+//
+// The window gate needs the WHOLE version and the cache key needs a narrowed token, and
+// both come from one probe. Threading the extra map out is what keeps the gate from
+// forking a second time per tool - the run path already pays for these probes, so the
+// check rides along free.
+func (m *Magus) probeTools(ctx context.Context, projects []*types.Project, extracted map[string]string) map[string][]string {
 	mode := toolVersionMode()
 	if mode == "off" {
 		return nil
@@ -691,6 +753,11 @@ func (m *Magus) toolVersionsByProject(ctx context.Context, projects []*types.Pro
 								slog.String("spell", s.Name()), slog.String("tool", tool),
 								slog.String("output", probed), slog.String("token", token))
 							tv = token
+							if extracted != nil {
+								if full, ok := spells.ExtractVersion(probed); ok {
+									extracted[p.Path+"\x00"+s.Name()+"\x00"+tool] = full
+								}
+							}
 						}
 					}
 					memo[tk] = tv
@@ -850,7 +917,20 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}
 	defer releaseLocks()
 
-	toolVer := m.toolVersionsByProject(ctx, uniqueProjects)
+	// The probe pass doubles as the toolchain gate. checkBounds at op dispatch only ever
+	// covered projects that DISPATCH a spell op, so a project whose targets shell out
+	// directly (every TypeScript project here runs its own pnpm scripts) declared a window
+	// that could never fail anything. Enforcement has to follow the DECLARATION - a window
+	// is stated per project - not the dispatch mechanism that happens to be in use.
+	//
+	// Checked here, before any target runs, so a violation stops the invocation instead of
+	// surfacing partway through. It reuses the probes this pass already performed, so the
+	// gate costs no extra forks.
+	toolWindows := map[string]string{}
+	toolVer := m.probeTools(ctx, uniqueProjects, toolWindows)
+	if err := checkToolWindows(uniqueProjects, toolWindows); err != nil {
+		return err
+	}
 	// Resolved ONCE for the whole invocation, not per target - see CurrentRevision.
 	revision, dirty := m.CurrentRevision(ctx)
 
@@ -950,17 +1030,6 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	ctx = installWorkspaceRegistry(ctx, m.wsReg)
 	ctx = secret.ContextWithResolver(ctx, m.resolver)
 	ctx = types.WithWorkspace(ctx, m)
-	// Per run, not per registration: the spell registry is process-wide and the daemon
-	// serves many workspaces from it, so one project's tool policy must never outlive
-	// its own run. Keyed by project dir because the declaration is per project. See
-	// types.WithToolBounds.
-	toolBounds := map[string]map[string]spells.VersionBounds{}
-	for _, p := range byPath {
-		if len(p.ToolBounds) > 0 {
-			toolBounds[p.Dir] = p.ToolBounds
-		}
-	}
-	ctx = types.WithToolBounds(ctx, toolBounds)
 	// Seeded with the projects this run SELECTED, then marked further by the dispatcher
 	// as cross-project dependencies run. Selection alone was not enough: `magus run
 	// build .` selects only the root, so a nested project reached through a dependency

@@ -363,8 +363,14 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Claims: []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.mjs", "**/*.cjs", "**/*.jsx", "**/*.json", "**/*.jsonc", "**/*.md", "**/*.mdx", "**/*.yaml", "**/*.yml", "**/*.css", "**/*.scss", "**/*.html"},
 		// No Provides: tsc's output location is the project's tsconfig outDir, which the spell
 		// cannot read, so it claims nothing rather than guessing "dist/**" (see MGS1018).
-		Opaque:     true,
-		Tools:      map[string]spells.Tool{"node": {Probe: spells.Command{Bin: "node", Args: []string{"--version"}}}},
+		Opaque: true,
+		Tools: map[string]spells.Tool{
+			"node": {Probe: spells.Command{Bin: "node", Args: []string{"--version"}}},
+			"pnpm": {Probe: spells.Command{Bin: "pnpm", Args: []string{"--version"}},
+				Key: spells.VersionKey{UpTo: spells.VersionPatch}},
+			"tsc": {Probe: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc", "--version"}},
+				Key: spells.VersionKey{UpTo: spells.VersionPatch}},
+		},
 		Language:   "typescript",
 		IgnoreDirs: []string{"node_modules"},
 		Manifests:  []string{"package.json"},

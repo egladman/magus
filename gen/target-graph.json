@@ -10,6 +10,9 @@
           "name": "go-build",
           "declared": "go_build",
           "doc": "Compiles the version-stamped magus binary.",
+          "dependencies": [
+            "spells-generate"
+          ],
           "spells": [
             {
               "spell": "go",
@@ -393,6 +396,9 @@
         {
           "name": "watch",
           "doc": "Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.",
+          "dependencies": [
+            "spells-generate"
+          ],
           "spells": [
             {
               "spell": "go",

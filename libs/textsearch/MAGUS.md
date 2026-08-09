@@ -78,6 +78,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Target | What it does |
 |---|---|
+| `go-build` | Compiles the version-stamped magus binary. |
 | `dogfood` | Compiles magus-dev, the binary THIS worktree points its own git tooling at. |
 | `image-registries` | Reports the registries `magus run image-build` under the SAME charms will push to, and whether the credentials each one needs are actually present in the environment. |
 | `image-login` | Logs in to every registry the active mode publishes to, resolving each one's credentials through the workspace's secret provider. |
@@ -101,7 +102,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `ci-shard` | Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed. |
 | `deploy-generate` | deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/. |
 | `serve` | serve is the workspace-root dev loop for BOTH deployables. |
-| `go-build` | Compiles the version-stamped magus binary. |
 | `image-build` | Two axes, one charm each. |
 | `security` | Gates on dependency LICENSE terms, which is a separate question from image_scan's vulnerability pass even though both drive trivy. |
 | `man-generate` | Renders the roff man pages into manpage/ (repo root). |

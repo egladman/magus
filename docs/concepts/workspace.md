@@ -114,7 +114,7 @@ This states POLICY: what this project has qualified. It is intersected with the
 window the spell declares for its own ops (what those ops need to function at
 all), narrower bound winning on each side, so neither can loosen the other. A
 violation is [MGS3005](../reference/codes/sandbox/MGS3005.md) or
-[MGS3006](../reference/codes/sandbox/MGS3006.md), raised before the op forks.
+[MGS3006](../reference/codes/sandbox/MGS3006.md), raised before the run does any work.
 
 magus compares against the binary it probed; it never learns which versions
 exist upstream and never selects one. Sharing a window between projects is an

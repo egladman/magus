@@ -12,6 +12,10 @@ The `typescript` spell wires a TypeScript project's tooling into a magusfile, fo
 
 **Version probe (node):** `node --version`
 
+**Version probe (pnpm):** `pnpm --version`
+
+**Version probe (tsc):** `pnpm exec tsc --version`
+
 **Opaque:** yes (its outputs are not enumerable, so magus treats the whole workspace as the cache input).
 
 ## Passing arguments to ops

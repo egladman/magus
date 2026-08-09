@@ -32,6 +32,7 @@ import (
 	metricshandler "github.com/egladman/magus/internal/handler/metrics"
 	"github.com/egladman/magus/internal/handler/status"
 	tokenhandler "github.com/egladman/magus/internal/handler/token"
+	toolhandler "github.com/egladman/magus/internal/handler/tool"
 	"github.com/egladman/magus/internal/handler/trailrpc"
 	viewer "github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/httpx"
@@ -45,6 +46,7 @@ import (
 	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1/metricsv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/status/v1/statusv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1/tokenv1connect"
+	"github.com/egladman/magus/proto/gen/go/magus/tool/v1/toolv1connect"
 	"github.com/egladman/magus/types"
 )
 
@@ -347,6 +349,17 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// Same cross-origin guards as the other read services, and read-only, so it joins the
 			// share read surface too - the LAN "share to phone" dashboard renders insight, and it
 			// reaches it over this route now rather than the JSON one.
+			// Tool Connect service: the toolchain view - which binaries this workspace's
+			// spells drive, what each reported, and the window it is held to. Read-only and
+			// a read of state magus already builds (the probe keys the cache; the window is
+			// declared), so it joins the share read surface with the others. It caches
+			// probes behind a TTL: a page load must never fork one process per declared
+			// tool, and a refreshing dashboard must never become a fork loop.
+			toolPath, toolConnectHandler := toolv1connect.NewToolServiceHandler(toolhandler.NewService(opts.Magus, log))
+			httpServer.Handle(toolPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, toolConnectHandler))))
+			shareGuarded[toolPath] = toolConnectHandler
+			log.InfoContext(ctx, "[BRIDGE] tool service mounted", slog.String("path", toolPath))
+
 			insightPath, insightConnectHandler := insightv1connect.NewInsightServiceHandler(insighthandler.NewService(svc))
 			httpServer.Handle(insightPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, insightConnectHandler))))
 			shareGuarded[insightPath] = insightConnectHandler

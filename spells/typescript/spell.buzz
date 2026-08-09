@@ -50,8 +50,31 @@ export fun mgs_listProvidedGlobs() > [Path] { return [<Path>]; }
 // mgs_getLanguage names the source language this spell adapts, canonical and lowercase
 // so it matches the language attr on the TypeScript files and symbols SCIP ingests. It
 // lets `magus query language:typescript` reach this adapter alongside the code it builds.
+// The three binaries this spell's ops actually depend on, not just the runtime.
+//
+// tsc is the one that matters most and was missing longest: every op here runs it through
+// `pnpm exec`, and a probe result is a CACHE-KEY INPUT, so while it went undeclared magus
+// would replay a cached typecheck produced by a different compiler. A TypeScript major is
+// exactly the kind of upgrade that changes what `tsc` accepts, which is the case the key
+// exists to catch. Its probe forks pnpm rather than tsc directly because tsc is a local
+// node_modules binary with no stable path; `pnpm exec` is how every op reaches it too. An
+// uninstalled tree makes the probe fail, which magus treats as unprobeable rather than as
+// a failure - the same degradation a missing binary gets.
+//
+// pnpm is declared for the same reason one step out: it resolves the dependency graph
+// every op builds against, and this repo pins it (mise.toml) precisely because the
+// resolution differs across versions.
+//
+// node keeps no `key` narrowing, so its whole probe line keys the cache, matching what it
+// did before these two were added.
 export fun mgs_getTools() > {str: Tool} {
-    return {"node": Tool{probe = Command{bin = "node", args = ["--version"]}}};
+    return {
+        "node": Tool{probe = Command{bin = "node", args = ["--version"]}},
+        "pnpm": Tool{probe = Command{bin = "pnpm", args = ["--version"]},
+                     key = VersionKey{upTo = VersionComponent.patch}},
+        "tsc": Tool{probe = Command{bin = "pnpm", args = ["exec", "tsc", "--version"]},
+                    key = VersionKey{upTo = VersionComponent.patch}},
+    };
 }
 
 export fun mgs_getLanguage() > str { return "typescript"; }
