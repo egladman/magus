@@ -375,12 +375,11 @@ func doRequest(ctx context.Context, method, url, body string, headers map[string
 	// than a result. --fail-with-body keeps the body in the error message;
 	// --fail omits it.
 	if (o.fail || o.failWithBody) && resp.StatusCode >= 400 {
+		e := &StatusError{Method: strings.ToLower(method), URL: url, Status: resp.StatusCode}
 		if o.failWithBody {
-			return types.HTTPResponse{}, fmt.Errorf("http.%s %s: server returned %d: %s",
-				strings.ToLower(method), url, resp.StatusCode, string(raw))
+			e.Body = string(raw)
 		}
-		return types.HTTPResponse{}, fmt.Errorf("http.%s %s: server returned %d",
-			strings.ToLower(method), url, resp.StatusCode)
+		return types.HTTPResponse{}, e
 	}
 
 	// Collect response headers; where a name has multiple values, take the first.
@@ -537,4 +536,48 @@ func isConnRefused(err error) bool { return errors.Is(err, syscall.ECONNREFUSED)
 func isTimeout(err error) bool {
 	var nerr net.Error
 	return errors.As(err, &nerr) && nerr.Timeout()
+}
+
+// StatusError is what `fail`/`fail_with_body` raises when a response is >= 400.
+//
+// It exists so a Buzz caller can BRANCH on the status. The thrown value used to be
+// `{"message": "http.get https://...: server returned 404"}` and nothing else, so
+// telling a 404 (this resource does not exist, which is often a normal answer) from
+// a 500 (the server is broken, which is not) meant substring-matching English prose
+// - and prose is the one part of an error nobody promises to keep stable.
+//
+// Additive: `message` reads exactly as before, so anything matching on it still works.
+type StatusError struct {
+	Method string
+	URL    string
+	Status int
+	// Body is carried only under fail_with_body, matching curl --fail-with-body.
+	Body string
+}
+
+// statusErrorIsStructured pins the contract that makes the fields reachable from
+// Buzz: vm.StructuredError is satisfied structurally, so this type needs no import
+// from the interpreter to become a map rather than a string.
+var _ interface{ BuzzError() map[string]string } = (*StatusError)(nil)
+
+func (e *StatusError) Error() string {
+	msg := "http." + e.Method + " " + e.URL + ": server returned " + strconv.Itoa(e.Status)
+	if e.Body != "" {
+		msg += ": " + e.Body
+	}
+	return msg
+}
+
+// BuzzError renders the error as the map a Buzz `catch` receives.
+func (e *StatusError) BuzzError() map[string]string {
+	fields := map[string]string{
+		"message": e.Error(),
+		"status":  strconv.Itoa(e.Status),
+		"url":     e.URL,
+		"method":  e.Method,
+	}
+	if e.Body != "" {
+		fields["body"] = e.Body
+	}
+	return fields
 }

@@ -166,6 +166,39 @@ func TestHTTPFail(t *testing.T) {
 	assert.Contains(t, err.Error(), "nope", "fail_with_body: want body in error")
 }
 
+// TestHTTPFailCarriesTheStatus is what lets a Buzz caller tell a 404 from a 500.
+// The thrown value used to be a message and nothing else, so branching on the
+// status meant substring-matching prose - the one part of an error nobody promises
+// to keep stable.
+func TestHTTPFailCarriesTheStatus(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "nope", http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	_, err := HTTPGet(context.Background(), srv.URL, nil, map[string]any{"fail": true})
+	require.Error(t, err)
+
+	var se *StatusError
+	require.ErrorAs(t, err, &se, "the error must carry its status structurally")
+	assert.Equal(t, http.StatusNotFound, se.Status)
+	assert.Equal(t, "get", se.Method)
+	assert.Equal(t, srv.URL, se.URL)
+
+	fields := se.BuzzError()
+	assert.Equal(t, "404", fields["status"], "a Buzz catch must be able to index the status")
+	assert.Equal(t, srv.URL, fields["url"])
+	assert.Equal(t, "get", fields["method"])
+	// Additive: message reads exactly as it did, so anything matching on it still works.
+	assert.Contains(t, fields["message"], "server returned 404")
+	assert.NotContains(t, fields, "body", "fail without fail_with_body must not carry one")
+
+	_, err = HTTPGet(context.Background(), srv.URL, nil, map[string]any{"fail_with_body": true})
+	require.ErrorAs(t, err, &se)
+	assert.Equal(t, "nope\n", se.BuzzError()["body"])
+}
+
 func TestHTTPRetryThenSucceeds(t *testing.T) {
 	t.Parallel()
 	var hits int32
