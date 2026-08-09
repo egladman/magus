@@ -98,8 +98,8 @@ func (o Options) httpClient() *http.Client {
 		// release-assets.githubusercontent.com, so redirects are on the normal path and
 		// an http:// hop would be a silent downgrade mid-download.
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if req.URL.Scheme != "https" && !(req.URL.Scheme == "http" && isLoopbackHost(req.URL.Hostname())) {
-				return fmt.Errorf("refusing redirect to %s: a signed fetch must stay on https", req.URL.Scheme)
+			if err := requireHTTPS(req.URL.String()); err != nil {
+				return fmt.Errorf("refusing redirect: %w", err)
 			}
 			if len(via) >= 10 {
 				return errors.New("stopped after 10 redirects")
