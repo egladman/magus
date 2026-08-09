@@ -90,4 +90,3 @@ shipped. Only the dynamically linked release asset asks:
 ```sh
 go build -tags liblzma,libzstd ./cmd/magus
 ```
-

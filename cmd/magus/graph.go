@@ -287,23 +287,17 @@ func graphExport(ctx context.Context, root string, args []string) error {
 	return nil
 }
 
-// stripRuntimeAttrs removes locally observed execution history from an exported graph.
-// Graph.Output shares node attribute maps with the live graph, so this copies only maps
-// containing runtime keys. It is used exclusively for reproducible checked-in exports;
-// interactive graph queries retain their local performance and output-reference context.
+// stripRuntimeAttrs removes locally observed execution history from an exported graph:
+// the observed attrs, the runtime-provenance links, and EdgeCount to match. Graph.Output
+// shares node attribute maps with the live graph, so this copies rather than deletes in
+// place. For reproducible checked-in exports only; interactive queries keep their local
+// performance and output-reference context.
 func stripRuntimeAttrs(g *types.KnowledgeGraphOutput) {
-	runtimeAttrs := map[string]bool{
-		knowledge.AttrDurationP75Ms: true,
-		knowledge.AttrCacheHitRate:  true,
-		knowledge.AttrRunSamples:    true,
-		knowledge.AttrLastOutputRef: true,
-		knowledge.AttrLastRunOK:     true,
-	}
 	for i := range g.Nodes {
 		src := g.Nodes[i].Attrs
 		hasRuntime := false
 		for key := range src {
-			if runtimeAttrs[key] {
+			if knowledge.IsRuntimeAttr(key) {
 				hasRuntime = true
 				break
 			}
@@ -313,7 +307,7 @@ func stripRuntimeAttrs(g *types.KnowledgeGraphOutput) {
 		}
 		kept := make(map[string]string, len(src))
 		for key, value := range src {
-			if !runtimeAttrs[key] {
+			if !knowledge.IsRuntimeAttr(key) {
 				kept[key] = value
 			}
 		}
@@ -324,7 +318,7 @@ func stripRuntimeAttrs(g *types.KnowledgeGraphOutput) {
 	}
 	links := g.Links[:0]
 	for _, link := range g.Links {
-		if link.Provenance != "runtime" {
+		if link.Provenance != knowledge.ProvenanceRuntime {
 			links = append(links, link)
 		}
 	}

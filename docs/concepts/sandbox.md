@@ -151,17 +151,17 @@ Being explicit about the boundary is part of the threat model:
 
 Every sandbox violation maps to a boundary described above.
 
-| Code                                                          | Fires when                                                                                       | Layer / disposition                        |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------ |
-| [MGS2001](../reference/codes/sandbox/MGS2001.md) PathReadDenied            | read of a path outside the read allowlist                                                        | binding + kernel; denied                   |
-| [MGS2002](../reference/codes/sandbox/MGS2002.md) PathWriteDenied           | write to a path outside the write allowlist                                                      | binding + kernel; denied                   |
-| [MGS2003](../reference/codes/sandbox/MGS2003.md) EnvStripped               | child env rebuilt; secret-bearing / unlisted vars dropped                                        | pure Go; informational                     |
-| [MGS2004](../reference/codes/sandbox/MGS2004.md) AllowlistUnresolved       | a `sandbox.allow` / passthrough entry could not resolve                                          | policy build; entry skipped, non-fatal     |
-| [MGS2005](../reference/codes/sandbox/MGS2005.md) SandboxUnsupported        | kernel landlock unavailable; interpreter layer only                                              | once per process; non-fatal fallback       |
-| [MGS2006](../reference/codes/sandbox/MGS2006.md) PathShimSuspected         | a subprocess likely failed because mise/asdf/direnv vars were stripped                           | heuristic hint                             |
-| [MGS2007](../reference/codes/sandbox/MGS2007.md) ExecDenied                | execve of a binary whose resolved path is outside the exec allowlist                             | binding + kernel; denied                   |
-| [MGS2008](../reference/codes/sandbox/MGS2008.md) DaemonSocketWithheld      | daemon socket withheld from an op subprocess, or re-injected into a recursive `magus` invocation | debug-level note                           |
-| [MGS2010](../reference/codes/sandbox/MGS2010.md) SandboxPolicyMismatch     | a daemon is asked to serve a workspace outside its applied union                                 | fail closed                                |
+| Code                                                                       | Fires when                                                                                       | Layer / disposition                             |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------- |
+| [MGS2001](../reference/codes/sandbox/MGS2001.md) PathReadDenied            | read of a path outside the read allowlist                                                        | binding + kernel; denied                        |
+| [MGS2002](../reference/codes/sandbox/MGS2002.md) PathWriteDenied           | write to a path outside the write allowlist                                                      | binding + kernel; denied                        |
+| [MGS2003](../reference/codes/sandbox/MGS2003.md) EnvStripped               | child env rebuilt; secret-bearing / unlisted vars dropped                                        | pure Go; informational                          |
+| [MGS2004](../reference/codes/sandbox/MGS2004.md) AllowlistUnresolved       | a `sandbox.allow` / passthrough entry could not resolve                                          | policy build; entry skipped, non-fatal          |
+| [MGS2005](../reference/codes/sandbox/MGS2005.md) SandboxUnsupported        | kernel landlock unavailable; interpreter layer only                                              | once per process; non-fatal fallback            |
+| [MGS2006](../reference/codes/sandbox/MGS2006.md) PathShimSuspected         | a subprocess likely failed because mise/asdf/direnv vars were stripped                           | heuristic hint                                  |
+| [MGS2007](../reference/codes/sandbox/MGS2007.md) ExecDenied                | execve of a binary whose resolved path is outside the exec allowlist                             | binding + kernel; denied                        |
+| [MGS2008](../reference/codes/sandbox/MGS2008.md) DaemonSocketWithheld      | daemon socket withheld from an op subprocess, or re-injected into a recursive `magus` invocation | debug-level note                                |
+| [MGS2010](../reference/codes/sandbox/MGS2010.md) SandboxPolicyMismatch     | a daemon is asked to serve a workspace outside its applied union                                 | fail closed                                     |
 | [MGS3001](../reference/codes/sandbox/MGS3001.md) DescendantBoundaryCrossed | a write-mode walk crossed into a registered descendant project                                   | audit rail; target fails, write not rolled back |
 
 ## Glossary

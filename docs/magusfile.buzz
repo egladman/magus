@@ -2,6 +2,7 @@ import "magus";
 import "../tools/toolchain-policy" as policy;
 // The shared advisory gate; see tools/audit.buzz for why an exit code is the wrong question.
 import "../tools/audit" as audit;
+import "../tools/drift" as drift;
 // Modules the targets use: fs (writes MAGUS.md), os (esbuild,
 // TinyGo, npm), vcs (drift gate), http (serve). render.buzz owns the rendering
 // machinery's own imports (markdown, io, std, serialize, encoding).
@@ -277,7 +278,11 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     // silently passes. What still gates is every generated file that IS tracked: MAGUS.md,
     // the root CHANGELOG.md, src/gen, and the derived Markdown in CONTENT.
     final GENERATED = ["MAGUS.md", ROOT + "/CHANGELOG.md", "src/gen"] + CONTENT;
-    final clean_before = vcs\isDirty(GENERATED) == false;
+    // Hashed before and after, not gated on a clean tree: the old form skipped whenever any
+    // of these was already dirty, which is the state you are in while editing a generator.
+    // It also makes the gate work in a git WORKTREE, where vcs\isDirty does not report
+    // these paths at all - it used to be inert there and fire only in CI.
+    final before = drift.hashes(GENERATED);
     // changelog-generate runs FIRST, alone: content-generate now copies CHANGELOG.md in as a
     // docs page, so the two no longer own disjoint outputs and cannot share a stage - fanned
     // out together, the page could be written from the previous release's changelog.
@@ -293,29 +298,16 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(site_generate);
     // site_generate owns the full render, bundle, and manifest artifact.
     if (ctx.has_charm("rw")) { return; }
-    // Say when the gate did not run. It only fires from a CLEAN tree, so a
-    // developer with any uncommitted work gets exit 0 from a check that never
-    // executed - which reads as "passed" and is why drift kept reaching CI after
-    // a local run said it would not.
-    if (clean_before == false) {
-        magus\info("generate: drift gate skipped - generated files were already dirty when it started; commit, then re-run to actually check");
-    }
-    if (clean_before and vcs\isDirty(GENERATED)) {
-        // Name the paths. "MAGUS.md or CHANGELOG.md or generated docs Markdown
-        // drifted" describes the whole GENERATED set, so a reader learns only that
-        // one of nine things moved - and this gate is INERT in a git worktree
-        // (vcs\isDirty does not report these paths there), so the one place it fires
-        // is CI, where nobody can poke at the tree afterwards. Guessing which file
-        // moved, from a machine where the check cannot fail, costs a push per guess.
-        var moved = mut [<str>];
-        foreach (path in GENERATED) {
-            if (vcs\isDirty([path])) { moved.append(path); }
-        }
-        // Print the diff, not just the names. This gate cannot fire on a developer
-        // machine (it is inert in a worktree), so CI is the only place it runs and
-        // the log is the only artifact anyone gets - and a name alone still leaves
-        // the reader guessing WHY a file they regenerated locally came out
-        // different on a runner. git only: hg and jj take different arguments, and
+    // Name the files, not the set. "MAGUS.md or CHANGELOG.md or generated docs Markdown
+    // drifted" tells a reader only that one of nine things moved, and this gate fires
+    // where the tree is not in front of them. changedSince expands the directories in
+    // GENERATED, so what comes back is the actual files.
+    final moved = drift.changedSince(before, GENERATED);
+    if (moved.len() > 0) {
+        // Print the diff, not just the names: a name alone still leaves the reader
+        // guessing WHY a file they regenerated locally came out different on a runner,
+        // and CI is where this mostly fires. git only: hg and jj take different
+        // arguments, and
         // a diagnostic must never be the thing that fails the build, so a backend
         // that cannot answer just prints nothing.
         if (vcs\name() == "git") {
@@ -336,11 +328,14 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
             }
         }
         throw "generate: regeneration changed " + moved.join(", ")
-            + "; re-run `magus run generate:rw docs` and commit";
+            + "; re-run `magus run generate:rw docs` and commit" + drift.secondCause;
     }
 }
 
-export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); }
+export fun format(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(generate);
+    markdown["dprint"](ctx);
+}
 
 // conventions holds the prose corpus to the conventions page it publishes: no shell prompt
 // in a command block, no pinned version standing in for example output, no backticked path
@@ -356,10 +351,14 @@ export fun conventions(ctx: magus\Context, args: [str]) > void {
         workspace.file("README.md"), workspace.file("CONTRIBUTING.md"));
     renderer\conventionsCheck(ROOT, DOCS);
 }
-// lint runs the doc formatter (prettier, via format) plus the client-side TypeScript
-// gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null
-// assertions - see biome.json). Both TS tools need node_modules, which it reaches through
-// format -> generate -> preflight; os.exec raises on a non-zero exit, so either gate fails lint.
+// lint runs the client-side TypeScript gates: tsc for type errors and Biome for the
+// banned patterns (no `any`, no non-null assertions - see biome.json). Both need
+// node_modules, which it reaches through format -> generate -> preflight; os.exec raises
+// on a non-zero exit, so either gate fails lint.
+//
+// Markdown formatting is dprint, run once from the root project (its scope is
+// dprint.json at the workspace root), so `format` here is a dependency edge and nothing
+// else. This project only lints prose; see docs/concepts/generated-files.md.
 export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format, conventions);
     // The site bundle imports the search grammar from the shared libs/textsearch source,

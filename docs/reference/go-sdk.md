@@ -112,12 +112,12 @@ you go looking for why `build` never runs.
 embedding of four smaller interfaces, and `types/repository.go` states the
 house rule outright: prefer the narrowest one your code actually uses.
 
-| Role | Methods | Answers |
-|---|---|---|
-| `WorkspaceReader` | `Root`, `All`, `Get`, `Graph`, `VCSOptions`, `Where` | what projects exist, and the project dependency graph |
-| `TargetExpander` | `ExpandPath`, `ExpandCwd`, `ExpandAffected` | which concrete `path:target` pairs a target pattern names |
-| `AffectedComputer` | `Affected`, `AffectedFromPaths` | which projects a VCS changeset touches |
-| `Inspector` | `List*`, `Evaluate*`, `ClassifyFiles`, `TargetGraph`, `Workspace` | see the axis below |
+| Role               | Methods                                                           | Answers                                                   |
+| ------------------ | ----------------------------------------------------------------- | --------------------------------------------------------- |
+| `WorkspaceReader`  | `Root`, `All`, `Get`, `Graph`, `VCSOptions`, `Where`              | what projects exist, and the project dependency graph     |
+| `TargetExpander`   | `ExpandPath`, `ExpandCwd`, `ExpandAffected`                       | which concrete `path:target` pairs a target pattern names |
+| `AffectedComputer` | `Affected`, `AffectedFromPaths`                                   | which projects a VCS changeset touches                    |
+| `Inspector`        | `List*`, `Evaluate*`, `ClassifyFiles`, `TargetGraph`, `Workspace` | see the axis below                                        |
 
 A function that only reads project facts should take `types.WorkspaceReader`,
 not the full repository:
@@ -144,15 +144,15 @@ bound, claims applied, charms patched in - and costs more. `ClassifyFiles`
 and `TargetGraph` are their own verbs because neither is a natural fit for
 either half.
 
-| Method | Reads | Cost |
-|---|---|---|
-| `ListProjects` | declared project facts, project-relative globs | cheap |
-| `ListTargets` | target name to spell/project vocabulary | cheap |
-| `ListCharms` | inverse charm index across every project | the most expensive `Inspector` method |
-| `EvaluateProjects` | resolved spells, workspace-rooted globs | resolves every project |
-| `EvaluateTarget(ctx, t)` | the full dispatch plan for one `path:target` | resolves one target |
-| `ClassifyFiles(ctx, paths)` | which project owns/declares each path | pure glob lookup, cheap even over a whole dirty tree |
-| `TargetGraph(ctx)` | the `ctx.needs` DAG, read statically from magusfile source | never executes a target body |
+| Method                      | Reads                                                      | Cost                                                 |
+| --------------------------- | ---------------------------------------------------------- | ---------------------------------------------------- |
+| `ListProjects`              | declared project facts, project-relative globs             | cheap                                                |
+| `ListTargets`               | target name to spell/project vocabulary                    | cheap                                                |
+| `ListCharms`                | inverse charm index across every project                   | the most expensive `Inspector` method                |
+| `EvaluateProjects`          | resolved spells, workspace-rooted globs                    | resolves every project                               |
+| `EvaluateTarget(ctx, t)`    | the full dispatch plan for one `path:target`               | resolves one target                                  |
+| `ClassifyFiles(ctx, paths)` | which project owns/declares each path                      | pure glob lookup, cheap even over a whole dirty tree |
+| `TargetGraph(ctx)`          | the `ctx.needs` DAG, read statically from magusfile source | never executes a target body                         |
 
 ```go
 declared, err := ws.ListProjects(ctx)     // fast: what's declared

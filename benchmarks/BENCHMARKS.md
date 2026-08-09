@@ -16,14 +16,14 @@ magus commit: 3659ef2bd3f00ea6f6c9bc26e700cbab444ff4de
 ### Tool versions
 
 ```text
-  hyperfine=1.18.0
-  node=22.22.2
-  pnpm=10.33.0
-  turbo=2.9.14
-  nx=22.7.3
-  lage=2.15.12
-  moon=2.2.5
-  bazel=7.6.1
+hyperfine=1.18.0
+node=22.22.2
+pnpm=10.33.0
+turbo=2.9.14
+nx=22.7.3
+lage=2.15.12
+moon=2.2.5
+bazel=7.6.1
 ```
 
 ---

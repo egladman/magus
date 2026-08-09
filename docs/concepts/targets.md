@@ -189,15 +189,15 @@ The normalizer lowercases, inserts `-` at camelCase and letter/digit boundaries,
 collapses each run of non-alphanumerics to a single `-`, and trims leading and
 trailing `-`. What that means in practice, including the cases people trip over:
 
-| You write     | magus resolves to | Rule                                        |
-| ------------- | ----------------- | ------------------------------------------- |
-| `go-build`    | `go-build`        | already canonical                           |
-| `go_build`    | `go-build`        | `_` is a delimiter, not part of the name    |
-| `goBuild`     | `go-build`        | camelCase boundary                          |
-| `GoBuild`     | `go-build`        | PascalCase boundary                         |
-| `HTTPServer`  | `http-server`     | an acronym run breaks before its last letter |
-| `build2`      | `build-2`         | letter/digit boundary                       |
-| `go--build`   | `go-build`        | delimiter runs collapse to one              |
+| You write    | magus resolves to | Rule                                         |
+| ------------ | ----------------- | -------------------------------------------- |
+| `go-build`   | `go-build`        | already canonical                            |
+| `go_build`   | `go-build`        | `_` is a delimiter, not part of the name     |
+| `goBuild`    | `go-build`        | camelCase boundary                           |
+| `GoBuild`    | `go-build`        | PascalCase boundary                          |
+| `HTTPServer` | `http-server`     | an acronym run breaks before its last letter |
+| `build2`     | `build-2`         | letter/digit boundary                        |
+| `go--build`  | `go-build`        | delimiter runs collapse to one               |
 
 The last three are the surprising ones. `HTTPServer` does not become
 `h-t-t-p-server`, and `build2` gains a `-` you did not type, so a target declared
@@ -208,6 +208,7 @@ standard library's `strings\kebabCase` computes exactly what magus resolves with
 Run it and see:
 
 <!-- magus-run -->
+
 ```buzz
 import "std";
 import "strings";
@@ -284,14 +285,14 @@ Names are constrained to alphanumerics plus `-` and `_`. Everything else, `:` an
 
 ### Where it applies
 
-| Surface                                                 | Example                                                                                                    |
-| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Magusfile declarations (`export fun`)                   | `export fun go_build(...)` registers as `go-build`.                                                        |
-| CLI `magus run` / `magus affected` arguments            | `magus run goBuild` reaches the target declared `go_build`.                                                |
+| Surface                                                 | Example                                                                                                  |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Magusfile declarations (`export fun`)                   | `export fun go_build(...)` registers as `go-build`.                                                      |
+| CLI `magus run` / `magus affected` arguments            | `magus run goBuild` reaches the target declared `go_build`.                                              |
 | `magus\needs` target handles                            | `ctx.needs(goBuild)` resolves the target declared `go_build` (the handle's declared name is normalized). |
-| The per-target policy map (`magus\project`'s `targets`) | A policy keyed `"goBuild"` applies to a target declared `go_build`, and vice versa.                        |
-| Charm names                                             | `target:NoCache` and `target:no-cache` are the same charm.                                                 |
-| Spell op keys                                           | A spell declaring an op `go_build` registers it as `go-build`.                                              |
+| The per-target policy map (`magus\project`'s `targets`) | A policy keyed `"goBuild"` applies to a target declared `go_build`, and vice versa.                      |
+| Charm names                                             | `target:NoCache` and `target:no-cache` are the same charm.                                               |
+| Spell op keys                                           | A spell declaring an op `go_build` registers it as `go-build`.                                           |
 
 One function does all of it: `types.Normalize`. There is no per-kind normalizer
 and no alias table.
@@ -400,14 +401,14 @@ Key invariant: targets passed to `Run` should be concrete (each Path resolves to
 
 ## Glossary
 
-| Term       | Definition                                                                                                                 |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------- |
-| **Target** | An addressed unit of work: `Path + Name + Charms + Files`. The `Target` struct in `types/target.go`.                       |
-| **Path**   | Project path relative to the workspace root. Empty or `/` means all projects.                                              |
-| **Name**   | The target name: the operation to run. One of: `preflight`, `build`, `test`, `lint`, `format`, `clean`, `generate`.        |
-| **Charm**  | A shared execution modifier (e.g. `rw`). Carried in context; see [charms.md](charms.md).                                   |
-| **Files**  | Repo-relative changed paths within a project. Populated by `ExpandAffected`; nil for explicit targets.                     |
-| **Spell**  | A library of tool-native operations a target composes. Separate from Target; see [spells.md](spells.md).                   |
+| Term       | Definition                                                                                                                       |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| **Target** | An addressed unit of work: `Path + Name + Charms + Files`. The `Target` struct in `types/target.go`.                             |
+| **Path**   | Project path relative to the workspace root. Empty or `/` means all projects.                                                    |
+| **Name**   | The target name: the operation to run. One of: `preflight`, `build`, `test`, `lint`, `format`, `clean`, `generate`.              |
+| **Charm**  | A shared execution modifier (e.g. `rw`). Carried in context; see [charms.md](charms.md).                                         |
+| **Files**  | Repo-relative changed paths within a project. Populated by `ExpandAffected`; nil for explicit targets.                           |
+| **Spell**  | A library of tool-native operations a target composes. Separate from Target; see [spells.md](spells.md).                         |
 | **`ci`**   | An ordinary target you compose with `magus\needs`; `Magus.RunCI` only strips `rw`, anchors `magus affected`, and must-not-no-op. |
 
 ## See also

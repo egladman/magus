@@ -1,0 +1,24 @@
+{
+  // Generated Markdown is excluded because its generators do not emit dprint-normal
+  // output yet - the documented fallback, not the goal (docs/concepts/generated-files.md).
+  // The list mirrors ../.markdownlintignore; both should eventually be written from
+  // declared outputs, the way .gitattributes already is.
+  "extends": "../dprint-base.json",
+  "includes": ["./**/*.md"],
+  "excludes": [
+    "./node_modules/**",
+    "./vendor/**",
+    "./gen/**",
+    "./src/gen/**",
+    "./MAGUS.md",
+    "./changelog.md",
+    "./reference/buzz/**",
+    "./reference/manpage/**",
+    "./reference/api/**",
+    "./reference/skills/**",
+    "./reference/config.md",
+    "./concepts/spells/**",
+    "./concepts/spells.md",
+    "./concepts/knowledge.md"
+  ]
+}

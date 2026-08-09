@@ -9,6 +9,7 @@
 //   magus run ci libs/diagnostics      lint, build, and test
 
 import "magus";
+import "../../tools/drift" as drift;
 
 // go spell claims **/*.go and the module files. This file's own export-fun targets
 // need no declaration - magus binds the magusfile driver to every project.
@@ -16,7 +17,6 @@ import "magus/spell/go";
 import "../../spells/golang/gomod" as gomod;
 
 import "fs";
-import "vcs";
 
 magus\project({
     "spells": [go],
@@ -48,12 +48,12 @@ export fun preflight(ctx: magus\Context, args: [str]) > void {}
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     gomod\replaceWorkspaceModules(ctx, go, "libs/diagnostics");
-    final clean_before = vcs\isDirty(["MAGUS.md"]) == false;
+    final before = drift.hashes(["MAGUS.md"]);
     ctx.needs(index_generate);
     if (ctx.has_charm("rw")) { return; }
 
-    if (clean_before and vcs\isDirty(["MAGUS.md"])) {
-        throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/diagnostics` and commit";
+    if (drift.changedSince(before, ["MAGUS.md"]).len() > 0) {
+        throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/diagnostics` and commit" + drift.secondCause;
     }
 }
 

@@ -145,8 +145,7 @@ most of the questions people ask.
 
 - **No commit, no branch.** A target's key is the content of its declared sources,
   not the commit they sit on. Check the same bytes out at two commits and they hash
-  the same. `--base` (see [choosing the diff
-  base](../workspace/affected.md#choosing-the-diff-base)) picks which projects a
+  the same. `--base` (see [choosing the diff base](../workspace/affected.md#choosing-the-diff-base)) picks which projects a
   `magus affected` run touches. It scopes the diff. It has no bearing on what any
   one target hashes to.
 - **No wall-clock time.** A ref printed two years ago still names today's run when
@@ -156,7 +155,7 @@ most of the questions people ask.
   CI's disagree on everything above the workspace root and agree below it, which is
   what carries a ref across machines.
 - **No machine identity.** Hostname, OS, user, runner id: none of it is an input. A
-  tool's *version* is, through the `tool:` lines. Where it ran is not.
+  tool's _version_ is, through the `tool:` lines. Where it ran is not.
 
 `Step.Label` is also excluded, so renaming what a log line calls a project (root
 prints as `magus`, not `.`) cannot change a ref.

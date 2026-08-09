@@ -66,7 +66,7 @@ curl.exe -fLO "https://github.com/egladman/magus/releases/download/$VERSION/SHA2
 curl.exe -fLO "https://github.com/egladman/magus/releases/download/$VERSION/SHA256SUMS.sig"
 ```
 
-Then verify the Ed25519 signature *first*, and only then the checksum - checking a hash against an unverified manifest proves nothing. The exact commands are in [Verify a release](verify.md).
+Then verify the Ed25519 signature _first_, and only then the checksum - checking a hash against an unverified manifest proves nothing. The exact commands are in [Verify a release](verify.md).
 
 ## Put it on your PATH
 

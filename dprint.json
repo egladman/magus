@@ -1,0 +1,16 @@
+{
+  // The ROOT project's own Markdown. Every project carries its own dprint.json extending
+  // dprint-base.json, so rules live with the project, the way biome.json already does.
+  //
+  // Patterns are "./"-anchored: a slash-less dprint pattern matches at any depth, so a
+  // bare "*.md" would sweep every project from here.
+  //
+  // dprint DISCOVERS nested configs, so a run started at the workspace root also formats
+  // each child project under that child's own config. That is dprint's monorepo model and
+  // cannot be excluded away - a parent exclude does not prune a subtree that owns a
+  // config. `magus run format <project>` still scopes correctly, because the op runs in
+  // that project's directory.
+  "extends": "./dprint-base.json",
+  "includes": ["./*.md", "./benchmarks/**/*.md", "./tapes/**/*.md"],
+  "excludes": ["./MAGUS.md", "./CHANGELOG.md"]
+}

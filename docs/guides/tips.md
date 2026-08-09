@@ -120,12 +120,12 @@ The field names are always the json keys - `-o json` and `-o template` share one
 
 The section above is about **built-in commands**. They declare an output type, so `-o json` and `-o template` render real fields and a bare `-o template` lists them. Your own targets are a different shape, and the difference decides how you should structure a magusfile:
 
-| | Built-in command (`magus describe projects`) | Your target (`magus run deploy`) |
-| --- | --- | --- |
-| Declares an output type | yes, discoverable with bare `-o template` | no |
-| `-o json` renders | the command's fields | the run envelope: target, charms, projects, count |
-| Domain data reaches you as | typed fields | whatever the target printed, addressable as an [output ref](../concepts/cache/output-refs.md) |
-| Signature | n/a | `fun(ctx: magus\Context, args: [str]) > void` |
+|                            | Built-in command (`magus describe projects`) | Your target (`magus run deploy`)                                                              |
+| -------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Declares an output type    | yes, discoverable with bare `-o template`    | no                                                                                            |
+| `-o json` renders          | the command's fields                         | the run envelope: target, charms, projects, count                                             |
+| Domain data reaches you as | typed fields                                 | whatever the target printed, addressable as an [output ref](../concepts/cache/output-refs.md) |
+| Signature                  | n/a                                          | `fun(ctx: magus\Context, args: [str]) > void`                                                 |
 
 A target returns `void`. Its result to the outside world is an exit code plus text. So the type system is not absent, it is on the **inside**: helpers can return whatever they like, and only the boundary is untyped.
 
@@ -184,7 +184,7 @@ Three properties fall out of this that the shell version does not have:
 
 - **The two halves cannot drift.** `image-login` and `image-build` read the same function, so the set logged into is by construction the set pushed to. Adding a registry is one entry in one list.
 - **Selection is by name, not position.** `magus run image-login:cd docker.io` picks one; an unknown host is an error listing the valid ones. Positional indexing would have been worse than it looks - charms change the list length, so index `1` is a registry under one charm and out of range under another.
-- **The secret never becomes an argument.** magus captures a command's argv into the run log and output store. Passing `-p <token>` would persist it in both; `opts.stdin` is not captured. The magusfile holds *references*, a [secret provider](../concepts/secrets.md) resolves them, and nothing in between sees a token.
+- **The secret never becomes an argument.** magus captures a command's argv into the run log and output store. Passing `-p <token>` would persist it in both; `opts.stdin` is not captured. The magusfile holds _references_, a [secret provider](../concepts/secrets.md) resolves them, and nothing in between sees a token.
 
 That last point is the boundary worth stating explicitly: **declare the shape in the magusfile, keep the secrets in the environment.** A CI workflow then supplies values for names it did not have to know, and a registry can be added without touching it.
 
@@ -192,27 +192,27 @@ That last point is the boundary worth stating explicitly: **declare the shape in
 
 Container registry vocabulary is used loosely everywhere, and the looseness is what makes this next problem hurt. The precise terms, from the [OCI distribution spec](https://github.com/opencontainers/distribution-spec):
 
-| Term | What it is | Example |
-| --- | --- | --- |
-| **registry** | the server, `host[:port]` | `ghcr.io`, `localhost:5000` |
+| Term           | What it is                                                                 | Example                           |
+| -------------- | -------------------------------------------------------------------------- | --------------------------------- |
+| **registry**   | the server, `host[:port]`                                                  | `ghcr.io`, `localhost:5000`       |
 | **repository** | the namespaced path inside a registry holding one set of related manifests | `egladman/magus`, `library/nginx` |
-| **tag** | a *mutable* pointer to one manifest in a repository | `latest`, `v1.2.3` |
-| **digest** | the *immutable* content address | `sha256:9f86d0...` |
-| **reference** | the whole addressable string | `ghcr.io/egladman/magus:v1.2.3` |
-| **image** | strictly the **artifact** - manifest, config, layers | not a string at all |
+| **tag**        | a _mutable_ pointer to one manifest in a repository                        | `latest`, `v1.2.3`                |
+| **digest**     | the _immutable_ content address                                            | `sha256:9f86d0...`                |
+| **reference**  | the whole addressable string                                               | `ghcr.io/egladman/magus:v1.2.3`   |
+| **image**      | strictly the **artifact** - manifest, config, layers                       | not a string at all               |
 
-That last row is the one worth internalizing. An image is a thing in a registry, not its name; the name is a *reference*. "Image" gets used for the reference constantly - Docker's own CLI help says `docker pull NAME[:TAG|@DIGEST]` while its glossary defines an image as a filesystem artifact - so if you name a variable `image` nobody knows which you meant. Name it `reference`, `repository`, or `tag`.
+That last row is the one worth internalizing. An image is a thing in a registry, not its name; the name is a _reference_. "Image" gets used for the reference constantly - Docker's own CLI help says `docker pull NAME[:TAG|@DIGEST]` while its glossary defines an image as a filesystem artifact - so if you name a variable `image` nobody knows which you meant. Name it `reference`, `repository`, or `tag`.
 
 Now the practical problem. **What you authenticate against and what you push to are different strings, and how they differ is per-provider:**
 
-| Provider | `docker login` | push reference |
-| --- | --- | --- |
-| GHCR / Docker Hub | `ghcr.io` | `ghcr.io/egladman/magus` |
-| Harbor | `harbor.example.com` | `harbor.example.com/team-a/app` |
-| Amazon ECR | `<acct>.dkr.ecr.<region>.amazonaws.com` | `<acct>.dkr.ecr.<region>.amazonaws.com/myapp` |
-| Artifact Registry | `us-central1-docker.pkg.dev` | `us-central1-docker.pkg.dev/proj/repo/app` |
+| Provider          | `docker login`                          | push reference                                |
+| ----------------- | --------------------------------------- | --------------------------------------------- |
+| GHCR / Docker Hub | `ghcr.io`                               | `ghcr.io/egladman/magus`                      |
+| Harbor            | `harbor.example.com`                    | `harbor.example.com/team-a/app`               |
+| Amazon ECR        | `<acct>.dkr.ecr.<region>.amazonaws.com` | `<acct>.dkr.ecr.<region>.amazonaws.com/myapp` |
+| Artifact Registry | `us-central1-docker.pkg.dev`            | `us-central1-docker.pkg.dev/proj/repo/app`    |
 
-For GHCR and Docker Hub the registry is just the first path segment, so it is easy to believe that is a rule. It is not. Harbor's first path segment is a *project*, and a robot account is frequently scoped to exactly one - so two repositories on one Harbor host can need two different credentials. ECR's registry embeds an account id and a region, and its password is a short-lived token from `aws ecr get-login-password` rather than a stored secret at all.
+For GHCR and Docker Hub the registry is just the first path segment, so it is easy to believe that is a rule. It is not. Harbor's first path segment is a _project_, and a robot account is frequently scoped to exactly one - so two repositories on one Harbor host can need two different credentials. ECR's registry embeds an account id and a region, and its password is a short-lived token from `aws ecr get-login-password` rather than a stored secret at all.
 
 **magus does not try to model this, and should not.** There is no registry-provider abstraction to get wrong, because the shape is different at every vendor and changes when they change. What magus gives you is the place to compute it:
 

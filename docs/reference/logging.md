@@ -20,13 +20,13 @@ magus has four output modes over three log levels. The flags are cheap to
 remember; what they actually buy you is not obvious from their names, and two of
 them change behavior beyond filtering.
 
-| Flag                 | Level | What you get                                                |
-| -------------------- | ----- | ----------------------------------------------------------- |
-| `-q` / `--quiet`     | error | Which targets failed, and their full output. Nothing else.  |
-| _(none)_             | info  | The run's scoreboard, plus warnings and workspace changes.  |
-| `-v`                 | debug | Cache-key derivation and every subprocess, scoreboard kept. |
-| `-vv`                | debug | The same, plus each target's output live and interleaved.   |
-| `-vvv`               | trace | The same, plus DAG scheduling and a startup timing table.   |
+| Flag             | Level | What you get                                                |
+| ---------------- | ----- | ----------------------------------------------------------- |
+| `-q` / `--quiet` | error | Which targets failed, and their full output. Nothing else.  |
+| _(none)_         | info  | The run's scoreboard, plus warnings and workspace changes.  |
+| `-v`             | debug | Cache-key derivation and every subprocess, scoreboard kept. |
+| `-vv`            | debug | The same, plus each target's output live and interleaved.   |
+| `-vvv`           | trace | The same, plus DAG scheduling and a startup timing table.   |
 
 `-s` / `--silent` is a variant of `--quiet`, not a fifth level. See
 [quiet versus silent](#quiet-versus-silent).

@@ -1,8 +1,10 @@
 package knowledge
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/egladman/magus/internal/json"
@@ -233,12 +235,12 @@ func TestAssembleRuntimeEmitsEdges(t *testing.T) {
 	// A target-scoped event becomes a target->diagnostic emits edge.
 	assert.Contains(t, s.Edges, types.KnowledgeEdge{
 		Source: "target:pkg/foo:build", Target: "diagnostic:MGS2007",
-		Relation: types.RelationEmits, Confidence: types.ConfidenceExtracted, Score: 1.0, Provenance: "runtime",
+		Relation: types.RelationEmits, Confidence: types.ConfidenceExtracted, Score: 1.0, Provenance: ProvenanceRuntime,
 	})
 	// A project-scoped event becomes a project->diagnostic edge.
 	assert.Contains(t, s.Edges, types.KnowledgeEdge{
 		Source: "project:pkg/bar", Target: "diagnostic:MGS2010",
-		Relation: types.RelationEmits, Confidence: types.ConfidenceExtracted, Score: 1.0, Provenance: "runtime",
+		Relation: types.RelationEmits, Confidence: types.ConfidenceExtracted, Score: 1.0, Provenance: ProvenanceRuntime,
 	})
 }
 
@@ -373,6 +375,27 @@ func TestAssembleOpTools(t *testing.T) {
 	}
 	assert.Equal(t, 1, tools, "exactly one tool node for the shared tool")
 	assert.Equal(t, 1, spellToolEdges, "the spell->tool edge is deduped to one despite two ops")
+}
+
+// TestRuntimeAttrsCoversAssembled derives the attr set from behaviour: whatever
+// assembleRuntime emits with every input populated must be exactly runtimeAttrs. An attr
+// added to timingAttrs and forgotten there would leak into the committed export.
+func TestRuntimeAttrsCoversAssembled(t *testing.T) {
+	known := map[string]bool{"target:pkg/a:build": true}
+	s := assembleRuntime(nil,
+		[]types.KnowledgeTiming{{Project: "pkg/a", Target: "build", P75Ms: 4200, Samples: 9, HitRate: 0.75, HitRateSamples: 12}},
+		[]types.KnowledgeOutputRef{{Project: "pkg/a", Target: "build", Ref: "out1a2b3c", OK: true}},
+		known)
+
+	emitted := map[string]bool{}
+	for _, n := range s.Nodes {
+		for k := range n.Attrs {
+			emitted[k] = true
+		}
+	}
+	require.NotEmpty(t, emitted, "guards against a vacuous pass if the fixture stops emitting")
+	assert.ElementsMatch(t, runtimeAttrs, slices.Collect(maps.Keys(emitted)),
+		"runtimeAttrs must match what the runtime shard actually emits")
 }
 
 func TestIsRuntimeShard(t *testing.T) {

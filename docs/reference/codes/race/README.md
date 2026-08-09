@@ -41,7 +41,7 @@ magus run build --race=watch,replay      # everything
 at graph construction time, with zero runtime cost, no flag required.
 
 `watch` is safe to leave on for every CI run. `replay` re-executes the
-affected set sequentially with the cache bypassed, so reserve it for nightly CI
+affected set sequentially with the cache bypassed, so reserve it for a scheduled audit
 or a manual audit rather than every push.
 
 ## Codes

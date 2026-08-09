@@ -62,15 +62,15 @@ Buzz is the only magusfile language, so there is no Lua-engine axis to vary.
 
 ## Scenarios
 
-| ID  | Scenario                 | What is measured                                              |
-| --- | ------------------------ | ------------------------------------------------------------- |
-| S1  | Startup overhead         | `--version` invocation latency                                |
-| S2  | Project discovery        | Time to enumerate all projects                                |
-| S3  | Affected dry-run         | Planning-only after 1 file change (no compiler)               |
-| S4  | Cold build               | First build with empty cache, max parallelism                 |
-| S5  | Warm cache replay        | Second build; all outputs already cached                      |
-| S6  | One leaf file changed    | Rebuild after touching 1 file with no downstream consumers    |
-| S7  | One upstream lib changed | Rebuild after touching a shared lib (all apps are downstream) |
+| ID | Scenario                 | What is measured                                              |
+| -- | ------------------------ | ------------------------------------------------------------- |
+| S1 | Startup overhead         | `--version` invocation latency                                |
+| S2 | Project discovery        | Time to enumerate all projects                                |
+| S3 | Affected dry-run         | Planning-only after 1 file change (no compiler)               |
+| S4 | Cold build               | First build with empty cache, max parallelism                 |
+| S5 | Warm cache replay        | Second build; all outputs already cached                      |
+| S6 | One leaf file changed    | Rebuild after touching 1 file with no downstream consumers    |
+| S7 | One upstream lib changed | Rebuild after touching a shared lib (all apps are downstream) |
 
 Tools with a persistent-daemon option (magus, nx) are measured twice:
 daemon off (`Daemon: off`) and daemon on (`Daemon: on`). Other tools are

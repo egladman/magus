@@ -1,0 +1,69 @@
+// drift.buzz - what every generated-file gate needs: measure drift by content, and say
+// both things it can mean.
+//
+// Gates used to ask "was the tree clean before, and is it dirty now", which disarms them
+// at exactly the moment they are reached - the documented pre-push check is run with
+// uncommitted work in the tree, so the gate printed "skipped" and exited 0. A check that
+// cannot fail is worse than no check, because it looks like coverage. Hashing the gated
+// paths before and after asks the question that actually matters (did the generators
+// change these bytes?) and an unrelated edit no longer hides the answer.
+namespace drift;
+
+import "fs";
+import "crypto";
+
+// expand flattens a mixed list of file and directory paths into the files under them, so
+// a gate can name a generated TREE the way its outputs are declared and not have to know
+// which entries are directories. A path that does not exist yet is dropped; changedSince
+// notices it when the generator creates it.
+export fun expand(paths: [str]) > [str] {
+    var files: [str] = mut [<str>];
+    foreach (p in paths) {
+        if (!fs\exists(p)) { continue; }
+        if (!fs\isDir(p)) { files.append(p); continue; }
+        foreach (f in fs\glob(p + "/**/*")) {
+            if (!fs\isDir(f.value)) { files.append(f.value); }
+        }
+    }
+    return files;
+}
+
+// hashes digests every file under paths, taking the "before" side of a gate.
+export fun hashes(paths: [str]) > {str: str} {
+    var digests: {str: str} = mut {<str: str>};
+    foreach (p in expand(paths)) { digests[p] = crypto\sha256File(p); }
+    return digests;
+}
+
+// changedSince returns the files whose bytes moved since `before` was taken: created,
+// modified, or deleted. A file that was already dirty and stayed byte-identical is NOT
+// drift - it is uncommitted work the generators did not touch, which is the whole point.
+export fun changedSince(before: {str: str}, paths: [str]) > [str] {
+    var moved: [str] = mut [<str>];
+    var seen: {str: bool} = mut {<str: bool>};
+    foreach (p in expand(paths)) {
+        seen[p] = true;
+        if (before[p] == null) { moved.append(p); }
+        else if (crypto\sha256File(p) != before[p]) { moved.append(p); }
+    }
+    // A file the generators DELETED is drift too, and expansion cannot see it: it is gone
+    // from disk, so only the snapshot remembers it.
+    foreach (p in before.keys()) {
+        if (seen[p] == null) { moved.append(p); }
+    }
+    return moved;
+}
+
+// secondCause is the half of a drift message that names the OTHER owner. A gate fires for
+// two causes it cannot tell apart: output that was never regenerated, and a generator
+// that does not emit the same bytes twice. Only a second regeneration separates them, and
+// `--race=replay` already does that, so the message routes there rather than every gate
+// reimplementing it - a gate cannot run the second pass itself, since `generate` is
+// exclusive and a nested run would contend for its own lock.
+//
+// Naming only the first cause is the footgun this closes: an author regenerates, commits,
+// watches it drift again, and learns to distrust the gate instead of fixing the generator.
+export final secondCause = "\n  If you already regenerated and committed and this fired "
+    + "again, the generator is not deterministic - committing cannot fix that. Confirm "
+    + "with `magus run generate:rw --race=replay` (MGS4003), then fix the generator: "
+    + "docs/concepts/generated-files.md";

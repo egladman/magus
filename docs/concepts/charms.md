@@ -89,13 +89,13 @@ The project is a **positional** argument, not part of the token. See the full gr
 
 `relock` is the other built-in write grant, and it is deliberately **not** part of `rw`. Both let a run write, but they differ in what kind of write, and that difference is the whole reason there are two:
 
-|                        | `rw`                                                | `relock`                                                     |
-| ---------------------- | --------------------------------------------------- | ------------------------------------------------------------ |
-| what it writes         | derived output, from sources already in this tree    | dependency state: a lockfile, or `go.mod`/`go.sum`            |
-| where the input is     | the tree                                             | the tree **and** a remote registry                            |
-| deterministic?         | yes: same sources, same bytes                        | no: same sources, different bytes on a different day          |
-| discard the result?    | re-run reproduces it exactly                         | re-running gives you whatever upstream serves now             |
-| typical ops            | `go-fmt`, `prettier`, `biome-format`, `golangci-lint --fix`, `generate` | `go-mod-tidy`, `go-mod-edit`                                  |
+|                     | `rw`                                                                    | `relock`                                             |
+| ------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------- |
+| what it writes      | derived output, from sources already in this tree                       | dependency state: a lockfile, or `go.mod`/`go.sum`   |
+| where the input is  | the tree                                                                | the tree **and** a remote registry                   |
+| deterministic?      | yes: same sources, same bytes                                           | no: same sources, different bytes on a different day |
+| discard the result? | re-run reproduces it exactly                                            | re-running gives you whatever upstream serves now    |
+| typical ops         | `go-fmt`, `prettier`, `biome-format`, `golangci-lint --fix`, `generate` | `go-mod-tidy`, `go-mod-edit`                         |
 
 That last row is the practical test. **If re-running the target from a clean checkout would reproduce the same bytes, it is `rw`. If the answer depends on what a registry serves today, it is `relock`.**
 

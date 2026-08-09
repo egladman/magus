@@ -107,12 +107,12 @@ if (ctx.has_charm("arm64")) { return "linux/arm64"; }
 Two charms that answer one question are a mistake worth reporting, not resolving.
 Group them on an axis and reject the pair:
 
-| axis | charms | question |
-| --- | --- | --- |
-| deliver | `cd` | publish the artifact, or only build it? |
-| channel | `stable`, `unstable` | which stream does this land in? |
-| platform | `amd64`, `arm64` | build for which architecture? |
-| variant | `static` | which build of the same artifact? |
+| axis     | charms               | question                                |
+| -------- | -------------------- | --------------------------------------- |
+| deliver  | `cd`                 | publish the artifact, or only build it? |
+| channel  | `stable`, `unstable` | which stream does this land in?         |
+| platform | `amd64`, `arm64`     | build for which architecture?           |
+| variant  | `static`             | which build of the same artifact?       |
 
 An axis with one charm is binary and needs no guard. An axis with two needs one.
 
@@ -168,7 +168,7 @@ Six questions, roughly in cost order. The first three eliminate most candidates,
 and they are the ones worth asking before you get attached to a word.
 
 **1. Is it a modifier, or is it an action?** A target is the verb and a charm says
-in what manner, so a name that reads as something you *do* is a target wearing the
+in what manner, so a name that reads as something you _do_ is a target wearing the
 wrong suffix. `upgrade`, `publish` and `resolve` all fail here. `rw`, `static` and
 `stable` pass because each describes the run rather than commanding it.
 
@@ -177,11 +177,11 @@ read by people arriving from other toolchains, so a word those toolchains disagr
 about imports the disagreement. This is the `snapshot` rule above, and package
 managers supply two more of the same kind:
 
-| word | one meaning | the other |
-| --- | --- | --- |
-| `update` | advance to newer versions (`pnpm update`, `cargo update`) | refresh metadata, change nothing (`apt update`, `brew update`) |
-| `lock` | rewrite the lockfile (`uv lock`) | do not touch the lockfile (`cargo --locked`) |
-| `snapshot` | build and publish nothing (GoReleaser) | publish to a different repository (Maven) |
+| word       | one meaning                                               | the other                                                      |
+| ---------- | --------------------------------------------------------- | -------------------------------------------------------------- |
+| `update`   | advance to newer versions (`pnpm update`, `cargo update`) | refresh metadata, change nothing (`apt update`, `brew update`) |
+| `lock`     | rewrite the lockfile (`uv lock`)                          | do not touch the lockfile (`cargo --locked`)                   |
+| `snapshot` | build and publish nothing (GoReleaser)                    | publish to a different repository (Maven)                      |
 
 Two of these invert on you. A reader who guesses wrong does not get an error, they
 get the opposite of what they wanted.
@@ -205,14 +205,14 @@ today but whether the name would mean the same thing if they did.
 
 ### Do and do not
 
-| do not | why | do instead |
-| --- | --- | --- |
-| `upgrade`, `publish`, `deploy` | actions, not manners; these are targets | name the mode the run is in |
-| `update`, `lock`, `snapshot` | invert in meaning between common tools | pick a word with one reading |
-| `deps`, `platform`, `channel` | bare nouns read as selectors ("test the deps") rather than modes | qualify it into a modifier |
-| `release`, `build`, `test` | collide with target names; doctor fails them | check the target list first |
-| `fast`, `full`, `proper` | describe a feeling, not a difference a reader can predict | name the concrete difference |
-| `nofrozen`, `skip-verify` | negations of a default that is already implicit | name what is granted, not what is skipped |
+| do not                         | why                                                              | do instead                                |
+| ------------------------------ | ---------------------------------------------------------------- | ----------------------------------------- |
+| `upgrade`, `publish`, `deploy` | actions, not manners; these are targets                          | name the mode the run is in               |
+| `update`, `lock`, `snapshot`   | invert in meaning between common tools                           | pick a word with one reading              |
+| `deps`, `platform`, `channel`  | bare nouns read as selectors ("test the deps") rather than modes | qualify it into a modifier                |
+| `release`, `build`, `test`     | collide with target names; doctor fails them                     | check the target list first               |
+| `fast`, `full`, `proper`       | describe a feeling, not a difference a reader can predict        | name the concrete difference              |
+| `nofrozen`, `skip-verify`      | negations of a default that is already implicit                  | name what is granted, not what is skipped |
 
 ### A worked example: how `relock` got its name
 
@@ -233,7 +233,7 @@ That establishes a new charm is warranted. Then the rubric runs:
 - `update` dies at question 2: it advances versions in pnpm and cargo, and refreshes
   metadata in apt and brew.
 - `upgrade` dies at question 1 as an action, and separately misdescribes the common
-  case: pinning a transitive package *down* to dodge an advisory is not an upgrade.
+  case: pinning a transitive package _down_ to dodge an advisory is not an upgrade.
 - `resolve` is technically accurate, since pinning, reconciling and advancing all
   re-run the resolver, but it is still a verb, and `magus vcs resolve` already
   spends the word.
@@ -276,6 +276,7 @@ deciding by.
 one semver field. Press Run:
 
 <!-- magus-run -->
+
 ```buzz
 import "std";
 import "semver";

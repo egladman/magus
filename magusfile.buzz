@@ -2,6 +2,7 @@ import "magus";
 // The shared toolchain windows; see tools/toolchain-policy.buzz for why they are a
 // module rather than an export on this file.
 import "./tools/toolchain-policy" as policy;
+import "./tools/drift" as drift;
 
 // Host modules: magus layers its methods onto Buzz's stdlib (camelCase).
 import "os";
@@ -68,6 +69,10 @@ magus\project({
         // writes into .gitattributes, and an ignored path can never conflict.
         "deploy-generate": {"skip_cache": "assembles a gitignored deploy tree that is never snapshotted"},
         "generate": {"skip_cache": "is the drift gate itself; a replay would skip the check it exists to make", "exclusive": true},
+        // Both render the WHOLE graph, but only the magusfiles are keyable inputs, so any
+        // other change leaves the key unmoved and a hit reverts the committed file.
+        "index-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
+        "graph-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
         "ci-shard": {"skip_cache": "emits a shard plan for the current invocation, not a reusable artifact"},
         "image-build": {"skip_cache": "pushes and cosign-signs a registry digest per invocation"},
         // Both read the environment and report or act on it per invocation; a replay
@@ -892,36 +897,36 @@ export fun postflight(ctx: magus\Context, args: [str]) > void {
     magus\info(magus\insight(["report", "--workspace"]).stdout);
 }
 
-// Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to
-// cwd). Drift = regeneration dirtied a previously-clean tree, via vcs.isDirty (not
-// a raw git/porcelain shell-out), so uncommitted-but-current generated files pass;
-// only a regeneration that changes a clean file fails (a generator input changed
-// but its output was not re-run and committed).
+// Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).
+// Drift = a path whose bytes the generators changed, measured by hashing before and
+// after rather than by asking whether the tree is clean, so the gate works on a dirty
+// tree. An uncommitted-but-current generated file still passes: its bytes do not move.
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    final clean_before = vcs\isDirty() == false;
+    // Hash every already-dirty path BEFORE the generators run. The gate used to require a
+    // clean tree, which disarmed it at exactly the moment it is reached: the documented
+    // pre-push check is run with uncommitted work in the tree, so it printed "skipped" and
+    // exited 0 - a check that cannot fail, which is how drift kept reaching CI after a
+    // local run said it would not. Comparing before against after asks the question that
+    // actually matters (did the generators change anything?) and an unrelated edit no
+    // longer hides the answer.
+    var dirtyBefore: [str] = mut [<str>];
+    foreach (f in vcs\status().files) { dirtyBefore.append(f.value); }
+    final before = drift.hashes(dirtyBefore);
     gomod\replaceWorkspaceModules(ctx, go, ".");
     ctx.needs(ctx.glob("*-generate", "!deploy-generate"));
     if (ctx.has_charm("rw")) { return; }
 
-    // Say when the gate did not run. It only fires from a CLEAN tree, so a
-    // developer with any uncommitted work gets exit 0 from a check that never
-    // executed - which reads as "passed" and is why drift kept reaching CI after
-    // a local run said it would not.
-    if (clean_before == false) {
-        magus\info("generate: drift gate skipped - the tree was already dirty when it started; commit, then re-run to actually check");
-    }
-    if (clean_before and vcs\isDirty()) {
-        // status().files, not a shell-out and not vcs.diff: magus already knows which
-        // files moved, and the gate fires exactly when its reader has a CI log instead of
-        // the tree. Not diagnoseDrift either - that classifies against a target's DECLARED
-        // outputs and inputs, and this gate is whole-tree by design (it composes every
-        // *-generate target), so with no inputs to compare it would always land on the
-        // dev-build verdict and tell an author their own uncommitted output was "not
-        // your change".
-        var changed: [str] = mut [<str>];
-        foreach (f in vcs\status().files) { changed.append(f.value); }
-        var detail = "";
-        if (changed.len() > 0) { detail = ": " + changed.join(", "); }
+    // Drift is a path the generators moved: one that was clean and is now dirty, or one
+    // that was already dirty and whose bytes changed during the run. status() is
+    // whole-tree, which is deliberate - this target composes every *-generate sibling, so
+    // it also covers a generator writing a path nobody declared. Not diagnoseDrift: that
+    // classifies against ONE target's declared outputs and inputs, and with none to
+    // compare it always lands on the dev-build verdict.
+    var dirtyNow: [str] = mut [<str>];
+    foreach (f in vcs\status().files) { dirtyNow.append(f.value); }
+    final changed = drift.changedSince(before, dirtyNow);
+    if (changed.len() > 0) {
+        final detail = ": " + changed.join(", ");
         // Print the diff, not just the names. This gate fires where its reader has a
         // CI log instead of the tree, and the console keeps only "likely diagnostics"
         // from a tool's own stdout - so the diff is CAPTURED and printed by the
@@ -930,7 +935,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
         // daemon auth token captured into a docs example, invisible from a filename.
         // git only (hg and jj take different arguments), never fatal - a diagnostic
         // must not become the failure.
-        if (vcs\name() == "git" and changed.len() > 0) {
+        if (vcs\name() == "git") {
             final d = vcs\cmd(["diff", "--unified=1", "--"] + changed,
                 opts: {"allow_failure": true});
             var body = d.stdout;
@@ -944,8 +949,13 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
                 magus\info("generate: what changed on this runner:\n" + body);
             }
         }
+        // Two causes land here and they have different owners: output that was never
+        // regenerated, and a generator that does not emit the same bytes twice. Only a
+        // second regeneration separates them, which is what --race=replay does, so the
+        // message routes there rather than reimplementing it (and a nested `generate`
+        // would contend for this target's own exclusive lock).
         throw "generate: regeneration changed generated files; re-run "
-            + "`magus run generate:rw .` and commit" + detail;
+            + "`magus run generate:rw .` and commit" + detail + drift.secondCause;
     }
 }
 
@@ -1545,7 +1555,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     // it being stale - the workspace's account of itself disagreeing with what a
     // target actually does, which is the disagreement declarations exist to end.
     ctx.writesFiles("assets/coverage.svg");
-    final clean_before = vcs\isDirty([fs\join("assets", "coverage.svg")]) == false;
+    final badgeBefore = drift.hashes([fs\join("assets", "coverage.svg")]);
     ctx.needs(format, buzz_test);
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out"]});
     // Measure hand-written code only. Generated files (protobuf accessors, mocks,
@@ -1572,14 +1582,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     fs\writeFile(fs\join("assets", "coverage.svg"),
         badge\coverage("go coverage", percent: pct.split(".")[0], radius: 3));
     if (ctx.has_charm("rw")) { return; }
-    // Say when the gate did not run. It only fires from a CLEAN tree, so a
-    // developer with any uncommitted work gets exit 0 from a check that never
-    // executed - which reads as "passed" and is why drift kept reaching CI after
-    // a local run said it would not.
-    if (clean_before == false) {
-        magus\info("test: badge drift gate skipped - assets/coverage.svg was already dirty when it started");
-    }
-    if (clean_before and vcs\isDirty([fs\join("assets", "coverage.svg")])) {
+    if (drift.changedSince(badgeBefore, [fs\join("assets", "coverage.svg")]).len() > 0) {
         throw "test: assets/coverage.svg is stale; re-run `magus run test:rw .` and commit the badge";
     }
 }
@@ -1696,11 +1699,17 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     // it (see docs/magusfile.buzz lint), because that is where the prose actually is.
     bash["shellcheck"](ctx);
 }
-// Regenerates, then formats Go and tidies `go.mod`. Markdown is linted (not formatted):
-// markdownlint runs in lint; there is no markdown FORMATTER any more - biome (used for all
-// TypeScript/CSS) has no markdown support, and prettier was dropped rather than kept solely
-// to format markdown.
-export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); go["go-fmt"](ctx); go["go-mod-tidy"](ctx); }
+// Regenerates, then formats Go, tidies `go.mod`, and formats Markdown. dprint rather than
+// prettier because it needs no Node in the format path, and rather than biome because
+// biome does not read Markdown at all. Every project with Markdown carries its own
+// dprint.json and runs the op itself; see this project's for what a root-started run
+// covers.
+export fun format(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(generate);
+    go["go-fmt"](ctx);
+    go["go-mod-tidy"](ctx);
+    markdown["dprint"](ctx);
+}
 
 // Runs the CI gates through their declared dependencies.
 export fun ci(ctx: magus\Context, args: [str]) > void {

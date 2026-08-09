@@ -30,8 +30,8 @@ dynamically linked build will not start.
 
 | `ARCH`  | Hardware                                                            |
 | ------- | ------------------------------------------------------------------- |
-| `amd64` | Any 64-bit x86 machine.                                              |
-| `arm64` | 64-bit ARM: Raspberry Pi 3 and up on a 64-bit OS, Ampere, Graviton.  |
+| `amd64` | Any 64-bit x86 machine.                                             |
+| `arm64` | 64-bit ARM: Raspberry Pi 3 and up on a 64-bit OS, Ampere, Graviton. |
 
 `uname -m` reports the kernel's architecture: `x86_64` is `amd64` and `aarch64` is
 `arm64`. On ARM the kernel alone does not settle it - a 64-bit Pi kernel often runs a
@@ -64,7 +64,7 @@ curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/SHA256
 curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/SHA256SUMS.sig"
 ```
 
-Then verify the Ed25519 signature *first*, and only then the checksum - checking a hash against an unverified manifest proves nothing. The exact commands are in [Verify a release](verify.md).
+Then verify the Ed25519 signature _first_, and only then the checksum - checking a hash against an unverified manifest proves nothing. The exact commands are in [Verify a release](verify.md).
 
 ## Put it on your PATH
 

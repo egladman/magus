@@ -86,7 +86,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 | `sources`      | declares additional project-relative file globs feeding the cache key and affected set, on top of whatever the project's spells already claim - for real inputs a spell doesn't know about (non-code assets, sibling schemas, docs a generator reads) |
 | `exclusive`    | marks the project as must-not-run-alongside-peers in a batch                                                                                                                                                                                          |
 | `watch_ignore` | appends `glob` / `regex` / `literal` patterns to the project's watch-ignore list                                                                                                                                                                      |
-| `no_language`  | a reason string recording that this project binds no toolchain spell on purpose, exempting it from `magus doctor`'s language-coverage check                                                                                                            |
+| `no_language`  | a reason string recording that this project binds no toolchain spell on purpose, exempting it from `magus doctor`'s language-coverage check                                                                                                           |
 | `tools`        | the version window this project requires of each binary its spells drive, keyed by bin name (see below)                                                                                                                                               |
 | `targets`      | a per-target policy table (see below)                                                                                                                                                                                                                 |
 
@@ -134,11 +134,11 @@ magus\project({
 
 The `targets` sub-map keys a target name to a policy table:
 
-| Policy       | Effect                                                                       |
-| ------------ | ---------------------------------------------------------------------------- |
+| Policy       | Effect                                                                                                                                                                                                                                                   |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `skip_cache` | a reason string stating why REPLAYING this target would be wrong; magus then always runs it and never replays or snapshots it. A bare `true` is a load error - for a merely fresh run use `--no-cache` (see [cache.md](cache.md#opting-out-and-busting)) |
-| `exclusive`  | runs the target alone - no peer target runs concurrently while it does       |
-| `slots`      | the target holds N concurrency slots while it runs, throttling parallel work |
+| `exclusive`  | runs the target alone - no peer target runs concurrently while it does                                                                                                                                                                                   |
+| `slots`      | the target holds N concurrency slots while it runs, throttling parallel work                                                                                                                                                                             |
 
 ```buzz
 magus\project({
