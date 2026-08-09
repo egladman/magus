@@ -2,8 +2,8 @@
 title: magus-vcs
 description: "Safe git operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs]
-skill_full_bytes: 6635
-skill_simple_bytes: 4856
+skill_full_bytes: 6848
+skill_simple_bytes: 5069
 ---
 
 # magus-vcs
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `26` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `50e5cf282e9c` |
+| `skill-content` | `4419face26cd` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -115,19 +115,23 @@ For a rare VCS fact that needs Magus's portable VCS module rather than porcelain
 use one inline Buzz evaluation:
 
 ```sh
-magus buzz -e 'import "std"; import "vcs"; fun main() > void { std\print(vcs\branch() + " " + vcs\shortHash()); } main();'
+magus buzz -e 'import "std"; import "vcs"; fun main() > void { std\print(vcs\ref() + " " + vcs\commit().short); } main();'
 ```
 
 Use `vcs\diff()` for the configured-base path set, `vcs\isDirty(["path"])` to
-scope a cleanliness check, and the discrete accessors for revision state:
-`vcs\hash()`, `vcs\shortHash()`, `vcs\branch()`, `vcs\commitDate()`,
-`vcs\isDirty()`. Each returns a typed scalar.
+scope a cleanliness check, and `vcs\status()` for `{clean, files}` when you want
+both answers at once.
 
-Prefer those over `vcs\metadata()`, which returns the same five facts as an
-untyped `map[string]any`. It is the one call in this module that gives up the
-type, so a caller reads fields by string key and finds out at runtime when one
-is missing or renamed - and it buys nothing, since the typed accessors already
-cover the whole map.
+Revision state is `vcs\commit()`, one typed record - `id`, `short`, `author`,
+`date`, `subject`, `body`, `parents` - rather than an accessor per field.
+Annotate it `> Commit` for compile-checked field access.
+
+`vcs\ref()` is the movable name pointing at the current revision, and it is
+deliberately not called `branch`: it is a git branch, a Mercurial named branch,
+or a Jujutsu bookmark depending on the backend, and jj's working copy is usually
+an anonymous change, so `""` is an ordinary answer there rather than a failure.
+Run `magus describe module vcs` for the current method list before reaching for
+anything not named here.
 
 The inline form is intentionally dense: it is an occasional capability query,
 not another everyday CLI surface.
@@ -237,19 +241,23 @@ For a rare VCS fact that needs Magus's portable VCS module rather than porcelain
 use one inline Buzz evaluation:
 
 ```sh
-magus buzz -e 'import "std"; import "vcs"; fun main() > void { std\print(vcs\branch() + " " + vcs\shortHash()); } main();'
+magus buzz -e 'import "std"; import "vcs"; fun main() > void { std\print(vcs\ref() + " " + vcs\commit().short); } main();'
 ```
 
 Use `vcs\diff()` for the configured-base path set, `vcs\isDirty(["path"])` to
-scope a cleanliness check, and the discrete accessors for revision state:
-`vcs\hash()`, `vcs\shortHash()`, `vcs\branch()`, `vcs\commitDate()`,
-`vcs\isDirty()`. Each returns a typed scalar.
+scope a cleanliness check, and `vcs\status()` for `{clean, files}` when you want
+both answers at once.
 
-Prefer those over `vcs\metadata()`, which returns the same five facts as an
-untyped `map[string]any`. It is the one call in this module that gives up the
-type, so a caller reads fields by string key and finds out at runtime when one
-is missing or renamed - and it buys nothing, since the typed accessors already
-cover the whole map.
+Revision state is `vcs\commit()`, one typed record - `id`, `short`, `author`,
+`date`, `subject`, `body`, `parents` - rather than an accessor per field.
+Annotate it `> Commit` for compile-checked field access.
+
+`vcs\ref()` is the movable name pointing at the current revision, and it is
+deliberately not called `branch`: it is a git branch, a Mercurial named branch,
+or a Jujutsu bookmark depending on the backend, and jj's working copy is usually
+an anonymous change, so `""` is an ordinary answer there rather than a failure.
+Run `magus describe module vcs` for the current method list before reaching for
+anything not named here.
 
 The inline form is intentionally dense: it is an occasional capability query,
 not another everyday CLI surface.
