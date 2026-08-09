@@ -30,6 +30,15 @@ type Registry struct {
 	// Sources credits where each category came from, so a reader can tell whose
 	// claim a date is. magus did not author any of this and cannot verify it.
 	Sources map[string]SourceCredit `json:"sources,omitzero"`
+	// Inputs records the digest of every upstream response this was built from, so
+	// a stranger can rebuild the file and diff rather than trust it. It proves the
+	// document follows from its STATED inputs; checking those against upstream is a
+	// separate and time-sensitive act, because endoflife.date changes under you.
+	Inputs []Input `json:"inputs,omitzero"`
+	// Releases is the same list public/release/index.json serves, carried here so
+	// new binaries need one file rather than two. That URL stays frozen and
+	// unchanged for as long as anything in the wild reads it.
+	Releases []Release `json:"releases,omitzero"`
 	// EOL is keyed by UPSTREAM PRODUCT SLUG - "nodejs", not "node" and not a magus
 	// spell name. That is what lets someone mirror this file while knowing nothing
 	// about magus, and the mapping to a tool lives where the tool is declared.
@@ -41,6 +50,28 @@ type SourceCredit struct {
 	Name           string `json:"name"`
 	URL            string `json:"url"`
 	UpstreamSchema string `json:"upstream_schema,omitzero"`
+}
+
+// Input is one upstream response the build consumed.
+type Input struct {
+	Slug         string `json:"slug"`
+	SHA256       string `json:"sha256"`
+	LastModified string `json:"last_modified,omitzero"`
+}
+
+// Release mirrors one entry of the release index.
+type Release struct {
+	Version   string     `json:"version"`
+	Yanked    bool       `json:"yanked,omitzero"`
+	Artifacts []Artifact `json:"artifacts"`
+}
+
+// Artifact is one downloadable asset with what pins it.
+type Artifact struct {
+	Name     string `json:"name"`
+	Platform string `json:"platform"`
+	Size     string `json:"size"`
+	SHA256   string `json:"sha256"`
 }
 
 // Product is one upstream product's support windows.

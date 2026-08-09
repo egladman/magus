@@ -129,7 +129,7 @@ Flag placement matters when forwarding: magus flags go BEFORE `--`.
 `magus run go::go-test . --silent -- ./internal/foo/` works; putting `--silent`
 after `--` forwards it to the test binary, which rejects it.
 
-Five workflows, one trigger each, and the name says which:
+Six workflows, one trigger each, and the name says which:
 
 | File                 | Runs on                        | Ships                                                     |
 | -------------------- | ------------------------------ | --------------------------------------------------------- |
@@ -144,6 +144,9 @@ populates the shared cache and the run history a pull request may only read.
 
 release-index.yaml and release.yaml's tail both call `.github/actions/release-index`,
 and they are the only two things that read `MAGUS_SIGNING_KEY` besides `release-sign`.
+registry.yaml signs too, with a SEPARATE `MAGUS_REGISTRY_KEY`: its input is several
+hundred third-party HTTP responses, which is the last place the key that signs magus
+binaries should be reachable from.
 Neither pushes to main - the ruleset requires a pull request and bypasses only for the
 admin role - so each opens one instead, and merging it is what publishes the index.
 

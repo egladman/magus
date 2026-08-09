@@ -1,0 +1,95 @@
+name: Registry
+
+# Aggregates endoflife.date once a day, signs the result, and opens a pull request
+# carrying it. One machine reads that API on a schedule so that no magus user ever
+# does - which is the answer to "polling a third party from every build is
+# unsanctioned". Every user reads one static file.
+#
+# NOT audit.yaml. That workflow's header promises neither job publishes anything,
+# and this one exists to publish. A schedule is not a reason to share a file with a
+# workflow that makes the opposite promise.
+#
+# It signs with MAGUS_REGISTRY_KEY and never MAGUS_SIGNING_KEY. The release key is
+# reachable from exactly one job on a v* tag and release.yaml records that
+# quarantine deliberately; a job whose input is several hundred third-party HTTP
+# responses is the last place it should appear. A second keypair costs nothing.
+#
+# The build is split from the download on purpose: -fetch writes ./upstream, and the
+# transform reads only files. That is what lets a stranger run
+# `magus-utils registry-build -upstream ... -verify <published>` and get a diff
+# rather than a promise. See docs/scope.md for what a signature does and does not
+# prove - it never says any date in this file is correct.
+
+on:
+  schedule:
+    # 05:40 UTC, after audit.yaml's 05:17 so the two never contend for runners.
+    - cron: '40 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: registry
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Aggregate, sign, and open a pull request
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write        # push the branch the pull request is opened from
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+
+      # Its own step so a network failure stops here, loudly, rather than being
+      # folded into a build that would then publish a half-refreshed snapshot.
+      - name: Fetch from endoflife.date
+        run: go run ./cmd/magus-utils registry-build -upstream ./upstream -fetch
+
+      - name: Build and sign the registry
+        env:
+          MAGUS_REGISTRY_KEY: ${{ secrets.MAGUS_REGISTRY_KEY }}
+        run: go run ./cmd/magus-utils registry-build -upstream ./upstream -releases ./releases -out ./docs/gen/public/registry
+
+      # Same reason release-index opens one: main's ruleset requires a pull request
+      # and bypasses only for the admin role, so no workflow pushes to the default
+      # branch. A day with no upstream change produces no diff and no pull request.
+      - name: Open a pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          paths=(docs/gen/public/registry)
+          if [ -z "$(git status --porcelain -- "${paths[@]}")" ]; then
+            echo "upstream is unchanged since the last run; nothing to publish"
+            exit 0
+          fi
+          branch="registry/$(git rev-parse --short HEAD)"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c "$branch"
+          git add -- "${paths[@]}"
+          git commit -m "Refresh the signed registry from endoflife.date"
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "Refresh the signed registry from endoflife.date" \
+            --body "$(cat <<'BODY'
+          Opened by `.github/workflows/registry.yaml`.
+
+          Republished end-of-life facts, keyed by upstream product slug. The signature
+          says these are the bytes our pipeline built; it does not say any date in them
+          is correct. magus did not author this data and cannot verify it.
+
+          Every upstream response's digest is recorded in the file, so this rebuilds:
+
+              go run ./cmd/magus-utils registry-build -upstream ./upstream \
+                -releases ./releases -verify docs/gen/public/registry/index.json
+          BODY
+          )"
