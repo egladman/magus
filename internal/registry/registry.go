@@ -200,12 +200,26 @@ func Offline() bool {
 // written: parsing is the attack surface, and persisting is what makes a bad
 // artifact durable.
 func verify(src Source, data, sig []byte) (*Registry, error) {
-	pub, err := src.LoadPubKey()
+	keys, err := src.Keys()
 	if err != nil {
 		return nil, err
 	}
-	if !ed25519.Verify(ed25519.PublicKey(pub), data, sig) {
-		return nil, fmt.Errorf("registry: %s: signature does not match the key pinned at %s", src.Name, src.PubKey)
+	// Any key in the ring may have signed it. For a file-declared source that ring is
+	// one key; for the built-in source it is every key this binary pins, which is what
+	// lets a key rotation ship ahead of the release that starts signing with it.
+	signed := false
+	for _, k := range keys {
+		if ed25519.Verify(k, data, sig) {
+			signed = true
+			break
+		}
+	}
+	if !signed {
+		where := src.PubKey
+		if where == "" {
+			where = "the key(s) pinned in this binary (" + pinnedHex() + ")"
+		}
+		return nil, fmt.Errorf("registry: %s: signature does not match %s", src.Name, where)
 	}
 	var reg Registry
 	if err := json.Unmarshal(data, &reg); err != nil {

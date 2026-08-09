@@ -117,9 +117,10 @@ func (r *runner) checkRegistryFreshness() types.DoctorCheck {
 		return types.DoctorCheck{Name: name, Status: types.DoctorFail, Message: err.Error()}
 	}
 	if len(cached) == 0 {
-		// Nothing configured, or every source declined. Both are settled positions,
-		// and telling someone who opted out to sync is the nag this design avoids.
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no sources configured"}
+		// Every source declined. magus ships a built-in one, so an empty list can only
+		// mean someone said no on purpose - and telling them to sync is the nag this
+		// design exists to avoid.
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "declined"}
 	}
 
 	var never, stale []string

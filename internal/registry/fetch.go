@@ -39,6 +39,14 @@ func Refresh(ctx context.Context, src Source, client *http.Client) (Cached, erro
 	if err := requireHTTPS(src.URL); err != nil {
 		return Cached{Source: src}, fmt.Errorf("registry: %s: %w", src.Name, err)
 	}
+	// Resolve the keys BEFORE sending anything. A response this build could not check
+	// is one it must not ask for: contacting the host first would leak that this
+	// machine runs magus and wants the registry, in exchange for bytes destined for
+	// the bin. It also turns "no key is pinned" into a clear refusal rather than a
+	// 404 that reads like the server is broken.
+	if _, err := src.Keys(); err != nil {
+		return Cached{Source: src}, err
+	}
 	if client == nil {
 		client = defaultClient()
 	}

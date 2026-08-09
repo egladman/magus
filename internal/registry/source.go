@@ -14,6 +14,7 @@
 package registry
 
 import (
+	"crypto/ed25519"
 	"fmt"
 	"net/url"
 	"os"
@@ -29,6 +30,26 @@ import (
 // DefaultStaleAfter is how old the DATA may get before magus says so. It bounds a
 // local calculation and never causes a fetch.
 const DefaultStaleAfter = 30 * 24 * time.Hour
+
+// BuiltinSourceName is the name the built-in source is cached and reported under.
+// A registry.d file of the same name replaces it, which is how you point the default
+// at a mirror without editing anything magus ships.
+const BuiltinSourceName = "magus"
+
+// DefaultRegistryURL is the registry magus publishes, alongside the release index at
+// public/release/. Shipping a default is the same call already made for the console
+// (config.DefaultConsoleURL) and the update channel (selfupdate.DefaultDiscoveryURL):
+// the endpoint is ours, it is documented, and overriding or declining it is one file.
+//
+// A default source is NOT a default fetch. Nothing here contacts it until someone
+// runs `magus self refresh`; every other command reads the local cache and reports
+// `never synced` until then.
+const DefaultRegistryURL = "https://eli.gladman.cc/magus/public/registry/index.json"
+
+// MAGUS_REGISTRY_URL overrides the built-in source's URL, matching MAGUS_UPDATE_URL
+// for the release index. Env-only for the same reason: it points at a mirror of a
+// signed file, which is a machine and network fact rather than a project one.
+const registryURLEnv = "MAGUS_REGISTRY_URL"
 
 // Source is one registry a magus installation will read, declared as a single file
 // in registry.d. One file per source rather than a list under a config key: adding
@@ -48,11 +69,14 @@ type Source struct {
 	Path string `yaml:"-"`
 
 	URL string `yaml:"url"`
-	// PubKey is a path to an Ed25519 public key in hex. Required for any source
-	// magus does not sign itself: omitting one is a load error, never a silent
-	// downgrade to unverified. Empty means "use the keyring this binary embeds",
-	// which only the built-in source may do.
+	// PubKey is a path to an Ed25519 public key in hex. Required for any source magus
+	// does not sign itself: omitting one is a load error, never a silent downgrade to
+	// unverified. Empty means "verify against PinnedKeys, the ring this binary
+	// embeds", which is what the built-in source uses and what a drop-in named
+	// BuiltinSourceName inherits so a mirror of OUR file needs no key of its own.
 	PubKey string `yaml:"pubkey"`
+	// Builtin marks the source magus ships rather than one a file declared.
+	Builtin bool `yaml:"-"`
 	// Enabled false declines this source entirely - the column reads a state word
 	// and doctor stays quiet. Without it, someone who declined on purpose would be
 	// told to sync forever, which is the nag this design exists to avoid.
@@ -82,12 +106,13 @@ func SourcesDir() (string, error) {
 	return filepath.Join(dir, "magus", "registry.d"), nil
 }
 
-// LoadSources reads every enabled source from registry.d, in filename order.
+// LoadSources returns the built-in source plus every enabled source in registry.d,
+// in filename order.
 //
-// An empty directory yields no sources, and that is a working state rather than a
-// broken one: magus reports that it has never synced and does nothing else. There
-// is no built-in source compiled in, so a fresh install contacts nobody until
-// someone drops a file in.
+// A registry.d file named BuiltinSourceName REPLACES the built-in one rather than
+// adding a second: that is how you point the default at a mirror, and how you decline
+// it entirely with `enabled: false`. Both are one file, which is the whole reason the
+// sources are a drop-in directory.
 func LoadSources() ([]Source, error) {
 	dir, err := SourcesDir()
 	if err != nil {
@@ -97,18 +122,36 @@ func LoadSources() ([]Source, error) {
 	if err != nil {
 		return nil, fmt.Errorf("registry: %w", err)
 	}
-	out := make([]Source, 0, len(entries))
+
+	out := make([]Source, 0, len(entries)+1)
+	replaced := false
 	for _, e := range entries {
 		src, err := parseSource(e)
 		if err != nil {
 			return nil, err
+		}
+		if src.Name == BuiltinSourceName {
+			replaced = true
 		}
 		if !src.IsEnabled() {
 			continue
 		}
 		out = append(out, src)
 	}
+	if !replaced {
+		out = append([]Source{builtinSource()}, out...)
+	}
 	return out, nil
+}
+
+// builtinSource is the source magus ships. It carries no PubKey path because it
+// verifies against PinnedKeys, the ring compiled into this binary.
+func builtinSource() Source {
+	url := DefaultRegistryURL
+	if env := os.Getenv(registryURLEnv); env != "" {
+		url = env
+	}
+	return Source{Name: BuiltinSourceName, Path: "(built in)", URL: url, Builtin: true}
 }
 
 // parseSource decodes and validates one registry.d file.
@@ -125,11 +168,19 @@ func parseSource(e dropin.Entry) (Source, error) {
 	if err := requireHTTPS(src.URL); err != nil {
 		return Source{}, fmt.Errorf("registry: %s: %w", e.Path, err)
 	}
-	// A source with no key is refused rather than fetched unverified. The whole
-	// value of this file is that its contents are attributable; reading it over
-	// TLS alone would be trusting whoever currently answers on that hostname.
-	if src.PubKey == "" {
+	// A source with no key is refused rather than fetched unverified. The whole value
+	// of this file is that its contents are attributable; reading it over TLS alone
+	// would be trusting whoever currently answers on that hostname.
+	//
+	// The one exception is a file named for the BUILT-IN source, which inherits the
+	// pinned ring - that is what makes pointing the default at a mirror a URL change
+	// rather than a key-management exercise, since a mirror serves the same signed
+	// bytes we published.
+	if src.PubKey == "" && src.Name != BuiltinSourceName {
 		return Source{}, fmt.Errorf("registry: %s declares no pubkey; a source must say which key signs it", e.Path)
+	}
+	if src.Name == BuiltinSourceName && src.PubKey == "" {
+		src.Builtin = true
 	}
 	return src, nil
 }
@@ -156,11 +207,29 @@ func isLoopback(host string) bool {
 	return host == "localhost" || strings.HasPrefix(host, "127.") || host == "::1"
 }
 
-// LoadPubKey reads the source's pinned Ed25519 public key.
-func (s Source) LoadPubKey() ([]byte, error) {
+// Keys returns the public keys a signature from this source may come from: the
+// binary's pinned ring for the built-in source, or the single key the file names.
+func (s Source) Keys() ([]ed25519.PublicKey, error) {
+	if s.PubKey == "" {
+		if len(PinnedKeys) == 0 {
+			dir, dirErr := SourcesDir()
+			if dirErr != nil {
+				dir = "the registry.d directory"
+			}
+			return nil, fmt.Errorf(
+				"registry: %s: this build pins no registry key, so nothing it downloads could be checked; "+
+					"either upgrade to a magus that ships one, declare a source you trust in %s/%s.yaml with its own "+
+					"pubkey, or set enabled: false there to stop being asked", s.Name, dir, s.Name)
+		}
+		return PinnedKeys, nil
+	}
 	raw, err := os.ReadFile(s.PubKey)
 	if err != nil {
 		return nil, fmt.Errorf("registry: %s: read pubkey %s: %w", s.Path, s.PubKey, err)
 	}
-	return decodeHexKey(strings.TrimSpace(string(raw)))
+	key, err := decodeHexKey(strings.TrimSpace(string(raw)))
+	if err != nil {
+		return nil, err
+	}
+	return []ed25519.PublicKey{ed25519.PublicKey(key)}, nil
 }

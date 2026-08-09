@@ -198,13 +198,93 @@ func TestDisabledSourceIsSilent(t *testing.T) {
 	assert.Empty(t, cached)
 }
 
-// TestNoSourcesIsAWorkingState: a fresh install contacts nobody, and says so
-// rather than failing.
-func TestNoSourcesIsAWorkingState(t *testing.T) {
+// TestBuiltinSourceShipsByDefault: a fresh install knows where the registry is,
+// the same way it knows the console and update URLs, and still contacts nobody
+// until asked. A default SOURCE is not a default FETCH.
+func TestBuiltinSourceShipsByDefault(t *testing.T) {
 	isolate(t)
+	sources, err := LoadSources()
+	require.NoError(t, err)
+	require.Len(t, sources, 1)
+	assert.Equal(t, BuiltinSourceName, sources[0].Name)
+	assert.Equal(t, DefaultRegistryURL, sources[0].URL)
+	assert.True(t, sources[0].Builtin)
+	assert.Empty(t, sources[0].PubKey, "the built-in source verifies against the pinned ring")
+
 	cached, err := Load()
 	require.NoError(t, err)
-	assert.Empty(t, cached)
+	require.Len(t, cached, 1)
+	assert.Equal(t, StateNeverSynced, cached[0].State, "shipped, not synced")
+}
+
+// TestBuiltinSourceIsReplacedNotDuplicated: pointing the default at a mirror is one
+// file. Adding a second entry for the same registry would double every fetch and
+// give two caches of one fact.
+func TestBuiltinSourceIsReplacedNotDuplicated(t *testing.T) {
+	cfg, _ := isolate(t)
+	writeSource(t, cfg, BuiltinSourceName, "https://mirror.invalid/index.json", "")
+
+	sources, err := LoadSources()
+	require.NoError(t, err)
+	require.Len(t, sources, 1, "a file named for the built-in source replaces it")
+	assert.Equal(t, "https://mirror.invalid/index.json", sources[0].URL)
+}
+
+// TestBuiltinSourceMirrorNeedsNoKeyOfItsOwn: a mirror serves the bytes we signed, so
+// requiring it to declare a key would be asking for a key it does not have.
+func TestBuiltinSourceMirrorNeedsNoKeyOfItsOwn(t *testing.T) {
+	cfg, _ := isolate(t)
+	dir := filepath.Join(cfg, "magus", "registry.d")
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, BuiltinSourceName+".yaml"),
+		[]byte("url: https://mirror.invalid/index.json\n"), 0o600))
+
+	sources, err := LoadSources()
+	require.NoError(t, err)
+	require.Len(t, sources, 1)
+	assert.True(t, sources[0].Builtin, "it inherits the pinned ring")
+}
+
+// TestBuiltinSourceCanBeDeclined: someone who does not want it says so once, and is
+// never told to sync again.
+func TestBuiltinSourceCanBeDeclined(t *testing.T) {
+	cfg, _ := isolate(t)
+	dir := filepath.Join(cfg, "magus", "registry.d")
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, BuiltinSourceName+".yaml"),
+		[]byte("url: https://unused.invalid/i.json\nenabled: false\n"), 0o600))
+
+	sources, err := LoadSources()
+	require.NoError(t, err)
+	assert.Empty(t, sources, "declining the built-in source leaves nothing configured")
+}
+
+// TestBuiltinSourceRefusesWithoutAPinnedKey is the state this build ships in: the
+// registry keypair does not exist yet, so the ring is empty and a refresh must say
+// exactly that rather than fetch something it cannot check.
+func TestBuiltinSourceRefusesWithoutAPinnedKey(t *testing.T) {
+	if len(PinnedKeys) > 0 {
+		t.Skip("a registry key is pinned now; this covers the window before that")
+	}
+	isolate(t)
+	sources, err := LoadSources()
+	require.NoError(t, err)
+	require.Len(t, sources, 1)
+
+	_, err = sources[0].Keys()
+	require.ErrorContains(t, err, "pins no registry key")
+	require.ErrorContains(t, err, "could be checked", "the error says why it refused, not just that it did")
+}
+
+// TestRegistryURLEnvOverridesTheBuiltin mirrors MAGUS_UPDATE_URL: pointing at a
+// mirror is a machine fact, so it is reachable without editing a file.
+func TestRegistryURLEnvOverridesTheBuiltin(t *testing.T) {
+	isolate(t)
+	t.Setenv(registryURLEnv, "https://env-mirror.invalid/index.json")
+	sources, err := LoadSources()
+	require.NoError(t, err)
+	require.Len(t, sources, 1)
+	assert.Equal(t, "https://env-mirror.invalid/index.json", sources[0].URL)
 }
 
 // TestLoadDegradesRatherThanFailing: a corrupt cache is recoverable by refreshing,
