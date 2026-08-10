@@ -30,10 +30,12 @@ export fun release(ctx: magus\Context, args: [str]) > void {
     magus\info("tagging and publishing the release");
 }
 
-// A target can also invoke another imperatively with magus.run - the dynamic
-// alternative to a static magus.needs edge. `run deploy` records the nested
-// call in the plan.
+// Another target in the same project is always an edge, never a nested run. A run
+// holds its projects' locks for its whole life, so `magus\run(["release"])` here
+// would wait on a lock its own caller holds and magus refuses it (MGS3007).
+// magus\run is for driving a DIFFERENT project - `magus\run(["build", "web"])` -
+// which the caller does not hold.
 export fun deploy(ctx: magus\Context, args: [str]) > void {
-    magus\run(["release"]);
+    ctx.needs(release);
     magus\info("rolling out to production");
 }

@@ -198,7 +198,7 @@ Validate the workspace and return what every check found: {workspace, checks, su
 
 Diagnose why a generate gate's declared outputs drifted and RETURN the verdict {drifted, code, message, url, files} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility bug). files are the drifted outputs as Paths based at the repository root. drifted is false with every field zero when the outputs are clean. It lives here rather than on vcs because choosing between those codes is magus policy; vcs only supplies the probe. Composes vcs.status; does not replace it.
 
-**Signature:** `magus\diagnoseDrift(outputs, [inputs]) → DriftVerdict` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L673)
+**Signature:** `magus\diagnoseDrift(outputs, [inputs]) → DriftVerdict` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L679)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

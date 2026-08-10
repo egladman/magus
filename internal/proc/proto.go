@@ -71,6 +71,12 @@ type RunRequest struct {
 	Cwd      string   `json:"cwd"`
 	Protocol string   `json:"protocol"`
 	Root     string   `json:"root,omitempty"` // empty → daemon walks up from Cwd
+	// Ancestors is the client's invocation ancestry, oldest first. The daemon adopts it
+	// so a run it executes on this client's behalf can recognize a project lock held by
+	// one of the client's OWN ancestors - which, under the daemon, is a lock this very
+	// process holds. Empty from a client that predates the field: re-entry detection is
+	// then unavailable and the acquire falls back to waiting.
+	Ancestors []string `json:"ancestors,omitempty"`
 }
 
 // RunReply is the response from the parent to the child.

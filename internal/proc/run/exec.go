@@ -115,7 +115,7 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 			return ExecResult{Code: -1}, types.DiagnosticErrorf(types.ExecDenied, "exec denied: %s", resolved)
 		}
 	}
-	env, withheldDaemon := childEnv(policy, opts.Env)
+	env, withheldDaemon := childEnv(ctx, policy, opts.Env)
 	c.Env = env
 	sandbox.RecordEnvDropped(ctx, policy)
 	if len(withheldDaemon) > 0 {
@@ -217,7 +217,7 @@ func classifyMissingBinary(err error, name string, started bool) error {
 var DaemonForwardVars = []string{"MAGUS_DAEMON_SOCKET", "MAGUS_DAEMON_ADDRESS"}
 
 // childEnv layers self-reference variables and caller overrides over the base environment.
-func childEnv(policy *sandbox.Policy, overrides []string) (env, withheld []string) {
+func childEnv(ctx context.Context, policy *sandbox.Policy, overrides []string) (env, withheld []string) {
 	var base []string
 	if policy != nil {
 		base = policy.BaseEnv
@@ -232,7 +232,11 @@ func childEnv(policy *sandbox.Policy, overrides []string) (env, withheld []strin
 		}
 	}
 	env = withoutEnvVars(root, DaemonForwardVars)
-	env = append(env, SelfVars()...)
+	// The ancestry is dropped from the base first, so a value inherited from whatever
+	// started THIS process can never outlive the invocation that set it - which matters in
+	// the daemon, where the process env belongs to nobody's invocation.
+	env = withoutEnvVars(env, []string{AncestorsEnvVar})
+	env = append(env, SelfVars(ctx)...)
 	env = append(env, overrides...)
 	return env, withheld
 }
@@ -261,13 +265,26 @@ func hasEnvVar(env []string, name string) bool {
 	return false
 }
 
-// SelfVars returns the binary path and recursion depth for child magus processes.
-func SelfVars() []string {
-	out := make([]string, 0, 2)
+// AncestorsEnvVar names the variable that carries an invocation's ancestry to every child
+// process, oldest first. Inherited like MAGUS_LEVEL, so a magus reached through a shell
+// script - or through several - still knows which invocations it is running underneath.
+const AncestorsEnvVar = "MAGUS_INVOCATION_ANCESTORS"
+
+// SelfVars returns the binary path, recursion depth, and invocation ancestry for child
+// magus processes.
+//
+// The first two are read from this process's environment because they describe the
+// PROCESS; the ancestry is read from ctx because it describes the INVOCATION, and the
+// daemon runs many of those in one process.
+func SelfVars(ctx context.Context) []string {
+	out := make([]string, 0, 3)
 	if exe := magusExe(); exe != "" {
 		out = append(out, "MAGUS="+exe)
 	}
 	out = append(out, "MAGUS_LEVEL="+strconv.Itoa(CurrentLevel()+1))
+	if refs := types.InvocationAncestorsFromContext(ctx); len(refs) > 0 {
+		out = append(out, AncestorsEnvVar+"="+strings.Join(refs, ","))
+	}
 	return out
 }
 
@@ -277,6 +294,24 @@ func CurrentLevel() int {
 		return n
 	}
 	return 0
+}
+
+// AncestorsFromEnv reads the ancestry a parent process passed down. This is the entry
+// point for a fresh magus process: the refs belong to invocations in OTHER processes (or,
+// under the daemon, to other goroutines), so the variable is the only thing that can carry
+// them across the boundary.
+func AncestorsFromEnv() []string {
+	raw := strings.TrimSpace(os.Getenv(AncestorsEnvVar))
+	if raw == "" {
+		return nil
+	}
+	var out []string
+	for _, ref := range strings.Split(raw, ",") {
+		if ref = strings.TrimSpace(ref); ref != "" {
+			out = append(out, ref)
+		}
+	}
+	return out
 }
 
 var magusExe = sync.OnceValue(func() string {

@@ -12,6 +12,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/types"
 )
 
 // TestSameProjectExclusiveSerializes proves two exclusive holders of the SAME
@@ -353,6 +356,108 @@ func TestLockOwnerNamesTheHolder(t *testing.T) {
 	}
 }
 
+// ancestryCtx builds the context a magus invocation runs under: the ancestry it inherited
+// plus its own id last, exactly as BeginInvocation assembles it. The ids belong to this
+// process, because that is the only pid a test can make the lock's owner record carry.
+func ancestryCtx(t *testing.T, ids ...string) context.Context {
+	t.Helper()
+	ctx := context.Background()
+	for _, id := range ids {
+		ctx = types.AppendInvocationAncestor(ctx, os.Getpid(), id)
+	}
+	// The owner record's Inv comes from the journal, never from the ancestry, so a test
+	// that only stamped the ancestry would leave the sidecar anonymous and prove nothing.
+	return journal.WithInvocationID(ctx, ids[len(ids)-1])
+}
+
+// TestReentrantLockRefusedNotAwaited is the regression test for the nested-run deadlock:
+// a target that runs magus against a project its own invocation already locked used to
+// wait forever, because the holder cannot release until the waiter exits.
+//
+// Both acquires happen in ONE process, which is not a shortcut - it is the daemon shape
+// exactly. flock is per open file description, so a second handle in the same process
+// contends like any other, and under a daemon the holder and the waiter really are one
+// process. The ctx timeout is the regression guard: without the refusal this test hangs
+// until the deadline instead of failing on the first assertion.
+func TestReentrantLockRefusedNotAwaited(t *testing.T) {
+	l := newProjectLocker(t.TempDir(), false)
+
+	outer := ancestryCtx(t, "inv-outer")
+	release, err := l.acquire(outer, "app")
+	if err != nil {
+		t.Fatalf("outer acquire: %v", err)
+	}
+	defer release()
+
+	nested, cancel := context.WithTimeout(ancestryCtx(t, "inv-outer", "inv-nested"), 10*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	_, err = l.acquire(nested, "app")
+	if waited := time.Since(start); waited > 2*time.Second {
+		t.Fatalf("nested acquire took %v; a lock its own ancestor holds must be refused, not awaited", waited)
+	}
+	if !errors.Is(err, types.ProjectLockHeldByAncestor) {
+		t.Fatalf("nested acquire error = %v, want MGS3007", err)
+	}
+	// The holder is what makes the message actionable: it is the run the author has to
+	// change, and "another magus process" was never enough to find it.
+	if msg := err.Error(); !strings.Contains(msg, "pid "+strconv.Itoa(os.Getpid())) {
+		t.Errorf("error = %q, want it to name the holding pid", msg)
+	}
+	if msg := err.Error(); !strings.Contains(msg, "ctx.needs") {
+		t.Errorf("error = %q, want it to name the way out", msg)
+	}
+}
+
+// TestUnrelatedContentionStillWaits is the other half, and the one that keeps the fix
+// honest: contention with a run this one is NOT nested inside is ordinary queueing, and
+// refusing it would break every legitimate concurrent magus.
+func TestUnrelatedContentionStillWaits(t *testing.T) {
+	cacheDir := t.TempDir()
+	lockDir := filepath.Join(cacheDir, "locks")
+
+	// A separate process, so the holder's sidecar carries an invocation id this one has
+	// never heard of - the shape of two developers, or two agents, in one workspace.
+	cmd := helperHold(t, lockDir, "app", 400)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start holder: %v", err)
+	}
+	t.Cleanup(func() { _ = cmd.Process.Kill() })
+	waitForFile(t, filepath.Join(lockDir, "app", "ready"), 3*time.Second)
+
+	var notes int32
+	l := newProjectLocker(cacheDir, false, withLockNotify(func(string) { atomic.AddInt32(&notes, 1) }))
+	ctx := ancestryCtx(t, "inv-unrelated")
+	release, err := l.acquire(ctx, "app")
+	if err != nil {
+		t.Fatalf("acquire: %v; unrelated contention must wait and then succeed", err)
+	}
+	defer release()
+	if got := atomic.LoadInt32(&notes); got != 1 {
+		t.Errorf("waiting notices = %d, want 1; the wait must still be announced", got)
+	}
+}
+
+// TestLockOwnerRecordsInvocation pins the sidecar field the refusal reads. Without it the
+// holder is anonymous to its own descendants and every nested run waits forever again.
+func TestLockOwnerRecordsInvocation(t *testing.T) {
+	l := newProjectLocker(t.TempDir(), false)
+
+	ctx := ancestryCtx(t, "inv-outer", "inv-mine")
+	release, err := l.acquire(ctx, "app")
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	defer release()
+
+	// This invocation's own id, not an ancestor's: recording an ancestor would point a
+	// descendant's check at a run that holds nothing.
+	if got := l.readOwner("app").Inv; got != "inv-mine" {
+		t.Errorf("owner Inv = %q, want %q", got, "inv-mine")
+	}
+}
+
 // TestOrphanHintEscalates pins that the message stops reassuring once a wait is long
 // enough that "busy peer" is no longer the likely explanation.
 func TestOrphanHintEscalates(t *testing.T) {
@@ -443,7 +548,7 @@ func TestLockWaitersAreRecorded(t *testing.T) {
 
 	// A waiter marker is written while blocked and cleared when the wait ends, so
 	// record/clear is exercised directly rather than racing a second process.
-	stop := l.recordWaiter("web/api")
+	stop := l.recordWaiter(context.Background(), "web/api")
 	held := heldLocks(cache)
 	if len(held) != 1 {
 		t.Fatalf("HeldLocks = %d entries, want 1", len(held))

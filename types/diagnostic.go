@@ -133,7 +133,14 @@ const (
 	// rejected" because the remediation is the opposite one, and because folding both
 	// into MGS3005 is exactly the defect this pair replaced - a too-new binary being
 	// told it was too old.
-	ToolTooNew                DiagnosticCode = "MGS3006"
+	ToolTooNew DiagnosticCode = "MGS3006"
+	// ProjectLockHeldByAncestor is a magus run that cannot proceed because a project it
+	// must lock is already locked by one of its OWN ancestor invocations, which cannot
+	// release it until this run exits. It sits in the environment family beside the tool
+	// codes: nothing in the workspace is wrong, the process context the run was started in
+	// makes it impossible. Named for the condition it detects, not for a "re-entrant lock"
+	// magus does not offer.
+	ProjectLockHeldByAncestor DiagnosticCode = "MGS3007"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -175,6 +182,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
+	ProjectLockHeldByAncestor,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits, DaemonRequired,

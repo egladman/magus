@@ -491,6 +491,10 @@ func (s *service) run(req RunRequest, reply *RunReply) error {
 
 	ctx = WithRoot(ctx, req.Root)
 	ctx = WithCwd(ctx, req.Cwd)
+	// Adopt the client's ancestry (BeginInvocation appends the id minted below), so a run
+	// this daemon executes for a nested client recognizes the lock it holds for that
+	// client's parent as its own ancestor's rather than waiting on itself forever.
+	ctx = types.WithInvocationAncestors(ctx, req.Ancestors)
 
 	key := cycleKey(req.Root, req.Cwd, req.Args)
 	if _, loaded := s.inflight.LoadOrStore(key, struct{}{}); loaded {
@@ -535,14 +539,21 @@ func (s *service) run(req RunRequest, reply *RunReply) error {
 		// rather than collapsing every failure to 1. Code 0 is a clean early exit.
 		var exitErr types.ExitError
 		if errors.As(err, &exitErr) {
+			// os.exit(code) from a magusfile: honor the code and say nothing. The message
+			// is incidental (types.ExitError says so), the magusfile printed whatever it
+			// wanted before exiting, and the local path prints nothing here either - so
+			// sending text the client would render as an error is a difference between
+			// adopted and local runs, not information.
 			reply.ExitCode = exitErr.Code
-			if exitErr.Code != 0 {
-				reply.Err = err.Error()
-			}
 			return nil
 		}
 		reply.ExitCode = 1
-		reply.Err = err.Error()
+		// Withheld when the handler already explained the failure: the client PRINTS this
+		// text, so sending a sentinel's placeholder would report "silent exit" as the
+		// reason a run failed.
+		if !AlreadyReported(err) {
+			reply.Err = err.Error()
+		}
 		return nil
 	}
 	reply.ExitCode = 0
@@ -606,6 +617,11 @@ func (s *service) submitJob(req JobRequest, reply *JobReply) error {
 		ctx = journal.WithInvocationID(ctx, inv)
 		ctx = WithSubOp(ctx, call.SubOp)
 		ctx = withJob(ctx) // route through the full job command set, not the run/affected adoption allowlist
+		// A job descends from nobody. parentCtx carries whatever ancestry the DAEMON's
+		// process environment had - which is a real value when the daemon was started from
+		// inside a magus target - and inheriting it would attribute this job's locks to a
+		// stranger, and tell every process it forks that it descends from one.
+		ctx = types.WithInvocationAncestors(ctx, nil)
 
 		if err := s.lim.Acquire(ctx); err != nil {
 			return

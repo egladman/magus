@@ -583,10 +583,11 @@ func checkVCSBaseRef(ctx context.Context, root string, opts types.VCSOptions) ty
 // fields; see checkEnvVars for why each one cannot be migrated onto the config
 // struct the way that function's doc otherwise requires.
 var runtimeEnvVars = map[string]struct{}{
-	"MAGUS_LEVEL":             {},
-	"MAGUS_SHARD":             {},
-	"MAGUS_N_SHARDS":          {},
-	"MAGUS_CACHE_SIGNING_KEY": {},
+	"MAGUS_LEVEL":                {},
+	"MAGUS_INVOCATION_ANCESTORS": {},
+	"MAGUS_SHARD":                {},
+	"MAGUS_N_SHARDS":             {},
+	"MAGUS_CACHE_SIGNING_KEY":    {},
 }
 
 func (*runner) checkEnvVars() types.DoctorCheck {
