@@ -18,9 +18,8 @@ var (
 
 // mapExecutable copies buf into a fresh private commit, flips it to RX, and
 // returns it as a slice aliasing that memory, or nil if any step fails (the
-// caller then runs the interpreter). The allocation is never released: a
-// compiledJIT is cached for the life of its Chunk, and the entry pointer handed
-// to generated code must stay valid.
+// caller then runs the interpreter). The allocation lives until its Chunk is
+// collected; see unmapExecutable.
 //
 // Windows has no mmap, and allocating RWX in one call is what W^X-enforcing
 // mitigations (and some EDR products) block, so this follows the same
@@ -60,5 +59,24 @@ func mapExecutable(buf []byte) []byte {
 		_ = windows.VirtualFree(addr, 0, windows.MEM_RELEASE)
 		return nil
 	}
+	jitMappedBytes.Add(int64(len(mem)))
 	return mem
+}
+
+// unmapExecutable releases an allocation mapExecutable returned. See the unix
+// half in jit_mem_unix.go for why this is safe only from cache eviction: a
+// running chunk is reachable from vm.frames, so it cannot have been collected,
+// so this cannot fire underneath executing code.
+//
+// MEM_RELEASE requires the size argument to be 0 and the address to be the base
+// the reservation was made at, which &mem[0] is: mapExecutable slices the whole
+// allocation from exactly that address.
+func unmapExecutable(mem []byte) {
+	if len(mem) == 0 {
+		return
+	}
+	if windows.VirtualFree(uintptr(unsafe.Pointer(&mem[0])), 0, windows.MEM_RELEASE) != nil {
+		return
+	}
+	jitMappedBytes.Add(-int64(len(mem)))
 }

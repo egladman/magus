@@ -4,7 +4,10 @@ package vm
 
 import (
 	"context"
+	"runtime"
 	"testing"
+	"time"
+	"weak"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -496,6 +499,85 @@ func TestJITDeclinedChunkIsNotAFailure(t *testing.T) {
 		assert.Zero(t, JITCompileFailCount(), "a declined shape is not a codegen failure")
 		assert.Zero(t, JITRunCount(), "native entries")
 		assert.Empty(t, kinds, "faults reported")
+	})
+}
+
+// TestJITCacheReleasesDeadChunks is the leak test. A strong *Chunk key made the
+// cache the reason its own entries could never expire, so the executable pages and
+// the chunk's Code and Consts lasted the process rather than the chunk — invisible
+// in a CLI run, cumulative in the daemon.
+//
+// It asserts on the exact weak key, never on a whole-cache total: jitCache and
+// JITMappedBytes are process-wide, and the runtime.GC() calls below collect other
+// tests' chunks too, so any assertion against an absolute baseline is a flake
+// waiting for a busy suite. Holding the key proves nothing about liveness — a weak
+// pointer is precisely the reference that does not keep its object alive, which is
+// what lets the test observe the collection it caused.
+func TestJITCacheReleasesDeadChunks(t *testing.T) {
+	jitTest(t, func(t *testing.T) {
+		var key weak.Pointer[Chunk]
+		func() {
+			c := addChunk()
+			key = weak.Make(c)
+			got, err := runChunk(t, c)
+			require.NoError(t, err)
+			require.Equal(t, IntValue(42), got)
+		}() // c goes out of scope here and nothing else holds it
+
+		v, cached := jitCache.Load(key)
+		require.True(t, cached, "compilation is cached while the chunk lives")
+		mine := int64(len(v.(*compiledJIT).code))
+		require.Positive(t, mine, "compilation mapped executable memory")
+		peak := JITMappedBytes()
+
+		// Cleanups run on their own goroutine after a collection, so poll rather
+		// than assume one GC is enough. Poll the KEY, which only this test's chunk
+		// can clear.
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			if _, still := jitCache.Load(key); !still || time.Now().After(deadline) {
+				break
+			}
+			runtime.GC()
+			time.Sleep(5 * time.Millisecond)
+		}
+
+		_, cached = jitCache.Load(key)
+		assert.False(t, cached, "cache entry removed once the chunk died")
+		assert.Nil(t, key.Value(), "chunk itself collected (a strong cache key would pin it)")
+		// Nothing compiles during the loop, so the gauge only falls; this chunk
+		// accounts for at least `mine` of the fall however many others also went.
+		assert.LessOrEqual(t, JITMappedBytes(), peak-mine, "executable memory released")
+	})
+}
+
+// TestJITLiveChunkKeepsItsMapping is the other half, and the one that matters for
+// safety rather than footprint: while a chunk is reachable, neither its entry nor
+// its pages may go anywhere. Eviction keyed on reachability is what makes
+// unmapping safe at all, so an entry disappearing early would mean unmapping an
+// instruction stream something is about to enter.
+func TestJITLiveChunkKeepsItsMapping(t *testing.T) {
+	jitTest(t, func(t *testing.T) {
+		c := addChunk()
+		_, err := runChunk(t, c)
+		require.NoError(t, err)
+		key := weak.Make(c)
+
+		for range 5 {
+			runtime.GC()
+		}
+
+		// Again on the key, not on a total: other tests' chunks are collectable
+		// during these GCs, so the process-wide gauge is expected to move.
+		_, cached := jitCache.Load(key)
+		assert.True(t, cached, "cache entry retained while the chunk is reachable")
+		assert.NotNil(t, key.Value(), "chunk still live")
+
+		// Still usable, which is the point of retaining it.
+		got, err := runChunk(t, c)
+		require.NoError(t, err)
+		assert.Equal(t, IntValue(42), got, "chunk still runs after a GC")
+		runtime.KeepAlive(c)
 	})
 }
 

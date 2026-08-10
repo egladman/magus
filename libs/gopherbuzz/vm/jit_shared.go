@@ -2,7 +2,12 @@
 
 package vm
 
-import "sync"
+import (
+	"runtime"
+	"sync"
+	"sync/atomic"
+	"weak"
+)
 
 // Arch-independent half of the baseline JIT: the run/cache/eligibility logic and
 // the ABI struct shared by the per-arch code generators (jit_amd64.go,
@@ -70,12 +75,43 @@ type compiledJIT struct {
 	// and costs one load on the cold path. Without it a stub emitting the wrong
 	// height silently hands the interpreter a corrupt operand stack.
 	entryDepth []int
+	// disabled marks a compilation whose native run exited unresumably. The entry
+	// is MARKED rather than replaced with jitIneligible, because replacing it would
+	// strand the mapping: eviction is the only safe point to unmap (see jitEvict),
+	// and here we are not at one — another VM sharing this chunk may be executing
+	// these very pages. Atomic for the same reason.
+	disabled atomic.Bool
 }
 
 var (
-	jitCache      sync.Map // *Chunk -> *compiledJIT (jitIneligible == not eligible)
+	// jitCache maps a chunk to its compilation, keyed WEAKLY. A strong *Chunk key
+	// would make the cache itself the reason a chunk can never be collected — and
+	// with it the chunk's Code and Consts and the executable pages of its
+	// compilation. That is the whole PROCESS's lifetime, not the chunk's, which is
+	// what mapExecutable already claimed and did not deliver. Harmless in a
+	// short-lived CLI; in the magus daemon, which is long-lived and recompiles a
+	// workspace's chunks on every edit, it accumulates. Entries leave via jitEvict.
+	jitCache      sync.Map // weak.Pointer[Chunk] -> *compiledJIT (jitIneligible == not eligible)
 	jitIneligible = &compiledJIT{}
 )
+
+// jitEvict drops a dead chunk's cache entry and releases its executable pages.
+//
+// It runs only once the chunk is unreachable, and THAT is what makes the unmap
+// safe: a chunk is reachable from vm.frames for the whole of its native run (the
+// KeepAlive in jitRun says so out loud), so this cannot fire underneath executing
+// code. Unmapping on any other schedule — an LRU, a size cap, an explicit purge —
+// would need a way to prove no goroutine is inside those pages, and there isn't
+// one. Reachability IS the proof, which is why eviction is tied to it.
+func jitEvict(key weak.Pointer[Chunk]) {
+	v, ok := jitCache.LoadAndDelete(key)
+	if !ok {
+		return
+	}
+	if c := v.(*compiledJIT); c != jitIneligible {
+		unmapExecutable(c.code)
+	}
+}
 
 // jitTestExitHook, when non-nil, runs after every native exit and may rewrite the
 // exit context. Test-only seam: it is the only way to drive the bad-exit recovery
@@ -103,6 +139,13 @@ func (vm *VM) jitRun() (Value, bool, error) {
 	if jc == nil {
 		return Null, false, nil
 	}
+	// The chunk must outlive every instruction of the native run: its death is what
+	// releases the executable pages we are about to enter (jitEvict). It is already
+	// reachable through f, which points into vm.frames and is read after the loop —
+	// but that is an inference about liveness the compiler is free to invalidate,
+	// and the failure mode if it ever does is unmapping the instruction stream
+	// mid-execution. So state it rather than infer it.
+	defer runtime.KeepAlive(f.chunk)
 	lc := f.chunk.LocalCount
 	if f.base+lc == 0 {
 		return Null, false, nil // need &stack[0]; nothing to anchor
@@ -185,7 +228,7 @@ func (vm *VM) jitRun() (Value, bool, error) {
 		if vm.faultHook != nil {
 			vm.faultHook(FaultJITBadExit)
 		}
-		jitCache.Store(f.chunk, jitIneligible)
+		jc.disabled.Store(true)
 		copy(vm.stack[f.base:f.base+lc], snap)
 		vm.stack = vm.stack[:f.base+lc]
 		f.ip = 0
@@ -199,20 +242,37 @@ func (vm *VM) jitRun() (Value, bool, error) {
 // panic — later calls read the cached ineligible marker — so a caller reporting it
 // reports each defect once per chunk instead of once per run.
 func jitCompileCached(chunk *Chunk) (jc *compiledJIT, codegenFailed bool) {
-	if v, ok := jitCache.Load(chunk); ok {
+	key := weak.Make(chunk)
+	if v, ok := jitCache.Load(key); ok {
 		c := v.(*compiledJIT)
-		if c == jitIneligible {
+		if c == jitIneligible || c.disabled.Load() {
 			return nil, false
 		}
 		return c, false
 	}
 	jc, failed := safeCompileJIT(chunk)
+	stored := jc
 	if jc == nil {
-		jitCache.Store(chunk, jitIneligible)
+		stored = jitIneligible
+	}
+	prev, raced := jitCache.LoadOrStore(key, stored)
+	if raced {
+		// Two VMs compiled the same shared chunk at once. Ours has never been
+		// entered and nobody else can reach it, so release it here rather than leak
+		// the mapping; everyone uses the winner's. LoadOrStore also makes the
+		// cleanup below register exactly once per chunk.
+		if jc != nil {
+			unmapExecutable(jc.code)
+		}
+		if c := prev.(*compiledJIT); c != jitIneligible {
+			return c, failed
+		}
 		return nil, failed
 	}
-	jitCache.Store(chunk, jc)
-	return jc, false
+	// The argument is the WEAK key, never the chunk: a cleanup that referenced its
+	// own object would keep it alive forever and so never run.
+	runtime.AddCleanup(chunk, jitEvict, key)
+	return jc, failed
 }
 
 // safeCompileJIT wraps compileJIT so a code-generator defect degrades to the

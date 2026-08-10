@@ -64,6 +64,19 @@ var jitBadExits atomic.Int64
 // the answer) is the most useful JIT bug report there is.
 func JITBadExitCount() int64 { return jitBadExits.Load() }
 
+// jitMappedBytes is executable memory currently held by cached compilations. A
+// GAUGE, not a counter: it rises when a chunk is compiled and falls when that
+// chunk is collected, so ResetJITStats deliberately leaves it alone — zeroing a
+// live measurement would just make it lie. Bytes requested, which the kernel
+// rounds up to a page per mapping.
+var jitMappedBytes atomic.Int64
+
+// JITMappedBytes returns the executable memory currently mapped for compiled
+// chunks. It is bounded by the chunks still reachable, so in a long-lived host
+// (the magus daemon serving many workspaces) it should plateau rather than climb;
+// a monotonic rise means chunks are being retained somewhere.
+func JITMappedBytes() int64 { return jitMappedBytes.Load() }
+
 // ResetJITStats zeroes the JIT counters (test helper).
 func ResetJITStats() {
 	jitRuns.Store(0)

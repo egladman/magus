@@ -459,6 +459,13 @@ dispatch. On by default; disable with `BUZZ_JIT=0` or `vm.SetJIT(false)`.
   emits nothing else); generated code cannot, on both counts -- and `marshal.go`
   decodes chunks from `.bo` bytes the compiler never wrote. A malformed chunk is
   declined, exactly like an unsupported opcode.
+- A compilation lives exactly as long as its `*Chunk`. The cache is keyed by a
+  WEAK pointer, so it is not itself the reason a chunk can never be collected; when
+  the chunk goes, a cleanup drops the entry and unmaps the executable pages.
+  Reachability is what makes that unmap safe -- a chunk is reachable for the whole
+  of its native run -- which is also why there is no LRU or size cap: neither can
+  prove nobody is inside those pages. `vm.JITMappedBytes()` is the gauge, and it
+  should plateau in a long-lived host rather than climb.
 - Every native exit is **checked, not trusted**. A deopt names a resume ip and a
   stack height, and the height has to equal `base + LocalCount + entryDepth[ip]` --
   the same depth model the stub was emitted from, so this is an exact equality, not
