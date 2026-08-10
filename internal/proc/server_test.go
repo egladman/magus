@@ -253,7 +253,7 @@ func TestRunWithholdsReportedError(t *testing.T) {
 // reportedErr stands in for cmd/magus's errSilent, which proc cannot import.
 type reportedErr struct{}
 
-func (reportedErr) Error() string  { return "silent exit" }
+func (reportedErr) Error() string         { return "silent exit" }
 func (reportedErr) AlreadyReported() bool { return true }
 
 // TestShutdownClosesServer pins the fix for the silent `server stop` no-op: a shutdown RPC
