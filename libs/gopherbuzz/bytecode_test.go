@@ -813,6 +813,98 @@ func assertJITInternallyConsistent(t *testing.T) {
 	require.Zero(t, vmpackage.JITBadExitCount(), "JIT produced an unresumable exit")
 }
 
+// TestConcurrentVMsShareAChunk exercises the property several hot-path caches
+// claim in their doc comments and nothing verified: that a *Chunk is immutable at
+// run time and every cache learned from it is per-VM, so N VMs may execute one
+// compiled chunk at once. It is an ASSERTED invariant (see vm.mcache, vm.icache,
+// vm.iterPool), and an asserted invariant with no concurrent test is exactly how
+// the golang-asm codegen race survived from the day the JIT landed: every other
+// test runs one VM, and -race reports nothing when nothing overlaps.
+//
+// Each subtest picks a program whose execution teaches a different cache. Run this
+// under -race; without it the assertions still hold but the point is lost.
+func TestConcurrentVMsShareAChunk(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{{
+		name: "member access and method dispatch (mcache)",
+		src: `object P { x: int = 0, y: int = 0, fun sum() > int { return this.x + this.y; } }
+			var t = 0; var i = 0;
+			while (i < 200) { final p = P{ x = i, y = 1 }; t = t + p.sum(); i = i + 1; }
+			return t;`,
+		want: "20100",
+	}, {
+		name: "string interpolation (strScratch)",
+		src: `var s = ""; var i = 0;
+			while (i < 100) { s = "value {i} of {100}"; i = i + 1; }
+			return s;`,
+		want: "value 99 of 100",
+	}, {
+		name: "closures over a shared chunk's Funs",
+		src: `fun mk(n: int) > fun () > int { return fun () > int { return n * 2; }; }
+			var t = 0; var i = 0;
+			while (i < 100) { final f = mk(i); t = t + f(); i = i + 1; }
+			return t;`,
+		want: "9900",
+	}, {
+		name: "foreach iteration (iterPool)",
+		src: `final items = [1, 2, 3, 4, 5];
+			var t = 0; var i = 0;
+			while (i < 100) { foreach (x in items) { t = t + x; } i = i + 1; }
+			return t;`,
+		want: "1500",
+	}, {
+		name: "numeric loop (the JIT path)",
+		src: `var sum = 0; var i = 0;
+			while (i < 10000) { sum = sum + i; i = i + 1; } return sum;`,
+		want: "49995000",
+	}}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			prog, err := ParseEmbedded(tc.src)
+			require.NoError(t, err, "parse")
+			chunk, err := CompileWith(prog, CompileOptions{})
+			require.NoError(t, err, "compile")
+
+			vmpackage.SetJIT(true)
+			defer vmpackage.SetJIT(false)
+
+			// One chunk, N VMs, released together. Each VM gets its own Env: two
+			// VMs sharing globals would be shared MUTABLE state, which is a
+			// different (and unclaimed) property.
+			const vms = 8
+			start := make(chan struct{})
+			got := make([]string, vms)
+			errs := make([]error, vms)
+			var wg sync.WaitGroup
+			for i := range vms {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					env := vmpackage.NewEnv()
+					vmpackage.RegisterStdlib(env)
+					<-start
+					v, err := vmpackage.NewVM(context.Background()).Run(chunk, env)
+					errs[i] = err
+					if err == nil {
+						got[i] = v.String()
+					}
+				}()
+			}
+			close(start)
+			wg.Wait()
+
+			for i := range vms {
+				require.NoErrorf(t, errs[i], "vm %d", i)
+				assert.Equalf(t, tc.want, got[i], "vm %d result", i)
+			}
+		})
+	}
+}
+
 // TestJITMatchesInterpreter is the core differential test: every program must
 // produce the identical result with the JIT on and off, and the JIT must
 // actually engage on the top-level loop. Each program is a top-level integer or
