@@ -2,6 +2,7 @@ package buzz
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -794,8 +795,114 @@ func assertJITMatchesInterp(t *testing.T, src string) {
 	require.NoError(t, err, "jit")
 	if vmpackage.JITAvailable() {
 		require.NotZero(t, vmpackage.JITRunCount(), "JIT did not engage (chunk ineligible?)")
+		assertJITInternallyConsistent(t)
 	}
 	require.Equal(t, want.String(), got.String(), "jit vs interp")
+}
+
+// assertJITInternallyConsistent fails if the last run tripped one of the JIT's own
+// self-checks. Both counters mean a defect in this package rather than anything
+// about the program: a codegen panic, or a native exit whose stack height or
+// resume ip the interpreter refused to resume from. Neither shows up as a wrong
+// answer - the recovery is correct, so a differential assertion alone stays green
+// while the JIT silently stops doing its job - which is exactly why the counters
+// have to be asserted next to it. See vm.JITBadExitCount.
+func assertJITInternallyConsistent(t *testing.T) {
+	t.Helper()
+	require.Zero(t, vmpackage.JITCompileFailCount(), "JIT codegen panicked")
+	require.Zero(t, vmpackage.JITBadExitCount(), "JIT produced an unresumable exit")
+}
+
+// TestConcurrentVMsShareAChunk exercises the property several hot-path caches
+// claim in their doc comments and nothing verified: that a *Chunk is immutable at
+// run time and every cache learned from it is per-VM, so N VMs may execute one
+// compiled chunk at once. It is an ASSERTED invariant (see vm.mcache, vm.icache,
+// vm.iterPool), and an asserted invariant with no concurrent test is exactly how
+// the golang-asm codegen race survived from the day the JIT landed: every other
+// test runs one VM, and -race reports nothing when nothing overlaps.
+//
+// Each subtest picks a program whose execution teaches a different cache. Run this
+// under -race; without it the assertions still hold but the point is lost.
+func TestConcurrentVMsShareAChunk(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{{
+		name: "member access and method dispatch (mcache)",
+		src: `object P { x: int = 0, y: int = 0, fun sum() > int { return this.x + this.y; } }
+			var t = 0; var i = 0;
+			while (i < 200) { final p = P{ x = i, y = 1 }; t = t + p.sum(); i = i + 1; }
+			return t;`,
+		want: "20100",
+	}, {
+		name: "string interpolation (strScratch)",
+		src: `var s = ""; var i = 0;
+			while (i < 100) { s = "value {i} of {100}"; i = i + 1; }
+			return s;`,
+		want: "value 99 of 100",
+	}, {
+		name: "closures over a shared chunk's Funs",
+		src: `fun mk(n: int) > fun () > int { return fun () > int { return n * 2; }; }
+			var t = 0; var i = 0;
+			while (i < 100) { final f = mk(i); t = t + f(); i = i + 1; }
+			return t;`,
+		want: "9900",
+	}, {
+		name: "foreach iteration (iterPool)",
+		src: `final items = [1, 2, 3, 4, 5];
+			var t = 0; var i = 0;
+			while (i < 100) { foreach (x in items) { t = t + x; } i = i + 1; }
+			return t;`,
+		want: "1500",
+	}, {
+		name: "numeric loop (the JIT path)",
+		src: `var sum = 0; var i = 0;
+			while (i < 10000) { sum = sum + i; i = i + 1; } return sum;`,
+		want: "49995000",
+	}}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			prog, err := ParseEmbedded(tc.src)
+			require.NoError(t, err, "parse")
+			chunk, err := CompileWith(prog, CompileOptions{})
+			require.NoError(t, err, "compile")
+
+			vmpackage.SetJIT(true)
+			defer vmpackage.SetJIT(false)
+
+			// One chunk, N VMs, released together. Each VM gets its own Env: two
+			// VMs sharing globals would be shared MUTABLE state, which is a
+			// different (and unclaimed) property.
+			const vms = 8
+			start := make(chan struct{})
+			got := make([]string, vms)
+			errs := make([]error, vms)
+			var wg sync.WaitGroup
+			for i := range vms {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					env := vmpackage.NewEnv()
+					vmpackage.RegisterStdlib(env)
+					<-start
+					v, err := vmpackage.NewVM(context.Background()).Run(chunk, env)
+					errs[i] = err
+					if err == nil {
+						got[i] = v.String()
+					}
+				}()
+			}
+			close(start)
+			wg.Wait()
+
+			for i := range vms {
+				require.NoErrorf(t, errs[i], "vm %d", i)
+				assert.Equalf(t, tc.want, got[i], "vm %d result", i)
+			}
+		})
+	}
 }
 
 // TestJITMatchesInterpreter is the core differential test: every program must
@@ -1840,6 +1947,8 @@ func TestJITMatchesInterpreterRandomized(t *testing.T) {
 		if vmpackage.JITRunCount() > 0 {
 			engaged++
 		}
+		require.Zerof(t, vmpackage.JITCompileFailCount(), "case %d: JIT codegen panicked\n%s", i, src)
+		require.Zerof(t, vmpackage.JITBadExitCount(), "case %d: JIT produced an unresumable exit\n%s", i, src)
 		switch {
 		case wantErr != nil && gotErr != nil:
 			require.Equalf(t, wantErr.Error(), gotErr.Error(), "case %d: differing errors\n%s", i, src)
@@ -1884,15 +1993,39 @@ func FuzzJITMatchesInterpreter(f *testing.F) {
 		if err != nil {
 			t.Skip()
 		}
+		// Bound every execution. The fuzzer readily produces a program that loops
+		// forever (`while (i < 20) { i== i + 1; }` — a comparison where the seed had
+		// an assignment), and with an unbounded context the FIRST run wedges the
+		// whole process: not a JIT finding, just a hang, and go-fuzz reports it as
+		// "terminated unexpectedly while minimizing" and writes a corpus entry that
+		// then hangs plain `go test` too. Both engines poll cancellation on a back
+		// edge (the JIT's is the cancel-check exit), so a deadline is honored on
+		// either path and the same limit applies to both sides of the comparison.
 		run := func(jit bool) (vmpackage.Value, error) {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
 			env := vmpackage.NewEnv()
 			vmpackage.RegisterStdlib(env)
 			vmpackage.SetJIT(jit)
 			defer vmpackage.SetJIT(false)
-			return vmpackage.NewVM(context.Background()).Run(chunk, env)
+			return vmpackage.NewVM(ctx).Run(chunk, env)
 		}
 		wantV, wantErr := run(false)
+		if wantErr != nil && errors.Is(wantErr, context.DeadlineExceeded) {
+			t.Skip() // non-terminating program: nothing to compare
+		}
+		vmpackage.ResetJITStats()
 		gotV, gotErr := run(true)
+		// A fuzzer-built chunk is the likeliest source of a shape depths() lets
+		// through and codegen then panics on, so check the self-checks before the
+		// answers: both recover silently, and a differential comparison alone
+		// cannot see them.
+		if n := vmpackage.JITCompileFailCount(); n != 0 {
+			t.Fatalf("JIT codegen panicked (%d) for:\n%s", n, src)
+		}
+		if n := vmpackage.JITBadExitCount(); n != 0 {
+			t.Fatalf("JIT produced an unresumable exit (%d) for:\n%s", n, src)
+		}
 		if (wantErr == nil) != (gotErr == nil) {
 			t.Fatalf("interp err=%v but jit err=%v for:\n%s", wantErr, gotErr, src)
 		}

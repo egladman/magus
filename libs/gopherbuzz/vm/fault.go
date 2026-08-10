@@ -13,6 +13,19 @@ const (
 	// ultimately catches it, but never for a control-flow sentinel (a fiber yield
 	// or a context cancellation), which are not faults. See raiseHostError.
 	FaultHostError
+	// FaultJITCompile is a panic out of the JIT code generator: the chunk hit a
+	// codegen defect and was marked permanently ineligible, so it runs interpreted.
+	// It fires ONCE per chunk (the ineligible verdict is cached), and never for a
+	// chunk the backend merely declines to compile - declining is routine and
+	// silent, a codegen panic is a bug. See safeCompileJIT.
+	FaultJITCompile
+	// FaultJITBadExit is a native JIT run that returned a status, resume ip, or
+	// stack height the interpreter cannot resume from. The run is discarded and the
+	// chunk re-executed interpreted from the top, so the answer stays right; the
+	// fault is how a miscompile becomes visible instead of silently degrading. Like
+	// FaultJITCompile it fires once per chunk, which then runs interpreted. See
+	// VM.jitRun.
+	FaultJITBadExit
 )
 
 // String names the fault kind for logs and metric labels (plain ASCII).
@@ -22,6 +35,10 @@ func (k FaultKind) String() string {
 		return "panic"
 	case FaultHostError:
 		return "host-error"
+	case FaultJITCompile:
+		return "jit-compile-fail"
+	case FaultJITBadExit:
+		return "jit-bad-exit"
 	default:
 		return "unknown"
 	}
