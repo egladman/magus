@@ -483,13 +483,14 @@ func TestCheckEnvVars(t *testing.T) {
 		assert.Contains(t, got.Details, "MAGUS_CACHE_MOD")
 	})
 
-	// magus reads these four itself (subprocess recursion depth, CI shard inputs,
-	// the cache-signing seed) without them being config fields, so they can never
-	// appear in KnownEnvVars - runtimeEnvVars is the allowlist that keeps this
+	// magus reads these itself (subprocess recursion depth and invocation ancestry, CI
+	// shard inputs, the cache-signing seed) without them being config fields, so they can
+	// never appear in KnownEnvVars - runtimeEnvVars is the allowlist that keeps this
 	// check from calling magus's own documented setup a typo.
 	t.Run("runtime env vars recognized", func(t *testing.T) {
 		for _, name := range []string{
 			"MAGUS_LEVEL",
+			"MAGUS_INVOCATION_ANCESTORS",
 			"MAGUS_SHARD",
 			"MAGUS_N_SHARDS",
 			"MAGUS_CACHE_SIGNING_KEY",

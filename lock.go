@@ -16,6 +16,7 @@ import (
 
 	"github.com/gofrs/flock"
 
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
@@ -188,6 +189,45 @@ func newProjectLocker(cacheDir string, noWait bool, opts ...lockerOption) *proje
 	return l
 }
 
+// reentrantErr returns the MGS3007 diagnostic when the process holding projectPath's lock
+// is running one of THIS invocation's ancestors, and nil for every other contention.
+//
+// This is the deadlock the plain wait cannot survive. A magusfile target that runs magus
+// against a project its own invocation already locked - directly, through magus.run, or
+// through a script several levels down - produces a holder that is waiting for the waiter.
+// flock cannot tell the two cases apart and neither can a timeout; the ancestry can, and
+// it is the only signal that also covers the daemon, where holder and waiter are threads
+// of ONE process and every pid comparison says "myself".
+//
+// It reads the owner sidecar, which is best-effort by design: a holder that wrote no
+// sidecar, or an ancestry that never reached this process, yields nil and the acquire
+// waits exactly as it did before. Under-detecting restores the old behavior;
+// over-detecting would refuse a legitimate concurrent run, so the check errs toward
+// silence.
+func (l *projectLocker) reentrantErr(ctx context.Context, projectPath string) error {
+	rec := l.readOwner(projectPath)
+	if !types.HasInvocationAncestor(ctx, rec.PID, rec.Inv) {
+		return nil
+	}
+	// A sidecar outlives a holder that was killed between locking and cleanup, and the
+	// flock behind it may since have been taken by someone else entirely. Believing a
+	// corpse here would refuse a run that should queue behind that new holder, so confirm
+	// the record still describes the process this acquire is actually blocked on. Same
+	// question heldLocks asks, for the same reason.
+	if !lockIsHeld(l.lockPath(projectPath)) {
+		return nil
+	}
+	p := projectPath
+	if p == "" {
+		p = "."
+	}
+	return types.DiagnosticErrorf(types.ProjectLockHeldByAncestor,
+		"project %s is locked by the magus run this one is nested inside (%s), which cannot finish until this one does."+
+			" Waiting would never end, so it is refused instead."+
+			" Either target a project the outer run does not hold, or express the dependency with ctx.needs(<target>)"+
+			" so one invocation runs both.", p, l.describeOwner(projectPath))
+}
+
 // lockContendedError is returned by a no-wait acquire when another magus process holds
 // the project's lock. It is the fail-fast signal for MAGUS_NO_WAIT.
 type lockContendedError struct{ Project string }
@@ -217,11 +257,18 @@ func (l *projectLocker) acquire(ctx context.Context, projectPath string) (func()
 		return nil, fmt.Errorf("workspace lock: lock %s: %w", projectPath, err)
 	}
 	if !got {
+		// Before anything else: a lock held by one of this invocation's OWN ancestors can
+		// never be released, because the ancestor is blocked waiting on this process to
+		// exit. Waiting is not slow here, it is permanent, so refuse instead - ahead of
+		// the noWait branch, since this diagnosis is the more specific one.
+		if err := l.reentrantErr(ctx, projectPath); err != nil {
+			return nil, err
+		}
 		if l.noWait {
 			return nil, &lockContendedError{Project: projectPath}
 		}
 		l.emitWaiting(ctx, projectPath)
-		stopWaiter := l.recordWaiter(projectPath)
+		stopWaiter := l.recordWaiter(ctx, projectPath)
 		stopHeartbeat := l.startWaitHeartbeat(ctx, projectPath)
 		got, err = fl.TryLockContext(ctx, lockRetryDelay)
 		stopHeartbeat()
@@ -238,7 +285,7 @@ func (l *projectLocker) acquire(ctx context.Context, projectPath string) (func()
 		}
 		l.emitResumed(ctx, projectPath)
 	}
-	l.recordOwner(projectPath)
+	l.recordOwner(ctx, projectPath)
 	return func() { l.removeOwner(projectPath); _ = fl.Unlock() }, nil
 }
 
@@ -404,6 +451,11 @@ type processRecord struct {
 	Command string `json:"command"`
 	Dir     string `json:"dir"`
 	Started string `json:"started"`
+	// Inv is the invocation that took the lock. It is what makes a holder identifiable to
+	// a DESCENDANT of it - a pid cannot, since under the daemon the holder and the waiter
+	// share one. Empty for a subcommand with no invocation record (clean), and for a
+	// sidecar written by an older magus; a waiter then has nothing to match and waits.
+	Inv string `json:"inv,omitempty"`
 }
 
 // The sidecar layout, in ONE place. HeldLocks previously re-derived these by hand
@@ -425,22 +477,28 @@ func (l *projectLocker) ownerPath(projectPath string) string {
 // recordOwner writes the sidecar after a successful acquire. Every failure is
 // swallowed: not being able to say who holds a lock must never fail a run that
 // already holds it.
-func (l *projectLocker) recordOwner(projectPath string) {
-	if data := selfRecord(); data != nil {
+func (l *projectLocker) recordOwner(ctx context.Context, projectPath string) {
+	if data := selfRecord(ctx); data != nil {
 		_ = os.WriteFile(l.ownerPath(projectPath), data, 0o600)
 	}
 }
 
-// selfRecord marshals this process's identity, the payload both the owner and waiter
+// selfRecord marshals this invocation's identity, the payload both the owner and waiter
 // sidecars carry. Returns nil when it cannot be built, which every caller treats as
 // "skip the sidecar": failing to say who we are must never fail the run.
-func selfRecord() []byte {
+func selfRecord(ctx context.Context) []byte {
 	dir, _ := os.Getwd()
+	// This invocation's OWN id, never the ancestry's last element. Those look the same for
+	// a run - BeginInvocation appends its id there - and differ for every lock-taker that
+	// mints no invocation of its own: `magus clean` inherits an ancestry and appends
+	// nothing, so the tail is its PARENT's id, and stamping that on the lock would have a
+	// sibling nested run refuse a lock the parent does not hold.
 	data, err := json.Marshal(processRecord{
 		PID:     os.Getpid(),
 		Command: strings.Join(os.Args, " "),
 		Dir:     dir,
 		Started: time.Now().Format(time.RFC3339),
+		Inv:     journal.InvocationIDFromContext(ctx),
 	})
 	if err != nil {
 		return nil
@@ -513,8 +571,8 @@ func (l *projectLocker) waiterPath(projectPath string) string {
 // are the other half and answer "who is stalled because of it", which is the question
 // asked by whoever is looking at a queue that is not moving. Best-effort, like the
 // owner record, and never load-bearing.
-func (l *projectLocker) recordWaiter(projectPath string) func() {
-	data := selfRecord()
+func (l *projectLocker) recordWaiter(ctx context.Context, projectPath string) func() {
+	data := selfRecord(ctx)
 	if data == nil {
 		return func() {}
 	}

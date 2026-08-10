@@ -3,6 +3,7 @@ package proc
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 )
 
 // statusQueryTimeout caps the QueryStatus round-trip; prevents hung daemons from blocking forever.
@@ -40,7 +42,13 @@ func Forward(ctx context.Context, args []string, version, root string) (int, err
 	// from its VCS stamp so it never matches a differently-built dev daemon (see
 	// adoptionIdentity). A stale pre-fix daemon compares this against its stored "unknown"
 	// and mismatches, so the fix fails closed against old daemons too.
-	req := RunRequest{Args: args, Version: adoptionIdentity(version), Cwd: cwd, Root: root, Protocol: ProtocolV2}
+	// The ancestry travels with the request because the daemon, not this process, is what
+	// takes the project locks for an adopted run: without it the daemon cannot tell a
+	// lock held for THIS client's parent from one held for an unrelated client.
+	req := RunRequest{
+		Args: args, Version: adoptionIdentity(version), Cwd: cwd, Root: root, Protocol: ProtocolV2,
+		Ancestors: types.InvocationAncestorsFromContext(ctx),
+	}
 	if err := writeFrame(conn, typeRun, req); err != nil {
 		return 0, fmt.Errorf("proc: forward: write: %w", err)
 	}
@@ -64,7 +72,16 @@ func Forward(ctx context.Context, args []string, version, root string) (int, err
 	if err := json.Unmarshal(line, &reply); err != nil {
 		return 0, fmt.Errorf("proc: forward: decode reply: %w", err)
 	}
-	return reply.ExitCode, nil // reply.Err is informational; callers observe failure via ExitCode
+	// An adopted run's failure reason has to be SAID. The server hands it back in
+	// reply.Err and this used to drop it, on the reasoning that the exit code is what
+	// callers act on - which is true, and left the user with a bare status and no reason,
+	// because the adopted handler returns its error to the server instead of printing it
+	// the way a local dispatch does. Emitted through slog so it renders exactly as the
+	// local path's error does; the exit code is still what the caller returns on.
+	if reply.ExitCode != 0 && reply.Err != "" {
+		slog.ErrorContext(ctx, reply.Err)
+	}
+	return reply.ExitCode, nil
 }
 
 // QueryStatus dials the proc server at addr and returns a live pool snapshot.

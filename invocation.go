@@ -8,6 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/types"
 )
 
 // BeginInvocation opens the structured journal for one `magus` command (launch to exit). It
@@ -36,6 +37,9 @@ func (m *Magus) BeginInvocation(ctx context.Context, cmd journal.Command, magusV
 		id = journal.NewInvocationID()
 	}
 	ctx = journal.WithInvocationID(ctx, id)
+	// Join this invocation to the ancestry it inherited, so the locks it takes are
+	// attributable to it and a descendant can recognize them as its own ancestor's.
+	ctx = types.AppendInvocationAncestor(ctx, os.Getpid(), id)
 
 	started := journal.Event{Kind: journal.KindStarted, Command: &cmd, MagusVersion: magusVersion}
 	finish := func(ctx context.Context, runErr error) {

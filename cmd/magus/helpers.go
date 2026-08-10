@@ -188,6 +188,13 @@ type errSilent struct{ exitCode int }
 
 func (errSilent) Error() string { return "silent exit" }
 
+// AlreadyReported says the failure has already been explained to the user, so no caller should
+// print this error's text. exitCodeOf has always honored that locally; the method states
+// it for the ADOPTED path too, where the error crosses a socket and the process that
+// receives it cannot see this type. Without it a forwarded failure reports itself as
+// "silent exit", which is a sentence about magus's internals and not about the failure.
+func (errSilent) AlreadyReported() bool { return true }
+
 // exitUsage is the exit code for a command-line misuse: a missing or unknown
 // subcommand, a wrong argument count, an unrecognized value. It is deliberately
 // distinct from 1:

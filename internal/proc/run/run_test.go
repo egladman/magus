@@ -5,11 +5,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 // TestExecEmitsExecEventWithinStep confirms Exec emits a KindExec event tagged with the
@@ -133,11 +136,45 @@ func TestChildEnvReportsWithheldDaemonVars(t *testing.T) {
 	t.Setenv("MAGUS_DAEMON_SOCKET", "unix:///tmp/p.sock")
 	t.Setenv("MAGUS_DAEMON_ADDRESS", "unix:///tmp/p.sock")
 	// Both present in the process env, no overrides: both are withheld from the child.
-	_, withheld := childEnv(nil, nil)
+	_, withheld := childEnv(context.Background(), nil, nil)
 	assert.ElementsMatch(t, DaemonForwardVars, withheld, "both daemon pointers withheld")
 	// An override that re-adds one (a nested magus forwarding) means it is NOT withheld.
-	_, withheld = childEnv(nil, []string{"MAGUS_DAEMON_SOCKET=unix:///tmp/child.sock"})
+	_, withheld = childEnv(context.Background(), nil, []string{"MAGUS_DAEMON_SOCKET=unix:///tmp/child.sock"})
 	assert.Equal(t, []string{"MAGUS_DAEMON_ADDRESS"}, withheld, "re-injected var is not reported withheld")
+}
+
+// TestChildEnvCarriesInvocationAncestry pins the ONLY carrier the ordinary nested case
+// has. A nested magus normally runs as its own process (childEnv withholds the daemon
+// socket), so if this variable does not reach it, the child cannot recognize a lock its own
+// ancestor holds and the deadlock this machinery exists to refuse comes straight back.
+//
+// It also pins the drop: the value must come from ctx, never from this process's
+// environment, because under the daemon the process env belongs to no invocation at all.
+// Mutates env; not parallel.
+func TestChildEnvCarriesInvocationAncestry(t *testing.T) {
+	t.Setenv(AncestorsEnvVar, "9:inv-stale")
+
+	ctx := types.AppendInvocationAncestor(context.Background(), 100, "inv-outer")
+	ctx = types.AppendInvocationAncestor(ctx, 101, "inv-nested")
+	env, _ := childEnv(ctx, nil, nil)
+
+	var got []string
+	for _, kv := range env {
+		if name, value, _ := strings.Cut(kv, "="); name == AncestorsEnvVar {
+			got = append(got, value)
+		}
+	}
+	assert.Equal(t, []string{"100:inv-outer,101:inv-nested"}, got,
+		"exactly one ancestry entry, oldest first, from ctx and not from the process env")
+
+	// No ancestry on ctx: the inherited value must not be passed through either, or a child
+	// inherits an ancestry that belongs to whoever started this process.
+	env, _ = childEnv(context.Background(), nil, nil)
+	for _, kv := range env {
+		if name, _, _ := strings.Cut(kv, "="); name == AncestorsEnvVar {
+			t.Errorf("child got %q with no ancestry on ctx; a stale inherited value leaked", kv)
+		}
+	}
 }
 
 func TestExecSuccess(t *testing.T) {

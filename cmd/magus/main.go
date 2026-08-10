@@ -62,6 +62,7 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
@@ -90,6 +91,10 @@ func runCLI() int {
 	// Stamp the binary's version onto the root context so host methods (the drift
 	// classifier) can tell a dev build from the pinned release without importing main.
 	rootCtx = types.WithMagusVersion(rootCtx, version)
+	// Adopt the ancestry a parent magus passed down, before anything can take a project
+	// lock. Stamped here rather than in BeginInvocation because every subcommand that
+	// locks needs it, including the ones with no invocation record of their own (clean).
+	rootCtx = types.WithInvocationAncestors(rootCtx, run.AncestorsFromEnv())
 
 	res, exitCode := startup(rootCtx, args)
 

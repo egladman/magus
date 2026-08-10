@@ -622,6 +622,12 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 			// Mirrors os.exec's runResult.
 			cmdErr = fmt.Errorf("magus.%s: %s: %w", label, strings.Join(full, " "), err)
 		case res.Code != 0:
+			// The child's own diagnostic is not repeated here. It reaches the console
+			// itself - printed by the child when it runs as its own process, and by
+			// proc.Forward when it was adopted - so folding it into this message too
+			// produced the same paragraph twice, once truncated into a `cause:` line.
+			// Under opts.quiet nothing streams by construction, and there the caller's
+			// own ExecResult.Stderr is the account of the failure.
 			cmdErr = fmt.Errorf("magus.%s: %s exited with code %d", label, strings.Join(full, " "), res.Code)
 		}
 		if res.Started {

@@ -57,6 +57,21 @@ func NotAdopted(err error) bool {
 	return errors.As(err, &e) && e.NotAdopted()
 }
 
+// AlreadyReported reports whether err - or any error it wraps - says its failure has
+// already been explained to the user, so its own text carries no information worth
+// showing. A dispatch that printed a diagnostic and then returned a bare sentinel is the
+// case: the sentinel's message describes magus's control flow, not the failure.
+//
+// It exists because that fact has to cross a process boundary. The server sends the
+// error's text in RunReply.Err and the client prints it; without a way to ask, every
+// adopted failure would report itself with whatever placeholder the sentinel carries.
+// Same shape as NotAdopted above, for the same reason: the classification belongs on the
+// error, not in a list of strings to match.
+func AlreadyReported(err error) bool {
+	var e interface{ AlreadyReported() bool }
+	return errors.As(err, &e) && e.AlreadyReported()
+}
+
 // decodeWireError rebuilds a typed proc error from the message string a server sent
 // over the wire. The error crossed the daemon->client process boundary as plain text,
 // losing its Go type; matching that text back to the known sentinel restores errors.Is

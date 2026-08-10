@@ -13,6 +13,7 @@ import (
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -209,6 +210,51 @@ func TestServiceAcquireNoHost(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not host shared services")
 }
+
+// TestRunAdoptsClientAncestry pins the plumbing the daemon's re-entrancy check rests on.
+// The daemon, not the client, takes the project locks for an adopted run, so without the
+// client's ancestry on ctx it cannot tell a lock it holds for THIS client's parent (a
+// deadlock it must refuse) from one it holds for an unrelated client (a wait that will
+// end). The ancestry only reaches it over the wire.
+func TestRunAdoptsClientAncestry(t *testing.T) {
+	got := make(chan []string, 1)
+	s := newJobService(func(ctx context.Context, _ []string) error {
+		got <- types.InvocationAncestorsFromContext(ctx)
+		return nil
+	})
+
+	var reply RunReply
+	want := []string{"inv-outer", "inv-nested"}
+	require.NoError(t, s.run(RunRequest{Args: []string{"run", "build"}, Ancestors: want}, &reply))
+	assert.Equal(t, 0, reply.ExitCode)
+	assert.Equal(t, want, <-got, "the handler must see the ancestry the client sent")
+}
+
+// TestRunWithholdsReportedError pins that a failure the handler already explained does not
+// come back as its sentinel's text. The client PRINTS RunReply.Err, so a dispatch that
+// printed a diagnostic and returned a bare "silent exit" would have that phrase reported
+// to the user as the reason their run failed.
+func TestRunWithholdsReportedError(t *testing.T) {
+	var reply RunReply
+	s := newJobService(func(context.Context, []string) error { return reportedErr{} })
+	require.NoError(t, s.run(RunRequest{Args: []string{"run", "build"}}, &reply))
+	assert.Equal(t, 1, reply.ExitCode, "the run still failed")
+	assert.Empty(t, reply.Err, "an already-reported failure must not ship its placeholder text")
+
+	// An ordinary error is the other half: its message IS the only account of the failure
+	// an adopted client gets, so it must cross.
+	reply = RunReply{}
+	s = newJobService(func(context.Context, []string) error { return errors.New("no such target") })
+	require.NoError(t, s.run(RunRequest{Args: []string{"run", "nope"}}, &reply))
+	assert.Equal(t, 1, reply.ExitCode)
+	assert.Equal(t, "no such target", reply.Err)
+}
+
+// reportedErr stands in for cmd/magus's errSilent, which proc cannot import.
+type reportedErr struct{}
+
+func (reportedErr) Error() string  { return "silent exit" }
+func (reportedErr) AlreadyReported() bool { return true }
 
 // TestShutdownClosesServer pins the fix for the silent `server stop` no-op: a shutdown RPC
 // must actually tear the server down, not just acknowledge. It asserts the observable
