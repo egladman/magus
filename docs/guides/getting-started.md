@@ -56,7 +56,7 @@ export fun preflight(ctx: magus\Context, args: [str]) > void {}
 export fun generate(ctx: magus\Context, args: [str]) > void { ctx.needs(preflight); }
 export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); }
 export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); }
-export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); os\exec("echo", ["Hello from magus"]); }
+export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); proc\exec("echo", ["Hello from magus"]); }
 export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(format); }
 
 // 'ci' is the conventional anchor that `magus affected ci` keys off.
@@ -82,7 +82,7 @@ magus run build     # run the build target for the project under the cwd
 
 ## 4. Bind your first spell
 
-The starter `build` shells out with `os\exec`. That is fine for a one-off, but real toolchains belong in a **spell**: a library of tool-native operations plus the cache metadata that toolchain needs. A spell runs nothing on its own; it contributes operations (`go-build`, `go-test`, `go-vet`, ...) that your targets compose, and it tells the cache which files are inputs and outputs. See [spells.md](../concepts/spells.md), and [Spells vs Targets](../concepts/spells.md#spells-vs-targets) for where the line falls.
+The starter `build` shells out with `proc\exec`. That is fine for a one-off, but real toolchains belong in a **spell**: a library of tool-native operations plus the cache metadata that toolchain needs. A spell runs nothing on its own; it contributes operations (`go-build`, `go-test`, `go-vet`, ...) that your targets compose, and it tells the cache which files are inputs and outputs. See [spells.md](../concepts/spells.md), and [Spells vs Targets](../concepts/spells.md#spells-vs-targets) for where the line falls.
 
 Bind the built-in `go` spell by importing it and listing it in `magus\project`, then compose its ops into your targets. Op keys are the CLI command in kebab-case, so they are reached by subscript (`go["go-build"]`), and every op call takes the target's `ctx` as its first argument:
 

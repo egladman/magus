@@ -118,7 +118,7 @@ ctx.needs(build);                      // dot: a method ON the ctx value
 ```
 
 Backslash reaches into a **module**; dot reaches into a **value** you already have.
-So `os\exec` is the `exec` function the `os` module provides, while `site.docPages`
+So `proc\exec` is the `exec` function the `os` module provides, while `site.docPages`
 is a field on the `site` object. A module name never appears on the left of a dot,
 and a variable never appears on the left of a backslash.
 

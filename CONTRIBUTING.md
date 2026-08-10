@@ -401,7 +401,7 @@ Two things worth knowing before you change any of it:
 - **The console lint target conflates formatting with linting, and should not.** The
   typescript spell exposes `biome-check` and `biome-format` as separate ops precisely so
   a target can compose them independently, but `console/magusfile.buzz` calls
-  `os\exec("pnpm", ["exec", "biome", "check", "src"])` directly, and `biome check`
+  `proc\exec("pnpm", ["exec", "biome", "check", "src"])` directly, and `biome check`
   reports formatting as lint findings. That is the exact blur the concepts page argues
   against, in our own tree. Route it through the spell ops when you next touch it.
 

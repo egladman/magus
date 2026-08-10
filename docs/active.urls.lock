@@ -283,6 +283,7 @@ reference/buzz/markdown/
 reference/buzz/os/
 reference/buzz/path/
 reference/buzz/platform/
+reference/buzz/proc/
 reference/buzz/semver/
 reference/buzz/strings/
 reference/buzz/template/
@@ -546,6 +547,7 @@ tags/linux/
 tags/load/
 tags/logging/
 tags/logs/
+tags/macos/
 tags/magus-query/
 tags/magus-run/
 tags/magus-server/
@@ -650,6 +652,7 @@ tags/vitest/
 tags/volatility/
 tags/ward/
 tags/watch/
+tags/windows/
 tags/workspace-provider/
 tags/workspace-providers/
 tags/workspace/

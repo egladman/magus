@@ -119,11 +119,11 @@ export fun list_projects(target: Target, cb: fun(any)) > [Project] {
     // cloud-onboarding prompt, NX_TUI and NX_INTERACTIVE keep nx from trying to
     // draw a terminal UI while magus captures its output.
     os\withEnv({"NX_NO_CLOUD": "true", "NX_TUI": "false", "NX_INTERACTIVE": "false"}, fun() > void {
-        final listed = os\exec("npx", args: ["--no-install", "nx", "show", "projects", "--json"], dir: r);
+        final listed = proc\exec("npx", args: ["--no-install", "nx", "show", "projects", "--json"], dir: r);
         final names = json\parse(listed.stdout);
 
         foreach (name in names as [str]) {
-            final shown = os\exec("npx", args: ["--no-install", "nx", "show", "project", name, "--json"], dir: r);
+            final shown = proc\exec("npx", args: ["--no-install", "nx", "show", "project", name, "--json"], dir: r);
             final detail = json\parse(shown.stdout) as? {str: any};
             projects.append(Project{
                 path   = ((detail?["root"]) as? str) ?? "",
@@ -184,7 +184,7 @@ The nx cloud-onboarding prompt is TTY-gated, but its non-interactive skip was
 only fixed around nx 20.2, and the nx 21 TUI is interactive-only regardless
 of TTY. `NX_NO_CLOUD`, `NX_TUI`, and `NX_INTERACTIVE` cover all three cases at
 once - belt and suspenders costs nothing here, so `list_projects` sets them
-unconditionally around its two `os\exec` calls.
+unconditionally around its two `proc\exec` calls.
 
 A one-shot nx command also starts the nx daemon, and that daemon outlives the
 magus invocation that started it: it self-terminates after 3 hours idle,

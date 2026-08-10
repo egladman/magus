@@ -20,6 +20,7 @@
 
 import "magus";
 import "os";
+import "proc";
 import "vcs";
 
 magus\project({
@@ -49,7 +50,7 @@ export fun stamp(ctx: magus\Context, args: [str]) > void {
 export fun tools(ctx: magus\Context, args: [str]) > void {
     foreach (tool in ["sh", "definitely-absent-zzz"]) {
         try {
-            magus\info(tool + " -> " + os\which(tool));
+            magus\info(tool + " -> " + proc\which(tool));
         } catch (e) {
             if (e["code"] == "MGS3003") {
                 magus\info(tool + " is not installed; skipping the steps that need it");
@@ -70,7 +71,7 @@ export fun gate(ctx: magus\Context, args: [str]) > void {
 
     foreach (tool in ["sh", "definitely-absent-zzz"]) {
         try {
-            os\which(tool);
+            proc\which(tool);
         } catch (e) {
             // A tool the project pins is actionable: install it. One it prefers is
             // not, so it is reported and the build continues.

@@ -70,7 +70,7 @@ magus run lint .         # runs your `lint` target, which calls go's golangci-li
 
 - **Reach for a target** when you want a _runnable verb_: the thing a teammate or CI types (`magus run test api`). Targets are your **public surface**; declare one per lifecycle step you want runnable. Until you export a target for an operation, `magus run <op>` is a graceful no-op.
 - **Reach for a spell** when you want to _package a toolchain's operations_ and _tell the cache which files matter_. Bind a built-in or load a spell file. Call its ops from inside target bodies.
-- **Skip the spell entirely** for a one-off step with arbitrary logic: write the target body directly with the host modules (e.g. `os\exec(...)`). A spell earns its keep when an operation recurs and has cache inputs worth declaring.
+- **Skip the spell entirely** for a one-off step with arbitrary logic: write the target body directly with the host modules (e.g. `proc\exec(...)`). A spell earns its keep when an operation recurs and has cache inputs worth declaring.
 - **Use the `::` escape hatch** (`magus run go::go-vet api`) only for ad-hoc runs or introspection. The everyday surface is your composed targets.
 
 magus deliberately does **not** decide what "lint" or "format" means. A spell supplies tool-native operations in the tool's own words; your magusfile decides which op backs each lifecycle target. Toolchain knowledge lives in the spell (reusable, cacheable); policy lives in the magusfile (yours to compose).
@@ -115,7 +115,7 @@ fun nodeServe(target: Target) > Service {
 export fun mgs_listTargets() > any { return {"go-fmt": goFmt, "serve": nodeServe}; }
 ```
 
-**In-VM work is still not an op.** Custom logic magus neither forks nor blocks on (HTTP, signing, a remote cache backend's get/put) is not an op at all. A remote cache backend is a separate contract magus's core invokes by name (see [Remote caching](cache/remote.md)); any other one-off logic belongs in a magusfile target body written directly with the host modules (`os\exec`, `http`, `crypto`).
+**In-VM work is still not an op.** Custom logic magus neither forks nor blocks on (HTTP, signing, a remote cache backend's get/put) is not an op at all. A remote cache backend is a separate contract magus's core invokes by name (see [Remote caching](cache/remote.md)); any other one-off logic belongs in a magusfile target body written directly with the host modules (`proc\exec`, `http`, `crypto`).
 
 ## Binding a spell to a project
 
@@ -274,7 +274,7 @@ the point of this section.
 ### What magus does not restrict
 
 A spell has the whole [host module](../reference/buzz/index.md) surface:
-`os\exec`, `http`, `fs`, `crypto`, the lot. It can run any command your shell
+`proc\exec`, `http`, `fs`, `crypto`, the lot. It can run any command your shell
 can, reach the network, and read and write files. Nothing here is sandboxed
 per-spell, and importing a spell is trusting it, the same way adding a dependency
 is trusting it.
@@ -288,7 +288,7 @@ automatically accounted for.
 
 | Bound | Applies to | Default |
 | --- | --- | --- |
-| Concurrency slot | every `os\exec`, so parallel work respects `-j` | on |
+| Concurrency slot | every `proc\exec`, so parallel work respects `-j` | on |
 | Own process group | subprocesses, so Ctrl+C reaches magus and not them | on |
 | Target deadline | a whole target, subprocesses included | **off** (`target_timeout`) |
 | Filesystem sandbox | the magus process, where the platform supports it | per [sandbox](sandbox.md) config |
@@ -317,12 +317,12 @@ performance budget.
 ### A gap worth knowing
 
 The Buzz language stdlib ships its own `os\execute`, separate from magus's
-`os\exec`. It spawns a subprocess without taking a concurrency slot, without its
+`proc\exec`. It spawns a subprocess without taking a concurrency slot, without its
 own process group, and without appearing in the run log. It is the one way a
 spell can run work that magus does not account for, and telling the two apart by
 name alone is not obvious.
 
-Prefer `os\exec`. It is the governed path, and everything in the table above
+Prefer `proc\exec`. It is the governed path, and everything in the table above
 applies to it.
 
 ## Lifecycle: bind → contribute → compose → run

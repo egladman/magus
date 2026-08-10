@@ -332,7 +332,7 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   probe forks a process, so the daemon caches each reading for a minute and every row
   carries its age instead of implying it is live. magus still never learns which versions
   exist upstream, never selects one, and carries no end-of-life data.
-- **`opts.quiet` on `os\exec`, `os\exec_sh`, and `vcs\cmd`.** Captures output without
+- **`opts.quiet` on `proc\exec`, `proc\shell`, and `vcs\cmd`.** Captures output without
   echoing it, matching what `magus\cmd` and friends already accepted. Read in the one
   path all three share, so they cannot drift into different option sets.
 - **A doctor check that the declared `required_version` covers the magusfile keys in
@@ -489,7 +489,7 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 - A magusfile can read a credential through a declared provider.
   `magus\secret.provider("<spell>")` selects the backend and `magus\secret.read("<ref>")`
   reads one reference. Where a secret comes from is a spell's problem, so 1Password, Vault,
-  or AWS Secrets Manager are an `os\exec` away and magus grows no per-provider code; with no
+  or AWS Secrets Manager are an `proc\exec` away and magus grows no per-provider code; with no
   provider declared, the built-in one treats a reference as an environment variable name.
   A value is a secret because it was read through the resolver, never because its name
   looked credential-shaped, so magus can keep it out of what it persists: the captured

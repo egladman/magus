@@ -22,7 +22,7 @@ Every op is invoked as `python["<op>"](ctx, opts?)`. The first argument is the t
 | `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L173) |
 
 
-Working directory and environment are NOT options: they ride the context, as `python["<op>"](ctx.withCwd("sub"))` and `python["<op>"](ctx.withEnv({"CGO_ENABLED": "0"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise - passing either as an option is an error.
+Working directory and environment are NOT options: they ride the context, as `python["<op>"](ctx.withCwd("sub"))` and `python["<op>"](ctx.withEnv({"CGO_ENABLED": "0"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise; passing either as an option is an error.
 
 Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).
 

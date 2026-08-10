@@ -19,6 +19,7 @@
 import "magus";
 import "os";
 
+import "proc";
 // The shape, declared once. Note what user_ref holds: a REFERENCE to a credential -
 // under the built-in provider, the name of an environment variable - never the value.
 // That is the whole trick to keeping secrets out of a magusfile: this file describes
@@ -125,7 +126,7 @@ export fun login(ctx: magus\Context, args: [str]) > void {
     foreach (reg in selected) {
         final user = magus\secret.read(reg.user_ref);
         final token = magus\secret.read(reg.token_ref);
-        os\exec("env", args: ["echo", "login", reg.host, "-u", user, "--password-stdin"],
+        proc\exec("env", args: ["echo", "login", reg.host, "-u", user, "--password-stdin"],
             dir: ".", opts: {"stdin": token});
         magus\info("login: " + reg.host + " authenticated as " + user);
     }
