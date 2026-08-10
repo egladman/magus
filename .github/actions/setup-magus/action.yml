@@ -287,6 +287,28 @@ runs:
       shell: bash
       run: echo "$RUNNER_TOOL_CACHE/magus/bin" >> "$GITHUB_PATH"
 
+    # The run history is magus's state, and restoring it belongs with installing magus
+    # for the same reason setup-go restores the module cache and setup-node the npm one:
+    # a caller should get a ready tool, not a tool plus three blocks of cache YAML it has
+    # to copy correctly. It used to live in the caller's workflow - a "Set history path"
+    # step and an actions/cache/restore, duplicated per job - which meant every adopting
+    # repository had to reproduce both, and ours had them in two of five jobs.
+    #
+    # A miss is free and expected (a fork, a first run, a cache aged out after 7 days).
+    # What a miss costs is the shard forecaster's duration data, so the plan falls back
+    # to a flat estimate rather than failing.
+    - name: Set the run history path
+      shell: bash
+      run: echo "MAGUS_HISTORY_PATH=$RUNNER_TEMP/magus-history.json" >> "$GITHUB_ENV"
+
+    - name: Restore the run history
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ runner.temp }}/magus-history.json
+        key: ${{ github.workflow }}-magus-history-v1-${{ github.run_id }}
+        restore-keys: |
+          ${{ github.workflow }}-magus-history-v1-
+
     # No job here runs a daemon, so MCP/console have nothing to listen on.
     # Exported via GITHUB_ENV so every later `magus` call in the job picks
     # it up, not just this step. Otherwise magus doctor's console check

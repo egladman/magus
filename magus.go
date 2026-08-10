@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
@@ -592,9 +593,81 @@ func (m *Magus) Where(dir string) (*types.Project, bool) {
 	return project.Where(m.ws, dir)
 }
 
+// BaseLastPassed is the base ref that means "the commit this branch last completed a
+// fully passing run at", read from the run history rather than from the VCS. Every
+// entry point that takes a base ref accepts it, so `--base last-passed`,
+// MAGUS_VCS_BASE_REF, and magus\affected() all reach the same resolution.
+const BaseLastPassed = "last-passed"
+
 // Affected computes projects touched by VCS changes since base.
 func (m *Magus) Affected(ctx context.Context, base string) (*types.AffectedResult, error) {
+	base, err := m.resolveLastPassed(ctx, base)
+	if err != nil {
+		return nil, err
+	}
 	return project.Affected(ctx, m.ws, base)
+}
+
+// resolveLastPassed translates [BaseLastPassed] into the commit the current branch last
+// passed at, and passes any other base through untouched.
+//
+// It resolves HERE rather than in vcs.Resolve's precedence chain because the answer does
+// not come from the VCS at all - it comes from the run history, which the vcs package
+// must not learn about. Affected is the single funnel every affected computation goes
+// through (ExpandAffected and Plan both call it), so one resolution covers the CLI, the
+// shard planner, and magus\affected in a magusfile.
+//
+// The fallback when nothing was recorded is the PARENT of HEAD, announced. It is not the
+// configured default: on the branch that builds itself the default base is that same
+// branch, so falling back to it compares a commit against itself, reports nothing
+// affected, and runs nothing - a gate that passes having checked nothing. Diffing one
+// commit is the wrong answer only when a preceding run failed, which is loud here rather
+// than silent.
+func (m *Magus) resolveLastPassed(ctx context.Context, base string) (string, error) {
+	// Resolve FIRST and test the winner, rather than testing the argument. The sentinel
+	// can arrive from --base, MAGUS_VCS_BASE_REF, magus.yaml, or a per-VCS env var, and
+	// vcs.Resolve is what knows the precedence between them. Asking it who won means the
+	// sentinel works from every source without this function restating that order - and
+	// without a caller who set the env var getting `git diff last-passed`.
+	res, err := vcs.Resolve(ctx, m.ws.Root, base, m.ws.VCSOptions)
+	if err != nil {
+		return "", err
+	}
+	if res.Base != BaseLastPassed {
+		return base, nil
+	}
+	// Refused, not silently downgraded. With the run log off there is nothing to read,
+	// and every fallback available here is a base that gates less than the caller asked
+	// for - which is the failure this base ref exists to prevent. Naming the switch that
+	// caused it beats a warning nobody reads under a green check.
+	if !m.cfg.CI.RecordRuns {
+		return "", fmt.Errorf("base %q needs the run log, and ci.record_runs is off; set it true or pass an explicit --base", BaseLastPassed)
+	}
+	if res.VCS == nil || res.Source == types.VCSSourceDisabled {
+		return "", fmt.Errorf("base %q needs a VCS to resolve against, and none is active", BaseLastPassed)
+	}
+	meta, err := res.VCS.Metadata(ctx, m.ws.Root)
+	if err != nil {
+		return "", fmt.Errorf("base %q: read %s metadata: %w", BaseLastPassed, res.Name, err)
+	}
+
+	var hist forecast.History
+	if err := hist.Load(ctx, m.cfg.HistoryPath); err != nil {
+		return "", fmt.Errorf("base %q: %w", BaseLastPassed, err)
+	}
+	if commit, ok := hist.PassedCommit(meta.Ref, ""); ok {
+		slog.DebugContext(ctx, "affected: base resolved from run history",
+			slog.String("ref", meta.Ref), slog.String("commit", commit))
+		return commit, nil
+	}
+
+	parent := res.VCS.ParentRef()
+	slog.WarnContext(ctx, "affected: no passing run recorded for this ref; diffing its parent commit instead",
+		slog.String("ref", meta.Ref),
+		slog.String("base", parent),
+		slog.String("history_path", m.cfg.HistoryPath),
+		slog.String("consequence", "anything merged by a run that did not pass is NOT in this diff"))
+	return parent, nil
 }
 
 // AffectedFromPaths computes the affected set from an explicit file list.

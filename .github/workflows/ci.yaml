@@ -66,9 +66,6 @@ jobs:
       count:         ${{ steps.plan.outputs.count }}
       max_parallel:  ${{ steps.plan.outputs.max_parallel }}
     steps:
-      - name: Set history path
-        run: echo "MAGUS_HISTORY_PATH=$RUNNER_TEMP/magus-history.json" >> "$GITHUB_ENV"
-
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           fetch-depth: 0
@@ -101,14 +98,6 @@ jobs:
       - name: Doctor
         run: magus doctor
 
-      - name: Restore magus run history
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: ${{ env.MAGUS_HISTORY_PATH }}
-          key: ${{ github.workflow }}-magus-history-v1-${{ github.run_id }}
-          restore-keys: |
-            ${{ github.workflow }}-magus-history-v1-
-
       # Fails the run before a single shard starts. Uncommitted generated output is the
       # most common way CI breaks here, and without this it is found INSIDE a shard -
       # after setup-magus has built magus from source, mise has installed the toolchain,
@@ -126,8 +115,23 @@ jobs:
       - name: Fail fast on uncommitted generated output
         run: magus run generate . libs/gopherbuzz --no-default-charms
 
+      # last-passed on a push, the configured default on a pull request.
+      #
+      # A push to main has no useful default base: magus's is origin/main, which on main
+      # IS the commit being pushed, so the diff is empty. Every main push planned
+      # `projects=0 shards=0`, the `count > 0` guard skipped every shard, and the run
+      # gated nothing - which is also why no shard ever uploaded a history, `report`
+      # logged "no shard histories; nothing to merge", and every pull request since
+      # planned its shards with no duration data at all.
+      #
+      # last-passed reads the run log for the commit this branch last passed `ci` at, so
+      # a run that was cancelled or failed leaves its commits in the NEXT run's diff
+      # instead of being stepped over. A pull request needs none of it: origin/main
+      # already IS its merge base, and an empty value falls through to that default.
       - id: plan
         name: Compute shard matrix
+        env:
+          MAGUS_VCS_BASE_REF: ${{ github.event_name == 'push' && 'last-passed' || '' }}
         run: magus affected ci --plan | magus run ci-shard:gha --no-default-charms
 
   ci:
@@ -149,9 +153,6 @@ jobs:
         with:
           fetch-depth: 0
           filter: blob:none
-
-      - name: Set history path
-        run: echo "MAGUS_HISTORY_PATH=$RUNNER_TEMP/magus-history.json" >> "$GITHUB_ENV"
 
       # install stays ON (the default). With install: false the action adds the shims
       # directory to PATH and computes the exported PATH BEFORE any tool exists, so a
@@ -179,8 +180,17 @@ jobs:
 
       - uses: crazy-max/ghaction-github-runtime@b3a9207c0e1ef41f4cf215303c976869d0c2c1c4 # v3.0.0
 
-      - name: Install native build dependencies (webkit, codec)
-        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev liblzma-dev libzstd-dev
+      # internal/codec's cgo xz/zstd fast path is the only thing here that needs a
+      # system library, and these two are it. libgtk-3-dev and libwebkit2gtk-4.1-dev
+      # used to be installed alongside them and were never needed: nothing in the tree
+      # references webkit or gtk (the install line was their only mention in the whole
+      # repository), no dependency pulls a webview, and the console is a PWA rather
+      # than a native shell. They arrived in the bulk workflow replacement b31229bcc,
+      # not in response to a build failure, and cost ~10-15s per shard. If some future
+      # native target does need them, this step fails loudly at compile - which is a
+      # better signal than installing them forever on the chance that it might.
+      - name: Install native build dependencies (codec)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
 
       # `describe <noun> [name]` - the noun comes FIRST, and the template fields
       # are the -o json names. This previously read `describe -o template=... $p`
@@ -196,14 +206,6 @@ jobs:
           for p in ${{ matrix.projects }}; do
             magus describe project "$p" -o 'template={{range .projects}}::notice title=affected::{{.path}}{{end}}'
           done
-
-      - name: Restore magus run history
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: ${{ env.MAGUS_HISTORY_PATH }}
-          key: ${{ github.workflow }}-magus-history-v1-${{ github.run_id }}
-          restore-keys: |
-            ${{ github.workflow }}-magus-history-v1-
 
       - name: Run CI for shard
         uses: ./.github/actions/magus
@@ -232,15 +234,6 @@ jobs:
         with:
           name: magus-logs-${{ matrix.shard }}
           path: .magus/logs/
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: Upload shard history
-        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: magus-history-${{ matrix.shard }}
-          path: ${{ env.MAGUS_HISTORY_PATH }}
           if-no-files-found: ignore
           retention-days: 7
 

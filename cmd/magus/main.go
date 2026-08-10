@@ -502,11 +502,19 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	gen.BindFlags(fs, &globalCfg)
 	bindDisplayFlags(fs)
 	fs.Usage = usage
-	// Parse until first non-flag arg (the subcommand).
-	if err := fs.Parse(args); err != nil && !errors.Is(err, flag.ErrHelp) {
-		stopFlags()
-		slog.Error("flag parse failed", slog.String("error", err.Error()))
-		return startupResult{cleanup: cleanup}, 1
+	// Parse until first non-flag arg (the subcommand). ErrHelp means an explicit -h or
+	// --help in the GLOBAL position, which the flag package has already answered by
+	// printing usage; it is recorded rather than swallowed so the no-subcommand branch
+	// below can tell "the user asked for help" (exit 0) from "the user asked for
+	// nothing" (exit 2).
+	helpRequested := false
+	if err := fs.Parse(args); err != nil {
+		if !errors.Is(err, flag.ErrHelp) {
+			stopFlags()
+			slog.Error("flag parse failed", slog.String("error", err.Error()))
+			return startupResult{cleanup: cleanup}, 1
+		}
+		helpRequested = true
 	}
 	applyDisplay()
 	rest := fs.Args()
@@ -528,9 +536,22 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	cfg = globalCfg
 	stopFlags()
 
+	// exitUsage, not 0. No subcommand is the same category as an unknown one - the
+	// invocation was wrong and nothing was attempted - and that path already exits 2
+	// (see dispatchSub's default). Returning 0 made bare `magus` a command that
+	// reports success having done nothing, so `magus $CMD` with an empty CMD is a
+	// green step in any script or CI action that builds its argv dynamically.
+	//
+	// An EXPLICIT `magus help` / `-h` / `--help` still exits 0: there the usage text
+	// is what was asked for, so printing it IS the work succeeding. That distinction
+	// is the whole of exitUsage's contract in helpers.go - 0 did what was asked, 2 was
+	// asked wrong - and it is why this cannot simply key on "did we print usage".
 	if len(rest) == 0 {
+		if helpRequested {
+			return startupResult{cleanup: cleanup}, 0
+		}
 		usage()
-		return startupResult{cleanup: cleanup}, 0
+		return startupResult{cleanup: cleanup}, exitUsage
 	}
 
 	rootCtx = withTrace(rootCtx, trace)

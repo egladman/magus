@@ -860,3 +860,48 @@ func TestClassifyFiles_PerTargetOutputs(t *testing.T) {
 	}, out[0])
 	assert.Contains(t, out[0].Hint, "generated")
 }
+
+// TestDescribeFileSeesCrossProjectReads pins that a file a target declares via a
+// cross-project ctx.readsFiles reports the READING project in source_of, not just the
+// project whose directory contains it.
+//
+// The regression it guards is not cosmetic. `magus vcs add` decides whether a drifted
+// output is explained by asking, per PROJECT, whether that project has a dirty declared
+// source (types.SplitExplainedOutputs). describeFile built source_of from the project-wide
+// baseline only, while the output side already folded in per-target ctx.writesFiles via
+// AllOutputs - so a cross-project read was invisible, and regenerating an output from a
+// source in another project was reported as MGS4005 environmental drift with "not your
+// change, do not commit".
+//
+// magusfile.buzz's own generate gate declines magus.diagnoseDrift citing this exact
+// symptom, which is how long it went unfixed.
+func TestDescribeFileSeesCrossProjectReads(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		"skills/note.md":        "# a source another project renders\n",
+		"skills/magusfile.buzz": "export fun build(ctx: magus\\Context, args: [str]) > void {}\n",
+		"site/magusfile.buzz": `import "project/../skills" as skills;
+export fun render(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles(skills.file("note.md"));
+    ctx.writesFiles("gen/*.html");
+}
+`,
+	}
+	for rel, body := range files {
+		abs := filepath.Join(root, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+		require.NoError(t, os.WriteFile(abs, []byte(body), 0o644))
+	}
+
+	ws, err := Inspect(context.Background(), root)
+	require.NoError(t, err, "Inspect")
+	m, ok := ws.(*Magus)
+	require.True(t, ok, "Inspect returns *Magus")
+	entries, err := m.ClassifyFiles(context.Background(), []string{"skills/note.md"})
+	require.NoError(t, err, "ClassifyFiles")
+	require.Len(t, entries, 1)
+
+	assert.Contains(t, entries[0].SourceOf, "site",
+		"site declares skills/note.md via a cross-project ctx.readsFiles, so it must appear in source_of; "+
+			"without it magus vcs add calls site's regenerated output MGS4005 and tells the author not to commit it")
+}

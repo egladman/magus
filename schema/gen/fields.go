@@ -77,6 +77,14 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_CI_RUNNER_POOL_BUDGET",
 	},
 	{
+		GoPath:   "CI.RecordRuns",
+		YamlPath: "ci.record_runs",
+		EnvVar:   "MAGUS_CI_RECORD_RUNS",
+		Flag:     fieldtype.FlagNames{Long: "ci-record-runs"},
+		Kind:     fieldtype.KindBool,
+		Usage:    "MAGUS_CI_RECORD_RUNS: RecordRuns keeps the per-branch run log (forecast.Run) in the history file:",
+	},
+	{
 		GoPath:   "Volatility.Enabled",
 		YamlPath: "volatility.enabled",
 		EnvVar:   "MAGUS_VOLATILITY_ENABLED",

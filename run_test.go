@@ -372,7 +372,7 @@ func TestCurrentRevisionNoVCS(t *testing.T) {
 }
 
 // TestCurrentRevisionWithVCS pins the success path CurrentRevisionNoVCS does not
-// reach: a real git repo yields meta.Hash/meta.IsDirty verbatim as (revision, dirty).
+// reach: a real git repo yields meta.ID/meta.IsDirty verbatim as (revision, dirty).
 // Reuses gitRun/writeCommit/gitHeadFull from knowledge_test.go rather than
 // reimplementing a git fixture helper.
 func TestCurrentRevisionWithVCS(t *testing.T) {
@@ -390,7 +390,7 @@ func TestCurrentRevisionWithVCS(t *testing.T) {
 	t.Cleanup(func() { _ = m.Close() })
 
 	revision, dirty := m.CurrentRevision(t.Context())
-	assert.Equal(t, head, revision, "CurrentRevision must pass meta.Hash through verbatim")
+	assert.Equal(t, head, revision, "CurrentRevision must pass meta.ID through verbatim")
 	assert.False(t, dirty, "a freshly committed tree is clean")
 
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("x"), 0o644))

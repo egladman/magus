@@ -17,6 +17,10 @@ func (v jjVCS) Name() string     { return "jj" }
 func (v jjVCS) Claims() []string { return []string{".jj"} }
 func (v jjVCS) Base() string     { return "trunk()" }
 
+// ParentRef is the first parent of the working-copy commit. jj's working copy is
+// itself a commit, so the interesting comparison is against @-, not @.
+func (v jjVCS) ParentRef() string { return "@-" }
+
 // IsSecondaryCheckout reports whether dir is a secondary `jj workspace add`
 // checkout: the primary workspace holds its store in a .jj/repo DIRECTORY, while a
 // secondary workspace's .jj/repo is a FILE pointing at that primary store, so
@@ -140,9 +144,9 @@ func (v jjVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) 
 		return types.VCSMeta{}, fmt.Errorf("jj diff: %w", err)
 	}
 	return types.VCSMeta{
-		ShortHash:  shortHash,
-		Hash:       hash,
-		Branch:     branch,
+		Short:      shortHash,
+		ID:         hash,
+		Ref:        branch,
 		CommitDate: commitDate,
 		IsDirty:    dirtyOut != "",
 	}, nil

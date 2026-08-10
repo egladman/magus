@@ -1037,7 +1037,36 @@ func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.Fil
 		if matchAnyGlob(outputs, path) {
 			entry.OutputOf = append(entry.OutputOf, p.Path)
 		}
-		if matchAnyGlob(step.Sources, path) {
+		// Per-target ctx.readsFiles folded in, for the same reason AllOutputs folds in
+		// per-target ctx.writesFiles above: baseStep is the project-wide baseline, so a
+		// file a target declares only in its own body was invisible here.
+		//
+		// The consequence was not cosmetic. `magus vcs add` asks whether a drifted
+		// output has a dirty declared input behind it, and it asks by PROJECT identity
+		// (types.SplitExplainedOutputs). docs/content-generate declares
+		// workspace.file("cmd/magus/skills/**/*.md"), so editing a skill source
+		// legitimately regenerates docs/reference/skills - but that source reported
+		// source_of=["."] alone, docs was absent, and the regenerated docs were called
+		// MGS4005 environmental drift with "not your change, do not commit". A staging
+		// check that tells you not to commit your own change is one people learn to
+		// override.
+		//
+		// Cross-project refs are kept here, unlike AllOutputs which drops them. The
+		// ownership rule inverts between the two: writing into another tree makes that
+		// project the owner, while READING another tree is a fact about THIS project's
+		// footprint - it is why this project rebuilds, and why it belongs in its
+		// affected set.
+		inputs := make([]string, 0, len(p.TargetInputs))
+		for _, refs := range p.TargetInputs {
+			for _, ref := range refs {
+				owner := ref.Project
+				if owner == "" {
+					owner = p.Path
+				}
+				inputs = append(inputs, joinGlob(owner, ref.Glob))
+			}
+		}
+		if matchAnyGlob(step.Sources, path) || matchAnyGlob(inputs, path) {
 			entry.SourceOf = append(entry.SourceOf, p.Path)
 		}
 	}

@@ -122,6 +122,6 @@ func affectedBisect(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("bisect: %w", err)
 	}
 
-	fmt.Printf("suspected culprit: %s  %s\n", culprit.SHA, culprit.Info)
+	fmt.Printf("suspected culprit: %s  %s\n", culprit.ID, culprit.Info)
 	return nil
 }

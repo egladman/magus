@@ -24,6 +24,11 @@ func (v gitVCS) Name() string     { return "git" }
 func (v gitVCS) Claims() []string { return []string{".git"} }
 func (v gitVCS) Base() string     { return "origin/main" }
 
+// ParentRef is the first parent of the checked-out commit. `^` rather than `~1`:
+// they are the same for a linear commit and differ on a merge, where `^` is the
+// branch being merged INTO - which is the side a CI run wants to measure from.
+func (v gitVCS) ParentRef() string { return "HEAD^" }
+
 // IsSecondaryCheckout reports whether dir is a linked git worktree: its .git is a
 // FILE whose gitdir points under another repo's .git/worktrees/. The main checkout
 // has a .git DIRECTORY, and a submodule's gitdir points under .git/modules/, so
@@ -255,7 +260,7 @@ func (v gitVCS) Bisect(ctx context.Context, dir string, opts types.BisectOptions
 		return types.Culprit{}, err
 	}
 	info, _ := v.commitInfo(ctx, dir, sha)
-	return types.Culprit{SHA: sha, Info: info}, nil
+	return types.Culprit{ID: sha, Info: info}, nil
 }
 
 // isAncestor, commitBeforeTime and commitInfo run via `git -C dir` so they target
@@ -345,9 +350,9 @@ func (v gitVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error)
 		return types.VCSMeta{}, fmt.Errorf("git status: %w", err)
 	}
 	return types.VCSMeta{
-		ShortHash:  shortHash,
-		Hash:       hash,
-		Branch:     branch,
+		Short:      shortHash,
+		ID:         hash,
+		Ref:        branch,
 		CommitDate: commitDate,
 		IsDirty:    dirtyOut != "",
 	}, nil
@@ -493,12 +498,12 @@ func (v gitVCS) RemoteURL(ctx context.Context, dir string) (string, error) {
 	return out, nil
 }
 
-// DefaultBranch resolves the repo's default branch from origin/HEAD, independent of
-// the checked-out branch (types.DefaultBranchReporter), so committed-doc links stay
+// DefaultRef resolves the repo's default branch from origin/HEAD, independent of
+// the checked-out branch (types.DefaultRefReporter), so committed-doc links stay
 // stable across feature branches and worktrees. `git symbolic-ref refs/remotes/origin/HEAD`
 // yields "origin/main"; we strip the "origin/" prefix. Yields ErrVCSUnsupported when
 // origin/HEAD is unset (e.g. a repo cloned without it), so callers fall back.
-func (v gitVCS) DefaultBranch(ctx context.Context, dir string) (string, error) {
+func (v gitVCS) DefaultRef(ctx context.Context, dir string) (string, error) {
 	out, err := vcsOutput(ctx, dir, "git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
 	if err != nil || out == "" {
 		return "", types.ErrVCSUnsupported

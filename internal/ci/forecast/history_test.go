@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,6 +16,56 @@ import (
 
 // fixedNow is a deterministic ingest timestamp so no test depends on wall-clock.
 var fixedNow = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+
+// TestHistorySchemaLockIsStructural walks the Go types by reflection instead of
+// marshalling a fixture, because the fixture-based lock below can only see fields
+// the fixture happens to set. A field added with `omitempty` and left unpopulated
+// there emits no JSON key at all, so the allowlist assertion never runs against it
+// and the whole lock passes while the new field ships unreviewed - which is exactly
+// how `runs` first slipped in.
+//
+// This one is not fixture-dependent: every json tag on the structs is checked
+// whether or not any test constructs a value carrying it.
+func TestHistorySchemaLockIsStructural(t *testing.T) {
+	// Same justification requirement as the fixture lock: an entry here means
+	// someone decided the field is safe to put in a shared CI cache.
+	allowed := map[reflect.Type]map[string]bool{
+		reflect.TypeOf(History{}): {
+			"version": true, "updated_at": true, "constants": true, "projects": true,
+			"setup": true, "alpha": true, "workspace_fallback_ms": true, "runs": true,
+		},
+		reflect.TypeOf(Constants{}): {"setup_p50_ms": true, "alpha_ms": true},
+		reflect.TypeOf(Run{}): {
+			// Commit ids and branch names live here and ONLY here; the cache-safety
+			// notice in history.go carries the reasoning for the exception.
+			"commit": true, "ref": true, "target": true, "status": true, "at": true,
+		},
+		reflect.TypeOf(BucketStats{}): {
+			"p75_ms": true, "samples": true, "recent": true,
+			"hit_count": true, "miss_count": true, "hit_rate": true,
+		},
+		reflect.TypeOf(Stats{}): {
+			"p75_ms": true, "samples": true, "last_updated": true, "recent": true,
+			"buckets": true, "hit_count": true, "miss_count": true, "hit_rate": true,
+			"pass_count": true, "fail_count": true, "volatile_count": true,
+			"recent_outcomes": true,
+		},
+		reflect.TypeOf(Outcome{}): {
+			"result": true, "affected": true, "duration_ms": true, "at": true,
+			"attempts": true, "max_rss_bytes": true,
+		},
+	}
+	for typ, keys := range allowed {
+		for i := range typ.NumField() {
+			f := typ.Field(i)
+			name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+			if name == "" {
+				name = f.Name
+			}
+			assert.Truef(t, keys[name], "unexpected %s field %q (json %q) - add it to this allowlist AND the fixture lock with a safety justification, or remove it", typ.Name(), f.Name, name)
+		}
+	}
+}
 
 // TestHistorySchemaLock asserts that the JSON representation of a fully
 // populated History contains only the approved set of top-level keys. Any
@@ -52,6 +104,7 @@ func TestHistorySchemaLock(t *testing.T) {
 		Setup:               []int64{29_000, 31_000},
 		Alpha:               []int64{4_800, 5_200},
 		WorkspaceFallbackMs: 9_000,
+		Runs:                []Run{{Commit: "39e02449", Ref: "main", Target: "ci", Status: RunPassed, At: time.Now()}},
 	}
 
 	b, err := json.Marshal(h)
@@ -71,6 +124,7 @@ func TestHistorySchemaLock(t *testing.T) {
 		"setup":                 true, // []int64 of per-shard setup observations
 		"alpha":                 true, // []int64 of fitted α observations
 		"workspace_fallback_ms": true, // int64 workspace-wide p75
+		"runs":                  true, // []Run - commit ids and ref names, the ONE exception; see the cache-safety notice in history.go
 	}
 	for k := range top {
 		assert.Truef(t, allowed[k], "unexpected History JSON key %q — add to allowed map with a safety justification, or remove the field", k)
@@ -819,4 +873,52 @@ func TestSave_contextCancelled(t *testing.T) {
 	h := History{Version: HistoryVersion}
 	err := h.Save(ctx, filepath.Join(t.TempDir(), "any.json"))
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+// TestRunLog covers the v5 run log end to end: the last-passed lookup the affected
+// base ref depends on, cross-target isolation, window trimming, and that Merge is a
+// union rather than freshest-wins (two shard histories are different runs, not two
+// readings of one).
+func TestRunLog(t *testing.T) {
+	var h History
+	t0 := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	h.RecordRun(Run{Commit: "aaa", Ref: "main", Target: "ci", Status: RunPassed}, t0)
+	h.RecordRun(Run{Commit: "bbb", Ref: "main", Target: "ci", Status: RunFailed}, t0.Add(time.Hour))
+	h.RecordRun(Run{Commit: "ccc", Ref: "main", Target: "ci", Status: RunFailed}, t0.Add(2*time.Hour))
+
+	if got, ok := h.PassedCommit("main", "ci"); !ok || got != "aaa" {
+		t.Fatalf("PassedCommit = %q,%v; want aaa,true", got, ok)
+	}
+	if n := len(h.FailedSince("main", "ci")); n != 2 {
+		t.Fatalf("FailedSince = %d; want 2", n)
+	}
+	// A different target must not shadow ci's marker.
+	h.RecordRun(Run{Commit: "ddd", Ref: "main", Target: "nightly", Status: RunPassed}, t0.Add(3*time.Hour))
+	if got, _ := h.PassedCommit("main", "ci"); got != "aaa" {
+		t.Fatalf("cross-target leak: got %q; want aaa", got)
+	}
+	// Unknown branch is a clean miss, not a panic.
+	if _, ok := h.PassedCommit("nope", "ci"); ok {
+		t.Fatal("unknown branch reported a commit")
+	}
+	// Window trim.
+	var w History
+	for i := range RunWindow + 25 {
+		w.RecordRun(Run{Commit: "x", Ref: "main", Target: "ci", Status: RunFailed}, t0.Add(time.Duration(i)*time.Minute))
+	}
+	if n := len(w.Runs); n != RunWindow {
+		t.Fatalf("window = %d; want %d", n, RunWindow)
+	}
+	// Merge is a union, not freshest-wins.
+	var a, b History
+	a.RecordRun(Run{Commit: "aaa", Ref: "main", Target: "ci", Status: RunPassed}, t0)
+	b.RecordRun(Run{Commit: "bbb", Ref: "main", Target: "ci", Status: RunFailed}, t0.Add(time.Hour))
+	a.Merge(&b)
+	if n := len(a.Runs); n != 2 {
+		t.Fatalf("merge kept %d runs; want 2 (union)", n)
+	}
+	a.Merge(&b) // idempotent
+	if n := len(a.Runs); n != 2 {
+		t.Fatalf("re-merge duplicated: %d runs; want 2", n)
+	}
 }

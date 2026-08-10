@@ -74,8 +74,8 @@ func deriveSourceBase(ctx context.Context, root string) string {
 	// stay byte-identical no matter which feature branch or worktree generated them.
 	// When the backend can't report a default branch, forgeBlobBase defaults to "main".
 	branch := ""
-	if brancher, ok := res.VCS.(types.DefaultBranchReporter); ok {
-		if b, err := brancher.DefaultBranch(ctx, ws.Root()); err == nil {
+	if brancher, ok := res.VCS.(types.DefaultRefReporter); ok {
+		if b, err := brancher.DefaultRef(ctx, ws.Root()); err == nil {
 			branch = b
 		}
 	}

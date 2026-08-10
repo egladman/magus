@@ -19,6 +19,11 @@ type VCSDriver interface {
 	// against the backend's on-disk signature; no process is spawned.
 	IsSecondaryCheckout(dir string) bool
 	Base() string
+	// ParentRef names the parent of the checked-out commit in this backend's own
+	// revision syntax (git HEAD^, hg p1(.), jj @-). It is the fallback base for a
+	// ref that builds itself, where Base - that ref's own tip - would compare a
+	// commit against itself and report nothing affected.
+	ParentRef() string
 	// Root, ChangedFiles, and Metadata operate on the repository containing dir. An empty
 	// dir uses the process working directory. Passing an explicit dir is required
 	// for correctness when work runs concurrently, since the process cwd is global.
@@ -176,9 +181,20 @@ type CommitRecord struct {
 
 // VCSMeta holds per-revision metadata for embedding in build artifacts.
 type VCSMeta struct {
-	ShortHash string
-	Hash      string
-	Branch    string
+	// ID and Short are the revision identifier and its abbreviation, named to match
+	// Commit.ID above rather than for git's word: "hash" is git and hg, while jj has
+	// a commit_id and a change_id and no hash in its vocabulary at all. One concept
+	// had two names in this file, and Commit.ID is the one that already said so.
+	Short string
+	ID    string
+	// Ref is the movable name pointing at this revision - a git branch, a
+	// Mercurial named branch, a Jujutsu bookmark - or "" when there is none
+	// (jj's working copy is usually an anonymous change, so empty is ordinary
+	// there). Named for the concept rather than for git's word for it, matching
+	// the vcs.ref() a magusfile already calls; "branch" is what two of the three
+	// backends happen to call theirs, which is not the same as it being the
+	// portable name.
+	Ref string
 	// CommitDate stays a string, deliberately not time.Time: each backend
 	// formats it with its own native command (git's `log --format=%ci`, hg's
 	// `{date|isodate}` template, jj's custom "%Y-%m-%d %H:%M:%S %z") and the
@@ -233,7 +249,10 @@ type BisectOptions struct {
 
 // Culprit is the outcome of a successful VCSDriver.Bisect call.
 type Culprit struct {
-	SHA  string
+	// ID is the offending revision, matching Commit.ID and VCSMeta.ID. It was SHA,
+	// which is git's alone - hg reports a node, jj a commit id - and bisect is not a
+	// git-only operation (hg has its own).
+	ID   string
 	Info string // one-line subject, author, and date
 }
 
@@ -276,16 +295,17 @@ type RemoteReporter interface {
 	RemoteURL(ctx context.Context, dir string) (string, error)
 }
 
-// DefaultBranchReporter is an optional capability (sibling of RemoteReporter) for
+// DefaultRefReporter is an optional capability (sibling of RemoteReporter) for
 // VCSDriver implementations that can report the repository's default branch, e.g.
 // "main", independent of whatever branch is currently checked out. Committed
 // artifacts (MAGUS.md's forge links) use it so their URLs stay stable no matter which
 // feature branch or worktree generated them. Callers type-assert for it and degrade
 // gracefully when a backend lacks it.
-type DefaultBranchReporter interface {
-	// DefaultBranch returns the default branch of the repo containing dir, or ""
+type DefaultRefReporter interface {
+	// DefaultRef returns the repo's primary line of development - git's default
+	// branch, hg's "default", jj's trunk() - for the repo containing dir, or ""
 	// with ErrVCSUnsupported when it cannot be determined.
-	DefaultBranch(ctx context.Context, dir string) (string, error)
+	DefaultRef(ctx context.Context, dir string) (string, error)
 }
 
 // TrackedFileReporter is an optional capability (sibling of RemoteReporter) for

@@ -636,7 +636,7 @@ func (m *Magus) CurrentRevision(ctx context.Context) (revision string, dirty boo
 	if err != nil {
 		return "", false
 	}
-	return meta.Hash, meta.IsDirty
+	return meta.ID, meta.IsDirty
 }
 
 // checkToolWindows fails the run when a probed tool falls outside the window its project

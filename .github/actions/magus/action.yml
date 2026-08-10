@@ -7,14 +7,18 @@ description: >
 
   Default mode (merge-history and report both false) runs `magus <command>`, setting
   MAGUS_SHARD/MAGUS_N_SHARDS first so shard-aware subcommands (e.g. `run`) emit
-  ci.shard.total timing events without extra shell logic in the workflow.
+  ci.shard.total timing events without extra shell logic in the workflow. When `shard`
+  is set it also uploads that shard's run history afterwards.
 
-  Merge mode (merge-history: true) ignores `command` and instead restores the
-  prior run history, folds in every shard history this run uploaded
-  (freshest-wins), and saves the merged result for the next run — the
-  aggregation step of a sharded CI run. It is self-contained: it keys the cache
-  by run and stages files under the runner temp dir, so the caller needs no
-  history plumbing of its own.
+  Merge mode (merge-history: true) ignores `command` and instead folds every shard
+  history this run uploaded into the prior one (freshest-wins) and saves the merged
+  result for the next run — the aggregation step of a sharded CI run.
+
+  Between this action and setup-magus the history round trip is complete and no
+  caller writes any of it: setup-magus sets MAGUS_HISTORY_PATH and restores the
+  prior history, default mode uploads each shard's, merge mode folds them back in.
+  A workflow wires three `uses:` lines and gets shard forecasting; it does not copy
+  a cache key, a path, or an artifact pattern, and cannot get one subtly wrong.
 
 inputs:
   command:
@@ -80,60 +84,90 @@ runs:
         # Via env, not interpolation: inputs.command comes from directory names;
         # shell metacharacters would execute if templated into the run line.
         INPUT_COMMAND: ${{ inputs.command }}
-      run: |
-        if [ -z "$INPUT_COMMAND" ]; then
-          echo "::error::magus action: command is required unless merge-history is true"; exit 1
-        fi
-        # Belt-and-braces: reject shell metacharacters (env indirection is the real fix).
-        case "$INPUT_COMMAND" in
-          *[\;\&\|\`\$\(\)\<\>\!\\]*) echo "::error::magus action: command contains shell metacharacters: $INPUT_COMMAND"; exit 1 ;;
-        esac
-        # Host memory is watched by magus itself, not by a loop here. This used to be
-        # a backgrounded shell sampler, and it was the wrong home twice over: it read
-        # `free`/`df`, so it worked on Linux runners and nowhere else, and it was
-        # untestable without stubbing both. internal/hostmem does the same job in Go,
-        # covered by tests, and streams a [warn] line the moment headroom collapses -
-        # which is what has to survive, because a killed runner never lets magus reach
-        # the summary it would otherwise print. See internal/hostmem/watch.go.
-        #
-        # The disk half is gone rather than ported: every sample it ever took reported
-        # 82-85GB free, so it was watching something that was never a candidate. Add it
-        # back when a measurement, not a hunch, says disk is in play.
-        # Word-split is intentional here: INPUT_COMMAND is a space-separated argv.
-        # shellcheck disable=SC2086
-        magus $INPUT_COMMAND
+      # Passing the command through the environment rather than templating it into the
+      # run line is what makes this safe, and it is sufficient on its own - an unquoted
+      # expansion word-splits, it does not interpret `;` or `|` as operators, so
+      # `version; echo PWNED` reaches magus as three arguments and is refused by argument
+      # parsing. A shell-metacharacter reject used to sit here and could only ever have
+      # rejected commands that were already safe.
+      #
+      # Word-split is intentional: INPUT_COMMAND is a space-separated argv.
+      # shellcheck disable=SC2086
+      run: magus $INPUT_COMMAND
+
+    # The write half of the history round trip; setup-magus does the read half. A shard
+    # that ran is a shard with timings worth keeping, so this is keyed on `shard` being
+    # set rather than on an event or a ref: which histories get KEPT is the merge
+    # step's decision (below), and a caller that folds in only main's still gets the
+    # right answer. Uploading one small JSON per shard is the cost of that split.
+    #
+    # always(), because a shard that was cancelled or that failed still measured every
+    # target it finished, and those are the runs whose timings the forecaster most needs.
+    # if-no-files-found: ignore, because a shard killed mid-target never reached the end
+    # of the run that writes the file - and for a run that did not finish, no history is
+    # the honest answer rather than a partial one.
+    - name: Upload this shard's history
+      if: always() && inputs.shard != '' && inputs.merge-history != 'true' && inputs.report != 'true'
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: magus-history-${{ inputs.shard }}
+        path: ${{ runner.temp }}/magus-history.json
+        if-no-files-found: ignore
+        retention-days: 7
 
     # --- merge-history mode --------------------------------------------------
-    # Prior history is the base, then each shard's is folded in. The local path
-    # is private to this action; the cache key (keyed by run) is what threads the
-    # history from the shards through to the next run.
-    - name: Restore previous run history
-      if: inputs.merge-history == 'true'
-      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-      with:
-        path: ${{ runner.temp }}/magus-history.json
-        key: ${{ github.workflow }}-magus-history-v1-${{ github.run_id }}
-        restore-keys: |
-          ${{ github.workflow }}-magus-history-v1-
-
+    # setup-magus already restored the prior history to this path, so this mode only
+    # folds each shard's in (freshest-wins) and saves the result under the run's key.
+    # It used to restore it again here; that step went when setup-magus took over the
+    # read half, since two restores of the same key to the same path is one too many.
+    #
+    # always() on all three: they are the aggregation of a run that has already ended,
+    # and the job-level `if: always()` that gets them scheduled does NOT reach the steps
+    # inside a composite action - a bare `if:` here implies success(), so a failing
+    # summarize step above would silently skip the merge. That is the case history
+    # matters most in: the runs that go red are the ones whose timings the forecaster
+    # needs, and losing them means the next plan plans blind.
     - name: Download shard histories
-      if: inputs.merge-history == 'true'
+      if: always() && inputs.merge-history == 'true'
       uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
       with:
         path: ${{ runner.temp }}/shard-history
         pattern: magus-history-*
 
+    # Two writes, and the second must not be gated on the first. A run whose affected
+    # set was empty uploads no shard history and still passed, and its commit has to be
+    # recorded or `--base last-passed` pins itself to whichever commit last happened to
+    # touch something and widens every later diff without bound.
     - name: Merge histories
-      if: inputs.merge-history == 'true'
+      if: always() && inputs.merge-history == 'true'
       shell: bash
+      env:
+        CI_RESULT: ${{ inputs.ci-result }}
+        REF: ${{ github.ref_name }}
+        COMMIT: ${{ github.sha }}
       run: |
         shopt -s nullglob
         files=("$RUNNER_TEMP"/shard-history/*/magus-history.json)
-        [[ ${#files[@]} -gt 0 ]] || { echo "no shard histories; nothing to merge"; exit 0; }
-        magus config history import --history "$RUNNER_TEMP/magus-history.json" "${files[@]}"
+        if [[ ${#files[@]} -gt 0 ]]; then
+          magus config history import --history "$RUNNER_TEMP/magus-history.json" "${files[@]}"
+        else
+          echo "no shard histories; nothing to merge"
+        fi
+        # Only success and failure are outcomes of THIS commit. A cancelled run measured
+        # nothing conclusive, and recording it as failed would be a lie that then keeps
+        # every following diff wide; leaving it unrecorded is what makes the next run
+        # pick these commits up, which is the entire point.
+        case "$CI_RESULT" in
+          success) STATUS=passed ;;
+          failure) STATUS=failed ;;
+          *)       echo "ci result '$CI_RESULT' is not an outcome; recording nothing"; exit 0 ;;
+        esac
+        magus config history passed \
+          --history "$RUNNER_TEMP/magus-history.json" \
+          --ref "$REF" --commit "$COMMIT" --status "$STATUS"
 
     - name: Save merged run history
-      if: inputs.merge-history == 'true'
+      if: always() && inputs.merge-history == 'true'
       uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ runner.temp }}/magus-history.json
