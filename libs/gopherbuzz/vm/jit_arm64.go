@@ -654,5 +654,7 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 	if mem == nil {
 		return nil
 	}
-	return &compiledJIT{code: mem, entry: &mem[0], maxDepth: maxDepth}
+	// entryDepth is the SAME array the deopt stubs above took their heights from,
+	// so jitRun can check each exit against it. See compiledJIT.entryDepth.
+	return &compiledJIT{code: mem, entry: &mem[0], maxDepth: maxDepth, entryDepth: entry}
 }

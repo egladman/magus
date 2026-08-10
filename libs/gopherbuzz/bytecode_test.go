@@ -2,6 +2,7 @@ package buzz
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -794,8 +795,22 @@ func assertJITMatchesInterp(t *testing.T, src string) {
 	require.NoError(t, err, "jit")
 	if vmpackage.JITAvailable() {
 		require.NotZero(t, vmpackage.JITRunCount(), "JIT did not engage (chunk ineligible?)")
+		assertJITInternallyConsistent(t)
 	}
 	require.Equal(t, want.String(), got.String(), "jit vs interp")
+}
+
+// assertJITInternallyConsistent fails if the last run tripped one of the JIT's own
+// self-checks. Both counters mean a defect in this package rather than anything
+// about the program: a codegen panic, or a native exit whose stack height or
+// resume ip the interpreter refused to resume from. Neither shows up as a wrong
+// answer - the recovery is correct, so a differential assertion alone stays green
+// while the JIT silently stops doing its job - which is exactly why the counters
+// have to be asserted next to it. See vm.JITBadExitCount.
+func assertJITInternallyConsistent(t *testing.T) {
+	t.Helper()
+	require.Zero(t, vmpackage.JITCompileFailCount(), "JIT codegen panicked")
+	require.Zero(t, vmpackage.JITBadExitCount(), "JIT produced an unresumable exit")
 }
 
 // TestJITMatchesInterpreter is the core differential test: every program must
@@ -1840,6 +1855,8 @@ func TestJITMatchesInterpreterRandomized(t *testing.T) {
 		if vmpackage.JITRunCount() > 0 {
 			engaged++
 		}
+		require.Zerof(t, vmpackage.JITCompileFailCount(), "case %d: JIT codegen panicked\n%s", i, src)
+		require.Zerof(t, vmpackage.JITBadExitCount(), "case %d: JIT produced an unresumable exit\n%s", i, src)
 		switch {
 		case wantErr != nil && gotErr != nil:
 			require.Equalf(t, wantErr.Error(), gotErr.Error(), "case %d: differing errors\n%s", i, src)
@@ -1884,15 +1901,39 @@ func FuzzJITMatchesInterpreter(f *testing.F) {
 		if err != nil {
 			t.Skip()
 		}
+		// Bound every execution. The fuzzer readily produces a program that loops
+		// forever (`while (i < 20) { i== i + 1; }` — a comparison where the seed had
+		// an assignment), and with an unbounded context the FIRST run wedges the
+		// whole process: not a JIT finding, just a hang, and go-fuzz reports it as
+		// "terminated unexpectedly while minimizing" and writes a corpus entry that
+		// then hangs plain `go test` too. Both engines poll cancellation on a back
+		// edge (the JIT's is the cancel-check exit), so a deadline is honored on
+		// either path and the same limit applies to both sides of the comparison.
 		run := func(jit bool) (vmpackage.Value, error) {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
 			env := vmpackage.NewEnv()
 			vmpackage.RegisterStdlib(env)
 			vmpackage.SetJIT(jit)
 			defer vmpackage.SetJIT(false)
-			return vmpackage.NewVM(context.Background()).Run(chunk, env)
+			return vmpackage.NewVM(ctx).Run(chunk, env)
 		}
 		wantV, wantErr := run(false)
+		if wantErr != nil && errors.Is(wantErr, context.DeadlineExceeded) {
+			t.Skip() // non-terminating program: nothing to compare
+		}
+		vmpackage.ResetJITStats()
 		gotV, gotErr := run(true)
+		// A fuzzer-built chunk is the likeliest source of a shape depths() lets
+		// through and codegen then panics on, so check the self-checks before the
+		// answers: both recover silently, and a differential comparison alone
+		// cannot see them.
+		if n := vmpackage.JITCompileFailCount(); n != 0 {
+			t.Fatalf("JIT codegen panicked (%d) for:\n%s", n, src)
+		}
+		if n := vmpackage.JITBadExitCount(); n != 0 {
+			t.Fatalf("JIT produced an unresumable exit (%d) for:\n%s", n, src)
+		}
 		if (wantErr == nil) != (gotErr == nil) {
 			t.Fatalf("interp err=%v but jit err=%v for:\n%s", wantErr, gotErr, src)
 		}

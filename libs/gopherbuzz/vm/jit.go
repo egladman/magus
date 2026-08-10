@@ -43,8 +43,31 @@ var jitDeopts atomic.Int64
 // JITDeoptCount returns the number of deopts back to the interpreter so far.
 func JITDeoptCount() int64 { return jitDeopts.Load() }
 
+// jitCompileFails counts chunks the code generator PANICKED on, as opposed to the
+// far more common (and silent) case of a backend declining a shape it does not
+// compile. Both end in the same cached "ineligible" verdict, so without this
+// counter a codegen defect is indistinguishable from an unsupported opcode: the
+// JIT just quietly stops engaging and nothing says why. See safeCompileJIT.
+var jitCompileFails atomic.Int64
+
+// JITCompileFailCount returns the number of chunks whose codegen panicked. Any
+// non-zero value is a bug in this package, not a property of the program run.
+func JITCompileFailCount() int64 { return jitCompileFails.Load() }
+
+// jitBadExits counts native runs discarded because their exit context was not
+// resumable. Same reasoning as jitCompileFails: the recovery is silent and
+// correct, so this is the only evidence a miscompile happened at all.
+var jitBadExits atomic.Int64
+
+// JITBadExitCount returns the number of native runs discarded as unresumable. Any
+// non-zero value is a bug in this package. Reporting it (with BUZZ_JIT=0 changing
+// the answer) is the most useful JIT bug report there is.
+func JITBadExitCount() int64 { return jitBadExits.Load() }
+
 // ResetJITStats zeroes the JIT counters (test helper).
 func ResetJITStats() {
 	jitRuns.Store(0)
 	jitDeopts.Store(0)
+	jitCompileFails.Store(0)
+	jitBadExits.Store(0)
 }
