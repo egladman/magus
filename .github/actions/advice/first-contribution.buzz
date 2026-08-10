@@ -10,6 +10,7 @@
 //
 // Reads REPO, PR_NUMBER, PR_AUTHOR.
 import "os";
+import "proc";
 import "advice";
 import "serialize";
 import "std";
@@ -21,7 +22,7 @@ final section = "first-contribution";
 // squashed under a different address.
 fun isFirst(repo: str, author: str) > bool {
     final query = "repo:" + repo + "+author:" + author + "+is:pr+is:merged";
-    final res = os\exec("gh", args: ["api", "search/issues?q=" + query],
+    final res = proc\exec("gh", args: ["api", "search/issues?q=" + query],
         dir: ".", opts: {"quiet": true, "allow_failure": true});
     if (!res.ok) { return false; }
     return serialize\jsonDecode(res.stdout).q("total_count").integerValue() == 0;

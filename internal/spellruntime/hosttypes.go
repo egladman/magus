@@ -5,7 +5,7 @@ import _ "embed"
 // This file holds the generated Buzz `object` mirrors of every host-METHOD return
 // type (as opposed to target.go's mirrors, which are what a spell op WRITES). Each
 // one ships with the declarations of the host import path whose method actually
-// returns it - os.exec returns ExecResult, so ExecResult ships with "os"; vcs.tags
+// returns it - proc.exec returns ExecResult, so ExecResult ships with "os"; vcs.tags
 // returns [Tag], so Tag ships with "vcs" - assembled in
 // internal/interp/bindings/modules.go (magusModules and RegisterSpellSourceModules).
 // That is what lets a spell already doing `import "os";` annotate `> ExecResult`
@@ -17,12 +17,13 @@ import _ "embed"
 // construct.
 
 // ExecResultSource is the generated Buzz `object ExecResult` mirror of
-// types.ExecResult (see cmd/magus-utils types). Ships with "os": os.exec /
+// types.ExecResult (see cmd/magus-utils types). Ships with "os": proc.exec /
 // os.execSh return it, and magus's own describe-style methods (magus.build, ...)
 // that also return ExecResult reuse the same mirror once "os" is imported for the
 // exec call that produced it in the first place.
 //
 //go:generate go run ../../cmd/magus-utils types -type ExecResult -out gen/types/execresult.buzz
+//go:generate go run ../../cmd/magus-utils types -type ShellCommand -out gen/types/shellcommand.buzz
 //go:embed gen/types/execresult.buzz
 var ExecResultSource string
 

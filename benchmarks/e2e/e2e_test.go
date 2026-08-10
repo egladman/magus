@@ -147,9 +147,11 @@ func TestMagusfileTargetsRunWithoutBeingDeclared(t *testing.T) {
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	src := `import "magus";
 import "os";
+import "proc";
 magus.project("svc", {});
 export fun hit(ctx: magus\Context, args: [str]) > void {
-    os.execSh("printf x >> count", "");
+    var c = proc.shell("printf x >> count");
+    proc.exec(c.bin, c.args, "", {});
 }
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(src), 0o644))
@@ -247,8 +249,10 @@ func TestRunCIComposesMagusfileTarget(t *testing.T) {
 	body := `
 import "magus";
 import "os";
+import "proc";
 fun record(name: str) > void {
-    os.execSh("printf '%s\n' " + name + " >> ci-order", "");
+    var c = proc.shell("printf '%s\n' " + name + " >> ci-order");
+    proc.exec(c.bin, c.args, "", {});
 }
 export fun build(ctx: magus\Context, args: [str]) > void { record("build"); }
 export fun test(ctx: magus\Context, args: [str]) > void {

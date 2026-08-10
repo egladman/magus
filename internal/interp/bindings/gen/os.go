@@ -10,48 +10,18 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
-	"github.com/egladman/magus/types"
 )
 
 // RegisterOs builds the "os" module map and returns it.
-// Process execution. os.exec runs a command directly (no shell); os.exec_sh runs a line through the shell. Both stream output live and return a result {stdout, stderr, code, ok}.
+// The machine and this process: platform triple, CPU count, hostname, the running magus binary, and the two members that shadow Buzz's own (exit, sleep). Running OTHER processes lives in the proc module.
 func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
 	m := vm.NewMap()
-	m.MapSet("exec", vm.DirectValue("os.exec", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		cmd := Str(bzArgs, 0)
-		args := StrSlice(bzArgs, 1)
-		dir := Str(bzArgs, 2)
-		opts := AnyMap(bzArgs, 3)
-		ret0, err := std.OsExec(ctx, cmd, args, dir, opts)
-		if err != nil {
-			return vm.Null, HostError(err)
-		}
-		return buzzValueOsExecResult(ret0), nil
-	}))
-	m.MapSet("execSh", vm.DirectValue("os.execSh", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		line := Str(bzArgs, 0)
-		dir := Str(bzArgs, 1)
-		opts := AnyMap(bzArgs, 2)
-		ret0, err := std.OsExecSh(ctx, line, dir, opts)
-		if err != nil {
-			return vm.Null, HostError(err)
-		}
-		return buzzValueOsExecResult(ret0), nil
-	}))
 	m.MapSet("withEnv", vm.DirectValue("os.withEnv", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		env := StrMap(bzArgs, 0)
 		callback := CallbackArg(sess, bzArgs, 1)
 		if err := std.OsWithEnv(ctx, env, callback); err != nil {
-			return vm.Null, HostError(err)
-		}
-		return vm.Null, nil
-	}))
-	m.MapSet("withSlots", vm.DirectValue("os.withSlots", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		n := Int(bzArgs, 0, 0)
-		callback := CallbackArg(sess, bzArgs, 1)
-		if err := std.OsWithSlots(ctx, n, callback); err != nil {
 			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil
@@ -76,21 +46,6 @@ func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil
-	}))
-	m.MapSet("which", vm.DirectValue("os.which", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		cmd := Str(bzArgs, 0)
-		ret0, err := std.OsWhich(ctx, cmd)
-		if err != nil {
-			return vm.Null, HostError(err)
-		}
-		return StrVal(ret0), nil
-	}))
-	m.MapSet("stdinIsTerminal", vm.DirectValue("os.stdinIsTerminal", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.OsStdinIsTerminal(ctx)
-		if err != nil {
-			return vm.Null, HostError(err)
-		}
-		return BoolVal(ret0), nil
 	}))
 	m.MapSet("numCpu", vm.DirectValue("os.numCpu", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.OsNumCPU(ctx)
@@ -124,12 +79,4 @@ func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 		return AnyVal(ret0), nil
 	}))
 	return m
-}
-func buzzValueOsExecResult(v types.ExecResult) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("stdout", vm.StrValue(v.Stdout))
-	out.MapSet("stderr", vm.StrValue(v.Stderr))
-	out.MapSet("code", vm.IntValue(int64(v.Code)))
-	out.MapSet("ok", vm.BoolValue(v.OK))
-	return out
 }

@@ -52,8 +52,8 @@ func TestMagusCmdWarnsForTypedSubcommands(t *testing.T) {
 }
 
 // TestResolveRunDir covers where a nested magus runs. opts.dir is resolved relative to
-// the contextual project dir, matching os.exec's dir, so a magusfile can send a nested
-// invocation to a sibling directory without reaching for os.exec on the magus binary -
+// the contextual project dir, matching proc.exec's dir, so a magusfile can send a nested
+// invocation to a sibling directory without reaching for proc.exec on the magus binary -
 // the thing magus warns about, and which it could not previously offer an alternative to.
 func TestResolveRunDir(t *testing.T) {
 	cases := []struct {

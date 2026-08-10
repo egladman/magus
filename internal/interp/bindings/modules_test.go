@@ -53,11 +53,16 @@ func TestSupersetModules(t *testing.T) {
 		assert.True(t, ok, "module %q missing key %q", module, key)
 	}
 
-	// os: Buzz stdlib (env, execute) and magus (exec, which) coexist on one module.
-	hasKey(t, "os", "env")     // Buzz stdlib
-	hasKey(t, "os", "execute") // Buzz stdlib
-	hasKey(t, "os", "exec")    // magus
-	hasKey(t, "os", "which")   // magus
+	// os: Buzz stdlib (env, execute) plus the magus members about THIS machine.
+	// Running other processes is proc's, deliberately: os.execute returns an exit
+	// code the caller must check and magus's verb raises instead, and two verbs
+	// that are synonyms in English sharing one module is the trap that split them.
+	hasKey(t, "os", "env")      // Buzz stdlib
+	hasKey(t, "os", "execute")  // Buzz stdlib, and it stays untouched
+	hasKey(t, "os", "platform") // magus
+	hasKey(t, "proc", "exec")   // magus, and NOT on os
+	hasKey(t, "proc", "shell")  // magus
+	hasKey(t, "proc", "which")  // magus
 
 	// fs: Buzz stdlib (makeDirectory) plus magus (glob, readFile).
 	hasKey(t, "fs", "makeDirectory") // Buzz stdlib
@@ -597,11 +602,13 @@ func TestRunBuzzAggregateUtil(t *testing.T) {
 import "magus";
 import "fs";
 import "os";
+import "proc";
 import "crypto";
 
 export fun verify(ctx: magus\Context, _opts: [str]) > void {
     var joined = fs.join("a", "b", "c");
-    var res = os.execSh("printf hello").stdout;
+    var sc = proc.shell("printf hello");
+    var res = proc.exec(sc.bin, sc.args, "", {}).stdout;
     var digest = crypto.hash(crypto.HashAlgorithm.Sha256, "").hex();
     fs.writeFile("ran", joined + "|" + res + "|" + digest);
 }
@@ -821,7 +828,7 @@ export fun nap(ctx: magus\Context, _a: [str]) > void {
 	require.NoError(t, runTargetIn(t, dir, "nap"))
 }
 
-// TestOsWhich verifies os.which resolves a real command to a non-empty path and RAISES
+// TestOsWhich verifies proc.which resolves a real command to a non-empty path and RAISES
 // for a missing one (asserted inside the magusfile via os.exit).
 //
 // It used to return "" for a missing command so a caller could branch on equality. That
@@ -833,11 +840,12 @@ func TestOsWhich(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
 import "os";
+import "proc";
 
 export fun checkwhich(ctx: magus\Context, _a: [str]) > void {
-    if (os.which("sh") == "") { os.exit(2); }
+    if (proc.which("sh") == "") { os.exit(2); }
     var raised = false;
-    try { os.which("definitely-no-such-cmd-zzz"); } catch (e) { raised = true; }
+    try { proc.which("definitely-no-such-cmd-zzz"); } catch (e) { raised = true; }
     if (!raised) { os.exit(3); }
 }
 `), 0o644))
@@ -877,17 +885,20 @@ export fun boom(ctx: magus\Context, _a: [str]) > void { magus.fatal("boom"); }
 	assert.Equal(t, 1, ex.Code)
 }
 
-// TestOsExecShShellOption verifies opts.shell is accepted and the chosen shell
-// runs (sh is always present; the flag/derivation is unit-tested in host).
-func TestOsExecShShellOption(t *testing.T) {
+// TestProcShellChoosesShell verifies proc.shell honours an explicit shell and that
+// its {bin, args} feeds straight into proc.exec. This is the pair that replaced
+// os.execSh: building the argv and running it are separate steps now, so the shell
+// choice is visible at the call site instead of hidden inside a wrapper.
+func TestProcShellChoosesShell(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
 	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
-import "os";
+import "proc";
 
 export fun viash(ctx: magus\Context, _a: [str]) > void {
-    os.execSh("true", "", {"shell": "sh"});
+    var c = proc.shell("true", "sh");
+    proc.exec(c.bin, c.args, "", {});
 }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "viash"))
@@ -901,8 +912,9 @@ func TestNeedsDedup(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
 import "os";
+import "proc";
 
-export fun dep(ctx: magus\Context, _a: [str]) > void { os.execSh("printf x >> mark", ""); }
+export fun dep(ctx: magus\Context, _a: [str]) > void { var c = proc.shell("printf x >> mark"); proc.exec(c.bin, c.args, "", {}); }
 export fun top(ctx: magus\Context, _a: [str]) > void { ctx.needs(dep, dep); }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "top"))
@@ -1002,8 +1014,10 @@ func TestNeedsGlobHandle(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "os";
+import "proc";
 fun note(s: str) > void {
-   os.execSh("printf '%s\n' " + s + " >> ran", "");
+   var c = proc.shell("printf '%s\n' " + s + " >> ran");
+   proc.exec(c.bin, c.args, "", {});
 }
 export fun go_build(ctx: magus\Context, _a: [str]) > void { note("go-build"); }
 export fun image_build(ctx: magus\Context, _a: [str]) > void { note("image-build"); }
@@ -1097,9 +1111,10 @@ func TestExecResultAnnotationChecksFields(t *testing.T) {
 		writeMagusfile(t, dir, `
 import "magus";
 import "os";
+import "proc";
 import "fs";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    final r: ExecResult = os.exec("echo", ["hi"]);
+    final r: ExecResult = proc.exec("echo", ["hi"]);
     fs.writeFile("ran", r.stdout);
 }
 `)
@@ -1111,8 +1126,9 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 		writeMagusfile(t, dir, `
 import "magus";
 import "os";
+import "proc";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    final r: ExecResult = os.exec("echo", ["hi"]);
+    final r: ExecResult = proc.exec("echo", ["hi"]);
     final x = r.stduot;
 }
 `)
@@ -1134,7 +1150,7 @@ func TestObjectAnnotationsCheckFields(t *testing.T) {
 		typ, expr, good, bad string
 		imports              string
 	}{
-		{"ExecResult", `os.exec("echo", ["hi"])`, "stdout", "stduot", `import "os";`},
+		{"ExecResult", `proc.exec("echo", ["hi"])`, "stdout", "stduot", `import "proc";`},
 		{"Commit", `vcs.commit()`, "author", "auther", `import "vcs";`},
 		{"FileInfo", `fs.stat(".")`, "size", "sizes", `import "fs";`},
 		{"HttpResponse", `http.get("http://x")`, "status", "staus", `import "http";`},
@@ -1195,21 +1211,23 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 	require.Len(t, targets, 2)
 }
 
-func TestOsExecShExitCode(t *testing.T) {
+func TestProcShellExitCode(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
 import "magus";
-import "os";
+import "proc";
 
 export fun check(ctx: magus\Context, args: [str]) > void {
-    var rc = os.execSh("true", "", {"allow_failure": true}).code;
+    var ok = proc.shell("true");
+    var rc = proc.exec(ok.bin, ok.args, "", {"allow_failure": true}).code;
     if (rc != 0) {
-        throw "os.execSh('true').code = {rc}";
+        throw "proc.shell('true') exited {rc}";
     }
-    var rc2 = os.execSh("false", "", {"allow_failure": true}).code;
+    var bad = proc.shell("false");
+    var rc2 = proc.exec(bad.bin, bad.args, "", {"allow_failure": true}).code;
     if (rc2 == 0) {
-        throw "os.execSh('false').code = 0, expected non-zero";
+        throw "proc.shell('false') exited 0, expected non-zero";
     }
 }
 `)
@@ -1223,10 +1241,12 @@ func TestOsWithEnvShellCapture(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "os";
+import "proc";
 
 export fun check(ctx: magus\Context, args: [str]) > void {
     os.withEnv({"MY_BUZZ_VAR": "hello"}, fun() > void {
-        var captured = os.execSh("echo $MY_BUZZ_VAR").stdout;
+        var ec = proc.shell("echo $MY_BUZZ_VAR");
+        var captured = proc.exec(ec.bin, ec.args, "", {}).stdout;
         if (captured != "hello") {
             throw "expected 'hello', got: [" + captured + "]";
         }
@@ -1476,7 +1496,7 @@ func BenchmarkRunBuzzParallel(b *testing.B) {
 // A synthetic host module's own import (`import "os";`) only binds its native
 // functions: the type-declaration companion registered alongside it
 // (hostTypeModuleSources) is collected by the CHECKER for annotation-checking
-// (`final r: ExecResult = os.exec(...)`), but it is never compiled and run, so it
+// (`final r: ExecResult = proc.exec(...)`), but it is never compiled and run, so it
 // can never bind an object literal's constructor into the runtime env - `Name{}`
 // needs `Name` bound as an objectDef VALUE, which only a compiled-and-run source
 // module provides (see vm.buildObjectVal). This bundle is that compiled-and-run
@@ -1650,7 +1670,7 @@ func TestMagusNamespaceIsTyped(t *testing.T) {
 	wrongReturn := func(t *testing.T, body string) error {
 		t.Helper()
 		dir := t.TempDir()
-		writeMagusfile(t, dir, "import \"magus\";\nimport \"os\";\n"+body+
+		writeMagusfile(t, dir, "import \"magus\";\nimport \"os\";\nimport \"proc\";\n"+body+
 			"\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n")
 		return runTargetIn(t, dir, "build")
 	}
@@ -1659,7 +1679,7 @@ func TestMagusNamespaceIsTyped(t *testing.T) {
 	require.Error(t, err, "magus\\where returns str; using it as int must be caught by the checker")
 	assert.Contains(t, err.Error(), "return type mismatch")
 
-	err = wrongReturn(t, `fun probe() > int { return os\which("ls"); }`)
+	err = wrongReturn(t, `fun probe() > int { return proc\which("ls"); }`)
 	require.Error(t, err, "control: a bare-import module must stay typed")
 	assert.Contains(t, err.Error(), "return type mismatch")
 }

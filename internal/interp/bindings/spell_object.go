@@ -38,7 +38,7 @@ func spellHandleFromMeta(m spells.Descriptor) vm.Value {
 //
 // A method's optional {cwd=, args=[...], env={...}} table appends opts.args to
 // the target's base argv and overlays opts.env on the subprocess, so
-// flag-carrying and cross-compile invocations need no os.exec. With no opts.args
+// flag-carrying and cross-compile invocations need no proc.exec. With no opts.args
 // the `magus run <t> -- <extra>` args ride along via project.ExtraArgs.
 func bindBuzzTargetDispatch(h vm.Value, targets map[string]spells.Op) {
 	h.MapSet("listTargets", vm.DirectValue("spell.listTargets", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
@@ -80,7 +80,7 @@ func bindBuzzCommandMethod(h vm.Value, target string, tgt spells.Op) {
 }
 
 // execRecordToBuzz converts the shared {stdout, stderr, code, ok} exec object to
-// a Buzz map, marshalled the same way os.exec's object is (see host.AnyVal):
+// a Buzz map, marshalled the same way proc.exec's object is (see host.AnyVal):
 // string/bool direct, int as a Buzz int.
 func execRecordToBuzz(rec map[string]any) vm.Value {
 	m := vm.NewMap()

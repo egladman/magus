@@ -25,7 +25,7 @@ import (
 // spell target (e.g. go.build({...})). cwd is the directory to run in (empty means
 // the process cwd, "."). args append as raw tokens after the target's base command -
 // so a build the op's bare base can't express (custom -ldflags, -o, a single package)
-// is reachable through the spell rather than os.exec. env overlays the subprocess
+// is reachable through the spell rather than proc.exec. env overlays the subprocess
 // environment (KEY=value; later entries win per Go's exec duplicate-key rule). hasArgs
 // distinguishes "no args key" (fall back to project.ExtraArgs) from an explicit empty
 // list; consulted only on the Buzz path.
@@ -51,7 +51,7 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 		dir = "."
 	}
 	// Resolve a relative dir against the context working directory (the project dir
-	// the magusfile runner set via std.WithCwd), matching os.exec's resolvePath. Without
+	// the magusfile runner set via std.WithCwd), matching proc.exec's resolvePath. Without
 	// this, a spell op invoked from a subproject target (e.g. go["go-run"] from docs/)
 	// would run in the process cwd, not the project dir, so its relative paths would
 	// miss. Absolute dirs pass through unchanged (the scip op passes one).

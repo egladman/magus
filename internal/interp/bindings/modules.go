@@ -144,7 +144,7 @@ func RegisterModuleSurface(ctx context.Context, sess *buzz.Session, opts ...Modu
 // registerMagusModules installs the magus module surface a Buzz session sees: Buzz's
 // own stdlib under bare names (so a magusfile or spell may `import "std"` /
 // `import "serialize"` / `import "io"`), with the magus modules layered on top
-// of those same bare names — `import "os"` carries Buzz's os plus os.exec/which/…,
+// of those same bare names — `import "os"` carries Buzz's os plus proc.exec/which/…,
 // and modules Buzz's stdlib lacks (http, vcs, archive, env, time, …) become new
 // bare imports. The result is one superset surface, no separate `magus/extra`
 // aggregate. Shared by the magusfile binding path (registerAllBuzz) and the spell

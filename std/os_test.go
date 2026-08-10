@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestOsExecTeesToOutputWriters verifies os.exec sends output through the run's
+// TestOsExecTeesToOutputWriters verifies proc.exec sends output through the run's
 // output writers (reusing the CLI's live+cached-log sink) while still capturing
 // it into the returned object.
 func TestOsExecTeesToOutputWriters(t *testing.T) {
@@ -523,21 +523,23 @@ func TestExecSignalKilledNamesTheSignal(t *testing.T) {
 	assert.NotContains(t, err.Error(), "exit -1")
 }
 
-// quiet is read in runResult, the one path os.exec, os.exec_sh, and vcs.cmd share, so
+// quiet is read in runResult, the one path proc.exec, proc.shell, and vcs.cmd share, so
 // the three cannot drift into offering different option sets. Capture stays on
 // regardless: a quiet call is still consuming the value, just not echoing it.
 func TestOsExecQuietStillCaptures(t *testing.T) {
 	res, err := OsExec(context.Background(), "sh", []string{"-c", "echo captured"}, "",
 		map[string]any{"quiet": true})
 	require.NoError(t, err)
-	assert.Equal(t, "captured", res.Stdout, "os.exec trims captured output")
+	assert.Equal(t, "captured", res.Stdout, "proc.exec trims captured output")
 	assert.Equal(t, 0, res.Code)
 }
 
-func TestOsExecShQuietStillCaptures(t *testing.T) {
-	res, err := OsExecSh(context.Background(), "echo captured", "", map[string]any{"quiet": true})
+func TestProcShellQuietStillCaptures(t *testing.T) {
+	c, err := OsShell(context.Background(), "echo captured", "")
 	require.NoError(t, err)
-	assert.Equal(t, "captured", res.Stdout, "os.exec trims captured output")
+	res, err := OsExec(context.Background(), c.Bin, c.Args, "", map[string]any{"quiet": true})
+	require.NoError(t, err)
+	assert.Equal(t, "captured", res.Stdout, "proc.exec trims captured output")
 }
 
 // Absent quiet must keep the streaming default. The option is opt-in because a build

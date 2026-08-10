@@ -16,7 +16,7 @@ import (
 )
 
 // cwdKey carries the default working directory for the exec primitives.
-// A spell target's dispatcher sets it (host.WithCwd) so os.exec/os.exec_sh
+// A spell target's dispatcher sets it (host.WithCwd) so proc.exec/proc.shell
 // run in the project directory without the spell passing it explicitly. Magusfile
 // targets leave it unset and instead run under a process chdir, so an unset cwd
 // resolves to the process working directory.

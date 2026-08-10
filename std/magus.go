@@ -51,7 +51,7 @@ var Magus = Module{
 	Methods: []Method{
 		{
 			Name: "cmd",
-			Doc:  "Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method (status, affected, agent, graph, ...). Its signature is the typed methods' signature with the subcommand pushed in front: magus.cmd(sub, args, [opts]) beside magus.run(args, [opts]), same argv, same opts, same ExecResult. The SUBCOMMAND is a typed argument rather than args[0] because it is the part of the invocation magus can reason about - it stays readable in the signature and greppable in the source, while the remaining argv stays free-form. Prefer the dedicated methods (run, describe, insight, doctor) when one exists - magus.cmd warns when sub names one that has. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like os.exec); opts.quiet captures the output without echoing it to the console.",
+			Doc:  "Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method (status, affected, agent, graph, ...). Its signature is the typed methods' signature with the subcommand pushed in front: magus.cmd(sub, args, [opts]) beside magus.run(args, [opts]), same argv, same opts, same ExecResult. The SUBCOMMAND is a typed argument rather than args[0] because it is the part of the invocation magus can reason about - it stays readable in the signature and greppable in the source, while the remaining argv stays free-form. Prefer the dedicated methods (run, describe, insight, doctor) when one exists - magus.cmd warns when sub names one that has. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console.",
 			Args: []Arg{
 				{Name: "sub", Type: TypeString},
 				{Name: "args", Type: TypeStringSlice},
@@ -112,7 +112,7 @@ var Magus = Module{
 		},
 		{
 			Name: "run",
-			Doc:  "Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like os.exec); opts.quiet captures the output without echoing it to the console.",
+			Doc:  "Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -122,7 +122,7 @@ var Magus = Module{
 		},
 		{
 			Name: "describe",
-			Doc:  "Run `magus describe <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like os.exec); opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.",
+			Doc:  "Run `magus describe <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -132,7 +132,7 @@ var Magus = Module{
 		},
 		{
 			Name: "insight",
-			Doc:  "Run `magus insight <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like os.exec); opts.quiet captures the output without echoing it to the console.",
+			Doc:  "Run `magus insight <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -181,7 +181,7 @@ var Magus = Module{
 		},
 		{
 			Name: "doctor",
-			Doc:  "Validate the workspace and return what every check found: {workspace, checks, summary}, each check {name, status, message, details} with status `ok`, `fail`, or `advice` (advice is worth knowing and never a gate). Annotate the result `> DoctorReport` for compile-checked field access. A caller branches on a check's status rather than grepping console text for the word fail. It does NOT raise when a check fails: doctor exits non-zero precisely when it has something to report, and raising would discard the report. Gate on `summary.fail` instead, which says more than an exit code does. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like os.exec).",
+			Doc:  "Validate the workspace and return what every check found: {workspace, checks, summary}, each check {name, status, message, details} with status `ok`, `fail`, or `advice` (advice is worth knowing and never a gate). Annotate the result `> DoctorReport` for compile-checked field access. A caller branches on a check's status rather than grepping console text for the word fail. It does NOT raise when a check fails: doctor exits non-zero precisely when it has something to report, and raising would discard the report. Gate on `summary.fail` instead, which says more than an exit code does. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec).",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -357,7 +357,7 @@ func MagusRaise(_ context.Context, code, message string, opts map[string]any) er
 		return fmt.Errorf("magus.raise: %s needs a message; a code is an identifier, not a sentence", code)
 	}
 	if strings.HasPrefix(strings.ToUpper(code), "MGS") {
-		return fmt.Errorf("magus.raise: %q is in magus's own MGS namespace, which is a closed catalog - pick a prefix for this workspace instead", code)
+		return fmt.Errorf("magus.raise: %q is in magus's own MGS namespace, which is a closed catalog; pick a prefix for this workspace instead", code)
 	}
 	// A per-call domain is how a caller-supplied url reaches the rendered error: Error's
 	// url field is captured at construction from the domain's function, never set later.
@@ -539,7 +539,7 @@ func runMagusSub(ctx context.Context, sub string, args []string, opts map[string
 }
 
 // resolveRunDir picks the directory a nested magus runs in: the contextual project dir,
-// or opts.dir resolved RELATIVE to it - exactly as os.exec's dir is, so the two spell the
+// or opts.dir resolved RELATIVE to it - exactly as proc.exec's dir is, so the two spell the
 // same idea the same way. An absolute opts.dir wins outright, and with no contextual dir
 // there is nothing to resolve against, so it is used as given.
 func resolveRunDir(ctx context.Context, opts map[string]any) string {
@@ -557,9 +557,9 @@ func resolveRunDir(ctx context.Context, opts map[string]any) string {
 // runMagus runs a nested magus invocation with the full arg vector, yielding the
 // caller's concurrency slot for the duration so the child can run. Output streams
 // live and is captured: on success it returns the same {stdout, stderr, code, ok}
-// object as os.exec, so a magusfile can read a subcommand's output (e.g. `magus
+// object as proc.exec, so a magusfile can read a subcommand's output (e.g. `magus
 // describe graph -o markdown` to generate MAGUS.md). It raises (non-nil error, nil
-// object) when the child can't launch or exits non-zero, mirroring os.exec. label
+// object) when the child can't launch or exits non-zero, mirroring proc.exec. label
 // names the calling method for error messages.
 //
 // The child runs in the working directory carried by ctx (WithCwd), so a nested
@@ -598,10 +598,10 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 
 	// Run in the contextual project dir; "" inherits the process cwd (the
 	// behavior for magusfile targets that run under a process chdir). opts.dir
-	// redirects it, resolved RELATIVE to that contextual dir exactly as os.exec's
+	// redirects it, resolved RELATIVE to that contextual dir exactly as proc.exec's
 	// dir is - a nested magus that must run somewhere else (a sibling project, a
 	// directory of scripts) has no other way to say so, and reaching for
-	// os.exec("magus", ...) to get it is the thing magus warns about.
+	// proc.exec("magus", ...) to get it is the thing magus warns about.
 	dir := resolveRunDir(ctx, opts)
 
 	// opts.quiet captures the output without echoing it to the console, for a
@@ -619,7 +619,7 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 		case res.Code != 0 && !res.Started:
 			// The child never launched (binary not found, permission, ctx cancelled
 			// before exec); surface the real cause, not a fabricated "code -1".
-			// Mirrors os.exec's runResult.
+			// Mirrors proc.exec's runResult.
 			cmdErr = fmt.Errorf("magus.%s: %s: %w", label, strings.Join(full, " "), err)
 		case res.Code != 0:
 			// The child's own diagnostic is not repeated here. It reaches the console

@@ -18,10 +18,11 @@ import "magus/spell/go";
 import "magus/spell/markdown";
 import "../../spells/golang/gomod" as gomod;
 
-// os.exec runs the benchmark; fs reads and writes the profile (Buzz's stdlib has
+// proc.exec runs the benchmark; fs reads and writes the profile (Buzz's stdlib has
 // neither streaming exec nor raw file IO). tools/drift.buzz gates regenerated outputs.
 // env.home locates the upstream clone cache for the conformance target.
 import "os";
+import "proc";
 import "fs";
 import "vcs";
 import "env";
@@ -157,14 +158,14 @@ export fun conformance(ctx: magus\Context, args: [str]) > void {
     final cache_dir = fs\join(env\home(), ".cache", "magus", "gopherbuzz-upstream-buzz");
 
     if (fs\exists(cache_dir)) {
-        os\exec("git", ["fetch", "origin"], cache_dir, {});
+        proc\exec("git", ["fetch", "origin"], cache_dir, {});
     } else {
-        os\exec("git", ["clone", "https://github.com/buzz-language/buzz", cache_dir], ".", {});
+        proc\exec("git", ["clone", "https://github.com/buzz-language/buzz", cache_dir], ".", {});
     }
-    os\exec("git", ["checkout", pinned], cache_dir, {});
+    proc\exec("git", ["checkout", pinned], cache_dir, {});
 
     magus\info("running upstream conformance against {cache_dir} @ {pinned}");
     os\withEnv({"GOPHERBUZZ_UPSTREAM_DIR": cache_dir}, fun() > void {
-        os\exec("go", ["test", "-run", "TestUpstreamConformance", "-v", "."], ".", {});
+        proc\exec("go", ["test", "-run", "TestUpstreamConformance", "-v", "."], ".", {});
     });
 }

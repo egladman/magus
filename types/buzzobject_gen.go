@@ -13,6 +13,13 @@ func (v ExecResult) BuzzObject() BuzzObject {
 	}
 }
 
+func (v ShellCommand) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"bin":  v.Bin,
+		"args": v.Args,
+	}
+}
+
 func (v CommitAuthor) BuzzObject() BuzzObject {
 	return BuzzObject{
 		"name":  v.Name,
@@ -47,7 +54,7 @@ func (v StatusRecord) BuzzObject() BuzzObject {
 	}
 }
 
-func (v DriftResultRecord) BuzzObject() BuzzObject {
+func (v DriftVerdictRecord) BuzzObject() BuzzObject {
 	itemsFiles := make([]any, len(v.Files))
 	for indexFiles := range v.Files {
 		itemsFiles[indexFiles] = v.Files[indexFiles].BuzzObject()
@@ -608,65 +615,14 @@ func (v KnowledgeStats) BuzzObject() BuzzObject {
 	}
 }
 
-func (v ProjectRef) BuzzObject() BuzzObject {
-	return BuzzObject{
-		"path": v.Path,
-		"name": v.Name,
-		"dir":  v.Dir,
-	}
-}
-
-func (v KnowledgeSymbolGap) BuzzObject() BuzzObject {
-	return BuzzObject{
-		"project": v.Project.BuzzObject(),
-		"state":   string(v.State),
-		"detail":  v.Detail,
-	}
-}
-
-func (v KnowledgeAnswer) BuzzObject() BuzzObject {
-	itemsGaps := make([]any, len(v.Gaps))
-	for indexGaps := range v.Gaps {
-		itemsGaps[indexGaps] = v.Gaps[indexGaps].BuzzObject()
-	}
-	return BuzzObject{
-		"verdict": string(v.Verdict),
-		"reason":  string(v.Reason),
-		"gaps":    itemsGaps,
-	}
-}
-
-func (v UnreferencedEntry) BuzzObject() BuzzObject {
-	return BuzzObject{
-		"id":       v.ID,
-		"label":    v.Label,
-		"source":   v.Source,
-		"kind":     v.Kind,
-		"language": v.Language,
-	}
-}
-
-func (v UnreferencedOutput) BuzzObject() BuzzObject {
-	itemsSymbols := make([]any, len(v.Symbols))
-	for indexSymbols := range v.Symbols {
-		itemsSymbols[indexSymbols] = v.Symbols[indexSymbols].BuzzObject()
-	}
-	return BuzzObject{
-		"definition": v.Definition,
-		"symbols":    itemsSymbols,
-		"answer":     v.Answer.BuzzObject(),
-	}
-}
-
 func (v InsightReport) BuzzObject() BuzzObject {
 	return BuzzObject{
-		"hotspots":     v.Hotspots.BuzzObject(),
-		"affinity":     v.Affinity.BuzzObject(),
-		"ownership":    v.Ownership.BuzzObject(),
-		"trend":        v.Trend.BuzzObject(),
-		"volatility":   v.Volatility.BuzzObject(),
-		"unreferenced": v.Unreferenced.BuzzObject(),
-		"graphStats":   v.GraphStats.BuzzObject(),
+		"hotspots":   v.Hotspots.BuzzObject(),
+		"affinity":   v.Affinity.BuzzObject(),
+		"ownership":  v.Ownership.BuzzObject(),
+		"trend":      v.Trend.BuzzObject(),
+		"volatility": v.Volatility.BuzzObject(),
+		"graphStats": v.GraphStats.BuzzObject(),
 	}
 }
 

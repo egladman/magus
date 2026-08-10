@@ -183,7 +183,7 @@ magus.project(".", {"spells": [noops]});`)
 // TestBuzzSpellMethodForwardsOpts verifies a Buzz spell handle's per-target method
 // (widget.capture(ctx, opts)): opts.args are appended to the target's base argv and the
 // command runs in opts.cwd — what lets a magusfile drive a flag-carrying tool (e.g.
-// docker.build({cwd: "..", args: [...]})) through the spell instead of os.exec. It
+// docker.build({cwd: "..", args: [...]})) through the spell instead of proc.exec. It
 // also checks listTargets() still exposes the op names for introspection.
 func TestBuzzSpellMethodForwardsOpts(t *testing.T) {
 	dir := t.TempDir()
@@ -246,7 +246,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 
 // TestBuzzSpellCaptureReturnsObject verifies a capture=true target returns the
 // {stdout, stderr, code, ok} object, accessed with dot syntax the way a
-// magusfile reads os.exec(...).stdout.
+// magusfile reads proc.exec(...).stdout.
 func TestBuzzSpellCaptureReturnsObject(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)

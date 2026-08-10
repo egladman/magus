@@ -27,6 +27,7 @@
 
 import "std";
 import "os";
+import "proc";
 import "json";
 import "semver";
 import "time";
@@ -56,7 +57,7 @@ fun hasInstallablePatch(pkg: str, patched: str, installed: str) > bool {
     if (patched == "" or patched == "<0.0.0") {
         return false;
     }
-    final res = os\exec("pnpm", args: ["view", pkg, "time", "--json"], dir: ".",
+    final res = proc\exec("pnpm", args: ["view", pkg, "time", "--json"], dir: ".",
         opts: {"allow_failure": true});
     if (res.code != 0) {
         return false; // registry unreachable: defer rather than fail on a network blip
@@ -109,7 +110,7 @@ fun hasInstallablePatch(pkg: str, patched: str, installed: str) > bool {
 // audit scans the current project and fails ONLY on findings that are actionable today.
 // Everything else is printed and carried. Throws to fail the calling target.
 export fun audit() > void {
-    final res = os\exec("pnpm", args: ["audit", "--json"], dir: ".",
+    final res = proc\exec("pnpm", args: ["audit", "--json"], dir: ".",
         opts: {"allow_failure": true});
     if (res.code == 0) {
         std\print("audit: no advisories match this tree");

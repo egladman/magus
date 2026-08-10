@@ -24,6 +24,7 @@ import "magus/spell";
 
 import "os";
 
+import "proc";
 // "onepassword", not "op": a spell's registered name has to stand alone - it is what
 // `magus describe spells` and every diagnostic show, with no directory around it to
 // supply the context. `op` is the binary, not the product.
@@ -53,7 +54,7 @@ final SCHEME = "op://";
 //   magus\secret.read("op://Private/Docker Hub/credential")
 //
 // `op read` prints the secret to stdout with a trailing newline; magus trims captured
-// output, so nothing here has to. os\exec raises on a non-zero exit, which is the
+// output, so nothing here has to. proc\exec raises on a non-zero exit, which is the
 // behavior wanted: a locked vault, an expired session, or a typo'd path all fail the
 // read rather than returning a blank that fails later at whatever consumes it.
 export fun resolve_secret(target: Target, cb: fun(any)) > str {
@@ -70,7 +71,7 @@ export fun resolve_secret(target: Target, cb: fun(any)) > str {
     }
 
     try {
-        os\which("op");
+        proc\which("op");
     } catch (e) {
         throw "onepassword: the `op` CLI is not on PATH.\n"
             + "  mise:     mise use -g op\n"
@@ -83,7 +84,7 @@ export fun resolve_secret(target: Target, cb: fun(any)) > str {
     // for the first time hits "not installed", "not signed in", or "wrong path", and a
     // message that names which one and what to type is the difference between a
     // five-second fix and an afternoon.
-    final res = os\exec("op", args: ["read", uri], dir: ".",
+    final res = proc\exec("op", args: ["read", uri], dir: ".",
         opts: {"allow_failure": true});
     if (res["code"] != 0) {
         final err = "" + res["stderr"];

@@ -11,6 +11,7 @@
 //
 // Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA.
 import "os";
+import "proc";
 import "advice";
 import "magus";
 import "std";
@@ -38,7 +39,7 @@ export fun added(diff: str) > [str] {
 // which is how a comment about NEW targets listed `preflight`, a target older than the
 // pull request. The base tree is the only thing that settles it.
 fun existed(name: str, base: str) > bool {
-    final res = os\exec("git", args: ["grep", "-q", "export fun " + name + "(",
+    final res = proc\exec("git", args: ["grep", "-q", "export fun " + name + "(",
         "origin/" + base, "--", "*.buzz"], dir: ".", opts: {"allow_failure": true});
     return res.ok;
 }
@@ -75,8 +76,8 @@ fun main() > void {
         return;
     }
 
-    os\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
-    final diff = os\exec("git", args: ["diff", "-U0", "origin/" + base + "..." + head, "--", "*.buzz"],
+    proc\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
+    final diff = proc\exec("git", args: ["diff", "-U0", "origin/" + base + "..." + head, "--", "*.buzz"],
         dir: ".", opts: {"allow_failure": true}).stdout;
     final names = added(diff);
     if (names.len() == 0) {

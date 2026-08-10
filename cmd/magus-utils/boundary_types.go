@@ -33,6 +33,7 @@ var boundaryTypes = []boundaryType{
 	// registry keys on the Buzz name, which is what makes that split expressible.
 	{Name: "Project", Type: reflect.TypeFor[spells.ProvidedProject]()},
 	{Name: "ExecResult", Type: reflect.TypeFor[types.ExecResult](), RuntimeObject: true},
+	{Name: "ShellCommand", Type: reflect.TypeFor[types.ShellCommand](), RuntimeObject: true},
 	{Name: "CommitAuthor", Type: reflect.TypeFor[types.CommitAuthor](), RuntimeObject: true},
 	{Name: "Commit", Type: reflect.TypeFor[types.CommitRecord](), RuntimeObject: true},
 	{Name: "Status", Type: reflect.TypeFor[types.StatusRecord](), RuntimeObject: true},

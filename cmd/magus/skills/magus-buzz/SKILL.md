@@ -98,7 +98,7 @@ fun main() > void {
 main();
 ```
 
-WRONG: `os\exec("magus", args: [...], dir: ".", opts: {})` - magus warns on it.
+WRONG: `proc\exec("magus", args: [...], dir: ".", opts: {})` - magus warns on it.
 CORRECT: `magus\cmd`, or the typed `magus\run` / `describe` / `insight` / `doctor`.
 
 Members that need a magusfile raise MGS1022 naming the constraint: the ones

@@ -20,6 +20,7 @@ var Modules = Set{
 	// Context-dependent (process / filesystem / network): full surface only. The
 	// browser has no way to provide these, so they are never in the playground.
 	"os":      {Register: RegisterOs},
+	"proc":    {Register: RegisterProc},
 	"fs":      {Register: RegisterFs},
 	"vcs":     {Register: RegisterVcs},
 	"archive": {Register: RegisterArchive},

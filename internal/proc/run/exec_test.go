@@ -70,7 +70,7 @@ func TestExecCapturesOutputWithNoTrailingNewline(t *testing.T) {
 
 // TestExecClassifiesAMissingBinary covers Exec specifically, because Exec is the path
 // every real caller takes (internal/interp/bindings/command.go's spell-op dispatch,
-// std/os.go's os\exec, std/magus.go, internal/service/journal.go). The sibling
+// std/os.go's proc\exec, std/magus.go, internal/service/journal.go). The sibling
 // assertion in run_integration_test.go sits behind //go:build integration, which no
 // target passes, so it runs nowhere - a missing tool is common enough that its
 // classification should be checked by the ordinary suite.

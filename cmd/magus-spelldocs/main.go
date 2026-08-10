@@ -293,7 +293,7 @@ func writeArgsSection(b *strings.Builder, invoker string) {
 	fmt.Fprintf(b, "| `stdin` | `str` | Data written to the command's standard input. | %s |\n", src("stdin"))
 	fmt.Fprintln(b)
 	fmt.Fprintln(b)
-	fmt.Fprintf(b, "Working directory and environment are NOT options: they ride the context, as `%s[\"<op>\"](ctx.withCwd(\"sub\"))` and `%s[\"<op>\"](ctx.withEnv({\"CGO_ENABLED\": \"0\"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise - passing either as an option is an error.\n\n", invoker, invoker)
+	fmt.Fprintf(b, "Working directory and environment are NOT options: they ride the context, as `%s[\"<op>\"](ctx.withCwd(\"sub\"))` and `%s[\"<op>\"](ctx.withEnv({\"CGO_ENABLED\": \"0\"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise; passing either as an option is an error.\n\n", invoker, invoker)
 	fmt.Fprintf(b, "Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).\n\n")
 }
 

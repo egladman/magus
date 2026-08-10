@@ -42,6 +42,22 @@ type ExecOptions struct {
 	// Capture to read output without echoing it (e.g. stdout captured into a
 	// variable and written to a file); without Capture the output is discarded.
 	Quiet bool
+	// TTY runs the child attached to a pseudo-terminal instead of pipes.
+	//
+	// This is the difference between the output a tool gives YOU and the output it
+	// gives a pipe. Nearly every modern CLI calls isatty() and, finding a pipe,
+	// turns off colour and drops its progress rendering. Without this flag magus
+	// necessarily shows - and caches - that degraded form.
+	//
+	// Two consequences worth knowing before setting it. A terminal is ONE stream,
+	// so stdout and stderr arrive interleaved and Capture returns them both in
+	// Stdout, with Stderr empty; that is inherent to a tty, not a shortcut here.
+	// And the captured bytes now contain escape sequences, so a tool that animates
+	// a progress bar records every frame it drew.
+	//
+	// Unsupported outside unix (see pty_other.go), where it is an error rather than
+	// a silent downgrade to pipes.
+	TTY bool
 }
 
 // ExecResult is the outcome of Exec.
@@ -124,7 +140,9 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 			"vars", withheldDaemon)
 	}
 	if opts.Stdin != "" {
-		c.Stdin = strings.NewReader(opts.Stdin)
+		// Wrapped so the TTY branch can recover the text and replay it through the
+		// pty master; a plain strings.Reader on a pty slave would never be read.
+		c.Stdin = &stringReaderMarker{Reader: strings.NewReader(opts.Stdin), s: opts.Stdin}
 	}
 
 	outW, errW := OutputWriters(ctx)
@@ -139,9 +157,14 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		c.Stdout, c.Stderr = outW, errW
 	}
 
-	slog.DebugContext(ctx, "run.exec", "cmd", name, "args", args, "dir", c.Dir)
+	slog.DebugContext(ctx, "run.exec", "cmd", name, "args", args, "dir", c.Dir, "tty", opts.TTY)
 
-	runErr := c.Run()
+	var runErr error
+	if opts.TTY {
+		runErr = runOnPTY(c, outW, &outBuf, opts)
+	} else {
+		runErr = c.Run()
+	}
 	runErr = classifyMissingBinary(runErr, name, c.ProcessState != nil)
 	if ctx.Err() != nil {
 		KillGroup(c) // reap grandchildren that ignored the graceful signal
@@ -187,7 +210,7 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 }
 
 // classifyMissingBinary tags a failure to START the process as MGS3003, the same code
-// std/os.go's os\which() already gives a Buzz script for the same condition. An op's
+// std/os.go's proc\which() already gives a Buzz script for the same condition. An op's
 // tool going missing used to surface here as a bare exec error with no code and no
 // docs link.
 //

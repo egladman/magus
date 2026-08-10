@@ -162,7 +162,7 @@ type Service struct {
 // other custom logic belongs in a magusfile target body, not the operation model.)
 //
 // Capture makes the op's magusfile method return the {stdout, stderr, code, ok}
-// record (the same shape os.exec returns) instead of void — for ops whose output
+// record (the same shape proc.exec returns) instead of void — for ops whose output
 // is the point (a hash, a revision date) rather than a build action whose exit code
 // is all that matters. It is Go-internal (the resolved op), not mirrored to Buzz.
 type Op struct {

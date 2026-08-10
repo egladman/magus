@@ -10,6 +10,7 @@
 //
 // Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA.
 import "os";
+import "proc";
 import "advice";
 import "std";
 
@@ -59,8 +60,8 @@ fun main() > void {
         return;
     }
 
-    os\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
-    final diff = os\exec("git", args: ["diff", "origin/" + base + "..." + head, "--", "magus.yaml"],
+    proc\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
+    final diff = proc\exec("git", args: ["diff", "origin/" + base + "..." + head, "--", "magus.yaml"],
         dir: ".", opts: {"allow_failure": true}).stdout;
     final floor = raised(diff);
     if (floor == "") {

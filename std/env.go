@@ -139,7 +139,7 @@ func EnvSet(ctx context.Context, name, value string) error {
 	slog.DebugContext(ctx, "env.set", "name", name)
 	if p := sandbox.FromContext(ctx); p != nil && !p.AllowEnv(name) {
 		// Refuse to re-introduce a stripped name; otherwise a spell could set
-		// GITHUB_TOKEN back into magus's env so the next os.exec carries it.
+		// GITHUB_TOKEN back into magus's env so the next proc.exec carries it.
 		slog.WarnContext(ctx, "env.set blocked by the sandbox", "name", name)
 		return nil
 	}

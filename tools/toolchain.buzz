@@ -35,6 +35,7 @@
 
 import "std";
 import "os";
+import "proc";
 import "semver";
 
 // remotes maps a probed binary to the upstream repository that tags its releases, and to
@@ -69,7 +70,7 @@ fun tagsOf(bin: str) > [str] {
     os\withEnv({"GIT_TERMINAL_PROMPT": "0"}, callback: fun () > void {
         // quiet: this is a 954-line listing being consumed, not a build step being
         // watched. Capture is unaffected.
-        final res = os\exec("git", args: ["ls-remote", "--tags", "--refs", remote["url"]],
+        final res = proc\exec("git", args: ["ls-remote", "--tags", "--refs", remote["url"]],
             dir: ".", opts: {"allow_failure": true, "quiet": true});
         if (res.code != 0) {
             return; // unreachable remote: reported as unknown, never as up to date
@@ -114,7 +115,7 @@ fun extract(output: str) > str {
 // tool is absent or says nothing version-shaped. Absent is not a finding: a tool this
 // repo does not install is not out of date.
 fun probe(bin: str, args: [str]) > str {
-    final res = os\exec(bin, args: args, dir: ".", opts: {"allow_failure": true, "quiet": true});
+    final res = proc\exec(bin, args: args, dir: ".", opts: {"allow_failure": true, "quiet": true});
     if (res.code != 0) {
         return "";
     }

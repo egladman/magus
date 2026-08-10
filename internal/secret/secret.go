@@ -3,7 +3,7 @@
 // everything it persists.
 //
 // WHERE a secret comes from is a spell's problem: a provider is an ordinary magus spell,
-// so 1Password, Vault or AWS Secrets Manager are `os\exec` away and the engine grows no
+// so 1Password, Vault or AWS Secrets Manager are `proc\exec` away and the engine grows no
 // per-provider code. What only the engine can do is know that a value IS a secret, and a
 // magusfile cannot express that at any level of cleverness - which is why this package
 // exists rather than a magusfile helper that shells out to `op read`.

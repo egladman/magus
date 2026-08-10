@@ -6,6 +6,7 @@ import "./tools/drift" as drift;
 
 // Host modules: magus layers its methods onto Buzz's stdlib (camelCase).
 import "os";
+import "proc";
 import "fs";
 import "http";
 import "vcs";
@@ -695,7 +696,7 @@ export fun image_login(ctx: magus\Context, args: [str]) > void {
     foreach (reg in registries) {
         final user = magus\secret.read(reg.user_ref);
         final token = magus\secret.read(reg.token_ref);
-        os\exec("docker", args: ["login", reg.host, "-u", user, "--password-stdin"],
+        proc\exec("docker", args: ["login", reg.host, "-u", user, "--password-stdin"],
             dir: ".", opts: {"stdin": token});
         magus\info("image-login: " + reg.host + " authenticated as " + user);
     }
@@ -706,14 +707,14 @@ export fun image_scan(ctx: magus\Context, args: [str]) > void {
     ctx.needs(image_build);
     if (ctx.has_charm("rw")) {
         fs\makeDirectory("dist");
-        os\exec("trivy", ["image",
+        proc\exec("trivy", ["image",
             "--format", "sarif",
             "--output", fs\join("dist", "trivy.sarif"),
             "--severity", "HIGH,CRITICAL",
             "--exit-code", "1",
             image_tag()]);
     } else {
-        os\exec("trivy", ["image", image_tag()]);
+        proc\exec("trivy", ["image", image_tag()]);
     }
 }
 
@@ -754,7 +755,7 @@ export fun security(ctx: magus\Context, args: [str]) > void {
     // answer across every op lint runs. GOEXPERIMENT is threaded through so the sandboxed
     // child builds with the same fingerprint as the rest of the workspace.
     go["govulncheck"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}));
-    os\exec("trivy", ["fs", "--scanners", "license",
+    proc\exec("trivy", ["fs", "--scanners", "license",
         "--severity", "HIGH,CRITICAL",
         "--ignored-licenses", "AGPL-3.0,AGPL-3.0-only,AGPL-3.0-or-later,"
             + "GPL-3.0,GPL-3.0-only,GPL-3.0-or-later,GPL-2.0-or-later,"
@@ -778,8 +779,8 @@ export fun security(ctx: magus\Context, args: [str]) > void {
 export fun man_generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("manpage/*.1", "internal/manpage/testdata/api.lock");
     fs\makeDirectory("manpage");
-    os\exec("go", ["run", "./cmd/magus-manpage", "-format", "roff", "-out", "manpage"]);
-    os\exec("go", ["generate", "./internal/manpage/..."]);
+    proc\exec("go", ["run", "./cmd/magus-manpage", "-format", "roff", "-out", "manpage"]);
+    proc\exec("go", ["generate", "./internal/manpage/..."]);
 }
 
 // CHANGELOG.md is a root artifact. Keeping its generator beside the file avoids a
@@ -789,7 +790,7 @@ export fun changelog_generate(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles("releases/*.yaml", "cmd/magus-utils/**/*.go", "internal/**/*.go",
         "go.mod", "go.sum", "go.work", "go.work.sum");
     ctx.modifiesExistingFiles("CHANGELOG.md");
-    os\exec("go", ["run", "./cmd/magus-utils", "generate-changelog",
+    proc\exec("go", ["run", "./cmd/magus-utils", "generate-changelog",
         "-releases", "./releases", "-changelog", "./CHANGELOG.md"]);
 }
 
@@ -798,14 +799,14 @@ export fun changelog_generate(ctx: magus\Context, args: [str]) > void {
 // methods use direct field access, so Magus never reflects at a Buzz boundary.
 export fun types_generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("types/buzzobject_gen.go");
-    os\exec("go", ["generate", "./types"]);
+    proc\exec("go", ["generate", "./types"]);
 }
 
 // Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.
 export fun bindings_generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(types_generate);
     ctx.writesFiles("internal/interp/bindings/gen/*.go");
-    os\exec("go", ["generate", "./std/..."]);
+    proc\exec("go", ["generate", "./std/..."]);
 }
 
 // Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen),
@@ -820,7 +821,7 @@ export fun spells_generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(types_generate);
     ctx.writesFiles("internal/spellruntime/gen/*.bo", "internal/spellruntime/gen/types/*.buzz",
                     "internal/spellruntime/gen/decls/*.buzz");
-    os\exec("go", ["generate", "./internal/spellruntime/..."]);
+    proc\exec("go", ["generate", "./internal/spellruntime/..."]);
 }
 
 // Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked
@@ -829,7 +830,7 @@ export fun spells_generate(ctx: magus\Context, args: [str]) > void {
 export fun mocks_generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(types_generate);
     ctx.writesFiles("**/gen/mocks/*.go");
-    os\exec("go", ["tool", "mockery"]);
+    proc\exec("go", ["tool", "mockery"]);
 }
 
 // Reinstalls the agent skills from their embedded sources in cmd/magus/skills.
@@ -863,7 +864,7 @@ export fun config_generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(types_generate);
     ctx.writesFiles("cmd/magus/gen/*.go", "schema/gen/*.go", "internal/config/gen/*.go",
                 "cmd/magus/completions/*");
-    os\exec("go", ["generate", "./cmd/magus/..."]);
+    proc\exec("go", ["generate", "./cmd/magus/..."]);
 }
 
 // The committed docs Markdown (Buzz module reference, spell docs, Markdown manpages)
@@ -981,17 +982,17 @@ export fun tapes(ctx: magus\Context, args: [str]) > void {
     // editing a tape invalidated nothing and told a reader it affected no target.
     ctx.readsFiles("tapes/*.tape", "tapes/demo-init.sh");
     ctx.writesFiles("assets/gen/*.gif");
-    // try/catch, not a sentinel: os.which RAISES when the tool is absent, so the check
+    // try/catch, not a sentinel: proc.which RAISES when the tool is absent, so the check
     // cannot be forgotten and the helpful message stays where it was.
     try {
-        os\which("vhs");
+        proc\which("vhs");
     } catch (e) {
         throw "tapes: vhs not found on PATH; install it with `brew install vhs` "
             + "(see tapes/README.md)";
     }
     foreach (tape in fs\glob("tapes/*.tape")) {
         magus\info("recording {tape.value}");
-        os\exec("vhs", [tape.value], ".", {});
+        proc\exec("vhs", [tape.value], ".", {});
     }
 }
 
@@ -1039,8 +1040,8 @@ fun goarm_level(goos: str, goarch: str) > str {
 // TEXTS come from the module cache, where the module zips already put them - no classifier,
 // no network, no extra tool to pin.
 fun write_notices(stage: str, binary: str) > void {
-    final modcache = os\exec("go", ["env", "GOMODCACHE"], ".", {}).stdout.split(separator: "\n")[0];
-    final listing = os\exec("go", ["version", "-m", fs\join(stage, binary)], ".", {}).stdout;
+    final modcache = proc\exec("go", ["env", "GOMODCACHE"], ".", {}).stdout.split(separator: "\n")[0];
+    final listing = proc\exec("go", ["version", "-m", fs\join(stage, binary)], ".", {}).stdout;
 
     var body = "THIRD-PARTY NOTICES\n\n"
         + "magus is licensed under the terms in the accompanying LICENSE file. It links the\n"
@@ -1295,8 +1296,8 @@ export fun release_build(ctx: magus\Context, args: [str]) > void {
 // regression guard, safe to run here (unlike setup-magus, which can't depend on the
 // magus source tree since it's reused by arbitrary external repos).
 export fun release_sign(ctx: magus\Context, args: [str]) > void {
-    os\exec("go", ["run", "./cmd/magus-utils", "sign", fs\join("dist", "SHA256SUMS")]);
-    os\exec("go", ["run", "./cmd/magus-utils", "verify",
+    proc\exec("go", ["run", "./cmd/magus-utils", "sign", fs\join("dist", "SHA256SUMS")]);
+    proc\exec("go", ["run", "./cmd/magus-utils", "verify",
         fs\join("dist", "SHA256SUMS"), fs\join("dist", "SHA256SUMS.sig")]);
 }
 
@@ -1573,7 +1574,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     fs\writeFile("coverage.hand.out",
         cov\stripGenerated(fs\readFile("coverage.out"),
             prefix: cov\modulePath(fs\readFile("go.mod")) + "/"));
-    final pct = total_coverage(os\exec("go", ["tool", "cover", "-func=coverage.hand.out"]).stdout);
+    final pct = total_coverage(proc\exec("go", ["tool", "cover", "-func=coverage.hand.out"]).stdout);
     if (std\parseInt(pct.split(".")[0]) < 60) {
         throw "test: coverage " + pct + "% is below the 60% floor; investigate the regression or lower the floor deliberately";
     }
@@ -1682,7 +1683,7 @@ export fun build(ctx: magus\Context, args: [str])  > void {
 export fun lint_build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles("libs/testsprawl/.custom-gcl.yml", "libs/testsprawl/go.mod",
                    "libs/testsprawl/go.sum", "libs/testsprawl/**/*.go");
-    os\exec("golangci-lint", ["custom"], "libs/testsprawl");
+    proc\exec("golangci-lint", ["custom"], "libs/testsprawl");
 }
 
 // Formats and builds the linter first, then golangci-lint, go vet, markdownlint, and
@@ -1713,7 +1714,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     // `--version` on a custom binary carries a build timestamp that moves every
     // rebuild.
     ctx.readsFiles("libs/testsprawl/.custom-gcl.yml", "libs/testsprawl/**/*.go");
-    os\exec("./custom-gcl", ["run"]);
+    proc\exec("./custom-gcl", ["run"]);
     go["go-vet"](ctx);
     markdown.markdownlint(ctx);
     // The repo-root prose, named rather than walked. NOT markdown.typos: that op takes no
@@ -1778,7 +1779,7 @@ export fun completion_test(ctx: magus\Context, args: [str]) > void {
     // re-derive the same answer with a git-diff grep in the workflow.
     ctx.readsFiles("hack/completion-checks/*", "cmd/magus/completions/*");
     try {
-        os\which("docker");
+        proc\which("docker");
     } catch (e) {
         throw "completion-test needs a docker daemon: it runs each shell's official image";
     }
@@ -1820,7 +1821,7 @@ export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void {
     // Narrow: affected reaches this only when the codecs or their tests move.
     ctx.readsFiles("internal/compress/*.go");
     foreach (lib in ["libzstd", "liblzma"]) {
-        os\exec("pkg-config", ["--exists", lib], ".", {});
+        proc\exec("pkg-config", ["--exists", lib], ".", {});
     }
     go["go-test"](ctx.withEnv({"CGO_ENABLED": "1"}),
         {"args": ["-tags", "liblzma,libzstd", "./internal/compress/"]});
@@ -1830,7 +1831,7 @@ export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void {
 // outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.
 export fun ci_shard(ctx: magus\Context, args: [str]) > void {
     var input = "";
-    if (!os\stdinIsTerminal()) {
+    if (!proc\stdinIsTerminal()) {
         input = io.stdin.readAll();
     }
     if (input == "") {
@@ -1891,8 +1892,8 @@ export fun ci_shard(ctx: magus\Context, args: [str]) > void {
 // replaced read that as ready and handed the missing packages to esbuild. On a warm tree
 // --frozen-lockfile is about a second and changes nothing.
 fun rebuild_console() > void {
-    os\exec("pnpm", ["install", "--frozen-lockfile"], "console", {});
-    os\exec("pnpm", ["run", "build"], "console", {});
+    proc\exec("pnpm", ["install", "--frozen-lockfile"], "console", {});
+    proc\exec("pnpm", ["run", "build"], "console", {});
 }
 
 // rerender_docs re-renders docs/gen via the docs project's fast `render` target.
@@ -1905,7 +1906,7 @@ fun rebuild_console() > void {
 fun rerender_docs() > void {
     var bin = os\env("MAGUS");
     if (bin == null or ("" + bin) == "") { bin = "magus"; }
-    os\exec("" + bin, ["run", "render", "docs"], ".", {});
+    proc\exec("" + bin, ["run", "render", "docs"], ".", {});
 }
 
 // missing_input phrases a deploy-generate precondition that ANOTHER project owns.

@@ -203,7 +203,7 @@ func ParseTarget(s string) (Target, error) {
 }
 
 // ExecResult is the serializable {stdout, stderr, code, ok} shape every magus exec
-// surface returns (os.exec, magus.cmd, a captured spell op); ok is code == 0. It is
+// surface returns (proc.exec, magus.cmd, a captured spell op); ok is code == 0. It is
 // the boundary mirror of the richer internal run.ExecResult.
 //
 // The Buzz `object ExecResult` mirror is generated from this struct by
@@ -213,6 +213,19 @@ type ExecResult struct {
 	Stderr string
 	Code   int
 	OK     bool `buzz:"ok"`
+}
+
+// ShellCommand is the argv that runs a line through the platform shell: what
+// proc.shell returns, and what proc.exec takes. It exists so the shell choice is a
+// VALUE rather than a decision taken inside a call - you can print it, log it, or
+// assert on it before anything runs, which the old proc.shell wrapper made
+// impossible.
+//
+// The Buzz `object ShellCommand` mirror is generated from this struct by
+// cmd/magus-utils types (go:generate); keep them in lockstep through the generator.
+type ShellCommand struct {
+	Bin  string
+	Args []string
 }
 
 // MagusfileSpellName is the spell a project's own magusfile is bound as. It is matched

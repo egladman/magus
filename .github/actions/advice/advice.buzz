@@ -10,6 +10,7 @@
 // comment trustworthy across pushes: fix the conflicts and the conflict section
 // disappears on the next run, rather than lingering as a stale scold.
 import "os";
+import "proc";
 import "fs";
 import "time";
 import "serialize";
@@ -244,7 +245,7 @@ export fun silences(labels: [str], name: str) > bool {
 
 // silenced asks GitHub for this pull request's labels and applies the rule above.
 export fun silenced(repo: str, pr: str, name: str) > bool {
-    final res = os\exec("gh", args: ["api", "repos/" + repo + "/issues/" + pr + "/labels"],
+    final res = proc\exec("gh", args: ["api", "repos/" + repo + "/issues/" + pr + "/labels"],
         dir: ".", opts: {"quiet": true, "allow_failure": true});
     if (!res.ok) { return false; }
     var labels = mut [];
@@ -259,7 +260,7 @@ export fun silenced(repo: str, pr: str, name: str) > bool {
 // marker is an HTML comment, and quoting it through a jq -r filter inside YAML inside
 // bash is three layers of escaping to get wrong.
 fun find(repo: str, pr: str) > str {
-    final listed = os\exec("gh", args: ["api", "--paginate",
+    final listed = proc\exec("gh", args: ["api", "--paginate",
         "repos/" + repo + "/issues/" + pr + "/comments"], dir: ".", opts: {"quiet": true});
     foreach (c in serialize\jsonDecode(listed.stdout).listValue()) {
         if (c.q("body").stringValue().indexOf(comment_marker) != null) {
@@ -276,7 +277,7 @@ export fun publish(repo: str, pr: str, name: str, title: str, body: str) > void 
     final id = find(repo, pr: pr);
     var current = "";
     if (id != "") {
-        final got = os\exec("gh", args: ["api", "repos/" + repo + "/issues/comments/" + id],
+        final got = proc\exec("gh", args: ["api", "repos/" + repo + "/issues/comments/" + id],
             dir: ".", opts: {"quiet": true});
         current = serialize\jsonDecode(got.stdout).q("body").stringValue();
     }
@@ -288,11 +289,11 @@ export fun publish(repo: str, pr: str, name: str, title: str, body: str) > void 
     final payload = "/tmp/magus-advice-payload.json";
     fs\writeFile(payload, content: serialize\jsonEncode({"body": composed}));
     if (id == "") {
-        os\exec("gh", args: ["api", "--method", "POST",
+        proc\exec("gh", args: ["api", "--method", "POST",
             "repos/" + repo + "/issues/" + pr + "/comments", "--input", payload], dir: ".", opts: {});
         return;
     }
-    os\exec("gh", args: ["api", "--method", "PATCH",
+    proc\exec("gh", args: ["api", "--method", "PATCH",
         "repos/" + repo + "/issues/comments/" + id, "--input", payload], dir: ".", opts: {});
 }
 

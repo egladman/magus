@@ -101,7 +101,7 @@ var Vcs = Module{
 		},
 		{
 			Name: "cmd",
-			Doc:  "Escape hatch: run the active VCS binary (git/hg/jj) with args, for something no method covers. Same result and raise semantics as magus.cmd and os.exec - returns {stdout, stderr, code, ok} and raises on a non-zero exit unless opts.allow_failure. opts.dir runs it elsewhere (relative to the target's cwd, unlike os.exec's positional dir); opts.quiet captures the output without echoing it to the console. This is VCS-AGNOSTIC only in that magus picks the binary; the args are the backend's own, so branch on vcs.name() when they differ. Raises when no VCS is resolved, rather than running nothing and reporting success.",
+			Doc:  "Escape hatch: run the active VCS binary (git/hg/jj) with args, for something no method covers. Same result and raise semantics as magus.cmd and proc.exec - returns {stdout, stderr, code, ok} and raises on a non-zero exit unless opts.allow_failure. opts.dir runs it elsewhere (relative to the target's cwd, unlike proc.exec's positional dir); opts.quiet captures the output without echoing it to the console. This is VCS-AGNOSTIC only in that magus picks the binary; the args are the backend's own, so branch on vcs.name() when they differ. Raises when no VCS is resolved, rather than running nothing and reporting success.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -447,7 +447,7 @@ func VcsTags(ctx context.Context, pattern string) ([]types.VCSTag, error) {
 
 // vcsExe returns the absolute path of the active VCS executable, or "" when
 // unresolved or not on PATH. Internal: the Buzz surface exposes vcs.cmd, which runs the
-// binary, rather than a path for the caller to hand to os.exec themselves.
+// binary, rather than a path for the caller to hand to proc.exec themselves.
 func vcsExe(ctx context.Context) (string, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
@@ -463,9 +463,9 @@ func vcsExe(ctx context.Context) (string, error) {
 // VcsCmd runs the active VCS binary with args.
 //
 // This replaced vcs.exe, which handed back a PATH and left every caller to write
-// os.exec(<the vcs binary>, [...]) - two calls, and a silent no-op when the path came back
+// proc.exec(<the vcs binary>, [...]) - two calls, and a silent no-op when the path came back
 // empty because no VCS was resolved. Returning an ExecResult also puts the escape hatch
-// on the same typed footing as magus.cmd and os.exec instead of a bare string. "exe" was
+// on the same typed footing as magus.cmd and proc.exec instead of a bare string. "exe" was
 // the wrong word besides: it reads as a Windows file extension, and the value is a
 // binary on every platform magus runs.
 func VcsCmd(ctx context.Context, args []string, opts map[string]any) (types.ExecResult, error) {

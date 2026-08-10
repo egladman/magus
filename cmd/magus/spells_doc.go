@@ -28,6 +28,6 @@ package main
 //
 // Host utility modules are imported directly, one bare import per module:
 //
-//	import "os";   // os.exec (direct) / os.execSh (shell)
+//	import "os";   // proc.exec (direct) / os.execSh (shell)
 //	import "fs";   // filesystem
 //	import "vcs";  // VCS introspection

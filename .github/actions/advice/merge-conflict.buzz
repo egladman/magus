@@ -8,6 +8,7 @@
 // Reads REPO, PR_NUMBER, PR_BASE, and PR_HEAD_SHA from the environment, and writes its
 // section of the pull request's one magus comment through advice\publish.
 import "os";
+import "proc";
 import "advice";
 import "magus";
 import "std";
@@ -27,8 +28,8 @@ final section = "merge-conflicts";
 // pull_request event to the ephemeral merge commit, which is base already merged with
 // head - comparing that against base would find nothing.
 fun conflicted(base: str, head: str) > [str] {
-    os\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
-    final res = os\exec("git", args: ["merge-tree", "--write-tree", "--name-only",
+    proc\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
+    final res = proc\exec("git", args: ["merge-tree", "--write-tree", "--name-only",
         "--no-messages", "origin/" + base, head], dir: ".", opts: {"allow_failure": true});
     if (res.code == 0) { return mut []; }
     // 1 is "merged with conflicts"; anything else is git failing to answer at all, which
