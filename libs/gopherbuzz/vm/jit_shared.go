@@ -93,6 +93,10 @@ var (
 	// workspace's chunks on every edit, it accumulates. Entries leave via jitEvict.
 	jitCache      sync.Map // weak.Pointer[Chunk] -> *compiledJIT (jitIneligible == not eligible)
 	jitIneligible = &compiledJIT{}
+	// jitCompileMu serializes code generation; see jitCompileCached for why the
+	// assembler cannot be entered concurrently. It guards the compile path only —
+	// the cache read above it stays lock-free.
+	jitCompileMu sync.Mutex
 )
 
 // jitEvict drops a dead chunk's cache entry and releases its executable pages.
@@ -243,36 +247,48 @@ func (vm *VM) jitRun() (Value, bool, error) {
 // reports each defect once per chunk instead of once per run.
 func jitCompileCached(chunk *Chunk) (jc *compiledJIT, codegenFailed bool) {
 	key := weak.Make(chunk)
-	if v, ok := jitCache.Load(key); ok {
-		c := v.(*compiledJIT)
-		if c == jitIneligible || c.disabled.Load() {
-			return nil, false
-		}
+	if c, ok := jitCacheLoad(key); ok {
 		return c, false
+	}
+	// Compilation is serialized. golang-asm's NewBuilder lazily initializes
+	// package-level assembler tables (obj/arm64's optab and xcmp, and the x86
+	// equivalent) with no synchronization of its own, so two goroutines entering
+	// the code generator at the same moment race INSIDE it — on any two chunks, not
+	// just the same one. magus runs targets concurrently and the daemon serves
+	// concurrent requests, so that is a production scenario rather than a test
+	// artifact; it went unseen because the differential suite runs one VM at a time.
+	// Serializing costs nothing that matters: this happens once per chunk, on the
+	// path that then assembles machine code.
+	jitCompileMu.Lock()
+	defer jitCompileMu.Unlock()
+	if c, ok := jitCacheLoad(key); ok {
+		return c, false // another goroutine compiled it while we waited
 	}
 	jc, failed := safeCompileJIT(chunk)
 	stored := jc
 	if jc == nil {
 		stored = jitIneligible
 	}
-	prev, raced := jitCache.LoadOrStore(key, stored)
-	if raced {
-		// Two VMs compiled the same shared chunk at once. Ours has never been
-		// entered and nobody else can reach it, so release it here rather than leak
-		// the mapping; everyone uses the winner's. LoadOrStore also makes the
-		// cleanup below register exactly once per chunk.
-		if jc != nil {
-			unmapExecutable(jc.code)
-		}
-		if c := prev.(*compiledJIT); c != jitIneligible {
-			return c, failed
-		}
-		return nil, failed
-	}
+	jitCache.Store(key, stored)
 	// The argument is the WEAK key, never the chunk: a cleanup that referenced its
 	// own object would keep it alive forever and so never run.
 	runtime.AddCleanup(chunk, jitEvict, key)
 	return jc, failed
+}
+
+// jitCacheLoad reads the cache, collapsing the two "do not run this natively"
+// verdicts — a chunk no backend compiles, and one disabled by a bad exit — into the
+// same nil. ok reports that the chunk has a cached verdict at all, which is what
+// tells the caller not to compile it again.
+func jitCacheLoad(key weak.Pointer[Chunk]) (jc *compiledJIT, ok bool) {
+	v, ok := jitCache.Load(key)
+	if !ok {
+		return nil, false
+	}
+	if c := v.(*compiledJIT); c != jitIneligible && !c.disabled.Load() {
+		return c, true
+	}
+	return nil, true
 }
 
 // safeCompileJIT wraps compileJIT so a code-generator defect degrades to the

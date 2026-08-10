@@ -5,6 +5,7 @@ package vm
 import (
 	"context"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 	"weak"
@@ -548,6 +549,91 @@ func TestJITCacheReleasesDeadChunks(t *testing.T) {
 		// Nothing compiles during the loop, so the gauge only falls; this chunk
 		// accounts for at least `mine` of the fall however many others also went.
 		assert.LessOrEqual(t, JITMappedBytes(), peak-mine, "executable memory released")
+	})
+}
+
+// TestJITIneligibleEntryIsAlsoEvicted covers the entry type that was actually the
+// bulk of the leak. Executable pages are only ever mapped for a chunk the backends
+// COMPILE, and most chunks are not: anything with a call, a string, or a member
+// access is declined. Every one of those still got a cached verdict, and under a
+// strong key that entry pinned the whole chunk — Code, Consts and all — for the
+// life of the process. So the dominant cost was never the RX pages; it was one
+// pinned Chunk per chunk the process had ever run.
+func TestJITIneligibleEntryIsAlsoEvicted(t *testing.T) {
+	jitTest(t, func(t *testing.T) {
+		var key weak.Pointer[Chunk]
+		func() {
+			// OpLoadTrue is outside the compilable set, so this is declined.
+			c := &Chunk{Name: "declined", LocalCount: 1, Code: []Instr{
+				{Op: OpLoadTrue},
+				{Op: OpReturn},
+			}}
+			key = weak.Make(c)
+			got, err := runChunk(t, c)
+			require.NoError(t, err)
+			require.Equal(t, True, got)
+		}()
+
+		v, cached := jitCache.Load(key)
+		require.True(t, cached, "a declined verdict is cached too")
+		require.Same(t, jitIneligible, v, "cached as ineligible")
+		require.Zero(t, JITRunCount(), "nothing was compiled, so nothing was mapped")
+
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			if _, still := jitCache.Load(key); !still || time.Now().After(deadline) {
+				break
+			}
+			runtime.GC()
+			time.Sleep(5 * time.Millisecond)
+		}
+
+		_, cached = jitCache.Load(key)
+		assert.False(t, cached, "ineligible entry evicted with its chunk")
+		assert.Nil(t, key.Value(), "declined chunk collected, not pinned by its own verdict")
+	})
+}
+
+// TestJITConcurrentCompileMapsOnce drives several VMs into the code generator at
+// once. Under -race this is what exposed a data race that had always been there:
+// golang-asm initializes package-level assembler tables from NewBuilder without
+// synchronization, so concurrent compilation corrupts the code generator's own
+// state. Nothing caught it because the differential suite runs one VM at a time.
+//
+// Keep it running under -race. The assertions below (one shared compilation, one
+// mapping) hold whether or not the scheduler overlaps the goroutines, but the race
+// detector only has something to find when it does.
+func TestJITConcurrentCompileMapsOnce(t *testing.T) {
+	jitTest(t, func(t *testing.T) {
+		const racers = 8
+		c := addChunk()
+		before := JITMappedBytes()
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		got := make([]*compiledJIT, racers)
+		for i := range got {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start // release them together to maximize the overlap
+				got[i], _ = jitCompileCached(c)
+			}()
+		}
+		close(start)
+		wg.Wait()
+
+		require.NotNil(t, got[0], "chunk compiled")
+		for i := 1; i < racers; i++ {
+			assert.Same(t, got[0], got[i], "racer %d got a different compilation", i)
+		}
+		// At most ONE mapping's worth was added: the compile path re-checks the
+		// cache under the lock, so racers dedupe instead of each compiling and
+		// discarding. Stated as an upper bound because a background collection may
+		// release some other test's chunk in the same window, which only moves this
+		// down; duplicate compilations would move it up by a multiple.
+		assert.LessOrEqual(t, JITMappedBytes()-before, int64(len(got[0].code)),
+			"the same chunk was compiled more than once")
+		runtime.KeepAlive(c)
 	})
 }
 

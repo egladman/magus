@@ -459,6 +459,11 @@ dispatch. On by default; disable with `BUZZ_JIT=0` or `vm.SetJIT(false)`.
   emits nothing else); generated code cannot, on both counts -- and `marshal.go`
   decodes chunks from `.bo` bytes the compiler never wrote. A malformed chunk is
   declined, exactly like an unsupported opcode.
+- Code generation is **serialized**. `golang-asm` initializes package-level
+  assembler tables from `NewBuilder` without synchronization, so two goroutines
+  entering the generator at once race inside it -- on any two chunks, not just the
+  same one. Compiling happens once per chunk, so the lock costs nothing; the cache
+  read in front of it stays lock-free.
 - A compilation lives exactly as long as its `*Chunk`. The cache is keyed by a
   WEAK pointer, so it is not itself the reason a chunk can never be collected; when
   the chunk goes, a cleanup drops the entry and unmaps the executable pages.
