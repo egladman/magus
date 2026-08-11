@@ -35,6 +35,13 @@ enum Kind {
   // host/tool/session data and the command or path; the response blob contains the guard decision.
   // OUTCOME_OK means the observation was recorded, NOT that a pre-hooked command later succeeded.
   KIND_AGENT_COMMAND = 7;
+  // A run made a credential reachable: a magusfile granted one to a destination host, or
+  // opened a loopback endpoint carrying one. The event names the REFERENCE, the host and
+  // the header, never the value - a grant resolves nothing at declaration time, and
+  // resolving one in order to log it would defeat that. It is the governance half of a
+  // fact the execution journal already records per invocation; this is what connects an
+  // agent's tool call to the credential it made spendable.
+  KIND_CREDENTIAL_GRANT = 8;
 }
 
 // Outcome is how the action ended.

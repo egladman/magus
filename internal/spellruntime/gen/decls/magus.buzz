@@ -366,6 +366,7 @@ export object TargetGraphNode {
     crossDependencies: [CrossTargetRef] = [],
     readsFiles: [InputRef] = [],
     readsSecrets: bool = false,
+    secretRefs: [str] = [],
     writesFiles: [OutputRef] = [],
     modifiesExistingFiles: [UpdateRef] = [],
     execOverrides: [str] = [],
@@ -428,6 +429,7 @@ export object ci {
 
 // Secret backend selection, and the credentials read through it.
 export object secret {
+    static extern fun endpoint(grant: any) > str !> any;
     static extern fun provider(spell: {str: any}) > void;
     static extern fun read(ref: str) > str !> any;
 }

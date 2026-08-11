@@ -325,6 +325,7 @@ func (v TargetGraphNode) BuzzObject() BuzzObject {
 		"crossDependencies":     itemsCrossDependencies,
 		"readsFiles":            itemsReadsFiles,
 		"readsSecrets":          v.ReadsSecrets,
+		"secretRefs":            v.SecretRefs,
 		"writesFiles":           itemsWritesFiles,
 		"modifiesExistingFiles": itemsModifiesExistingFiles,
 		"execOverrides":         v.ExecOverrides,

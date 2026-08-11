@@ -3,10 +3,13 @@ package trail
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/secret"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,9 +33,9 @@ func seedEvents(t *testing.T, base string, n int) []Event {
 
 func TestAppendAndReadRecent_NewestFirst(t *testing.T) {
 	dir := t.TempDir()
-	Append(dir, Event{Ts: 1, Kind: KindMCPToolCall, Actor: "a", Action: "query", Outcome: OutcomeOK})
-	Append(dir, Event{Ts: 2, Kind: KindTokenLifecycle, Actor: "cli", Action: "connector.create", Outcome: OutcomeOK})
-	Append(dir, Event{Ts: 3, Kind: KindJob, Actor: "daemon", Workspace: "/ws", Action: "graph build", Outcome: OutcomeError, Error: "boom"})
+	Append(t.Context(), dir, Event{Ts: 1, Kind: KindMCPToolCall, Actor: "a", Action: "query", Outcome: OutcomeOK})
+	Append(t.Context(), dir, Event{Ts: 2, Kind: KindTokenLifecycle, Actor: "cli", Action: "connector.create", Outcome: OutcomeOK})
+	Append(t.Context(), dir, Event{Ts: 3, Kind: KindJob, Actor: "daemon", Workspace: "/ws", Action: "graph build", Outcome: OutcomeError, Error: "boom"})
 
 	events, err := ReadRecent(dir, 10)
 	if err != nil {
@@ -52,7 +55,7 @@ func TestAppendAndReadRecent_NewestFirst(t *testing.T) {
 func TestReadRecent_LimitKeepsTailNewestFirst(t *testing.T) {
 	dir := t.TempDir()
 	for i := 1; i <= 5; i++ {
-		Append(dir, Event{Ts: int64(i), Kind: KindMCPToolCall, Action: string(rune('a' + i - 1))})
+		Append(t.Context(), dir, Event{Ts: int64(i), Kind: KindMCPToolCall, Action: string(rune('a' + i - 1))})
 	}
 	events, err := ReadRecent(dir, 2)
 	if err != nil {
@@ -76,12 +79,12 @@ func TestReadRecent_MissingOrEmptyBase(t *testing.T) {
 }
 
 func TestAppend_EmptyBaseIsNoop(t *testing.T) {
-	Append("", Event{Action: "x"}) // must not panic or create anything
+	Append(t.Context(), "", Event{Action: "x"}) // must not panic or create anything
 }
 
 func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 	dir := t.TempDir()
-	AppendAgentCommand(dir, AgentCommand{
+	AppendAgentCommand(t.Context(), dir, AgentCommand{
 		Actor:     "session:abc123",
 		Workspace: "/repo/magus",
 		Host:      "codex",
@@ -129,7 +132,7 @@ func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 
 func TestAppendAgentCommand_RequiresCommandOrPath(t *testing.T) {
 	dir := t.TempDir()
-	AppendAgentCommand(dir, AgentCommand{Tool: "Bash", Decision: "pass"})
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Decision: "pass"})
 	events, err := ReadRecent(dir, 1)
 	require.NoError(t, err)
 	require.Empty(t, events)
@@ -137,7 +140,7 @@ func TestAppendAgentCommand_RequiresCommandOrPath(t *testing.T) {
 
 func TestAppendAgentCommand_PathUsesFallbackActorAndAction(t *testing.T) {
 	dir := t.TempDir()
-	AppendAgentCommand(dir, AgentCommand{Path: "AGENTS.md", Decision: "advise", Context: "record the decision"})
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Path: "AGENTS.md", Decision: "advise", Context: "record the decision"})
 
 	events, err := ReadRecent(dir, 1)
 	require.NoError(t, err)
@@ -166,7 +169,7 @@ func TestAppendAgentCommand_PathUsesFallbackActorAndAction(t *testing.T) {
 
 func TestWriteBlob_RoundTripAndDedup(t *testing.T) {
 	dir := t.TempDir()
-	ref, size := WriteBlob(dir, "mcp", []byte("payload one"))
+	ref, size := WriteBlob(t.Context(), dir, "mcp", []byte("payload one"))
 	if ref == "" || size != int64(len("payload one")) || ref[:3] != "mcp" {
 		t.Fatalf("WriteBlob = %q,%d", ref, size)
 	}
@@ -174,7 +177,7 @@ func TestWriteBlob_RoundTripAndDedup(t *testing.T) {
 	if err != nil || string(body) != "payload one" {
 		t.Fatalf("ReadBlob = %q, %v", body, err)
 	}
-	if again, _ := WriteBlob(dir, "mcp", []byte("payload one")); again != ref { // content-addressed dedup
+	if again, _ := WriteBlob(t.Context(), dir, "mcp", []byte("payload one")); again != ref { // content-addressed dedup
 		t.Errorf("dedup failed: %q != %q", again, ref)
 	}
 }
@@ -182,14 +185,14 @@ func TestWriteBlob_RoundTripAndDedup(t *testing.T) {
 func TestWriteBlob_RejectsBadPrefixOrEmpty(t *testing.T) {
 	dir := t.TempDir()
 	for _, bad := range []string{"", "m", "MCP", "toolong99", "a1"} {
-		if ref, _ := WriteBlob(dir, bad, []byte("x")); ref != "" {
+		if ref, _ := WriteBlob(t.Context(), dir, bad, []byte("x")); ref != "" {
 			t.Errorf("WriteBlob(prefix=%q) = %q, want empty", bad, ref)
 		}
 	}
-	if ref, size := WriteBlob(dir, "mcp", nil); ref != "" || size != 0 {
+	if ref, size := WriteBlob(t.Context(), dir, "mcp", nil); ref != "" || size != 0 {
 		t.Errorf("empty data = %q,%d; want \"\",0", ref, size)
 	}
-	if ref, _ := WriteBlob("", "mcp", []byte("x")); ref != "" {
+	if ref, _ := WriteBlob(t.Context(), "", "mcp", []byte("x")); ref != "" {
 		t.Errorf("empty base = %q, want empty", ref)
 	}
 }
@@ -215,9 +218,9 @@ func TestRotate_CapsEventsAndGCsOrphanBlobs(t *testing.T) {
 	dir := t.TempDir()
 	refs := make([]string, 0, 5)
 	for i := 1; i <= 5; i++ {
-		ref, _ := WriteBlob(dir, "mcp", []byte(string(rune('a'+i-1))+"-body"))
+		ref, _ := WriteBlob(t.Context(), dir, "mcp", []byte(string(rune('a'+i-1))+"-body"))
 		refs = append(refs, ref)
-		Append(dir, Event{Ts: int64(i), Kind: KindMCPToolCall, Action: string(rune('a' + i - 1)), ResponseRef: ref})
+		Append(t.Context(), dir, Event{Ts: int64(i), Kind: KindMCPToolCall, Action: string(rune('a' + i - 1)), ResponseRef: ref})
 		// Past blobGraceWindow, so this test exercises real orphan collection rather
 		// than the grace-window protection covered by TestGCBlobs_ProtectsPendingBlob.
 		backdateBlob(t, dir, ref, blobGraceWindow+time.Second)
@@ -253,7 +256,7 @@ func TestRotate_CapsEventsAndGCsOrphanBlobs(t *testing.T) {
 // deterministic: no sleep, the blob's real age (just-created) is what protects it.
 func TestGCBlobs_ProtectsPendingBlob(t *testing.T) {
 	dir := t.TempDir()
-	ref, _ := WriteBlob(dir, "mcp", []byte("pending payload"))
+	ref, _ := WriteBlob(t.Context(), dir, "mcp", []byte("pending payload"))
 
 	gcBlobs(dir, nil) // simulate rotate's events snapshot: taken before Append landed
 
@@ -266,7 +269,7 @@ func TestGCBlobs_ProtectsPendingBlob(t *testing.T) {
 // window only delays collection, it must not disable it, or gcBlobs stops doing its job.
 func TestGCBlobs_CollectsOrphanPastGraceWindow(t *testing.T) {
 	dir := t.TempDir()
-	ref, _ := WriteBlob(dir, "mcp", []byte("truly orphaned"))
+	ref, _ := WriteBlob(t.Context(), dir, "mcp", []byte("truly orphaned"))
 	backdateBlob(t, dir, ref, blobGraceWindow+time.Second)
 
 	gcBlobs(dir, nil)
@@ -278,7 +281,7 @@ func TestGCBlobs_CollectsOrphanPastGraceWindow(t *testing.T) {
 
 func TestRotate_UnderCapAndEmptyBaseAreNoops(t *testing.T) {
 	dir := t.TempDir()
-	Append(dir, Event{Ts: 1, Action: "a"})
+	Append(t.Context(), dir, Event{Ts: 1, Action: "a"})
 	rotate(dir, 10) // under cap: no rewrite
 	if evs, _ := ReadRecent(dir, 10); len(evs) != 1 {
 		t.Errorf("under-cap rotate changed the trail: %d events", len(evs))
@@ -289,7 +292,7 @@ func TestRotate_UnderCapAndEmptyBaseAreNoops(t *testing.T) {
 func TestRotate_ExportedWrapperUnderCapKeepsAll(t *testing.T) {
 	dir := t.TempDir()
 	for i := 1; i <= 3; i++ {
-		Append(dir, Event{Ts: int64(i), Kind: KindJob, Action: "x"})
+		Append(t.Context(), dir, Event{Ts: int64(i), Kind: KindJob, Action: "x"})
 	}
 	Rotate(dir) // maxEvents is 10000, so this is a no-op that must not lose events
 	if evs, _ := ReadRecent(dir, 10); len(evs) != 3 {
@@ -325,7 +328,7 @@ func TestRotateOnCount_EmptyBaseIsNoop(t *testing.T) {
 
 func TestReadRecent_SkipsCorruptLines(t *testing.T) {
 	dir := t.TempDir()
-	Append(dir, Event{Ts: 1, Kind: KindJob, Action: "good-one"})
+	Append(t.Context(), dir, Event{Ts: 1, Kind: KindJob, Action: "good-one"})
 	// Splice a non-JSON line into the middle of the trail; ReadRecent must skip it, not fail.
 	f, err := os.OpenFile(eventsPath(dir), os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
@@ -335,7 +338,7 @@ func TestReadRecent_SkipsCorruptLines(t *testing.T) {
 		t.Fatalf("write corrupt line: %v", err)
 	}
 	f.Close()
-	Append(dir, Event{Ts: 2, Kind: KindJob, Action: "good-two"})
+	Append(t.Context(), dir, Event{Ts: 2, Kind: KindJob, Action: "good-two"})
 
 	events, err := ReadRecent(dir, 10)
 	if err != nil {
@@ -344,4 +347,90 @@ func TestReadRecent_SkipsCorruptLines(t *testing.T) {
 	if len(events) != 2 || events[0].Action != "good-two" || events[1].Action != "good-one" {
 		t.Fatalf("corrupt line not skipped cleanly: %+v", events)
 	}
+}
+
+// TestTrailRedactsThroughContext is the reason these functions grew a ctx parameter.
+// The trail is DURABLE and append-only, so a credential landing here sits on disk until
+// someone deletes the file - strictly worse than the same value reaching a terminal.
+// Blobs are the sharpest edge: an MCP request/response pair is a whole tool payload,
+// persisted verbatim, and nothing else on that path scrubs it.
+//
+// Delete the secret.Redact call in WriteBlob (or redactEvent in Append) and this fails.
+func TestTrailRedactsThroughContext(t *testing.T) {
+	const credential = "sk-live-must-not-be-persisted"
+	base := t.TempDir()
+
+	res := secret.New()
+	t.Setenv("TRAIL_TEST_TOKEN", credential)
+	ctx := secret.ContextWithResolver(t.Context(), res)
+	// Reading is what marks the value as a secret - provenance, not shape.
+	got, err := res.Read(ctx, "TRAIL_TEST_TOKEN")
+	require.NoError(t, err)
+	require.Equal(t, credential, got.Reveal())
+
+	ref, _ := WriteBlob(ctx, base, "mcp", []byte(`{"headers":{"Authorization":"Bearer `+credential+`"}}`))
+	require.NotEmpty(t, ref)
+
+	Append(ctx, base, Event{
+		Ts:      time.Now().UnixMilli(),
+		Kind:    KindAgentCommand,
+		Actor:   "agent",
+		Action:  "curl -H 'Authorization: Bearer " + credential + "'",
+		Outcome: OutcomeOK,
+		Preview: "sent " + credential,
+		Error:   "failed with " + credential,
+	})
+
+	AppendAgentCommand(ctx, base, AgentCommand{
+		Actor:   "agent",
+		Event:   "pre-tool",
+		Tool:    "Bash",
+		Command: "deploy --token " + credential,
+	})
+
+	// Nothing anywhere under the trail directory may contain the value.
+	var found []string
+	require.NoError(t, filepath.WalkDir(filepath.Join(base, dir), func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, rerr := os.ReadFile(path)
+		if rerr != nil {
+			return rerr
+		}
+		if strings.Contains(string(b), credential) {
+			found = append(found, path)
+		}
+		return nil
+	}))
+	assert.Empty(t, found, "the credential was persisted to the trail in these files")
+}
+
+// TestTrailKeepsStructuralFields: redaction must not shred the fields the activity view
+// filters on by exact match. Those are enumerated values, identities and content
+// addresses - a credential cannot occupy them, and masking them would break the reader
+// to protect nothing.
+func TestTrailKeepsStructuralFields(t *testing.T) {
+	base := t.TempDir()
+	res := secret.New()
+	t.Setenv("TRAIL_TEST_TOKEN", "sk-live-must-not-be-persisted")
+	ctx := secret.ContextWithResolver(t.Context(), res)
+	_, err := res.Read(ctx, "TRAIL_TEST_TOKEN")
+	require.NoError(t, err)
+
+	Append(ctx, base, Event{
+		Ts:        time.Now().UnixMilli(),
+		Kind:      KindAgentCommand,
+		Actor:     "agent-7",
+		Workspace: "/repos/magus",
+		Action:    "Bash",
+		Outcome:   OutcomeOK,
+	})
+
+	b, err := os.ReadFile(filepath.Join(base, dir, eventsFile))
+	require.NoError(t, err)
+	line := string(b)
+	assert.Contains(t, line, "agent-7")
+	assert.Contains(t, line, "/repos/magus")
+	assert.Contains(t, line, string(KindAgentCommand))
 }

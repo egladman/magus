@@ -4,14 +4,17 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/service"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -194,9 +197,138 @@ func buildSecretNS(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 				Text: fmt.Sprintf("read secret %q via %s", ref, via),
 			})
 		}
-		return vm.StrValue(v), nil
+		// Reveal where the credential crosses into a magusfile string. From here it is an
+		// ordinary Buzz str with only redact-at-write behind it, which is the documented
+		// seam - magus\secret.grant is the surface that avoids this crossing entirely.
+		return vm.StrValue(v.Reveal()), nil
+	}))
+	// endpoint() is what a grant is FOR. It returns a loopback base URL a CHILD can
+	// be pointed at, so a tool magus shells out to gets the credential attached without
+	// ever holding it. The magusfile decides which env var carries it
+	// (ctx.with_env({"OPENAI_BASE_URL": magus\secret.endpoint(g)})) rather than magus
+	// setting one, because a tool with no base-URL knob should fail where you can see
+	// it, not silently talk to the real endpoint unauthenticated.
+	//
+	// Binding a socket resolves nothing either: the provider is invoked on the first
+	// request the child actually sends through it.
+	ns.MapSet("endpoint", directVal(obs, "magus.secret.endpoint", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+		g, err := secretGrantArg("endpoint", args)
+		if err != nil {
+			return vm.Null, err
+		}
+		r := secret.ResolverFromContext(ctx)
+		if r == nil {
+			return vm.Null, fmt.Errorf(`magus\secret.endpoint: no secret resolver on this run`)
+		}
+		// The per-call ctx - see grant() above for why the captured one is stale. It is
+		// also the correct LIFETIME: a target's dispatch context is cancelled when the
+		// run ends, not when this call returns, so the forwarder outlives the magusfile
+		// asking for its URL and dies with the run that asked.
+		url, err := r.OpenEndpoint(ctx, g)
+		if err != nil {
+			return vm.Null, fmt.Errorf(`magus\secret.endpoint: %w`, err)
+		}
+		if project, target, ok := journal.StepFromContext(ctx); ok {
+			journal.Emit(ctx, journal.Event{
+				Kind: journal.KindSecret, Project: project, Target: target,
+				Text: fmt.Sprintf("opened a local endpoint for %s carrying secret %q", g.Host, g.Ref),
+			})
+		}
+		recordCredentialGrant(ctx, g, "secret.endpoint")
+		return vm.StrValue(url), nil
 	}))
 	return ns
+}
+
+// recordCredentialGrant writes the governance half of a credential declaration to the
+// activity trail: a run made this credential reachable at this destination.
+//
+// The journal already records the same act, and the two are not redundant. The journal
+// answers "what did this build do" and is read per invocation; the trail answers "who
+// did what against this daemon" and is what the console's activity view shows. When an
+// AGENT triggers a run that makes a credential spendable, this is the event that
+// connects the tool call to its consequence - without it the activity log shows the
+// call and not what it unlocked.
+//
+// The REFERENCE, host and header only. The value is not resolved at declaration time
+// and must not be resolved in order to log it - that would undo the laziness the whole
+// interaction policy rests on, and put a credential one formatting mistake from a
+// durable append-only file.
+func recordCredentialGrant(ctx context.Context, g types.SecretGrant, action string) {
+	base := trail.BaseFromContext(ctx)
+	if base == "" {
+		return
+	}
+	// "magusfile" when no agent triggered this run: the declaration is still worth
+	// recording, and attributing it to a person or an agent magus cannot identify would
+	// be worse than naming the file that actually declared it.
+	actor, userAgent := "magusfile", ""
+	if o, ok := origin.FromContext(ctx); ok && o.Agent != "" {
+		actor, userAgent = o.Agent, o.UserAgent
+	}
+	trail.Append(ctx, base, trail.Event{
+		Ts:        time.Now().UnixMilli(),
+		Kind:      trail.KindCredentialGrant,
+		Actor:     actor,
+		UserAgent: userAgent,
+		Action:    action,
+		Outcome:   trail.OutcomeOK,
+		Preview:   fmt.Sprintf("%s -> %s (%s)", g.Ref, g.Host, g.Header),
+	})
+}
+
+// secretGrantArg reads a secret-grant object out of a namespace call's arguments.
+// Shared by grant() and endpoint() so the two cannot disagree about what a grant looks
+// like or word the same mistake differently.
+//
+// The magusfile DECLARES the object; magus does not export one. A type in a host
+// module's generated declarations can be annotated but not constructed, so exporting a
+// `magus\SecretGrant` would name something an author could not build - which an
+// earlier version of this error message told them to write.
+//
+// A present-but-wrong-typed field is distinguished from an absent one. Reporting
+// `host = 42` as "host is required" pointed at the wrong mistake, and `prefix = 42`
+// was worse than misleading: Normalize never inspects prefix, so it silently became ""
+// and the credential went out with no "Bearer " in front of it.
+func secretGrantArg(method string, args []vm.Value) (types.SecretGrant, error) {
+	// MapView, not IsMap. A magusfile and a spell both declare `object SecretGrant {...}`
+	// and pass an INSTANCE, which is tagObject and NOT tagMap - so an IsMap check rejected
+	// the documented spelling outright. Nothing caught it because every test built the Go
+	// struct directly instead of going through Buzz; magus's own GitHub Actions cache
+	// spell was the first caller to use the surface as written. MapView accepts a map and
+	// an object instance both, which is what this always meant to take.
+	fields, viewOK := args[0].MapView()
+	if len(args) == 0 || !viewOK {
+		return types.SecretGrant{}, fmt.Errorf(`magus\secret.%s: expected an object with ref/host/header/prefix fields, e.g. SecretGrant{ ref = "...", host = "api.example.com", header = "Authorization", prefix = "Bearer " } declared in your magusfile`, method)
+	}
+	var bad error
+	field := func(name string) string {
+		v, ok := fields.MapGet(name)
+		if !ok {
+			return ""
+		}
+		if !v.IsStr() {
+			if bad == nil {
+				bad = fmt.Errorf(`magus\secret.%s: field %q must be a str`, method, name)
+			}
+			return ""
+		}
+		return v.AsString()
+	}
+	g := types.SecretGrant{
+		Ref:    field("ref"),
+		Host:   field("host"),
+		Header: field("header"),
+		Prefix: field("prefix"),
+	}
+	if bad != nil {
+		return types.SecretGrant{}, bad
+	}
+	g, err := g.Normalize()
+	if err != nil {
+		return types.SecretGrant{}, fmt.Errorf(`magus\secret.%s: %w`, method, err)
+	}
+	return g, nil
 }
 
 // dispatchBuzzExternal runs the cross-project target an external handle names,

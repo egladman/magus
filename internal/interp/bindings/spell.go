@@ -423,7 +423,9 @@ func resolveSecretEnv(ctx context.Context, opName string, refs, base map[string]
 		if err != nil {
 			return nil, fmt.Errorf("spell: op %q secret %q: %w", opName, name, err)
 		}
-		env[name] = v
+		// Reveal where the credential crosses into a child process's environment, which
+		// is the boundary Command.secrets declared it for.
+		env[name] = v.Reveal()
 	}
 	return env, nil
 }

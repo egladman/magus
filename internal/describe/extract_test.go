@@ -529,3 +529,97 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 	plain, _ := nodeByName(g, "build")
 	assert.Empty(t, plain.Declared, "a name the normalizer leaves alone has no declared_as")
 }
+
+// TestSecretRefsAreExtracted pins what `describe` can tell you about a target's
+// credentials without running it: the REFERENCES it names, never values, which magus does
+// not have at describe time and would not print if it did.
+//
+// It also pins the two limits. An endpoint takes an object, usually a `final` declared
+// elsewhere, so its reference is not at the call site - the use is recorded, the name is
+// not. And a read behind a helper the static walk cannot reach is invisible, which
+// under-reports rather than over-reports.
+func TestSecretRefsAreExtracted(t *testing.T) {
+	g := Extract(`import "magus";
+export fun reads(ctx: magus\Context, args: [str]) > void {
+    final a = magus\secret.read("DOCKERHUB_TOKEN");
+    final b = magus\secret.read("GHCR_TOKEN");
+    final c = magus\secret.read("DOCKERHUB_TOKEN");   // deduped
+    proc\exec("login", args: [a, b, c]);
+}
+export fun endpoints(ctx: magus\Context, args: [str]) > void {
+    final base = magus\secret.endpoint(OPENAI);
+    proc\exec("agent", args: [base]);
+}
+export fun computed(ctx: magus\Context, args: [str]) > void {
+    final name = "DOCKERHUB" + "_TOKEN";
+    final t = magus\secret.read(name);
+    proc\exec("login", args: [t]);
+}
+export fun plain(ctx: magus\Context, args: [str]) > void { http\get("https://example.com/"); }
+`)
+
+	reads, ok := nodeByName(g, "reads")
+	require.True(t, ok)
+	assert.True(t, reads.ReadsSecrets)
+	assert.Equal(t, []string{"DOCKERHUB_TOKEN", "GHCR_TOKEN"}, reads.SecretRefs,
+		"literal references should be listed, sorted and deduped")
+
+	// An endpoint's reference lives on an object declared elsewhere, so only the USE is
+	// visible statically.
+	endpoints, ok := nodeByName(g, "endpoints")
+	require.True(t, ok)
+	assert.True(t, endpoints.ReadsSecrets, "an endpoint use must still be recorded")
+	assert.Empty(t, endpoints.SecretRefs)
+
+	// A computed reference is not a literal; recording a guess would be worse than
+	// recording nothing.
+	computed, ok := nodeByName(g, "computed")
+	require.True(t, ok)
+	assert.True(t, computed.ReadsSecrets)
+	assert.Empty(t, computed.SecretRefs)
+
+	plain, ok := nodeByName(g, "plain")
+	require.True(t, ok)
+	assert.False(t, plain.ReadsSecrets)
+	assert.Empty(t, plain.SecretRefs)
+}
+
+// TestReadsSecretsCoversTheWholeSecretSurface pins what MGS1026 can see.
+//
+// Recognizing only magus\secret.read left the entire injector surface uncovered, so a
+// target that granted a credential and then fetched with it was never flagged as
+// uncacheable. That is a worse hazard than the one the check was built for: with a grant
+// the magusfile never holds the value, so switching the ref from staging to production
+// changes nothing the cache can see and the target replays its old output against a
+// different credential - a wrong build, not a stale login.
+func TestReadsSecretsCoversTheWholeSecretSurface(t *testing.T) {
+	g := Extract(`import "magus";
+export fun reads(ctx: magus\Context, args: [str]) > void {
+    final tok = magus\secret.read("TOKEN");
+    proc\exec("curl", args: ["-H", tok]);
+}
+export fun endpoints(ctx: magus\Context, args: [str]) > void {
+    final base = magus\secret.endpoint(OPENAI);
+    proc\exec("agent", args: [base]);
+}
+export fun plain(ctx: magus\Context, args: [str]) > void {
+    // magus\secret.read("TOKEN") in a comment must not count
+    http\get("https://example.com/");
+}
+export fun lookalike(ctx: magus\Context, args: [str]) > void {
+    // a .read on something that is not the magus\secret namespace
+    fs\read("file.txt");
+    other\secret.read("TOKEN");
+}
+`)
+	for _, name := range []string{"reads", "endpoints"} {
+		n, ok := nodeByName(g, name)
+		require.True(t, ok, "target %q missing", name)
+		assert.True(t, n.ReadsSecrets, "target %q reaches for a credential and was not flagged", name)
+	}
+	for _, name := range []string{"plain", "lookalike"} {
+		n, ok := nodeByName(g, name)
+		require.True(t, ok, "target %q missing", name)
+		assert.False(t, n.ReadsSecrets, "target %q was flagged without touching a credential", name)
+	}
+}

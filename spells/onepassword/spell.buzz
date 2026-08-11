@@ -46,7 +46,11 @@ fun has(haystack: str, needle: str) > bool {
 final SCHEME = "op://";
 
 // resolve_secret is the secret-provider contract, detected by name and invoked by
-// magus\secret.read(). It receives the reference as payload.ref and returns the value.
+// magus\secret.read(). It receives the reference as payload.ref and returns a Secret.
+//
+// `> Secret`, not `> str`: Buzz checks function signatures, so this one is enforced at
+// compile time - a provider returning the wrong shape fails to load rather than failing
+// at the first read. Secret comes from magus/spell, like Target and Command.
 //
 // The reference may be written either way, because both read naturally at a call site:
 //
@@ -57,7 +61,7 @@ final SCHEME = "op://";
 // output, so nothing here has to. proc\exec raises on a non-zero exit, which is the
 // behavior wanted: a locked vault, an expired session, or a typo'd path all fail the
 // read rather than returning a blank that fails later at whatever consumes it.
-export fun resolve_secret(target: Target, cb: fun(any)) > str !> any {
+export fun resolve_secret(target: Target, cb: fun(any)) > Secret !> any {
     final io = {};
     cb(io);
     final ref = "" + io["ref"];
@@ -103,7 +107,7 @@ export fun resolve_secret(target: Target, cb: fun(any)) > str !> any {
     if (value == "") {
         throw "onepassword: " + uri + " resolved to an empty value; check the item and field names";
     }
-    return value;
+    return Secret{ value = value };
 }
 
 export fun mgs_getTools() > {str: Tool} {

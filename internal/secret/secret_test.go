@@ -32,7 +32,7 @@ func TestEnvProviderRead(t *testing.T) {
 		t.Setenv("MAGUS_TEST_TOKEN", "s3cret-value")
 		v, err := envProvider{}.Fetch(t.Context(), "MAGUS_TEST_TOKEN")
 		require.NoError(t, err)
-		assert.Equal(t, "s3cret-value", v)
+		assert.Equal(t, "s3cret-value", v.Reveal())
 	})
 
 	t.Run("unset and empty are distinct errors, both naming the variable", func(t *testing.T) {
@@ -53,7 +53,7 @@ func TestReadRegistersForRedaction(t *testing.T) {
 
 	v, err := ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_TOKEN")
 	require.NoError(t, err)
-	assert.Equal(t, "hunter2-token", v)
+	assert.Equal(t, "hunter2-token", v.Reveal())
 
 	assert.Equal(t, "pushing with *** to ghcr.io\n",
 		string(r.Redact([]byte("pushing with hunter2-token to ghcr.io\n"))))
@@ -104,7 +104,7 @@ func TestReadDoesNotRegisterValuesTooShortToMask(t *testing.T) {
 
 	v, err := ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_TINY")
 	require.NoError(t, err)
-	assert.Equal(t, "ab", v, "the value is returned; only its protection is declined")
+	assert.Equal(t, "ab", v.Reveal(), "the value is returned; only its protection is declined")
 
 	// Unregistered, so ordinary output containing those letters survives intact. This is
 	// a documented hole, not an accident - see minRedactLen.
@@ -161,11 +161,11 @@ func TestReadMemoizesPerProviderAndReference(t *testing.T) {
 	var calls int
 	var mu sync.Mutex
 	withOpener(t, func(context.Context, string) (Provider, error) {
-		return providerFunc(func(context.Context, string) (string, error) {
+		return providerFunc(func(context.Context, string) (Value, error) {
 			mu.Lock()
 			defer mu.Unlock()
 			calls++
-			return "resolved-value", nil
+			return NewValue("resolved-value"), nil
 		}), nil
 	})
 	r.SetProviderName("fake")
@@ -173,7 +173,7 @@ func TestReadMemoizesPerProviderAndReference(t *testing.T) {
 	for range 3 {
 		v, err := ResolverFromContext(ctx).Read(ctx, "SOME_REF")
 		require.NoError(t, err)
-		assert.Equal(t, "resolved-value", v)
+		assert.Equal(t, "resolved-value", v.Reveal())
 	}
 	assert.Equal(t, 1, calls, "a provider that shells out is invoked once per reference")
 }
@@ -187,18 +187,18 @@ func TestReadReReadsWhenTheProviderChanges(t *testing.T) {
 
 	v, err := ResolverFromContext(ctx).Read(ctx, "SOME_REF")
 	require.NoError(t, err)
-	assert.Equal(t, "from-env", v)
+	assert.Equal(t, "from-env", v.Reveal())
 
 	withOpener(t, func(context.Context, string) (Provider, error) {
-		return providerFunc(func(context.Context, string) (string, error) {
-			return "from-vault", nil
+		return providerFunc(func(context.Context, string) (Value, error) {
+			return NewValue("from-vault"), nil
 		}), nil
 	})
 	r.SetProviderName("vault")
 
 	v, err = ResolverFromContext(ctx).Read(ctx, "SOME_REF")
 	require.NoError(t, err)
-	assert.Equal(t, "from-vault", v, "the declared provider must win over a memoized fallback")
+	assert.Equal(t, "from-vault", v.Reveal(), "the declared provider must win over a memoized fallback")
 }
 
 // TestReadCollapsesConcurrentReadsOfOneReference pins the singleflight. Without it, N
@@ -211,12 +211,12 @@ func TestReadCollapsesConcurrentReadsOfOneReference(t *testing.T) {
 	calls := 0
 	release := make(chan struct{})
 	withOpener(t, func(context.Context, string) (Provider, error) {
-		return providerFunc(func(context.Context, string) (string, error) {
+		return providerFunc(func(context.Context, string) (Value, error) {
 			mu.Lock()
 			calls++
 			mu.Unlock()
 			<-release // hold every caller inside the provider so they genuinely overlap
-			return "one-value", nil
+			return NewValue("one-value"), nil
 		}), nil
 	})
 	r.SetProviderName("slow")
@@ -228,7 +228,7 @@ func TestReadCollapsesConcurrentReadsOfOneReference(t *testing.T) {
 			defer wg.Done()
 			v, err := ResolverFromContext(ctx).Read(ctx, "SHARED_REF")
 			assert.NoError(t, err)
-			assert.Equal(t, "one-value", v)
+			assert.Equal(t, "one-value", v.Reveal())
 		}()
 	}
 	close(release)
@@ -265,9 +265,9 @@ func TestRedactStringMatchesRedact(t *testing.T) {
 }
 
 // providerFunc adapts a function to [Provider].
-type providerFunc func(context.Context, string) (string, error)
+type providerFunc func(context.Context, string) (Value, error)
 
-func (f providerFunc) Fetch(ctx context.Context, ref string) (string, error) { return f(ctx, ref) }
+func (f providerFunc) Fetch(ctx context.Context, ref string) (Value, error) { return f(ctx, ref) }
 
 // withOpener installs an opener for one test and restores the previous one after.
 // RegisterProviderOpener panics on a second call - correct for its real once-at-init
@@ -475,7 +475,7 @@ func TestReadSurfacesProviderOpenFailures(t *testing.T) {
 func TestReadRejectsAnEmptyValueFromAProvider(t *testing.T) {
 	ctx, r := withResolver(t)
 	withOpener(t, func(context.Context, string) (Provider, error) {
-		return providerFunc(func(context.Context, string) (string, error) { return "", nil }), nil
+		return providerFunc(func(context.Context, string) (Value, error) { return Value{}, nil }), nil
 	})
 	r.SetProviderName("blank")
 
@@ -529,4 +529,68 @@ func TestRedactingHandlerCoversEveryAnyCarrier(t *testing.T) {
 				"something must show the value was masked, got %s", out)
 		})
 	}
+}
+
+// TestGrantValidationCarriesItsCode pins MGS1027 onto every rejection path. A grant is
+// the one declaration that decides where a credential may go, so a malformed one gets a
+// lookupable code a caller can branch on, not a bare string.
+func TestGrantValidationCarriesItsCode(t *testing.T) {
+	for _, g := range []types.SecretGrant{
+		{Host: "h", Header: "A"},
+		{Ref: "R", Header: "A"},
+		{Ref: "R", Host: "h"},
+		{Ref: "R", Host: "*.example.com", Header: "A"},
+		{Ref: "R", Host: "https://x.com/y", Header: "A"},
+		{Ref: "R", Host: "hookſ.slack.com", Header: "A"},
+		{Ref: "R", Host: "h", Header: "X Api Key"},
+	} {
+		_, err := g.Normalize()
+		require.Error(t, err)
+		var d *types.DiagnosticError
+		require.ErrorAs(t, err, &d, "grant %+v rejected without a diagnostic code", g)
+		assert.Equal(t, types.SecretGrantInvalid, d.Code)
+		assert.Contains(t, types.CodeURL(d.Code), "MGS1027")
+	}
+}
+
+// TestCanonicalHostFolding: g.Host is what the endpoint forwarder dials, so the
+// spellings of one destination must fold onto one form. Cutting at the first colon
+// mangled IPv6 ("[::1]:443" gave name "["), and folding :80 merged two destinations a
+// credential may never travel over anyway.
+func TestCanonicalHostFolding(t *testing.T) {
+	g, err := types.SecretGrant{Ref: "R", Host: "API.Example.com.:443", Header: "Authorization"}.Normalize()
+	require.NoError(t, err)
+	assert.Equal(t, "api.example.com", g.Host)
+
+	v6, err := types.SecretGrant{Ref: "R", Host: "[::1]:443", Header: "Authorization"}.Normalize()
+	require.NoError(t, err)
+	assert.Equal(t, "::1", v6.Host, "IPv6 was mangled by a first-colon split")
+
+	v6p, err := types.SecretGrant{Ref: "R", Host: "[::1]:8443", Header: "Authorization"}.Normalize()
+	require.NoError(t, err)
+	assert.Equal(t, "[::1]:8443", v6p.Host, "a non-default IPv6 port is part of the destination")
+
+	p80, err := types.SecretGrant{Ref: "R", Host: "api.example.com:80", Header: "Authorization"}.Normalize()
+	require.NoError(t, err)
+	assert.Equal(t, "api.example.com:80", p80.Host, ":80 was folded into the bare name")
+}
+
+// resolvedCount is how many references have been resolved through a provider.
+//
+// This, and NOT hasSecrets, is the observable for laziness: a resolver can hold something
+// maskable (an endpoint's URL) while having invoked no provider at all. Provider
+// invocations are what a lazy declaration must avoid, because that is what prompts for an
+// unlock.
+func (r *Resolver) resolvedCount() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.memo)
+}
+
+// endpointCount reports how many forwarders the resolver holds, so a test can assert the
+// map does not grow without bound.
+func (r *Resolver) endpointCount() int {
+	r.endpointMu.Lock()
+	defer r.endpointMu.Unlock()
+	return len(r.endpoints)
 }

@@ -3,8 +3,8 @@
   "schema_version": 8,
   "directed": true,
   "multigraph": false,
-  "node_count": 2075,
-  "edge_count": 4969,
+  "node_count": 2081,
+  "edge_count": 4985,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -268,6 +268,14 @@
       "label": "MGS1026",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1026/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1027",
+      "kind": "diagnostic",
+      "label": "MGS1027",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1027/"
       }
     },
     {
@@ -996,7 +1004,7 @@
       "source": "docs/reference",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "174",
+        "dir_files": "175",
         "dir_languages": "markdown"
       }
     },
@@ -1029,7 +1037,7 @@
       "source": "docs/reference/codes",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "80",
+        "dir_files": "81",
         "dir_languages": "markdown"
       }
     },
@@ -1073,7 +1081,7 @@
       "source": "docs/reference/codes/magusfile",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "27",
+        "dir_files": "28",
         "dir_languages": "markdown"
       }
     },
@@ -1172,7 +1180,7 @@
       "source": "docs/tour",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "23",
+        "dir_files": "24",
         "dir_languages": "buzz"
       }
     },
@@ -4156,7 +4164,19 @@
         "role": "doc",
         "section": "reference",
         "tags": "MGS1026,magusfile,secrets,cache,skip_cache,credentials,replay",
-        "title": "MGS1026: a cacheable target reads a credential"
+        "title": "MGS1026: a cacheable target reaches for a credential"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/magusfile/MGS1027.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/magusfile/MGS1027.md",
+      "source": "docs/reference/codes/magusfile/MGS1027.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1027,magusfile,secrets,credentials,grant,endpoint,injection",
+        "title": "MGS1027: a secret grant is malformed"
       }
     },
     {
@@ -6219,6 +6239,15 @@
       "kind": "file",
       "label": "docs/tour/23-charm-axes.buzz",
       "source": "docs/tour/23-charm-axes.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
+      "id": "file:docs/tour/24-secret-grants.buzz",
+      "kind": "file",
+      "label": "docs/tour/24-secret-grants.buzz",
+      "source": "docs/tour/24-secret-grants.buzz",
       "attrs": {
         "language": "buzz"
       }
@@ -10693,6 +10722,16 @@
       "source": "docs/tour/23-charm-axes.buzz:34"
     },
     {
+      "id": "function:docs/tour/24-secret-grants.buzz:agent_demo",
+      "kind": "function",
+      "label": "agent_demo",
+      "doc": "The subprocess half. A child cannot be handed a Go HTTP client, so magus binds a loopback endpoint for the run and the child is pointed at it. There is no gateway to install and no service to start: the listener belongs to this run and closes when it ends.  Note who decides which variable carries it. magus does NOT set one for you - you name it, because a tool with no base-URL knob should fail somewhere you can see it rather than silently talking to the real endpoint unauthenticated.  The URL carries a rand",
+      "source": "docs/tour/24-secret-grants.buzz:88",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:evals/magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
@@ -12068,41 +12107,42 @@
       "id": "function:spells/aws/s3-cache/spell.buzz:access",
       "kind": "function",
       "label": "access",
-      "source": "spells/aws/s3-cache/spell.buzz:87"
+      "doc": "WHY THIS SPELL DOES NOT USE magus\\secret.grant, unlike spells/github/actions.  A grant attaches a credential to a request as a header VALUE: prefix + value, on one declared host. That fits a bearer token exactly, and the Actions cache spell was converted to it. It does not fit SigV4, for two independent reasons:  1. AWS_SECRET_ACCESS_KEY is never sent. It is an HMAC key input - see the kDate chain in sign() - so the thing on the wire is a derived signature, not the credential. There is no header for magus t",
+      "source": "spells/aws/s3-cache/spell.buzz:112"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:amzTimestamp",
       "kind": "function",
       "label": "amzTimestamp",
       "doc": "amzTimestamp formats the current UTC time as a SigV4 x-amz-date (YYYYMMDDTHHMMSSZ), handing the calendar math to the host time module (Go's time.Format under the hood). os.time() returns epoch millis as a double — exactly what the time module speaks — so it flows straight through with no conversion.",
-      "source": "spells/aws/s3-cache/spell.buzz:129"
+      "source": "spells/aws/s3-cache/spell.buzz:154"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:bucket",
       "kind": "function",
       "label": "bucket",
-      "source": "spells/aws/s3-cache/spell.buzz:90"
+      "source": "spells/aws/s3-cache/spell.buzz:115"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:cache_key",
       "kind": "function",
       "label": "cache_key",
       "doc": "cache_key derives the object key from the spec hash (already unique per project; hex, so URL-safe — no extra encoding needed in the canonical URI). NOTE: cache-key format differs from spells/github/actions/spell.buzz on purpose: S3 folds CACHE_VERSION into the key string (\"magus-<hash>-<version>\"), while GHA keeps the version in a separate `version` request field. Do NOT change the emitted string here — it would invalidate every existing S3 artifact. Track the inconsistency for follow-up only.",
-      "source": "spells/aws/s3-cache/spell.buzz:123"
+      "source": "spells/aws/s3-cache/spell.buzz:148"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:deleteObject",
       "kind": "function",
       "label": "deleteObject",
       "doc": "deleteObject removes one object by key (S3 DeleteObject, path-style). DeleteObject is idempotent, returning 204 No Content whether or not the key existed.",
-      "source": "spells/aws/s3-cache/spell.buzz:271"
+      "source": "spells/aws/s3-cache/spell.buzz:296"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:enabled",
       "kind": "function",
       "label": "enabled",
       "doc": "enabled gates the backend on having credentials and a bucket. The cache probes this once and skips fetch/push entirely when false — no remote calls.",
-      "source": "spells/aws/s3-cache/spell.buzz:192",
+      "source": "spells/aws/s3-cache/spell.buzz:217",
       "attrs": {
         "exported": "true"
       }
@@ -12111,14 +12151,14 @@
       "id": "function:spells/aws/s3-cache/spell.buzz:endpoint",
       "kind": "function",
       "label": "endpoint",
-      "source": "spells/aws/s3-cache/spell.buzz:100"
+      "source": "spells/aws/s3-cache/spell.buzz:125"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:get_artifact",
       "kind": "function",
       "label": "get_artifact",
       "doc": "get_artifact downloads the object for io.hash into io.dest. true on a hit (200), false on a miss (404) or when not configured.",
-      "source": "spells/aws/s3-cache/spell.buzz:198",
+      "source": "spells/aws/s3-cache/spell.buzz:223",
       "attrs": {
         "exported": "true"
       }
@@ -12135,21 +12175,21 @@
       "kind": "function",
       "label": "hostOf",
       "doc": "hostOf extracts the Host header value (authority) from a base URL. SigV4 signs the host header, and the server recomputes the signature against the Host it receives — which Go derives from the URL — so this must equal the URL authority.",
-      "source": "spells/aws/s3-cache/spell.buzz:109"
+      "source": "spells/aws/s3-cache/spell.buzz:134"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:listPage",
       "kind": "function",
       "label": "listPage",
       "doc": "listPage fetches one page of the bucket listing (S3 ListObjects v1, path-style) for objects under the magus- prefix, starting after marker (\"\"=from the start). Cache keys are hex + literal — all RFC-3986-unreserved — so neither prefix nor marker needs percent-encoding, and the canonical query string (keys sorted: marker before prefix) is byte-identical to the one on the URL. Returns the raw XML body, or \"\" on a non-200.",
-      "source": "spells/aws/s3-cache/spell.buzz:227"
+      "source": "spells/aws/s3-cache/spell.buzz:252"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:listing",
       "kind": "function",
       "label": "listing",
       "doc": "listing is a fiber generator over every magus- object in the bucket. Each resume yields the next {key, lastModified} object, transparently fetching the next S3 page when the current one drains — marker pagination stays hidden behind the coroutine. It returns null when the listing is exhausted; since a real artifact is never null, the consumer drains it with a resume-until-null loop. The bucket's LastModified is the S3-side mtime, so no per-object HEAD is needed.",
-      "source": "spells/aws/s3-cache/spell.buzz:243"
+      "source": "spells/aws/s3-cache/spell.buzz:268"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:mgs_getName",
@@ -12166,7 +12206,7 @@
       "kind": "function",
       "label": "prune",
       "doc": "prune evicts cache objects per a retention policy, enumerating them through the listing fiber. Inputs arrive via cb: older_than_secs : int  — evict objects older than this many seconds (0 = off) keep_last       : int  — keep only the newest N objects (0 = off) dry_run         : bool — report intended deletions without performing them The two bounds are additive — an object is doomed if it trips either — and the doomed set is keyed by object key so the overlap never double-deletes. Returns true onc",
-      "source": "spells/aws/s3-cache/spell.buzz:287",
+      "source": "spells/aws/s3-cache/spell.buzz:312",
       "attrs": {
         "exported": "true"
       }
@@ -12176,7 +12216,7 @@
       "kind": "function",
       "label": "put_artifact",
       "doc": "put_artifact uploads the file at io.src as the object for io.hash. true on a 200 store, false otherwise. The payload hash is the file's SHA-256 (S3 verifies it against x-amz-content-sha256).",
-      "source": "spells/aws/s3-cache/spell.buzz:210",
+      "source": "spells/aws/s3-cache/spell.buzz:235",
       "attrs": {
         "exported": "true"
       }
@@ -12185,26 +12225,26 @@
       "id": "function:spells/aws/s3-cache/spell.buzz:region",
       "kind": "function",
       "label": "region",
-      "source": "spells/aws/s3-cache/spell.buzz:92"
+      "source": "spells/aws/s3-cache/spell.buzz:117"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:secret",
       "kind": "function",
       "label": "secret",
-      "source": "spells/aws/s3-cache/spell.buzz:88"
+      "source": "spells/aws/s3-cache/spell.buzz:113"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:sign",
       "kind": "function",
       "label": "sign",
       "doc": "sign builds the signed request headers for an S3 path-style request. path is the canonical URI (\"/bucket/key\"); query is the canonical query string (keys sorted, \"\" for none); payloadHash is the hex SHA-256 of the body (EMPTY_SHA256 for a bodyless GET/DELETE). Returns the header map to hand extra/http.",
-      "source": "spells/aws/s3-cache/spell.buzz:137"
+      "source": "spells/aws/s3-cache/spell.buzz:162"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:token",
       "kind": "function",
       "label": "token",
-      "source": "spells/aws/s3-cache/spell.buzz:89"
+      "source": "spells/aws/s3-cache/spell.buzz:114"
     },
     {
       "id": "function:spells/bash/spell.buzz:mgs_getName",
@@ -12929,7 +12969,7 @@
       "kind": "function",
       "label": "annotate",
       "doc": "annotate raises a message that surfaces on the pull request, not just the log. Actions has no dedicated code field, so a diagnostic code leads the title where it stays greppable in the annotations list.",
-      "source": "spells/github/actions/spell.buzz:207",
+      "source": "spells/github/actions/spell.buzz:221",
       "attrs": {
         "exported": "true"
       }
@@ -12945,7 +12985,7 @@
       "kind": "function",
       "label": "cache_key",
       "doc": "cache_key derives the cache key from the spec hash. The hash already folds in the project path (see cache/hash.go), so it is unique per project and needs no extra namespacing — and being hex, it is URL-safe. NOTE: cache-key format differs from spells/aws/s3-cache/spell.buzz on purpose: GHA keeps CACHE_VERSION in a separate `version` request field, while S3 folds it into the key string. Do NOT change the emitted string here — it would invalidate every existing GHA cache entry. Track the inconsistency for",
-      "source": "spells/github/actions/spell.buzz:94"
+      "source": "spells/github/actions/spell.buzz:108"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:enabled",
@@ -12962,21 +13002,21 @@
       "kind": "function",
       "label": "escapeData",
       "doc": "escapeData encodes the characters Actions treats as structural in a command's message. A raw newline would end the command early and spill the rest into the log as loose text, and a failure's cause is usually the part after line one. Percent goes first, or it would corrupt the escapes introduced after it.",
-      "source": "spells/github/actions/spell.buzz:170"
+      "source": "spells/github/actions/spell.buzz:184"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:escapeProp",
       "kind": "function",
       "label": "escapeProp",
       "doc": "escapeProp additionally encodes the separators between properties, so a title containing a comma or colon cannot be read as the start of another property.",
-      "source": "spells/github/actions/spell.buzz:178"
+      "source": "spells/github/actions/spell.buzz:192"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:get_artifact",
       "kind": "function",
       "label": "get_artifact",
       "doc": "get_artifact downloads the cache artifact for payload.hash into payload.dest. Returns true on a hit (dest written), false on a miss or when not running under Actions.",
-      "source": "spells/github/actions/spell.buzz:110",
+      "source": "spells/github/actions/spell.buzz:124",
       "attrs": {
         "exported": "true"
       }
@@ -12993,7 +13033,7 @@
       "kind": "function",
       "label": "group_end",
       "doc": "group_end closes the current fold. Actions tracks a single open group, so the id is unused; it is in the contract for providers keyed by section name.",
-      "source": "spells/github/actions/spell.buzz:199",
+      "source": "spells/github/actions/spell.buzz:213",
       "attrs": {
         "exported": "true"
       }
@@ -13003,17 +13043,24 @@
       "kind": "function",
       "label": "group_start",
       "doc": "group_start opens a fold. Actions has no expanded section: ::group:: always starts collapsed. A caller asking for an expanded one wants output the reader must not have to click for, so the group is skipped and the content stays inline. Folding it anyway would be worse - a hidden failure is one nobody sees.",
-      "source": "spells/github/actions/spell.buzz:188",
+      "source": "spells/github/actions/spell.buzz:202",
       "attrs": {
         "exported": "true"
       }
+    },
+    {
+      "id": "function:spells/github/actions/spell.buzz:has_token",
+      "kind": "function",
+      "label": "has_token",
+      "doc": "has_token reports presence WITHOUT resolving, so enabled() and the cache-path guards stay cheap and cannot prompt.",
+      "source": "spells/github/actions/spell.buzz:99"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:maskInRunnerLog",
       "kind": "function",
       "label": "maskInRunnerLog",
       "doc": "maskInRunnerLog asks the RUNNER to redact value from its own log. magus already redacts the output it captures; this covers the half magus cannot reach - a later step, or an action that never ran under magus at all. It is not pure belt and braces: the runner auto-masks anything interpolated from `secrets.*`, but NOT a step output injected into env:, and not a token minted mid-job like the OIDC one below.  std\\print rather than anything magus captures, for the same reason group_start above uses it: a workflo",
-      "source": "spells/github/actions/spell.buzz:326"
+      "source": "spells/github/actions/spell.buzz:343"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:mgs_getName",
@@ -13030,14 +13077,14 @@
       "kind": "function",
       "label": "oidcToken",
       "doc": "oidcToken mints an OIDC token for audience from the runner's token endpoint. Actions publishes the endpoint and its request token into the environment only when the job declares `permissions: id-token: write`, so an unset variable means a missing permission far more often than a broken runner - and the message says that rather than naming the variable.  The audience identifies the relying party: \"sts.amazonaws.com\" for AWS, the workload-identity-pool provider URL for GCP, whatever the trust policy on the ot",
-      "source": "spells/github/actions/spell.buzz:360"
+      "source": "spells/github/actions/spell.buzz:377"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:put_artifact",
       "kind": "function",
       "label": "put_artifact",
       "doc": "put_artifact uploads the artifact at payload.src for payload.hash. Returns true on success or when another runner already stored the same key, else false.",
-      "source": "spells/github/actions/spell.buzz:128",
+      "source": "spells/github/actions/spell.buzz:142",
       "attrs": {
         "exported": "true"
       }
@@ -13047,7 +13094,7 @@
       "kind": "function",
       "label": "quote_prefixes",
       "doc": "quote_prefixes declares the line prefixes that introduce a workflow command. magus captures subprocess output and replays it, so a dependency printing \"::error::\" would otherwise have the runner execute it and forge annotations. Returned once per run; magus does the per-line matching itself.",
-      "source": "spells/github/actions/spell.buzz:248",
+      "source": "spells/github/actions/spell.buzz:262",
       "attrs": {
         "exported": "true"
       }
@@ -13056,8 +13103,8 @@
       "id": "function:spells/github/actions/spell.buzz:resolve_secret",
       "kind": "function",
       "label": "resolve_secret",
-      "doc": "resolve_secret is the secret-provider contract, detected by name and invoked by magus\\secret.read(). It receives the reference as payload.ref.",
-      "source": "spells/github/actions/spell.buzz:284",
+      "doc": "resolve_secret is the secret-provider contract, detected by name and invoked by magus\\secret.read(). It receives the reference as payload.ref and returns a Secret.  `> Secret`, not `> str`: Buzz checks function signatures, so a provider returning the wrong shape fails to load rather than failing at the first read.",
+      "source": "spells/github/actions/spell.buzz:301",
       "attrs": {
         "exported": "true"
       }
@@ -13067,27 +13114,28 @@
       "kind": "function",
       "label": "rpc",
       "doc": "rpc POSTs a JSON Twirp request to the named CacheService method and returns the host http response map ({status, body}).",
-      "source": "spells/github/actions/spell.buzz:98"
+      "source": "spells/github/actions/spell.buzz:112"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:token",
       "kind": "function",
       "label": "token",
-      "source": "spells/github/actions/spell.buzz:85"
+      "doc": "token reads ACTIONS_RUNTIME_TOKEN through the SECRET PROVIDER, not getenv.  That one-word difference is the whole fix. A value read with getenv is not a value magus knows is a credential, so this token was absent from the redaction set entirely - any run log, captured output or cached entry quoting it kept it in the clear, in CI. Reading it through the provider registers it, and magus masks it everywhere it writes.  Under Actions no provider is selected, so the built-in environment provider resolves this to",
+      "source": "spells/github/actions/spell.buzz:95"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:tokenURL",
       "kind": "function",
       "label": "tokenURL",
       "doc": "tokenURL puts the audience on the runner's token endpoint. The separator is chosen rather than assumed: the endpoint arrives carrying ?api-version=2.0, so a hard-coded \"?\" would build a second query string and earn a 400 that names nothing.",
-      "source": "spells/github/actions/spell.buzz:410"
+      "source": "spells/github/actions/spell.buzz:427"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:workflowEnv",
       "kind": "function",
       "label": "workflowEnv",
       "doc": "workflowEnv reads a secret the workflow injected. There is no other way in, so a miss is a workflow-file edit rather than anything this run could recover from - which is why the error is the snippet to paste rather than a status.",
-      "source": "spells/github/actions/spell.buzz:335"
+      "source": "spells/github/actions/spell.buzz:352"
     },
     {
       "id": "function:spells/gitlab/ci/spell.buzz:annotate",
@@ -13462,7 +13510,7 @@
       "id": "function:spells/onepassword/spell.buzz:mgs_getTools",
       "kind": "function",
       "label": "mgs_getTools",
-      "source": "spells/onepassword/spell.buzz:109",
+      "source": "spells/onepassword/spell.buzz:113",
       "attrs": {
         "exported": "true"
       }
@@ -13471,8 +13519,8 @@
       "id": "function:spells/onepassword/spell.buzz:resolve_secret",
       "kind": "function",
       "label": "resolve_secret",
-      "doc": "resolve_secret is the secret-provider contract, detected by name and invoked by magus\\secret.read(). It receives the reference as payload.ref and returns the value.  The reference may be written either way, because both read naturally at a call site:  magus\\secret.read(\"Private/Docker Hub/credential\") magus\\secret.read(\"op://Private/Docker Hub/credential\")  `op read` prints the secret to stdout with a trailing newline; magus trims captured output, so nothing here has to. proc\\exec raises on a non-zero exit,",
-      "source": "spells/onepassword/spell.buzz:60",
+      "doc": "resolve_secret is the secret-provider contract, detected by name and invoked by magus\\secret.read(). It receives the reference as payload.ref and returns a Secret.  `> Secret`, not `> str`: Buzz checks function signatures, so this one is enforced at compile time - a provider returning the wrong shape fails to load rather than failing at the first read. Secret comes from magus/spell, like Target and Command.  The reference may be written either way, because both read naturally at a call site:  magus\\secret.r",
+      "source": "spells/onepassword/spell.buzz:64",
       "attrs": {
         "exported": "true"
       }
@@ -17013,7 +17061,7 @@
       "id": "module:magus",
       "kind": "module",
       "label": "magus",
-      "doc": "Magus core primitives.  Three provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\\cache.remote(<spell>)` selects a remote cache backend, `magus\\ci.provider(<spell>)` a CI provider, and `magus\\secret.provider(<spell>)` / `magus\\secret.read(<ref>)` a secret backend and the credentials read through it. Each takes an imported spell handle. See [Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) and [CI in"
+      "doc": "Magus core primitives.  Three provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\\cache.remote(<spell>)` selects a remote cache backend, `magus\\ci.provider(<spell>)` a CI provider, and `magus\\secret.provider(<spell>)` / `magus\\secret.read(<ref>)` a secret backend and the credentials read through it. Each takes an imported spell handle. `magus\\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback base URL a CH"
     },
     {
       "id": "module:markdown",
@@ -17792,11 +17840,18 @@
       "source": "magusfile.buzz:1821"
     },
     {
-      "id": "rationale:spells/aws/s3-cache/spell.buzz:123:NOTE",
+      "id": "rationale:spells/aws/s3-cache/spell.buzz:112:WHY",
+      "kind": "rationale",
+      "label": "WHY",
+      "doc": "THIS SPELL DOES NOT USE magus\\secret.grant, unlike spells/github/actions.",
+      "source": "spells/aws/s3-cache/spell.buzz:112"
+    },
+    {
+      "id": "rationale:spells/aws/s3-cache/spell.buzz:148:NOTE",
       "kind": "rationale",
       "label": "NOTE",
       "doc": "cache-key format differs from spells/github/actions/spell.buzz on purpose:",
-      "source": "spells/aws/s3-cache/spell.buzz:123"
+      "source": "spells/aws/s3-cache/spell.buzz:148"
     },
     {
       "id": "rationale:spells/aws/s3-cache/spell.buzz:81:NOTE",
@@ -17806,18 +17861,18 @@
       "source": "spells/aws/s3-cache/spell.buzz:81"
     },
     {
+      "id": "rationale:spells/github/actions/spell.buzz:108:NOTE",
+      "kind": "rationale",
+      "label": "NOTE",
+      "doc": "cache-key format differs from spells/aws/s3-cache/spell.buzz on purpose:",
+      "source": "spells/github/actions/spell.buzz:108"
+    },
+    {
       "id": "rationale:spells/github/actions/spell.buzz:72:NOTE",
       "kind": "rationale",
       "label": "NOTE",
       "doc": "byte-identical to the getenv in spells/aws/s3-cache/spell.buzz. The",
       "source": "spells/github/actions/spell.buzz:72"
-    },
-    {
-      "id": "rationale:spells/github/actions/spell.buzz:94:NOTE",
-      "kind": "rationale",
-      "label": "NOTE",
-      "doc": "cache-key format differs from spells/aws/s3-cache/spell.buzz on purpose:",
-      "source": "spells/github/actions/spell.buzz:94"
     },
     {
       "id": "spell:bash",
@@ -21301,6 +21356,14 @@
     },
     {
       "source": "dir:docs/reference/codes/magusfile",
+      "target": "doc:docs/reference/codes/magusfile/MGS1027.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1027.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/magusfile",
       "target": "doc:docs/reference/codes/magusfile/README.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -22178,6 +22241,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/tour/23-charm-axes.buzz"
+    },
+    {
+      "source": "dir:docs/tour",
+      "target": "file:docs/tour/24-secret-grants.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/24-secret-grants.buzz"
     },
     {
       "source": "dir:evals/fixtures",
@@ -31554,6 +31625,54 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1026.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1027.md",
+      "target": "diagnostic:MGS1026",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1027.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1027.md",
+      "target": "diagnostic:MGS1027",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1027.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1027.md",
+      "target": "diagnostic:MGS2011",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1027.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1027.md",
+      "target": "doc:docs/concepts/secrets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1027.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1027.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1026.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1027.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1027.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS2011.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1027.md"
     },
     {
       "source": "doc:docs/reference/codes/magusfile/README.md",
@@ -42860,6 +42979,46 @@
       "provenance": "docs/tour/23-charm-axes.buzz"
     },
     {
+      "source": "file:docs/tour/24-secret-grants.buzz",
+      "target": "function:docs/tour/24-secret-grants.buzz:agent_demo",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/24-secret-grants.buzz"
+    },
+    {
+      "source": "file:docs/tour/24-secret-grants.buzz",
+      "target": "import:http",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/24-secret-grants.buzz"
+    },
+    {
+      "source": "file:docs/tour/24-secret-grants.buzz",
+      "target": "import:magus",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/24-secret-grants.buzz"
+    },
+    {
+      "source": "file:docs/tour/24-secret-grants.buzz",
+      "target": "import:os",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/24-secret-grants.buzz"
+    },
+    {
+      "source": "file:docs/tour/24-secret-grants.buzz",
+      "target": "import:proc",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/24-secret-grants.buzz"
+    },
+    {
       "source": "file:evals/magusfile.buzz",
       "target": "function:evals/magusfile.buzz:ci",
       "relation": "contains",
@@ -46502,6 +46661,14 @@
     {
       "source": "file:spells/github/actions/spell.buzz",
       "target": "function:spells/github/actions/spell.buzz:group_start",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/actions/spell.buzz",
+      "target": "function:spells/github/actions/spell.buzz:has_token",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -50829,7 +50996,7 @@
     },
     {
       "source": "function:spells/github/actions/spell.buzz:get_artifact",
-      "target": "function:spells/github/actions/spell.buzz:rpc",
+      "target": "function:spells/github/actions/spell.buzz:has_token",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -50837,7 +51004,7 @@
     },
     {
       "source": "function:spells/github/actions/spell.buzz:get_artifact",
-      "target": "function:spells/github/actions/spell.buzz:token",
+      "target": "function:spells/github/actions/spell.buzz:rpc",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -50846,6 +51013,14 @@
     {
       "source": "function:spells/github/actions/spell.buzz:group_start",
       "target": "function:spells/github/actions/spell.buzz:escapeData",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/actions/spell.buzz:has_token",
+      "target": "function:spells/github/actions/spell.buzz:getenv",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -50901,7 +51076,7 @@
     },
     {
       "source": "function:spells/github/actions/spell.buzz:put_artifact",
-      "target": "function:spells/github/actions/spell.buzz:rpc",
+      "target": "function:spells/github/actions/spell.buzz:has_token",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -50909,7 +51084,7 @@
     },
     {
       "source": "function:spells/github/actions/spell.buzz:put_artifact",
-      "target": "function:spells/github/actions/spell.buzz:token",
+      "target": "function:spells/github/actions/spell.buzz:rpc",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -50950,14 +51125,6 @@
     {
       "source": "function:spells/github/actions/spell.buzz:rpc",
       "target": "function:spells/github/actions/spell.buzz:token",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "spells/github/actions/spell.buzz"
-    },
-    {
-      "source": "function:spells/github/actions/spell.buzz:token",
-      "target": "function:spells/github/actions/spell.buzz:getenv",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -54694,12 +54861,20 @@
       "provenance": "magusfile.buzz:1821"
     },
     {
-      "source": "rationale:spells/aws/s3-cache/spell.buzz:123:NOTE",
+      "source": "rationale:spells/aws/s3-cache/spell.buzz:112:WHY",
+      "target": "function:spells/aws/s3-cache/spell.buzz:access",
+      "relation": "rationale_for",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/aws/s3-cache/spell.buzz:112"
+    },
+    {
+      "source": "rationale:spells/aws/s3-cache/spell.buzz:148:NOTE",
       "target": "function:spells/aws/s3-cache/spell.buzz:cache_key",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/aws/s3-cache/spell.buzz:123"
+      "provenance": "spells/aws/s3-cache/spell.buzz:148"
     },
     {
       "source": "rationale:spells/aws/s3-cache/spell.buzz:81:NOTE",
@@ -54710,20 +54885,20 @@
       "provenance": "spells/aws/s3-cache/spell.buzz:81"
     },
     {
+      "source": "rationale:spells/github/actions/spell.buzz:108:NOTE",
+      "target": "function:spells/github/actions/spell.buzz:cache_key",
+      "relation": "rationale_for",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/actions/spell.buzz:108"
+    },
+    {
       "source": "rationale:spells/github/actions/spell.buzz:72:NOTE",
       "target": "function:spells/github/actions/spell.buzz:getenv",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
       "provenance": "spells/github/actions/spell.buzz:72"
-    },
-    {
-      "source": "rationale:spells/github/actions/spell.buzz:94:NOTE",
-      "target": "function:spells/github/actions/spell.buzz:cache_key",
-      "relation": "rationale_for",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "spells/github/actions/spell.buzz:94"
     },
     {
       "source": "spell:bash",
@@ -57868,6 +58043,14 @@
     {
       "source": "target:docs:site-generate",
       "target": "file:docs/tour/23-charm-axes.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:site-generate",
+      "target": "file:docs/tour/24-secret-grants.buzz",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,

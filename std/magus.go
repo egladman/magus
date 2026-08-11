@@ -39,7 +39,12 @@ var Magus = Module{
 		"they do not appear in the method list below: `magus\\cache.remote(<spell>)` selects " +
 		"a remote cache backend, `magus\\ci.provider(<spell>)` a CI provider, and " +
 		"`magus\\secret.provider(<spell>)` / `magus\\secret.read(<ref>)` a secret backend and " +
-		"the credentials read through it. Each takes an imported spell handle. See " +
+		"the credentials read through it. Each takes an imported spell handle. " +
+		"`magus\\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback " +
+		"base URL a CHILD PROCESS is pointed at instead of the real API, so magus attaches the " +
+		"credential on the way upstream and the child never holds it. It takes an object with " +
+		"ref/host/header/prefix fields, declared in your own magusfile. For your own code, " +
+		"`read` is the ordinary choice. See " +
 		"[Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) " +
 		"and [CI integration](../../guides/integrations/ci.md).\n\n" +
 		"`import \"magus\"` resolves in a `magus buzz` script as well as in a magusfile. The " +
@@ -369,6 +374,18 @@ var Magus = Module{
 					Args: []Arg{{Name: "ref", Type: TypeString}},
 					// A magus-resolved value rather than a bare str, which is what lets
 					// magus recognise it and keep it out of logs and cache keys.
+					Returns: []Ret{{Type: TypeString}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name: "endpoint",
+					Doc:  "Open a loopback base URL carrying the credential a grant names, for a CHILD PROCESS to be pointed at instead of the real API. magus attaches the credential upstream, so the child never holds it.",
+					// TypeAny, not TypeAnyMap: the grant is an object INSTANCE the
+					// magusfile declares itself (ref/host/header/prefix), and an object
+					// does not satisfy a {str: any} annotation. The shape is checked at
+					// the call, by secretGrantArg.
+					Args:    []Arg{{Name: "grant", Type: TypeAny}},
 					Returns: []Ret{{Type: TypeString}},
 					Raises:  true,
 					Extern:  true,

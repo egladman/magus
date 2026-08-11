@@ -194,14 +194,32 @@ type TargetGraphNode struct {
 	// cross-project input only; a same-project one seeds by directory containment), and
 	// the consumes edge to the file node in the owning project.
 	ReadsFiles []InputRef `json:"reads_files,omitempty" yaml:"reads_files,omitempty"`
-	// ReadsSecrets records that the target body calls magus\secret.read. A resolved
-	// credential contributes NOTHING to the cache key - deliberately, since hashing one
-	// would write it into cache metadata - so rotating or revoking it invalidates nothing.
-	// A cacheable target that reads a credential therefore becomes a replay that reports
-	// success without ever contacting the provider, which is worst for exactly the
-	// authentication targets the `-login` convention encourages, whose sources rarely
-	// change. MGS1026 reports the combination; skip_cache with a reason is the fix.
+	// ReadsSecrets records that the target body reaches for a credential - magus\secret's
+	// read, grant or endpoint. A resolved credential contributes NOTHING to the cache key
+	// - deliberately, since hashing one would write it into cache metadata - so rotating
+	// or revoking it invalidates nothing. A cacheable target that uses one therefore
+	// becomes a replay that reports success without ever contacting the provider, which is
+	// worst for exactly the authentication targets the `-login` convention encourages,
+	// whose sources rarely change. MGS1026 reports the combination; skip_cache with a
+	// reason is the fix.
+	//
+	// A GRANT carries the same hazard in a sharper form, which is why it counts here: the
+	// magusfile never holds the value, so changing a grant's ref from staging to
+	// production alters nothing the cache can see, and the target replays its old output
+	// against a different credential. The name stays ReadsSecrets because it is a
+	// Buzz-visible describe field (readsSecrets); the concept it records is "uses".
 	ReadsSecrets bool `json:"reads_secrets,omitempty" yaml:"reads_secrets,omitempty"`
+	// SecretRefs are the credential REFERENCES this target names, sorted and deduped -
+	// never values, which magus does not have at describe time and would not print if it
+	// did. It answers "which credentials does this target touch" without running it,
+	// which is the question an operator reviewing a magusfile actually has.
+	//
+	// Only literal references appear. magus\secret.read takes a string literal, so its
+	// reference is here; magus\secret.endpoint takes an object usually declared as a
+	// `final` elsewhere, so its reference is not at the call site and only ReadsSecrets
+	// records the use. Under-reporting is deliberate: resolving that identifier would
+	// mean evaluating the magusfile, which a static read refuses to do.
+	SecretRefs []string `json:"secret_refs,omitempty" yaml:"secret_refs,omitempty"`
 	// WritesFiles are the per-target ctx.writesFiles(...) refs, each carrying its owning project
 	// (empty means this target's own). When present, they define the target's
 	// snapshot/replay set instead of inheriting project-wide and spell outputs.

@@ -26,11 +26,13 @@ import (
 	"github.com/egladman/magus/internal/hostmem"
 	"github.com/egladman/magus/internal/interactive"
 	interp "github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/race"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/service"
+	"github.com/egladman/magus/internal/trail"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
@@ -1046,6 +1048,13 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}
 	ctx = installWorkspaceRegistry(ctx, m.wsReg)
 	ctx = secret.ContextWithResolver(ctx, m.resolver)
+	// So a magusfile binding can record a governance event (a credential granted, an
+	// endpoint opened) without the trail path being threaded through the VM.
+	ctx = trail.ContextWithBase(ctx, m.CacheDir())
+	// Scopes a credential endpoint to THIS run. internal/secret cannot read the
+	// invocation id itself - internal/journal imports it for redaction, so that would be
+	// a cycle - so the id is threaded from here, where both are already in scope.
+	ctx = secret.ContextWithInvocationID(ctx, journal.InvocationIDFromContext(ctx))
 	ctx = types.WithWorkspace(ctx, m)
 	// Seeded with the projects this run SELECTED, then marked further by the dispatcher
 	// as cross-project dependencies run. Selection alone was not enough: `magus run

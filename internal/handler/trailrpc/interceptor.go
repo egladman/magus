@@ -128,7 +128,7 @@ func Interceptor(trailDir, actor string, kind trail.Kind, opts ...Option) connec
 					ev.Outcome = trail.OutcomeError
 					ev.Error = err.Error()
 				}
-				trail.Append(trailDir, ev)
+				trail.Append(ctx, trailDir, ev)
 			}
 			return resp, err
 		}

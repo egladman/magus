@@ -68,6 +68,13 @@ A magusfile can already read a credential. `os\env("DOCKERHUB_TOKEN")` works, an
 does shelling out to `op read` with [`proc\exec`](../reference/buzz/os.md). What neither
 can do is tell magus that the value is sensitive.
 
+**So do not use `os\env` for a credential.** With no provider selected,
+`magus\secret.read("DOCKERHUB_TOKEN")` reads exactly the same environment variable -
+the built-in environment provider _is_ a provider. Same variable, same plaintext, same
+line of code. The only difference is that magus now knows the value is a credential and
+keeps it out of everything it writes down. Reading it with `os\env` gives that up and
+buys nothing. Keep `os\env` for configuration that is not sensitive.
+
 That distinction is the whole feature. A value resolved through a secret provider is one
 magus recognizes on the way out, so it never reaches a run log, a terminal, or the
 [output store](cache/output-refs.md) in the clear.
@@ -85,8 +92,10 @@ failure trace - magus redacts it:
 DEBUG: authenticating to ghcr.io with password=***
 ```
 
-Read the same variable with `os\env` and magus has no reason to protect the result. That
-is the seam, and it is deliberate rather than a gap.
+Read the same variable with `os\env` and magus has no reason to protect the result -
+provenance is what marks a value as a credential, not its name. That seam is deliberate
+rather than a gap, and it is exactly why the paragraph above says to stop reaching for
+`os\env` here.
 
 ## Secrets in a spell op
 
@@ -110,10 +119,19 @@ export fun mgs_listTargets() > any {
     return {"publish": Command{
         bin = "npm",
         args = ["publish"],
-        secrets = {"NPM_TOKEN": "NPM_TOKEN"},
+        //        env var npm reads -> reference the provider resolves
+        secrets = {"NPM_TOKEN": "op://engineering/npm-registry/publish-token"},
     }};
 }
 ```
+
+The two sides are different kinds of name and the example keeps them visibly
+different on purpose. The **key** is the environment variable the command itself
+looks for, fixed by whatever you are running (`npm` wants `NPM_TOKEN`). The **value**
+is a reference in your provider's own addressing - an `op://` path here, a bare
+variable name under the built-in environment provider. Writing the same string on both
+sides happens to work under the built-in provider and teaches the wrong thing: it makes
+the mapping look like a redundant restatement rather than the translation it is.
 
 Each reference is resolved through the workspace's selected provider **at spawn**, the
 moment before the command runs, and injected into **that one child process's**
@@ -173,12 +191,22 @@ final token = magus\secret.read("Private/DockerHub/token");
 // spells/onepassword/spell.buzz
 export fun mgs_getName() > str { return "onepassword"; }
 
-export fun resolve_secret(target: Target, cb: fun(any)) > str {
+export fun resolve_secret(target: Target, cb: fun(any)) > Secret {
     var io = {};
     cb(io);
-    return proc\exec("op", args: ["read", "op://" + ("" + io["ref"])]).stdout;
+    final v = proc\exec("op", args: ["read", "op://" + ("" + io["ref"])]).stdout;
+    return Secret{ value = v };
 }
 ```
+
+`Secret` comes from `magus/spell`, alongside `Target` and `Command`. The return is typed
+because Buzz checks function signatures: a provider returning the wrong shape fails to
+load rather than failing at the first read. That is worth having here and not on
+`magus\secret.read`, which hands a magusfile a plain `str` - Buzz does not check
+host-call results, so a type there would be decoration rather than a constraint.
+
+A provider that returns a bare string still works, so an older spell keeps loading, but
+write new ones with the typed return.
 
 A declared provider wins over the built-in, so selecting one is how a laptop avoids
 exporting tokens into a shell while CI keeps using the environment.
@@ -321,12 +349,13 @@ provider's job**:
 
 ```buzz
 // spells/onepassword/spell.buzz - a house convention, expressed in one place
-export fun resolve_secret(target: Target, cb: fun(any)) > str {
+export fun resolve_secret(target: Target, cb: fun(any)) > Secret {
     var io = {};
     cb(io);
     final ref = "" + io["ref"];               // "dockerhub-token"
-    return proc\exec("op", args: ["read", "op://Engineering/" + ref + "/credential"],
+    final v = proc\exec("op", args: ["read", "op://Engineering/" + ref + "/credential"],
         dir: ".", opts: {}).stdout;
+    return Secret{ value = v };
 }
 ```
 
@@ -638,6 +667,171 @@ the way out.
 server start` a resolved credential is resident in that process until it restarts, and
   would appear in a heap or core dump. A one-shot CLI invocation holds it for the life of
   that process only. Nothing is written to disk in either case.
+
+## Endpoints: pointing a subprocess at magus instead of the API
+
+`magus\secret.read` hands your magusfile the credential. That works when your own code is
+the consumer, because magus knows the value is sensitive and masks it out of the run log,
+the terminal and the output store.
+
+It does not work when the consumer is a **subprocess**. A child process holds the value in
+its own memory, and magus cannot redact another process. If that child decides at runtime
+what to run, or executes code you did not write, its ability to read its own environment
+is the exposure.
+
+`magus\secret.endpoint` addresses that one case. It returns a loopback base URL. You point
+the child at that instead of the real API, and magus attaches the credential on the way
+upstream:
+
+```buzz
+object SecretGrant {
+    ref: str = "",
+    host: str = "",
+    header: str = "",
+    prefix: str = "",
+}
+
+final OPENAI = SecretGrant{
+    ref    = "op://vault/openai/key",
+    host   = "api.openai.com",
+    header = "Authorization",
+    prefix = "Bearer ",
+};
+
+export fun agent(ctx: magus\Context, args: [str]) > void {
+    ctx.skip_cache("reaches for a credential, which contributes nothing to the cache key");
+    os\withEnv({
+        "OPENAI_BASE_URL": magus\secret.endpoint(OPENAI),
+        "OPENAI_API_KEY":  "placeholder-magus-replaces-this",
+    }, fun () > void {
+        proc\exec("my-agent", args: ["run"], dir: ".");
+    });
+}
+```
+
+You declare the object yourself. magus does not export the type: a type declared in a host
+module can be annotated but not constructed, so exporting one would name something you
+could not build.
+
+### The placeholder key
+
+openai-python, the Anthropic SDK and most API clients refuse to start without a key, then
+set the auth header from it unconditionally. Give them any non-empty string. magus
+overwrites that header, because the value you supplied is garbage by construction.
+
+Without the placeholder the SDK exits before it sends anything.
+
+### What the forwarder does
+
+magus binds `127.0.0.1` on a random port and serves one path: a 128-bit token minted per
+endpoint. A request presenting that token is forwarded to the granted host over ordinary,
+fully verified TLS with the credential attached. Anything else gets a 404.
+
+The token is why a loopback socket is defensible. Without it, any process on the machine
+could reach the port and spend your credential by guessing a port number. **Treat the
+endpoint URL as a credential**: it belongs in the environment, never in a command line,
+since argv is world-readable on Linux. magus masks it out of its own output for the same
+reason.
+
+Streaming works. The forwarder does not buffer, so an SSE completion arrives token by
+token.
+
+### No interception, and why that is not a compromise
+
+The obvious way to cover every tool at once is to intercept all outbound traffic: generate
+a certificate authority, install it in the machine's trust store, terminate each TLS
+connection, inject the credential, re-encrypt. magus does not do this.
+
+That mechanism adds surveillance, not security. Decrypting traffic, inspecting it and
+re-encrypting it is what a corporate TLS-inspecting VPN does, and the end-to-end guarantee
+TLS exists to provide is gone once a third party holds a key that can impersonate every
+site you visit.
+
+It also fails its own threat model. A process hostile enough that you must withhold a
+credential from it by force is running as you: it can read the CA you just installed, read
+magus's memory, or hook the TLS library. You would have added a universal interception
+capability to defend against an adversary already inside the boundary it protects.
+
+You have to trust your tooling and your environment somewhere. What magus offers is
+narrower: it shrinks the standing exposure so the ordinary failures stop handing the value
+over. It is not a containment boundary against code you chose to execute.
+
+### A bypass fails closed
+
+A child that ignores the endpoint and dials the API directly gets a 401, because magus
+holds the key. Nothing has to stop it. This is why endpoints need no egress enforcement,
+no network sandbox and no per-platform firewall work, and it is the property an allow/deny
+egress gate lacks: that fails _open_ the moment something routes around it.
+
+### Scope and lifetime
+
+An endpoint belongs to the run that opened it. Two concurrent runs wanting the same
+credential get two sockets and two tokens, so a token leaked from one run authorizes
+nothing in another. The listener closes when the run's context ends.
+
+Opening one at a magusfile's top level is refused. A top level runs during `magus ls` and
+has no run to end, so the socket would outlive every run and keep one token valid for as
+long as the process lives.
+
+### What gets recorded
+
+Opening an endpoint lands in two places. The **run journal**, alongside every credential
+read, readable with `magus query invocation <id> --secrets`. The **activity trail**, as a
+`credential_grant` event, which is what connects an agent's tool call to the credential it
+made spendable.
+
+Both record the reference, the host and the header. Neither records the value: magus
+resolves nothing when you declare an endpoint, and resolving one in order to log it would
+defeat the point.
+
+### What an endpoint does not do
+
+- **It stops exfiltration, not use.** A child pointed at an endpoint can issue any request
+  the declaration permits. It cannot read the credential; it can spend it.
+- **It covers what you forward.** A tool with no base-URL setting is not covered, and you
+  find that out where you can see it rather than by having magus rewrite its traffic.
+- **`Authorization: Basic` is not expressible.** `prefix` writes a literal string before
+  the value; it does not base64 a user:password pair.
+- **The object is yours, not magus's.** Buzz checks the construction of an object it can
+  see, so a misspelled field is a compile error. Field _types_ in an object literal are not
+  checked, so `host = 42` compiles and fails when the endpoint opens.
+
+### Why magus does not inject into its own HTTP calls
+
+An earlier version attached these credentials to magus's own `http\*` calls too, matching
+each request's host against a registry of declarations.
+
+That got cut. The plaintext sits in magus's memory either way, since the resolver memoizes
+it and the redaction set must retain it for masking to work, so withholding it from a Buzz
+variable in the same process bought close to nothing over `read`. Meanwhile the host
+matching and per-hop redirect re-checking it required produced two credential-leak bugs of
+their own: one where a credential followed a redirect into a different declared host
+sharing a header name, and one where an `https` to `http` downgrade on the same host kept
+the header.
+
+For your own code, `read` is the answer. The subprocess case is the one `read` cannot
+serve, and that is what an endpoint is for.
+
+## What a resolved credential is, in Go
+
+Inside magus a resolved credential is a `secret.Value`, not a `string`. Every standard
+way of rendering one - `fmt` with any verb, `slog`, JSON - yields `***`, so the plaintext
+reaches output only where a caller explicitly asked for it by name with `Reveal()`.
+
+That type exists because redaction at the write boundary cannot be finished. Those
+interceptors compare against what `fmt` renders while a handler emits what its _encoder_
+produces, and the two differ - a `[]byte` attribute rendered as decimal bytes by `fmt`
+was emitted base64-encoded, and decodable, by the JSON handler. No amount of additional
+kind-handling closes that, because an interceptor cannot know what a downstream encoder
+will do. The value has to mask itself.
+
+Both mechanisms are required, and neither replaces the other. `secret.Value` covers
+return values, structured log attributes and descriptor fields. The write interceptors
+cover bytes a child process printed, which magus never held as a value.
+
+There are five `Reveal()` call sites in the whole engine, and that is deliberate: they
+are the boundaries where a credential stops being self-protecting, and they are meant to
+be greppable. If the count grows much past a handful, the boundary is in the wrong place.
 
 ## Why a secret is a `str` and not its own type
 

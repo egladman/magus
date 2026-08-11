@@ -31,7 +31,7 @@ func TestSpellSecretProviderInvokesResolveSecretWithTheReference(t *testing.T) {
 	d := &stubDriver{resp: spells.InvokeResponse{Text: "value-from-spell"}}
 	v, err := spellSecretProvider{drv: d}.Fetch(context.Background(), "Private/DockerHub/token")
 	require.NoError(t, err)
-	assert.Equal(t, "value-from-spell", v)
+	assert.Equal(t, "value-from-spell", v.Reveal())
 
 	assert.Equal(t, "resolve_secret", d.got.Target)
 	assert.Equal(t, map[string]any{"ref": "Private/DockerHub/token"}, d.got.Params,
@@ -44,7 +44,7 @@ func TestSpellSecretProviderAcceptsAStringInData(t *testing.T) {
 	d := &stubDriver{resp: spells.InvokeResponse{Data: "value-in-data"}}
 	v, err := spellSecretProvider{drv: d}.Fetch(context.Background(), "ref")
 	require.NoError(t, err)
-	assert.Equal(t, "value-in-data", v)
+	assert.Equal(t, "value-in-data", v.Reveal())
 }
 
 func TestSpellSecretProviderRejectsAnEmptyOrWrongTypedResult(t *testing.T) {

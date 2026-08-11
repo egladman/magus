@@ -260,9 +260,9 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Origin, trailD
 		// Capture both sides the agent exchanged with the tool as content-addressed blobs
 		// (prefixed "mcp"), keeping only refs on the event so a large body never bloats the
 		// trail line. Request = the tool arguments, response = the result text.
-		reqRef, reqBytes := trail.WriteBlob(trailDir, "mcp", argsJSON(req.GetArguments()))
+		reqRef, reqBytes := trail.WriteBlob(ctx, trailDir, "mcp", argsJSON(req.GetArguments()))
 		respText := allText(result)
-		respRef, respBytes := trail.WriteBlob(trailDir, "mcp", []byte(respText))
+		respRef, respBytes := trail.WriteBlob(ctx, trailDir, "mcp", []byte(respText))
 
 		dur := time.Since(start)
 		ev := trail.Event{
@@ -294,7 +294,7 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Origin, trailD
 		default:
 			reqLog.InfoContext(ctx, "[AGENT] tool done", slog.Duration("duration", dur))
 		}
-		trail.Append(trailDir, ev)
+		trail.Append(ctx, trailDir, ev)
 		// Boot-time rotate alone lets a long-lived daemon's trail grow unbounded, so drive a
 		// rotate off the append count: every rotateEvery calls across the whole server, the trail
 		// is trimmed back to its cap. The counter is caller-side state, keeping trail stateless. Run

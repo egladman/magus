@@ -51,7 +51,7 @@ type spellSecretProvider struct {
 // is a single opaque string, and routing it through a typed payload would mean it also
 // passes through the JSON encoder that serializes Data for MCP - one more place a
 // credential could be retained.
-func (p spellSecretProvider) Fetch(ctx context.Context, ref string) (string, error) {
+func (p spellSecretProvider) Fetch(ctx context.Context, ref string) (secret.Value, error) {
 	// ANNOUNCED BEFORE THE PROVIDER RUNS, not after. A 1Password prompt appearing during
 	// what looked like an ordinary build, with nothing on screen explaining it, is a
 	// trust failure - the user cannot tell whether magus asked for it or something else
@@ -90,23 +90,43 @@ func (p spellSecretProvider) Fetch(ctx context.Context, ref string) (string, err
 			// The distinction worth drawing for the reader: it did not "time out", it had
 			// nobody to ask. Naming that is the difference between re-running it and
 			// wiring a service token.
-			return "", fmt.Errorf("provider %q needed %s and there is no terminal to prompt on; "+
+			return secret.Value{}, fmt.Errorf("provider %q needed %s and there is no terminal to prompt on; "+
 				"configure an unattended credential for it (a service-account token) or run this interactively",
 				p.name, timeout)
 		}
 		if ctx.Err() != nil {
-			return "", fmt.Errorf("provider %q did not answer within %s; it may be waiting on an "+
+			return secret.Value{}, fmt.Errorf("provider %q did not answer within %s; it may be waiting on an "+
 				"unlock nobody completed", p.name, timeout)
 		}
-		return "", err
+		return secret.Value{}, err
 	}
+	// The typed return, which is the contract a provider should write today:
+	//
+	//   export fun resolve_secret(target: Target, cb: fun(any)) > Secret {
+	//       return Secret{ value = ... };
+	//   }
+	//
+	// Buzz checks function SIGNATURES, so `> Secret` is enforced at compile time - a
+	// provider returning the wrong shape fails to load rather than failing at the first
+	// read. That is why this is worth typing even though magus\secret.read still hands a
+	// magusfile a plain str: Buzz does not check host-call results, so a type there would
+	// be decoration, while a type here is a constraint.
+	if m, ok := resp.Data.(map[string]any); ok {
+		if v, has := m["value"].(string); has && v != "" {
+			return secret.NewValue(v), nil
+		}
+		return secret.Value{}, fmt.Errorf("provider returned a Secret with no value (resolve_secret must set Secret.value)")
+	}
+	// compat(until: no provider spell returns a bare string from resolve_secret):
+	// the op shipped returning `> str` and third-party providers were written against
+	// that, so a plain string is still accepted. Observe it is safe to drop by checking
+	// that no spell in spells/ and no documented provider declares `> str` on
+	// resolve_secret - magus's own three were converted with the typed return.
 	if resp.Text != "" {
-		return resp.Text, nil
+		return secret.NewValue(resp.Text), nil
 	}
-	// A provider that returns structured data instead of text is still honoured, but
-	// only for a plain string: anything else means the spell misunderstood the contract.
 	if s, ok := resp.Data.(string); ok && s != "" {
-		return s, nil
+		return secret.NewValue(s), nil
 	}
-	return "", fmt.Errorf("provider returned no value (its resolve_secret op must return the secret as a string)")
+	return secret.Value{}, fmt.Errorf("provider returned no value (its resolve_secret op must return Secret{ value = ... })")
 }

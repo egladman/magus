@@ -157,8 +157,11 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 					if name, ok := charmCall(e); ok {
 						node.Charms = appendUniq(node.Charms, name)
 					}
-					if secretReadCall(e) {
+					if ref, ok := secretUseCall(e); ok {
 						node.ReadsSecrets = true
+						if ref != "" {
+							node.SecretRefs = appendUniq(node.SecretRefs, ref)
+						}
 					}
 					// Per-target cache footprint: ctx.readsFiles(...) / ctx.writesFiles(...).
 					// Every argument must be a string literal; a non-literal one is not
@@ -542,25 +545,52 @@ func crossFileArg(arg ast.Node, aliases map[string]string) (types.InputRef, bool
 	return types.InputRef{Project: proj, Glob: lit.Val}, true
 }
 
-// secretReadCall reports whether e is `magus\secret.read(...)`. Matched structurally rather
-// than by rendered text so an aliased import or stray whitespace cannot hide it.
+// secretUseCall reports whether e reaches for a credential - `magus\secret.read(...)` or
+// `magus\secret.endpoint(...)` - and returns the reference when it is a literal at the
+// call site. Matched structurally rather than by rendered text, so an aliased import or
+// stray whitespace cannot hide it.
 //
-// The shape is a member access on a NAMESPACED member: magus\secret is the namespace access,
-// .read hangs off it. Only the direct call is recognized - a read behind a helper the static
-// walk cannot reach is invisible here, exactly like an unreached ctx.readsFiles (MGS1004), and
-// under-reports rather than over-reports. That is the right direction for a check whose
-// remedy is to opt a target OUT of the cache.
-func secretReadCall(e *ast.CallExpr) bool {
+// BOTH count for MGS1026. A credential contributes nothing to the cache key, so a
+// cacheable target that uses one replays without ever contacting the provider. An
+// endpoint has that property in a sharper form: the magusfile never holds the value, so
+// switching its reference from staging to production changes nothing the cache can see
+// and the target replays its old output against a different credential.
+//
+// The REFERENCE comes back only for read, whose argument is a string literal. An
+// endpoint takes an object, usually a `final` declared elsewhere, so the reference is not
+// at the call site and this returns "" - the use is still recorded, the name is not.
+// Resolving that identifier would mean evaluating the magusfile, which is exactly what a
+// static read refuses to do.
+//
+// The shape is a member access on a NAMESPACED member: magus\secret is the namespace
+// access, .read hangs off it. Only the direct call is recognized - a use behind a helper
+// the static walk cannot reach is invisible here, like an unreached ctx.readsFiles
+// (MGS1004). It under-reports rather than over-reports, which is the right direction for
+// a check whose remedy is to opt a target OUT of the cache.
+func secretUseCall(e *ast.CallExpr) (string, bool) {
 	me, ok := e.Callee.(*ast.MemberExpr)
-	if !ok || me.Name != "read" {
-		return false
+	if !ok {
+		return "", false
+	}
+	switch me.Name {
+	case "read", "endpoint":
+	default:
+		return "", false
 	}
 	ns, ok := me.Object.(*ast.MemberExpr)
 	if !ok || !ns.Namespaced || ns.Name != "secret" {
-		return false
+		return "", false
 	}
 	id, ok := ns.Object.(*ast.IdentExpr)
-	return ok && id.Name == "magus"
+	if !ok || id.Name != "magus" {
+		return "", false
+	}
+	if me.Name == "read" && len(e.Args) > 0 {
+		if lit, isLit := e.Args[0].(*ast.StringLit); isLit {
+			return lit.Val, true
+		}
+	}
+	return "", true
 }
 
 // charmCall returns the literal charm name a has_charm("name") read names, and ok=true.

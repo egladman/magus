@@ -20,6 +20,7 @@ package trail
 
 import (
 	"bufio"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -29,6 +30,7 @@ import (
 	"time"
 
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/secret"
 )
 
 // dir is the base-dir subdirectory holding the trail, a sibling of the journal's runs/.
@@ -82,6 +84,19 @@ const (
 	// own working notes, so knowing when the operator inspected them is part of the governance story,
 	// and the mount opts into read auditing (the agent/MCP door is already audited separately).
 	KindMemory Kind = "memory"
+
+	// KindCredentialGrant records that a run made a credential reachable: a magusfile
+	// granted one to a destination host, or opened a loopback endpoint carrying one.
+	//
+	// It is the governance half of a fact the execution journal already records. The
+	// journal answers "what did this build do" and is queried per invocation; the trail
+	// answers "who did what against this daemon", so when an AGENT triggers a run that
+	// makes a credential spendable, this is the event that connects the two. Without it
+	// the activity log shows the tool call and not its consequence.
+	//
+	// It carries the REFERENCE, the host and the header - never the value, which is not
+	// resolved at declaration time and must not be resolved to log it.
+	KindCredentialGrant Kind = "credential_grant" //nolint:gosec // G101: an event-kind discriminator whose name contains "credential", not a credential
 )
 
 // Outcome values; map to the wire Outcome enum.
@@ -164,10 +179,17 @@ type agentCommandResponse struct {
 // requested command ran or succeeded. A pre-execution hook has no such knowledge. Callers must not
 // make command execution contingent on the trail, so this function follows Append's best-effort,
 // error-free contract.
-func AppendAgentCommand(base string, command AgentCommand) {
+func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) {
 	if base == "" || (command.Command == "" && command.Path == "") {
 		return
 	}
+	// A hook observes a shell command line, which is exactly where a credential passed as an
+	// argument shows up. Redacted here rather than in the blob alone, because these fields also
+	// reach Action and Preview on the event line.
+	command.Command = secret.RedactString(ctx, command.Command)
+	command.Path = secret.RedactString(ctx, command.Path)
+	command.Reason = secret.RedactString(ctx, command.Reason)
+	command.Context = secret.RedactString(ctx, command.Context)
 	request, _ := json.Marshal(agentCommandRequest{
 		SchemaVersion: agentCommandSchemaVersion,
 		Host:          command.Host,
@@ -183,8 +205,8 @@ func AppendAgentCommand(base string, command AgentCommand) {
 		Reason:        command.Reason,
 		Context:       command.Context,
 	})
-	reqRef, reqBytes := WriteBlob(base, "agent", request)
-	respRef, respBytes := WriteBlob(base, "agent", response)
+	reqRef, reqBytes := WriteBlob(ctx, base, "agent", request)
+	respRef, respBytes := WriteBlob(ctx, base, "agent", response)
 
 	action := command.Tool
 	if action == "" {
@@ -198,7 +220,7 @@ func AppendAgentCommand(base string, command AgentCommand) {
 	if command.Decision != "" {
 		preview = "guard: " + command.Decision
 	}
-	Append(base, Event{
+	Append(ctx, base, Event{
 		Ts:            time.Now().UnixMilli(),
 		Kind:          KindAgentCommand,
 		Actor:         actor,
@@ -221,10 +243,16 @@ func blobsPath(base string) string  { return filepath.Join(base, dir, blobsSubDi
 // Append records one event under base. Best-effort: an empty base or any I/O error is dropped,
 // because the trail is never a precondition for the action it records. Concurrent Appends from
 // different producers do not interleave: each is a single POSIX append of one short line.
-func Append(base string, e Event) {
+//
+// ctx carries the run's secret resolver, and every free-text field goes through it first. The
+// trail is DURABLE and append-only, so a credential that lands here is on disk until someone
+// deletes the file - strictly worse than the same value reaching a terminal. It took a ctx
+// parameter for no other reason.
+func Append(ctx context.Context, base string, e Event) {
 	if base == "" {
 		return
 	}
+	e = redactEvent(ctx, e)
 	line, err := json.Marshal(e)
 	if err != nil {
 		return
@@ -245,7 +273,11 @@ func Append(base string, e Event) {
 // size. An empty base, invalid prefix, empty data, or write failure yields an empty ref (the
 // caller omits it) while still reporting the size. Idempotent by content and atomic (temp file
 // then rename), so a concurrent reader never observes a partial blob.
-func WriteBlob(base, prefix string, data []byte) (ref string, size int64) {
+func WriteBlob(ctx context.Context, base, prefix string, data []byte) (ref string, size int64) {
+	// Redacted BEFORE the ref is computed, so the content address names what is actually
+	// stored. Blobs are the highest-risk surface in this package: an MCP request/response pair
+	// is a whole tool payload, persisted verbatim, and nothing else on the path scrubs it.
+	data = secret.Redact(ctx, data)
 	size = int64(len(data))
 	if base == "" || len(data) == 0 || !validPrefix(prefix) {
 		return "", size
@@ -531,4 +563,45 @@ func validRef(ref string) bool {
 		}
 	}
 	return true
+}
+
+// redactEvent masks every free-text field on an event.
+//
+// The structural fields are deliberately left alone: Kind, Outcome, Actor, Host, Session,
+// Workspace and the blob refs are enumerated values, identities and content addresses, none of
+// which a credential can occupy, and all of which a reader filters on by exact match. Redacting
+// them would break the activity view to protect nothing - the same reasoning that leaves slog
+// attribute KEYS alone in internal/secret.
+func redactEvent(ctx context.Context, e Event) Event {
+	e.Action = secret.RedactString(ctx, e.Action)
+	e.Error = secret.RedactString(ctx, e.Error)
+	e.Preview = secret.RedactString(ctx, e.Preview)
+	return e
+}
+
+type baseKey struct{}
+
+// ContextWithBase carries the trail's base directory so a producer deep in the run - a
+// magusfile binding, say - can record an event without being handed the path.
+//
+// Every other producer receives its base as an argument, which is the better shape when
+// the call site is a handler constructed with it. A magusfile binding is not: it runs
+// inside the Buzz VM, several layers below anything that knows a cache directory, and
+// threading a string through those layers to reach one Append would put the trail into
+// signatures that have no other reason to mention it.
+func ContextWithBase(ctx context.Context, base string) context.Context {
+	if base == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, baseKey{}, base)
+}
+
+// BaseFromContext returns the trail base, or "" when none was installed. An empty base
+// makes every write a no-op, which is the package's existing best-effort contract.
+func BaseFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	base, _ := ctx.Value(baseKey{}).(string)
+	return base
 }

@@ -92,9 +92,9 @@ func TestJobInfo_LastRunFromTrailAndTargetSize(t *testing.T) {
 	dir := t.TempDir()
 	// A completed rotate-activities job in the trail, plus two more events so Stat has a count of 3.
 	start := time.UnixMilli(1_000_000).UnixMilli()
-	trail.Append(dir, trail.Event{Ts: start, Kind: trail.KindJob, Actor: "daemon", Action: "server rotate-activities", Outcome: trail.OutcomeOK, DurMs: 250})
-	trail.Append(dir, trail.Event{Ts: start + 1, Kind: trail.KindMCPToolCall, Actor: "a", Action: "query", Outcome: trail.OutcomeOK})
-	trail.Append(dir, trail.Event{Ts: start + 2, Kind: trail.KindMCPToolCall, Actor: "a", Action: "explain", Outcome: trail.OutcomeOK})
+	trail.Append(t.Context(), dir, trail.Event{Ts: start, Kind: trail.KindJob, Actor: "daemon", Action: "server rotate-activities", Outcome: trail.OutcomeOK, DurMs: 250})
+	trail.Append(t.Context(), dir, trail.Event{Ts: start + 1, Kind: trail.KindMCPToolCall, Actor: "a", Action: "query", Outcome: trail.OutcomeOK})
+	trail.Append(t.Context(), dir, trail.Event{Ts: start + 2, Kind: trail.KindMCPToolCall, Actor: "a", Action: "explain", Outcome: trail.OutcomeOK})
 
 	s := newTestService(fakeWS{dir: dir}, nil, nil)
 	running := map[string]string{argvKey([]string{"server", "rotate-activities"}): "inv-live"}

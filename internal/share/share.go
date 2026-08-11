@@ -464,10 +464,16 @@ func (g *sessionGuard) recordFirstUse(r *http.Request) {
 		return
 	}
 	ua := r.UserAgent()
+	// WithoutCancel because the append runs in a goroutine that outlives the request:
+	// the context is carried for the secret resolver Append redacts against, not for
+	// cancellation, and a cancelled ctx would still redact correctly but reads as a
+	// deadline being ignored. A share listener carries no resolver today, so redaction
+	// degrades to a no-op - which is the documented contract, not an oversight.
+	trailCtx := context.WithoutCancel(r.Context())
 	// KindTokenLifecycle is the closest existing activity kind: a share token being
 	// exercised by a remote device is a lifecycle event of that token. No new proto
 	// kind is added; the console derives the alert from this event frontend-side.
-	go trail.Append(g.m.trailDir, trail.Event{
+	go trail.Append(trailCtx, g.m.trailDir, trail.Event{
 		Ts:        time.Now().UnixMilli(),
 		Kind:      trail.KindTokenLifecycle,
 		Actor:     "share-guest",

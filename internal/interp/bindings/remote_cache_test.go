@@ -22,6 +22,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/secret"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -209,10 +210,11 @@ func repoRoot(t *testing.T) string {
 
 func ghaBackend(t *testing.T) *spellRemoteBackend {
 	t.Helper()
-	path := filepath.Join(repoRoot(t), "magus", "spells", "github", "actions", "spell.buzz")
-	if _, err := os.Stat(path); err != nil {
-		t.Skipf("github spell not found at %s: %v", path, err)
-	}
+	path := filepath.Join(repoRoot(t), "spells", "github", "actions", "spell.buzz")
+	// NOT t.Skipf. This skipped silently for who knows how long - the path carried an
+	// extra "magus" segment from before the repo was flattened - so the only coverage of
+	// magus's own GitHub Actions cache backend was dead, and read as passing.
+	require.FileExists(t, path, "github spell missing; this test must run, not skip")
 	drv, err := resolveBackendSpell(context.Background(), path)
 	require.NoError(t, err, "load github spell")
 	require.Equal(t, "github-actions", drv.Name(), "spell name")
@@ -226,6 +228,14 @@ type ghaEmulator struct {
 	mu        sync.Mutex
 	pending   map[string][]byte // key -> uploaded bytes, awaiting finalize
 	committed map[string][]byte // key -> finalized bytes
+	twirpAuth []string          // Authorization seen on each Twirp call, in order
+}
+
+// twirpAuths returns the Authorization headers the Twirp endpoints saw, in order.
+func (e *ghaEmulator) twirpAuths() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return append([]string(nil), e.twirpAuth...)
 }
 
 func newGHAEmulator() *ghaEmulator {
@@ -239,6 +249,18 @@ const ghaTwirp = "/twirp/github.actions.results.api.v1.CacheService/"
 
 func (e *ghaEmulator) handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Record the Authorization the spell's Twirp calls arrive with. The spell no
+		// longer builds that header itself - it declares a magus\secret grant and magus
+		// attaches it - so without this the emulator would happily serve unauthenticated
+		// requests and the round-trip would pass with the credential never sent.
+		//
+		// The pre-signed blob URLs deliberately carry no auth, hence the Twirp-only
+		// scope: they are a different host in production and a grant must not follow.
+		if strings.HasPrefix(r.URL.Path, ghaTwirp) {
+			e.mu.Lock()
+			e.twirpAuth = append(e.twirpAuth, r.Header.Get("Authorization"))
+			e.mu.Unlock()
+		}
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == ghaTwirp+"CreateCacheEntry":
 			e.createEntry(w, r)
@@ -257,7 +279,12 @@ func (e *ghaEmulator) handler() http.Handler {
 }
 
 func (e *ghaEmulator) createEntry(w http.ResponseWriter, r *http.Request) {
-	var body struct{ Key, Version string }
+	// Explicit tags: under GOEXPERIMENT=jsonv2 (which the test target sets) field
+	// matching is case-sensitive, so an untagged Key never sees the wire's "key".
+	var body struct {
+		Key     string `json:"key"`
+		Version string `json:"version"`
+	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	if body.Key == "" {
 		http.Error(w, "missing key", http.StatusBadRequest)
@@ -292,9 +319,9 @@ func (e *ghaEmulator) upload(w http.ResponseWriter, r *http.Request) {
 
 func (e *ghaEmulator) finalize(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Key       string
-		SizeBytes string // int64 is a JSON string in proto3
-		Version   string
+		Key       string `json:"key"`
+		SizeBytes string `json:"sizeBytes"` // int64 is a JSON string in proto3
+		Version   string `json:"version"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	e.mu.Lock()
@@ -317,9 +344,9 @@ func (e *ghaEmulator) finalize(w http.ResponseWriter, r *http.Request) {
 
 func (e *ghaEmulator) downloadURL(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Key         string
-		RestoreKeys []string
-		Version     string
+		Key         string   `json:"key"`
+		RestoreKeys []string `json:"restoreKeys"`
+		Version     string   `json:"version"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	e.mu.Lock()
@@ -358,8 +385,12 @@ func TestGHACacheBackendRoundTrip(t *testing.T) {
 	t.Setenv("ACTIONS_RUNTIME_TOKEN", "test-token")
 
 	store := ghaBackend(t)
-	require.True(t, store.Active(context.Background()), "Active() = false under GITHUB_ACTIONS=true, want true")
-	ctx := context.Background()
+	// A resolver on the context, because a run always has one - the cache backend is
+	// invoked from inside a run. The spell declares a magus\secret grant, and without a
+	// resolver that is an error rather than a silent unauthenticated request, which is
+	// the correct behaviour and why the test has to look like production here.
+	ctx := secret.ContextWithResolver(context.Background(), secret.New())
+	require.True(t, store.Active(ctx), "Active() = false under GITHUB_ACTIONS=true, want true")
 	entry := bytes.Repeat([]byte{0x00, 0x1f, 0x8b, 0xff}, 10)
 
 	rc, err := store.GetArtifact(ctx, "pkg/a", "abc123")
@@ -376,6 +407,17 @@ func TestGHACacheBackendRoundTrip(t *testing.T) {
 	got, _ := io.ReadAll(rc)
 	_ = rc.Close()
 	assert.Equal(t, entry, got)
+
+	// The spell declares a magus\secret grant instead of building the header itself, so
+	// this is what proves the credential actually reached the wire. A grant that silently
+	// failed to apply would leave every one of these empty and the round-trip would still
+	// pass, because the emulator does not require auth.
+	auths := emu.twirpAuths()
+	require.NotEmpty(t, auths, "no Twirp calls reached the emulator")
+	for i, got := range auths {
+		assert.Equal(t, "Bearer test-token", got,
+			"Twirp call %d arrived without the granted credential", i)
+	}
 }
 
 // Outside GitHub Actions the spell's enabled() op returns false, so the backend

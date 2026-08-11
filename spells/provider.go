@@ -79,3 +79,24 @@ type ProvidedProject struct {
 	// Exclusive marks the project as must-not-run-alongside-peers in a batch.
 	Exclusive bool `json:"exclusive"`
 }
+
+// Secret is what a provider spell's resolve_secret op returns: one resolved credential.
+//
+// A typed return rather than a bare `str`, and the distinction that makes it worth having
+// is narrow but real. Buzz does not check host-call RESULTS or object field literals -
+// which is why magus\secret.read still hands a magusfile a plain string, and why there is
+// no Buzz-level Secret type there. It DOES check function signatures, so
+// `resolve_secret(...) > Secret` is enforced: a provider that returns something else
+// fails to compile rather than failing at the first read.
+//
+// It also gives the contract somewhere to grow: a provider that knows its credential's
+// lifetime, or wants to declare a cache identity for it, has a field to add without
+// another breaking change.
+//
+// What it does NOT do is mask anything inside the spell. Buzz has no self-masking type;
+// the Go side wraps this in a secret.Value the moment it crosses the boundary, and that
+// is where the protection starts.
+type Secret struct {
+	// Value is the resolved credential.
+	Value string
+}

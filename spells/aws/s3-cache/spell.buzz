@@ -84,6 +84,31 @@ fun getenv(name: str) > str {
     return "" + v;
 }
 
+// WHY THIS SPELL DOES NOT USE magus\secret.grant, unlike spells/github/actions.
+//
+// A grant attaches a credential to a request as a header VALUE: prefix + value, on one
+// declared host. That fits a bearer token exactly, and the Actions cache spell was
+// converted to it. It does not fit SigV4, for two independent reasons:
+//
+//  1. AWS_SECRET_ACCESS_KEY is never sent. It is an HMAC key input - see the kDate chain
+//     in sign() - so the thing on the wire is a derived signature, not the credential.
+//     There is no header for magus to put it in.
+//  2. AWS_SESSION_TOKEN IS sent, as x-amz-security-token, but it is also inside
+//     canonicalHeaders and named in signedHeaders. It is COVERED BY the signature, so a
+//     header magus attached afterwards would either be unsigned (rejected) or would have
+//     to match a signature this spell computed over a value it was not given.
+//
+// The dividing line is bearer versus signing: a grant covers a credential that travels,
+// not one that is computed with. Reaching for a grant here would break request signing,
+// so this reads its credentials directly and states the limit rather than leaving the
+// next person to discover it.
+//
+// The cost is honest and stands: values read with getenv are NOT known to magus as
+// credentials, so they are absent from the redaction set. Neither is printed by this
+// spell and the secret key never leaves the process, which is why this is documented
+// rather than papered over - switching to magus\secret.read would register them, but
+// would also resolve these AWS-standard variable names through whatever provider the
+// workspace selected, which for a vault-backed workspace is a lookup that does not exist.
 fun access() > str { return getenv("AWS_ACCESS_KEY_ID"); }
 fun secret() > str { return getenv("AWS_SECRET_ACCESS_KEY"); }
 fun token() > str { return getenv("AWS_SESSION_TOKEN"); }

@@ -116,6 +116,7 @@ Kind classifies the recorded action by its source. A reader switches on kind; ne
 | `KIND_SANDBOX_DENIAL` | 5 | reserved: a target attempted a disallowed filesystem write |
 | `KIND_MEMORY` | 6 | a console MemoryService action on the durable magus\_memory files (reads audited too) |
 | `KIND_AGENT_COMMAND` | 7 | An agent host observed a shell or file-tool invocation. The request blob contains normalized host/tool/session data and the command or path; the response blob contains the guard decision. OUTCOME\_OK means the observation was recorded, NOT that a pre-hooked command later succeeded. |
+| `KIND_CREDENTIAL_GRANT` | 8 | A run made a credential reachable: a magusfile granted one to a destination host, or opened a loopback endpoint carrying one. The event names the REFERENCE, the host and the header, never the value - a grant resolves nothing at declaration time, and resolving one in order to log it would defeat that. It is the governance half of a fact the execution journal already records per invocation; this is what connects an agent's tool call to the credential it made spendable. |
 
 ### Outcome
 
