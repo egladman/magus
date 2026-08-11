@@ -9,6 +9,7 @@ ci.provider
 cmd
 describe
 describeFile
+describeModule
 diagnoseDrift
 doctor
 fatal
@@ -22,8 +23,6 @@ log.hint
 log.info
 log.warn
 ls
-module
-modules
 project
 projectGraph
 pry

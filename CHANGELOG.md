@@ -63,6 +63,15 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   siblings, so each is now named for what it contains. It also settles the surface's one
   inconsistent qualifier: every other pair suffixes (`describe`/`describeFile`,
   `affected`/`affectedImpact`, `insight`/`insightReport`) while this one prefixed.
+- **`magus\modules()` and `magus\module(name)` are now one `magus\describeModule(name?)`.**
+  Omit the name for every module; pass one to detail it. Either way the return is a
+  `[Module]`, so detailing one reads `magus\describeModule("fs")[0]`.
+  The pair was a list/get CRUD split this surface uses nowhere else. `magus describe
+  <noun> [<name>]` is ONE command - its own usage says "singular and plural are
+  interchangeable; pass a name to detail one entity" - and the Go API underneath
+  (`hostmodules.Describe`) already took an optional name and returned a slice. The
+  Buzz surface now mirrors the CLI one method per command form, the way
+  `magus\describeFile` mirrors `magus describe file`.
 - **Logging moved to `magus\log`, and `magus\normalize` is now `magus\canonicalName`.**
   `magus\info(...)` becomes `magus\log.info(...)`, and the same for `debug`, `warn`,
   `error` and `hint`. `magus\fatal` and `magus\raise` deliberately did NOT move.

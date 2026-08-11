@@ -255,21 +255,16 @@ var Magus = Module{
 			Extern: true,
 		},
 		{
-			Name: "modules",
-			Doc:  "Every host module magus exposes, as the records `magus describe modules` prints.",
-			// `[Module]`, not `any`. A bare TypeAny return is not field accessible in
-			// Buzz, so declaring one is WORSE than leaving the member undeclared: the
-			// caller's `.name` stops compiling where before it resolved dynamically.
-			// The brackets live in Object, which is how a list-of-object return is
-			// spelled (see vcs.history's `[Commit]`).
+			Name: "describe_module",
+			Doc:  "The host modules magus exposes, with their fields, methods and rendered Buzz signatures - the records `magus describe module` prints. Omit `name` for every module; pass one to detail it.",
+			// ONE method, not a modules()/module(name) pair, because `magus describe
+			// <noun> [<name>]` is one command: its own usage says "singular and plural
+			// are interchangeable; pass a name to detail one entity". A list/get split
+			// would be a CRUD shape this surface uses nowhere else. So a name is an
+			// optional SELECTOR and the return is a collection either way, which is
+			// also what hostmodules.Describe does underneath.
+			Args:    []Arg{{Name: "name", Type: TypeString, Optional: true}},
 			Returns: []Ret{{Type: TypeAny, Object: "[Module]"}},
-			Extern:  true,
-		},
-		{
-			Name:    "module",
-			Doc:     "One host module by name, with its fields and methods. Raises when no module has that name.",
-			Args:    []Arg{{Name: "name", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAny, Object: "Module"}},
 			Raises:  true,
 			Extern:  true,
 		},

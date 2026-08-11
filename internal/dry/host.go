@@ -364,16 +364,11 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	// which the sandbox doesn't wire (pulling host/std in would bloat the playground).
 	// Stub them as empty-but-shaped so a reference and field access (e.g.
 	// magus.module(x).methods) resolve in a dry run.
-	m.MapSet("modules", fn("magus.modules", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("describeModule", fn("magus.describeModule", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		// An empty-but-shaped LIST: the real member returns a collection whether or
+		// not a name selects one, so a dry run must too or `describeModule(x)[0].name`
+		// stops resolving.
 		return vm.ListValue(nil), nil
-	}))
-	m.MapSet("module", fn("magus.module", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		res := vm.NewMap()
-		res.MapSet("name", vm.StrValue(""))
-		res.MapSet("doc", vm.StrValue(""))
-		res.MapSet("fields", vm.ListValue(nil))
-		res.MapSet("methods", vm.ListValue(nil))
-		return res, nil
 	}))
 
 	// Runtime-only members (a debugger, hints, fatal-abort, cache busting) have no

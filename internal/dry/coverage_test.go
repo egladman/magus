@@ -223,8 +223,8 @@ export fun work(ctx: magus\Context, args: [str]) > void !> any {
     magus.describe(["x"]);
     magus.insight(["y"]);
     magus.doctor(["z"]);
-    magus.modules();
-    magus.module("go");
+    magus.describeModule();
+    magus.describeModule("go");
     magus.log.hint("h");
     magus.pry();
     magus.bustCache();

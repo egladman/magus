@@ -160,19 +160,20 @@ func buildMagusNS(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserv
 	// which std can't import. hostmodules.Describe, not std.DescribeModules: std's
 	// own registry no longer covers std/encoding's nine modules by itself - see
 	// hostmodules's doc.
-	magus.MapSet("modules", directVal(obs, "magus.modules", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return bindinggen.MapsVal(hostmodules.Describe("")), nil
-	}))
-	magus.MapSet("module", directVal(obs, "magus.module", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	// magus.describeModule([name]): the host module surface, as `magus describe
+	// module [<name>]` prints it. One member rather than a modules()/module(name)
+	// pair - the CLI noun takes an optional name and returns a collection either
+	// way, and hostmodules.Describe already has that shape.
+	magus.MapSet("describeModule", directVal(obs, "magus.describeModule", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		name := ""
 		if len(args) > 0 && args[0].IsStr() {
 			name = args[0].AsString()
 		}
 		out := hostmodules.Describe(name)
-		if len(out) == 0 {
-			return vm.Null, fmt.Errorf("magus.module: unknown module %q", name)
+		if name != "" && len(out) == 0 {
+			return vm.Null, fmt.Errorf("magus.describeModule: unknown module %q", name)
 		}
-		return bindinggen.AnyMapVal(out[0].BuzzObject()), nil
+		return bindinggen.MapsVal(out), nil
 	}))
 
 	// magus.normalize(name): the canonical form of any magus entity name - a target, a
