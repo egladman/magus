@@ -449,7 +449,7 @@ func (s *Session) Exec(ctx context.Context, code string) error {
 // tell that a module re-exported a name another module already exported, which
 // would silently drop the later module's export from its namespace object.
 func (s *Session) exec(ctx context.Context, code string) ([]string, error) {
-	chunk, err := s.compileShared(code)
+	chunk, err := s.compileShared(ctx, code)
 	if err != nil {
 		return nil, err
 	}
@@ -514,7 +514,7 @@ func (s *Session) SetFaultHook(cb func(vmpackage.FaultKind)) { s.faultHook = cb 
 // program's result value (the value of a trailing `return <expr>`, else Null).
 // The REPL uses it to print bare expressions.
 func (s *Session) Eval(ctx context.Context, code string) (vmpackage.Value, error) {
-	chunk, err := s.compileShared(code)
+	chunk, err := s.compileShared(ctx, code)
 	if err != nil {
 		return vmpackage.Null, err
 	}
@@ -572,8 +572,8 @@ func (s *Session) DoString(code string) error { return s.Exec(s.ctx, code) }
 // (injected globals, prior definitions, target callbacks), so top-level
 // declarations are Env bindings (SharedGlobals), not per-Run slots. Predefined
 // globals are passed to the checker so they aren't flagged as undefined.
-func (s *Session) compileShared(code string) (*vmpackage.Chunk, error) {
-	prog, errs, parseErr := s.checkShared(code)
+func (s *Session) compileShared(ctx context.Context, code string) (*vmpackage.Chunk, error) {
+	prog, errs, parseErr := s.checkShared(ctx, code)
 	if parseErr != nil {
 		return nil, parseErr
 	}
@@ -601,7 +601,7 @@ func (s *Session) compileShared(code string) (*vmpackage.Chunk, error) {
 // compiles on success and reports only the first error, while Diagnostics returns
 // them all for the editor. A parse error comes back separately as parseErr, since
 // type-checking has no tree to run against when parsing fails.
-func (s *Session) checkShared(code string) (prog *ast.Program, typeErrs []typeError, parseErr error) {
+func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Program, typeErrs []typeError, parseErr error) {
 	parseStart := time.Now()
 	prog, err := parseModed(code, !s.embedded)
 	if obs := s.compileObserver; obs != nil {
@@ -612,7 +612,7 @@ func (s *Session) checkShared(code string) (prog *ast.Program, typeErrs []typeEr
 	}
 	// Resolve file-based imports before type-checking so the globals they
 	// introduce are visible to the checker.
-	if err := s.loadFileImports(prog); err != nil {
+	if err := s.loadFileImports(ctx, prog); err != nil {
 		return nil, nil, err
 	}
 	names := s.env.Names()
@@ -664,7 +664,9 @@ type Diagnostic struct {
 // never on a live session you still intend to Exec, or a later real import will be
 // skipped as already-loaded.
 func (s *Session) Diagnostics(code string) []Diagnostic {
-	_, errs, parseErr := s.checkShared(code)
+	// Diagnostics takes no per-call ctx (see the doc comment above); it runs
+	// against the session's own lifetime like the rest of the no-ctx surface.
+	_, errs, parseErr := s.checkShared(s.ctx, code)
 	if parseErr != nil {
 		line, col, msg := splitBuzzPos(parseErr.Error())
 		return []Diagnostic{{Line: line, Col: col, Msg: msg}}
@@ -735,7 +737,7 @@ func (s *Session) importPrivateHint() map[string]bool {
 //   - no alias or alias "_": flat exec — file's globals merge into parent env.
 //   - alias "x": exec in a sub-session (inheriting host globals), collect new
 //     bindings, create a map value, bind it under "x" in the parent env.
-func (s *Session) loadFileImports(prog *ast.Program) error {
+func (s *Session) loadFileImports(ctx context.Context, prog *ast.Program) error {
 	// Note: don't early-return on empty includeDirs — host-provided synthetic
 	// modules (e.g. "magus/extra") resolve without any include path.
 	for _, stmt := range prog.Stmts {
@@ -744,7 +746,7 @@ func (s *Session) loadFileImports(prog *ast.Program) error {
 			continue
 		}
 		start := time.Now()
-		outcome, err := s.resolveImport(imp)
+		outcome, err := s.resolveImport(ctx, imp)
 		if obs := s.compileObserver; obs != nil {
 			obs.Import(imp.Path, outcome, time.Since(start), err)
 		}
@@ -762,7 +764,7 @@ func (s *Session) loadFileImports(prog *ast.Program) error {
 // resolver, and finally a .buzz file on the search path. Every `continue` in the
 // old loop is a `return <outcome>, nil` here; every error return carries the
 // outcome it failed under.
-func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
+func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (ImportOutcome, error) {
 	// `buzz:<name>` is upstream Buzz's package-manager scheme for a built-in
 	// stdlib module (`import "buzz:os"`), disambiguating it from a package or
 	// file import. gopherbuzz registers the stdlib under bare names, so strip
@@ -853,7 +855,7 @@ func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
 		}
 		s.loadedPaths[key] = true
 		s.collectImportedModule(boundName, src)
-		exports, err := s.execImport(s.ctx, src)
+		exports, err := s.execImport(ctx, src)
 		if err != nil {
 			return ImportDecls, bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", imp.Path, err)
 		}
@@ -902,7 +904,7 @@ func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
 		// Aliased import: exec in an isolated sub-session so the file's
 		// globals don't leak into the parent env. Collect the new globals
 		// and expose them as a map bound under the alias.
-		if err := s.loadImportAsAlias(imp.Path, string(data), imp.Alias); err != nil {
+		if err := s.loadImportAsAlias(ctx, imp.Path, string(data), imp.Alias); err != nil {
 			return ImportFile, err
 		}
 		return ImportFile, nil
@@ -911,7 +913,7 @@ func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
 	// collect its exported types and functions so the importer can name
 	// them (Exec only merges runtime values, not type declarations).
 	s.collectImportedModule(boundName, string(data))
-	exports, err := s.execImport(s.ctx, string(data))
+	exports, err := s.execImport(ctx, string(data))
 	if err != nil {
 		return ImportFile, bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", imp.Path, err)
 	}
@@ -1110,7 +1112,7 @@ func (s *Session) bindNamespacePath(segments []string, exports []string, importP
 
 // loadImportAsAlias executes src in a sub-session that inherits the parent's
 // host globals, then binds the sub-session's new globals as a map under alias.
-func (s *Session) loadImportAsAlias(importPath, src, alias string) error {
+func (s *Session) loadImportAsAlias(ctx context.Context, importPath, src, alias string) error {
 	sub := newSession(s.ctx)
 	sub.embedded = s.embedded // inherit the parent session's parse mode
 	sub.searchPaths = s.searchPaths
@@ -1147,7 +1149,7 @@ func (s *Session) loadImportAsAlias(importPath, src, alias string) error {
 	}
 
 	// Execute the imported file.
-	if err := sub.Exec(s.ctx, src); err != nil {
+	if err := sub.Exec(ctx, src); err != nil {
 		return bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", importPath, err)
 	}
 
@@ -1211,7 +1213,9 @@ func bzzExists(path string) bool { _, err := os.Stat(path); return err == nil }
 // session's shared-globals scope. Pass the result to ExecChunk to run it,
 // optionally multiple times without re-parsing.
 func (s *Session) Compile(code string) (*vmpackage.Chunk, error) {
-	return s.compileShared(code)
+	// Compile takes no per-call ctx (public signature, unchanged); it runs
+	// against the session's own lifetime like the rest of the no-ctx surface.
+	return s.compileShared(s.ctx, code)
 }
 
 // ExecChunk runs a previously compiled Chunk in the session's environment.

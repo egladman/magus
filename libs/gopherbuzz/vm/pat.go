@@ -3,11 +3,23 @@ package vm
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/dlclark/regexp2"
 
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 )
+
+// patMatchTimeout bounds a single regexp2 match attempt. regexp2 is a
+// backtracking engine and regexp2.None (the default RegexOptions) suppresses
+// ALL timeout checking, so a pattern like `(a+)+$` against a crafted
+// non-matching subject backtracks exponentially with no escape hatch — and
+// since FindStringMatch/FindNextMatch/Replace take no ctx, the VM's
+// checkCancel() poll (vm.go, between bytecode dispatch steps) can never fire
+// mid-match either. In a long-lived daemon that wedges a worker forever. A
+// generous fixed ceiling turns that hang into an ordinary MatchTimeoutError,
+// which every call site already surfaces via its existing `if err != nil`.
+const patMatchTimeout = 2 * time.Second
 
 // patObj is a compiled Buzz pattern (the `pat` type) — a PCRE-style regular
 // expression written as a $"..." literal. src is the original pattern source
@@ -29,6 +41,7 @@ func PatValue(src string) (Value, error) {
 	if err != nil {
 		return Null, fmt.Errorf("buzz: invalid pattern %q: %w", src, err)
 	}
+	re.MatchTimeout = patMatchTimeout
 	return heapValue(tagPat, &patObj{src: src, re: re}), nil
 }
 

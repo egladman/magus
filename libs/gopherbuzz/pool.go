@@ -39,9 +39,18 @@ type WorkerFunc func(ctx context.Context) (*WorkerSession, error)
 // TargetMemo is a per-invocation run-once tracker. It ensures a target executes
 // at most once within one top-level dispatch, even when concurrent `depends_on`
 // callers name the same target (diamond dependencies). Safe for concurrent use.
+//
+// It also detects the cross-dependency cycle the static ancestor-chain check in
+// Submit/dispatchInner cannot see: two in-flight SIBLINGS that depend on each
+// other (B needs C, C needs B) never appear in each other's ancestor stack, so
+// without this they would each subscribe to the other's still-running entry and
+// deadlock forever. waitingFor records the dynamic wait-for graph (which caller
+// is blocked on which name) so a caller about to block can detect the loop
+// closing back to itself first. See TryRun.
 type TargetMemo struct {
-	mu      sync.Mutex
-	entries map[string]*memoEntry
+	mu         sync.Mutex
+	entries    map[string]*memoEntry
+	waitingFor map[string]*waitEdge // caller name -> what it is waiting for
 }
 
 type memoEntry struct {
@@ -49,26 +58,121 @@ type memoEntry struct {
 	err  error
 }
 
+// waitEdge is one entry in the dynamic wait-for graph: the caller is blocked
+// waiting for target to finish. cycle is closed by whichever goroutine first
+// discovers a loop that passes through this edge, waking the blocked TryRun
+// caller (via its own select) with a cycle error instead of leaving it parked
+// on a memoEntry.done that nothing will ever close.
+type waitEdge struct {
+	target string
+	cycle  chan struct{}
+}
+
 // NewTargetMemo returns a fresh, empty TargetMemo for one invocation scope.
 func NewTargetMemo() *TargetMemo {
 	return &TargetMemo{entries: make(map[string]*memoEntry)}
 }
 
-// TryRun checks whether name has already run or is running.
+// TryRun checks whether name has already run or is running. caller is the
+// name of the target on whose behalf this call is being made (the last entry
+// of its ancestor stack), or "" for a top-level dispatch with no enclosing
+// target; it is used only to record/detect the wait-for cycle below.
 //
 // Returns (true, nil) when name is new — caller must run the target then call
 // Complete. Returns (false, waitFn) when name is already in-flight or done —
-// caller invokes waitFn() to get the result. waitFn blocks until the in-flight
-// execution finishes; call it WITHOUT holding a limiter slot.
-func (m *TargetMemo) TryRun(name string) (isNew bool, waitFn func() error) {
+// caller invokes waitFn(ctx) to get the result. waitFn blocks until the
+// in-flight execution finishes, ctx is cancelled, or a cross-dependency cycle
+// through name is detected; call it WITHOUT holding a limiter slot.
+func (m *TargetMemo) TryRun(caller, name string) (isNew bool, waitFn func(ctx context.Context) error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if e, ok := m.entries[name]; ok {
-		return false, func() error { <-e.done; return e.err }
+	e, ok := m.entries[name]
+	if !ok {
+		e = &memoEntry{done: make(chan struct{})}
+		m.entries[name] = e
+		return true, nil
 	}
-	e := &memoEntry{done: make(chan struct{})}
-	m.entries[name] = e
-	return true, nil
+	if caller == "" {
+		return false, func(ctx context.Context) error { return waitEntry(ctx, e) }
+	}
+	// Would waiting on name eventually wait back on caller? Walk the existing
+	// wait-for chain starting at name; if it reaches caller, blocking here would
+	// complete the loop. chain[:len(chain)-1] are the callers already parked on
+	// this chain (chain's last element is caller itself, not yet parked), and
+	// each is woken via its edge's cycle channel rather than left to wait on a
+	// memoEntry.done that will now never close (every target on the loop is
+	// stuck the same way).
+	if chain := m.waitForChain(name, caller); chain != nil {
+		for _, n := range chain[:len(chain)-1] {
+			if edge, ok := m.waitingFor[n]; ok {
+				close(edge.cycle)
+			}
+		}
+		err := fmt.Errorf("buzzpool: dispatch: %s (cycle detected)", describeWaitCycle(chain))
+		return false, func(context.Context) error { return err }
+	}
+	if m.waitingFor == nil {
+		m.waitingFor = map[string]*waitEdge{}
+	}
+	edge := &waitEdge{target: name, cycle: make(chan struct{})}
+	m.waitingFor[caller] = edge
+	return false, func(ctx context.Context) error {
+		defer func() {
+			m.mu.Lock()
+			delete(m.waitingFor, caller)
+			m.mu.Unlock()
+		}()
+		select {
+		case <-e.done:
+			return e.err
+		case <-edge.cycle:
+			return fmt.Errorf("buzzpool: dispatch: %q waits on %q, which waits back on %q (cycle detected)", caller, name, caller)
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+// waitForChain walks the wait-for graph starting at start, following each
+// node's recorded target, and returns the path up to and including caller if
+// the chain reaches it (a cycle), or nil if the chain dead-ends first. Bounded
+// by len(waitingFor)+1 steps so a bug elsewhere in the graph cannot spin this
+// loop forever.
+func (m *TargetMemo) waitForChain(start, caller string) []string {
+	chain := []string{start}
+	cur := start
+	for i := 0; i <= len(m.waitingFor); i++ {
+		if cur == caller {
+			return chain
+		}
+		edge, ok := m.waitingFor[cur]
+		if !ok {
+			return nil
+		}
+		cur = edge.target
+		chain = append(chain, cur)
+	}
+	return nil
+}
+
+// describeWaitCycle renders a wait-for chain (e.g. ["b", "c"]) as "b -> c -> b".
+func describeWaitCycle(chain []string) string {
+	s := chain[0]
+	for _, n := range chain[1:] {
+		s += " -> " + n
+	}
+	return s + " -> " + chain[0]
+}
+
+// waitEntry blocks until e.done closes or ctx is cancelled, for the no-caller
+// (top-level) TryRun path, which participates in no wait-for cycle.
+func waitEntry(ctx context.Context, e *memoEntry) error {
+	select {
+	case <-e.done:
+		return e.err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // Complete records err for name and unblocks any waiters. Must be called
@@ -103,9 +207,18 @@ func TargetMemoFromContext(ctx context.Context) *TargetMemo {
 // list, runs the target, and returns the session. Because there is no fixed set
 // of worker goroutines, a target that dispatches children via Dispatch and blocks
 // until they finish never starves the children of a goroutine to run on — nested
-// dispatch cannot deadlock regardless of fan-out. Parallelism is bounded by the
-// semaphore, which Dispatch yields (via getSem.Yield) so a child can acquire
-// the slot its parent holds, even at MAGUS_CONCURRENCY=1.
+// dispatch cannot deadlock on GOROUTINE OR SEMAPHORE availability, regardless of
+// fan-out. Parallelism is bounded by the semaphore, which Dispatch yields (via
+// getSem.Yield) so a child can acquire the slot its parent holds, even at
+// MAGUS_CONCURRENCY=1.
+//
+// That invariant does not, by itself, rule out every deadlock: two in-flight
+// SIBLINGS that mutually depend on each other (B needs C, C needs B) each hold
+// a goroutine and a slot just fine, but would block forever on each other's
+// TargetMemo entry — neither name appears in the other's static ancestor stack,
+// so the ancestor-chain cycle check never fires. TargetMemo.TryRun detects this
+// dynamically (its waitingFor wait-for graph) and errors instead of hanging; see
+// TargetMemo's doc comment.
 type Pool struct {
 	newSession WorkerFunc
 	getSem     func(ctx context.Context) Semaphore // derives semaphore from ctx; nil ok
@@ -233,12 +346,20 @@ func (p *Pool) Dispatch(ctx context.Context, names []string, ancestors []string)
 
 func (p *Pool) dispatchInner(ctx context.Context, names []string, ancestors []string) error {
 	memo := TargetMemoFromContext(ctx)
+	// The last ancestor is the target on whose behalf this dispatch runs (see
+	// execute: it appends its own name before invoking the target body), or ""
+	// at the top level with no enclosing target. TryRun uses it to detect a
+	// cross-dependency cycle between two in-flight siblings.
+	var caller string
+	if len(ancestors) > 0 {
+		caller = ancestors[len(ancestors)-1]
+	}
 
 	type work struct {
 		name   string
-		ch     <-chan error // set if submitted to pool
-		waitFn func() error // set if subscribing to in-flight entry
-		err    error        // set if resolved immediately (e.g. a cycle)
+		ch     <-chan error                    // set if submitted to pool
+		waitFn func(ctx context.Context) error // set if subscribing to in-flight entry
+		err    error                           // set if resolved immediately (e.g. a cycle)
 	}
 	works := make([]work, len(names))
 	for i, name := range names {
@@ -252,7 +373,7 @@ func (p *Pool) dispatchInner(ctx context.Context, names []string, ancestors []st
 			continue
 		}
 		if memo != nil {
-			isNew, waitFn := memo.TryRun(name)
+			isNew, waitFn := memo.TryRun(caller, name)
 			if !isNew {
 				works[i] = work{name: name, waitFn: waitFn}
 				continue
@@ -273,7 +394,7 @@ func (p *Pool) dispatchInner(ctx context.Context, names []string, ancestors []st
 		case w.ch != nil:
 			err = <-w.ch
 		case w.waitFn != nil:
-			err = w.waitFn()
+			err = w.waitFn(ctx)
 		}
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", w.name, err))

@@ -581,6 +581,19 @@ func (v Value) buzzKind() string {
 
 // String returns the Buzz string representation of v.
 func (v Value) String() string {
+	return v.stringPath(nil)
+}
+
+// stringPath is String's recursive workhorse. path is every list/map/object
+// currently being rendered on this call stack, tracked by heap identity
+// (sameObj), not content. Buzz lists and maps are heap objects mutable in
+// place (list.append et al.), so `[any] l = mut []; l.append(l);` is a real
+// reference cycle: naive recursion here would stack-overflow, which in Go is a
+// FATAL, unrecoverable error, not something a recover() can paper over. String
+// backs str(), print, and string interpolation — upstream-visible surface — so
+// unlike an internal safety check, this must render something rather than
+// error: a revisited collection prints a placeholder and recursion stops there.
+func (v Value) stringPath(path []Value) string {
 	switch v.tag() {
 	case tagNull:
 		return "null"
@@ -596,6 +609,10 @@ func (v Value) String() string {
 	case tagStr:
 		return v.asStr().V
 	case tagList:
+		if pathHasIdentity(path, v) {
+			return "[...]"
+		}
+		path = append(path, v)
 		l := v.asList()
 		var sb strings.Builder
 		sb.WriteByte('[')
@@ -603,11 +620,15 @@ func (v Value) String() string {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
-			sb.WriteString(item.String())
+			sb.WriteString(item.stringPath(path))
 		}
 		sb.WriteByte(']')
 		return sb.String()
 	case tagMap:
+		if pathHasIdentity(path, v) {
+			return "{...}"
+		}
+		path = append(path, v)
 		m := v.asMap()
 		var sb strings.Builder
 		sb.WriteByte('{')
@@ -617,7 +638,7 @@ func (v Value) String() string {
 			}
 			sb.WriteString(strconv.Quote(k))
 			sb.WriteString(": ")
-			sb.WriteString(m.Vals[i].String())
+			sb.WriteString(m.Vals[i].stringPath(path))
 		}
 		sb.WriteByte('}')
 		return sb.String()
@@ -627,6 +648,10 @@ func (v Value) String() string {
 		return fmt.Sprintf("<direct:%s>", v.asDirect().Name)
 	case tagObject:
 		inst := v.asObject()
+		if pathHasIdentity(path, v) {
+			return inst.Def.Name + "{...}"
+		}
+		path = append(path, v)
 		var sb strings.Builder
 		sb.WriteString(inst.Def.Name)
 		sb.WriteByte('{')
@@ -636,7 +661,7 @@ func (v Value) String() string {
 			}
 			sb.WriteString(strconv.Quote(df.Name))
 			sb.WriteString(": ")
-			sb.WriteString(inst.Fields[i].String())
+			sb.WriteString(inst.Fields[i].stringPath(path))
 		}
 		sb.WriteByte('}')
 		return sb.String()
@@ -671,6 +696,19 @@ func (v Value) String() string {
 	default:
 		return "<unknown>"
 	}
+}
+
+// pathHasIdentity reports whether v (a list, map, or object) is already on
+// path, by heap identity rather than content — used to break a reference
+// cycle while rendering. The tag check is defensive: sameObj's contract
+// (see its doc comment) assumes the caller already matched tags.
+func pathHasIdentity(path []Value, v Value) bool {
+	for _, p := range path {
+		if p.tag() == v.tag() && sameObj(p, v) {
+			return true
+		}
+	}
+	return false
 }
 
 // Bool returns the truthiness of v. Only null and false are falsy.

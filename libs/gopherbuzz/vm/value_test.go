@@ -3,6 +3,7 @@ package vm_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
@@ -101,6 +102,31 @@ func TestValueString(t *testing.T) {
 	assert.Equal(t, "42", vm.IntValue(42).String())
 	assert.Equal(t, "hi", vm.StrValue("hi").String())
 	assert.Equal(t, "[1, 2]", vm.ListValue([]vm.Value{vm.IntValue(1), vm.IntValue(2)}).String())
+}
+
+// TestValueStringCircular is the regression for String recursing into a
+// genuine reference cycle: Buzz lists are heap objects mutable in place
+// (list.append), so `[any] l = mut []; l.append(l);` makes l[0] == l. String
+// backs str()/print/string interpolation (upstream-visible), so it must render
+// a placeholder for the revisited list instead of stack-overflowing (a FATAL,
+// unrecoverable Go error) or erroring. Run on a goroutine and bounded with
+// select + time.After (the repo's hang/crash-test idiom; see pool_test.go
+// TestDispatchRejectsCycleWithMemo) since a regression here is unsafe to call
+// inline.
+func TestValueStringCircular(t *testing.T) {
+	items := make([]vm.Value, 1)
+	l := vm.ListValue(items)
+	items[0] = l // l[0] == l: the same cycle list.append(l) would create
+
+	done := make(chan string, 1)
+	go func() { done <- l.String() }()
+
+	select {
+	case s := <-done:
+		assert.Equal(t, "[[...]]", s, "a cyclic list should render a placeholder for the revisit, not recurse")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Value.String did not return within bound on a cyclic list")
+	}
 }
 
 func TestValueRawEqual(t *testing.T) {
