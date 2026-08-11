@@ -371,10 +371,10 @@ func VcsDirtyDiff(ctx context.Context, paths []string) (string, error) {
 	return diff, nil
 }
 
-// VcsCommit resolves rev (empty = current revision) to its commit object. When
-// no VCS is resolved or the revision can't be looked up it returns the zero
-// types.Commit - an all-empty object (id/date/… are ""), so a caller tests a
-// field (e.g. c.date == "") rather than a null.
+// VcsCommit resolves rev (empty = current revision) to its commit object. It
+// RAISES when no VCS is resolved and RAISES when the revision can't be looked
+// up - a caller uses vcs.name() to test for a VCS first, and try/catch for a
+// revision that may not exist.
 func VcsCommit(ctx context.Context, rev string) (types.Commit, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
@@ -392,7 +392,8 @@ func VcsCommit(ctx context.Context, rev string) (types.Commit, error) {
 }
 
 // VcsHistory returns up to limit recent commits (newest first) as objects, or an
-// empty list when no VCS is resolved or the query fails.
+// empty list when no VCS is resolved. It RAISES when the query fails - an empty
+// list there would read as "no history" for "could not read history".
 func VcsHistory(ctx context.Context, limit int) ([]types.Commit, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
@@ -407,8 +408,8 @@ func VcsHistory(ctx context.Context, limit int) ([]types.Commit, error) {
 
 // VcsDescribe returns a human-readable version string from the nearest tag (see
 // the driver Describe methods), or "" when no VCS is resolved or the backend has
-// no describe concept. A query failure is reported as "" rather than raising,
-// matching the metadata accessors - callers treat "" as "no describe" and fall back.
+// no describe concept. It RAISES when the query fails - "" is reserved for the
+// two no-op cases above, not for a probe that could not run.
 func VcsDescribe(ctx context.Context) (string, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {

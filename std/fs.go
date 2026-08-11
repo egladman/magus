@@ -109,14 +109,14 @@ var Fs = Module{
 		},
 		{
 			Name:    "is_dir",
-			Doc:     "True iff path exists and is a directory (a sandbox-denied path reads as false).",
+			Doc:     "True iff path exists and is a directory. A sandbox-denied path raises rather than reading as false.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeBool}},
 			Impl:    FsIsDir,
 		},
 		{
 			Name:    "is_file",
-			Doc:     "True iff path exists and is a regular file (a sandbox-denied path reads as false).",
+			Doc:     "True iff path exists and is a regular file. A sandbox-denied path raises rather than reading as false.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeBool}},
 			Impl:    FsIsFile,
@@ -269,7 +269,8 @@ func FsBasename(_ context.Context, path string) (string, error) {
 	return filepath.Base(path), nil
 }
 
-// FsExists reports whether path exists; a sandbox-denied path is reported as absent.
+// FsExists reports whether path exists. A sandbox-denied path RAISES rather than
+// being reported as absent (see the inline comment below for why).
 func FsExists(ctx context.Context, path string) (bool, error) {
 	path = resolvePath(ctx, path)
 	if err := checkRead(ctx, path); err != nil {
