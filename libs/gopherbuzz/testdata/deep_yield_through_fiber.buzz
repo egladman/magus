@@ -1,0 +1,7 @@
+// @expect: 1
+// The positive side: `&call` CONSUMES the yield instead of propagating it, so a
+// plain function may create a fiber over a yielding one without declaring *> itself.
+fun leaf() > int *> int? { _ = yield 1; return 2; }
+fun makeFiber() > fib { return &leaf(); }
+final f = makeFiber();
+final __r = resume f ?? 0;

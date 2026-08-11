@@ -1,0 +1,4 @@
+// @error: yield type mismatch
+fun leaf() > int *> int? { _ = yield 1; return 2; }
+fun middle() > int *> str? { return leaf(); }
+final __r = 0;

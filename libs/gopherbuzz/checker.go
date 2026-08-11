@@ -600,6 +600,7 @@ func (c *checker) checkFunDecl(fd *ast.FunDecl) {
 	ft := c.funDeclType(fd)
 	// Re-register in current scope (may be a nested function not seen in first pass).
 	c.define(fd.Name, ft, true)
+	c.checkMainSig(fd, ft)
 
 	// An extern declaration IS the signature and nothing else - there is no body to
 	// descend into. Defining the type above is the whole point of it: every call
@@ -681,6 +682,7 @@ func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
 		// exists by now, and call sites read ot.Methods, not this local.
 		ft := c.funDeclType(m)
 		ot.Methods[m.Name] = ft
+		c.checkReservedMethodSig(m, ft)
 		// An extern method IS the signature and nothing else, exactly as a top-level
 		// extern is: recording ft above was the whole point, and there is no body to
 		// descend into.
@@ -689,8 +691,18 @@ func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
 		}
 		savedRet := c.retTyp
 		savedRaise := c.raiseDeclared
+		savedYield := c.yieldTyp
 		c.retTyp = ft.Ret
 		c.raiseDeclared = m.ErrAnnot != ""
+		// A method's *> annotation was never recorded here, unlike a free function's
+		// in checkFunDecl. Nothing surfaced it because every yield check is guarded on
+		// yieldTyp being non-nil, so `yield` inside a method silently went unchecked -
+		// and a method calling another yielding method looked like an undeclared yield.
+		if m.YieldAnnot != "" {
+			c.yieldTyp = c.resolveAnnot(m.YieldAnnot)
+		} else {
+			c.yieldTyp = nil
+		}
 		c.pushScope()
 		c.define("this", ot, false)
 		for i, name := range m.Params {
@@ -708,9 +720,13 @@ func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
 		for _, s := range m.Body.Stmts {
 			c.checkStmt(s)
 		}
+		// Same reason checkFunDecl invokes these directly: the method opened its own
+		// scope for `this` and the parameters, so it never went through checkBlock.
+		c.checkUnreachable(m.Body)
 		c.popScope()
 		c.retTyp = savedRet
 		c.raiseDeclared = savedRaise
+		c.yieldTyp = savedYield
 	}
 }
 
@@ -930,6 +946,15 @@ func (c *checker) infer(n ast.Node) types.Type {
 		// The declared yield type is the expected type for the yielded value, the same
 		// way a return propagates its own -- `*> Locale?` is what resolves `yield .en`.
 		vt := c.inferExpected(v.Value, c.yieldTyp)
+		// A yield with NO enclosing *> annotation is deliberately allowed, which is a
+		// known divergence: upstream rejects it twice over (compile_errors/
+		// yield-location.buzz "Can't yield here", and yield-without-annotation.buzz,
+		// where the absent annotation means void). Requiring it here was tried on
+		// 2026-08-11 and reverted - the dismissal is documented on ast.YieldExpr and
+		// pinned by TestYieldOutsideFiberDismissed, ~18 of this package's own fiber
+		// fixtures omit the annotation, and so does magus's s3-cache spell
+		// (`fun listing() > any !> any` yields without one). Closing it is a dialect
+		// decision with a migration, not an oversight to patch.
 		if c.yieldTyp != nil && !types.Compat(vt, c.yieldTyp) {
 			c.errorfc(v.Pos, TypeMismatch, "yield type mismatch: got %s, want %s", vt.TypeName(), c.yieldTyp.TypeName())
 		}
@@ -1128,6 +1153,24 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 		// reach a caller with no way to know it might.
 		if ft.Raises && !c.raiseDeclared && c.catchDepth == 0 {
 			c.errorfc(v.Pos, UnhandledRaise, "call may raise but is neither declared with !> nor caught")
+		}
+		// Yield propagates the same way a raise does, and for the same reason: a
+		// function that yields suspends its whole call chain, so every frame between
+		// the yield and the fiber has to say so. An intermediate that stays silent
+		// would let a caller resume into a suspension it never declared. Upstream
+		// pins all three shapes (deep-yield, deep-yield-missing-intermediate,
+		// deep-yield-wrong-intermediate-type).
+		//
+		// This does NOT fire for `&f()`: FiberExpr infers its own callee and
+		// arguments rather than routing through here, which is exactly right - wrapping
+		// the call in a fiber is what CONSUMES the yield instead of propagating it.
+		if ft.Yield != nil {
+			switch {
+			case c.yieldTyp == nil:
+				c.errorfc(v.Pos, TypeMismatch, "call to a yielding function must be declared with *> %s or wrapped in a fiber (&call)", ft.Yield.TypeName())
+			case !types.Compat(ft.Yield, c.yieldTyp):
+				c.errorfc(v.Pos, TypeMismatch, "yield type mismatch: callee yields %s, enclosing function declares %s", ft.Yield.TypeName(), c.yieldTyp.TypeName())
+			}
 		}
 		c.resolveNamedArgs(v, ft)
 	} else {
@@ -2024,4 +2067,47 @@ func (c *checker) checkFunReturns(fd *ast.FunDecl) {
 		return
 	}
 	c.errorf(fd.Pos, "missing return statement: %s declares %s but can fall through without returning", fd.Name, fd.RetAnnot)
+}
+
+// checkReservedMethodSig enforces the signatures of the two method names the
+// runtime itself calls. They are not ordinary methods: `collect` is the finalizer
+// hook and `toString` is what string conversion reaches for, so both are invoked
+// with a fixed shape no call site can adapt to. Declaring either with a different
+// signature compiles today and then fails - or is silently skipped - at the moment
+// the runtime tries to use it.
+func (c *checker) checkReservedMethodSig(m *ast.FunDecl, ft *types.FuncType) {
+	switch m.Name {
+	case "collect":
+		if len(ft.Params) != 0 || (ft.Ret != nil && ft.Ret != types.Void) {
+			c.errorf(m.Pos, "expected `collect` method to be `fun collect() > void`")
+		}
+	case "toString":
+		if len(ft.Params) != 0 || ft.Ret != types.Str {
+			c.errorf(m.Pos, "expected `toString` method to be `fun toString() > str`")
+		}
+	}
+}
+
+// checkMainSig enforces upstream's entry-point signature: `main` takes either
+// nothing or a single list of arguments, and returns void or an exit code.
+func (c *checker) checkMainSig(fd *ast.FunDecl, ft *types.FuncType) {
+	if fd.Name != "main" {
+		return
+	}
+	if len(ft.Params) > 1 {
+		c.errorf(fd.Pos, "expected `main` signature to be `fun main([args: [str]]) > void|int`")
+		return
+	}
+	// The element type is deliberately not pinned: upstream's own diagnostic spells
+	// it `[int]` where the runtime passes strings, so the checkable part is that the
+	// parameter is a LIST at all - which is what rejects `fun main(args: int)`.
+	if len(ft.Params) == 1 {
+		if _, isList := c.resolveType(ft.Params[0]).(*types.ListType); !isList {
+			c.errorf(fd.Pos, "expected `main` signature to be `fun main([args: [str]]) > void|int`")
+			return
+		}
+	}
+	if ft.Ret != nil && ft.Ret != types.Void && ft.Ret != types.Int {
+		c.errorf(fd.Pos, "expected `main` to return void or int, got %s", ft.Ret.TypeName())
+	}
 }

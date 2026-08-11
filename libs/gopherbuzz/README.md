@@ -23,33 +23,44 @@ rather than only the flattering one.
 | upstream suite          | files |      gopherbuzz | what it asks                                                     |
 | ----------------------- | ----: | --------------: | ---------------------------------------------------------------- |
 | `tests/behavior/`       |    83 |     **74 pass** | does correct source produce the right answer?                    |
-| `tests/compile_errors/` |    77 | **45 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
+| `tests/compile_errors/` |    77 | **51 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
 | `tests/fuzzed/`         |   644 |    **0 panics** | can malformed input crash the front end?                         |
 | `tests/bench/`          |    11 |         not run | upstream's benchmarks (ours are in [`benchmarks/`](benchmarks/)) |
 | `tests/manual/`         |     9 |         not run | interactive                                                      |
 | `tests/utils/`          |    10 |             n/a | helper modules the behavior tests import                         |
 
-**The compile-error row is the uncomfortable one and the most important.** 32 of those
+**The compile-error row is the uncomfortable one and the most important.** 26 of those
 77 programs compile CLEAN here that upstream refuses. That is not a missing feature, it
 is missing strictness: gopherbuzz will accept source upstream tells you is wrong. If
 you are evaluating this VM as a Buzz implementation, weigh that at least as heavily as
 the behavior row -- a permissive checker is the failure mode a subset does not warn you
 about.
 
-The two largest clusters are now closed: `match` analysis (11 files -- exhaustiveness,
-duplicate conditions, overlapping ranges) and terminal flow (8 -- unreachable code
-after a statement that transfers control away, plus the missing return). What remains
-is led by fiber and `yield` typing (7 files), then `out` and block expressions,
-mutability, unused locals and shadowing, and a tail of signature checks.
+The three largest clusters are closed: `match` analysis (11 files -- exhaustiveness,
+duplicate conditions, overlapping ranges), terminal flow (8 -- unreachable code after
+a statement that transfers control away, plus the missing return), and yield
+propagation with the reserved-method signatures (6). What remains has no cluster
+bigger than a handful: `out` and block expressions, mutability, unused locals and
+shadowing, and assorted type checks.
 
-Two things to know before adding a rule here. Upstream's own suite is not internally
-consistent everywhere, so check a proposed rule against `tests/behavior/` before
-writing it -- `unused-import` is the worked example, and the note in `session.go`
-records why that one cannot be promoted at all. And a strictness check has a
-DIRECTION: reporting unreachable code over-claims (a wrong answer calls live code
-dead), while reporting a missing return under-claims (a wrong answer invents an error
-on a correct function). `terminates` and `terminatesForReturn` exist because those
-two biases disagree about try/catch.
+Three things to know before adding a rule here.
+
+Upstream's own suite is not internally consistent everywhere, so check a proposed rule
+against `tests/behavior/` before writing it. `unused-import` is the worked example: the
+note in `session.go` records why that one cannot be promoted at all.
+
+A strictness check has a DIRECTION. Reporting unreachable code over-claims (a wrong
+answer calls live code dead); reporting a missing return under-claims (a wrong answer
+invents an error on a correct function). `terminates` and `terminatesForReturn` exist
+because those two biases disagree about try/catch.
+
+Some of what is left is a DIALECT DECISION rather than a missing check, and the two
+`yield` files are the example. Upstream requires a `*>` annotation on any function
+that yields; gopherbuzz deliberately does not, dismisses a yield outside a fiber
+(documented on `ast.YieldExpr`, pinned by `TestYieldOutsideFiberDismissed`), and both
+this package's fiber fixtures and magus's own s3-cache spell rely on that. Closing
+those two costs a migration and reverses a recorded choice -- which is a call to make
+deliberately, not a gap to patch.
 
 The fuzz corpus is upstream's checked-in AFL output, not hand-written tests: the
 filenames are AFL's (`id_000123,sig_06,src_000051,op_flip1,pos_1`), where `sig_06` is

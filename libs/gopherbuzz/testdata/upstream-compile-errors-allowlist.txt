@@ -12,7 +12,11 @@
 bad-fun-signature.buzz
 bad-pattern.buzz
 break.buzz
+collect-signature.buzz
 const.buzz
+deep-yield-missing-intermediate.buzz
+deep-yield-wrong-intermediate-type.buzz
+deep-yield.buzz
 duplicated-namespace.buzz
 early-return.buzz
 early-throw.buzz
@@ -25,6 +29,7 @@ label-not-found.buzz
 labeled-continue-terminal-flow.buzz
 local-assignment-value-type.buzz
 long-tuple.buzz
+main-signature.buzz
 match-duplicate-condition-folded.buzz
 match-duplicate-condition-number.buzz
 match-duplicate-condition-same-branch.buzz
@@ -45,6 +50,7 @@ terminal-break-unreachable.buzz
 terminal-continue-unreachable.buzz
 terminal-if-unreachable.buzz
 terminal-loop-unreachable.buzz
+tostring-signature.buzz
 tuple-mix.buzz
 tuple-shorthand-anonymous-numeric-field.buzz
 tuple-shorthand-binary-index.buzz
