@@ -17,7 +17,7 @@ Hex text codec.
 
 Encode data as lowercase hex.
 
-**Signature:** `hex\encode(data) → string` · [source](https://github.com/egladman/magus/blob/main/std/encoding/hex/hex.go#L45)
+**Signature:** `hex\encode(data) → string` · [source](https://github.com/egladman/magus/blob/main/std/encoding/hex/hex.go#L46)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -29,7 +29,7 @@ Encode data as lowercase hex.
 
 Decode a hex string; errors on malformed input.
 
-**Signature:** `hex\decode(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/encoding/hex/hex.go#L50)
+**Signature:** `hex\decode(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/encoding/hex/hex.go#L51)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

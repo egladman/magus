@@ -62,7 +62,7 @@ Reserve n slots from magus's concurrency budget for the duration of callback. Us
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `n` | `int` |  | |
-| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L17) |  | |
+| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |  | |
 
 ### stdinIsTerminal
 

@@ -20,6 +20,7 @@ import (
 // switching between a string method and a module.
 var Module = std.Module{
 	Name: "hex",
+	WASM: true,
 	Path: "encoding/hex",
 	Doc:  "Hex text codec.",
 	Methods: []std.Method{

@@ -17,7 +17,7 @@ String formatting (printf-style).
 
 Format string args into the template using Go printf verbs (e.g. %s, %q). Returns the formatted string.
 
-**Signature:** `fmt\sprintf(format, args...) → string` · [source](https://github.com/egladman/magus/blob/main/std/fmt.go#L32)
+**Signature:** `fmt\sprintf(format, args...) → string` · [source](https://github.com/egladman/magus/blob/main/std/fmt.go#L33)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

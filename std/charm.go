@@ -20,6 +20,7 @@ func init() { Register(Charm) }
 // of the active charms are concatenated and applied at run time (fork.go).
 var Charm = Module{
 	Name: "charm",
+	WASM: true,
 	Doc:  "Constructors for charm values: RFC 6902 JSON Patches over a target's argv (see docs/charms.md).",
 	Methods: []Method{
 		{

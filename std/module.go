@@ -11,6 +11,12 @@ import (
 	"sync"
 )
 
+// The module REGISTRY that binds these declarations to their generated trampolines is
+// itself generated, from the WASM field below plus each module's Name and Path. It
+// lives beside the trampolines rather than here because it names them.
+//
+//go:generate go run ../cmd/magus-utils moduleset -outdir ../internal/interp/bindings/gen
+
 // Callback is the host-side handle for a VM-side function value passed as
 // an argument. The generated bindings layer wraps a buzz.Session + function value.
 // Impls invoke the callback via Call; args are marshalled per VM convention.
@@ -273,6 +279,21 @@ type Module struct {
 	Methods []Method
 	// Namespaces are member groups the runtime assembles; see Namespace.
 	Namespaces []Namespace
+	// WASM marks a module the browser playground can install: pure compute, with no
+	// process, filesystem, or network access. It is what
+	// internal/interp/bindings/gen's WASM capability is generated FROM.
+	//
+	// Declared here because it is a fact about the MODULE, and it had no home: the
+	// classification lived only as prose in doc comments ("Pure computation:
+	// WASM-safe", std/math.go) and as a hand-maintained table in bindings/gen, whose
+	// wasm half carried the instruction "Keep this in sync with the WASM-capable
+	// entries of modules.go" - a mirror that could drift and a rule no test could
+	// check, because nothing upstream declared the answer.
+	//
+	// uuid is WASM despite generating randomness: the browser supplies
+	// getRandomValues. The test is whether the BROWSER can provide it, not whether
+	// the operation sounds pure.
+	WASM bool
 }
 
 // ImportPath returns the path a magusfile imports this module by: Path when it

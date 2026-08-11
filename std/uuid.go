@@ -21,6 +21,7 @@ func init() { Register(UUID) }
 // nondeterminism never leaks into the "planned, not run" dry-run surface.
 var UUID = Module{
 	Name: "uuid",
+	WASM: true,
 	Doc:  "Unique identifiers and random tokens (v4 random, v7 time-ordered, plus raw random hex/tokens).",
 	Methods: []Method{
 		{

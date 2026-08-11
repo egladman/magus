@@ -37,6 +37,7 @@ func init() { Register(Diff) }
 // more to compute.
 var Diff = Module{
 	Name: "diff",
+	WASM: true,
 	Doc:  "Unified line diffs, for reporting what drifted rather than only that something did.",
 	Methods: []Method{
 		{

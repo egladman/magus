@@ -89,6 +89,7 @@ func init() { Register(Platform) }
 // answer, so every accepted spelling is enumerated.
 var Platform = Module{
 	Name: "platform",
+	WASM: true,
 	Doc:  "Normalize OS/architecture identifiers across naming conventions (aarch64↔arm64, Darwin↔darwin).",
 	Methods: []Method{
 		{

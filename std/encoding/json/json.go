@@ -17,6 +17,7 @@ import (
 // Module is the "json" host module: JSON encode/decode for spells.
 var Module = std.Module{
 	Name: "json",
+	WASM: true,
 	Path: "encoding/json",
 	Doc:  "JSON encode/decode.",
 	Methods: []std.Method{

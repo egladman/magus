@@ -30,6 +30,7 @@ import (
 // render emits no whitespace between tags, so the caller controls the exact bytes.
 var Module = std.Module{
 	Name: "xml",
+	WASM: true,
 	Path: "encoding/xml",
 	Doc:  "Build, serialize, and parse XML/SVG.",
 	Methods: []std.Method{

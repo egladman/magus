@@ -29,6 +29,7 @@ func init() { Register(Math) }
 // Pure computation: WASM-safe, no filesystem, no environment.
 var Math = Module{
 	Name: "math",
+	WASM: true,
 	Doc:  "Rounding to a decimal place, clamping, and aggregation over a list of numbers.",
 	Methods: []Method{
 		{

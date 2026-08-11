@@ -22,7 +22,7 @@ Add env vars to subprocesses os.exec/os.exec_sh start inside callback. Never tou
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `env` | `map[string]string` |  | |
-| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L17) |  | |
+| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |  | |
 
 ### platform
 
@@ -85,7 +85,7 @@ Call fn up to max times, retrying on error with exponential backoff; returns fn'
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `max` | `int` |  | |
-| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L17) |  | |
+| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |  | |
 | `opts` | `map[string]any` | yes | |
 
 **Returns:** any

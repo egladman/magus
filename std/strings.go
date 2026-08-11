@@ -31,6 +31,7 @@ func init() { Register(Strings) }
 // Pure string transforms: no filesystem or environment access.
 var Strings = Module{
 	Name: "strings",
+	WASM: true,
 	Doc:  "String helpers Buzz's builtins lack: case conversion, comparison, affix trimming, padding, and splitting into lines or fields.",
 	Methods: []Method{
 		{

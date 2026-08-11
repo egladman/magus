@@ -22,6 +22,7 @@ func init() { Register(Path) }
 // path still goes through the sandbox-aware fs.* calls.
 var Path = Module{
 	Name: "path",
+	WASM: true,
 	Doc:  "Pure path-string math: abs, rel, clean, is_abs, expand_user, and glob matching.",
 	Methods: []Method{
 		{

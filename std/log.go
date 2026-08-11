@@ -45,6 +45,7 @@ const logLevelTrace slog.Level = slog.LevelDebug - 4
 // Pure compute at this layer (the handler does the I/O), so it is WASM-safe.
 var Log = Module{
 	Name: "log",
+	WASM: true,
 	Doc:  "Emit a message at a level through magus's own logger, so it honors -q/-v/-vv, renders in the run's format, is redacted, and is captured in the run log. Unlike std\\print, which is an uncontrolled bare line.",
 	Methods: []Method{
 		{

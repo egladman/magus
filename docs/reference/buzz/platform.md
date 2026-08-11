@@ -17,7 +17,7 @@ Normalize OS/architecture identifiers across naming conventions (aarch64↔arm64
 
 Normalize an architecture identifier (x86_64, aarch64, armv7l, …) to canonical Go GOARCH (amd64, arm64, arm). With style, render that result in a convention (go|uname); raises on an unknown style. Returns "" when the identifier is unrecognized.
 
-**Signature:** `platform\arch(name, [style]) → string` · [source](https://github.com/egladman/magus/blob/main/std/platform.go#L223)
+**Signature:** `platform\arch(name, [style]) → string` · [source](https://github.com/egladman/magus/blob/main/std/platform.go#L224)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -30,7 +30,7 @@ Normalize an architecture identifier (x86_64, aarch64, armv7l, …) to canonical
 
 Normalize an OS identifier (Darwin, macOS, win, …) to canonical Go GOOS (darwin, windows). With style, render that result in a convention (go|uname); raises on an unknown style. Returns "" when the identifier is unrecognized.
 
-**Signature:** `platform\os(name, [style]) → string` · [source](https://github.com/egladman/magus/blob/main/std/platform.go#L233)
+**Signature:** `platform\os(name, [style]) → string` · [source](https://github.com/egladman/magus/blob/main/std/platform.go#L234)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -43,7 +43,7 @@ Normalize an OS identifier (Darwin, macOS, win, …) to canonical Go GOOS (darwi
 
 The machine's total physical memory in BYTES, or 0 when it cannot be determined (any host other than Linux or macOS). Note magus.project targets take memory_mb in MEGABYTES. Size work that scales on memory rather than cores with this: `go test` defaults its package parallelism to the CPU count, which is the wrong axis under -race, where each test binary carries the race detector's shadow memory. Branch on 0 rather than treating it as "no memory".
 
-**Signature:** `platform\memoryBytes() → int` · [source](https://github.com/egladman/magus/blob/main/std/platform.go#L142)
+**Signature:** `platform\memoryBytes() → int` · [source](https://github.com/egladman/magus/blob/main/std/platform.go#L143)
 
 **Returns:** int
 
@@ -51,7 +51,7 @@ The machine's total physical memory in BYTES, or 0 when it cannot be determined 
 
 How many CPUs this process may use (Go's GOMAXPROCS, which honors a container quota where the OS-visible core count does not). Pair with memory_bytes() when sizing parallel work: the smaller of the two limits is the one that matters.
 
-**Signature:** `platform\cpus() → int` · [source](https://github.com/egladman/magus/blob/main/std/platform.go#L154)
+**Signature:** `platform\cpus() → int` · [source](https://github.com/egladman/magus/blob/main/std/platform.go#L155)
 
 **Returns:** int
 

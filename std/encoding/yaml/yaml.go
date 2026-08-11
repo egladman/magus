@@ -18,6 +18,7 @@ import (
 // Module is the "yaml" host module: YAML parse and stringify via gopkg.in/yaml.v3.
 var Module = std.Module{
 	Name: "yaml",
+	WASM: true,
 	Path: "encoding/yaml",
 	Doc:  "YAML parse and stringify (YAML 1.2 via gopkg.in/yaml.v3).",
 	Methods: []std.Method{

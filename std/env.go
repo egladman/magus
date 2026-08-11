@@ -18,6 +18,7 @@ func init() { Register(Env) }
 // Env is the "env" host module: process environment-variable access, filtered by the sandbox policy.
 var Env = Module{
 	Name: "env",
+	WASM: true,
 	Doc:  "Process environment variable access.",
 	Methods: []Method{
 		{

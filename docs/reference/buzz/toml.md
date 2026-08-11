@@ -17,7 +17,7 @@ TOML parse and stringify (TOML 1.0 via pelletier/go-toml/v2).
 
 Decode a TOML document into a value (tables become maps, arrays become lists, plus strings, numbers, bools, and datetimes); errors on invalid input.
 
-**Signature:** `toml\parse(source) → any` · [source](https://github.com/egladman/magus/blob/main/std/encoding/toml/toml.go#L48)
+**Signature:** `toml\parse(source) → any` · [source](https://github.com/egladman/magus/blob/main/std/encoding/toml/toml.go#L49)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -29,7 +29,7 @@ Decode a TOML document into a value (tables become maps, arrays become lists, pl
 
 Encode a value to a TOML string; the top level must be a table/map, as TOML requires. Errors on unencodable input.
 
-**Signature:** `toml\stringify(value) → string` · [source](https://github.com/egladman/magus/blob/main/std/encoding/toml/toml.go#L57)
+**Signature:** `toml\stringify(value) → string` · [source](https://github.com/egladman/magus/blob/main/std/encoding/toml/toml.go#L58)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

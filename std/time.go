@@ -20,6 +20,7 @@ func init() { Register(Time) }
 // to UTC, so results are deterministic and location-free.
 var Time = Module{
 	Name: "time",
+	WASM: true,
 	Doc:  "Timestamp formatting/parsing and duration parsing (Go time, UTC).",
 	Methods: []Method{
 		{

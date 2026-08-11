@@ -17,6 +17,7 @@ func init() { Register(Template) }
 // being logic-less it keeps generated config files predictable.
 var Template = Module{
 	Name: "template",
+	WASM: true,
 	Doc:  "Logic-less Mustache templating (Mustache spec, via github.com/cbroglie/mustache).",
 	Methods: []Method{
 		{

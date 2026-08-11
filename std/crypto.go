@@ -49,6 +49,7 @@ func init() { Register(Crypto) }
 // error, or a captured run output.
 var Crypto = Module{
 	Name: "crypto",
+	WASM: true,
 	Doc:  "Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop) and Ed25519 signing.",
 	Methods: []Method{
 		{

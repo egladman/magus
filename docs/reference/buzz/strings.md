@@ -17,7 +17,7 @@ String helpers Buzz's builtins lack: case conversion, comparison, affix trimming
 
 Convert s to camelCase.
 
-**Signature:** `strings\camelCase(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L176)
+**Signature:** `strings\camelCase(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L177)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -40,7 +40,7 @@ std\print(strings\camelCase("hello world"));
 
 Convert s to snake_case.
 
-**Signature:** `strings\snakeCase(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L181)
+**Signature:** `strings\snakeCase(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L182)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -63,7 +63,7 @@ std\print(strings\snakeCase("HelloWorld"));
 
 Convert s to kebab-case.
 
-**Signature:** `strings\kebabCase(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L186)
+**Signature:** `strings\kebabCase(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L187)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -86,7 +86,7 @@ std\print(strings\kebabCase("MyComponentName"));
 
 Convert s to PascalCase.
 
-**Signature:** `strings\pascalCase(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L191)
+**Signature:** `strings\pascalCase(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L192)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -109,7 +109,7 @@ std\print(strings\pascalCase("user_profile"));
 
 Uppercase the first rune of s and lowercase the rest.
 
-**Signature:** `strings\capitalize(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L196)
+**Signature:** `strings\capitalize(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L197)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -132,7 +132,7 @@ std\print(strings\capitalize("hELLO"));
 
 Split s into its constituent words (splitting on case changes, digits, and separators).
 
-**Signature:** `strings\words(s) → []string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L201)
+**Signature:** `strings\words(s) → []string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L202)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -159,7 +159,7 @@ foreach (w in parts) { std\print(w); }
 
 Trim s to at most length runes, appending "..." when truncated.
 
-**Signature:** `strings\ellipsis(s, length) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L206)
+**Signature:** `strings\ellipsis(s, length) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L207)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -183,7 +183,7 @@ std\print(strings\ellipsis("the quick brown fox", 12));
 
 Uppercase the first rune of s, leaving the rest untouched. Unlike capitalize, which lowercases the remainder, this preserves interior casing - the form a label or breadcrumb built from an existing string needs.
 
-**Signature:** `strings\upperFirst(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L211)
+**Signature:** `strings\upperFirst(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L212)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -195,7 +195,7 @@ Uppercase the first rune of s, leaving the rest untouched. Unlike capitalize, wh
 
 Compare a and b lexicographically by byte, returning -1, 0, or 1. Buzz has no < operator on str, so this is what a list.sort comparator over strings is built from.
 
-**Signature:** `strings\compare(a, b) → int` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L221)
+**Signature:** `strings\compare(a, b) → int` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L222)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -223,7 +223,7 @@ std\print(names.join(", "));
 
 Report whether s contains substr.
 
-**Signature:** `strings\contains(s, substr) → bool` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L226)
+**Signature:** `strings\contains(s, substr) → bool` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L227)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -236,7 +236,7 @@ Report whether s contains substr.
 
 Remove prefix from the start of s if present, otherwise return s unchanged. Buzz's str.trim only strips whitespace, so there is no built-in way to drop a known affix.
 
-**Signature:** `strings\trimPrefix(s, prefix) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L231)
+**Signature:** `strings\trimPrefix(s, prefix) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L232)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -249,7 +249,7 @@ Remove prefix from the start of s if present, otherwise return s unchanged. Buzz
 
 Remove suffix from the end of s if present, otherwise return s unchanged.
 
-**Signature:** `strings\trimSuffix(s, suffix) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L236)
+**Signature:** `strings\trimSuffix(s, suffix) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L237)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -262,7 +262,7 @@ Remove suffix from the end of s if present, otherwise return s unchanged.
 
 Left-pad s with pad until it is length runes wide; s is returned unchanged when already that wide or wider. pad defaults to a space. Zero-padding a number so it sorts lexically is the usual reason.
 
-**Signature:** `strings\padLeft(s, length, [pad]) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L241)
+**Signature:** `strings\padLeft(s, length, [pad]) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L242)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -276,7 +276,7 @@ Left-pad s with pad until it is length runes wide; s is returned unchanged when 
 
 Right-pad s with pad until it is length runes wide; s is returned unchanged when already that wide or wider. pad defaults to a space. Aligning a column of output is the usual reason.
 
-**Signature:** `strings\padRight(s, length, [pad]) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L247)
+**Signature:** `strings\padRight(s, length, [pad]) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L248)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -290,7 +290,7 @@ Right-pad s with pad until it is length runes wide; s is returned unchanged when
 
 Split s into lines on \n, tolerating \r\n endings and dropping the trailing empty element a final newline would produce. Reading a command's stdout line by line is what this is for; fs.read_lines is the same shape over a file.
 
-**Signature:** `strings\lines(s) → []string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L275)
+**Signature:** `strings\lines(s) → []string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L276)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -302,7 +302,7 @@ Split s into lines on \n, tolerating \r\n endings and dropping the trailing empt
 
 Split s around runs of whitespace, discarding empties. Picking a column out of a tool's version banner is what this is for; str.split(" ") cannot, because it yields an empty element per extra space.
 
-**Signature:** `strings\fields(s) → []string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L288)
+**Signature:** `strings\fields(s) → []string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L289)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -314,7 +314,7 @@ Split s around runs of whitespace, discarding empties. Picking a column out of a
 
 Split s on sep into at most n pieces, leaving any remaining separators in the final piece; n of -1 means no limit. Parsing a KEY=VALUE line whose value itself contains the separator needs this rather than str.split.
 
-**Signature:** `strings\splitN(s, sep, n) → []string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L297)
+**Signature:** `strings\splitN(s, sep, n) → []string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L298)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -328,7 +328,7 @@ Split s on sep into at most n pieces, leaving any remaining separators in the fi
 
 Fold every run of whitespace in s into a single space and trim the ends, so a multi-line value reads as one clean line.
 
-**Signature:** `strings\collapseWs(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L306)
+**Signature:** `strings\collapseWs(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L307)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

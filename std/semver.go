@@ -15,6 +15,7 @@ func init() { Register(Semver) }
 // Semver is the "semver" host module: semantic version parsing and comparison.
 var Semver = Module{
 	Name: "semver",
+	WASM: true,
 	Doc:  "Semantic version parsing and comparison (SemVer 2.0.0).",
 	Methods: []Method{
 		{

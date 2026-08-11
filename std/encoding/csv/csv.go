@@ -30,6 +30,7 @@ import (
 // silent; a declared argument is checked. New surface should not add to that.
 var Module = std.Module{
 	Name: "csv",
+	WASM: true,
 	Path: "encoding/csv",
 	Doc:  "Delimiter-separated tabular text (CSV, TSV) parsing and rendering.",
 	Methods: []std.Method{

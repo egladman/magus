@@ -412,7 +412,7 @@ Blocking. Watch paths (directories, recursively) and call callback with each deb
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `paths` | `[]string` |  | |
-| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L17) |  | |
+| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |  | |
 
 **Example:**
 
@@ -436,7 +436,7 @@ Recursively walk the directory tree rooted at root, calling callback(path, is_di
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `root` | `string` |  | |
-| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L17) |  | |
+| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |  | |
 
 **Example:**
 

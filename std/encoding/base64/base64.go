@@ -30,6 +30,7 @@ import (
 // binary data.
 var Module = std.Module{
 	Name: "base64",
+	WASM: true,
 	Path: "encoding/base64",
 	Doc:  "Base64 text codec (standard and URL-safe, both padded).",
 	Methods: []std.Method{

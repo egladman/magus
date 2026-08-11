@@ -20,6 +20,7 @@ import (
 // pyproject.toml / Cargo.toml the same way it reads package.json.
 var Module = std.Module{
 	Name: "toml",
+	WASM: true,
 	Path: "encoding/toml",
 	Doc:  "TOML parse and stringify (TOML 1.0 via pelletier/go-toml/v2).",
 	Methods: []std.Method{

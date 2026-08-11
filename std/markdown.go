@@ -26,6 +26,7 @@ func init() { Register(Markdown) }
 // HTML. It backs the docs-site generator, which renders each docs/*.md page.
 var Markdown = Module{
 	Name: "markdown",
+	WASM: true,
 	Doc:  "GitHub-Flavored Markdown to semantic HTML.",
 	Methods: []Method{
 		{

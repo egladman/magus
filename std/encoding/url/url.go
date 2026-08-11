@@ -25,6 +25,7 @@ import (
 // back without string surgery on a query string.
 var Module = std.Module{
 	Name: "url",
+	WASM: true,
 	Path: "encoding/url",
 	Doc:  "URL percent-encoding, parsing, and building.",
 	Methods: []std.Method{

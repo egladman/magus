@@ -48,6 +48,7 @@ const iniGlobalSection = ""
 // when the format itself has no types.
 var Module = std.Module{
 	Name: "ini",
+	WASM: true,
 	Path: "encoding/ini",
 	Doc:  "INI/properties config parsing and rendering (.npmrc, .gitconfig, .editorconfig).",
 	Methods: []std.Method{

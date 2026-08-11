@@ -27,6 +27,7 @@ func init() { Register(Sort) }
 // caller that wants it.
 var Sort = Module{
 	Name: "sort",
+	WASM: true,
 	Doc:  "Ordering for string lists: lexicographic, natural (digit-aware), and semver.",
 	Methods: []Method{
 		{
