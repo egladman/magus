@@ -183,6 +183,13 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, origin
 		tel = opts.Magus.Telemetry()
 	}
 	tools := allMCPTools(opts)
+	// A function rather than the workspace itself: wrap needs one capability - put this
+	// workspace's secret resolver on a context so the trail writes are redacted - and
+	// taking *magus.Magus for it would hand the handler a whole workspace to reach into.
+	withSecrets := func(ctx context.Context) context.Context { return ctx }
+	if opts.Magus != nil {
+		withSecrets = opts.Magus.ContextWithSecrets
+	}
 	byName := make(map[string]spells.Driver, len(tools))
 	for _, t := range tools {
 		byName[t.Name()] = t
@@ -195,7 +202,7 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, origin
 		if !ok {
 			panic(fmt.Sprintf("mcp: registry entry %q has no SpellDriver implementation", d.Name))
 		}
-		srv.AddTool(buildMCPTool(d), wrap(log, originFn, trailDir, tel, rotateCount, adapt(t)))
+		srv.AddTool(buildMCPTool(d), wrap(log, originFn, trailDir, withSecrets, tel, rotateCount, adapt(t)))
 	}
 	// The loop above only checks Registry -> driver; a driver built into allMCPTools but
 	// missing its own Registry entry would otherwise mount nowhere, silently, with no
@@ -229,13 +236,21 @@ func unregisteredDrivers(tools []spells.Driver, reg []ToolDescriptor) []string {
 // both sides of the exchange captured as content-addressed blobs - and records
 // the call to the magus.mcp.tool.* metric family (attributed by tool + outcome
 // only; never by argument values or result content). A nil tel is a no-op.
-func wrap(log *slog.Logger, originFn func(context.Context) origin.Origin, trailDir string, tel observability.Provider, rotateCount *atomic.Uint64, fn handlerFn) server.ToolHandlerFunc {
+func wrap(log *slog.Logger, originFn func(context.Context) origin.Origin, trailDir string, withSecrets func(context.Context) context.Context, tel observability.Provider, rotateCount *atomic.Uint64, fn handlerFn) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		o := originFn(ctx)
 		agentID := o.Agent
 		toolName := req.Params.Name
 
 		ctx = origin.WithContext(ctx, o)
+		// The workspace's secret resolver, so the trail writes below are redacted.
+		//
+		// This context is an ANCESTOR of any run a tool starts, never a descendant, so it
+		// does not inherit the resolver the run installs. Without this the ctx parameter
+		// threaded through internal/trail did nothing on the path that motivated it: a
+		// request/response pair is a whole tool payload, persisted verbatim to an
+		// append-only file, and nothing else on that path scrubs it.
+		ctx = withSecrets(ctx)
 
 		reqLog := log.With(
 			slog.String("agent", agentID),

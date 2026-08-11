@@ -1084,3 +1084,21 @@ func forSpellNamed(ctx context.Context, p *types.Project, target, name string, f
 	}
 	return nil
 }
+
+// ContextWithSecrets installs this workspace's secret resolver on ctx, so a caller
+// outside the run path can redact against the credentials this workspace has resolved.
+//
+// It hands out a CONTEXT, not the resolver. The daemon needs redaction on its serving
+// paths - internal/trail writes MCP request and response payloads verbatim, and those are
+// the largest credential-shaped thing magus persists - but nothing outside this package
+// needs to read or mutate the resolver to get it.
+//
+// The resolver is per workspace Open, so this is only meaningful for a caller already
+// bound to one workspace. A daemon-wide action has no workspace and therefore nothing to
+// redact against, which is the honest answer rather than a gap.
+func (m *Magus) ContextWithSecrets(ctx context.Context) context.Context {
+	if m == nil || m.resolver == nil {
+		return ctx
+	}
+	return secret.ContextWithResolver(ctx, m.resolver)
+}
