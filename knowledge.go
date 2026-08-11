@@ -381,7 +381,7 @@ func loadKnowledgeSymbols(ctx context.Context, in symbolIngestInputs) map[string
 			}
 			continue
 		}
-		syms, err := symbols.ParseIndex(ctx, data, decl.project)
+		syms, err := symbols.ParseIndex(ctx, data, decl.project, decl.language)
 		if err != nil {
 			// An index that exists but will not decode is a real problem (corrupt output),
 			// not a benign miss - surface it.
@@ -393,10 +393,97 @@ func loadKnowledgeSymbols(ctx context.Context, in symbolIngestInputs) map[string
 	return out
 }
 
-// resolvedSymbolIndex pairs a project with the absolute path of its SCIP index.
+// SymbolGaps reports every project that declares a SCIP index magus could not read, so a
+// lookup that came back empty can say whether it searched everywhere it should have. It
+// keys off the same declarations loadKnowledgeSymbols ingests, which is deliberately NOT
+// the set magus status reports: declarations include knowledge.symbols overrides, and a
+// project indexed only through one of those is invisible to the status lens.
+//
+// The caller should reach for this only on an empty result. It is one Stat per declared
+// index - cheap, but not free, and a lookup that found something has nothing to explain.
+//
+// Freshness is out of scope here: deciding whether an index is merely STALE needs a cache
+// handle, and the read verbs that call this deliberately inspect the workspace rather than
+// opening it (opening writes). A stale index still answers, just about older sources.
+func SymbolGaps(ctx context.Context, ws types.Inspector, root string, cfg config.Config, log *slog.Logger) []types.KnowledgeSymbolGap {
+	if log == nil {
+		log = slog.Default()
+	}
+	spells, err := ListSpells(ctx)
+	if err != nil {
+		return nil
+	}
+	projects, err := ws.ListProjects(ctx)
+	if err != nil {
+		return nil
+	}
+	return symbolGaps(ctx, symbolIngestInputs{
+		cfg: cfg, root: root, cacheDir: resolveCacheDir(root, cfg),
+		projects: projects, spells: spells, log: log,
+	})
+}
+
+// symbolGaps is the testable half of SymbolGaps: it takes the same resolved inputs
+// loadKnowledgeSymbols does, so the two cannot disagree about which indexes exist.
+func symbolGaps(ctx context.Context, in symbolIngestInputs) []types.KnowledgeSymbolGap {
+	dirByPath := map[string]string{}
+	for _, p := range in.projects.Projects {
+		dirByPath[p.Path] = p.Dir
+	}
+
+	var out []types.KnowledgeSymbolGap
+	for _, decl := range symbolIndexDeclarations(ctx, in) {
+		// Mirror loadKnowledgeSymbols's three outcomes: readable (no gap), absent (never
+		// built), unreadable (present but unusable). Detail carries the distinction so the
+		// remediation can differ without a second enum.
+		data, err := os.ReadFile(decl.path)
+		switch {
+		case err == nil:
+			// An index that exists but will not decode is as invisible as a missing one, and
+			// silently dropping it is what made an empty answer look verified.
+			if _, derr := symbols.ParseIndex(ctx, data, decl.project, decl.language); derr != nil {
+				out = append(out, types.KnowledgeSymbolGap{
+					Project: types.NewProjectRef(decl.project, dirByPath[decl.project]),
+					State:   types.SymbolIndexNotBuilt,
+					Detail:  "undecodable",
+				})
+			}
+		case errors.Is(err, fs.ErrNotExist):
+			out = append(out, types.KnowledgeSymbolGap{
+				Project: types.NewProjectRef(decl.project, dirByPath[decl.project]),
+				State:   types.SymbolIndexNotBuilt,
+			})
+		default:
+			out = append(out, types.KnowledgeSymbolGap{
+				Project: types.NewProjectRef(decl.project, dirByPath[decl.project]),
+				State:   types.SymbolIndexNotBuilt,
+				Detail:  "unreadable",
+			})
+		}
+	}
+	return out
+}
+
+// SymbolGaps reports the projects whose declared symbol index this workspace could not
+// read. It is the method form of the package-level SymbolGaps, for callers that already
+// hold a Magus (the MCP handlers).
+func (m *Magus) SymbolGaps(ctx context.Context) []types.KnowledgeSymbolGap {
+	return SymbolGaps(ctx, m, m.Root(), m.cfg, slog.Default())
+}
+
+// resolvedSymbolIndex pairs a project with the absolute path of its SCIP index and the
+// language the spell that produced it adapts.
+//
+// language is carried because an indexer may not report one. SCIP makes Document.Language
+// optional and scip-typescript sets it on nothing, so trusting the index alone leaves
+// every TypeScript symbol unlabelled and `magus query language:typescript` empty. The
+// spell's declared language is what magus already used to decide the project was
+// symbol-capable at all, so it is both authoritative and free. Empty for a
+// knowledge.symbols override, which names a path rather than a spell.
 type resolvedSymbolIndex struct {
-	project string
-	path    string
+	project  string
+	path     string
+	language string
 }
 
 // symbolIngestInputs is the shared context for resolving and reading symbol indexes,
@@ -420,10 +507,10 @@ type symbolIngestInputs struct {
 // workspace-relative path in the tree for a project whose indexer writes somewhere
 // non-standard. The result is sorted by project for deterministic ingestion.
 func symbolIndexDeclarations(ctx context.Context, in symbolIngestInputs) []resolvedSymbolIndex {
-	capable := map[string]bool{}
+	capable := map[string]string{}
 	for _, sp := range in.spells {
 		if slices.Contains(sp.Targets, symbols.IndexOp) {
-			capable[sp.Name] = true
+			capable[sp.Name] = sp.Language
 		}
 	}
 
@@ -434,13 +521,14 @@ func symbolIndexDeclarations(ctx context.Context, in symbolIngestInputs) []resol
 			bound = []string{p.Spell}
 		}
 		for _, name := range bound {
-			if !capable[name] {
+			language, ok := capable[name]
+			if !ok {
 				continue
 			}
 			// One index per project: the cache location is keyed by the project dir, so
 			// the first symbol-capable spell wins and the rest would name the same file.
 			absDir := filepath.Join(in.root, filepath.FromSlash(p.Path))
-			byProject[p.Path] = resolvedSymbolIndex{project: p.Path, path: symbols.IndexPath(in.cacheDir, absDir)}
+			byProject[p.Path] = resolvedSymbolIndex{project: p.Path, path: symbols.IndexPath(in.cacheDir, absDir), language: language}
 			break
 		}
 	}

@@ -289,6 +289,7 @@ func writeInsightMarkdown(w io.Writer, r types.InsightReport, renderMermaid merm
 	b.Paragraph("**Next:** investigate sharply rising projects before they become recurring delivery risk.")
 
 	writeVolatilitySection(&b, r.Volatility)
+	writeUnreferencedSection(&b, r.Unreferenced)
 	writeGraphStatsSection(&b, r.GraphStats)
 
 	_, err := b.WriteTo(w)
@@ -320,6 +321,63 @@ func writeGitHubMermaid(w io.Writer, graph renderGraph) error {
 // writeVolatilitySection renders the run-outcome axis (`magus insight volatility`) into the
 // combined report: each (project, target) pair's Wilson-scored flakiness against the threshold.
 // Empty when no history was read or it held no targets (the report is best-effort here).
+// unreferencedReportRows caps the committed report's table; the full list is a command away.
+const unreferencedReportRows = 50
+
+// writeUnreferencedSection renders the knowledge-graph lens.
+//
+// Unlike the other sections it renders even when the list is EMPTY, whenever the verdict
+// is unknown. An omitted section reads as "nothing to report", and the one case this lens
+// exists to catch is a workspace whose symbol index was never built, where nothing to
+// report is precisely what it cannot claim.
+func writeUnreferencedSection(b *md.Builder, u types.UnreferencedOutput) {
+	if len(u.Symbols) == 0 && u.Answer.Verdict != types.VerdictUnknown {
+		return
+	}
+	b.Heading(2, "Unreferenced symbols")
+	b.Paragraph(types.UnreferencedDefinition)
+	if len(u.Symbols) > 0 {
+		// A committed report is read, not scrolled, so the table is capped and the
+		// omission is stated. A silent truncation would read as a complete list, which
+		// is the same failure the verdict below exists to prevent.
+		shown := u.Symbols
+		if len(shown) > unreferencedReportRows {
+			shown = shown[:unreferencedReportRows]
+		}
+		rows := make([][]string, 0, len(shown))
+		for _, s := range shown {
+			rows = append(rows, []string{s.Kind, md.Code(s.Source), md.Code(s.Label)})
+		}
+		b.Table([]string{"Kind", "Source", "Symbol"}, []md.Align{md.Left, md.Left, md.Left}, rows)
+		if len(u.Symbols) > len(shown) {
+			b.Paragraphf("_Showing %d of %d. Run `magus insight unreferenced -o json` for the full list._", len(shown), len(u.Symbols))
+		}
+	}
+	switch u.Answer.Verdict {
+	case types.VerdictUnknown:
+		b.Paragraphf("**Incomplete:** %s. This list is what magus could see, not what exists.", uncoveredPhrase(u.Answer))
+	case types.VerdictAbsent:
+		b.Paragraph("**Next:** nothing here is unreferenced, across every symbol index this workspace declares.")
+	default:
+		b.Paragraph("**Next:** read each entry before deleting it. Reflection, interface dispatch, build tags, and consumers outside this workspace are all invisible here.")
+	}
+}
+
+// uncoveredPhrase names what put an answer outside coverage, for prose.
+func uncoveredPhrase(ans types.KnowledgeAnswer) string {
+	if ans.Reason == types.ReasonSymbolsNotLoaded {
+		return "no code symbols were loaded for this report"
+	}
+	names := make([]string, 0, len(ans.Uncovered))
+	for _, g := range ans.Uncovered {
+		names = append(names, g.Project.Display())
+	}
+	if len(names) == 0 {
+		return "part of the workspace was outside coverage"
+	}
+	return "no symbol index for " + strings.Join(names, ", ")
+}
+
 func writeVolatilitySection(b *md.Builder, v types.VolatilityReport) {
 	if len(v.Targets) == 0 {
 		return

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/types"
 )
 
@@ -57,6 +58,32 @@ func phraseFor(relation string, active bool) string {
 
 // wrapCol is the target line width for wrapped ID lists.
 const wrapCol = 80
+
+// AnswerText renders an unknown verdict for a lookup that matched nothing: what magus
+// could not see, and the command that would let it. It exists so an agent reading a
+// text-channel tool gets the same coverage statement a JSON consumer gets from the
+// answer field, rather than an error string it would have to pattern-match.
+func AnswerText(query string, ans types.KnowledgeAnswer) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "no node matches %s\n", query)
+	fmt.Fprintf(&b, "verdict: %s, not absent\n", ans.Verdict)
+	if ans.Reason == types.ReasonSymbolsNotLoaded {
+		b.WriteString("this lookup searched domain entities only, not code symbols; a code symbol by that name may exist.\n")
+		b.WriteString("search code symbols with the magus_refs tool.\n")
+	}
+	if len(ans.Uncovered) > 0 {
+		b.WriteString("outside coverage:\n")
+		for _, g := range ans.Uncovered {
+			detail := g.Detail
+			if detail == "" {
+				detail = string(g.State)
+			}
+			fmt.Fprintf(&b, "  %s (%s)\n", g.Project.Display(), detail)
+		}
+		fmt.Fprintf(&b, "build the missing index from a shell with `%s`.\n", clihint.GraphBuild)
+	}
+	return b.String()
+}
 
 // ExplainText renders one node's context card: its identity and attrs, then its
 // relationships grouped by natural-language verb, each group listing the full IDs.

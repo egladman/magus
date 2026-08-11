@@ -140,6 +140,34 @@ func (m *Magus) Volatility(ctx context.Context) (types.VolatilityReport, error) 
 	return volatility.BuildReport(ctx, m.cfg.HistoryPath, m.volatilityConfig())
 }
 
+// Unreferenced is the knowledge-graph lens: code symbols this workspace defines that
+// nothing in it names. Like Volatility it takes no window - it reads the graph, not a
+// commit scan - so it is workspace-wide.
+//
+// The result carries a coverage verdict alongside the list, and that pairing is the whole
+// design. A project whose symbol index was never built contributes no symbols, so its
+// unreferenced code would render as a clean report; without the verdict, the lens would
+// be most reassuring exactly where it knows least.
+func (m *Magus) Unreferenced(ctx context.Context) (types.UnreferencedOutput, error) {
+	g, err := m.KnowledgeGraphWithSymbols(ctx)
+	if err != nil {
+		return types.UnreferencedOutput{}, err
+	}
+	syms := g.Unreferenced()
+	out := types.UnreferencedOutput{Definition: types.UnreferencedDefinition, Symbols: syms}
+	// Gaps are worth probing whatever the list length: a long list from a half-indexed
+	// workspace is just as misleading as an empty one, since the projects it omits are
+	// invisible either way.
+	if gaps := m.SymbolGaps(ctx); len(gaps) > 0 {
+		out.Answer = types.EmptyAnswer(true, gaps)
+	} else if len(syms) > 0 {
+		out.Answer = types.KnowledgeAnswer{Verdict: types.VerdictFound}
+	} else {
+		out.Answer = types.EmptyAnswer(true, nil)
+	}
+	return out, nil
+}
+
 // Trend is the rising/cooling lens: each project's churn in the recent vs earlier
 // half of the window.
 func (m *Magus) Trend(ctx context.Context, opts types.InsightOptions) (types.TrendOutput, error) {

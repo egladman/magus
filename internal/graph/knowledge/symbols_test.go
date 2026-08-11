@@ -48,6 +48,38 @@ func TestAssembleSymbols(t *testing.T) {
 		"a cross-project reference file is parented to its own project")
 }
 
+// A symbol's Calls become symbol->symbol edges, carrying the attributed count in the same
+// provenance format the reference edges use so one decoder serves both.
+func TestAssembleSymbolsEmitsCallEdges(t *testing.T) {
+	syms := []types.KnowledgeSymbol{
+		{
+			Key:    "example.com/foo Caller().",
+			Label:  "Caller",
+			Source: "pkg/foo/foo.go:11",
+			Defs:   []string{"pkg/foo/foo.go"},
+			Calls:  []types.KnowledgeSymbolCall{{Key: "example.com/foo Callee().", Count: 3}},
+		},
+		{
+			Key:    "example.com/foo Callee().",
+			Label:  "Callee",
+			Source: "pkg/foo/foo.go:30",
+			Defs:   []string{"pkg/foo/foo.go"},
+		},
+	}
+	out := mergeAll([]Shard{assembleSymbols("pkg/foo", syms, []types.TargetGraphProject{{Path: "pkg/foo"}})}).Output()
+
+	e, ok := findEdge(out, "symbol:example.com/foo Caller().", "symbol:example.com/foo Callee().", types.RelationCalls)
+	require.True(t, ok, "the caller reaches the callee directly, not only through their shared file")
+	assert.Contains(t, e.Provenance, "count=3")
+
+	// One decoder, one format: a call edge's provenance must read back through the same
+	// parser the reference edges use, or a consumer would need to know which it holds.
+	count, lines, ok := parseRefProvenance(e.Provenance)
+	require.True(t, ok)
+	assert.Equal(t, 3, count)
+	assert.Empty(t, lines, "call sites live on the file's references edge, not repeated per pair")
+}
+
 // TestAssembleShardsIngestsSymbols: a project with declared symbols yields a
 // per-project @symbols shard in the assembled set, merged into the graph.
 func TestAssembleShardsIngestsSymbols(t *testing.T) {

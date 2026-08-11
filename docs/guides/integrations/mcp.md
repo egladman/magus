@@ -97,7 +97,7 @@ Inspect:
 | `magus_status`   | Report telemetry/cache settings and the live proc-server pool state    |
 | `magus_tail_log` | Return the most recent captured build log for a project                |
 | `magus_output`   | Fetch one target execution's exact captured output by its `out...` ref |
-| `magus_insight`  | VCS-history lenses: hotspots, files, affinity, ownership, trend        |
+| `magus_insight`  | Lenses: hotspots, files, affinity, ownership, trend, unreferenced      |
 
 Knowledge graph:
 

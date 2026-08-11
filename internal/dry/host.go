@@ -314,12 +314,26 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		volatility.MapSet("threshold", vm.FloatValue(0))
 		volatility.MapSet("targets", vm.ListValue(nil))
 
+		// Unreferenced carries a nested answer record, so the plain insightLens helper
+		// (definition + list fields) is not enough: a script reading
+		// `.unreferenced.answer.verdict` would hit a member access on nothing, which is
+		// the same silent truncation the shaped stubs exist to avoid.
+		answer := vm.NewMap()
+		answer.MapSet("verdict", vm.StrValue(""))
+		answer.MapSet("reason", vm.StrValue(""))
+		answer.MapSet("uncovered", vm.ListValue(nil))
+		unreferenced := vm.NewMap()
+		unreferenced.MapSet("definition", vm.StrValue(""))
+		unreferenced.MapSet("symbols", vm.ListValue(nil))
+		unreferenced.MapSet("answer", answer)
+
 		res := vm.NewMap()
 		res.MapSet("hotspots", insightLens("nodes", "files"))
 		res.MapSet("affinity", insightLens("pairs"))
 		res.MapSet("ownership", insightLens("projects"))
 		res.MapSet("trend", insightLens("projects"))
 		res.MapSet("volatility", volatility)
+		res.MapSet("unreferenced", unreferenced)
 		res.MapSet("graphStats", stats)
 		return res, nil
 	}))

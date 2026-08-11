@@ -28,7 +28,12 @@ package types
 // version mismatch as a full rebuild, which is exactly the migration needed - without
 // the bump, a v6 cache would read as current while every fingerprint disagreed, and a
 // changed shard would never be rewritten.
-const KnowledgeSchemaVersion = 7
+// v8 adds symbol->symbol `calls` edges to the @symbols shards, attributed from the SCIP
+// occurrence's enclosing_range (the callee is referenced from inside the caller's body).
+// The relation and both node kinds already existed, so a v7 consumer parses a v8 graph
+// without changing - but it would read a symbol's edge set as complete when it is not,
+// and the shard fingerprints all differ, so the bump is what forces the rebuild.
+const KnowledgeSchemaVersion = 8
 
 // KnowledgeGraphDefinition is the human-readable description printed by
 // "magus graph export".
@@ -74,7 +79,7 @@ const (
 	RelationUses         = "uses"          // target->op
 	RelationReferences   = "references"    // charm->target/project; reused for file->symbol (SCIP)
 	RelationDocuments    = "documents"     // doc->spell/diagnostic/module (phase 4)
-	RelationCalls        = "calls"         // function->function (phase 4)
+	RelationCalls        = "calls"         // function->function (buzz); symbol->symbol, from a SCIP index (v8)
 	RelationImports      = "imports"       // file->file / file->import (phase 4)
 	RelationRationaleFor = "rationale_for" // rationale->function (phase 4)
 	RelationEmits        = "emits"         // target->diagnostic, runtime (phase 8)
@@ -162,6 +167,12 @@ type KnowledgeSymbol struct {
 	Source string
 	Defs   []string
 	Refs   []KnowledgeSymbolRef
+	// Calls are the workspace-defined symbols referenced from inside this symbol's own
+	// definition body, attributed by the SCIP occurrence's enclosing range. Collapsed per
+	// (caller, callee) - the same scale decision Refs makes per (file, symbol) - so a hot
+	// callee yields one entry per caller, never one per call site. Empty when the indexer
+	// emits no enclosing ranges, which is the honest answer rather than a guess.
+	Calls []KnowledgeSymbolCall
 }
 
 // SymbolIndexFreshness is the state of a project's cached SCIP index relative to its
@@ -190,6 +201,79 @@ type KnowledgeSymbolRef struct {
 	Path  string
 	Count int
 	Lines []int
+}
+
+// KnowledgeSymbolCall is one callee reached from inside a symbol's definition body: the
+// callee's version-stripped key (the same key that becomes its node ID) and how many
+// occurrences were attributed. It carries no line list on purpose - the call sites are
+// already recorded on the caller file's `references` edge, and duplicating them per pair
+// would be pure shard weight at this edge count.
+type KnowledgeSymbolCall struct {
+	Key   string
+	Count int
+}
+
+// KnowledgeVerdict classifies an answer that came back empty. The distinction is the
+// point: `absent` is a fact magus verified, `unknown` is magus saying it could not see
+// far enough to know. Without it a caller reads every empty result as proof of absence,
+// which is the most expensive way for a lookup to be wrong.
+type KnowledgeVerdict string
+
+const (
+	VerdictFound   KnowledgeVerdict = "found"   // the lookup returned something
+	VerdictAbsent  KnowledgeVerdict = "absent"  // nothing matched, and everything that could match was searched
+	VerdictUnknown KnowledgeVerdict = "unknown" // nothing matched, but part of the workspace was not searchable
+)
+
+// KnowledgeUnknownReason says WHY an answer is unknown, because the two causes have
+// different fixes: one needs an index built, the other needs a different query.
+type KnowledgeUnknownReason string
+
+const (
+	// ReasonSymbolIndexMissing: a project declares a SCIP index that magus could not read.
+	// Fix: build it.
+	ReasonSymbolIndexMissing KnowledgeUnknownReason = "symbol-index-missing"
+	// ReasonSymbolsNotLoaded: this lookup never merged the symbol shards, so no code symbol
+	// could have matched whatever the index holds. Fix: ask a question that seeds symbols.
+	ReasonSymbolsNotLoaded KnowledgeUnknownReason = "symbols-not-loaded"
+)
+
+// KnowledgeSymbolGap is one project whose declared symbol index magus could not read.
+// State reuses SymbolIndexFreshness so reporting staleness later is additive rather than
+// a second enum; today only SymbolIndexNotBuilt is emitted, because the read verbs have
+// no cache handle to probe freshness with.
+type KnowledgeSymbolGap struct {
+	Project ProjectRef           `json:"project"          yaml:"project"`
+	State   SymbolIndexFreshness `json:"state"            yaml:"state"`
+	Detail  string               `json:"detail,omitempty" yaml:"detail,omitempty"`
+}
+
+// KnowledgeAnswer rides every graph lookup's structured output so a consumer can branch
+// on the verdict instead of inferring it from an empty list. Verdict has no omitempty:
+// `absent` must be positively asserted, or a reader cannot tell a verified absence from
+// an older magus that had no verdict at all.
+type KnowledgeAnswer struct {
+	Verdict   KnowledgeVerdict       `json:"verdict"             yaml:"verdict"`
+	Reason    KnowledgeUnknownReason `json:"reason,omitempty"    yaml:"reason,omitempty"`
+	Uncovered []KnowledgeSymbolGap   `json:"uncovered,omitempty" yaml:"uncovered,omitempty"`
+}
+
+// EmptyAnswer classifies a lookup that returned nothing. Call it only on an empty
+// result; a non-empty one is VerdictFound by construction.
+//
+// symbolsLoaded reports whether this lookup merged the symbol shards at all. When it did
+// not, that is the reason returned even if indexes are also missing: it is the more
+// specific fact and the more actionable fix, and a caller told to go build an index would
+// find the rebuilt index just as invisible to the same query.
+func EmptyAnswer(symbolsLoaded bool, gaps []KnowledgeSymbolGap) KnowledgeAnswer {
+	switch {
+	case !symbolsLoaded:
+		return KnowledgeAnswer{Verdict: VerdictUnknown, Reason: ReasonSymbolsNotLoaded, Uncovered: gaps}
+	case len(gaps) > 0:
+		return KnowledgeAnswer{Verdict: VerdictUnknown, Reason: ReasonSymbolIndexMissing, Uncovered: gaps}
+	default:
+		return KnowledgeAnswer{Verdict: VerdictAbsent}
+	}
 }
 
 // KnowledgeNode is one vertex: a magus-domain entity with stable identity and
@@ -285,6 +369,11 @@ type KnowledgeRefsOutput struct {
 	RefCount      int                `json:"ref_count"      yaml:"ref_count"`
 	Defs          []KnowledgeRefSite `json:"defs,omitempty" yaml:"defs,omitempty"`
 	Refs          []KnowledgeRefSite `json:"refs,omitempty" yaml:"refs,omitempty"`
+	// Answer says whether an empty Refs list is a verified absence or a blind spot. A
+	// named field rather than an embedded struct: the template renderer skips anonymous
+	// fields, so `-o template` with no body would not list it, and yaml would nest what
+	// json flattens.
+	Answer KnowledgeAnswer `json:"answer" yaml:"answer"`
 }
 
 // KnowledgeRefSite is one file that defines or references a symbol, with the
@@ -314,6 +403,10 @@ type KnowledgeQueryOutput struct {
 	Matches []KnowledgeMatch `json:"matches"        yaml:"matches"`
 	Nodes   []KnowledgeNode  `json:"nodes"          yaml:"nodes"`
 	Links   []KnowledgeEdge  `json:"links"          yaml:"links"`
+	// Answer says whether MatchCount 0 is a verified absence or a blind spot. Most
+	// queries never seed the symbol shards, so a bare term matching nothing says nothing
+	// about whether a code symbol by that name exists - this is where that is stated.
+	Answer KnowledgeAnswer `json:"answer" yaml:"answer"`
 }
 
 // EdgeDirection says which end of an edge the focus node sits on. Distinct from

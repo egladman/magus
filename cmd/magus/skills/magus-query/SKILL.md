@@ -50,9 +50,11 @@ only: no daemon AND no CLI, or a human asking what the committed index says.{{en
    Prefer these over grep and glob for anything in the magus domain. `magus_refs`
    needs a workspace that declares a SCIP index (`knowledge.symbols` in config);{{if .Full}} it
    is the occurrence-shaped def/references answer, so use it over `magus_query` for a
-   symbol's fan-in.{{end}} When refs (or `kind:symbol`) reports no match for a symbol that
-   plainly exists, the index is probably unbuilt, not the name wrong: `magus status`
-   lists each project's symbol-index state; `magus graph build` indexes and rebuilds.
+   symbol's fan-in.{{end}} Every empty result carries a verdict: `absent` means magus
+   searched every symbol index this workspace declares and the thing is not there;
+   `unknown` names the projects it could not search, and building those with
+   `magus graph build` is what turns the answer into a fact. Read the verdict before
+   concluding anything from an empty result.
 
 {{if .Full}}   The graph relates entities; the evaluated dispatch plan lives one verb over.
 {{end}}   `magus describe target <name>` prints, per project, the resolved source globs,
@@ -69,7 +71,8 @@ Free-text terms (AND) plus field filters and negation:
 - `project:pkg/foo` - everything the project owns{{if .Full}}: the project node, its
   targets, and the files/functions/docs whose source lives under it (nested
   projects claim their own; the root `.` owns only what no nested project does){{end}}
-- `relation:uses` - seed from nodes touching that edge
+- `relation:uses` - seed from nodes touching that edge{{if .Full}} (`relation:calls`
+  reaches symbol-to-symbol call edges, so it loads the lazy symbol shards){{end}}
 - `id:build` - substring match on the node ID
 - `id:target:*build` - `*` wildcard, matching any run (in a value or a free-text term)
 - `-kind:op` - negation, exclude these

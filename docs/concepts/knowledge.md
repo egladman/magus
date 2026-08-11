@@ -275,7 +275,8 @@ Edges are directed and carry provenance and a confidence tag - `extracted` (1.0,
 from a parseable source) or `inferred` (a rubric score, from a fuzzy match).
 
 Relations: `depends_on`, `contains`, `uses`, `calls`, `imports`, `references`,
-`documents`, `rationale_for`, `owns`.
+`documents`, `rationale_for`, `owns`. `calls` spans two layers: buzz function to buzz
+function, and code symbol to code symbol from a SCIP index.
 
 Ownership is extracted from a committed `CODEOWNERS` file (checked at the repo
 root, `.github/`, or `docs/`): each owner becomes an `owner` node with an `owns`
@@ -381,8 +382,20 @@ knowledge:
 
 Each ingested index becomes a per-project `<project>@symbols` shard: `symbol` nodes
 (keyed by their version-stripped SCIP moniker), `defines` edges from the defining
-file, and `references` edges from each using file (one per file, carrying an
-occurrence count and capped lines). A symbol seen only as a reference still gets a
+file, `references` edges from each using file (one per file, carrying an
+occurrence count and capped lines), and `calls` edges between symbols.
+
+A call edge is attributed, not inferred: SCIP records an enclosing range for each
+definition, so a reference occurrence that falls inside one was written in that
+definition's body, and the enclosing symbol is the caller. Two restrictions keep the
+relation honest. The callee must be something callable - an enclosing range spans the
+whole declaration, signature included, so most occurrences inside it are types and
+fields rather than calls. Callability is read off the moniker's SCIP descriptor suffix
+rather than the optional `SymbolInformation.Kind`, so it does not depend on an indexer
+choosing to populate a field: scip-typescript sets no kinds at all, and a kind-based rule
+would silently produce no calls for an entire language. And the callee must be defined in
+this workspace: a call into a dependency has no body to navigate to, and its usage is
+already recorded by the referencing file's `references` edge. A symbol seen only as a reference still gets a
 node, so cross-project usage resolves. Every indexed source file also becomes a
 browsable `file` node the edges land on, linked to the project that owns it - so a
 `.go` or `.ts` file sits in the graph the same way a `.buzz` file does, reachable from
@@ -395,14 +408,55 @@ groups every Go source file and symbol - and `language:buzz` the buzz sources - 
 filter across everything the graph knows, however it was extracted (magus's own AST
 walk or a foreign SCIP index).
 
+SCIP makes a document's language optional and not every indexer sets it (scip-typescript
+sets it on none), so magus falls back to the language the producing spell declares - the
+same declaration that made the project symbol-capable. A document that names its own
+language still wins, since one index may legitimately span several.
+
 Symbol shards can dwarf the domain graph, so they are **lazily loaded**: the default
 `magus query`/`magus graph stats`/`magus graph open`/warm graph never touch them. They load only when a query is
-symbol-seeded - `kind:symbol`, a `symbol:` ID, `relation:defines`/`references`, or
-the `refs` verb. `magus refs <symbol>` lists a symbol's definition and every
+symbol-seeded - `kind:symbol`, a `symbol:` ID,
+`relation:defines`/`references`/`calls`, or the `refs` verb. `magus refs <symbol>` lists a symbol's definition and every
 referencing file (`magus_refs` over MCP, paginated). At very large scale a derived
 `shards/@symbols.routing.json` (symbol hash to referencing shard names, rebuilt with
 the shards) lets an exact-ID lookup load only the shards that mention the symbol
 rather than all of them; a missing routing file just falls back to loading all.
+
+## The third verdict: when an empty answer is not a fact
+
+A lookup that returns nothing has two very different meanings, and collapsing them is
+how a blind spot gets recorded as a fact. `magus query`, `magus explain`, and
+`magus refs` all say which one they mean:
+
+| verdict | what it asserts | what to do |
+| --- | --- | --- |
+| `found` | the lookup returned something | read it |
+| `absent` | nothing matched, and everything that could match was searched | trust it |
+| `unknown` | nothing matched, but part of the workspace was not searchable | close the gap, then re-run |
+
+An `unknown` verdict names its cause. `symbol-index-missing` lists the projects whose
+declared SCIP index magus could not read, which `magus graph build` fixes.
+`symbols-not-loaded` means the lookup never consulted the symbol layer at all - a bare
+`magus query someFunc` searches domain entities, so it says nothing about whether a code
+symbol by that name exists, and `magus refs someFunc` is the verb that would know.
+
+The verdict rides the structured output as an `answer` field, so an agent branches on
+`answer.verdict` rather than pattern-matching prose:
+
+```sh
+magus refs SomeSymbol -o json    # .answer.verdict, .answer.reason, .answer.uncovered[]
+```
+
+Exit codes follow the same split. `refs` and `explain` exit 2 on `absent` - the request
+cannot be carried out as stated, and magus verified that - and 1 on `unknown`, where the
+invocation was fine and a prerequisite artifact was missing. `magus query` always exits 0:
+an empty result set is a legitimate answer to a search, so its verdict rides the output
+only.
+
+A verdict is computed only when a result is empty, and the coverage probe behind it is
+skipped entirely when the symbol layer was irrelevant to the question - `kind:author`
+returning nothing has nothing to do with a missing symbol index, so nothing about one is
+reported.
 
 ## Git history (@vcs)
 

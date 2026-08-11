@@ -1,10 +1,10 @@
 {
   "definition": "The knowledge graph is a deterministic, cache-backed graph of the magus domain: projects, targets, spells, ops, charms, modules, methods, and diagnostics, connected by verified relations (depends_on, contains, uses, references, documents). Every node and edge is extracted or rubric-inferred from workspace sources - no LLM pass - so it is safe to rebuild implicitly and query instead of grepping.",
-  "schema_version": 7,
+  "schema_version": 8,
   "directed": true,
   "multigraph": false,
   "node_count": 2582,
-  "edge_count": 6054,
+  "edge_count": 6050,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -29567,14 +29567,6 @@
       "provenance": "benchmarks/README.md"
     },
     {
-      "source": "doc:cmd/magus/skills/magus-architecture/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-status.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-architecture/SKILL.md"
-    },
-    {
       "source": "doc:cmd/magus/skills/magus-buzz/SKILL.md",
       "target": "diagnostic:MGS1022",
       "relation": "documents",
@@ -29673,14 +29665,6 @@
     {
       "source": "doc:cmd/magus/skills/magus-query/SKILL.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "cmd/magus/skills/magus-query/SKILL.md"
-    },
-    {
-      "source": "doc:cmd/magus/skills/magus-query/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-status.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -30837,6 +30821,14 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "docs/concepts/knowledge.md"
+    },
+    {
+      "source": "doc:docs/concepts/knowledge/insight.md",
+      "target": "doc:docs/concepts/knowledge.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/knowledge/insight.md"
     },
     {
       "source": "doc:docs/concepts/knowledge/insight.md",
@@ -41759,14 +41751,6 @@
       "provenance": "docs/setup/windows.md"
     },
     {
-      "source": "doc:evals/fixtures/full/.claude/skills/magus-architecture/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-status.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "evals/fixtures/full/.claude/skills/magus-architecture/SKILL.md"
-    },
-    {
       "source": "doc:evals/fixtures/full/.claude/skills/magus-buzz/SKILL.md",
       "target": "diagnostic:MGS1022",
       "relation": "documents",
@@ -41865,14 +41849,6 @@
     {
       "source": "doc:evals/fixtures/full/.claude/skills/magus-query/SKILL.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "evals/fixtures/full/.claude/skills/magus-query/SKILL.md"
-    },
-    {
-      "source": "doc:evals/fixtures/full/.claude/skills/magus-query/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-status.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -42017,14 +41993,6 @@
     {
       "source": "doc:evals/fixtures/simple/.claude/skills/magus-query/SKILL.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "evals/fixtures/simple/.claude/skills/magus-query/SKILL.md"
-    },
-    {
-      "source": "doc:evals/fixtures/simple/.claude/skills/magus-query/SKILL.md",
-      "target": "doc:docs/reference/manpage/magus-status.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,

@@ -25,9 +25,10 @@ type insightAnalyzer interface {
 	Ownership(ctx context.Context, opts types.InsightOptions) (types.OwnershipOutput, error)
 	Trend(ctx context.Context, opts types.InsightOptions) (types.TrendOutput, error)
 	Volatility(ctx context.Context) (types.VolatilityReport, error)
+	Unreferenced(ctx context.Context) (types.UnreferencedOutput, error)
 }
 
-var insightLenses = []string{"hotspots", "affinity", "ownership", "trend", "volatility", "report"}
+var insightLenses = []string{"hotspots", "affinity", "ownership", "trend", "volatility", "unreferenced", "report"}
 
 func insightCmd(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
@@ -46,6 +47,8 @@ func insightCmd(ctx context.Context, root string, args []string) error {
 		return insightTrend(ctx, root, rest)
 	case "volatility":
 		return insightVolatility(ctx, root, rest)
+	case "unreferenced":
+		return insightUnreferenced(ctx, root, rest)
 	case "report":
 		return insightReport(ctx, root, rest)
 	case "structure":
@@ -77,10 +80,14 @@ func insightUsage() {
 	fmt.Fprintln(os.Stderr, "Run-outcome lens (from the shared runtime-history file, not git):")
 	fmt.Fprintln(os.Stderr, "  volatility  targets whose pass/fail record flaps - a Wilson-scored flakiness signal")
 	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Knowledge-graph lens (from the SCIP symbol index, not git):")
+	fmt.Fprintln(os.Stderr, "  unreferenced  code symbols nothing in the workspace names - candidates, not a delete list")
+	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "  report      every lens plus graph stats as one Markdown doc (commit it as INSIGHT.md)")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "VCS-history flags: --commits N, --since 90d|12w|6mo|1y (the volatility lens takes neither:")
-	fmt.Fprintln(os.Stderr, "it reads run history whole, workspace-wide). Each lens accepts -o text|json|yaml|name.")
+	fmt.Fprintln(os.Stderr, "VCS-history flags: --commits N, --since 90d|12w|6mo|1y (the volatility and unreferenced")
+	fmt.Fprintln(os.Stderr, "lenses take neither: they read their whole source, workspace-wide). Each lens accepts")
+	fmt.Fprintln(os.Stderr, "-o text|json|yaml|name.")
 	fmt.Fprintln(os.Stderr, "See also: `magus graph stats` for the knowledge-graph shape (god nodes, orphans, doc coverage).")
 }
 
@@ -303,6 +310,77 @@ func volatilityText(out types.VolatilityReport) error {
 	return nil
 }
 
+// insightUnreferenced renders the knowledge-graph lens: symbols nothing names. Like
+// volatility it takes no history window - it reads the graph, not a commit scan - so the
+// report is always workspace-wide.
+func insightUnreferenced(ctx context.Context, root string, args []string) error {
+	if _, err := cmdParse("insight unreferenced", args, func(fs *flag.FlagSet) {
+		fs.Usage = func() {
+			fmt.Fprintf(os.Stderr, "Usage: magus insight unreferenced [flags]\n\n%s\n\nRuns workspace-wide (no --commits/--since window). Global flags also accepted, see `magus -h`:\n", types.UnreferencedDefinition)
+			fs.PrintDefaults()
+		}
+	}); err != nil {
+		return err
+	}
+	outOpts, err := ResolveOutput(global.output)
+	if err != nil {
+		return err
+	}
+	ws, err := inspectWorkspace(ctx, root)
+	if err != nil {
+		return err
+	}
+	a, ok := ws.(insightAnalyzer)
+	if !ok {
+		return errors.New("insight: workspace does not support insight analysis")
+	}
+	out, err := a.Unreferenced(ctx)
+	if err != nil {
+		return err
+	}
+	switch outOpts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(outOpts, out)
+	case outputName:
+		for _, s := range out.Symbols {
+			fmt.Println(s.ID)
+		}
+		return nil
+	}
+	return unreferencedText(out)
+}
+
+// unreferencedTextRows caps the terminal table, matching the match list in `magus query`.
+const unreferencedTextRows = 30
+
+func unreferencedText(out types.UnreferencedOutput) error {
+	fmt.Printf("definition: %s\n\n", types.UnreferencedDefinition)
+	if len(out.Symbols) == 0 {
+		fmt.Println("no unreferenced symbols found")
+	} else {
+		fmt.Printf("unreferenced symbols (%d):\n", len(out.Symbols))
+		fmt.Printf("  %-14s  %-34s  %s\n", "KIND", "SOURCE", "SYMBOL")
+		// Capped like `magus query`'s match list: this is a terminal view, and a
+		// workspace of any size produces thousands of rows. -o json is the full set.
+		shown := out.Symbols
+		if len(shown) > unreferencedTextRows {
+			shown = shown[:unreferencedTextRows]
+		}
+		for _, s := range shown {
+			fmt.Printf("  %-14s  %-34s  %s\n", s.Kind, s.Source, s.Label)
+		}
+		if len(out.Symbols) > len(shown) {
+			fmt.Printf("  ... and %d more. Run with -o json for the full list, -o name for ids.\n", len(out.Symbols)-len(shown))
+		}
+	}
+	// The verdict goes below the list, not above it: a clean report from a half-indexed
+	// workspace is the failure mode this lens has to guard against, and the reader needs
+	// to see the caveat attached to the result they just read.
+	fmt.Println()
+	printSymbolAnswer(os.Stdout, out.Answer, "")
+	return nil
+}
+
 // insightReport gathers every lens and emits the combined Markdown doc (the default),
 // or the bundled struct under -o json/yaml.
 func insightReport(ctx context.Context, root string, args []string) error {
@@ -340,6 +418,11 @@ func insightReport(ctx context.Context, root string, args []string) error {
 	// read error just omits the section rather than failing the whole report).
 	if vr, verr := a.Volatility(ctx); verr == nil {
 		report.Volatility = vr
+	}
+	// Same for the knowledge-graph axis: a workspace with no symbol index yields an
+	// empty list carrying an unknown verdict, which is a useful section, not a failure.
+	if ur, uerr := a.Unreferenced(ctx); uerr == nil {
+		report.Unreferenced = ur
 	}
 	// The report spans both axes: add graph stats (best-effort - a graph build
 	// failure just omits the section rather than failing the whole report).

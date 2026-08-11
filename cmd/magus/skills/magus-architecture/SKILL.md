@@ -66,10 +66,10 @@ and nothing it exports would need to be exported once merged.
    rename.{{end}}
 2. Fan-in of a symbol: `magus refs <symbol>` lists the defining file and every
    referencing file:line from the SCIP index. Run it before moving or renaming
-   any exported symbol.{{if .Full}} (If it reports no match for a symbol that surely
-   exists, the index is likely unbuilt: check `magus status`, then
-   `magus graph build`.){{else}} No match for a symbol that exists means an unbuilt
-   index: `magus graph build`.{{end}}
+   any exported symbol.{{if .Full}} An empty result states which kind of empty it is:
+   `absent` is verified, `unknown` names the projects with no symbol index - build
+   them with `magus graph build` before trusting it.{{else}} An empty result carries a
+   verdict; `unknown` means an index is missing, not that nothing uses it.{{end}}
 3. How two things relate: `magus path <a> <b>` gives the shortest edge chain{{if .Full}} -
    use it to test whether a proposed boundary actually separates them{{end}}.
 4. Owners: `magus query kind:owner` (populated from CODEOWNERS) tells you whose

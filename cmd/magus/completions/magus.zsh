@@ -52,7 +52,7 @@ _magus() {
                 'path:show the shortest path between two knowledge-graph nodes'
                 'refs:list where an ingested code symbol is defined and referenced'
                 'graph:the graphs as objects\: deps (project DAG), export (knowledge graph), stats (shape)'
-                'insight:VCS-history analytics\: hotspots, affinity, ownership, trend, volatility'
+                'insight:Codebase analytics\: hotspots, affinity, ownership, trend, volatility, unreferenced'
                 'watch:emit changed file paths (pipe into affected --stdin)'
                 'status:inspect the concurrency pool of a running parent magus'
                 'clean:remove declared Outputs (regenerable build artifacts) [--cache to also drop entries]'
@@ -154,6 +154,7 @@ _magus() {
                             'affinity:projects that change together (temporal coupling)'
                             'ownership:author concentration and bus factor'
                             'trend:rising vs cooling activity'
+                            'unreferenced:code symbols nothing in the workspace names'
                             'report:every lens plus graph stats as one document'
                         )
                         _describe 'lens' lenses

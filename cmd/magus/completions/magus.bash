@@ -32,7 +32,7 @@ _magus_complete() {
     local subcommands="ls describe run x where affected query explain path refs graph insight watch status clean vcs doctor config memory server buzz completion man init agent hook notify self version help"
 # magus-utils:subcommands:end
     local nouns="spell charm target project workspace module mcp-tool"
-    local lenses="hotspots affinity ownership trend report"
+    local lenses="hotspots affinity ownership trend unreferenced report"
     local graph_subs="deps export stats"
     local config_subs="view set history cache mcp"
     local server_subs="start stop"

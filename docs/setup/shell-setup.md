@@ -17,7 +17,7 @@ Two things worth doing once, after magus is [installed](../setup.md) and on your
 - **Subcommands**, and the subcommands under `graph`, `config`, `server`, `self`, and `man`.
 - **Targets** after `run` and `affected`: `ls`, `build`, `test`, `lint`, `format`, `clean`, `generate`, `ci`.
 - **Project paths**, live from the workspace. The script shells out to `magus ls -o name`, so it offers the projects this repo actually has rather than a baked-in list, and it stays correct as you add them.
-- **Nouns** after `describe` (`spell`, `charm`, `target`, `project`, `workspace`, `module`, `mcp-tool`) and **lenses** after `insight` (`hotspots`, `affinity`, `ownership`, `trend`, `report`).
+- **Nouns** after `describe` (`spell`, `charm`, `target`, `project`, `workspace`, `module`, `mcp-tool`) and **lenses** after `insight` (`hotspots`, `affinity`, `ownership`, `trend`, `unreferenced`, `report`).
 - **Flags** per subcommand, so `magus affected --<TAB>` offers `--base`, `--plan`, `--bisect`, and the rest rather than nothing.
 
 Outside a workspace the project completions are simply empty. Nothing errors.

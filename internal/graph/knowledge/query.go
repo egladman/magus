@@ -20,8 +20,8 @@ import (
 
 // SeedsSymbols reports whether an input targets symbol nodes, so a caller knows to
 // lazily load the symbol shards the default graph omits: a symbol: ID, the symbol kind
-// (incl. wildcard), a defines/references relation, or any language filter. It must agree
-// with scoreNode - a match that reaches symbols without seeding here returns empty.
+// (incl. wildcard), a defines/references/calls relation, or any language filter. It must
+// agree with scoreNode - a match that reaches symbols without seeding here returns empty.
 // Over-eager is safe: it only loads shards a later filter may discard.
 func SeedsSymbols(input string) bool {
 	if strings.Contains(input, types.KindSymbol+":") { // an explicit symbol: node ID
@@ -42,8 +42,34 @@ func SeedsSymbols(input string) bool {
 		}
 	}
 	return slices.ContainsFunc(q.fields["relation"], func(r string) bool {
-		return r == types.RelationDefines || r == types.RelationReferences
+		// calls spans both layers: buzz function->function lives in the default graph,
+		// symbol->symbol only in the symbol shards. Seeding on it loads shards a buzz-only
+		// query does not need, which is the safe direction - the alternative is a
+		// relation:calls query that silently omits every code symbol.
+		return r == types.RelationDefines || r == types.RelationReferences || r == types.RelationCalls
 	})
+}
+
+// CouldMatchSymbol reports whether a query could ever match a symbol node, which is a
+// weaker question than SeedsSymbols: it asks whether the symbol layer is RELEVANT, not
+// whether it was loaded.
+//
+// The two differ for exactly the queries where an unloaded-symbols caveat would mislead.
+// `kind:author` returning nothing has nothing to do with code symbols, so telling the
+// reader that symbols were not searched points them at a layer that could not have held
+// the answer. A query that names a non-symbol kind and no wildcard has ruled the layer
+// out itself; everything else leaves it open.
+func CouldMatchSymbol(input string) bool {
+	if SeedsSymbols(input) {
+		return true
+	}
+	kinds := parseQuery(input).fields["kind"]
+	if len(kinds) == 0 {
+		return true // no kind filter, so a symbol was in scope and simply was not loaded
+	}
+	// Any explicit kind that is not symbol (and no wildcard reaching it - SeedsSymbols
+	// already returned false, so none does) excludes the layer outright.
+	return false
 }
 
 // wildcardCouldMatchPrefix reports whether a glob could match a string starting with

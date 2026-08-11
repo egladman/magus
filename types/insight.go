@@ -8,7 +8,8 @@ const InsightDefinition = "Insight shows where a codebase's attention and risk c
 	"affinity (projects that change together, and whether a dependency edge explains it), " +
 	"ownership (author concentration and bus factor), and trend (rising vs cooling activity). " +
 	"A fifth lens, volatility, reads run-outcome history instead: targets whose pass/fail record " +
-	"flaps (a Wilson-scored flakiness signal)."
+	"flaps (a Wilson-scored flakiness signal). A sixth, unreferenced, reads the knowledge graph: " +
+	"code symbols nothing else in the workspace names."
 
 // InsightOptions configures an insight scan. One scan of recent history feeds every
 // lens; Dir scopes it to a subtree, Since bounds it by date, Files switches the
@@ -34,7 +35,38 @@ const (
 	VolatilityDefinition = "Volatility reads run-outcome history, not git: each (project, target) " +
 		"pair's recent pass/fail/volatile record scored by its Wilson lower bound. A pair at or above " +
 		"the configured threshold is flagged volatile - a flakiness signal, the prime stabilization targets."
+	UnreferencedDefinition = "Unreferenced lists code symbols the workspace defines and nothing " +
+		"in it names: no call from another symbol, and no file outside the one defining them. It reads " +
+		"the SCIP-backed knowledge graph, not git. This is a measurement, not a verdict - reflection, " +
+		"interface dispatch, build tags, generated call sites, and any consumer outside this workspace " +
+		"are all invisible to it, so read each entry before deleting anything."
 )
+
+// UnreferencedOutput lists the symbols nothing in the workspace names.
+//
+// Answer is what keeps the list honest. A project whose symbol index was never built
+// contributes no symbols at all, so its dead code would silently render as a clean
+// report; the verdict says when the list is a fact and when it is only what magus could
+// see. An empty Symbols list with an unknown verdict means "nothing found and I could not
+// look everywhere", which is not the same as "nothing to find".
+type UnreferencedOutput struct {
+	Definition string              `json:"definition" yaml:"definition"`
+	Symbols    []UnreferencedEntry `json:"symbols"    yaml:"symbols"`
+	Answer     KnowledgeAnswer     `json:"answer"     yaml:"answer"`
+}
+
+// UnreferencedEntry is one symbol nothing names, with where it is defined so the reader
+// can go look at it. Kind is the SCIP classifier (Function, Struct, ...), which is what
+// makes the list triageable: an unreferenced exported Function reads very differently
+// from an unreferenced Field.
+type UnreferencedEntry struct {
+	ID       string `json:"id"                 yaml:"id"`
+	Label    string `json:"label"              yaml:"label"`
+	Source   string `json:"source,omitempty"   yaml:"source,omitempty"`
+	Kind     string `json:"kind,omitempty"     yaml:"kind,omitempty"`
+	Language string `json:"language,omitempty" yaml:"language,omitempty"`
+	Project  string `json:"project,omitempty"  yaml:"project,omitempty"`
+}
 
 // HotspotOutput ranks where churn meets complexity — the canonical "fix this first"
 // view. Nodes is the project-level heatmap (reusing the dependency-graph nodes, with
@@ -162,5 +194,9 @@ type InsightReport struct {
 	Ownership  OwnershipOutput  `json:"ownership"   yaml:"ownership"`
 	Trend      TrendOutput      `json:"trend"       yaml:"trend"`
 	Volatility VolatilityReport `json:"volatility"  yaml:"volatility"`
-	GraphStats KnowledgeStats   `json:"graph_stats" yaml:"graph_stats"`
+	// Unreferenced is the knowledge-graph axis. Like Volatility it is a value, not a
+	// pointer: the report always renders the section, and an empty list with a verdict
+	// says more than an omitted section would.
+	Unreferenced UnreferencedOutput `json:"unreferenced" yaml:"unreferenced"`
+	GraphStats   KnowledgeStats     `json:"graph_stats"  yaml:"graph_stats"`
 }

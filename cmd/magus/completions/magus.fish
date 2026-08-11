@@ -16,7 +16,7 @@ function __magus_subcommands
         path       'show the shortest path between two knowledge-graph nodes' \
         refs       'list where an ingested code symbol is defined and referenced' \
         graph      'the graphs as objects: deps (project DAG), export (knowledge graph), stats (shape)' \
-        insight    'VCS-history analytics: hotspots, affinity, ownership, trend, volatility' \
+        insight    'Codebase analytics: hotspots, affinity, ownership, trend, volatility, unreferenced' \
         watch      'emit changed file paths (pipe into affected --stdin)' \
         status     'inspect the concurrency pool of a running parent magus' \
         clean      'remove declared Outputs (regenerable build artifacts) [--cache to also drop entries]' \
@@ -80,6 +80,7 @@ function __magus_insight_lenses
         affinity  'projects that change together (temporal coupling)' \
         ownership 'author concentration and bus factor' \
         trend     'rising vs cooling activity' \
+        unreferenced 'code symbols nothing in the workspace names' \
         report    'every lens plus graph stats as one document'
 end
 
@@ -156,7 +157,7 @@ for _cmd in magus mgs
     complete -c $_cmd -n '__fish_seen_subcommand_from x' -a '(__magus_projects)'
     complete -c $_cmd -n '__fish_seen_subcommand_from x' -l step -d 'pause before each subprocess'
 
-    complete -c $_cmd -n "__fish_seen_subcommand_from insight; and not __fish_seen_subcommand_from hotspots affinity ownership trend report" -a '(__magus_insight_lenses)'
+    complete -c $_cmd -n "__fish_seen_subcommand_from insight; and not __fish_seen_subcommand_from hotspots affinity ownership trend unreferenced report" -a '(__magus_insight_lenses)'
     complete -c $_cmd -n '__fish_seen_subcommand_from insight' -l commits -d 'cap on how many recent commits to scan'
     complete -c $_cmd -n '__fish_seen_subcommand_from insight' -l since -d 'only commits within this window'
     complete -c $_cmd -n '__fish_seen_subcommand_from insight' -l workspace -d 'analyze the whole workspace'

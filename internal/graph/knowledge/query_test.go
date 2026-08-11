@@ -25,6 +25,7 @@ func TestSeedsSymbols(t *testing.T) {
 	for _, in := range []string{
 		"kind:symbol Foo", "symbol:example.com/a Foo#", "relation:defines", "relation:references", "id:symbol:x",
 		"kind:sym*", "kind:symbol*", "kind:*", "id:sym*",
+		"relation:calls", // symbol->symbol calls live only in the lazy shards
 	} {
 		assert.Truef(t, SeedsSymbols(in), "%q should seed symbols", in)
 	}
@@ -349,5 +350,19 @@ func TestGrammarConformance(t *testing.T) {
 		got := matchIDs(g.Resolve(tc.query, 0))
 		slices.Sort(got)
 		assert.Equalf(t, tc.want, got, "query %q", tc.query)
+	}
+}
+
+// CouldMatchSymbol is the weaker "was the symbol layer relevant" question. It exists so
+// an empty result does not point its reader at a layer that could never have held the
+// answer: `kind:author` returning nothing has nothing to do with code symbols.
+func TestCouldMatchSymbol(t *testing.T) {
+	for _, in := range []string{
+		"kind:symbol Foo", "relation:calls", "someBareName", "project:pkg/a", "",
+	} {
+		assert.Truef(t, CouldMatchSymbol(in), "%q leaves the symbol layer in scope", in)
+	}
+	for _, in := range []string{"kind:author", "kind:target build", "kind:spell"} {
+		assert.Falsef(t, CouldMatchSymbol(in), "%q rules the symbol layer out itself", in)
 	}
 }

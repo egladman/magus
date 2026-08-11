@@ -292,6 +292,30 @@ var KnowledgeDocCoverageSource string
 //go:embed gen/types/knowledgestats.buzz
 var KnowledgeStatsSource string
 
+// The unreferenced lens and the coverage verdict it carries. ProjectRef leads because a
+// gap names a project the same way every other structured output does - by path AND
+// display name, so the workspace root reads as its repo name rather than a bare ".".
+
+//go:generate go run ../../cmd/magus-utils types -type ProjectRef -out gen/types/projectref.buzz
+//go:embed gen/types/projectref.buzz
+var ProjectRefSource string
+
+//go:generate go run ../../cmd/magus-utils types -type KnowledgeSymbolGap -out gen/types/knowledgesymbolgap.buzz
+//go:embed gen/types/knowledgesymbolgap.buzz
+var KnowledgeSymbolGapSource string
+
+//go:generate go run ../../cmd/magus-utils types -type KnowledgeAnswer -out gen/types/knowledgeanswer.buzz
+//go:embed gen/types/knowledgeanswer.buzz
+var KnowledgeAnswerSource string
+
+//go:generate go run ../../cmd/magus-utils types -type UnreferencedEntry -out gen/types/unreferencedentry.buzz
+//go:embed gen/types/unreferencedentry.buzz
+var UnreferencedEntrySource string
+
+//go:generate go run ../../cmd/magus-utils types -type Unreferenced -out gen/types/unreferenced.buzz
+//go:embed gen/types/unreferenced.buzz
+var UnreferencedSource string
+
 //go:generate go run ../../cmd/magus-utils types -type InsightReport -out gen/types/insightreport.buzz
 //go:embed gen/types/insightreport.buzz
 var InsightReportSource string

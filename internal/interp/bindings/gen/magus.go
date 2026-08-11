@@ -582,6 +582,57 @@ func buzzValueMagusVolatilityReport(v types.VolatilityReport) vm.Value {
 	return out
 }
 
+func buzzValueMagusUnreferencedEntry(v types.UnreferencedEntry) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("label", vm.StrValue(v.Label))
+	out.MapSet("source", vm.StrValue(v.Source))
+	out.MapSet("kind", vm.StrValue(v.Kind))
+	out.MapSet("language", vm.StrValue(v.Language))
+	out.MapSet("project", vm.StrValue(v.Project))
+	return out
+}
+
+func buzzValueMagusProjectRef(v types.ProjectRef) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("dir", vm.StrValue(v.Dir))
+	return out
+}
+
+func buzzValueMagusKnowledgeSymbolGap(v types.KnowledgeSymbolGap) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("project", buzzValueMagusProjectRef(v.Project))
+	out.MapSet("state", vm.StrValue(string(v.State)))
+	out.MapSet("detail", vm.StrValue(v.Detail))
+	return out
+}
+
+func buzzValueMagusKnowledgeAnswer(v types.KnowledgeAnswer) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("verdict", vm.StrValue(string(v.Verdict)))
+	out.MapSet("reason", vm.StrValue(string(v.Reason)))
+	itemsUncovered := make([]vm.Value, len(v.Uncovered))
+	for indexUncovered := range v.Uncovered {
+		itemsUncovered[indexUncovered] = buzzValueMagusKnowledgeSymbolGap(v.Uncovered[indexUncovered])
+	}
+	out.MapSet("uncovered", vm.ListValue(itemsUncovered))
+	return out
+}
+
+func buzzValueMagusUnreferencedOutput(v types.UnreferencedOutput) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("definition", vm.StrValue(v.Definition))
+	itemsSymbols := make([]vm.Value, len(v.Symbols))
+	for indexSymbols := range v.Symbols {
+		itemsSymbols[indexSymbols] = buzzValueMagusUnreferencedEntry(v.Symbols[indexSymbols])
+	}
+	out.MapSet("symbols", vm.ListValue(itemsSymbols))
+	out.MapSet("answer", buzzValueMagusKnowledgeAnswer(v.Answer))
+	return out
+}
+
 func buzzValueMagusKnowledgeGodNode(v types.KnowledgeGodNode) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StrValue(v.ID))
@@ -649,6 +700,7 @@ func buzzValueMagusInsightReport(v types.InsightReport) vm.Value {
 	out.MapSet("ownership", buzzValueMagusOwnershipOutput(v.Ownership))
 	out.MapSet("trend", buzzValueMagusTrendOutput(v.Trend))
 	out.MapSet("volatility", buzzValueMagusVolatilityReport(v.Volatility))
+	out.MapSet("unreferenced", buzzValueMagusUnreferencedOutput(v.Unreferenced))
 	out.MapSet("graphStats", buzzValueMagusKnowledgeStats(v.GraphStats))
 	return out
 }

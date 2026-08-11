@@ -50,16 +50,28 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	}
 	out, ok := g.Refs(pos[0])
 	if !ok {
-		// Distinguish the two failure modes: with no symbol index built at all,
-		// nothing could ever match, so point at how to build one instead of implying
-		// the symbol name is wrong.
-		if !g.HasSymbols() {
-			fmt.Fprintf(os.Stderr, "magus refs: no symbol index has been built, so there are no symbols to match %q\n", pos[0])
-			fmt.Fprintf(os.Stderr, "build one with `%s`; the daemon's auto-indexer also keeps it current while `%s` runs\n", clihint.GraphBuild, clihint.ServerStart)
-			return errSilent{exitCode: 2}
-		}
+		// Nothing matched. Whether that is a fact about the workspace or a fact about
+		// what magus could see is the whole question, so answer it rather than printing
+		// one message for both.
+		// refs ALWAYS merges the symbol shards, so "not loaded" is never its problem;
+		// what it can be missing is an index that was never built. Passing HasSymbols()
+		// here would also be wrong for a different reason: an exact symbol ID routes to a
+		// subset of shards, so it answers about the subset, not the workspace. The
+		// declared-index probe is the authority.
+		ans := types.EmptyAnswer(true, symbolGapsFor(ctx, root))
 		fmt.Fprintf(os.Stderr, "magus refs: no node matches %q\n", pos[0])
-		return errSilent{exitCode: 2}
+		printSymbolAnswer(os.Stderr, ans, "")
+		if len(ans.Uncovered) > 0 {
+			fmt.Fprintf(os.Stderr, "  the daemon's auto-indexer also keeps indexes current while `%s` runs\n", clihint.ServerStart)
+		}
+		return answerExit(ans)
+	}
+	// A symbol that resolved but has no referencing files is the same question one level
+	// down: nothing uses it, or nothing magus can see uses it.
+	if len(out.Refs) == 0 {
+		out.Answer = types.EmptyAnswer(true, symbolGapsFor(ctx, root))
+	} else {
+		out.Answer = types.KnowledgeAnswer{Verdict: types.VerdictFound}
 	}
 
 	switch opts.Format {
@@ -85,6 +97,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	}
 	if len(out.Refs) == 0 {
 		fmt.Println("no references found")
+		printSymbolAnswer(os.Stdout, out.Answer, "")
 		return nil
 	}
 	fmt.Printf("referenced in %d file(s), %d occurrence(s):\n", out.FileCount, out.RefCount)

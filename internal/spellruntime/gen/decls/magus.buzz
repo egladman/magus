@@ -213,6 +213,39 @@ export object Volatility {
     targets: [VolatilityTarget] = [],
 }
 
+export object UnreferencedEntry {
+    id: str = "",
+    label: str = "",
+    source: str = "",
+    kind: str = "",
+    language: str = "",
+    project: str = "",
+}
+
+export object ProjectRef {
+    path: str = "",
+    name: str = "",
+    dir: str = "",
+}
+
+export object KnowledgeSymbolGap {
+    project: ProjectRef = ProjectRef{},
+    state: SymbolIndexFreshness = SymbolIndexFreshness.none,
+    detail: str = "",
+}
+
+export object KnowledgeAnswer {
+    verdict: str = "",
+    reason: str = "",
+    uncovered: [KnowledgeSymbolGap] = [],
+}
+
+export object Unreferenced {
+    definition: str = "",
+    symbols: [UnreferencedEntry] = [],
+    answer: KnowledgeAnswer = KnowledgeAnswer{},
+}
+
 export object KnowledgeGodNode {
     id: str = "",
     kind: str = "",
@@ -255,6 +288,7 @@ export object InsightReport {
     ownership: Ownership = Ownership{},
     trend: Trend = Trend{},
     volatility: Volatility = Volatility{},
+    unreferenced: Unreferenced = Unreferenced{},
     graphStats: KnowledgeStats = KnowledgeStats{},
 }
 

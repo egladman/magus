@@ -32,7 +32,7 @@ var subcommands = []subcommand{
 	{Name: "path", Short: "show the shortest path between two knowledge-graph nodes"},
 	{Name: "refs", Short: "list where an ingested code symbol is defined and referenced"},
 	{Name: "graph", Short: "the graphs as objects: deps (project DAG), export (knowledge graph), stats (shape)"},
-	{Name: "insight", Short: "VCS-history analytics: hotspots, affinity, ownership, trend, volatility"},
+	{Name: "insight", Short: "Codebase analytics: hotspots, affinity, ownership, trend, volatility, unreferenced"},
 	{Name: "watch", Short: "emit changed file paths (pipe into affected --stdin)"},
 	{Name: "status", Short: "inspect the concurrency pool of a running parent magus"},
 	{Name: "clean", Short: "remove declared Outputs (regenerable build artifacts) [--cache to also drop entries]"},
