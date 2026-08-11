@@ -219,3 +219,11 @@ const (
 // "some test references this symbol"; absence means none do (a coverage-independent
 // signal, since a symbol can be exercised transitively without a direct test reference).
 const AttrTestRefs = "test_refs"
+
+// AttrLanguage and AttrSymbolKind are the attrs a symbol (and, for language, a file) node
+// carries from its index. Named because they are read from four places across two files
+// and a mistyped literal would silently match nothing rather than fail.
+const (
+	AttrLanguage   = "language"
+	AttrSymbolKind = "symbol_kind"
+)

@@ -16,7 +16,7 @@ $__magus_scriptblock = {
                    'agent', 'hook', 'notify', 'self', 'version', 'help'
     # magus-utils:subcommands:end
     $describeNouns = 'spell', 'charm', 'target', 'project', 'workspace', 'module', 'mcp-tool'
-    $lenses        = 'hotspots', 'affinity', 'ownership', 'trend', 'report'
+    $lenses        = 'hotspots', 'affinity', 'ownership', 'trend', 'unreferenced', 'report'
     $graphSubs     = 'deps', 'export', 'stats'
     $configSubs    = 'view', 'set', 'history', 'cache', 'mcp'
     $serverSubs    = 'start', 'stop'

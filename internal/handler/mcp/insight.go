@@ -15,6 +15,7 @@ type insightAnalyzer interface {
 	Affinity(ctx context.Context, opts types.InsightOptions) (types.AffinityOutput, error)
 	Ownership(ctx context.Context, opts types.InsightOptions) (types.OwnershipOutput, error)
 	Trend(ctx context.Context, opts types.InsightOptions) (types.TrendOutput, error)
+	Unreferenced(ctx context.Context) (types.UnreferencedOutput, error)
 }
 
 type insightTool struct {
@@ -49,8 +50,11 @@ func (t *insightTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spe
 		data, err = analyzer.Ownership(ctx, opts)
 	case "trend":
 		data, err = analyzer.Trend(ctx, opts)
+	case "unreferenced":
+		// Takes no window: it reads the knowledge graph, not the commit log.
+		data, err = analyzer.Unreferenced(ctx)
 	default:
-		return spells.InvokeResponse{}, fmt.Errorf("mcp: unknown insight lens %q (use hotspots, files, affinity, ownership, or trend)", lens)
+		return spells.InvokeResponse{}, fmt.Errorf("mcp: unknown insight lens %q (use hotspots, files, affinity, ownership, trend, or unreferenced)", lens)
 	}
 	if err != nil {
 		toolLogger(ctx).WarnContext(ctx, "mcp: insight computation failed", "error", err)

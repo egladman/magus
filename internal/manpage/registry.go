@@ -246,12 +246,13 @@ history to find the commit that introduced a regression.`,
 
 var insightCommand = Command{
 	Name:        "insight",
-	Short:       "Behavioral code analysis from VCS and run-outcome history",
-	Description: "Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, plus volatility from run-outcome history.",
-	Tags:        []string{"cli", "magus insight", "analysis", "hotspots", "ownership", "coupling", "vcs", "volatility", "flaky"},
+	Short:       "Behavioral code analysis from VCS, run-outcome, and knowledge-graph sources",
+	Description: "Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, volatility from run-outcome history, and unreferenced symbols from the knowledge graph.",
+	Tags:        []string{"cli", "magus insight", "analysis", "hotspots", "ownership", "coupling", "vcs", "volatility", "flaky", "unreferenced", "symbols"},
 	Long: `Read history to show where a codebase's attention and risk concentrate.
 Four lenses read version-control history; a fifth, volatility, reads run-outcome
-history instead. The VCS lenses are contextual to the working directory by default -
+history instead; a sixth, unreferenced, reads the knowledge graph. The VCS lenses
+are contextual to the working directory by default -
 run from inside a subtree and each reflects only that subtree's history; pass
 --workspace to analyze the whole workspace (the fan-in postflight uses this). The
 active VCS adapter must report per-commit files (git can).
@@ -277,6 +278,20 @@ Run-outcome lens:
              is flagged volatile - a flakiness signal, the prime stabilization
              targets. It reads the shared runtime-history file, not git, so it takes
              no --commits/--since window and is always workspace-wide.
+
+Knowledge-graph lens:
+
+  unreferenced
+             Code symbols the workspace defines and nothing in it names: no call
+             from another symbol, and no file outside the one defining them. It
+             reads the SCIP symbol index, so it takes no --commits/--since window.
+
+             These are candidates for review, not a delete list. Reflection,
+             interface dispatch, build tags, generated call sites, and any consumer
+             outside this workspace are invisible to a static index. Read the
+             result's verdict before trusting it: "unknown" means a project's symbol
+             index was missing, so the list is what magus could see rather than what
+             exists. Build the missing index with magus graph build.
 
   report     Every lens plus graph stats as one whole-workspace Markdown document.
              With --mermaid-style=safe the Mermaid subset is restricted to what
@@ -304,6 +319,7 @@ doc coverage from the knowledge graph - is magus graph stats; the report embeds 
 		{"Bus factor and abandonment", "magus insight ownership"},
 		{"Rising vs cooling activity", "magus insight trend --since 90d"},
 		{"Flaky (volatile) targets", "magus insight volatility"},
+		{"Symbols nothing names", "magus insight unreferenced"},
 		{"Whole-workspace report (all lenses)", "magus insight report --workspace"},
 	},
 }

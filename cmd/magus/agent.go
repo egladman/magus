@@ -1476,7 +1476,7 @@ const (
 		"  DOMAIN ENTITY (projects, targets, spells, ops, docs, diagnostics):  magus query \"<terms>\"  with kind:<k> project:<p> relation:<r> filters and -negation\n" +
 		"  ONE node's edges, provenance, blast radius:  magus explain <node>\n" +
 		"  HOW two things connect:  magus path <a> <b>\n" +
-		"`magus query <symbol>` returns 0 for code symbols - that is refs's job, not query's; do not conclude the graph is empty. If refs reports no symbol index, build it once with `magus graph build` (the daemon keeps it current while `magus server start` runs).\n" +
+		"`magus query <symbol>` returns 0 for code symbols - that is refs's job, not query's. Every empty result carries a verdict saying which kind of empty it is: `absent` is a fact magus verified, `unknown` names what it could not search and how to fix it. Read the verdict rather than guessing.\n" +
 		"If you are searching for raw TEXT rather than a symbol or an entity (a string literal, a comment, a config value), grep is the right tool and magus has no replacement - carry on. Load the magus-query skill for the full grammar."
 
 	pushGuardContext = "magus workspace: `magus affected ci` is the gate before publishing - it runs the full pipeline over every project the diff reaches, including ones you never edited. Run it if you have not since your last change. If you are pushing deliberate work-in-progress, or you already ran it, push. Load the magus-run skill if not already loaded."

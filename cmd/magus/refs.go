@@ -50,17 +50,35 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	}
 	out, ok := g.Refs(pos[0])
 	if !ok {
-		// Distinguish the two failure modes: with no symbol index built at all,
-		// nothing could ever match, so point at how to build one instead of implying
-		// the symbol name is wrong.
-		if !g.HasSymbols() {
-			fmt.Fprintf(os.Stderr, "magus refs: no symbol index has been built, so there are no symbols to match %q\n", pos[0])
-			fmt.Fprintf(os.Stderr, "build one with `%s`; the daemon's auto-indexer also keeps it current while `%s` runs\n", clihint.GraphBuild, clihint.ServerStart)
-			return errSilent{exitCode: 2}
+		// Nothing matched. Whether that is a fact about the workspace or a fact about
+		// what magus could see is the whole question, so answer it rather than printing
+		// one message for both.
+		// refs ALWAYS merges the symbol shards, so "not loaded" is never its problem;
+		// what it can be missing is an index that was never built. Passing HasSymbols()
+		// here would also be wrong for a different reason: an exact symbol ID routes to a
+		// subset of shards, so it answers about the subset, not the workspace. The
+		// declared-index probe is the authority.
+		gaps, probed := symbolGapsFor(ctx, root)
+		var reason types.KnowledgeUnknownReason
+		if !probed {
+			reason = types.ReasonCoverageUnknown
 		}
+		ans := types.Answer(false, reason, gaps)
 		fmt.Fprintf(os.Stderr, "magus refs: no node matches %q\n", pos[0])
-		return errSilent{exitCode: 2}
+		printVerdict(os.Stderr, ans, "")
+		if len(ans.Gaps) > 0 {
+			fmt.Fprintf(os.Stderr, "  the daemon's auto-indexer also keeps indexes current while `%s` runs\n", clihint.ServerStart)
+		}
+		return exitForVerdict(ans.Verdict)
 	}
+	// A resolved symbol still carries the coverage verdict: an uncovered project could
+	// hold references this list does not show, whether or not it showed any.
+	gaps, probed := symbolGapsFor(ctx, root)
+	var reason types.KnowledgeUnknownReason
+	if !probed {
+		reason = types.ReasonCoverageUnknown
+	}
+	out.Answer = types.Answer(len(out.Refs) > 0, reason, gaps)
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -85,6 +103,14 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	}
 	if len(out.Refs) == 0 {
 		fmt.Println("no references found")
+		printVerdict(os.Stdout, out.Answer, "")
+		// "nothing uses this" is a NEGATIVE claim, so it follows the verdict the same way
+		// an unresolved name does: exit 1 when magus could not verify it. Absent stays 0
+		// here, unlike the unresolved branch above - the symbol resolved and its empty
+		// reference list is a real, verified answer, not a request magus could not carry out.
+		if out.Answer.Verdict == types.VerdictUnknown {
+			return errSilent{exitCode: 1}
+		}
 		return nil
 	}
 	fmt.Printf("referenced in %d file(s), %d occurrence(s):\n", out.FileCount, out.RefCount)

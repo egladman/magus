@@ -17,6 +17,15 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Breaking
 
+- **`magus\diagnoseDrift` now returns a `DriftResult` object, not `DriftVerdict`.** A
+  magusfile annotating the return type has to follow. The rename settles what the word
+  means across the codebase: a VERDICT is the scalar judgment, and the thing carrying one
+  is named for the question it answers. `DriftVerdict` was a record of drift, not a
+  judgment value, and `StagingVerdict` (internal) was four slices classifying paths.
+- **Knowledge-graph schema v8.** The shard store invalidates and rebuilds on first run.
+  The bump is the symbol-to-symbol `calls` edges: the relation and both node kinds already
+  existed, so a v7 consumer parses a v8 graph unchanged, but it would read a symbol's edge
+  set as complete when it is not, and every shard fingerprint differs.
 - **`vcs\diff` is now `vcs\changedFiles`.** It returns the file paths changed against a
   base ref, not a diff, and the name said otherwise. The confusion became concrete when
   `vcs\dirtyDiff` arrived and read like a variant of it rather than a different question.
@@ -44,6 +53,55 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   prose and generated block.
 
 ### Added
+
+- **A built symbol index no longer changes the committed graph.** A SCIP index is cache
+  state - gitignored, per-worktree, present only where the `scip` op has run - but two
+  aggregate shards folded its paths into the DEFAULT graph: `@dirs` minted a dir node per
+  symbol directory, and `@io` minted produces/consumes edges for symbol files. So
+  `MAGUS.md` and `gen/knowledge-graph.json` differed between a developer who had run
+  `magus graph build` and CI, which never does, and the drift gate fired on the difference.
+  The `@io` half was worse than nondeterministic: those edges sat in the default graph
+  while their target file nodes did not, so the committed graph carried 138 references to
+  nodes it does not contain. Both now stay in the per-project `@symbols` shards, so an edge
+  and its endpoint appear together or not at all.
+- **The knowledge graph now has a call graph.** SCIP records an enclosing range for each
+  definition, so a reference occurrence inside one was written in that definition's body
+  and the enclosing symbol is the caller. `magus explain symbol:X` gains "calls" and
+  "called by", and `magus query relation:calls` reaches them. Nothing new is parsed and no
+  indexer re-runs: the ranges were already in the indexes magus caches and were being
+  discarded.
+
+  Two restrictions keep the relation truthful rather than merely large. The callee must be
+  callable - an enclosing range spans the whole declaration, signature included, so
+  measured over this repo's own index only 26.4% of the occurrences inside one are calls
+  and the rest are struct fields, types, and packages. Callability comes from the moniker's
+  SCIP descriptor suffix rather than the optional `SymbolInformation.Kind`, so it holds for
+  any indexer: scip-typescript populates no kinds at all, and a kind-based rule would have
+  produced no calls for TypeScript at all while looking like it worked. And the callee must be defined in
+  this workspace, since a call into a dependency has no body to navigate to and its usage
+  is already on the referencing file's `references` edge. Together those took the symbol
+  shards from a projected 2.35x to a measured 1.18x.
+- **Every empty graph answer says which kind of empty it is.** `magus query`,
+  `magus explain`, and `magus refs` carry an `answer.verdict`: `absent` is a fact magus
+  verified, `unknown` names the projects it could not search and the command that fixes
+  them. Previously both printed the same thing, so a missing symbol index was
+  indistinguishable from a symbol that does not exist - and an agent recorded the blind
+  spot as a fact. `refs` and `explain` now exit 1 on `unknown` and keep 2 for `absent`;
+  `magus query` still exits 0 either way, because an empty result set is a legitimate
+  answer to a search.
+- **Symbols carry a language even when the indexer does not report one.** SCIP makes
+  `Document.Language` optional and scip-typescript sets it on nothing, so every TypeScript
+  symbol landed unlabeled and `magus query language:typescript` returned 0 while
+  `language:go` returned 22,245. magus now falls back to the language the producing spell
+  declares - the same declaration that made the project symbol-capable in the first place.
+  A document that names its own language still wins, since one index may span several.
+- **`magus insight unreferenced`**, a sixth lens: code symbols the workspace defines and
+  nothing in it names. It reads the knowledge graph rather than git, so it takes no
+  history window. The output carries the coverage verdict above, which is the point - a
+  project whose symbol index was never built contributes no symbols, so without it the
+  lens would be most reassuring exactly where it knows least. Candidates for review, never
+  a delete list: reflection, interface dispatch, build tags, and consumers outside the
+  workspace are all invisible to a static index.
 
 - **`vcs\dirtyDiff([paths])` returns the working tree's uncommitted changes as text**, on
   every backend. Drift gates previously branched on `vcs\name() == "git"` and shelled out

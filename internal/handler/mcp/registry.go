@@ -54,9 +54,9 @@ var Registry = []ToolDescriptor{
 	},
 	{
 		Name:        string(ToolInsight),
-		Description: "Behavioral code analysis from VCS history: find where a codebase's attention and risk concentrate before diving in. Lenses (the `lens` param): hotspots (per-project churn × complexity, with authors/recency/blast-radius), files (per-file churn × complexity), affinity (projects that change together, flagging hidden undeclared coupling), ownership (author concentration, bus factor, abandonment), trend (rising vs cooling activity).",
+		Description: "Behavioral code analysis: find where a codebase's attention and risk concentrate before diving in. VCS-history lenses (the `lens` param): hotspots (per-project churn × complexity, with authors/recency/blast-radius), files (per-file churn × complexity), affinity (projects that change together, flagging hidden undeclared coupling), ownership (author concentration, bus factor, abandonment), trend (rising vs cooling activity). One lens reads the knowledge graph instead of git: unreferenced (code symbols nothing in the workspace names). Read its answer.verdict before trusting an empty list - \"unknown\" means part of the workspace had no symbol index.",
 		Params: []ParamDescriptor{
-			{Name: "lens", Type: "string", Description: "One of: hotspots (default), files, affinity, ownership, trend."},
+			{Name: "lens", Type: "string", Description: "One of: hotspots (default), files, affinity, ownership, trend, unreferenced."},
 			{Name: "commits", Type: "number", Description: "Cap on how many recent commits to scan (default 500)."},
 			{Name: "since", Type: "string", Description: "Only commits within this window, e.g. \"90d\", \"12w\", \"6mo\", \"1y\"."},
 		},

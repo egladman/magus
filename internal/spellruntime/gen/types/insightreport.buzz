@@ -11,5 +11,6 @@ export object InsightReport {
     ownership: Ownership = Ownership{},
     trend: Trend = Trend{},
     volatility: Volatility = Volatility{},
+    unreferenced: Unreferenced = Unreferenced{},
     graphStats: KnowledgeStats = KnowledgeStats{},
 }

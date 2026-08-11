@@ -225,7 +225,7 @@ so it is the entry point an agent reads first. See
 ### Insight
 
 The reports magus derives over the graph and history (hotspots, affinity,
-ownership, trend). See [insight.md](guides/insight.md).
+ownership, trend, volatility, unreferenced). See [insight.md](guides/insight.md).
 
 ### Hotspot
 

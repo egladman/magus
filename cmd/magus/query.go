@@ -177,11 +177,14 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		input += " kind:" + k
 	}
 
-	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope, knowledge.SeedsSymbols(input))
+	seedsSymbols := knowledge.SeedsSymbols(input)
+	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope, seedsSymbols)
 	if err != nil {
 		return err
 	}
 	out := g.Query(input, budget)
+	reason, gaps := symbolCoverage(ctx, root, input, seedsSymbols)
+	out.Answer = types.Answer(out.MatchCount > 0, reason, gaps)
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -195,6 +198,13 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 
 	fmt.Printf("query: %s\n", out.Query)
 	fmt.Printf("matches: %d  (neighborhood budget %d)\n\n", out.MatchCount, out.Budget)
+	if out.MatchCount == 0 {
+		// query's exit status stays 0 whatever the verdict: an empty result set is a
+		// legitimate answer to a search, and every script that runs `magus query` would
+		// break if it became a failure. The verdict rides the output instead.
+		printVerdict(os.Stdout, out.Answer, clihint.Refs.With("<name>"))
+		return nil
+	}
 	shown := out.Matches
 	if len(shown) > 20 {
 		shown = shown[:20]
@@ -673,14 +683,22 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope, knowledge.SeedsSymbols(pos[0]))
+	seedsSymbols := knowledge.SeedsSymbols(pos[0])
+	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope, seedsSymbols)
 	if err != nil {
 		return err
 	}
 	out, ok := g.Explain(pos[0])
 	if !ok {
+		// A bare name does not seed symbols, so explain resolved it against a graph that
+		// provably held no code symbols. Reporting that as "no node matches" is how a
+		// real symbol comes to look nonexistent - but only when the input could have
+		// named one, so a typo'd `kind:target` still gets the absent verdict it deserves.
+		reason, gaps := symbolCoverage(ctx, root, pos[0], seedsSymbols)
+		ans := types.Answer(false, reason, gaps)
 		fmt.Fprintf(os.Stderr, "magus explain: no node matches %q\n", pos[0])
-		return errSilent{exitCode: 2}
+		printVerdict(os.Stderr, ans, clihint.Refs.With(pos[0]))
+		return exitForVerdict(ans.Verdict)
 	}
 
 	switch opts.Format {

@@ -381,7 +381,7 @@ func loadKnowledgeSymbols(ctx context.Context, in symbolIngestInputs) map[string
 			}
 			continue
 		}
-		syms, err := symbols.ParseIndex(ctx, data, decl.project)
+		syms, err := symbols.ParseIndex(ctx, data, decl.project, decl.language)
 		if err != nil {
 			// An index that exists but will not decode is a real problem (corrupt output),
 			// not a benign miss - surface it.
@@ -393,10 +393,90 @@ func loadKnowledgeSymbols(ctx context.Context, in symbolIngestInputs) map[string
 	return out
 }
 
-// resolvedSymbolIndex pairs a project with the absolute path of its SCIP index.
+// SymbolGaps reports every project that declares a SCIP index magus could not read, so a
+// lookup can say whether it searched everywhere it should have. ok is false when the probe
+// itself could not run: a nil slice would otherwise be indistinguishable from "no gaps"
+// and would turn an internal failure into a confident claim of absence, which is the one
+// outcome the verdict exists to prevent.
+//
+// It keys off the same declarations loadKnowledgeSymbols ingests, which is deliberately
+// NOT the set magus status reports: declarations include knowledge.symbols overrides, and
+// a project indexed only through one of those is invisible to the status lens.
+//
+// The probe is one Stat per declared index and nothing more. It deliberately does not
+// decode the index to check it parses: that is a full protobuf unmarshal plus symbol
+// accumulation per lookup, and a never-built index is the case that actually occurs. A
+// present-but-corrupt index therefore reads as covered here; the graph build logs it.
+//
+// Freshness is out of scope for the same reason: deciding whether an index is merely STALE
+// needs a cache handle, and the read verbs that call this inspect the workspace rather
+// than opening it (opening writes).
+func SymbolGaps(ctx context.Context, ws types.Inspector, root string, cfg config.Config, log *slog.Logger) (gaps []types.KnowledgeSymbolGap, ok bool) {
+	if log == nil {
+		log = slog.Default()
+	}
+	spells, err := ListSpells(ctx)
+	if err != nil {
+		return nil, false
+	}
+	projects, err := ws.ListProjects(ctx)
+	if err != nil {
+		return nil, false
+	}
+	return symbolGaps(ctx, symbolIngestInputs{
+		cfg: cfg, root: root, cacheDir: resolveCacheDir(root, cfg),
+		projects: projects, spells: spells, log: log,
+	}), true
+}
+
+// symbolGaps is the testable half of SymbolGaps: it takes the same resolved inputs
+// loadKnowledgeSymbols does, so the two cannot disagree about which indexes exist.
+func symbolGaps(ctx context.Context, in symbolIngestInputs) []types.KnowledgeSymbolGap {
+	dirByPath := map[string]string{}
+	for _, p := range in.projects.Projects {
+		dirByPath[p.Path] = p.Dir
+	}
+
+	var out []types.KnowledgeSymbolGap
+	for _, decl := range symbolIndexDeclarations(ctx, in) {
+		// Detail carries what Stat can actually distinguish: absent, or present but
+		// unreadable. State stays the machine-branchable field and is accurate for both,
+		// since neither yields a usable index.
+		var detail string
+		if _, err := os.Stat(decl.path); err == nil {
+			continue
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			detail = "unreadable"
+		}
+		out = append(out, types.KnowledgeSymbolGap{
+			Project: types.NewProjectRef(decl.project, dirByPath[decl.project]),
+			State:   types.SymbolIndexNotBuilt,
+			Detail:  detail,
+		})
+	}
+	return out
+}
+
+// SymbolGaps reports the projects whose declared symbol index this workspace could not
+// read, and whether the probe ran at all. Method form of the package-level SymbolGaps,
+// for callers that already hold a Magus (the MCP handlers).
+func (m *Magus) SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool) {
+	return SymbolGaps(ctx, m, m.Root(), m.cfg, slog.Default())
+}
+
+// resolvedSymbolIndex pairs a project with the absolute path of its SCIP index and the
+// language the spell that produced it adapts.
+//
+// language is carried because an indexer may not report one. SCIP makes Document.Language
+// optional and scip-typescript sets it on nothing, so trusting the index alone leaves
+// every TypeScript symbol unlabeled and `magus query language:typescript` empty. It comes
+// from the project's spells, which is authoritative and free - and it is resolved for a
+// knowledge.symbols override too, since such a project is still bound to spells even
+// though the override names a path rather than one.
 type resolvedSymbolIndex struct {
-	project string
-	path    string
+	project  string
+	path     string
+	language string
 }
 
 // symbolIngestInputs is the shared context for resolving and reading symbol indexes,
@@ -421,10 +501,38 @@ type symbolIngestInputs struct {
 // non-standard. The result is sorted by project for deterministic ingestion.
 func symbolIndexDeclarations(ctx context.Context, in symbolIngestInputs) []resolvedSymbolIndex {
 	capable := map[string]bool{}
+	langBySpell := map[string]string{}
 	for _, sp := range in.spells {
+		langBySpell[sp.Name] = sp.Language
 		if slices.Contains(sp.Targets, symbols.IndexOp) {
 			capable[sp.Name] = true
 		}
+	}
+	// The language a project's symbols are written in, resolved from its spells rather
+	// than from the index: SCIP makes Document.Language optional and scip-typescript sets
+	// it on nothing. Prefer the symbol-capable spell, but fall back to any bound spell so
+	// a knowledge.symbols OVERRIDE - which names a path, not a spell, and so never reaches
+	// the capable branch below - still labels its symbols.
+	languageOf := func(p types.ProjectEntry) string {
+		bound := p.Spells
+		if len(bound) == 0 && p.Spell != "" {
+			bound = []string{p.Spell}
+		}
+		for _, name := range bound {
+			if capable[name] {
+				return langBySpell[name]
+			}
+		}
+		for _, name := range bound {
+			if lang := langBySpell[name]; lang != "" {
+				return lang
+			}
+		}
+		return ""
+	}
+	languageByProject := map[string]string{}
+	for _, p := range in.projects.Projects {
+		languageByProject[p.Path] = languageOf(p)
 	}
 
 	byProject := map[string]resolvedSymbolIndex{}
@@ -440,7 +548,7 @@ func symbolIndexDeclarations(ctx context.Context, in symbolIngestInputs) []resol
 			// One index per project: the cache location is keyed by the project dir, so
 			// the first symbol-capable spell wins and the rest would name the same file.
 			absDir := filepath.Join(in.root, filepath.FromSlash(p.Path))
-			byProject[p.Path] = resolvedSymbolIndex{project: p.Path, path: symbols.IndexPath(in.cacheDir, absDir)}
+			byProject[p.Path] = resolvedSymbolIndex{project: p.Path, path: symbols.IndexPath(in.cacheDir, absDir), language: languageByProject[p.Path]}
 			break
 		}
 	}
@@ -454,7 +562,7 @@ func symbolIndexDeclarations(ctx context.Context, in symbolIngestInputs) []resol
 			in.log.WarnContext(ctx, "knowledge: symbol index path escapes the workspace, skipping", slog.String("project", decl.Project), slog.String("index", decl.Index))
 			continue
 		}
-		byProject[decl.Project] = resolvedSymbolIndex{project: decl.Project, path: filepath.Join(in.root, decl.Index)}
+		byProject[decl.Project] = resolvedSymbolIndex{project: decl.Project, path: filepath.Join(in.root, decl.Index), language: languageByProject[decl.Project]}
 	}
 
 	out := make([]resolvedSymbolIndex, 0, len(byProject))

@@ -81,7 +81,7 @@ export object Path {
     isDir: bool = false,
 }
 
-export object DriftVerdict {
+export object DriftResult {
     drifted: bool = false,
     code: str = "",
     message: str = "",
@@ -213,6 +213,38 @@ export object Volatility {
     targets: [VolatilityTarget] = [],
 }
 
+export object UnreferencedEntry {
+    id: str = "",
+    label: str = "",
+    source: str = "",
+    kind: str = "",
+    language: str = "",
+}
+
+export object ProjectRef {
+    path: str = "",
+    name: str = "",
+    dir: str = "",
+}
+
+export object KnowledgeSymbolGap {
+    project: ProjectRef = ProjectRef{},
+    state: SymbolIndexFreshness = SymbolIndexFreshness.none,
+    detail: str = "",
+}
+
+export object KnowledgeAnswer {
+    verdict: str = "",
+    reason: str = "",
+    gaps: [KnowledgeSymbolGap] = [],
+}
+
+export object Unreferenced {
+    definition: str = "",
+    symbols: [UnreferencedEntry] = [],
+    answer: KnowledgeAnswer = KnowledgeAnswer{},
+}
+
 export object KnowledgeGodNode {
     id: str = "",
     kind: str = "",
@@ -255,6 +287,7 @@ export object InsightReport {
     ownership: Ownership = Ownership{},
     trend: Trend = Trend{},
     volatility: Volatility = Volatility{},
+    unreferenced: Unreferenced = Unreferenced{},
     graphStats: KnowledgeStats = KnowledgeStats{},
 }
 
@@ -338,7 +371,7 @@ export extern fun bustCache(project_path: str = "") > void;
 export extern fun cmd(sub: str, args: [str], opts: {str: any} = {<str: any>}) > ExecResult;
 export extern fun describe(args: [str], opts: {str: any} = {<str: any>}) > ExecResult;
 export extern fun describeFile(paths: [str], opts: {str: any} = {<str: any>}) > FileReport;
-export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftVerdict;
+export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftResult;
 export extern fun doctor(args: [str], opts: {str: any} = {<str: any>}) > DoctorReport;
 export extern fun graph() > Graph;
 export extern fun has_charm(name: str) > bool;

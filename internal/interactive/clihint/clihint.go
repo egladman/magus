@@ -77,6 +77,7 @@ var (
 	Ls               = cmd("ls")
 	LsTargets        = cmd("ls", "targets")
 	Where            = cmd("where")
+	Refs             = cmd("refs")
 	MCPTokenGenerate = cmd("config", "mcp", "token", "generate")
 	SelfUpdate       = cmd("self", "update")
 	SelfRefresh      = cmd("self", "refresh")
@@ -88,6 +89,6 @@ var (
 var All = []Command{
 	Run, QueryOutput, QueryInvocation, GraphOpen, GraphExport, GraphStats, GraphBuild,
 	ServerStart, ServerStop, ServerJob, Status, Watch, Affected,
-	DescribeTargets, DescribeProject, Ls, LsTargets, Where, MCPTokenGenerate,
+	DescribeTargets, DescribeProject, Ls, LsTargets, Where, Refs, MCPTokenGenerate,
 	SelfUpdate, SelfRefresh, SelfRegistry,
 }

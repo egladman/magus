@@ -1,33 +1,44 @@
 # `magus refs <symbol>` lists where an ingested code symbol is defined and
-# referenced, drawn from a SCIP index (see knowledge.symbols in config). This
-# fixture never declares one, so every case here exercises the "no index"
-# path - which is the interesting contract: refs distinguishes "nothing
-# could ever match, go build the index" from "the index exists but this
-# name isn't in it", and only the first case is reachable without a real
-# SCIP toolchain (scip-go et al) wired into the workspace. That second
-# message ("magus refs: no node matches %q") lives in cmd/magus/refs.go but
-# is not covered here for that reason.
+# referenced, drawn from a SCIP index (see knowledge.symbols in config).
+#
+# This fixture's only spell (acme) exposes no `scip` op, so the workspace
+# declares NO symbol index. That is the case this file pins, and the reason it
+# is interesting: an unmatched name here is a VERIFIED absence. There is no
+# code-symbol layer to have missed, so magus asserts that positively rather
+# than leaving the reader to wonder whether it simply could not look.
+#
+# The other verdict - "unknown", where a project declares an index that was
+# never built - needs a real SCIP toolchain (scip-go et al) wired into the
+# workspace, so it is covered by the unit tests in cmd/magus and
+# internal/handler/mcp instead.
 
-# No index at all: the message diagnoses the cause (no index was ever
-# built) rather than reporting a bare "not found", and names the remedy
-# command on its own line rather than folding it into one sentence.
+# The verdict is stated, not implied by an empty result. Exit 2, because the
+# request cannot be carried out as stated: the name names nothing, and magus
+# verified that rather than guessing it.
 ! exec magus refs Foo
-stderr 'magus refs: no symbol index has been built, so there are no symbols to match "Foo"'
-stderr 'build one with `magus graph build`'
-stderr 'auto-indexer also keeps it current while `magus server start` runs'
+stderr 'magus refs: no node matches "Foo"'
+stderr 'verdict: absent \(magus searched everything it could reach, so this is not there\)'
+
+# Exit 2, not 1: the name named nothing and magus verified that, so the request cannot be
+# carried out as stated. An unknown verdict would be exit 1 instead.
+
+# An absent verdict must NOT suggest building an index. Nothing is missing, so
+# the remedy would send the reader somewhere with nothing to fix.
+! stderr 'graph build'
+! stderr 'outside coverage'
 
 # Missing the symbol argument entirely is a distinct, earlier error.
 ! exec magus refs
 stderr 'magus refs: requires a symbol ID or name'
 
-# The no-index check runs before format dispatch, so every -o value hits the
+# The verdict is decided before format dispatch, so every -o value hits the
 # same plain-text stderr message rather than a JSON/YAML-shaped error.
 ! exec magus refs Foo -o json
-stderr 'magus refs: no symbol index has been built'
+stderr 'verdict: absent'
 ! exec magus refs Foo -o yaml
-stderr 'magus refs: no symbol index has been built'
+stderr 'verdict: absent'
 ! exec magus refs Foo -o name
-stderr 'magus refs: no symbol index has been built'
+stderr 'verdict: absent'
 
 # Nothing is printed to stdout on this path - the whole finding is on stderr.
 ! exec magus refs Foo

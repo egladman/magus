@@ -122,6 +122,80 @@ func TestLoadKnowledgeSymbolsSkipsUnbuilt(t *testing.T) {
 	assert.Empty(t, got, "a derived index whose scip target has not run is skipped")
 }
 
+// A project that declares an index which was never built is the gap that makes an empty
+// lookup unknown rather than absent. loadKnowledgeSymbols skips it silently by design;
+// this is what recovers the fact so a reader is told.
+func TestSymbolGapsReportsUnbuiltIndex(t *testing.T) {
+	root := t.TempDir()
+	projects, spells := goWorkspace("pkg/a") // no index written
+	got := symbolGaps(t.Context(), ingest(config.Config{}, root, filepath.Join(root, ".magus"), projects, spells))
+
+	require.Len(t, got, 1)
+	assert.Equal(t, "pkg/a", got[0].Project.Path)
+	assert.Equal(t, types.SymbolIndexNotBuilt, got[0].State)
+	assert.Empty(t, got[0].Detail, "never built needs no qualifier")
+}
+
+// A readable index is no gap, which is what lets an empty result be reported as a
+// verified absence.
+func TestSymbolGapsEmptyWhenBuilt(t *testing.T) {
+	root := t.TempDir()
+	cacheDir := filepath.Join(root, ".magus")
+	writeSCIP(t, symbols.IndexPath(cacheDir, filepath.Join(root, "pkg/a")))
+
+	projects, spells := goWorkspace("pkg/a")
+	assert.Empty(t, symbolGaps(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells)))
+}
+
+// A present-but-corrupt index reads as COVERED, and that is a deliberate trade rather
+// than an oversight. Detecting it means a full protobuf unmarshal plus symbol
+// accumulation per lookup, on a path taken every time a query comes back empty, to catch
+// a case that barely occurs - while a never-built index, the case that occurs constantly,
+// costs one Stat. The graph build logs the corrupt one when it tries to ingest it.
+//
+// This test exists so the trade is a decision on the record: if the probe ever grows a
+// decode check, it should be because the cost changed, not because nobody noticed.
+func TestSymbolGapsTreatsCorruptIndexAsPresent(t *testing.T) {
+	root := t.TempDir()
+	cacheDir := filepath.Join(root, ".magus")
+	path := symbols.IndexPath(cacheDir, filepath.Join(root, "pkg/a"))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte("not a protobuf"), 0o644))
+
+	projects, spells := goWorkspace("pkg/a")
+	assert.Empty(t, symbolGaps(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells)))
+}
+
+// A workspace with no symbol-capable project has no code-symbol layer to miss, so there
+// is nothing outside coverage and an unmatched name is a verified absence.
+func TestSymbolGapsNoneCapable(t *testing.T) {
+	root := t.TempDir()
+	projects := types.ProjectsOutput{Projects: []types.ProjectEntry{{Path: "web", Spell: "ts", Spells: []string{"ts"}}}}
+	spells := []types.Spell{{Name: "ts", Targets: []string{"tsc"}}} // no scip op
+	assert.Empty(t, symbolGaps(t.Context(), ingest(config.Config{}, root, filepath.Join(root, ".magus"), projects, spells)))
+}
+
+// The declared language reaches ingestion, so an indexer that reports none still yields
+// labelled symbols. Without it `magus query language:typescript` is empty while
+// `language:go` works, and the graph looks like it has no TypeScript at all.
+func TestLoadKnowledgeSymbolsCarriesDeclaredLanguage(t *testing.T) {
+	root := t.TempDir()
+	cacheDir := filepath.Join(root, ".magus")
+	writeSCIP(t, symbols.IndexPath(cacheDir, filepath.Join(root, "web")))
+
+	projects := types.ProjectsOutput{Projects: []types.ProjectEntry{
+		{Path: "web", Spell: "typescript", Spells: []string{"typescript"}},
+	}}
+	spells := []types.Spell{
+		{Name: "typescript", Language: "typescript", Targets: []string{symbols.IndexOp}},
+	}
+	got := loadKnowledgeSymbols(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells))
+
+	require.Len(t, got["web"], 1)
+	assert.Equal(t, "typescript", got["web"][0].Language,
+		"writeSCIP's fixture sets no Document.Language, exactly like scip-typescript")
+}
+
 func TestLoadKnowledgeSymbolsNoneCapable(t *testing.T) {
 	root := t.TempDir()
 	projects := types.ProjectsOutput{Projects: []types.ProjectEntry{{Path: "web", Spell: "ts", Spells: []string{"ts"}}}}

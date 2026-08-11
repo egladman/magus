@@ -158,7 +158,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueMagusDriftVerdict(ret0), nil
+		return buzzValueMagusDriftResult(ret0), nil
 	}))
 	m.MapSet("bustCache", vm.DirectValue("magus.bustCache", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		project_path := Str(bzArgs, 0)
@@ -582,6 +582,56 @@ func buzzValueMagusVolatilityReport(v types.VolatilityReport) vm.Value {
 	return out
 }
 
+func buzzValueMagusUnreferencedEntry(v types.UnreferencedEntry) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("label", vm.StrValue(v.Label))
+	out.MapSet("source", vm.StrValue(v.Source))
+	out.MapSet("kind", vm.StrValue(v.Kind))
+	out.MapSet("language", vm.StrValue(v.Language))
+	return out
+}
+
+func buzzValueMagusProjectRef(v types.ProjectRef) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("dir", vm.StrValue(v.Dir))
+	return out
+}
+
+func buzzValueMagusKnowledgeSymbolGap(v types.KnowledgeSymbolGap) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("project", buzzValueMagusProjectRef(v.Project))
+	out.MapSet("state", vm.StrValue(string(v.State)))
+	out.MapSet("detail", vm.StrValue(v.Detail))
+	return out
+}
+
+func buzzValueMagusKnowledgeAnswer(v types.KnowledgeAnswer) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("verdict", vm.StrValue(string(v.Verdict)))
+	out.MapSet("reason", vm.StrValue(string(v.Reason)))
+	itemsGaps := make([]vm.Value, len(v.Gaps))
+	for indexGaps := range v.Gaps {
+		itemsGaps[indexGaps] = buzzValueMagusKnowledgeSymbolGap(v.Gaps[indexGaps])
+	}
+	out.MapSet("gaps", vm.ListValue(itemsGaps))
+	return out
+}
+
+func buzzValueMagusUnreferencedOutput(v types.UnreferencedOutput) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("definition", vm.StrValue(v.Definition))
+	itemsSymbols := make([]vm.Value, len(v.Symbols))
+	for indexSymbols := range v.Symbols {
+		itemsSymbols[indexSymbols] = buzzValueMagusUnreferencedEntry(v.Symbols[indexSymbols])
+	}
+	out.MapSet("symbols", vm.ListValue(itemsSymbols))
+	out.MapSet("answer", buzzValueMagusKnowledgeAnswer(v.Answer))
+	return out
+}
+
 func buzzValueMagusKnowledgeGodNode(v types.KnowledgeGodNode) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StrValue(v.ID))
@@ -649,6 +699,7 @@ func buzzValueMagusInsightReport(v types.InsightReport) vm.Value {
 	out.MapSet("ownership", buzzValueMagusOwnershipOutput(v.Ownership))
 	out.MapSet("trend", buzzValueMagusTrendOutput(v.Trend))
 	out.MapSet("volatility", buzzValueMagusVolatilityReport(v.Volatility))
+	out.MapSet("unreferenced", buzzValueMagusUnreferencedOutput(v.Unreferenced))
 	out.MapSet("graphStats", buzzValueMagusKnowledgeStats(v.GraphStats))
 	return out
 }
@@ -815,7 +866,7 @@ func buzzValueMagusPath(v types.Path) vm.Value {
 	return out
 }
 
-func buzzValueMagusDriftVerdict(v types.DriftVerdict) vm.Value {
+func buzzValueMagusDriftResult(v types.DriftResult) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("drifted", vm.BoolValue(v.Drifted))
 	out.MapSet("code", vm.StrValue(v.Code))

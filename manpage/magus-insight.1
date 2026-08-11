@@ -1,13 +1,14 @@
 .TH MAGUS-INSIGHT 1 "" "magus" "magus Manual"
 .SH NAME
-magus\-insight \- Behavioral code analysis from VCS and run\-outcome history
+magus\-insight \- Behavioral code analysis from VCS, run\-outcome, and knowledge\-graph sources
 .SH SYNOPSIS
 .B magus
 .RI "insight <lens> [flags]"
 .SH DESCRIPTION
 Read history to show where a codebase's attention and risk concentrate.
 Four lenses read version\-control history; a fifth, volatility, reads run\-outcome
-history instead. The VCS lenses are contextual to the working directory by default \-
+history instead; a sixth, unreferenced, reads the knowledge graph. The VCS lenses
+are contextual to the working directory by default \-
 run from inside a subtree and each reflects only that subtree's history; pass
 \-\-workspace to analyze the whole workspace (the fan\-in postflight uses this). The
 active VCS adapter must report per\-commit files (git can).
@@ -33,6 +34,20 @@ volatility Each (project, target) pair's recent pass/fail/volatile record scored
              is flagged volatile \- a flakiness signal, the prime stabilization
              targets. It reads the shared runtime\-history file, not git, so it takes
              no \-\-commits/\-\-since window and is always workspace\-wide.
+.PP
+Knowledge\-graph lens:
+.PP
+unreferenced
+             Code symbols the workspace defines and nothing in it names: no call
+             from another symbol, and no file outside the one defining them. It
+             reads the SCIP symbol index, so it takes no \-\-commits/\-\-since window.
+.PP
+These are candidates for review, not a delete list. Reflection,
+             interface dispatch, build tags, generated call sites, and any consumer
+             outside this workspace are invisible to a static index. Read the
+             result's verdict before trusting it: "unknown" means a project's symbol
+             index was missing, so the list is what magus could see rather than what
+             exists. Build the missing index with magus graph build.
 .PP
 report     Every lens plus graph stats as one whole\-workspace Markdown document.
              With \-\-mermaid\-style=safe the Mermaid subset is restricted to what
@@ -96,6 +111,12 @@ magus insight trend --since 90d
 .PP
 .EX
 magus insight volatility
+.EE
+.PP
+\fISymbols nothing names\fR
+.PP
+.EX
+magus insight unreferenced
 .EE
 .PP
 \fIWhole\-workspace report (all lenses)\fR

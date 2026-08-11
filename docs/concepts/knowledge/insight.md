@@ -40,6 +40,17 @@ The first argument selects a lens:
   distinct author count (the bus factor), and abandonment (projects gone quiet).
 - **trend** - the recent half of the window against the earlier half. A positive
   delta is a rising hotspot; a negative one is cooling.
+- **unreferenced** - code symbols the workspace defines and nothing in it names:
+  no call from another symbol, and no file outside the one defining them. It reads
+  the [knowledge graph](../knowledge.md), not git, so it takes no window and is always
+  workspace-wide.
+
+  These are candidates for review, not a delete list. Reflection, interface dispatch,
+  build tags, generated call sites, and any consumer outside this workspace are all
+  invisible to a static index. The result carries a
+  [verdict](../knowledge.md#the-third-verdict-when-an-empty-answer-is-not-a-fact) for
+  the same reason: a project whose symbol index was never built contributes no symbols,
+  so without it the lens would be most reassuring exactly where it knows least.
 - **report** - every lens, plus the knowledge graph's shape from
   [`magus graph stats`](../../reference/manpage/magus-graph.md), as one whole-workspace
   Markdown document. With `--mermaid-style=safe` the Mermaid subset is

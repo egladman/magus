@@ -32,7 +32,7 @@ func TestAllRegistered(t *testing.T) {
 	declared := []Command{
 		Run, QueryOutput, QueryInvocation, GraphOpen, GraphExport, GraphStats, GraphBuild,
 		ServerStart, ServerStop, ServerJob, Status, Watch, Affected,
-		DescribeTargets, DescribeProject, Ls, LsTargets, Where, MCPTokenGenerate,
+		DescribeTargets, DescribeProject, Ls, LsTargets, Where, Refs, MCPTokenGenerate,
 		SelfUpdate, SelfRefresh, SelfRegistry,
 	}
 	if len(All) != len(declared) {

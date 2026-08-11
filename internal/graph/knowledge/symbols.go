@@ -26,9 +26,13 @@ func SymbolsShardName(project string) string { return project + symbolsShardSuff
 func IsSymbolsShard(name string) bool { return strings.HasSuffix(name, symbolsShardSuffix) }
 
 // assembleSymbols builds one project's symbol shard from the ingested records: a
-// symbol node per record, a `defines` edge from each defining file, and a
+// symbol node per record, a `defines` edge from each defining file, a
 // `references` edge from each using file (one per file, carrying the occurrence
-// count and capped lines in its provenance). It also materializes a `file` node for
+// count and capped lines in its provenance), and a `calls` edge to each callee the
+// record's body invokes. A callee always has a node in THIS shard - the call was found
+// through a reference occurrence in this project's index, so the parse minted a record
+// for it and the node loop above emitted it - which is what lets the derived xref route
+// call queries with no changes of its own. It also materializes a `file` node for
 // every path the index touched - so a SCIP-indexed source file is a browsable node
 // the def/ref edges land on, not a dangling ID - and links each to the project that
 // owns it (longest-prefix over the full project list, so a cross-project reference
@@ -47,7 +51,7 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		seenFiles[path] = true
 		var attrs map[string]string
 		if language != "" {
-			attrs = map[string]string{"language": language}
+			attrs = map[string]string{AttrLanguage: language}
 		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{ID: fileID(path), Kind: types.KindFile, Label: path, Source: path, Attrs: attrs})
 		if owner, ok := owningProjectPath(path, projects); ok {
@@ -60,10 +64,10 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		sID := symbolID(sym.Key)
 		attrs := map[string]string{}
 		if sym.Language != "" {
-			attrs["language"] = sym.Language
+			attrs[AttrLanguage] = sym.Language
 		}
 		if sym.SymbolKind != "" {
-			attrs["symbol_kind"] = sym.SymbolKind
+			attrs[AttrSymbolKind] = sym.SymbolKind
 		}
 		if sym.Moniker != "" {
 			attrs["moniker"] = sym.Moniker
@@ -89,6 +93,9 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		for _, ref := range sym.Refs {
 			noteFile(ref.Path, sym.Language)
 			s.Edges = append(s.Edges, extractedEdge(fileID(ref.Path), sID, types.RelationReferences, refProvenance(ref)))
+		}
+		for _, c := range sym.Calls {
+			s.Edges = append(s.Edges, extractedEdge(sID, symbolID(c.Key), types.RelationCalls, callProvenance(c)))
 		}
 	}
 	return s
@@ -129,6 +136,16 @@ func refProvenance(ref types.KnowledgeSymbolRef) string {
 		}
 	}
 	return b.String()
+}
+
+// callProvenance encodes a call edge's attributed occurrence count in the same
+// "scip count=N" shape refProvenance uses, so parseRefProvenance decodes both and there
+// is one SCIP provenance format rather than two near-identical ones. It carries no lines:
+// the call sites are already on the caller file's `references` edge, and repeating them
+// per (caller, callee) pair would be pure shard weight. What distinguishes a call from a
+// reference is the RELATION and the endpoint kinds, never the provenance.
+func callProvenance(c types.KnowledgeSymbolCall) string {
+	return refProvenancePrefix + "count=" + strconv.Itoa(c.Count)
 }
 
 // parseRefProvenance decodes a refProvenance string back into its count and lines.

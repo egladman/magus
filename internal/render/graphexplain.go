@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/types"
 )
 
@@ -57,6 +58,34 @@ func phraseFor(relation string, active bool) string {
 
 // wrapCol is the target line width for wrapped ID lists.
 const wrapCol = 80
+
+// MissText renders explain's miss for an unknown verdict: what magus could not see, and
+// the command that would let it. It exists so an agent reading a text-channel tool gets
+// the same coverage statement a JSON consumer gets from the answer field, rather than an
+// error string it would have to pattern-match.
+//
+// Unknown only. An absent verdict is a fact explain reports as an error, so rendering one
+// here would print "verdict: absent, not absent".
+func MissText(query string, ans types.KnowledgeAnswer) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "no node matches %s\n", query)
+	if ans.Verdict != types.VerdictUnknown {
+		return b.String()
+	}
+	b.WriteString("verdict: unknown, not absent\n")
+	if ans.Reason == types.ReasonSymbolsNotLoaded {
+		b.WriteString("this lookup searched domain entities only, not code symbols; a code symbol by that name may exist.\n")
+		b.WriteString("search code symbols with the magus_refs tool.\n")
+	}
+	if ans.Reason == types.ReasonCoverageUnknown {
+		b.WriteString("magus could not determine which projects it searched, so this is not a verified absence.\n")
+	}
+	if len(ans.Gaps) > 0 {
+		fmt.Fprintf(&b, "outside coverage: %s\n", types.DescribeGaps(ans.Gaps))
+		fmt.Fprintf(&b, "build the missing index from a shell with `%s`.\n", clihint.GraphBuild)
+	}
+	return b.String()
+}
 
 // ExplainText renders one node's context card: its identity and attrs, then its
 // relationships grouped by natural-language verb, each group listing the full IDs.
