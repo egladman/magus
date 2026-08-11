@@ -1383,6 +1383,13 @@ func (s *Session) bindNamespacePath(segments []string, exports []string, importP
 	if prev, dup := s.declaredNamespaces[full]; dup {
 		return fmt.Errorf("buzz: import %q: the namespace %q already exists (also declared by import %q)", importPath, full, prev)
 	}
+	// The ENTRY program's own namespace counts as taken too. Only imports were
+	// compared against each other, so a module declaring the same namespace as the
+	// file importing it bound straight over it - the importer's own exports became
+	// unreachable under their own name.
+	if strings.Join(s.ownNamespace, `\`) == full {
+		return fmt.Errorf("buzz: import %q: the namespace %q already exists (it is this program's own namespace)", importPath, full)
+	}
 
 	leaf := vmpackage.NewMap()
 	for _, n := range exports {

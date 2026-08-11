@@ -20,6 +20,7 @@ deep-yield-missing-intermediate.buzz
 deep-yield-wrong-intermediate-type.buzz
 deep-yield.buzz
 duplicated-namespace.buzz
+duplicated-own-namespace.buzz
 early-return.buzz
 early-throw.buzz
 empty-import.buzz
