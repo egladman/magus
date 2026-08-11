@@ -564,6 +564,30 @@
             {
               "project": ".",
               "glob": "libs/testsprawl/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "_typos.toml"
+            },
+            {
+              "project": ".",
+              "glob": "README.md"
+            },
+            {
+              "project": ".",
+              "glob": "CHANGELOG.md"
+            },
+            {
+              "project": ".",
+              "glob": "CONTRIBUTING.md"
+            },
+            {
+              "project": ".",
+              "glob": "AGENTS.md"
+            },
+            {
+              "project": ".",
+              "glob": "TODO.md"
             }
           ],
           "reads_secrets": false

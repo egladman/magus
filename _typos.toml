@@ -53,3 +53,23 @@ extend-exclude = [
 # extend-words / extend-identifiers are deliberately empty - add an entry only
 # when `typos` false-flags a real word (e.g. a deliberate abbreviation), never
 # for domain jargon that isn't in typos' typo->fix map to begin with.
+
+# Code is not prose. typos has no include-only filter - it walks the tree and scopes by
+# CONFIG, not argv (a glob passed as an argument is reported as a missing path) - so the
+# only way to point it at prose is to say which types are not it. 507 hits sat behind
+# that, nearly all British spellings in code comments, which is a separate decision from
+# gating prose and one nobody has made. Turning a type back on is how that decision gets
+# made, deliberately, rather than by which project happens to invoke the op.
+#
+# ts covers .tsx and .cts/.mts; js covers .jsx/.mjs/.cjs; c covers headers. See
+# `typos --type-list`.
+[type.go]
+check-file = false
+[type.ts]
+check-file = false
+[type.js]
+check-file = false
+[type.c]
+check-file = false
+[type.sh]
+check-file = false

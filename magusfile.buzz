@@ -1716,10 +1716,17 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     os\exec("./custom-gcl", ["run"]);
     go["go-vet"](ctx);
     markdown.markdownlint(ctx);
-    // NOT markdown.typos here, deliberately. The op walks the whole project directory,
-    // and this project is the Go tree - 487 of its hits are code comments using British
-    // spellings, which is a separate decision from gating prose. The docs project runs
-    // it (see docs/magusfile.buzz lint), because that is where the prose actually is.
+    // The repo-root prose, named rather than walked. NOT markdown.typos: that op takes no
+    // paths and walks the project directory, and THIS project's directory is the whole
+    // workspace - so it would grade console's CSS and every other project's markdown as
+    // part of the Go tree's lint. _typos.toml already narrows typos to prose by turning
+    // the code types off; naming the files is the other half, and it is what this gate was
+    // missing when `unlabelled` reached main through CHANGELOG.md. It surfaced one shard
+    // over, in the docs project, because docs/changelog.md is a GENERATED MIRROR of the
+    // root file - so the error pointed at generated output while the fix belonged here.
+    final prose = ["README.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md", "TODO.md"];
+    ctx.readsFiles("_typos.toml", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md", "TODO.md");
+    os\exec("typos", ["--format", "brief"] + prose);
     bash["shellcheck"](ctx);
 }
 // Regenerates, then formats Go, tidies `go.mod`, and formats Markdown. dprint rather than

@@ -202,7 +202,7 @@ a per-op span, is a pure Go change at
       grab-bag of this repo's CI conventions. Prefer a second, clearly
       magus-repo-internal composite action for repo-specific reuse.
 
-- [ ] **Rename "surface".** The term is not discernable to anyone who has not
+- [ ] **Rename "surface".** The term is not discernible to anyone who has not
       read the source. It appears in CLI output and in the embedded agent
       skills, both of which ship inside the binary, so renaming after a tag is
       user-visible churn. Pick the replacement against the naming rules already
