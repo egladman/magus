@@ -680,7 +680,7 @@ func TestDispatchOpInjectsDeclaredSecrets(t *testing.T) {
 		}},
 	}
 
-	_, err := dispatchOp(ctx, ops, nil, spells.InvokeRequest{Target: "publish", Dir: dir})
+	_, err := dispatchOp(ctx, ops, nil, nil, spells.InvokeRequest{Target: "publish", Dir: dir})
 	require.NoError(t, err)
 
 	got, err := os.ReadFile(filepath.Join(dir, "out.txt"))
@@ -698,7 +698,7 @@ func TestDispatchOpSecretsRequireAResolver(t *testing.T) {
 			Secrets: map[string]string{"NPM_TOKEN": "NPM_TOKEN"},
 		}},
 	}
-	_, err := dispatchOp(context.Background(), ops, nil, spells.InvokeRequest{Target: "publish", Dir: t.TempDir()})
+	_, err := dispatchOp(context.Background(), ops, nil, nil, spells.InvokeRequest{Target: "publish", Dir: t.TempDir()})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `"publish"`)
 	assert.Contains(t, err.Error(), "no secret resolver is on this run")
@@ -717,7 +717,7 @@ func TestDispatchOpSecretsPropagateResolverError(t *testing.T) {
 			Secrets: map[string]string{"TOKEN": "NOT_SET_ANYWHERE"},
 		}},
 	}
-	_, err := dispatchOp(ctx, ops, nil, spells.InvokeRequest{Target: "publish", Dir: t.TempDir()})
+	_, err := dispatchOp(ctx, ops, nil, nil, spells.InvokeRequest{Target: "publish", Dir: t.TempDir()})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `"publish"`)
 	assert.Contains(t, err.Error(), `"TOKEN"`)

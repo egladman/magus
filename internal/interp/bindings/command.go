@@ -7,10 +7,12 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/service"
@@ -28,14 +30,22 @@ import (
 // is reachable through the spell rather than proc.exec. env overlays the subprocess
 // environment (KEY=value; later entries win per Go's exec duplicate-key rule). hasArgs
 // distinguishes "no args key" (fall back to project.ExtraArgs) from an explicit empty
-// list; consulted only on the Buzz path.
+// list; consulted only on the Buzz path. ignoreDirs are the issuing spell's own
+// mgs_listIgnoreDirs, threaded through so a Command.Sources expansion (see
+// runSourcedCommand) inherits them instead of the op re-declaring them. refs
+// adds op-specific runner-computed values (e.g. a per-run cache destination) to
+// what a $NAME token in Bin/Args may resolve to, alongside run.SelfVars - see
+// resolveRunnerRefs. It is deliberately separate from env: env can carry a
+// resolved Secret, and a Secret must never be reachable through Args.
 type commandOpts struct {
-	op      string // the op name, for error attribution; "" only on paths with no name to give
-	cwd     string
-	args    []string
-	env     map[string]string
-	stdin   string
-	hasArgs bool
+	op         string // the op name, for error attribution; "" only on paths with no name to give
+	cwd        string
+	args       []string
+	env        map[string]string
+	stdin      string
+	hasArgs    bool
+	ignoreDirs []string
+	refs       map[string]string
 }
 
 // runCommand runs tgt.Bin as a subprocess with the base argv as reshaped by the
@@ -70,6 +80,17 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 	// resolveCharmArgs also serves and which surfaces conflicts in its own output).
 	warnCharmConflicts(ctx, tgt.Args, tgt.Charms)
 	args = append(args, opts.args...)
+	// A static op is resolved to {bin, args} ONCE, with no Target (see recordOp in
+	// internal/spellruntime/resolve.go), so it cannot compute a value only the
+	// runner knows (its own binary path, a per-run cache destination) - which is
+	// why a spell used to shell out to `sh -c` just to let the shell expand a
+	// variable magus itself set ($MAGUS et al). Resolving a bare $NAME token here,
+	// against exactly what the runner controls for this invocation, replaces that
+	// shell with no shell at all.
+	bin, args, err := resolveRunnerRefs(opts.op, tgt.Bin, args, runnerRefs(ctx, opts))
+	if err != nil {
+		return run.ExecResult{}, err
+	}
 	// Secrets resolve HERE, in the one function every command spawn funnels through,
 	// so `magus run publish` (dispatchOp) and a magusfile body's `npm.publish(ctx)`
 	// (runBuzzCommand) inject the same env. Resolving in dispatchOp alone made the
@@ -88,7 +109,7 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 	// through and foregrounds, blocking as intended (Ctrl-C stops it).
 	if tgt.IsService() && tgt.Service != nil {
 		svc := spells.Service{
-			Command:   spells.Command{Bin: tgt.Bin, Args: args},
+			Command:   spells.Command{Bin: bin, Args: args},
 			Readiness: tgt.Service.Readiness,
 			Stop:      tgt.Service.Stop,
 			Idle:      tgt.Service.Idle,
@@ -125,7 +146,12 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 		stdout, stderr := run.OutputWriters(ctx)
 		ctx = run.WithOutputWriters(ctx, io.MultiWriter(outTail, stdout), io.MultiWriter(errTail, stderr))
 	}
-	res, err := execCommand(ctx, dir, tgt.Bin, args, opts.env, opts.stdin, tgt.Capture)
+	var res run.ExecResult
+	if len(tgt.Sources) == 0 {
+		res, err = execCommand(ctx, dir, bin, args, opts.env, opts.stdin, tgt.Capture)
+	} else {
+		res, err = runSourcedCommand(ctx, tgt, bin, dir, args, opts)
+	}
 	// A REAL failure only: the process started and exited non-zero, and nothing cancelled
 	// it. run.Exec joins ctx.Err() into its error, so gating on err alone would advise a
 	// user who pressed Ctrl-C to go and authenticate, diagnosing a failure that never
@@ -146,6 +172,77 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 		}
 	}
 	return res, err
+}
+
+// runnerRefPattern matches a Bin or Args token that is a REFERENCE to a
+// runner-computed value: a bare $NAME with no other characters - the same
+// $VAR syntax a spell already wrote inside an `sh -c` one-liner, just without
+// the shell to expand it. It deliberately does NOT match ${NAME} or a $NAME
+// embedded inside a longer string ("--output=$NAME"): Buzz's own string
+// interpolation already owns {...}, and a substring match would leave where a
+// reference starts and ends ambiguous. A whole token is unambiguous and is
+// exactly the shape every current use needs ("$MAGUS", "$MAGUS_SYMBOL_INDEX").
+var runnerRefPattern = regexp.MustCompile(`^\$[A-Za-z_][A-Za-z0-9_]*$`)
+
+// runnerRefs returns the values a static op's Bin/Args may reference via a bare
+// $NAME token (see resolveRunnerRefs): run.SelfVars for this invocation (MAGUS,
+// MAGUS_LEVEL, the ancestor chain - the same values every spell subprocess
+// already receives in its own environment) plus whatever opts.refs adds
+// explicitly for one op (e.g. a future per-run cache destination for the scip
+// op). It is NOT the process environment or the sandbox's BaseEnv, and it is
+// NOT commandOpts.env: env can carry a resolved Secret (runCommand's
+// tgt.Secrets), and Secrets exists precisely so that value never reaches Args -
+// folding env in here would defeat that the moment a spell wrote $A_SECRET_NAME.
+func runnerRefs(ctx context.Context, opts commandOpts) map[string]string {
+	refs := make(map[string]string, len(opts.refs)+2)
+	for _, kv := range run.SelfVars(ctx) {
+		if k, v, ok := strings.Cut(kv, "="); ok {
+			refs[k] = v
+		}
+	}
+	for k, v := range opts.refs {
+		refs[k] = v
+	}
+	return refs
+}
+
+// resolveRunnerRefs replaces every token in bin/args matching runnerRefPattern
+// with its value in refs. A token that is not shaped like a reference passes
+// through unchanged. A token that IS shaped like one but is absent from refs is
+// a hard error naming the op and the reference: this is deliberately not "" on
+// a miss - a silently empty substitution would turn `--output` (its value
+// dropped) into a confusing downstream tool failure instead of a diagnosis
+// naming the actual problem, right where the mistake was made.
+//
+// This is NOT shell expansion: it never reads the process environment, never
+// interpolates inside a larger string, and it is exec-time engine behavior, not
+// a text substitution a spell could observe or a charm could patch around.
+func resolveRunnerRefs(opName, bin string, args []string, refs map[string]string) (string, []string, error) {
+	resolve := func(tok string) (string, error) {
+		if !runnerRefPattern.MatchString(tok) {
+			return tok, nil
+		}
+		if v, ok := refs[tok[1:]]; ok {
+			return v, nil
+		}
+		where := ""
+		if opName != "" {
+			where = fmt.Sprintf("op %q: ", opName)
+		}
+		return "", fmt.Errorf("spell: %s%q is not a value the runner provides", where, tok)
+	}
+	rbin, err := resolve(bin)
+	if err != nil {
+		return "", nil, err
+	}
+	rargs := make([]string, len(args))
+	for i, a := range args {
+		rargs[i], err = resolve(a)
+		if err != nil {
+			return "", nil, err
+		}
+	}
+	return rbin, rargs, nil
 }
 
 // hintTailBytes bounds the output kept per stream for classification. A tool's failure
@@ -336,4 +433,99 @@ func execCommand(ctx context.Context, dir, cmd string, args []string, env map[st
 		return res, fmt.Errorf("%s exited %d", cmd, res.Code)
 	}
 	return res, nil
+}
+
+// sourcesBatchLimit caps how many files one batched Sources invocation carries in
+// its argv. Mirrors gitTrackedBatch's approach (vcs/git.go): pick a round count
+// comfortably under the OS's argv/environment limit rather than compute an exact
+// byte budget that varies with path length and environment size. ARG_MAX is
+// roughly 2MB on Linux and 256KB-1MB on macOS (historically floored at 4KB by
+// POSIX); even generously long project-relative paths (a few hundred bytes) keep
+// 256 of them a couple of orders of magnitude under the smallest of those.
+const sourcesBatchLimit = 256
+
+// runSourcedCommand runs bin once per file tgt.Sources matches (tgt.SourcesEach)
+// or in as few batches as fit under sourcesBatchLimit (the default), appending
+// the matched files to baseArgs exactly where `find | xargs` used to place them:
+// after the declared/charm-patched/extra args. It is the execution half of
+// spells.Command.Sources; see that field's doc for the full design.
+//
+// A glob set that matches nothing runs bin ZERO times and reports success
+// (ExecResult{}) rather than invoking it with no files or failing outright -
+// this mirrors `xargs -r`'s "do not run the command on an empty input" and the
+// --step gate's own skip-is-not-a-failure convention (run.Exec's
+// StepActionSkip branch returns the same zero value for the same reason).
+//
+// Every batch/file still runs even after an earlier one exits non-zero:
+// shellcheck/buzz --check across many files should report every file's
+// failure in one run, the same as the `xargs` this replaces (which only
+// aborts early on a command it could not run at all, not on an ordinary
+// non-zero exit) - but the FIRST error is what the caller sees, so the op
+// still fails overall. A process that never started (bad exec, sandbox
+// denial) or a cancelled run stops the loop immediately instead: every
+// remaining invocation would fail identically, or should not proceed.
+func runSourcedCommand(ctx context.Context, tgt spells.Op, bin, dir string, baseArgs []string, opts commandOpts) (run.ExecResult, error) {
+	files, err := cache.ExpandSources(tgt.Sources, dir, nil, opts.ignoreDirs)
+	if err != nil {
+		return run.ExecResult{}, err
+	}
+	if len(files) == 0 {
+		return run.ExecResult{}, nil
+	}
+
+	var combined run.ExecResult
+	var firstErr error
+	for _, batch := range sourceBatches(files, tgt.SourcesEach) {
+		args := append(append([]string(nil), baseArgs...), batch...)
+		res, err := execCommand(ctx, dir, bin, args, opts.env, opts.stdin, tgt.Capture)
+		combined.Started = combined.Started || res.Started
+		if res.MaxRSSBytes > combined.MaxRSSBytes {
+			combined.MaxRSSBytes = res.MaxRSSBytes
+		}
+		if tgt.Capture {
+			combined.Stdout = joinNonEmpty(combined.Stdout, res.Stdout)
+			combined.Stderr = joinNonEmpty(combined.Stderr, res.Stderr)
+		}
+		if err == nil {
+			continue
+		}
+		if firstErr == nil {
+			firstErr = err
+			combined.Code = res.Code
+		}
+		if !res.Started || ctx.Err() != nil || errors.Is(err, types.ExecDenied) {
+			return combined, firstErr
+		}
+	}
+	return combined, firstErr
+}
+
+// sourceBatches groups files into invocations: one file per batch when each is
+// true (xargs -n1), otherwise as few batches as fit under sourcesBatchLimit.
+func sourceBatches(files []string, each bool) [][]string {
+	if each {
+		batches := make([][]string, len(files))
+		for i, f := range files {
+			batches[i] = []string{f}
+		}
+		return batches
+	}
+	batches := make([][]string, 0, (len(files)+sourcesBatchLimit-1)/sourcesBatchLimit)
+	for start := 0; start < len(files); start += sourcesBatchLimit {
+		batches = append(batches, files[start:min(start+sourcesBatchLimit, len(files))])
+	}
+	return batches
+}
+
+// joinNonEmpty concatenates a and b with a newline separator, skipping either
+// side that is empty rather than leaving a stray blank line.
+func joinNonEmpty(a, b string) string {
+	switch {
+	case a == "":
+		return b
+	case b == "":
+		return a
+	default:
+		return a + "\n" + b
+	}
 }

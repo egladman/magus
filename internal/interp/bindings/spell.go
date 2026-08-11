@@ -45,7 +45,7 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 			spells.WithOutputs(spec.Provides...),
 			spells.WithTargets(spec.OpNames()...),
 			spells.WithServiceTargets(spec.ServiceOpNames()...),
-			spells.WithInvoker(newSpellInvoker(spec.Ops, spec.Tools)),
+			spells.WithInvoker(newSpellInvoker(spec.Ops, spec.Tools, spec.IgnoreDirs)),
 			spells.WithTools(spec.Tools),
 			spells.WithVersionProber(versionProber),
 			spells.WithCommandRenderer(newCommandRenderer(spec.Ops)),
@@ -128,6 +128,11 @@ func newCommandRenderer(targets map[string]spells.Op) func(string, []string) (st
 		if err != nil {
 			return "", nil, false, err
 		}
+		// A declared Sources is appended as its placeholder token: this renderer
+		// takes no project dir (magus describe has none per-target either), so it
+		// cannot run the runner's real per-project expansion - see
+		// spells.Command.Sources and SourcesPlaceholder.
+		args = append(args, op.Command.SourcesPlaceholder()...)
 		return op.Bin, args, true, nil
 	}
 }
@@ -349,7 +354,7 @@ func probeUntilReady(ctx context.Context, probe spells.Command, tool, dir string
 	}
 }
 
-func dispatchOp(ctx context.Context, ops map[string]spells.Op, tools map[string]spells.Tool, req spells.InvokeRequest) (any, error) {
+func dispatchOp(ctx context.Context, ops map[string]spells.Op, tools map[string]spells.Tool, ignoreDirs []string, req spells.InvokeRequest) (any, error) {
 	op, ok := ops[req.Target]
 	if !ok {
 		slog.DebugContext(ctx, "spell: target not provided by this spell (fan-out skip)", "target", req.Target, "dir", req.Dir)
@@ -362,7 +367,7 @@ func dispatchOp(ctx context.Context, ops map[string]spells.Op, tools map[string]
 	if err := checkReady(ctx, tools, op, req.Dir); err != nil {
 		return nil, err
 	}
-	opts := commandOpts{op: req.Target, cwd: req.Dir, args: project.ExtraArgs(ctx)}
+	opts := commandOpts{op: req.Target, cwd: req.Dir, args: project.ExtraArgs(ctx), ignoreDirs: ignoreDirs}
 	// The reserved `scip` op writes its index into the cache, not the tree: magus
 	// hands it the destination via MAGUS_SYMBOL_INDEX so the spell command
 	// (`... --output "$MAGUS_SYMBOL_INDEX"`) needs no knowledge of where the cache is.
@@ -444,10 +449,12 @@ func symbolIndexEnv(ctx context.Context, projectDir string) (map[string]string, 
 }
 
 // newSpellInvoker returns an invoker closure for a built-in spell. Built-in ops
-// are command-only (cmd/args/charms data, no script body).
-func newSpellInvoker(targets map[string]spells.Op, tools map[string]spells.Tool) func(context.Context, spells.InvokeRequest) (any, error) {
+// are command-only (cmd/args/charms data, no script body). ignoreDirs is the
+// spell's own declared mgs_listIgnoreDirs, carried through to dispatchOp so a
+// Command.Sources op inherits it (see commandOpts.ignoreDirs).
+func newSpellInvoker(targets map[string]spells.Op, tools map[string]spells.Tool, ignoreDirs []string) func(context.Context, spells.InvokeRequest) (any, error) {
 	return func(ctx context.Context, req spells.InvokeRequest) (any, error) {
-		return dispatchOp(ctx, targets, tools, req)
+		return dispatchOp(ctx, targets, tools, ignoreDirs, req)
 	}
 }
 
@@ -553,7 +560,7 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 // magus.project bind time). A function-op spell instead registers eagerly at load
 // via loadBuzzSpell.
 func registerLocalSpell(m spells.Descriptor) {
-	opts := append(localSpellBaseOptions(m), spells.WithInvoker(newSpellInvoker(m.Ops, m.Tools)))
+	opts := append(localSpellBaseOptions(m), spells.WithInvoker(newSpellInvoker(m.Ops, m.Tools, m.IgnoreDirs)))
 	project.DefaultSpellRegistry().RegisterIfAbsent(spells.NewSpell(m.Name, opts...))
 }
 

@@ -224,9 +224,9 @@ var goldenBuiltins = map[string]spells.Descriptor{
 	"bash": {
 		Name:       "bash",
 		Needs:      []string{"**/*.sh", "**/*.bash", ".shellcheckrc"},
-		IgnoreDirs: []string{"node_modules", ".claude/worktrees"},
+		IgnoreDirs: []string{"node_modules", "worktrees"},
 		Ops: map[string]spells.Op{
-			"shellcheck": {Command: spells.Command{Bin: "sh", Args: []string{"-c", "find . \\( -name node_modules -o -path './.claude/worktrees' \\) -prune -o \\( -name '*.sh' -o -name '*.bash' \\) -print0 | xargs -0 -r shellcheck"}}},
+			"shellcheck": {Command: spells.Command{Bin: "shellcheck", Sources: []string{"**/*.sh", "**/*.bash"}}},
 		},
 	},
 	"buf": {
@@ -252,9 +252,9 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Name:  "buzz",
 		Needs: []string{"**/*.buzz"},
 		Ops: map[string]spells.Op{
-			"buzz-check": {Command: spells.Command{Bin: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --check"}}},
-			"buzz-test":  {Command: spells.Command{Bin: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --test"}}},
-			"magus-buzz": {Command: spells.Command{Bin: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 \"$MAGUS\" buzz"}}},
+			"buzz-check": {Command: spells.Command{Bin: "buzz", Args: []string{"--check"}, Sources: []string{"**/*.buzz"}, SourcesEach: true}},
+			"buzz-test":  {Command: spells.Command{Bin: "buzz", Args: []string{"--test"}, Sources: []string{"**/*.buzz"}, SourcesEach: true}},
+			"magus-buzz": {Command: spells.Command{Bin: "$MAGUS", Args: []string{"buzz"}, Sources: []string{"**/*.buzz"}, SourcesEach: true}},
 		},
 	},
 	"cosign": {

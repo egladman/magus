@@ -1,5 +1,7 @@
 package spells
 
+import "strings"
+
 // PatchOp is one RFC 6902 operation over a target's argv array. Path/From are
 // single-token JSON Pointers (RFC 6901) into the array — "/N" for an index, or
 // "/-" (add only) for the append position. Value is the string element for
@@ -36,10 +38,47 @@ type Charm struct {
 // ways: magus-utils types mirrors it to the Buzz `object Command` a spell op
 // returns, and the resolved spell Op embeds it. An empty Command (no Bin) is the
 // no-op marker.
+//
+// Bin or any Args entry may be a bare $NAME token (e.g. "$MAGUS") to reference a
+// value the RUNNER computes for this invocation - the engine-side replacement
+// for a spell shelling out to `sh -c` just to let the shell expand a variable
+// magus itself set. See internal/interp/bindings' resolveRunnerRefs for the
+// resolution rule and, importantly, its scope: it is NOT the process
+// environment.
 type Command struct {
 	Bin    string           `json:"bin,omitempty"`
 	Args   []string         `json:"args,omitempty"`
 	Charms map[string]Charm `json:"charms,omitempty"`
+	// Sources, when non-empty, are doublestar globs (relative to the project
+	// directory this command runs in) that the RUNNER expands into a file list
+	// at EXECUTION time, via the same walk that builds the cache key
+	// (cache.ExpandSources) - so a Sources-declaring op inherits the workspace's
+	// declared ignore dirs (the core project.IgnoreDirs plus the issuing spell's
+	// own mgs_listIgnoreDirs) instead of hardcoding directory names.
+	//
+	// This exists because an op handler runs ONCE with a null Target and is
+	// reduced to a static {bin, args} record (see recordOp in
+	// internal/spellruntime/resolve.go) - it cannot walk a project directory
+	// itself, which is why a spell used to shell out to `find | xargs` to build
+	// its own file list. Declaring Sources here defers that walk to the runner,
+	// per project, at run time, with no shell involved.
+	//
+	// The expanded files are appended to Args (after charm-patching and any
+	// caller-supplied extra args) in one of two shapes, chosen by SourcesEach:
+	// batched (the default: every match on as few invocations as fit under the
+	// runner's ARG_MAX-safe limit) or one invocation per file. A glob set that
+	// matches nothing runs the command ZERO times and reports success - the
+	// engine-side equivalent of `xargs -r` - rather than invoking Bin with an
+	// empty file list or failing outright.
+	//
+	// Empty (the default) leaves Args exactly as declared: no behavior change
+	// for a Command that does not use this.
+	Sources []string `json:"sources,omitempty"`
+	// SourcesEach runs Bin once PER file Sources matches (xargs -n1: one file,
+	// one invocation), each invocation appending that single file to Args. False
+	// (the default) batches every matched file across as few invocations as fit
+	// under the runner's ARG_MAX-safe limit. Meaningless without Sources.
+	SourcesEach bool `json:"sources_each,omitempty"`
 	// Capture makes this command's spell method return its exec record. The field
 	// belongs on Command because it is declared by a Command-returning handler;
 	// Op carries the resolved copy that dispatch reads.
@@ -78,6 +117,23 @@ type Command struct {
 	// this is the same property, and JSON is not used to transport an Op - the only
 	// marshal of the registry is the hash itself.
 	Hints []Hint `json:"-"`
+}
+
+// SourcesPlaceholder renders Sources as a single human-readable argv token, for a
+// renderer that cannot execute the runner's real expansion - `magus describe` and
+// the dry-run preview both render a Command outside any project directory, so
+// neither can walk Sources into real files the way runCommand does at execution
+// time. nil when Sources is unset, so an ordinary Command's rendered argv is
+// completely unchanged.
+func (c Command) SourcesPlaceholder() []string {
+	if len(c.Sources) == 0 {
+		return nil
+	}
+	mode := "batch"
+	if c.SourcesEach {
+		mode = "each"
+	}
+	return []string{"<sources:" + mode + " " + strings.Join(c.Sources, ",") + ">"}
 }
 
 // Hint is one failure classification: when a command fails and Contains appears in its

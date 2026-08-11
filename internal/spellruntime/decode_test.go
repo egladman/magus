@@ -552,3 +552,28 @@ func TestDecodeCommandHints(t *testing.T) {
 		assert.Contains(t, err.Error(), "both contains and advise are required")
 	})
 }
+
+// TestDecodeCommandSources pins that Sources/SourcesEach decode from the Buzz
+// field names buzzgen derives for them (a plain lower-cased "sources" and the
+// camelCase "sourcesEach" for the two-word field - see FieldName in
+// libs/gopherbuzz/buzzgen/mirror.go), and that an ordinary Command with neither
+// key decodes to the unset default (nil, false): no behavior change for a
+// Command that does not declare Sources.
+func TestDecodeCommandSources(t *testing.T) {
+	t.Run("sources and sourcesEach decode", func(t *testing.T) {
+		cmd, err := decodeCommand("bash", "shellcheck", mapObj{
+			"bin":         "shellcheck",
+			"sources":     []string{"**/*.sh", "**/*.bash"},
+			"sourcesEach": true,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"**/*.sh", "**/*.bash"}, cmd.Sources)
+		assert.True(t, cmd.SourcesEach)
+	})
+	t.Run("neither key decodes to the unset default", func(t *testing.T) {
+		cmd, err := decodeCommand("bash", "shellcheck", mapObj{"bin": "shellcheck"})
+		require.NoError(t, err)
+		assert.Nil(t, cmd.Sources)
+		assert.False(t, cmd.SourcesEach)
+	})
+}

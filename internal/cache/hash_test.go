@@ -229,6 +229,24 @@ func TestExpandSourcesEmptyGlobs(t *testing.T) {
 	assert.Nil(t, out)
 }
 
+// TestExpandSourcesExported pins the exported wrapper a caller outside this
+// package uses (a spell op's Sources placeholder - see spells.Command.Sources):
+// it must return root-relative paths, sorted, and honor ignoreDirs exactly like
+// the unexported walk it wraps, since the whole point is reusing that walk
+// rather than a second one.
+func TestExpandSourcesExported(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "node_modules"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "b.sh"), []byte("b"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "a.sh"), []byte("a"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "node_modules", "skip.sh"), []byte("s"), 0o644))
+
+	out, err := ExpandSources([]string{"**/*.sh"}, root, nil, []string{"node_modules"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a.sh", "b.sh"}, out,
+		"sorted, root-relative, and the declared ignore dir pruned")
+}
+
 // TestHashFilesEmpty verifies the len(files) == 0 fast path returns nils.
 func TestHashFilesEmpty(t *testing.T) {
 	c := newBareCache(t)

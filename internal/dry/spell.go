@@ -106,11 +106,17 @@ func decodeSpellOp(name string, mv vm.Value) spellOp {
 // an out-of-range pointer that decode's structural check cannot catch) is returned, not
 // swallowed, so the dry run refuses the plan exactly as the engine would rather than
 // rendering the un-reshaped command as if the charm applied.
+//
+// A declared Sources is appended as its SourcesPlaceholder token rather than
+// expanded: this preview has no project directory to walk (a SPELL buffer has
+// no Target of its own), so it cannot run the runner's real expansion the way
+// runCommand does at execution time - see spells.Command.Sources.
 func (o spellOp) renderCommand(activeNames []string) (string, error) {
 	args, err := spellruntime.ApplyCharms(o.cmd.Args, o.cmd.Charms, activeNames)
 	if err != nil {
 		return "", err
 	}
+	args = append(args, o.cmd.SourcesPlaceholder()...)
 	parts := make([]string, 0, len(args)+1)
 	if o.cmd.Bin != "" {
 		parts = append(parts, o.cmd.Bin)

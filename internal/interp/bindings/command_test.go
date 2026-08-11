@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -238,4 +241,200 @@ func TestRunCommandAdvisesOnRealFailure(t *testing.T) {
 		bare := spells.Op{Command: spells.Command{Bin: "sh", Args: []string{"-c", "echo hi >&2; exit 1"}}}
 		assert.NotContains(t, run6(context.Background(), bare), "hint:")
 	})
+}
+
+// logInvocationOp is a Command that appends one line per invocation to a log
+// file - every arg of that invocation, space-separated - so a test can tell
+// how many times it ran and with what argv, without a real tool on PATH.
+func logInvocationOp(sources []string, each bool) spells.Op {
+	return spells.Op{Command: spells.Command{
+		Bin:         "sh",
+		Args:        []string{"-c", `echo "$@" >> "$LOGFILE"`, "sh"},
+		Sources:     sources,
+		SourcesEach: each,
+	}}
+}
+
+// writeSourceFixture lays out a small tree under dir: two source files at the
+// root, one nested under a subdirectory, and one under thirdparty/ - a name
+// NOT in the core project.IgnoreDirs default, so pruning it proves the
+// exclusion came from a declared ignore dir (commandOpts.ignoreDirs), not the
+// walk's always-on defaults. Returns the sorted list of the three files an
+// unfiltered **/*.txt glob is expected to match, relative to dir.
+func writeSourceFixture(t *testing.T, dir string) []string {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "sub"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "thirdparty"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "sub", "c.txt"), []byte("c"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "thirdparty", "skip.txt"), []byte("s"), 0o644))
+	return []string{"a.txt", "b.txt", filepath.Join("sub", "c.txt")}
+}
+
+// logLines reads path's lines, or nil if it does not exist - the empty-match
+// case must never create it.
+func logLines(t *testing.T, path string) []string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	require.NoError(t, err)
+	s := strings.TrimRight(string(data), "\n")
+	if s == "" {
+		return nil
+	}
+	return strings.Split(s, "\n")
+}
+
+// TestRunCommandSourcesBatchesAllMatches proves the default (SourcesEach
+// unset) mode invokes Bin ONCE with every matched file appended to argv - the
+// `xargs` (no -n1) shape shellcheck relies on.
+func TestRunCommandSourcesBatchesAllMatches(t *testing.T) {
+	dir := t.TempDir()
+	files := writeSourceFixture(t, dir)
+	ctx := std.WithCwd(context.Background(), dir)
+	logFile := filepath.Join(dir, "calls.log")
+
+	op := logInvocationOp([]string{"**/*.txt"}, false)
+	_, err := runCommand(ctx, op, commandOpts{env: map[string]string{"LOGFILE": logFile}, ignoreDirs: []string{"thirdparty"}})
+	require.NoError(t, err)
+
+	lines := logLines(t, logFile)
+	require.Len(t, lines, 1, "batched mode must run Bin exactly once")
+	assert.Equal(t, strings.Join(files, " "), lines[0], "every matched file must be on the one invocation, in sorted order")
+}
+
+// TestRunCommandSourcesEachInvokesPerFile proves SourcesEach = true invokes
+// Bin once per matched file (the `xargs -n1` shape buzz --check/--test/magus
+// buzz rely on).
+func TestRunCommandSourcesEachInvokesPerFile(t *testing.T) {
+	dir := t.TempDir()
+	files := writeSourceFixture(t, dir)
+	ctx := std.WithCwd(context.Background(), dir)
+	logFile := filepath.Join(dir, "calls.log")
+
+	op := logInvocationOp([]string{"**/*.txt"}, true)
+	_, err := runCommand(ctx, op, commandOpts{env: map[string]string{"LOGFILE": logFile}, ignoreDirs: []string{"thirdparty"}})
+	require.NoError(t, err)
+
+	lines := logLines(t, logFile)
+	require.Len(t, lines, len(files), "each mode must run Bin once per matched file")
+	assert.Equal(t, files, lines, "one file per invocation, in sorted order")
+}
+
+// TestRunCommandSourcesEmptyMatchIsNoop proves a Sources glob matching nothing
+// runs Bin ZERO times and reports success - the engine-side `xargs -r` - rather
+// than invoking it with no files or failing.
+func TestRunCommandSourcesEmptyMatchIsNoop(t *testing.T) {
+	dir := t.TempDir()
+	writeSourceFixture(t, dir)
+	ctx := std.WithCwd(context.Background(), dir)
+	logFile := filepath.Join(dir, "calls.log")
+
+	op := logInvocationOp([]string{"**/*.doesnotexist"}, false)
+	res, err := runCommand(ctx, op, commandOpts{env: map[string]string{"LOGFILE": logFile}})
+	require.NoError(t, err)
+	assert.Equal(t, run.ExecResult{}, res, "an empty match must report the same zero result as a skipped step")
+	assert.NoFileExists(t, logFile, "Bin must never have been invoked")
+}
+
+// TestRunCommandSourcesHonorsIgnoreDirs proves a declared ignore dir (threaded
+// through commandOpts.ignoreDirs, as dispatchOp threads a spell's own
+// mgs_listIgnoreDirs) is pruned from the Sources walk WITHOUT the op's own
+// glob naming it - the mechanism spells/bash/spell.buzz's shellcheck op relies
+// on for "worktrees"/"node_modules" instead of hardcoding a find prune.
+func TestRunCommandSourcesHonorsIgnoreDirs(t *testing.T) {
+	dir := t.TempDir()
+	writeSourceFixture(t, dir)
+	ctx := std.WithCwd(context.Background(), dir)
+	logFile := filepath.Join(dir, "calls.log")
+
+	op := logInvocationOp([]string{"**/*.txt"}, false)
+	_, err := runCommand(ctx, op, commandOpts{env: map[string]string{"LOGFILE": logFile}, ignoreDirs: []string{"thirdparty"}})
+	require.NoError(t, err)
+
+	lines := logLines(t, logFile)
+	require.Len(t, lines, 1)
+	assert.NotContains(t, lines[0], "skip.txt", "a file under a declared ignore dir must never reach argv")
+
+	// Without the declared ignore dir, the same file DOES survive the walk -
+	// proving the exclusion above came from opts.ignoreDirs, not the glob.
+	require.NoError(t, os.Remove(logFile))
+	_, err = runCommand(ctx, op, commandOpts{env: map[string]string{"LOGFILE": logFile}})
+	require.NoError(t, err)
+	lines = logLines(t, logFile)
+	require.Len(t, lines, 1)
+	assert.Contains(t, lines[0], "skip.txt", "without the declared ignore dir the file is walked")
+}
+
+// TestResolveRunnerRefs pins the $NAME token rule directly: a token shaped
+// like a reference resolves against refs or errors naming the op and the
+// reference; anything else - a normal arg, a $ that is not a whole bare
+// identifier - passes through untouched.
+func TestResolveRunnerRefs(t *testing.T) {
+	refs := map[string]string{"MAGUS": "/path/to/magus", "MAGUS_LEVEL": "1"}
+
+	t.Run("a known reference resolves in bin and args", func(t *testing.T) {
+		bin, args, err := resolveRunnerRefs("magus-buzz", "$MAGUS", []string{"buzz", "$MAGUS_LEVEL"}, refs)
+		require.NoError(t, err)
+		assert.Equal(t, "/path/to/magus", bin)
+		assert.Equal(t, []string{"buzz", "1"}, args)
+	})
+	t.Run("an unknown reference is a hard error naming the op and the token", func(t *testing.T) {
+		_, _, err := resolveRunnerRefs("magus-buzz", "shellcheck", []string{"$NOT_A_REAL_REF"}, refs)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `"magus-buzz"`)
+		assert.Contains(t, err.Error(), "$NOT_A_REAL_REF")
+	})
+	t.Run("a token embedding a reference is left alone, not interpolated", func(t *testing.T) {
+		bin, args, err := resolveRunnerRefs("", "shellcheck", []string{"--output=$MAGUS", "${MAGUS}"}, refs)
+		require.NoError(t, err)
+		assert.Equal(t, "shellcheck", bin)
+		assert.Equal(t, []string{"--output=$MAGUS", "${MAGUS}"}, args, "only a WHOLE bare $NAME token is a reference")
+	})
+	t.Run("an ordinary arg is untouched", func(t *testing.T) {
+		_, args, err := resolveRunnerRefs("", "shellcheck", []string{"-c", "**/*.sh"}, refs)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"-c", "**/*.sh"}, args)
+	})
+}
+
+// TestRunCommandResolvesMagusRef is the integration proof that runCommand
+// itself feeds run.SelfVars into resolveRunnerRefs: an op referencing
+// $MAGUS_LEVEL in Args (the same shape magus-buzz uses for $MAGUS) receives the
+// runner's own value, with no shell involved.
+func TestRunCommandResolvesMagusRef(t *testing.T) {
+	dir := t.TempDir()
+	ctx := std.WithCwd(context.Background(), dir)
+
+	op := spells.Op{Command: spells.Command{
+		Bin:  "sh",
+		Args: []string{"-c", `printf '%s' "$1" > level.txt`, "sh", "$MAGUS_LEVEL"},
+	}}
+	_, err := runCommand(ctx, op, commandOpts{})
+	require.NoError(t, err)
+
+	got, err := os.ReadFile(filepath.Join(dir, "level.txt"))
+	require.NoError(t, err)
+	// Not hardcoded to "1": this test process's own MAGUS_LEVEL is whatever
+	// invoked it (0 when run directly, higher under a nested magus run - see
+	// run.CurrentLevel), and the child is always one past that.
+	want := strconv.Itoa(run.CurrentLevel() + 1)
+	assert.Equal(t, want, string(got), "MAGUS_LEVEL is this process's level plus one for the child")
+}
+
+// TestRunCommandUnresolvedRefFailsBeforeExec proves an op referencing a $NAME
+// the runner does not provide fails with a diagnosis naming the reference,
+// rather than either exec'ing a literal "$NOT_A_REAL_REF" or silently dropping
+// it as an empty argument.
+func TestRunCommandUnresolvedRefFailsBeforeExec(t *testing.T) {
+	ctx := std.WithCwd(context.Background(), t.TempDir())
+	op := spells.Op{Command: spells.Command{Bin: "sh", Args: []string{"-c", "echo $1", "sh", "$NOT_A_REAL_REF"}}}
+
+	_, err := runCommand(ctx, op, commandOpts{op: "example"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `"example"`)
+	assert.Contains(t, err.Error(), "$NOT_A_REAL_REF")
 }

@@ -254,7 +254,12 @@ func validEnvName(s string) bool {
 // RFC 6902 patch. It is shared by a command op and by each of a service op's
 // run/ready/stop commands, so every command shape decodes identically.
 func decodeCommand(spellName, opName string, o Obj) (spells.Command, error) {
-	c := spells.Command{Args: o.Strs("args"), Capture: o.Bool("capture")}
+	c := spells.Command{
+		Args:        o.Strs("args"),
+		Capture:     o.Bool("capture"),
+		Sources:     o.Strs("sources"),
+		SourcesEach: o.Bool("sourcesEach"),
+	}
 	if bin, ok := o.Str("bin"); ok {
 		c.Bin = bin
 	}
