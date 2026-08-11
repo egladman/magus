@@ -344,9 +344,10 @@ func (zeroReader) Read(p []byte) (int, error) {
 }
 
 // TestImportMaxBytesCapsTarBomb verifies that a tar entry larger than
-// WithMaxImportBytes is truncated rather than filling the disk. Import
-// accepts arbitrary input from CI/S3; the tar header's reported size
-// cannot be trusted to bound writes without io.LimitReader.
+// WithMaxImportBytes is rejected rather than silently truncated. Import
+// accepts arbitrary input from CI/S3; a truncated write that still returns
+// success would commit a corrupt blob that Replay never re-verifies (see
+// snapshot.go's replayBlob, which just reflinks/copies by name).
 func TestImportMaxBytesCapsTarBomb(t *testing.T) {
 	t.Parallel()
 
@@ -358,13 +359,14 @@ func TestImportMaxBytesCapsTarBomb(t *testing.T) {
 	const entrySize = 1 << 20
 	archive := makeTar(t, "manifests/test/entry", entrySize)
 
-	require.NoError(t, c.Import(context.Background(), archive), "Import")
+	err = c.Import(context.Background(), archive)
+	require.Error(t, err, "Import must reject an oversized entry rather than truncating it")
+	assert.ErrorIs(t, err, errImportTooLarge)
 
-	// The written file must not exceed the cap.
+	// No truncated (corrupt) file must be left behind at the destination.
 	dest := filepath.Join(cdir, "manifests", "test", "entry")
-	fi, err := os.Stat(dest)
-	require.NoError(t, err, "stat")
-	assert.LessOrEqual(t, fi.Size(), int64(1024), "file size must not exceed the cap")
+	_, statErr := os.Stat(dest)
+	assert.True(t, os.IsNotExist(statErr), "oversized entry must not leave a truncated file on disk")
 }
 
 // TestImportDefaultCapApplied ensures Import works normally when no cap

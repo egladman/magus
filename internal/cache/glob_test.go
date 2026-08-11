@@ -57,6 +57,19 @@ func TestCompiledGlobMatchCases(t *testing.T) {
 	assert.False(t, newCompiledGlob("web/studio/package.json").Match("web/studio/src/package.json"))
 }
 
+// TestCompiledGlobMatchMetaCharacterPrefix verifies that a pattern whose
+// prefix (the part before "**/") itself contains glob metacharacters falls
+// through to the doublestar complex path instead of being misclassified as
+// an extension-glob fast path, which would compare the prefix with a literal
+// strings.HasPrefix and never match.
+func TestCompiledGlobMatchMetaCharacterPrefix(t *testing.T) {
+	g := newCompiledGlob("src/*/**/*.go")
+	assert.False(t, g.exact)
+	assert.Emptyf(t, g.suffix, "prefix %q contains metacharacters, must not take the extension-glob fast path", g.prefix)
+	assert.True(t, g.Match("src/pkg/deep/file.go"))
+	assert.False(t, g.Match("other/pkg/deep/file.go"))
+}
+
 // TestExpandSourcesSemantics pins the behavior of expandSources: glob matching
 // at depth, ignore-dir skipping, exclude pruning, symlink skipping, and sorted
 // (rel,abs) output. It guards the walk implementation against regressions.

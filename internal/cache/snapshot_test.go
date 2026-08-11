@@ -2,11 +2,14 @@ package cache
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"testing"
 )
 
@@ -376,6 +379,66 @@ func TestSnapshotOneBlobDedup(t *testing.T) {
 	recB, err := c.snapshotOne(b, "b.txt")
 	require.NoError(t, err)
 	assert.Equal(t, recA.Blob, recB.Blob, "identical content must share one blob")
+}
+
+// TestSnapshotOneHashMatchesWrittenBytes verifies that the blob committed to
+// the CAS is always named after the bytes actually copied into it. snapshotOne
+// used to call hashFile(abs) and then separately re-open and re-read abs via
+// copyToFile(abs, tmp); anything that changes what a read of abs returns
+// between those two independent opens (a concurrent write is the real-world
+// trigger) would commit content under a name that does not match it,
+// permanently poisoning the CAS entry (the dedup gate trusts an existing blob
+// name forever).
+//
+// This test makes the failure deterministic instead of timing-dependent: abs
+// is a FIFO, so each of the two independent reads snapshotOne performs gets
+// whichever write session this test feeds it, exactly modelling "the content
+// changed between the two reads" without depending on goroutine scheduling.
+func TestSnapshotOneHashMatchesWrittenBytes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("FIFOs are not available on Windows")
+	}
+	c := newBareCache(t)
+	root := t.TempDir()
+	abs := filepath.Join(root, "out.txt")
+	require.NoError(t, syscall.Mkfifo(abs, 0o644))
+
+	// snapshotOne performs exactly two independent opens-for-read of abs on
+	// the pre-fix code path (hashFile, then copyToFile); a fixed snapshotOne
+	// performs exactly one. Feed a distinct payload to each read session so a
+	// second read (if one happens) unambiguously sees different content than
+	// the first.
+	writes := [][]byte{[]byte("version-one"), []byte("version-two-is-longer")}
+	errCh := make(chan error, 1)
+	go func() {
+		for _, data := range writes {
+			w, err := os.OpenFile(abs, os.O_WRONLY, 0)
+			if err != nil {
+				errCh <- err
+				return
+			}
+			if _, err := w.Write(data); err != nil {
+				_ = w.Close()
+				errCh <- err
+				return
+			}
+			if err := w.Close(); err != nil {
+				errCh <- err
+				return
+			}
+		}
+		errCh <- nil
+	}()
+
+	rec, err := c.snapshotOne(abs, "out.txt")
+	require.NoError(t, err)
+	require.NoError(t, <-errCh, "fifo writer")
+
+	got, err := os.ReadFile(c.blobPath(rec.Blob))
+	require.NoError(t, err)
+	sum := sha256.Sum256(got)
+	assert.Equal(t, hex.EncodeToString(sum[:]), rec.Blob,
+		"blob must be named after the bytes actually stored in the CAS")
 }
 
 // TestExpandOutputGlobsRejectsAbsolute verifies absolute output globs are

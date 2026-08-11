@@ -101,9 +101,47 @@ func TestMtimeStoreLoadCancelledCtx(t *testing.T) {
 	cancel()
 	s := newMtimeStore(dir, nil)
 	s.load(ctx)
-	// Shards were never populated, so a get on the seeded path must miss.
+	// The disk read was skipped, so a get on the seeded path must miss even
+	// though shard maps themselves are now initialised (empty).
 	_, ok := s.get("/ws/x.go", 1, 2)
-	assert.False(t, ok, "cancelled load must not populate shards")
+	assert.False(t, ok, "cancelled load must not read shard files from disk")
+}
+
+// TestMtimeStoreSetAfterCancelledLoadDoesNotPanic verifies that set is total
+// even when load's disk-read was skipped by a cancelled context: load must
+// still initialise the (empty) shard maps, or set's plain map write panics
+// with "assignment to entry in nil map".
+func TestMtimeStoreSetAfterCancelledLoadDoesNotPanic(t *testing.T) {
+	dir := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	s := newMtimeStore(dir, nil)
+	s.load(ctx)
+	require.NotPanics(t, func() {
+		s.set("/ws/x.go", "cafef00d", 1, 2)
+	}, "set after a cancelled load must not panic on a nil shard map")
+
+	got, ok := s.get("/ws/x.go", 1, 2)
+	require.True(t, ok)
+	assert.Equal(t, "cafef00d", got)
+}
+
+// TestMtimeStoreSetAfterDisabledLoadDoesNotPanic verifies the same invariant
+// for a store with persistence disabled (dir == ""): load must initialise
+// shard maps before returning, not only when it goes on to read from disk.
+func TestMtimeStoreSetAfterDisabledLoadDoesNotPanic(t *testing.T) {
+	s := newMtimeStore(t.TempDir(), nil)
+	s.dir = "" // disable persistence explicitly
+
+	s.load(context.Background())
+	require.NotPanics(t, func() {
+		s.set("/ws/a.go", "deadbeef", 1, 2)
+	}, "set after a disabled-persistence load must not panic on a nil shard map")
+
+	got, ok := s.get("/ws/a.go", 1, 2)
+	require.True(t, ok)
+	assert.Equal(t, "deadbeef", got)
 }
 
 // TestMtimeStoreLoadSkipsJunkFiles verifies that files in the shard directory

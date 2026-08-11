@@ -1113,10 +1113,19 @@ func (c *Cache) Import(ctx context.Context, r io.Reader) error {
 			if err != nil {
 				return fmt.Errorf("magus/cache: import create %q: %w", clean, err)
 			}
-			// LimitReader caps per-entry bytes to guard against tar-bomb input.
-			if _, err := io.Copy(f, io.LimitReader(tr, c.importLimit())); err != nil {
+			// Read limit+1 to detect an oversized entry rather than silently
+			// truncating: io.LimitReader alone stops at the cap and io.Copy
+			// returns nil, which would commit a corrupt/truncated blob.
+			limit := c.importLimit()
+			n, err := io.Copy(f, io.LimitReader(tr, limit+1))
+			if err != nil {
 				_ = f.Close()
 				return fmt.Errorf("magus/cache: import write %q: %w", clean, err)
+			}
+			if n > limit {
+				_ = f.Close()
+				_ = os.Remove(clean)
+				return fmt.Errorf("magus/cache: import %q: %w", clean, errImportTooLarge)
 			}
 			if err := f.Close(); err != nil {
 				return fmt.Errorf("magus/cache: import close %q: %w", clean, err)

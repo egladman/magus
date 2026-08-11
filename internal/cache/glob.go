@@ -46,8 +46,8 @@ func newCompiledGlob(pat string) compiledGlob {
 	const dstarDot = "**/*."
 	if idx := strings.Index(pat, dstarDot); idx != -1 {
 		suffix := "." + pat[idx+len(dstarDot):]
-		if !strings.ContainsAny(suffix, meta) {
-			prefix := pat[:idx] // everything before "**/", may be ""
+		prefix := pat[:idx] // everything before "**/", may be ""
+		if !strings.ContainsAny(suffix, meta) && !strings.ContainsAny(prefix, meta) {
 			return compiledGlob{raw: pat, prefix: prefix, suffix: suffix}
 		}
 	}

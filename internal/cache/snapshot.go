@@ -3,6 +3,8 @@ package cache
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -96,11 +98,19 @@ func (c *Cache) snapshotOne(abs, rel string) (OutputRecord, error) {
 	if info.IsDir() {
 		return OutputRecord{}, fmt.Errorf("snapshotOne: %s is a directory (use a glob like %s/**)", rel, rel)
 	}
-	hash, err := hashFile(abs)
+	// preHash is a cheap fast-path check only: if the CAS already holds a blob
+	// under it, we're done without touching abs again. It must never be used
+	// to name a blob we actually write below — that name has to come from the
+	// bytes copied in this same pass (see the hash-while-copy below), or a
+	// write to abs between this hash and a later separate read would store
+	// bytes under a hash they don't match, permanently poisoning the CAS
+	// entry (the dedup gate trusts an existing blob name forever).
+	preHash, err := hashFile(abs)
 	if err != nil {
 		return OutputRecord{}, err
 	}
-	dst := c.blobPath(hash)
+	hash := preHash
+	dst := c.blobPath(preHash)
 	if _, err := os.Stat(dst); errors.Is(err, os.ErrNotExist) {
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return OutputRecord{}, err
@@ -111,7 +121,8 @@ func (c *Cache) snapshotOne(abs, rel string) (OutputRecord, error) {
 		}
 		tmpName := tmp.Name()
 		defer func() { _ = os.Remove(tmpName) }()
-		if err := copyToFile(abs, tmp); err != nil {
+		h := sha256.New()
+		if err := copyToFile(abs, io.MultiWriter(tmp, h)); err != nil {
 			_ = tmp.Close()
 			return OutputRecord{}, err
 		}
@@ -120,6 +131,13 @@ func (c *Cache) snapshotOne(abs, rel string) (OutputRecord, error) {
 			return OutputRecord{}, err
 		}
 		if err := tmp.Close(); err != nil {
+			return OutputRecord{}, err
+		}
+		// The authoritative hash is the one just computed from the bytes this
+		// pass actually copied, not preHash.
+		hash = hex.EncodeToString(h.Sum(nil))
+		dst = c.blobPath(hash)
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return OutputRecord{}, err
 		}
 		if err := os.Rename(tmpName, dst); err != nil {
@@ -249,8 +267,9 @@ func copyFile(src, dst string) error {
 	return errors.Join(copyErr, out.Close())
 }
 
-// copyToFile copies src into an already-open dst file.
-func copyToFile(src string, dst *os.File) error {
+// copyToFile copies src into dst (an already-open file, or a MultiWriter
+// wrapping one to hash while copying).
+func copyToFile(src string, dst io.Writer) error {
 	in, err := os.Open(src)
 	if err != nil {
 		return err
