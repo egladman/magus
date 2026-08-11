@@ -1340,7 +1340,51 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 // parameter slots left to right and must precede named ones; every problem —
 // an unknown or duplicate label, a label colliding with a positional slot, a
 // missing parameter — is a checker error at the call site.
+// bindTypeArgToName passes a call's explicit `::<T>` spelling to a callee that
+// declares a `typeName: str` parameter, when the call itself left that slot empty.
+//
+// gopherbuzz ERASES type arguments, so a generic assertion helper cannot inspect
+// `T` at run time the way upstream's can. But the spelling is known STATICALLY -
+// the parser already captures it onto CallExpr.TypeArg - so a helper can opt into
+// receiving it by name. That is what lets upstream source written as
+// `t.assertOfType::<int>(value)` run here unchanged against a signature of
+// `assertOfType(value: any, typeName: str, ...)`.
+//
+// Deliberately keyed on the exact parameter name: this is an opt-in convention, not
+// a general rule about type arguments, and a callee that wants nothing to do with it
+// simply does not declare one.
+func (c *checker) bindTypeArgToName(v *ast.CallExpr, ft *types.FuncType) {
+	if v.TypeArg == "" {
+		return
+	}
+	idx := -1
+	for i, name := range ft.ParamNames {
+		if name == "typeName" {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 || idx >= len(ft.Params) || ft.Params[idx] != types.Str {
+		return
+	}
+	// Already supplied, by label or by position: the caller wins.
+	for _, name := range v.ArgNames {
+		if name == "typeName" {
+			return
+		}
+	}
+	if v.ArgNames == nil && idx < len(v.Args) {
+		return
+	}
+	v.Args = append(v.Args, &ast.StringLit{Pos: v.Pos, Val: v.TypeArg})
+	if v.ArgNames == nil {
+		v.ArgNames = make([]string, len(v.Args)-1)
+	}
+	v.ArgNames = append(v.ArgNames, "typeName")
+}
+
 func (c *checker) resolveNamedArgs(v *ast.CallExpr, ft *types.FuncType) {
+	c.bindTypeArgToName(v, ft)
 	// A call with no labels still needs this pass when the callee declares
 	// defaults: `hey("John")` fills three slots the caller never wrote.
 	if v.ArgNames == nil && !hasDefault(ft) {

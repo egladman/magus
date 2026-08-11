@@ -81,6 +81,7 @@ std.buzz
 str.buzz
 tail-call.buzz
 terminal-flow.buzz
+testing.buzz
 throw-inside-try.buzz
 try-catch.buzz
 tuples.buzz

@@ -1,0 +1,8 @@
+// @expect: int:str
+// A call's `::<T>` spelling is passed to a callee declaring `typeName: str` that
+// the call left empty. Type arguments are ERASED here, so this is what lets
+// upstream's generic assertion helpers run unchanged; an explicit argument wins.
+fun describe(value: any, typeName: str) > str { return typeName; }
+final a = describe::<int>(1);
+final b = describe::<int>(1, typeName: "str");
+final __r = "{a}:{b}";

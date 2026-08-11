@@ -22,7 +22,7 @@ rather than only the flattering one.
 
 | upstream suite          | files |      gopherbuzz | what it asks                                                     |
 | ----------------------- | ----: | --------------: | ---------------------------------------------------------------- |
-| `tests/behavior/`       |    83 |     **75 pass** | does correct source produce the right answer?                    |
+| `tests/behavior/`       |    83 |     **76 pass** | does correct source produce the right answer?                    |
 | `tests/compile_errors/` |    77 | **71 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
 | `tests/fuzzed/`         |   644 |    **0 panics** | can malformed input crash the front end?                         |
 | `tests/bench/`          |    11 |         not run | upstream's benchmarks (ours are in [`benchmarks/`](benchmarks/)) |
@@ -154,9 +154,6 @@ backlog:
 - **A compiled native library.** `ffi`, `extern-library`, `c-buzz-api` and
   `types-as-value` all `zdef` against `tests/utils/libforeign`, and `os` shells out
   to upstream's own `./zig-out/bin/buzz`. All five need upstream built with Zig.
-- **Reified generics.** `testing` calls `assertOfType::<int>` and
-  `assertThrows::<str>`; gopherbuzz erases type parameters, so a type argument is
-  not a runtime value. gopherbuzz's own `testing` module takes a type NAME instead.
 - **`math\deg` will not be matched.** Upstream's result implies a degrees-per-radian
   constant of 57.295779513082195; the correctly-rounded f64 value is
   57.29577951308232, which is what gopherbuzz returns. Matching upstream here would
