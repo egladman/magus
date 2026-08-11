@@ -1,0 +1,6 @@
+// @expect: <str>:<int>
+// A str-backed case's `.value` is its NAME, so `typeof` must say str. It said int
+// unconditionally before, while the VM answered a string.
+enum<str> Backed { one, two }
+enum Plain { a, b }
+final __r = "{typeof Backed.one.value}:{typeof Plain.a.value}";

@@ -140,6 +140,10 @@ func (o *ObjectType) TypeName() string { return o.Name }
 type EnumType struct {
 	Name  string
 	Cases []string
+	// Backing is the declared `enum<str>` / `enum<int>` backing type, "" when the
+	// declaration omits it (which numbers the cases from zero, so it reads as int).
+	// It is what types a case's `.value`.
+	Backing string
 }
 
 func (e *EnumType) TypeName() string { return e.Name }

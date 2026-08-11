@@ -224,7 +224,7 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 					case *ast.ObjectDecl:
 						nt.Fields[v.Name] = c.buildObjectType(v)
 					case *ast.EnumDecl:
-						nt.Fields[v.Name] = &types.EnumType{Name: v.Name, Cases: v.Cases}
+						nt.Fields[v.Name] = &types.EnumType{Name: v.Name, Cases: v.Cases, Backing: v.Backing}
 						// The enum's VALUE lives behind the namespace, so a resolved case has to
 						// compile to `ns\Enum.case` rather than the bare name the checker uses.
 						if c.enumNS == nil {
@@ -293,7 +293,7 @@ func (c *checker) registerTypeDecls(decls []ast.Node) {
 			c.types[v.Name] = ot
 			c.define(v.Name, ot, true)
 		case *ast.EnumDecl:
-			et := &types.EnumType{Name: v.Name, Cases: v.Cases}
+			et := &types.EnumType{Name: v.Name, Cases: v.Cases, Backing: v.Backing}
 			c.types[v.Name] = et
 			c.define(v.Name, et, true)
 		}
@@ -1101,6 +1101,12 @@ func (c *checker) inferBinary(v *ast.BinaryExpr) types.Type {
 	case "&", "|", "^", "<<", ">>":
 		return c.integerResult(v.Pos, v.Op, left, right)
 	case "<", ">", "<=", ">=", "==", "!=":
+		// Deliberately UNTYPED. Checking it was tried on 2026-08-11 and reverted: the
+		// rule is only as good as the inference under it, and two of its false
+		// positives are not fixable here. `extractList::<int>(...) == list` compares a
+		// generic call's result, and type arguments are ERASED by design, so the
+		// left side is whatever the un-substituted body suggested. Closing
+		// import-syntax-error.buzz this way costs correct programs.
 		return types.Bool
 	case "and", "or":
 		return types.Bool
@@ -1430,6 +1436,13 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 		case "name":
 			return types.Str
 		case "value":
+			// A str-backed enum's case value is its NAME, not an ordinal. This
+			// returned Int unconditionally, so `StrEnum.one.value` typed as int while
+			// the VM answered a string - a silently wrong answer that nothing
+			// compared against until comparison typing surfaced it.
+			if t.Backing == "str" {
+				return types.Str
+			}
 			return types.Int
 		}
 		c.errorf(v.Pos, "enum %s has no case %q", t.Name, v.Name)

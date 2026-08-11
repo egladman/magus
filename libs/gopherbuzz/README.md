@@ -63,6 +63,7 @@ than a missing check. Each of these was implemented, measured, and reverted:
 | `fiber-error-location` | hold a direct `throw` to propagate-or-catch, as a CALL already is | breaks seven of magus's suites: its spells, tour files and scripts throw without `!>` |
 | `unused-import` | make BZZ3001 an error | impossible as stated -- see the note in `session.go` |
 | `selective-import` | stop `assert` resolving unimported | blocked on `registerBuiltins`, which pre-defines the stdlib names on purpose |
+| `import-syntax-error` | type comparison operands | erased generics make it misfire: `extractList::<int>(...) == list` compares a call whose result type was never substituted |
 
 Each is a call to make deliberately, with the migration budgeted -- not a gap to
 patch.
