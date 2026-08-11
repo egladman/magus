@@ -46,6 +46,11 @@ type scopeEntry struct {
 	// read records whether anything ever evaluated it.
 	declaredLocal bool
 	read          bool
+	// optional records that the DECLARATION spelled a trailing `?`. The type system
+	// erases optionality (ParseAnnot consumes the `?`), so this is the only place it
+	// survives - deliberately narrow, and only consulted where a null would be a
+	// hard error rather than a value.
+	optional bool
 	pos      ast.Pos
 	name     string
 }
@@ -510,6 +515,11 @@ func (c *checker) checkDecl(v *ast.DeclStmt) {
 	// `_` is the discard name, never assigned by construction, so it is exempt -
 	// upstream's own anonymous-objects.buzz writes `var _ = ...`.
 	c.declareTracked(v.Name, v.Pos)
+	if strings.HasSuffix(v.TypeAnnot, "?") && len(c.scopes) > 1 {
+		e := c.scopes[len(c.scopes)-1][v.Name]
+		e.optional = true
+		c.scopes[len(c.scopes)-1][v.Name] = e
+	}
 	if !v.IsConst && v.Name != "_" && len(c.scopes) > 1 {
 		e := c.scopes[len(c.scopes)-1][v.Name]
 		e.varDecl, e.pos, e.name = true, v.Pos, v.Name
@@ -1543,6 +1553,18 @@ func (c *checker) inferIndex(v *ast.IndexExpr) types.Type {
 	c.infer(v.Index)
 	switch t := ot.(type) {
 	case *types.ListType:
+		// A list index must be a non-null int, and `?[` is the form that tolerates
+		// one. Optionality is erased in the type system, so this reads the narrow
+		// record kept on the declaration instead - enough for the case that bites
+		// (an `int?` local used directly as a subscript) without claiming the
+		// checker tracks optionals generally.
+		if !v.Optional {
+			if id, isName := v.Index.(*ast.IdentExpr); isName {
+				if e, found := c.lookup(id.Name); found && e.optional {
+					c.errorfc(v.Pos, TypeMismatch, "list index must be an int, but %q may be null; unwrap it or use ?[", id.Name)
+				}
+			}
+		}
 		return t.Elem
 	case *types.MapType:
 		return t.Val

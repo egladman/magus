@@ -56,6 +56,7 @@ missing-return-one-branch.buzz
 multiple-location.buzz
 multiple-out.buzz
 not-callable.buzz
+nullable-list-index.buzz
 object-assignment-value-type.buzz
 object-field-default.buzz
 object-prop-immutable-value.buzz

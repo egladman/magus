@@ -1,0 +1,10 @@
+// @expect: 1
+// The check is on the DECLARED optionality of the index name, so coalescing to a
+// non-optional local satisfies it. Note the narrowness this pins: `[?idx]` would
+// NOT help, because that form tolerates an out-of-range index, not a null one.
+fun f() > int {
+    final idx: int? = null;
+    final safe = idx ?? 0;
+    return [1, 2, 3][safe];
+}
+final __r = f();
