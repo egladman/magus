@@ -369,14 +369,19 @@ func dispatchOp(ctx context.Context, ops map[string]spells.Op, tools map[string]
 	}
 	opts := commandOpts{op: req.Target, cwd: req.Dir, args: project.ExtraArgs(ctx), ignoreDirs: ignoreDirs}
 	// The reserved `scip` op writes its index into the cache, not the tree: magus
-	// hands it the destination via MAGUS_SYMBOL_INDEX so the spell command
-	// (`... --output "$MAGUS_SYMBOL_INDEX"`) needs no knowledge of where the cache is.
+	// hands it the destination via MAGUS_SYMBOL_INDEX so the spell command (a bare
+	// "$MAGUS_SYMBOL_INDEX" arg token, resolved by resolveRunnerRefs) needs no
+	// knowledge of where the cache is. Set on both opts.refs (what a spell's Args
+	// token resolves against) and opts.env (the process environment), so a
+	// workspace-local scip spell that still shells out - the doc comment on
+	// symbols.IndexEnvVar promises the env var is set - keeps working.
 	if req.Target == symbols.IndexOp {
 		env, err := symbolIndexEnv(ctx, req.Dir)
 		if err != nil {
 			return nil, err
 		}
 		opts.env = env
+		opts.refs = env
 	}
 	_, err := runCommand(ctx, op, opts)
 	return nil, err

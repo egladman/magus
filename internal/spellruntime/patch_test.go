@@ -338,7 +338,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			}}},
 			"go-vet":      {Command: spells.Command{Bin: "go", Args: []string{"vet", "./..."}}},
 			"govulncheck": {Command: spells.Command{Bin: "govulncheck", Args: []string{"./..."}}},
-			"scip":        {Command: spells.Command{Bin: "sh", Args: []string{"-c", "scip-go --output \"$MAGUS_SYMBOL_INDEX\""}}},
+			"scip":        {Command: spells.Command{Bin: "scip-go", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}}},
 		},
 	},
 	"markdown": {
@@ -398,7 +398,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"ruff-format": {Command: spells.Command{Bin: "uv", Args: []string{"run", "ruff", "format", "--check", "."}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/3"}}},
 			}}},
-			"scip": {Command: spells.Command{Bin: "sh", Args: []string{"-c", "scip-python index . --output \"$MAGUS_SYMBOL_INDEX\""}}},
+			"scip": {Command: spells.Command{Bin: "scip-python", Args: []string{"index", ".", "--output", "$MAGUS_SYMBOL_INDEX"}}},
 		},
 	},
 	"rust": {
@@ -416,7 +416,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}},
 			}}},
 			"cargo-test": {Command: spells.Command{Bin: "cargo", Args: []string{"test"}}},
-			"scip":       {Command: spells.Command{Bin: "sh", Args: []string{"-c", "rust-analyzer scip . --output \"$MAGUS_SYMBOL_INDEX\""}}},
+			"scip":       {Command: spells.Command{Bin: "rust-analyzer", Args: []string{"scip", ".", "--output", "$MAGUS_SYMBOL_INDEX"}}},
 		},
 	},
 	"typescript": {
@@ -461,7 +461,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"dev-server": {Kind: "service", Command: spells.Command{Bin: "pnpm", Args: []string{"run", "dev"}}, Service: &spells.Service{
 				Command: spells.Command{Bin: "pnpm", Args: []string{"run", "dev"}},
 			}},
-			"scip": {Command: spells.Command{Bin: "sh", Args: []string{"-c", "scip-typescript index --output \"$MAGUS_SYMBOL_INDEX\""}}},
+			"scip": {Command: spells.Command{Bin: "scip-typescript", Args: []string{"index", "--output", "$MAGUS_SYMBOL_INDEX"}}},
 		},
 	},
 }

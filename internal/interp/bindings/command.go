@@ -188,11 +188,12 @@ var runnerRefPattern = regexp.MustCompile(`^\$[A-Za-z_][A-Za-z0-9_]*$`)
 // $NAME token (see resolveRunnerRefs): run.SelfVars for this invocation (MAGUS,
 // MAGUS_LEVEL, the ancestor chain - the same values every spell subprocess
 // already receives in its own environment) plus whatever opts.refs adds
-// explicitly for one op (e.g. a future per-run cache destination for the scip
-// op). It is NOT the process environment or the sandbox's BaseEnv, and it is
-// NOT commandOpts.env: env can carry a resolved Secret (runCommand's
-// tgt.Secrets), and Secrets exists precisely so that value never reaches Args -
-// folding env in here would defeat that the moment a spell wrote $A_SECRET_NAME.
+// explicitly for one op (e.g. the per-run cache destination dispatchOp sets for
+// the scip op via MAGUS_SYMBOL_INDEX). It is NOT the process environment or
+// the sandbox's BaseEnv, and it is NOT commandOpts.env: env can carry a
+// resolved Secret (runCommand's tgt.Secrets), and Secrets exists precisely so
+// that value never reaches Args - folding env in here would defeat that the
+// moment a spell wrote $A_SECRET_NAME.
 func runnerRefs(ctx context.Context, opts commandOpts) map[string]string {
 	refs := make(map[string]string, len(opts.refs)+2)
 	for _, kv := range run.SelfVars(ctx) {

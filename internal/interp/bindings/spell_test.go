@@ -7,9 +7,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -753,4 +755,38 @@ func TestResolveSecretEnvCollisionErrors(t *testing.T) {
 	assert.Contains(t, err.Error(), `"scip"`)
 	assert.Contains(t, err.Error(), "MAGUS_SYMBOL_INDEX")
 	assert.Contains(t, err.Error(), "collides")
+}
+
+// TestDispatchOpResolvesSymbolIndexRefInArgs proves the mechanism that replaced
+// `sh -c 'scip-go --output "$MAGUS_SYMBOL_INDEX"'` in the built-in scip spells: a
+// bare $MAGUS_SYMBOL_INDEX token in an op's Args is resolved by the runner (via
+// opts.refs, wired in dispatchOp) to the real cache destination BEFORE the process
+// forks - not left for a shell to expand. The op here writes its raw argv[1] (not
+// an env var) to a file, so a script that merely referenced $MAGUS_SYMBOL_INDEX as
+// an environment variable - which the child also receives, for a workspace-local
+// scip spell that still shells out - would not make this test pass; only genuine
+// engine-side substitution of the arg token does.
+func TestDispatchOpResolvesSymbolIndexRefInArgs(t *testing.T) {
+	ctx := context.Background()
+	c, err := cache.Open(ctx, t.TempDir(), cache.WithMutable(true))
+	require.NoError(t, err)
+	ctx = cache.NewContext(ctx, c)
+
+	projDir := t.TempDir()
+	argvFile := filepath.Join(projDir, "argv.txt")
+	ops := map[string]spells.Op{
+		"scip": {Command: spells.Command{
+			Bin:  "sh",
+			Args: []string{"-c", `printf '%s' "$1" > "$2"`, "sh", "$MAGUS_SYMBOL_INDEX", argvFile},
+		}},
+	}
+
+	_, err = dispatchOp(ctx, ops, nil, nil, spells.InvokeRequest{Target: symbols.IndexOp, Dir: projDir})
+	require.NoError(t, err)
+
+	got, err := os.ReadFile(argvFile)
+	require.NoError(t, err)
+	want := symbols.IndexPath(c.Dir(), projDir)
+	assert.Equal(t, want, string(got), "the resolved arg must be the real index path")
+	assert.NotContains(t, string(got), "$MAGUS_SYMBOL_INDEX", "the literal reference token must never reach the child's argv")
 }

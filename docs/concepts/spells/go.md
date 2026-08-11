@@ -389,5 +389,5 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 
 ## scip
 
-**Command:** `sh -c scip-go --output "$MAGUS_SYMBOL_INDEX"`
+**Command:** `scip-go --output $MAGUS_SYMBOL_INDEX`
 

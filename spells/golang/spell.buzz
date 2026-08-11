@@ -143,7 +143,7 @@ fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", 
 // pinned by whatever the workspace uses, and mgs_getVersionProbes records which.
 fun goVulncheck(target: Target) > Command { return Command{bin = "govulncheck", args = ["./..."]}; }
 fun scipGo(target: Target) > Command {
-    return Command{bin = "sh", args = ["-c", "scip-go --output \"$MAGUS_SYMBOL_INDEX\""]};
+    return Command{bin = "scip-go", args = ["--output", "$MAGUS_SYMBOL_INDEX"]};
 }
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {
