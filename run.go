@@ -1138,7 +1138,16 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// and readiness-gated, deduped by fingerprint so N dependents share one instance,
 	// and released when the run ends (warm on the daemon, or stopped in-process).
 	svcSession := m.newServiceSession(ctx)
-	defer svcSession.ReleaseAll()
+	// context.WithoutCancel: a cancelled run (Ctrl-C) still has to release the
+	// services it acquired, or an in-process one leaks running and a daemon-hosted
+	// one leaks its ref-count - passing the already-cancelled ctx through would make
+	// Shutdown's bounded wait for e.ready return immediately and skip stopping
+	// anything still starting. Bounded so a wedged service cannot hang teardown.
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), service.DefaultShutdownTimeout)
+		defer cancel()
+		svcSession.ReleaseAll(shutdownCtx)
+	}()
 	ctx = service.WithSession(ctx, svcSession)
 	_, runErr := m.cache.RunAll(ctx, steps, func(ctx context.Context, s cache.Step) error {
 		// Each step invocation gets a fresh TargetMemo so depends_on diamonds

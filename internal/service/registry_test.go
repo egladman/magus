@@ -33,7 +33,7 @@ func (f *fakeRunner) Start(_ context.Context, _ spells.Service) (Handle, error) 
 	return fakeHandle{id: f.started}, nil
 }
 
-func (f *fakeRunner) Stop(Handle) {
+func (f *fakeRunner) Stop(context.Context, Handle) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.stopped++
@@ -177,7 +177,7 @@ func TestShutdownStopsAll(t *testing.T) {
 
 	_, _ = r.Acquire(ctx, "a", svc())
 	_, _ = r.Acquire(ctx, "b", svc())
-	r.Shutdown()
+	r.Shutdown(context.Background())
 
 	_, stopped := f.counts()
 	assert.Equal(t, 2, stopped)
@@ -204,7 +204,7 @@ func (s *slowRunner) Start(context.Context, spells.Service) (Handle, error) {
 	return fakeHandle{id: s.started}, nil
 }
 
-func (s *slowRunner) Stop(Handle) {
+func (s *slowRunner) Stop(context.Context, Handle) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.stopped++
@@ -235,7 +235,7 @@ func TestShutdownWaitsForInFlightStart(t *testing.T) {
 	// Shutdown while Start is blocked, then let Start complete.
 	shutdownReturned := make(chan struct{})
 	go func() {
-		r.Shutdown() // must block on the in-flight start, not skip it
+		r.Shutdown(context.Background()) // must block on the in-flight start, not skip it
 		close(shutdownReturned)
 	}()
 	time.Sleep(20 * time.Millisecond) // let Shutdown reach its wait
@@ -252,6 +252,38 @@ func TestShutdownWaitsForInFlightStart(t *testing.T) {
 	assert.Equal(t, 1, started)
 	assert.Equal(t, 1, stopped, "the process started mid-shutdown must still be stopped, not orphaned")
 	assert.Equal(t, 0, r.Held())
+}
+
+// TestShutdownRespectsCtx is the regression test for D5: before the fix, Shutdown
+// took no ctx and stop() blocked on <-e.ready unconditionally, so one entry whose
+// Start never completes could hang daemon teardown forever. Shutdown must instead
+// return once ctx expires, even with a permanently in-flight Start.
+func TestShutdownRespectsCtx(t *testing.T) {
+	sr := &slowRunner{entered: make(chan struct{}), proceed: make(chan struct{})}
+	r := New(sr, time.Hour)
+
+	go func() { _, _ = r.Acquire(context.Background(), "pg", svc()) }()
+	<-sr.entered // Start is blocked mid-flight and never proceeds in this test
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	shutdownReturned := make(chan struct{})
+	go func() {
+		r.Shutdown(ctx)
+		close(shutdownReturned)
+	}()
+
+	// Hard bound well beyond ctx's 50ms: a regression here should fail the test
+	// rather than wedge the suite.
+	select {
+	case <-shutdownReturned:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Shutdown did not return within the hard test bound after ctx expired; a wedged Start blocked teardown")
+	}
+
+	// Unblock the still-in-flight Start so its goroutine does not leak past the test.
+	close(sr.proceed)
 }
 
 func TestSuperviseGating(t *testing.T) {
@@ -303,7 +335,7 @@ func TestSessionRoutesToDaemonWhenPresent(t *testing.T) {
 	assert.Equal(t, []string{"pg"}, acquired)
 
 	// ReleaseAll releases the daemon-held key (kept warm) and shuts the local registry.
-	sess.ReleaseAll()
+	sess.ReleaseAll(context.Background())
 	assert.Equal(t, []string{"pg"}, released)
 }
 
@@ -328,7 +360,7 @@ func TestSessionReleaseAllMatchesAcquireCount(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, acquireCount, "test acquired the same key twice")
 
-	sess.ReleaseAll()
+	sess.ReleaseAll(context.Background())
 	assert.Equal(t, acquireCount, releaseCount, "every daemon acquire must be matched by a release")
 }
 
@@ -350,7 +382,7 @@ func TestSessionFallsBackToInProcessOnDaemonFailure(t *testing.T) {
 
 	// The fallback is NOT recorded as a daemon key, so ReleaseAll does not release it
 	// remotely; the in-process registry stops it on Shutdown instead.
-	sess.ReleaseAll()
+	sess.ReleaseAll(context.Background())
 	assert.Empty(t, released, "in-process fallback is not released to the daemon")
 }
 

@@ -23,7 +23,7 @@ func (r *recordRunner) Start(context.Context, spells.Service) (service.Handle, e
 	r.started++
 	return struct{}{}, nil
 }
-func (r *recordRunner) Stop(service.Handle) {}
+func (r *recordRunner) Stop(context.Context, service.Handle) {}
 
 func serviceOp() spells.Op {
 	// bin "true" exits 0, so the non-supervised fall-through fork is harmless.

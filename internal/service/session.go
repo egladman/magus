@@ -64,8 +64,11 @@ func (s *Session) acquire(ctx context.Context, key string, svc spells.Service) e
 
 // ReleaseAll releases everything the session acquired: daemon-hosted services are
 // released back to the daemon (which keeps them warm and reaps them later), and the
-// in-process ones are stopped. Call once at run end.
-func (s *Session) ReleaseAll() {
+// in-process ones are stopped. Call once at run end. ctx bounds the in-process
+// Shutdown; pass a ctx that can still make progress even if the run's own ctx is
+// already cancelled (see [Registry.Shutdown]), since a cancelled run still has to
+// release what it acquired.
+func (s *Session) ReleaseAll(ctx context.Context) {
 	s.mu.Lock()
 	keys := s.daemonKeys
 	s.daemonKeys = map[string]int{}
@@ -76,5 +79,5 @@ func (s *Session) ReleaseAll() {
 			s.daemonRelease(k)
 		}
 	}
-	s.reg.Shutdown()
+	s.reg.Shutdown(ctx)
 }

@@ -988,7 +988,15 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 		// Drain in-flight handlers (srv.Close waits on connWg) before reg.close so a
 		// workspace can't be closed under an in-flight build. Close is idempotent.
 		srv.Close()
-		svcReg.Shutdown() // stop every hosted service on daemon teardown
+		// ctx may already be Done here (the signal path above), and Shutdown's wait
+		// for an in-flight service Start returns immediately once its ctx is done -
+		// so passing the cancelled ctx straight through would skip stopping anything
+		// still starting. context.WithoutCancel plus a fresh bound keeps teardown
+		// running (and still cancellable) instead of either hanging forever (the bug
+		// this fixes) or aborting outright (worse: leaks the process).
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), service.DefaultShutdownTimeout)
+		svcReg.Shutdown(shutdownCtx) // stop every hosted service on daemon teardown
+		cancel()
 		reg.close()
 	}()
 }

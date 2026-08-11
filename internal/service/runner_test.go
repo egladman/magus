@@ -38,7 +38,7 @@ func TestExecRunnerReadyThenStop(t *testing.T) {
 	default:
 	}
 
-	ExecRunner{}.Stop(h)
+	ExecRunner{}.Stop(context.Background(), h)
 	select {
 	case <-eh.done:
 	case <-time.After(2 * time.Second):
@@ -118,7 +118,7 @@ func TestExecRunnerUsesStopCommand(t *testing.T) {
 	})
 	require.NoError(t, err)
 	done := make(chan struct{})
-	go func() { runner.Stop(h); close(done) }()
+	go func() { runner.Stop(context.Background(), h); close(done) }()
 	select {
 	case <-done:
 	case <-time.After(10 * time.Second):

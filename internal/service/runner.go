@@ -18,6 +18,15 @@ const (
 	defaultStopGrace     = 5 * time.Second
 )
 
+// DefaultShutdownTimeout bounds a [Registry.Shutdown] call for a caller whose own ctx
+// may already be cancelled (e.g. Ctrl-C) by the time it tears down services - such a
+// caller must derive a fresh ctx (context.WithoutCancel plus this timeout) rather than
+// pass the cancelled one through, or Shutdown would return immediately without
+// stopping anything. It covers one victim's worst case (defaultReadyTimeout waiting
+// out an in-flight Start, plus defaultStopGrace) with headroom; Shutdown tears down
+// victims concurrently, so this bounds the whole call, not each service.
+const DefaultShutdownTimeout = 40 * time.Second
+
 // ExecRunner is the production [Runner]: it forks the service process in its own
 // process group, waits for an optional readiness probe to pass, and stops it via
 // its graceful Stop command or a signal, escalating to a group kill. It supervises
@@ -88,27 +97,36 @@ func (r ExecRunner) Start(ctx context.Context, s spells.Service) (Handle, error)
 
 	if s.Readiness.Bin != "" {
 		if err := r.waitReady(ctx, s.Readiness); err != nil {
-			stopProc(h)
+			// Start's own ctx, not context.Background(): if ctx is already why waitReady
+			// gave up (deadline/cancel), stopProc's grace wait should not outlive it
+			// either - a caller that cancelled Start is not going to wait around for a
+			// graceful cleanup grace period.
+			stopProc(ctx, h)
 			return nil, fmt.Errorf("service: %q not ready: %w", s.Command.Bin, err)
 		}
 	}
 	return h, nil
 }
 
-// Stop stops a running service.
-func (ExecRunner) Stop(h Handle) {
+// Stop stops a running service. ctx bounds the wait beyond the usual stop
+// grace: if ctx is done first, Stop escalates to a hard kill immediately instead of
+// waiting out the rest of the grace window, and does not block confirming the
+// process was reaped (the Start goroutine still reaps it in the background, so
+// nothing is left a zombie - Stop just stops waiting to hear about it).
+func (ExecRunner) Stop(ctx context.Context, h Handle) {
 	eh, ok := h.(*execHandle)
 	if !ok || eh == nil {
 		return
 	}
-	stopProc(eh)
+	stopProc(ctx, eh)
 }
 
 // stopProc shuts a service down: prefer its graceful Stop command, else SIGTERM the
 // process group; either way escalate to a hard group kill if it does not exit within
-// the grace window, and wait for it to be reaped. Signalling and killing target the
-// whole group (via internal/proc/run) so a wrapper's grandchildren are not orphaned.
-func stopProc(h *execHandle) {
+// the grace window (or ctx ends first), and wait for it to be reaped unless ctx ends
+// before that too. Signalling and killing target the whole group (via
+// internal/proc/run) so a wrapper's grandchildren are not orphaned.
+func stopProc(ctx context.Context, h *execHandle) {
 	select {
 	case <-h.done:
 		return // already exited
@@ -116,26 +134,35 @@ func stopProc(h *execHandle) {
 	}
 
 	if h.stop.Bin != "" {
-		runStopCommand(h.stop, h.grace)
+		runStopCommand(ctx, h.stop, h.grace)
 	} else {
 		_ = run.TerminateGroup(h.cmd)
 	}
 
 	select {
 	case <-h.done:
+		return
 	case <-time.After(h.grace):
-		run.KillGroup(h.cmd)
-		<-h.done
+	case <-ctx.Done():
+		// Caller's deadline expired before the grace window did; escalate now rather
+		// than waiting out the rest of grace, so a bounded Shutdown cannot be stalled
+		// past its own deadline by one slow-to-exit process.
+	}
+	run.KillGroup(h.cmd)
+	select {
+	case <-h.done:
+	case <-ctx.Done():
 	}
 }
 
-// runStopCommand runs a service's graceful stop command, bounded by grace so a hung
-// stop binary cannot block teardown indefinitely (the caller still escalates to a
-// group kill afterward).
-func runStopCommand(stop spells.Command, grace time.Duration) {
-	ctx, cancel := context.WithTimeout(context.Background(), grace)
+// runStopCommand runs a service's graceful stop command, bounded by the shorter of
+// grace and ctx's remaining time, so a hung stop binary cannot block teardown
+// indefinitely (the caller still escalates to a group kill afterward) and cannot
+// outlive a caller deadline either.
+func runStopCommand(ctx context.Context, stop spells.Command, grace time.Duration) {
+	cctx, cancel := context.WithTimeout(ctx, grace)
 	defer cancel()
-	_ = exec.CommandContext(ctx, stop.Bin, stop.Args...).Run()
+	_ = exec.CommandContext(cctx, stop.Bin, stop.Args...).Run()
 }
 
 // waitReady polls the readiness probe until it exits 0 or the timeout elapses. The
