@@ -133,7 +133,7 @@ fun greet() > str {
 
 // Empty typed-list literal `[<T>]` must infer `[T]`, not `[any]`, so a list
 // accumulated with `+` and returned keeps its element type. Mirrors upstream
-// Buzz; see splitCommands in examples/bubblegum/config.buzz.
+// Buzz.
 func TestCheck_TypedEmptyListReturn(t *testing.T) {
 	checkOK(t, `
 fun build() > [str] {

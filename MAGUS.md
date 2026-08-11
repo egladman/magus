@@ -46,7 +46,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Size | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 10+ | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 100+ | `magus query kind:target` | `content-generate`, `site-generate`, `bindings-generate` |
+| target | 100+ | `magus query kind:target` | `content-generate`, `site-generate`, `generate` |
 | spell | 10+ | `magus query kind:spell` | `go`, `markdown`, `typescript` |
 | op | 60+ | `magus query kind:op` | `go-build`, `go-test`, `go-fmt` |
 | tool | 10+ | `magus query kind:tool` | `sh`, `go`, `pnpm` |
@@ -55,15 +55,15 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | method | 100+ | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 60+ | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS1022` |
 | doc | 200+ | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
-| dir | 200+ | `magus query kind:dir` | `docs/reference/codes/magusfile`, `libs/gopherbuzz/examples/bubblegum`, `docs/concepts` |
-| file | 200+ | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 1000+ | `magus query kind:function` | `sel`, `sendObject`, `send` |
-| import | 100+ | `magus query kind:import` | `std`, `magus`, `fs` |
+| dir | 100+ | `magus query kind:dir` | `docs/reference/codes/magusfile`, `docs/concepts`, `std/examples/fs` |
+| file | 100+ | `magus query kind:file` | `magusfile.buzz`, `docs/render.buzz`, `docs/magusfile.buzz` |
+| function | 700+ | `magus query kind:function` | `tail`, `sign`, `renderContentHTML` |
+| import | 80+ | `magus query kind:import` | `magus`, `fs`, `std` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 37 | `magus query project:.` | `bindings-generate`, `changelog-generate`, `generate` |
+| . | 37 | `magus query project:.` | `generate`, `image-build`, `format` |
 | console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 4 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
