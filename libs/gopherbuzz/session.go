@@ -693,6 +693,24 @@ func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Progr
 			if u.Alias != "" {
 				msg = fmt.Sprintf("import %q as %s is never used", u.Path, u.Alias)
 			}
+			// A WARNING, deliberately, though upstream makes this a compile ERROR
+			// (tests/compile_errors/unused-import.buzz). Measured 2026-08-11, twice:
+			//
+			//  1. The check has FALSE POSITIVES it cannot fix at this layer.
+			//     `referenced` flips when the BINDING NAME is seen, so
+			//     `import "buzz:std"; print("x");` reads as unused even though the
+			//     flat call is a real use - knowing that would need each module's
+			//     export table, which lives past resolution, not in the parser.
+			//  2. Upstream's own suite CONTRADICTS itself here.
+			//     tests/behavior/namespace.buzz and
+			//     tests/compile_errors/unused-import.buzz are semantically identical
+			//     - both import an unused `buzz:math` beside a used `buzz:std` - and
+			//     are expected to compile and to fail respectively. They differ only
+			//     in import order. No consistent rule satisfies both, so promoting
+			//     this to an error trades one suite's file for the other's.
+			//
+			// Fix (1) before revisiting: an accurate check is the precondition, and
+			// it is worth doing on its own merits even while this stays a warning.
 			warnings = append(warnings, typeError{Line: u.Line, Col: u.Col, Code: UnusedImport, Severity: SeverityWarning, Msg: msg})
 		}
 	}
