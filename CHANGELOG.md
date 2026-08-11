@@ -50,6 +50,13 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   produced an identifier inconsistent with `fs\readFile`, `fs\removeAll`, `fs\copyFile`,
   `fs\listDir`, and `fs\appendFile`. There is no alias: a magusfile calling
   `fs\mkdirall(...)` must be updated to `fs\mkdirAll(...)`.
+- **`has_charm` is now `hasCharm`, on both receivers.** `magus\hasCharm(...)` and
+  `ctx.hasCharm(...)`. It was the ONLY snake_case member on either surface, sitting
+  beside camelCase neighbours (`ctx.needs`, `ctx.readsFiles`, `magus\bustCache`); the
+  lock file now has no underscore in it at all. The name was pinned because the static
+  charm extractor in `internal/describe` matches it literally to build the charm
+  inventory - that matcher moved with it, and the existing tests for both receivers and
+  both arms of a charm branch are what make the rename safe rather than silent.
 - **`magus\graph` is now `magus\projectGraph`.** It returns the PROJECT dependency DAG,
   and sat beside `magus\targetGraph`, which returns a different graph entirely. Named
   `graph` and `targetGraph`, the second read as a variant of the first; they are

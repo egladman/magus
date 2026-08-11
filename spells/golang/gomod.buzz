@@ -117,7 +117,7 @@ export fun replaceWorkspaceModules(ctx: magus\Context, go: any, project: str) > 
     final flags = replaceArgs(go["go-mod-json"](ctx).stdout, modules: workspace_go_mods(ctx, go));
     if (flags.len() == 0) { return; }
     final edited = go["go-mod-edit"](ctx, {"args": flags});
-    if (ctx.has_charm("rw")) { return; }
+    if (ctx.hasCharm("rw")) { return; }
     if (edited.stdout != fs\readFile("go.mod")) {
         throw "MGS1016: go.mod has workspace-local replace drift; run `magus run generate:rw " + project + "` to apply the derived replacements";
     }

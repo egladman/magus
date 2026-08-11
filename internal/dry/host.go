@@ -173,7 +173,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	// has_charm(name) reports whether name is in the active charm set (tr.charms), so
 	// a `run t:charm` dry-run takes charm-gated branches. The same closure backs
 	// ctx.has_charm (see buildCtx).
-	m.MapSet("has_charm", fn("magus.has_charm", traceHasCharm(tr)))
+	m.MapSet("hasCharm", fn("magus.hasCharm", traceHasCharm(tr)))
 
 	// magus.log.* - the emitting members, grouped as they are in the real bindings.
 	// hint rides along here rather than with the runtime-only stubs below because it
@@ -481,7 +481,7 @@ func buildCtx(tr *Tracer) vm.Value {
 	c := vm.NewMap()
 	c.MapSet("needs", fn("ctx.needs", traceNeeds(tr)))
 	c.MapSet("glob", fn("ctx.glob", traceGlob(tr)))
-	c.MapSet("has_charm", fn("ctx.has_charm", traceHasCharm(tr)))
+	c.MapSet("hasCharm", fn("ctx.hasCharm", traceHasCharm(tr)))
 	c.MapSet("readsFiles", fn("ctx.readsFiles", retNull))
 	c.MapSet("writesFiles", fn("ctx.writesFiles", retNull))
 	c.MapSet("modifiesExistingFiles", fn("ctx.modifiesExistingFiles", retNull))

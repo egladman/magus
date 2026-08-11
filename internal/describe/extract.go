@@ -571,7 +571,7 @@ func secretReadCall(e *ast.CallExpr) bool {
 // form, so both spellings must be scanned.
 func charmCall(e *ast.CallExpr) (string, bool) {
 	me, ok := e.Callee.(*ast.MemberExpr)
-	if !ok || me.Name != "has_charm" {
+	if !ok || me.Name != "hasCharm" {
 		return "", false
 	}
 	id, ok := me.Object.(*ast.IdentExpr)

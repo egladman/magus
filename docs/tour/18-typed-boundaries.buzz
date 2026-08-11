@@ -50,8 +50,8 @@ final DOCKERHUB = Registry{
 // which a target could not. Every verb below reads it, so they cannot disagree about
 // which registries a run involves - add one entry and all of them follow.
 fun publish_registries(ctx: magus\Context) > [Registry] {
-    if (ctx.has_charm("prod")) { return [GHCR, DOCKERHUB]; }
-    if (ctx.has_charm("snapshot")) { return [GHCR]; }
+    if (ctx.hasCharm("prod")) { return [GHCR, DOCKERHUB]; }
+    if (ctx.hasCharm("snapshot")) { return [GHCR]; }
     return [];
 }
 

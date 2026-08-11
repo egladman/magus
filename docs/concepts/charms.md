@@ -263,11 +263,11 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
-A function target reads the active charm set directly with **`ctx.has_charm(name)`**, including the built-in read→write toggle, `has_charm("rw")`. This is how a function target _selects which command to run_, the one thing a charm itself cannot do (see [the boundary](#charm-vs-target-the-command-boundary)). For example, a `build` target can compile the host binary by default and switch to the container image under a `container` charm:
+A function target reads the active charm set directly with **`ctx.hasCharm(name)`**, including the built-in read→write toggle, `has_charm("rw")`. This is how a function target _selects which command to run_, the one thing a charm itself cannot do (see [the boundary](#charm-vs-target-the-command-boundary)). For example, a `build` target can compile the host binary by default and switch to the container image under a `container` charm:
 
 ```buzz
 export fun build(ctx: magus\Context, args: [str]) > void {
-    if (ctx.has_charm("container")) { ctx.needs(image_build); }
+    if (ctx.hasCharm("container")) { ctx.needs(image_build); }
     else { ctx.needs(go_build); }
 }
 ```

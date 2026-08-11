@@ -264,7 +264,7 @@ export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("gen/**", "src/gen/**", "active.urls.lock");
     renderer\site_publish(ROOT, DOCS, BLOG, OUT,
         magus\targets(), magus\projectGraph(),
-        ctx.has_charm("rw"));
+        ctx.hasCharm("rw"));
 }
 
 // generate is the one public docs publication target. Its small drift gate always runs;
@@ -298,7 +298,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(build_mermaid, build_hljs, build_playground_editor);
     ctx.needs(site_generate);
     // site_generate owns the full render, bundle, and manifest artifact.
-    if (ctx.has_charm("rw")) { return; }
+    if (ctx.hasCharm("rw")) { return; }
     // Name the files, not the set. "MAGUS.md or CHANGELOG.md or generated docs Markdown
     // drifted" tells a reader only that one of nine things moved, and this gate fires
     // where the tree is not in front of them. changedSince expands the directories in

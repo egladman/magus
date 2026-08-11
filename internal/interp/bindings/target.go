@@ -523,7 +523,7 @@ func buildTargetContext(obs buzz.DirectObserver, targets map[string]vm.Callable,
 	// environment map, which spell dispatch reads back - a declaration under that name
 	// silently replaced the environment with a no-op and dropped every withEnv override.
 	c.MapSet("envInputs", directVal(obs, "ctx.envInputs", footprintDecl))
-	c.MapSet("has_charm", directVal(obs, "ctx.has_charm", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+	c.MapSet("hasCharm", directVal(obs, "ctx.hasCharm", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		return vm.BoolValue(types.HasCharm(ctx, argStr(args, 0))), nil
 	}))
 	return c

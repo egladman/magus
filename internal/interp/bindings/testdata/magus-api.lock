@@ -12,7 +12,7 @@ describeFile
 diagnoseDrift
 doctor
 fatal
-has_charm
+hasCharm
 insight
 insightReport
 log

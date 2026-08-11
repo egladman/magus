@@ -132,7 +132,7 @@ A target returns `void`. Its result to the outside world is an exit code plus te
 ```buzz
 // Typed where it matters. The list never leaves Buzz, so nothing has to parse it.
 fun publish_registries(ctx: magus\Context) > [Registry] {
-    if (ctx.has_charm("cd")) { return REGISTRIES; }
+    if (ctx.hasCharm("cd")) { return REGISTRIES; }
     return [];
 }
 ```

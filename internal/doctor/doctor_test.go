@@ -412,11 +412,11 @@ func TestCheckCharmTargetCollision(t *testing.T) {
 		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 	t.Run("charm distinct from every target", func(t *testing.T) {
-		got := run(map[string]string{"magusfile.buzz": "export fun build(ctx: magus\\Context, _a: [str]) > void { ctx.has_charm(\"container\"); }\n"})
+		got := run(map[string]string{"magusfile.buzz": "export fun build(ctx: magus\\Context, _a: [str]) > void { ctx.hasCharm(\"container\"); }\n"})
 		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 	t.Run("body charm shares a target name", func(t *testing.T) {
-		got := run(map[string]string{"magusfile.buzz": "export fun container(ctx: magus\\Context, _a: [str]) > void {}\nexport fun build(ctx: magus\\Context, _a: [str]) > void { ctx.has_charm(\"container\"); }\n"})
+		got := run(map[string]string{"magusfile.buzz": "export fun container(ctx: magus\\Context, _a: [str]) > void {}\nexport fun build(ctx: magus\\Context, _a: [str]) > void { ctx.hasCharm(\"container\"); }\n"})
 		assert.Equal(t, types.DoctorFail, got.Status, got.Message)
 	})
 	t.Run("target named like a reserved charm", func(t *testing.T) {
@@ -437,17 +437,17 @@ func TestCheckHasCharmTypos(t *testing.T) {
 		assert.Equal(t, types.DoctorOK, run("export fun build(ctx: magus\\Context, _a: [str]) > void {}\n").Status)
 	})
 	t.Run("live read of a reserved charm", func(t *testing.T) {
-		assert.Equal(t, types.DoctorOK, run("export fun b(ctx: magus\\Context, _a: [str]) > void { ctx.has_charm(\"rw\"); }\n").Status)
+		assert.Equal(t, types.DoctorOK, run("export fun b(ctx: magus\\Context, _a: [str]) > void { ctx.hasCharm(\"rw\"); }\n").Status)
 	})
 	t.Run("separator variant of a real charm is live, not a typo", func(t *testing.T) {
 		// has_charm("rw_") normalizes to "rw", so the branch is live and must not flag.
-		assert.Equal(t, types.DoctorOK, run("export fun b(ctx: magus\\Context, _a: [str]) > void { ctx.has_charm(\"rw_\"); }\n").Status)
+		assert.Equal(t, types.DoctorOK, run("export fun b(ctx: magus\\Context, _a: [str]) > void { ctx.hasCharm(\"rw_\"); }\n").Status)
 	})
 	t.Run("novel undeclared charm has no near match, so no flag", func(t *testing.T) {
-		assert.Equal(t, types.DoctorOK, run("export fun b(ctx: magus\\Context, _a: [str]) > void { ctx.has_charm(\"container\"); }\n").Status)
+		assert.Equal(t, types.DoctorOK, run("export fun b(ctx: magus\\Context, _a: [str]) > void { ctx.hasCharm(\"container\"); }\n").Status)
 	})
 	t.Run("misspelling of a real charm is flagged", func(t *testing.T) {
-		got := run("export fun b(ctx: magus\\Context, _a: [str]) > void { ctx.has_charm(\"rww\"); }\n")
+		got := run("export fun b(ctx: magus\\Context, _a: [str]) > void { ctx.hasCharm(\"rww\"); }\n")
 		assert.Equal(t, types.DoctorFail, got.Status, got.Message)
 		require.Len(t, got.Details, 1)
 		assert.Contains(t, got.Details[0], "rww")

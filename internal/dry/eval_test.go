@@ -116,7 +116,7 @@ import "magus";
 import "magus/spell/docker";
 magus.project({"spells": [docker]});
 export fun image_build(ctx: magus\Context, args: [str]) > void {
-    if (ctx.has_charm("cd")) { docker["docker-build"]({"args": ["--push"]}); }
+    if (ctx.hasCharm("cd")) { docker["docker-build"]({"args": ["--push"]}); }
     else { docker["docker-build"]({"args": ["--load"]}); }
 }
 `

@@ -55,7 +55,7 @@ magus\project({
 // charm - the point is that the KEY differs regardless, because the charm is part of the
 // run's identity whether or not this target's code branches on it.
 export fun report(ctx: magus\Context, args: [str]) > void {
-    if (ctx.has_charm("loud")) {
+    if (ctx.hasCharm("loud")) {
         magus\log.info("report: running LOUD");
     } else {
         magus\log.info("report: running plain");

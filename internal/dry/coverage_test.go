@@ -426,7 +426,7 @@ export fun mgs_listTargets() > any { return {"svc": svc}; }
 	assert.Equal(t, "service", r.Trace[0].Kind, "a command-shaped-but-not-map field still reads as a service")
 }
 
-// TestRun_charmBranchElseViaCtx re-confirms the ctx.has_charm path branches on the
+// TestRun_charmBranchElseViaCtx re-confirms the ctx.hasCharm path branches on the
 // active charm set - exercising traceHasCharm's true and false returns through the
 // ctx form rather than the global.
 func TestRun_charmBranchViaCtx(t *testing.T) {
@@ -435,7 +435,7 @@ import "magus";
 import "magus/spell/docker";
 magus.project({"spells": [docker]});
 export fun image_build(ctx: magus\Context, args: [str]) > void {
-    if (ctx.has_charm("cd")) { docker["docker-build"]({"args": ["--push"]}); }
+    if (ctx.hasCharm("cd")) { docker["docker-build"]({"args": ["--push"]}); }
     else { docker["docker-build"]({"args": ["--load"]}); }
 }
 `

@@ -226,8 +226,7 @@ var Magus = Module{
 			Impl:    MagusBustCache,
 		},
 		{
-			Name:     "has_charm",
-			BuzzName: "has_charm",
+			Name: "has_charm",
 			Doc:      "True when execution charm `name` is active, letting a target body branch on a charm carried in context (e.g. has_charm(\"rw\")).",
 			Args: []Arg{
 				{Name: "name", Type: TypeString},

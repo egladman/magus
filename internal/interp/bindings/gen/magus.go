@@ -167,7 +167,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return vm.Null, nil
 	}))
-	m.MapSet("has_charm", vm.DirectValue("magus.has_charm", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+	m.MapSet("hasCharm", vm.DirectValue("magus.hasCharm", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		name := Str(bzArgs, 0)
 		ret0, err := std.MagusHasCharm(ctx, name)
 		if err != nil {

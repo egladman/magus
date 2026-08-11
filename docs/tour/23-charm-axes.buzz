@@ -37,7 +37,7 @@ fun version() > str { return "1.4.0-rc.2"; }
 // this workspace's own code prefix - magus refuses the MGS prefix, which is its closed
 // catalog, so a workspace diagnostic can never render as though magus documented it.
 fun exclusiveCharms(ctx: magus\Context, a: str, b: str, code: str, question: str) > void !> any {
-    if (ctx.has_charm(a) and ctx.has_charm(b)) {
+    if (ctx.hasCharm(a) and ctx.hasCharm(b)) {
         magus\raise(code, message: "the `" + a + "` and `" + b + "` charms both answer "
             + question + " - name one");
     }
@@ -53,8 +53,8 @@ fun channel(ctx: magus\Context) > str !> any {
     exclusiveCharms(ctx, a: "stable", b: "unstable", code: "WS1002",
         question: "which channel to publish to");
 
-    final wantStable = ctx.has_charm("stable");
-    final wantUnstable = ctx.has_charm("unstable");
+    final wantStable = ctx.hasCharm("stable");
+    final wantUnstable = ctx.hasCharm("unstable");
     if (!wantStable and !wantUnstable) { return "commit"; }
 
     final pre = semver\parse(version()).prerelease;
@@ -79,7 +79,7 @@ fun channel(ctx: magus\Context) > str !> any {
 // pushes nothing: the commit channel adds an immutable tag and moves nothing, while a
 // release moves a tag every consumer follows.
 export fun publish(ctx: magus\Context, args: [str]) > void !> any {
-    if (!ctx.has_charm("cd")) {
+    if (!ctx.hasCharm("cd")) {
         magus\log.info("publish: built " + version() + ", pushed nothing (add the cd charm to deliver)");
         return;
     }

@@ -386,8 +386,8 @@ fun write_image_summary(refs: [str]) > void !> any {
 // it to be slow; it is a debugging tool, not a second default.
 fun load_platform(ctx: magus\Context) > str !> any {
     exclusive_charms(ctx, "amd64", "arm64", "WS1001", "which platform to build for");
-    if (ctx.has_charm("amd64")) { return "linux/amd64"; }
-    if (ctx.has_charm("arm64")) { return "linux/arm64"; }
+    if (ctx.hasCharm("amd64")) { return "linux/amd64"; }
+    if (ctx.hasCharm("arm64")) { return "linux/arm64"; }
     return "linux/" + os\platform()[1];
 }
 
@@ -399,7 +399,7 @@ fun load_platform(ctx: magus\Context) > str !> any {
 // refuses the MGS prefix outright, which is what stops a workspace diagnostic from
 // rendering as though magus documented it.
 fun exclusive_charms(ctx: magus\Context, a: str, b: str, code: str, question: str) > void !> any {
-    if (ctx.has_charm(a) and ctx.has_charm(b)) {
+    if (ctx.hasCharm(a) and ctx.hasCharm(b)) {
         magus\raise(code, message: "the `" + a + "` and `" + b
             + "` charms both answer " + question + " - name one",
             opts: {"url": "https://eli.gladman.cc/magus/recommendations/#one-charm-answers-one-question"});
@@ -441,7 +441,7 @@ fun load_variant(ctx: magus\Context, dockerfile: str) > void !> any {
 export fun image_build(ctx: magus\Context, args: [str]) > void !> any {
     final registries = publish_registries(ctx);
     var pushed = mut [<str>];
-    if (ctx.has_charm("cd")) {
+    if (ctx.hasCharm("cd")) {
         final ch = channel(ctx);
         if (ch == "commit") {
             foreach (r in publish_variant(ctx, "Dockerfile.static", "linux/amd64,linux/arm64",
@@ -461,7 +461,7 @@ export fun image_build(ctx: magus\Context, args: [str]) > void !> any {
                 registries, dynamicTags, "dynamic-meta.json")) { pushed.append(r); }
         }
         write_image_summary(pushed);
-    } else if (ctx.has_charm("dynamic")) {
+    } else if (ctx.hasCharm("dynamic")) {
         load_variant(ctx, "Dockerfile");
     } else {
         // Static is the DEFAULT, so it gets no charm - a charm names a departure from
@@ -480,7 +480,7 @@ export fun image_build(ctx: magus\Context, args: [str]) > void !> any {
 // Going through channel() also means the workflow's `image-registries:cd,stable,verify`
 // preflight rejects a bad version before QEMU, buildx and a multi-arch compile run.
 fun publish_registries(ctx: magus\Context) > [Registry] !> any {
-    if (!ctx.has_charm("cd")) { return []; }
+    if (!ctx.hasCharm("cd")) { return []; }
     if (channel(ctx) == "commit") { return [GHCR]; }
     return REGISTRIES;
 }
@@ -513,9 +513,9 @@ fun exact_release_tag() > str !> any {
 // a prerelease has not earned.
 fun channel(ctx: magus\Context) > str !> any {
     exclusive_charms(ctx, "stable", "unstable", "WS1002", "which channel to publish to");
-    final wantTagged = ctx.has_charm("tagged");
-    final wantStable = ctx.has_charm("stable");
-    final wantUnstable = ctx.has_charm("unstable");
+    final wantTagged = ctx.hasCharm("tagged");
+    final wantStable = ctx.hasCharm("stable");
+    final wantUnstable = ctx.hasCharm("unstable");
     if (wantTagged and (wantStable or wantUnstable)) {
         magus\raise("WS1002", message: "the `tagged` charm reads which channel to publish "
             + "to off the release tag, so naming `stable` or `unstable` beside it answers "
@@ -606,7 +606,7 @@ export fun image_registries(ctx: magus\Context, args: [str]) > void !> any {
     // The CREDENTIALS column costs a provider round trip - and a prompt, on a provider
     // that has one - so it is only filled when `verify` asked for it. Without the charm
     // this target reads nothing and can never surprise anyone with an unlock dialog.
-    final checking = ctx.has_charm("verify");
+    final checking = ctx.hasCharm("verify");
     var table = pad("REGISTRY", 12) + pad("REPOSITORY", 28) + pad("USERNAME REF", 20) + pad("TOKEN REF", 20) + "CREDENTIALS";
     foreach (reg in registries) {
         var state = "not checked (add the verify charm)";
@@ -709,7 +709,7 @@ export fun image_login(ctx: magus\Context, args: [str]) > void !> any {
 // Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL.
 export fun image_scan(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(image_build);
-    if (ctx.has_charm("rw")) {
+    if (ctx.hasCharm("rw")) {
         fs\makeDirectory("dist");
         proc\exec("trivy", ["image",
             "--format", "sarif",
@@ -936,7 +936,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     final before = drift.hashes(dirtyBefore);
     gomod\replaceWorkspaceModules(ctx, go, ".");
     ctx.needs(ctx.glob("*-generate", "!deploy-generate"));
-    if (ctx.has_charm("rw")) { return; }
+    if (ctx.hasCharm("rw")) { return; }
 
     // Drift is a path the generators moved: one that was clean and is now dirty, or one
     // that was already dirty and whose bytes changed during the run. status() is
@@ -1293,7 +1293,7 @@ export fun release_build(ctx: magus\Context, args: [str]) > void !> any {
     // its arch as `arm64-cgo`. platformFromName in cmd/magus-utils strips it before
     // splitting, for the same reason.
     final p = release_target_platform(goos, goarch);
-    if (ctx.has_charm("dynamic")) {
+    if (ctx.hasCharm("dynamic")) {
         build_release_variant(ctx, p[0], p[1], true, "");
     } else {
         build_release_variant(ctx, p[0], p[1], false, "_static");
@@ -1354,7 +1354,7 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
     // sign, there; tag and rewrite go.mod, here). The channel charm answers a
     // question this target does not have: cutting a version tag has only one
     // channel, so naming it would be a word with no alternative to distinguish.
-    final deliver = ctx.has_charm("cd");
+    final deliver = ctx.hasCharm("cd");
     final dirty = vcs\isDirty();
     final modules = releaser\releasableModules(magus\ls().projects);
 
@@ -1597,7 +1597,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // survives the crossing.
     fs\writeFile(fs\join("assets", "coverage.svg"),
         badge\coverage("go coverage", percent: pct.split(".")[0], radius: 3));
-    if (ctx.has_charm("rw")) { return; }
+    if (ctx.hasCharm("rw")) { return; }
     if (drift.changedSince(badgeBefore, [fs\join("assets", "coverage.svg")]).len() > 0) {
         throw "test: assets/coverage.svg is stale; re-run `magus run test:rw .` and commit the badge";
     }
@@ -1671,7 +1671,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
 // Compiles one artifact: the host binary, or the container image under the `container` charm.
 export fun build(ctx: magus\Context, args: [str])  > void {
     ctx.needs(format);
-    if (ctx.has_charm("container")) {
+    if (ctx.hasCharm("container")) {
         ctx.needs(image_build);
     } else {
         ctx.needs(go_build);
@@ -1856,7 +1856,7 @@ export fun ci_shard(ctx: magus\Context, args: [str]) > void !> any {
         + "count=" + plan.q("count").integerValue() + "\n"
         + "max_parallel=" + plan.q("max_parallel").integerValue() + "\n";
 
-    if (!ctx.has_charm("gha")) {
+    if (!ctx.hasCharm("gha")) {
         magus\log.info("ci-shard preview (add the gha charm — `magus run ci-shard:gha` — to write $GITHUB_OUTPUT):\n" + block);
         return;
     }
