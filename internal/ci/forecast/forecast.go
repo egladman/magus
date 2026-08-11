@@ -190,11 +190,10 @@ func lpt(projects []*types.Project, durations []int64, nShards int) [][]*types.P
 		idx[i] = i
 	}
 	slices.SortStableFunc(idx, func(a, b int) int {
-		ia, ib := idx[a], idx[b]
-		if durations[ia] != durations[ib] {
-			return cmp.Compare(durations[ib], durations[ia])
+		if durations[a] != durations[b] {
+			return cmp.Compare(durations[b], durations[a])
 		}
-		return cmp.Compare(projects[ia].Path, projects[ib].Path)
+		return cmp.Compare(projects[a].Path, projects[b].Path)
 	})
 
 	shards := make([][]*types.Project, nShards)

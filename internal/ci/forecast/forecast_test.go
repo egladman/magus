@@ -260,6 +260,22 @@ func TestLPT_balancesByDuration(t *testing.T) {
 	}
 }
 
+func TestLPT_sortsUnorderedDurations(t *testing.T) {
+	t.Parallel()
+	// nShards=1 puts every project on the single shard in sort order, so the
+	// packing order is directly observable instead of hidden behind bin balancing.
+	ps := testProjects("a", "b", "c")
+	durs := []int64{1_000, 5_000, 3_000}
+
+	shards := lpt(ps, durs, 1)
+	require.Len(t, shards, 1)
+	got := make([]string, len(shards[0]))
+	for i, p := range shards[0] {
+		got[i] = p.Path
+	}
+	assert.Equal(t, []string{"b", "c", "a"}, got, "want descending by duration: b(5000), c(3000), a(1000)")
+}
+
 func TestLPT_emptyAndDegenerate(t *testing.T) {
 	t.Parallel()
 

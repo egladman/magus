@@ -96,3 +96,14 @@ func TestComplexity(t *testing.T) {
 	assert.Equal(t, 5, Complexity(path))
 	assert.Zero(t, Complexity(filepath.Join(dir, "missing.go")), "unreadable file scores 0")
 }
+
+func TestComplexity_onlyLeadingWhitespaceCounts(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sample.go")
+	// No leading indentation, but a gofmt-style aligned "=" contributes 4
+	// interior spaces plus 1 more before "1" (5 total). A scan that (wrongly)
+	// sums whitespace anywhere on the line sees indent=5 -> 1+5/4=2; counting
+	// only the leading run gives indent=0 -> 1+0/4=1.
+	require.NoError(t, os.WriteFile(path, []byte("foo    = 1\n"), 0o644))
+	assert.Equal(t, 1, Complexity(path), "interior alignment spaces must not inflate the indentation score")
+}
