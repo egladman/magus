@@ -187,7 +187,6 @@ func IntVal(i int) vm.Value       { return vm.IntValue(int64(i)) }
 func BoolVal(b bool) vm.Value     { return vm.BoolValue(b) }
 func FloatVal(f float64) vm.Value { return vm.FloatValue(f) }
 
-// StrSliceVal converts []string to a Buzz list.
 // ByteSlice converts argument n to raw bytes, accepting either a str (taken as
 // its bytes) or a list of ints.
 //
@@ -336,6 +335,7 @@ func FloatSliceVal(f []float64) vm.Value {
 	return vm.ListValue(items)
 }
 
+// StrSliceVal converts []string to a Buzz list.
 func StrSliceVal(s []string) vm.Value {
 	items := make([]vm.Value, len(s))
 	for i, v := range s {

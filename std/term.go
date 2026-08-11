@@ -119,7 +119,7 @@ func TermSizeOf(_ context.Context) (types.TermSize, error) {
 	if err != nil {
 		// Not a raise: "there is no size" is an ordinary answer for a pipe, and a
 		// caller that has to try/catch to lay out a line will simply not measure.
-		return types.TermSize{}, nil
+		return types.TermSize{}, nil //nolint:nilerr // documented above: an unmeasurable size is zero, not a raise; matches the size doc's "check width rather than expecting a raise"
 	}
 	return types.TermSize{Width: w, Height: h}, nil
 }

@@ -65,7 +65,6 @@ func TestCSVStringify(t *testing.T) {
 	got, err = CSVStringify(ctx, [][]string{{"x", "a,b"}}, ",")
 	require.NoError(t, err)
 	assert.Equal(t, "x,\"a,b\"\n", got)
-
 }
 
 func TestCSVRoundTrip(t *testing.T) {

@@ -127,10 +127,12 @@ func INIStringify(_ context.Context, sections map[string]map[string]string) (str
 	sort.Strings(names)
 
 	var b strings.Builder
-	write := func(name string) error {
+	// write never fails: it only appends to a strings.Builder, whose own Write
+	// methods are documented to always return a nil error.
+	write := func(name string) {
 		entries := m[name]
 		if len(entries) == 0 {
-			return nil
+			return
 		}
 		if name != iniGlobalSection {
 			if b.Len() > 0 {
@@ -146,21 +148,16 @@ func INIStringify(_ context.Context, sections map[string]map[string]string) (str
 		for _, k := range keys {
 			fmt.Fprintf(&b, "%s=%s\n", k, entries[k])
 		}
-		return nil
 	}
 
 	if _, has := m[iniGlobalSection]; has {
-		if err := write(iniGlobalSection); err != nil {
-			return "", err
-		}
+		write(iniGlobalSection)
 	}
 	for _, name := range names {
 		if name == iniGlobalSection {
 			continue
 		}
-		if err := write(name); err != nil {
-			return "", err
-		}
+		write(name)
 	}
 	return b.String(), nil
 }

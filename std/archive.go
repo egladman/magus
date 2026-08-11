@@ -290,12 +290,7 @@ func ArchiveReadFile(ctx context.Context, src, name string, opts map[string]any)
 			if e.Name != name || e.FileInfo().IsDir() {
 				continue
 			}
-			rc, oerr := e.Open()
-			if oerr != nil {
-				return "", fmt.Errorf("archive.read_file %q: %w", name, oerr)
-			}
-			defer rc.Close()
-			return readCapped(rc, maxSize, name)
+			return readZipEntry(e, maxSize, name)
 		}
 		return "", fmt.Errorf("archive.read_file: %q is not in %s", name, filepath.Base(src))
 	}
@@ -342,6 +337,19 @@ func readCapped(r io.Reader, maxSize int64, name string) (string, error) {
 		return "", fmt.Errorf("archive.read_file %q: entry exceeds max_size (%d bytes)", name, maxSize)
 	}
 	return buf.String(), nil
+}
+
+// readZipEntry opens one zip entry and reads it capped at maxSize. Pulled out
+// of ArchiveReadFile's search loop so the deferred Close runs when THIS call
+// returns rather than piling up across every entry the loop would otherwise
+// visit before finding (or failing to find) a match.
+func readZipEntry(e *zip.File, maxSize int64, name string) (string, error) {
+	rc, err := e.Open()
+	if err != nil {
+		return "", fmt.Errorf("archive.read_file %q: %w", name, err)
+	}
+	defer rc.Close()
+	return readCapped(rc, maxSize, name)
 }
 
 // defaultArchiveThreads returns the auto thread count for archive operations:

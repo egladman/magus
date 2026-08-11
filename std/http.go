@@ -542,12 +542,13 @@ var httpRetryKeys = map[string]bool{
 // zero policy: one attempt.
 //
 // AN UNKNOWN KEY IS AN ERROR, matching what http.server already does with its own
-// options. It matters more here than anywhere else in this module: a policy that
-// silently ignores "attemps" does not fail, it just never retries, and the only
-// evidence is a build that gives up on the first blip months after someone
-// believed they had configured otherwise. The declared HttpRetry object gives the
-// checker the same field list, so a magusfile writing HttpRetry{...} is caught
-// earlier still - this is the backstop for the map-literal form.
+// options. It matters more here than anywhere else in this module: a policy with
+// a mistyped key name (say, "attempts" spelled wrong) does not fail, it just
+// never retries, and the only evidence is a build that gives up on the first blip
+// months after someone believed they had configured otherwise. The declared
+// HttpRetry object gives the checker the same field list, so a magusfile writing
+// HttpRetry{...} is caught earlier still - this is the backstop for the
+// map-literal form.
 //
 // Durations arrive in MILLISECONDS here while httpOpts.timeout is in seconds.
 // That is not an inconsistency to tidy away: timeout mirrors curl --max-time,
@@ -622,14 +623,19 @@ func (o httpOpts) client(r httpRetry) *http.Client {
 		timeout = o.timeout
 	}
 	ropts = append(ropts, retry.WithTimeout(timeout))
-	ropts = append(ropts, retry.WithRetryDecider(o.decider(r)))
+	// Inlined rather than routed through a decider() helper that returns
+	// func(*http.Response, error) bool: bodyclose's return-type check is a plain
+	// substring match, and that signature's text contains "*net/http.Response",
+	// so a helper returning it gets misread as a call that itself produces an
+	// unclosed response. The real response lifecycle is unaffected either way -
+	// shouldRetry only ever inspects resp.StatusCode, never resp.Body, so it has
+	// nothing to close; ownership of Body stays with retryTransport.RoundTrip
+	// (internal/retry/retry.go), which closes it on every attempt it discards,
+	// and with the caller's own defer resp.Body.Close() on the attempt it keeps.
+	ropts = append(ropts, retry.WithRetryDecider(func(resp *http.Response, err error) bool {
+		return o.shouldRetry(r, resp, err)
+	}))
 	return retry.NewHTTPClient(nil, ropts...)
-}
-
-// decider binds the options and the policy into the predicate the retry client
-// asks per attempt.
-func (o httpOpts) decider(r httpRetry) func(*http.Response, error) bool {
-	return func(resp *http.Response, err error) bool { return o.shouldRetry(r, resp, err) }
 }
 
 // shouldRetry is the retry policy derived from the curl-style options. Exactly

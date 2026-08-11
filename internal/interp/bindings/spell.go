@@ -132,7 +132,7 @@ func newCommandRenderer(targets map[string]spells.Op) func(string, []string) (st
 		// takes no project dir (magus describe has none per-target either), so it
 		// cannot run the runner's real per-project expansion - see
 		// spells.Command.Sources and SourcesPlaceholder.
-		args = append(args, op.Command.SourcesPlaceholder()...)
+		args = append(args, op.SourcesPlaceholder()...)
 		return op.Bin, args, true, nil
 	}
 }

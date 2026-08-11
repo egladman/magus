@@ -183,7 +183,7 @@ var Crypto = Module{
 // checker.
 func CryptoHmacSha256(_ context.Context, key, data []byte) ([]byte, error) {
 	m := hmac.New(sha256.New, key)
-	m.Write(data)
+	_, _ = m.Write(data) // hash.Hash.Write never returns an error
 	return m.Sum(nil), nil
 }
 
