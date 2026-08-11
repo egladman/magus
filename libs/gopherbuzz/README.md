@@ -22,7 +22,7 @@ rather than only the flattering one.
 
 | upstream suite          | files |      gopherbuzz | what it asks                                                     |
 | ----------------------- | ----: | --------------: | ---------------------------------------------------------------- |
-| `tests/behavior/`       |    83 |     **67 pass** | does correct source produce the right answer?                    |
+| `tests/behavior/`       |    83 |     **72 pass** | does correct source produce the right answer?                    |
 | `tests/compile_errors/` |    77 | **26 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
 | `tests/fuzzed/`         |   644 |    **0 panics** | can malformed input crash the front end?                         |
 | `tests/bench/`          |    11 |         not run | upstream's benchmarks (ours are in [`benchmarks/`](benchmarks/)) |
@@ -113,12 +113,11 @@ exhaustiveness analysis, protocol conformance is unverified, and generics are er
 
 ### What does not
 
-Three of the twelve remaining failures are open gaps, each with a known cause:
+Two of the eleven remaining failures are open gaps, each with a known cause:
 
 | Gap                                  |                     Blocks | Cause                                                                                                                                                                                                                                       |
 | ------------------------------------ | -------------------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Object-keyed maps                    |                `protocols` | `mapObj` is keyed by `string` throughout, and a map literal stores a bare identifier key as its literal name rather than evaluating it. Upstream allows any value as a key.                                                                 |
-| Tuple types                          |                   `tuples` | `obj{ :str, :str }` (positional fields) and the matching `.{ a, b }` literal.                                                                                                                                                               |
 | `typeof` and mutability              | `clone-mutability-methods` | `cloneMutable()` has to retype to `<mut [int]>`; mutability is a property no runtime value carries.                                                                                                                                         |
 
 The other nine cannot be accommodated here, which is a property of the embedding

@@ -1,0 +1,8 @@
+// @expect: joedoe42
+// A tuple is an anonymous object keyed by each element's decimal index, so `.0` and
+// `.@"0"` are the same lookup. Parenthesizing a bare identifier forces the positional
+// reading, since `.{ name }` alone is the `name = name` field shorthand.
+final tuple = .{ "joe", "doe" };
+final age = 42;
+final forced = .{ (age) };
+final __r = tuple.0 + tuple.@"1" + "{forced.0}";

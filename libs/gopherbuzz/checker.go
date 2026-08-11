@@ -1272,6 +1272,17 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 		c.errorf(v.Pos, "`any` is not field accessible")
 		return types.Any
 	}
+	// The bare `t.0` shorthand is defined only on tuples. A named object or an
+	// anonymous one with a field literally called `@"0"` has to be spelled that way -
+	// upstream has a compile-error test for each. Unknown passes through with the
+	// same reasoning as E28 above: an erased `obj{ :str, :str }` return annotation
+	// tracks as Unknown, and rejecting there would fail upstream's own tuples.buzz.
+	if v.TupleIndex && ot != types.Unknown {
+		if mt, ok := ot.(*types.MapType); !ok || !mt.Tuple {
+			c.errorf(v.Pos, "tuple index shorthand `.%s` is only allowed on tuples; use `.@%q` to read a field of that name", v.Name, v.Name)
+			return types.Unknown
+		}
+	}
 	switch t := ot.(type) {
 	case *types.ObjectType:
 		if ft, ok := t.Fields[v.Name]; ok {
@@ -1435,7 +1446,9 @@ func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {
 		c.infer(v.Keys[i])
 		c.infer(v.Values[i])
 	}
-	return &types.MapType{Key: keyTyp, Val: valTyp}
+	// Carry tuple-ness onto the type: it is what lets inferMember tell `.{ 1, 2 }.0`
+	// (legal) from `.{ @"0" = 1 }.0` (not), which are the same map otherwise.
+	return &types.MapType{Key: keyTyp, Val: valTyp, Tuple: v.Tuple}
 }
 
 func (c *checker) inferListExpr(v *ast.ListExpr) types.Type {

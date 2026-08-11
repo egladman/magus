@@ -336,6 +336,10 @@ type MemberExpr struct {
 	// a static reader cannot: os\withEnv and someCtx.withEnv are otherwise the same
 	// node, and conflating them makes a host-module call look like a ctx declaration.
 	Namespaced bool
+	// TupleIndex marks the bare numeric form `t.0`, as opposed to the equivalent
+	// free-identifier spelling `t.@"0"`. Both resolve the field named "0", but only
+	// the bare form is restricted to tuples, so the two cannot be collapsed here.
+	TupleIndex bool
 }
 
 // IndexExpr: object[index]. Optional is set for the checked subscript form
@@ -400,6 +404,10 @@ type MapExpr struct {
 	// instance - with the object's methods and field defaults - instead of a map.
 	// Empty when the literal has no object to fill, which stays a map.
 	ObjectName string
+	// Tuple marks the positional form `.{ a, b }`, whose keys are the elements'
+	// decimal indexes rather than written field names. Upstream caps a tuple at
+	// four elements and forbids mixing the two forms in one literal.
+	Tuple bool
 }
 
 // ListExpr: [val, ...]. Mut is set for the `mut [...]` form (a mutable list); a

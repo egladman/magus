@@ -2274,11 +2274,29 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 				continue
 			}
 			t := p.advance()
-			nameTok, err := p.eatIdent()
-			if err != nil {
-				return nil, err
+			// Tuple element access: `t.0`. A tuple is an anonymous object whose
+			// fields are named by their decimal index (see parseAnonObjectLit), so
+			// the numeric member IS the field name - `t.0` and `t.@"0"` are the same
+			// lookup. The lexer emits Dot then Int here rather than a leading-dot
+			// float, which is what makes the shape unambiguous.
+			nameTok, tupleIndex := p.peek(), false
+			if nameTok.Kind == token.Int {
+				// Only the plain decimal digits 0..3 are an index, and the check is on
+				// the RAW spelling: upstream rejects `t.0b10`, `t.0x10` and `t.0_0`
+				// even where they denote an in-range index. Token.Val keeps the source
+				// text, so comparing it is what makes that distinction possible.
+				if !validTupleIndex(nameTok.Val) {
+					return nil, fmt.Errorf("buzz: line %d:%d: tuple index shorthand accepts only 0, 1, 2 or 3, got %q", nameTok.Line, nameTok.Col, nameTok.Val)
+				}
+				p.advance()
+				tupleIndex = true
+			} else {
+				var err error
+				if nameTok, err = p.eatIdent(); err != nil {
+					return nil, err
+				}
 			}
-			node = &ast.MemberExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Object: node, Name: nameTok.Val, OptionalRecv: optionalRecv}
+			node = &ast.MemberExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Object: node, Name: nameTok.Val, OptionalRecv: optionalRecv, TupleIndex: tupleIndex}
 			optionalRecv = false
 		case token.Backslash:
 			// Namespace access: std\print. Resolves a member of an imported module,
@@ -2799,8 +2817,25 @@ func (p *parser) parseFunRest(extern bool) (funRest, error) {
 }
 
 // parseMapLit parses {"key": val, ...}; an empty {} is an empty map.
+// maxTupleLen is upstream's cap on a tuple literal: `.{ 1, 2, 3, 4, 5 }` is a compile
+// error there, and the `t.N` shorthand is defined only for N in 0..maxTupleLen-1.
+const maxTupleLen = 4
+
+// validTupleIndex reports whether raw is the source spelling of a tuple index: one of
+// the plain decimal digits 0..3. It compares the RAW text rather than a parsed value
+// because upstream rejects `0b10`, `0x10` and `0_0` as indexes even though each denotes
+// an in-range number.
+func validTupleIndex(raw string) bool {
+	return len(raw) == 1 && raw[0] >= '0' && raw[0] < '0'+maxTupleLen
+}
+
 // parseAnonObjectLit parses `{ name = expr, ... }` (the brace of a `.{...}` literal)
 // into a map keyed by the field names.
+//
+// It also parses upstream's TUPLE form, `.{ a, b }`, whose elements are positional.
+// A tuple is not a distinct runtime type here: it is an anonymous object whose fields
+// are named by their decimal index, which is the same thing upstream's `t.0` and
+// `t.@"0"` accessors read. So both spellings land on the same map.
 func (p *parser) parseAnonObjectLit() (*ast.MapExpr, error) {
 	t, err := p.eat(token.LBrace)
 	if err != nil {
@@ -2808,16 +2843,49 @@ func (p *parser) parseAnonObjectLit() (*ast.MapExpr, error) {
 	}
 	m := &ast.MapExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Anon: true}
 	for !p.check(token.RBrace) && !p.check(token.EOF) {
-		nameTok, err := p.eatIdent()
-		if err != nil {
-			return nil, err
+		// A named field is `ident = expr`, or the `{ ident }` shorthand for
+		// `ident = ident` that parseFieldValue handles. Anything else is a positional
+		// element. That is exactly why upstream's own test parenthesizes a bare
+		// identifier to "force" a tuple: `.{ name }` is the shorthand, `.{ (name) }`
+		// is a one-element tuple.
+		named := false
+		if p.check(token.Ident) {
+			next := p.peekAt(1).Kind
+			named = next == token.Assign || next == token.Comma || next == token.RBrace
 		}
-		val, err := p.parseFieldValue(nameTok)
-		if err != nil {
-			return nil, err
+		if named {
+			nameTok, err := p.eatIdent()
+			if err != nil {
+				return nil, err
+			}
+			val, err := p.parseFieldValue(nameTok)
+			if err != nil {
+				return nil, err
+			}
+			if m.Tuple {
+				return nil, fmt.Errorf("buzz: line %d:%d: cannot mix tuple elements and named fields in one anonymous object", nameTok.Line, nameTok.Col)
+			}
+			m.Keys = append(m.Keys, &ast.StringLit{Pos: ast.Pos{Line: nameTok.Line, Col: nameTok.Col}, Val: nameTok.Val})
+			m.Values = append(m.Values, val)
+		} else {
+			elem := p.peek()
+			val, err := p.parseExpr()
+			if err != nil {
+				return nil, err
+			}
+			if len(m.Keys) > 0 && !m.Tuple {
+				return nil, fmt.Errorf("buzz: line %d:%d: cannot mix tuple elements and named fields in one anonymous object", elem.Line, elem.Col)
+			}
+			if len(m.Keys) == maxTupleLen {
+				return nil, fmt.Errorf("buzz: line %d:%d: a tuple cannot have more than %d elements", elem.Line, elem.Col, maxTupleLen)
+			}
+			m.Tuple = true
+			m.Keys = append(m.Keys, &ast.StringLit{
+				Pos: ast.Pos{Line: elem.Line, Col: elem.Col},
+				Val: strconv.Itoa(len(m.Keys)),
+			})
+			m.Values = append(m.Values, val)
 		}
-		m.Keys = append(m.Keys, &ast.StringLit{Pos: ast.Pos{Line: nameTok.Line, Col: nameTok.Col}, Val: nameTok.Val})
-		m.Values = append(m.Values, val)
 		if !p.check(token.Comma) {
 			break
 		}

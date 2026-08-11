@@ -1,0 +1,5 @@
+// @error: only allowed on tuples
+// An anonymous object with a field literally named `0` is not a tuple, so it has to
+// be read with the free-identifier form rather than the shorthand.
+final value = .{ @"0" = 1 };
+final __r = value.0;

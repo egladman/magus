@@ -48,7 +48,15 @@ type ListType struct{ Elem Type }
 func (l *ListType) TypeName() string { return "[" + l.Elem.TypeName() + "]" }
 
 // MapType is the type {K:V}.
-type MapType struct{ Key, Val Type }
+//
+// Tuple marks the form upstream spells `.{ a, b }`: a tuple is a map at runtime,
+// keyed by each element's decimal index, but only a tuple accepts the `t.0` index
+// shorthand. An anonymous object that merely happens to have a field named `@"0"`
+// is not one, which is the distinction upstream's compile-error tests pin.
+type MapType struct {
+	Key, Val Type
+	Tuple    bool
+}
 
 func (m *MapType) TypeName() string {
 	return "{" + m.Key.TypeName() + ":" + m.Val.TypeName() + "}"

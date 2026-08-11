@@ -93,6 +93,10 @@ func TestUpstreamConformance(t *testing.T) {
 			regressions = append(regressions, fmt.Sprintf("%s: %s", name, detail))
 		case !allowed[name] && pass:
 			improvements = append(improvements, name)
+		case !allowed[name] && !pass:
+			// Not a failure - this file is known-red. Log WHY at -v so closing a
+			// gap starts with a diagnosis instead of a hacked copy of this loop.
+			t.Logf("still failing (not allowlisted): %s: %s", name, detail)
 		}
 	}
 

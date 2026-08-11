@@ -1,0 +1,5 @@
+// @error: accepts only 0, 1, 2 or 3
+// The index rule is on the RAW spelling: 0x2 denotes an in-range index and is still
+// rejected, exactly as upstream rejects the hex, binary and underscored forms.
+final t = .{ 1, 2, 3, 4 };
+final __r = t.0x2;
