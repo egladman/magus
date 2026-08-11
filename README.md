@@ -486,10 +486,10 @@ The architecture diagram above tags each runtime component with the package it l
 
 ### Building from source
 
-Building magus needs Go. The full toolchain (Go itself, plus Node and esbuild for the docs site and TinyGo for the WebAssembly playground) is pinned in [`mise.toml`](https://github.com/egladman/magus/blob/main/mise.toml); [mise](https://mise.jdx.dev/) installs it in one step. From a fresh clone:
+Building magus needs Go. The full toolchain (Go itself, plus Node and esbuild for the docs site) is pinned in [`mise.toml`](https://github.com/egladman/magus/blob/main/mise.toml); [mise](https://mise.jdx.dev/) installs it in one step. From a fresh clone:
 
 ```sh
-mise install           # installs the pinned Go, Node, esbuild, and TinyGo
+mise install           # installs the pinned Go, Node, and esbuild
 go build -o magus ./cmd/magus
 ```
 

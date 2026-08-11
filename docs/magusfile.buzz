@@ -4,14 +4,15 @@ import "../tools/toolchain-policy" as policy;
 import "../tools/audit" as audit;
 import "../tools/drift" as drift;
 // Modules the targets use: fs (writes MAGUS.md), os (esbuild,
-// TinyGo, npm), vcs (drift gate), http (serve). render.buzz owns the rendering
+// npm), vcs (drift gate), http (serve). render.buzz owns the rendering
 // machinery's own imports (markdown, io, std, serialize, encoding).
 import "fs";
 import "os";
 import "proc";
 import "vcs";
 import "http";
-// build-playground compiles the gopherbuzz Buzz VM to wasm, so it depends on
+// build-playground compiles the gopherbuzz Buzz VM to wasm with the stock Go
+// toolchain, so it depends on
 // gopherbuzz's build. The path import binds its targets as cross-project handles
 // (gopherbuzz.build), and folds gopherbuzz into this project's affected set.
 import "project/../libs/gopherbuzz" as gopherbuzz;
@@ -144,9 +145,6 @@ magus\project({
 		// outside file hashing, so replay is unsafe until the cache has a VCS input
 		// primitive. It still has a narrow target footprint and no output snapshot.
 		"site-generate": {"skip_cache": "incorporates VCS tags and history, which are outside file hashing, so a replay is unsafe"},
-        // build-playground shells out to TinyGo (not a CI tool) for a non-deterministic
-        // wasm binary; skip_cache so a hit never replays a stale one. Run by hand.
-        "build-playground": {"skip_cache": "TinyGo emits a non-deterministic wasm binary; a hit would replay a stale one"},
         // build-mermaid / build-hljs / build-playground-editor bundle a
         // src/*-vendor.js (or feature) entry with esbuild (pinned in mise.toml) into a
         // gen/ artifact. esbuild + pinned npm deps are deterministic, so these
@@ -295,7 +293,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // it: site-generate hashes gen/ into the service-worker precache and site-manifest, so a
     // bundle written after it would ship with a manifest that does not describe it. They used
     // to be run by hand and committed; with gen/ untracked, generate is what produces them.
-    ctx.needs(build_mermaid, build_hljs, build_playground_editor);
+    ctx.needs(build_mermaid, build_hljs, build_playground_editor, build_playground);
     ctx.needs(site_generate);
     // site_generate owns the full render, bundle, and manifest artifact.
     if (ctx.hasCharm("rw")) { return; }
@@ -390,31 +388,41 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
     ctx.needs(generate, lint, build, test);
 }
 
-// build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo
-// compiles ../cmd/buzz-playground into vendor/playground/buzz.wasm, and the matching
-// wasm_exec.js glue is copied beside it. Run after changing the interpreter
-// (../gopherbuzz) or the playground host (../internal/playground), then commit. TinyGo
-// >= 0.40; the glue must come from the same TinyGo that built the wasm.
+// build-playground rebuilds the WebAssembly interpreter the playground loads: the
+// stock Go toolchain compiles ../cmd/buzz-playground straight into
+// gen/playground/buzz.wasm, and Go's own wasm_exec.js glue is copied beside it. The
+// glue must come from the SAME Go that built the wasm - it is a matched pair.
 //
-// vendor/, not gen/. These two are the only published bytes CI cannot reproduce - it has
-// no TinyGo, deliberately - so they are COMMITTED INPUTS to the render rather than render
-// output. Keeping them in gen/ made that tree a mix of "rebuild at will" and "irreplaceable
-// if deleted", which is exactly the distinction gen/ is supposed to make obvious, and it is
-// what stopped gen/ from being untracked. site_render copies them into gen/playground/.
+// gen/, not vendor/. Those bytes were committed for one reason: CI had no TinyGo, so
+// it could not reproduce them and they had to be inputs rather than output. CI has
+// Go. So this is ordinary render output now, rebuilt at will, and a ~21MB binary
+// stops entering git history on every interpreter change.
+//
+// Stock Go over TinyGo, which built this until now, is a deliberate trade. It costs
+// size: 3.4MB brotli against TinyGo's 0.9MB, and no flag closes that gap - `-s -w`
+// saves 0.07MB and wasm-opt -Oz shrinks the RAW file while making the compressed one
+// slightly larger, because its transforms compress worse than what they replace. It
+// buys three things back: the build is byte-reproducible (verified by building twice
+// and comparing sha256, which is why this target no longer needs skip_cache, where
+// TinyGo's non-determinism forced it), the toolchain is one already pinned rather
+// than a second one, and full reflection means std/validate_wasm.go's no-op stub -
+// there because TinyGo's wasm reflect omits NumIn/NumOut - can go.
 export fun build_playground(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     ctx.needs(gopherbuzz\build);
-    // Run from the module root (..) so TinyGo resolves its go.mod. -stack-size lifts
-    // TinyGo's small default goroutine stack for deep magusfile evaluation;
-    // -scheduler=asyncify pins the wasm default so the status banner matches the build.
-    proc\exec("tinygo",
-        ["build", "-target=wasm", "-no-debug", "-stack-size=1MB", "-scheduler=asyncify",
-         "-o", "docs/vendor/playground/buzz.wasm", "./cmd/buzz-playground"],
-        "..", {});
-    proc\exec("sh",
-        ["-c", "cp \"$(tinygo env TINYGOROOT)/targets/wasm_exec.js\" docs/vendor/playground/wasm_exec.js"],
-        "..", {});
-    magus\log.info("rebuilt docs/vendor/playground/buzz.wasm + wasm_exec.js - commit the result");
+    ctx.writesFiles("gen/playground/buzz.wasm", "gen/playground/wasm_exec.js");
+    fs\mkdirAll("gen/playground");
+    // Run from the module root (..) so go resolves its go.mod. -trimpath keeps the
+    // output independent of the checkout path, which is half of what makes it
+    // reproducible; -s -w drops the symbol table and DWARF.
+    os\withEnv({"GOOS": "js", "GOARCH": "wasm"}, fun () > void !> any {
+        proc\exec("go",
+            ["build", "-trimpath", "-ldflags=-s -w",
+             "-o", "docs/gen/playground/buzz.wasm", "./cmd/buzz-playground"],
+            "..", {});
+    });
+    final goroot = proc\exec("go", ["env", "GOROOT"], ".", {}).stdout.trim();
+    fs\copyFile(goroot + "/lib/wasm/wasm_exec.js", "gen/playground/wasm_exec.js");
 }
 
 // build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11)

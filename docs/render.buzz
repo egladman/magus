@@ -255,7 +255,9 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // way down - the copy is reproducible, the wasm is not. editor.js is esbuild output
     // (build-playground-editor) and lands in gen/playground/ on its own, so it is not here.
     // renderPlayground (below) adds index.html alongside both.
-    os\execute(["sh", "-c", "mkdir -p " + site.outDir + "/playground && cp -r " + site.root + "/" + site.docs + "/vendor/playground/. " + site.outDir + "/playground/"]);
+    // The playground wasm and its glue are BUILT into gen/playground by the
+    // build-playground target, not copied from a committed vendor/ tree - see that
+    // target for why they stopped being committed inputs. Nothing to copy here.
     // Gather every docs page's relatedness metadata BEFORE any page renders, so each page's
     // "Related" cards resolve titles/URLs against the full corpus. collectDocPages reads only
     // frontmatter, so it is free of the render state below.
