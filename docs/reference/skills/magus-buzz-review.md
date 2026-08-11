@@ -2,8 +2,8 @@
 title: magus-buzz-review
 description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance."
 tags: [agents, skills, magus-buzz-review]
-skill_full_bytes: 17211
-skill_simple_bytes: 13490
+skill_full_bytes: 17483
+skill_simple_bytes: 13661
 ---
 
 # magus-buzz-review
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `29` |
+| `agent-skill-version` | `30` |
 | `knowledge-schema-version` | `8` |
-| `skill-content` | `949f44525014` |
+| `skill-content` | `f0425d4b8a54` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -147,6 +147,10 @@ What reads as Buzz house style versus what merely parses.
   Flag a literal that mixes the two forms, or uses `:` where an object
   literal was clearly intended. Authority: UPSTREAM (both forms and the
   distinction are upstream Buzz).
+- **A magusfile carrying logic that wants a test is a finding.** A
+  magusfile is declarative configuration; a test of it tests your
+  configuration, not your logic. The fix is moving that logic into a
+  spell or a sibling module - see magus-buzz's "Test what you write".
 
 ## Lens: skeptic and correctness
 
@@ -431,6 +435,8 @@ That is the fixture doing its job.
   Flag a literal that mixes the two forms, or uses `:` where an object
   literal was clearly intended. Authority: UPSTREAM (both forms and the
   distinction are upstream Buzz).
+- **A magusfile carrying logic that wants a test is a finding.** The fix is moving that logic into a
+  spell or a sibling module - see magus-buzz's "Test what you write".
 
 ## Lens: skeptic and correctness
 

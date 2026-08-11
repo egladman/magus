@@ -2,8 +2,8 @@
 title: magus-buzz
 description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in."
 tags: [agents, skills, magus-buzz]
-skill_full_bytes: 7631
-skill_simple_bytes: 6431
+skill_full_bytes: 8159
+skill_simple_bytes: 6761
 ---
 
 # magus-buzz
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `29` |
+| `agent-skill-version` | `30` |
 | `knowledge-schema-version` | `8` |
-| `skill-content` | `949f44525014` |
+| `skill-content` | `f0425d4b8a54` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -232,6 +232,16 @@ test "slug hyphenates" {
 ```sh
 magus buzz -t script.buzz     # ok/fail per block, then a summary line
 ```
+
+Do not test `magusfile.buzz` itself. It is declarative configuration,
+so a test of it tests your configuration, not your logic. Wanting a test
+for a magusfile is the signal to move that logic into a spell or a sibling
+module and test it there instead.
+
+A module a magusfile imports is tested with the same runner, plus one flag:
+`magus buzz -t --embedded render.buzz` - a magusfile's own imports
+always parse embedded, not strict, so testing under the strict default would
+judge the module by a mode it never actually runs in.
 
 ## Where Buzz code belongs
 
@@ -439,6 +449,14 @@ test "slug hyphenates" {
 ```sh
 magus buzz -t script.buzz     # ok/fail per block, then a summary line
 ```
+
+Do not test `magusfile.buzz` itself. Wanting a test
+for a magusfile is the signal to move that logic into a spell or a sibling
+module and test it there instead.
+
+A module a magusfile imports is tested with the same runner, plus one flag:
+`magus buzz -t --embedded render.buzz` (a magusfile's
+imports parse embedded, not strict).
 
 ## Where Buzz code belongs
 

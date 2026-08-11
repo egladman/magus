@@ -382,6 +382,15 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   callable`. The passage now states the real reserved list, states plainly that
   `test` is usable, and moves the shadowing hazard to its own line. Skill
   contract v29.
+- **`magus-buzz` and `magus-buzz-review` now teach the magusfile testing
+  boundary.** `docs/guides/testing.md` already said not to write tests for a
+  magusfile - it is declarative configuration, and wanting one is the signal
+  to move that logic into a spell or a sibling module - but the shipped skill
+  never said so, so an agent following it would happily test a magusfile.
+  magus-buzz now states the boundary and the `--embedded` flag a magusfile's
+  own imported module needs when tested (its imports parse embedded, not
+  strict); the review skill's idiom lens adds the one-line finding and points
+  back rather than restating it. Skill contract v30.
 - **Host parity is now a build gate rather than a table nobody re-reads.** Each guard
   template declares, per guard surface, how much of a verdict it can carry
   (`magus-guard-coverage`), and the guard's own vocabulary moved into an importable

@@ -195,6 +195,17 @@ test "slug hyphenates" {
 magus buzz -t script.buzz     # ok/fail per block, then a summary line
 ```
 
+Do not test `magusfile.buzz` itself.{{if .Full}} It is declarative configuration,
+so a test of it tests your configuration, not your logic.{{end}} Wanting a test
+for a magusfile is the signal to move that logic into a spell or a sibling
+module and test it there instead.
+
+A module a magusfile imports is tested with the same runner, plus one flag:
+`magus buzz -t --embedded render.buzz`{{if .Full}} - a magusfile's own imports
+always parse embedded, not strict, so testing under the strict default would
+judge the module by a mode it never actually runs in{{else}} (a magusfile's
+imports parse embedded, not strict){{end}}.
+
 ## Where Buzz code belongs
 
 - **A one-off** - a standalone `.buzz` file run with `magus buzz`.{{if .Full}} Nothing is

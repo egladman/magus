@@ -105,6 +105,10 @@ That is the fixture doing its job.
   Flag a literal that mixes the two forms, or uses `:` where an object
   literal was clearly intended. Authority: UPSTREAM (both forms and the
   distinction are upstream Buzz).
+- **A magusfile carrying logic that wants a test is a finding.**{{if .Full}} A
+  magusfile is declarative configuration; a test of it tests your
+  configuration, not your logic.{{end}} The fix is moving that logic into a
+  spell or a sibling module - see magus-buzz's "Test what you write".
 
 ## Lens: skeptic and correctness
 
