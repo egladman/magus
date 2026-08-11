@@ -205,12 +205,17 @@ were the language.{{end}}
   postfix member operator on VALUES. gopherbuzz's parser accepts both forms
   identically for a module reference, which is a superset, not a mirror:
   `fs\readFile(...)` parses in both; `fs.readFile(...)` parses only here.
-- **`str.len()` counts runes in gopherbuzz; upstream documents it as byte
-  length.** Authority: GOPHERBUZZ. They agree on pure ASCII and can quietly
-  disagree the moment a string holds anything else - e.g. a binary digest
-  whose bytes happen to form fewer runes than bytes reports a shorter length
-  than its byte size would suggest. Do not use `.len()` as a byte count for
-  anything hashed, encoded, or otherwise non-textual.
+- **A string is indexed by BYTES, and `utf8Len()` is the rune count.**
+  Authority: UPSTREAM. `len()`, `sub()`, `indexOf()`, `byte()` and `foreach`
+  all work in bytes, matching upstream's own builtins; `utf8Len()` is the only
+  codepoint-counting member. So `"h\u00e9llo".len()` is 6, not 5.
+  {{if .Full}}This is worth knowing because gopherbuzz USED to index runes, and
+  code written against that reads plausibly either way. A loop slicing with
+  `sub()` and bounding with `len()` was consistent under both models, so it will
+  not announce the change; what moves is any index arithmetic that assumed one
+  character was one position. Reach for `utf8Len()` only when the question is
+  genuinely "how many characters", which is rarer than it looks - a byte count
+  is what a digest, an encoding, or a wire format wants.{{end}}
 - **A bare `as` cast coerces in gopherbuzz; upstream statically checks it.**
   Authority: GOPHERBUZZ. `3.9 as int` silently truncates to `3` here; upstream
   rejects a cast that cannot hold statically. `as?` is the real type test in
