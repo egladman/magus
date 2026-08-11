@@ -22,7 +22,7 @@ rather than only the flattering one.
 
 | upstream suite          | files |      gopherbuzz | what it asks                                                     |
 | ----------------------- | ----: | --------------: | ---------------------------------------------------------------- |
-| `tests/behavior/`       |    83 |     **74 pass** | does correct source produce the right answer?                    |
+| `tests/behavior/`       |    83 |     **75 pass** | does correct source produce the right answer?                    |
 | `tests/compile_errors/` |    77 | **71 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
 | `tests/fuzzed/`         |   644 |    **0 panics** | can malformed input crash the front end?                         |
 | `tests/bench/`          |    11 |         not run | upstream's benchmarks (ours are in [`benchmarks/`](benchmarks/)) |
@@ -164,8 +164,7 @@ backlog:
 - **GC collector callbacks** depend on Buzz's own collector running at points a Go
   program does not control. Upstream's test asserts a collector ran after dropping a
   reference; Go's GC gives no such guarantee.
-- **`std\toUd`** returns Zig-specific userdata, which this embedding has no
-  representation for.
+
 
 ### Where the skeletons are
 

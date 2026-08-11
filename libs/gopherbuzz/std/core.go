@@ -6,6 +6,7 @@ import (
 	"io"
 	"math/rand/v2"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -30,9 +31,8 @@ func coreModule(out io.Writer) vm.Value {
 	m.MapSet("pattern", fn("std.pattern", stdPattern))
 	m.MapSet("currentFiber", fn("std.currentFiber", stdCurrentFiber))
 	m.MapSet("panic", fn("std.panic", stdPanic))
-	// toUd / parseUd require Zig userdata — not supported in the Go embedding.
-	m.MapSet("toUd", fn("std.toUd", unsupported("std.toUd", "userdata (ud) is a Zig-specific type")))
-	m.MapSet("parseUd", fn("std.parseUd", unsupported("std.parseUd", "userdata (ud) is a Zig-specific type")))
+	m.MapSet("toUd", fn("std.toUd", stdToUd))
+	m.MapSet("parseUd", fn("std.parseUd", stdParseUd))
 	return m
 }
 
@@ -187,4 +187,40 @@ func stdPattern(_ context.Context, args []vm.Value) (vm.Value, error) {
 		return vm.Null, fmt.Errorf("std.pattern: requires a str argument")
 	}
 	return vm.PatValue(args[0].AsString())
+}
+
+// stdToUd converts a number to userdata. Upstream's `ud` is a Zig `*anyopaque`,
+// which is why this pair was stubbed as unsupported for as long as it existed - but
+// the VM has carried a userdata value (`udObj`, a bare uintptr) all along, and what
+// upstream's std.buzz actually asserts of one is only that `toUd(23) is ud` and
+// that `parseUd("42") == toUd(42)`. Both are satisfied by carrying the numeric
+// payload in the address slot, so the Go embedding can answer this after all.
+//
+// It is NOT a pointer here, and nothing dereferences it. A ud that came from FFI
+// still holds a real address; one made this way holds a number, exactly as
+// upstream's own toUd does with an integer cast.
+func stdToUd(_ context.Context, args []vm.Value) (vm.Value, error) {
+	if len(args) < 1 {
+		return vm.Null, fmt.Errorf("std.toUd: requires 1 argument")
+	}
+	switch {
+	case args[0].IsInt():
+		return vm.UDValue(uintptr(args[0].AsInt())), nil
+	case args[0].IsFloat():
+		return vm.UDValue(uintptr(args[0].AsFloat())), nil
+	}
+	return vm.Null, fmt.Errorf("std.toUd: requires an int or double argument")
+}
+
+// stdParseUd parses a decimal string into userdata. Null on a malformed input,
+// matching how std's other parse* functions report a miss rather than raising.
+func stdParseUd(_ context.Context, args []vm.Value) (vm.Value, error) {
+	if len(args) < 1 || !args[0].IsStr() {
+		return vm.Null, fmt.Errorf("std.parseUd: requires a str argument")
+	}
+	n, err := strconv.ParseUint(strings.TrimSpace(args[0].AsString()), 10, 64)
+	if err != nil {
+		return vm.Null, nil
+	}
+	return vm.UDValue(uintptr(n)), nil
 }

@@ -2353,6 +2353,11 @@ func (vm *VM) buzzIsType(v Value, typeName string) bool {
 		return v.tag() == tagRange
 	case "pat":
 		return v.tag() == tagPat
+	case "ud":
+		// Absent for as long as `ud` existed, because nothing could construct one
+		// outside FFI and so nothing ever tested for one. std\toUd can now, and
+		// upstream's std.buzz asserts `std\toUd(23) is ud`.
+		return v.tag() == tagUD
 	}
 	// `obj{a,b}` is an anonymous STRUCTURAL type, reduced to its field names by
 	// isTypeShape. It holds when the value carries every one of them -- for a map (what
