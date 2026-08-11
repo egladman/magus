@@ -17,7 +17,7 @@ var RuntimeBoundaryTypes = []any{
 	types.DoctorCheck{},
 	types.DoctorReport{},
 	types.DoctorSummary{},
-	types.DriftVerdictRecord{},
+	types.DriftResultRecord{},
 	types.ExecResult{},
 	types.FileEntry{},
 	types.FileHotspot{},

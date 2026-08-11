@@ -11,6 +11,11 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Breaking
 
+- **`magus\diagnoseDrift` now returns a `DriftResult` object, not `DriftVerdict`.** A
+  magusfile annotating the return type has to follow. The rename settles what the word
+  means across the codebase: a VERDICT is the scalar judgment, and the thing carrying one
+  is named for the question it answers. `DriftVerdict` was a record of drift, not a
+  judgment value, and `StagingVerdict` (internal) was four slices classifying paths.
 - **Knowledge-graph schema v8.** The shard store invalidates and rebuilds on first run.
   The bump is the symbol-to-symbol `calls` edges: the relation and both node kinds already
   existed, so a v7 consumer parses a v8 graph unchanged, but it would read a symbol's edge

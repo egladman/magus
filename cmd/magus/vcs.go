@@ -561,7 +561,7 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 		maintained, unclaimed = nil, nil
 	}
 
-	verdict := types.StagingVerdict{
+	verdict := types.StagingPlan{
 		Sources:     sources,
 		Outputs:     outputs,
 		Unexplained: unexplained,
@@ -732,7 +732,7 @@ func classifyForStaging(out []types.FileEntry) (sources, outputs, undeclared []s
 
 // reportStaging renders the verdict as prose. It reads the value and prints; it decides
 // nothing, so the terminal and `-o json` cannot disagree about what happened.
-func reportStaging(v types.StagingVerdict, dropped []string, untracked, dryRun bool) {
+func reportStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool) {
 	verb := "staged"
 	if dryRun {
 		verb = "would stage"
@@ -849,7 +849,7 @@ func stagePaths(ctx context.Context, root, vcsName string, recorder types.Confli
 // emitStaging renders the verdict: the structured formats get the value itself, and the
 // terminal gets the prose. One decision, several audiences - which is the whole reason
 // the verdict is a value. `-o json` used to be accepted here and answer in text.
-func emitStaging(v types.StagingVerdict, dropped []string, untracked, dryRun bool) error {
+func emitStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool) error {
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err

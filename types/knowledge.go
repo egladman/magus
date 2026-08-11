@@ -219,6 +219,15 @@ type KnowledgeSymbolCall struct {
 // point: `absent` is a fact magus verified, `unknown` is magus saying it could not see
 // far enough to know. Without it a caller reads every empty result as proof of absence,
 // which is the most expensive way for a lookup to be wrong.
+//
+// Naming rule for the whole family, since magus reaches verdicts in several domains: a
+// VERDICT is the scalar judgment, and the thing carrying it is named for the question it
+// answers. So KnowledgeAnswer holds a Verdict, spells.VersionBounds.Check returns a
+// spells.Verdict, and a record of a judgment is a Result or a Plan rather than a Verdict.
+// Two packages both spelling the scalar `Verdict` is not a collision - Go qualifies it,
+// and both genuinely are verdicts. Prefixing this one to KnowledgeVerdictUnknown would
+// only add stutter and break the tie to what the CLI prints and the JSON key says, which
+// is the one-vocabulary rule the README states.
 type KnowledgeVerdict string
 
 const (

@@ -3,8 +3,8 @@
   "schema_version": 8,
   "directed": true,
   "multigraph": false,
-  "node_count": 2582,
-  "edge_count": 6050,
+  "node_count": 2731,
+  "edge_count": 6188,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -622,8 +622,19 @@
       "source": "benchmarks",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "7",
-        "dir_languages": "buzz,markdown"
+        "dir_files": "8",
+        "dir_languages": "buzz,go,markdown"
+      }
+    },
+    {
+      "id": "dir:benchmarks/e2e",
+      "kind": "dir",
+      "label": "benchmarks/e2e",
+      "source": "benchmarks/e2e",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
       }
     },
     {
@@ -666,8 +677,8 @@
       "source": "cmd",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "29",
-        "dir_languages": "buzz,markdown"
+        "dir_files": "175",
+        "dir_languages": "buzz,go,markdown"
       }
     },
     {
@@ -682,14 +693,124 @@
       }
     },
     {
+      "id": "dir:cmd/langservice-manifest",
+      "kind": "dir",
+      "label": "cmd/langservice-manifest",
+      "source": "cmd/langservice-manifest",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
       "id": "dir:cmd/magus",
       "kind": "dir",
       "label": "cmd/magus",
       "source": "cmd/magus",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "27",
-        "dir_languages": "buzz,markdown"
+        "dir_files": "141",
+        "dir_languages": "buzz,go,markdown"
+      }
+    },
+    {
+      "id": "dir:cmd/magus-configdocs",
+      "kind": "dir",
+      "label": "cmd/magus-configdocs",
+      "source": "cmd/magus-configdocs",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:cmd/magus-docs",
+      "kind": "dir",
+      "label": "cmd/magus-docs",
+      "source": "cmd/magus-docs",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:cmd/magus-examples",
+      "kind": "dir",
+      "label": "cmd/magus-examples",
+      "source": "cmd/magus-examples",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:cmd/magus-manpage",
+      "kind": "dir",
+      "label": "cmd/magus-manpage",
+      "source": "cmd/magus-manpage",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:cmd/magus-protodocs",
+      "kind": "dir",
+      "label": "cmd/magus-protodocs",
+      "source": "cmd/magus-protodocs",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:cmd/magus-skilldocs",
+      "kind": "dir",
+      "label": "cmd/magus-skilldocs",
+      "source": "cmd/magus-skilldocs",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:cmd/magus-spelldocs",
+      "kind": "dir",
+      "label": "cmd/magus-spelldocs",
+      "source": "cmd/magus-spelldocs",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:cmd/magus-utils",
+      "kind": "dir",
+      "label": "cmd/magus-utils",
+      "source": "cmd/magus-utils",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "19",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:cmd/magus/gen",
+      "kind": "dir",
+      "label": "cmd/magus/gen",
+      "source": "cmd/magus/gen",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
       }
     },
     {
@@ -1513,8 +1634,349 @@
       "source": "internal",
       "attrs": {
         "dir_commits": "0",
+        "dir_files": "673",
+        "dir_languages": "buzz,go,markdown"
+      }
+    },
+    {
+      "id": "dir:internal/agent",
+      "kind": "dir",
+      "label": "internal/agent",
+      "source": "internal/agent",
+      "attrs": {
+        "dir_commits": "0",
         "dir_files": "3",
-        "dir_languages": "buzz,markdown"
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/audit",
+      "kind": "dir",
+      "label": "internal/audit",
+      "source": "internal/audit",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "4",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/auth",
+      "kind": "dir",
+      "label": "internal/auth",
+      "source": "internal/auth",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "7",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/cache",
+      "kind": "dir",
+      "label": "internal/cache",
+      "source": "internal/cache",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "72",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/cache/reflink",
+      "kind": "dir",
+      "label": "internal/cache/reflink",
+      "source": "internal/cache/reflink",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "3",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/ci",
+      "kind": "dir",
+      "label": "internal/ci",
+      "source": "internal/ci",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "15",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/ci/annotate",
+      "kind": "dir",
+      "label": "internal/ci/annotate",
+      "source": "internal/ci/annotate",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/ci/forecast",
+      "kind": "dir",
+      "label": "internal/ci/forecast",
+      "source": "internal/ci/forecast",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "7",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/ci/volatility",
+      "kind": "dir",
+      "label": "internal/ci/volatility",
+      "source": "internal/ci/volatility",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/compress",
+      "kind": "dir",
+      "label": "internal/compress",
+      "source": "internal/compress",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "4",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/config",
+      "kind": "dir",
+      "label": "internal/config",
+      "source": "internal/config",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "14",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/config/gen",
+      "kind": "dir",
+      "label": "internal/config/gen",
+      "source": "internal/config/gen",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/config/generate",
+      "kind": "dir",
+      "label": "internal/config/generate",
+      "source": "internal/config/generate",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/daemon",
+      "kind": "dir",
+      "label": "internal/daemon",
+      "source": "internal/daemon",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "3",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/describe",
+      "kind": "dir",
+      "label": "internal/describe",
+      "source": "internal/describe",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "3",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/docs",
+      "kind": "dir",
+      "label": "internal/docs",
+      "source": "internal/docs",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "3",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/doctor",
+      "kind": "dir",
+      "label": "internal/doctor",
+      "source": "internal/doctor",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "17",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/dropin",
+      "kind": "dir",
+      "label": "internal/dropin",
+      "source": "internal/dropin",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/dry",
+      "kind": "dir",
+      "label": "internal/dry",
+      "source": "internal/dry",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "11",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/dry/gen",
+      "kind": "dir",
+      "label": "internal/dry/gen",
+      "source": "internal/dry/gen",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/dry/gen/mocks",
+      "kind": "dir",
+      "label": "internal/dry/gen/mocks",
+      "source": "internal/dry/gen/mocks",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/file",
+      "kind": "dir",
+      "label": "internal/file",
+      "source": "internal/file",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "19",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/file/diff",
+      "kind": "dir",
+      "label": "internal/file/diff",
+      "source": "internal/file/diff",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/file/watch",
+      "kind": "dir",
+      "label": "internal/file/watch",
+      "source": "internal/file/watch",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "12",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/generate",
+      "kind": "dir",
+      "label": "internal/generate",
+      "source": "internal/generate",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "4",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/generate/emit",
+      "kind": "dir",
+      "label": "internal/generate/emit",
+      "source": "internal/generate/emit",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/generate/godecl",
+      "kind": "dir",
+      "label": "internal/generate/godecl",
+      "source": "internal/generate/godecl",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/graph",
+      "kind": "dir",
+      "label": "internal/graph",
+      "source": "internal/graph",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "58",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/graph/dependency",
+      "kind": "dir",
+      "label": "internal/graph/dependency",
+      "source": "internal/graph/dependency",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "12",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/graph/knowledge",
+      "kind": "dir",
+      "label": "internal/graph/knowledge",
+      "source": "internal/graph/knowledge",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "44",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/graph/url",
+      "kind": "dir",
+      "label": "internal/graph/url",
+      "source": "internal/graph/url",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
       }
     },
     {
@@ -1524,8 +1986,591 @@
       "source": "internal/handler",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "1",
-        "dir_languages": "markdown"
+        "dir_files": "81",
+        "dir_languages": "go,markdown"
+      }
+    },
+    {
+      "id": "dir:internal/handler/activity",
+      "kind": "dir",
+      "label": "internal/handler/activity",
+      "source": "internal/handler/activity",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/handler/graph",
+      "kind": "dir",
+      "label": "internal/handler/graph",
+      "source": "internal/handler/graph",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "3",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/handler/insight",
+      "kind": "dir",
+      "label": "internal/handler/insight",
+      "source": "internal/handler/insight",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/handler/job",
+      "kind": "dir",
+      "label": "internal/handler/job",
+      "source": "internal/handler/job",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/handler/mcp",
+      "kind": "dir",
+      "label": "internal/handler/mcp",
+      "source": "internal/handler/mcp",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "36",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/handler/mcp/origin",
+      "kind": "dir",
+      "label": "internal/handler/mcp/origin",
+      "source": "internal/handler/mcp/origin",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/handler/memory",
+      "kind": "dir",
+      "label": "internal/handler/memory",
+      "source": "internal/handler/memory",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/handler/metrics",
+      "kind": "dir",
+      "label": "internal/handler/metrics",
+      "source": "internal/handler/metrics",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "9",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/handler/status",
+      "kind": "dir",
+      "label": "internal/handler/status",
+      "source": "internal/handler/status",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "9",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/handler/token",
+      "kind": "dir",
+      "label": "internal/handler/token",
+      "source": "internal/handler/token",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/handler/tool",
+      "kind": "dir",
+      "label": "internal/handler/tool",
+      "source": "internal/handler/tool",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/handler/trailrpc",
+      "kind": "dir",
+      "label": "internal/handler/trailrpc",
+      "source": "internal/handler/trailrpc",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/handler/viewer",
+      "kind": "dir",
+      "label": "internal/handler/viewer",
+      "source": "internal/handler/viewer",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "7",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/hostmem",
+      "kind": "dir",
+      "label": "internal/hostmem",
+      "source": "internal/hostmem",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "6",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/httpx",
+      "kind": "dir",
+      "label": "internal/httpx",
+      "source": "internal/httpx",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "15",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/interactive",
+      "kind": "dir",
+      "label": "internal/interactive",
+      "source": "internal/interactive",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "20",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/interactive/clihint",
+      "kind": "dir",
+      "label": "internal/interactive/clihint",
+      "source": "internal/interactive/clihint",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/interactive/tty",
+      "kind": "dir",
+      "label": "internal/interactive/tty",
+      "source": "internal/interactive/tty",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "10",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/interp",
+      "kind": "dir",
+      "label": "internal/interp",
+      "source": "internal/interp",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "90",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/interp/bindings",
+      "kind": "dir",
+      "label": "internal/interp/bindings",
+      "source": "internal/interp/bindings",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "65",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/interp/bindings/gen",
+      "kind": "dir",
+      "label": "internal/interp/bindings/gen",
+      "source": "internal/interp/bindings/gen",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "31",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/interp/engine",
+      "kind": "dir",
+      "label": "internal/interp/engine",
+      "source": "internal/interp/engine",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "8",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/interp/engine/buzz",
+      "kind": "dir",
+      "label": "internal/interp/engine/buzz",
+      "source": "internal/interp/engine/buzz",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "5",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/jobs",
+      "kind": "dir",
+      "label": "internal/jobs",
+      "source": "internal/jobs",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/journal",
+      "kind": "dir",
+      "label": "internal/journal",
+      "source": "internal/journal",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "8",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/json",
+      "kind": "dir",
+      "label": "internal/json",
+      "source": "internal/json",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "4",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/langservice",
+      "kind": "dir",
+      "label": "internal/langservice",
+      "source": "internal/langservice",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "10",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/maintenance",
+      "kind": "dir",
+      "label": "internal/maintenance",
+      "source": "internal/maintenance",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/manpage",
+      "kind": "dir",
+      "label": "internal/manpage",
+      "source": "internal/manpage",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "12",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/memory",
+      "kind": "dir",
+      "label": "internal/memory",
+      "source": "internal/memory",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/observability",
+      "kind": "dir",
+      "label": "internal/observability",
+      "source": "internal/observability",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "11",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/observability/otlp",
+      "kind": "dir",
+      "label": "internal/observability/otlp",
+      "source": "internal/observability/otlp",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "7",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/playground",
+      "kind": "dir",
+      "label": "internal/playground",
+      "source": "internal/playground",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "6",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/proc",
+      "kind": "dir",
+      "label": "internal/proc",
+      "source": "internal/proc",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "26",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/proc/endpoint",
+      "kind": "dir",
+      "label": "internal/proc/endpoint",
+      "source": "internal/proc/endpoint",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/proc/run",
+      "kind": "dir",
+      "label": "internal/proc/run",
+      "source": "internal/proc/run",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "7",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/race",
+      "kind": "dir",
+      "label": "internal/race",
+      "source": "internal/race",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "10",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/registry",
+      "kind": "dir",
+      "label": "internal/registry",
+      "source": "internal/registry",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "6",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/render",
+      "kind": "dir",
+      "label": "internal/render",
+      "source": "internal/render",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "14",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/render/md",
+      "kind": "dir",
+      "label": "internal/render/md",
+      "source": "internal/render/md",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/report",
+      "kind": "dir",
+      "label": "internal/report",
+      "source": "internal/report",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "8",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/retry",
+      "kind": "dir",
+      "label": "internal/retry",
+      "source": "internal/retry",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/sandbox",
+      "kind": "dir",
+      "label": "internal/sandbox",
+      "source": "internal/sandbox",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "18",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/sandbox/apply",
+      "kind": "dir",
+      "label": "internal/sandbox/apply",
+      "source": "internal/sandbox/apply",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/sandbox/env",
+      "kind": "dir",
+      "label": "internal/sandbox/env",
+      "source": "internal/sandbox/env",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "3",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/sandbox/filesystem",
+      "kind": "dir",
+      "label": "internal/sandbox/filesystem",
+      "source": "internal/sandbox/filesystem",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "4",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/secret",
+      "kind": "dir",
+      "label": "internal/secret",
+      "source": "internal/secret",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/selfupdate",
+      "kind": "dir",
+      "label": "internal/selfupdate",
+      "source": "internal/selfupdate",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "6",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/service",
+      "kind": "dir",
+      "label": "internal/service",
+      "source": "internal/service",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "27",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/service/console",
+      "kind": "dir",
+      "label": "internal/service/console",
+      "source": "internal/service/console",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "15",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/service/identity",
+      "kind": "dir",
+      "label": "internal/service/identity",
+      "source": "internal/service/identity",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "4",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/serviceaudit",
+      "kind": "dir",
+      "label": "internal/serviceaudit",
+      "source": "internal/serviceaudit",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/share",
+      "kind": "dir",
+      "label": "internal/share",
+      "source": "internal/share",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
       }
     },
     {
@@ -1535,8 +2580,63 @@
       "source": "internal/spellruntime",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "1",
-        "dir_languages": "buzz"
+        "dir_files": "18",
+        "dir_languages": "buzz,go"
+      }
+    },
+    {
+      "id": "dir:internal/symbols",
+      "kind": "dir",
+      "label": "internal/symbols",
+      "source": "internal/symbols",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "5",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/trail",
+      "kind": "dir",
+      "label": "internal/trail",
+      "source": "internal/trail",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/ward",
+      "kind": "dir",
+      "label": "internal/ward",
+      "source": "internal/ward",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "6",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/workspace",
+      "kind": "dir",
+      "label": "internal/workspace",
+      "source": "internal/workspace",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "10",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:libs/gopherbuzz/ast",
+      "kind": "dir",
+      "label": "libs/gopherbuzz/ast",
+      "source": "libs/gopherbuzz/ast",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "3",
+        "dir_languages": "go"
       }
     },
     {
@@ -1559,6 +2659,39 @@
         "dir_commits": "0",
         "dir_files": "1",
         "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:libs/gopherbuzz/buzzgen",
+      "kind": "dir",
+      "label": "libs/gopherbuzz/buzzgen",
+      "source": "libs/gopherbuzz/buzzgen",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "3",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:libs/gopherbuzz/cmd",
+      "kind": "dir",
+      "label": "libs/gopherbuzz/cmd",
+      "source": "libs/gopherbuzz/cmd",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:libs/gopherbuzz/cmd/buzz",
+      "kind": "dir",
+      "label": "libs/gopherbuzz/cmd/buzz",
+      "source": "libs/gopherbuzz/cmd/buzz",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
       }
     },
     {
@@ -1590,8 +2723,8 @@
       "source": "libs/gopherbuzz/examples",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "61",
-        "dir_languages": "buzz,markdown"
+        "dir_files": "62",
+        "dir_languages": "buzz,go,markdown"
       }
     },
     {
@@ -1667,8 +2800,30 @@
       "source": "libs/gopherbuzz/examples/ffi-c",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "2",
-        "dir_languages": "buzz,markdown"
+        "dir_files": "3",
+        "dir_languages": "buzz,go,markdown"
+      }
+    },
+    {
+      "id": "dir:libs/gopherbuzz/internal",
+      "kind": "dir",
+      "label": "libs/gopherbuzz/internal",
+      "source": "libs/gopherbuzz/internal",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:libs/gopherbuzz/internal/codec",
+      "kind": "dir",
+      "label": "libs/gopherbuzz/internal/codec",
+      "source": "libs/gopherbuzz/internal/codec",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
       }
     },
     {
@@ -1678,8 +2833,448 @@
       "source": "libs/gopherbuzz/std",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "6",
-        "dir_languages": "buzz,markdown"
+        "dir_files": "26",
+        "dir_languages": "buzz,go,markdown"
+      }
+    },
+    {
+      "id": "dir:libs/gopherbuzz/token",
+      "kind": "dir",
+      "label": "libs/gopherbuzz/token",
+      "source": "libs/gopherbuzz/token",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:libs/gopherbuzz/types",
+      "kind": "dir",
+      "label": "libs/gopherbuzz/types",
+      "source": "libs/gopherbuzz/types",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:libs/gopherbuzz/vm",
+      "kind": "dir",
+      "label": "libs/gopherbuzz/vm",
+      "source": "libs/gopherbuzz/vm",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "39",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:libs/testsprawl/plugin",
+      "kind": "dir",
+      "label": "libs/testsprawl/plugin",
+      "source": "libs/testsprawl/plugin",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:project",
+      "kind": "dir",
+      "label": "project",
+      "source": "project",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "20",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:project/impact",
+      "kind": "dir",
+      "label": "project/impact",
+      "source": "project/impact",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen",
+      "kind": "dir",
+      "label": "proto/gen",
+      "source": "proto/gen",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "20",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go",
+      "kind": "dir",
+      "label": "proto/gen/go",
+      "source": "proto/gen/go",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "20",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus",
+      "kind": "dir",
+      "label": "proto/gen/go/magus",
+      "source": "proto/gen/go/magus",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "20",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/activity",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/activity",
+      "source": "proto/gen/go/magus/activity",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/activity/v1",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/activity/v1",
+      "source": "proto/gen/go/magus/activity/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/activity/v1/activityv1connect",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/activity/v1/activityv1connect",
+      "source": "proto/gen/go/magus/activity/v1/activityv1connect",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/graph",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/graph",
+      "source": "proto/gen/go/magus/graph",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/graph/v1",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/graph/v1",
+      "source": "proto/gen/go/magus/graph/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/insight",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/insight",
+      "source": "proto/gen/go/magus/insight",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/insight/v1",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/insight/v1",
+      "source": "proto/gen/go/magus/insight/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/insight/v1/insightv1connect",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/insight/v1/insightv1connect",
+      "source": "proto/gen/go/magus/insight/v1/insightv1connect",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/job",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/job",
+      "source": "proto/gen/go/magus/job",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/job/v1",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/job/v1",
+      "source": "proto/gen/go/magus/job/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/job/v1/jobv1connect",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/job/v1/jobv1connect",
+      "source": "proto/gen/go/magus/job/v1/jobv1connect",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/memory",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/memory",
+      "source": "proto/gen/go/magus/memory",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/memory/v1",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/memory/v1",
+      "source": "proto/gen/go/magus/memory/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/memory/v1/memoryv1connect",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/memory/v1/memoryv1connect",
+      "source": "proto/gen/go/magus/memory/v1/memoryv1connect",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/metrics",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/metrics",
+      "source": "proto/gen/go/magus/metrics",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/metrics/v1",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/metrics/v1",
+      "source": "proto/gen/go/magus/metrics/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/metrics/v1/metricsv1connect",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/metrics/v1/metricsv1connect",
+      "source": "proto/gen/go/magus/metrics/v1/metricsv1connect",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/query",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/query",
+      "source": "proto/gen/go/magus/query",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/query/v1",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/query/v1",
+      "source": "proto/gen/go/magus/query/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/status",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/status",
+      "source": "proto/gen/go/magus/status",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/status/v1",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/status/v1",
+      "source": "proto/gen/go/magus/status/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/status/v1/statusv1connect",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/status/v1/statusv1connect",
+      "source": "proto/gen/go/magus/status/v1/statusv1connect",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/token",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/token",
+      "source": "proto/gen/go/magus/token",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/token/v1",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/token/v1",
+      "source": "proto/gen/go/magus/token/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/token/v1/tokenv1connect",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/token/v1/tokenv1connect",
+      "source": "proto/gen/go/magus/token/v1/tokenv1connect",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/tool",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/tool",
+      "source": "proto/gen/go/magus/tool",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/tool/v1",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/tool/v1",
+      "source": "proto/gen/go/magus/tool/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/tool/v1/toolv1connect",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/tool/v1/toolv1connect",
+      "source": "proto/gen/go/magus/tool/v1/toolv1connect",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/viewer",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/viewer",
+      "source": "proto/gen/go/magus/viewer",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/viewer/v1",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/viewer/v1",
+      "source": "proto/gen/go/magus/viewer/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/viewer/v1/viewerv1connect",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/viewer/v1/viewerv1connect",
+      "source": "proto/gen/go/magus/viewer/v1/viewerv1connect",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
       }
     },
     {
@@ -1689,8 +3284,30 @@
       "source": "schema",
       "attrs": {
         "dir_commits": "0",
+        "dir_files": "8",
+        "dir_languages": "go,markdown"
+      }
+    },
+    {
+      "id": "dir:schema/fieldtype",
+      "kind": "dir",
+      "label": "schema/fieldtype",
+      "source": "schema/fieldtype",
+      "attrs": {
+        "dir_commits": "0",
         "dir_files": "1",
-        "dir_languages": "markdown"
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:schema/gen",
+      "kind": "dir",
+      "label": "schema/gen",
+      "source": "schema/gen",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
       }
     },
     {
@@ -1700,8 +3317,8 @@
       "source": "spells",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "64",
-        "dir_languages": "buzz"
+        "dir_files": "79",
+        "dir_languages": "buzz,go"
       }
     },
     {
@@ -2030,8 +3647,8 @@
       "source": "std",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "41",
-        "dir_languages": "buzz,markdown"
+        "dir_files": "92",
+        "dir_languages": "buzz,go,markdown"
       }
     },
     {
@@ -2120,6 +3737,28 @@
         "dir_commits": "0",
         "dir_files": "5",
         "dir_languages": "buzz"
+      }
+    },
+    {
+      "id": "dir:types",
+      "kind": "dir",
+      "label": "types",
+      "source": "types",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "61",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:vcs",
+      "kind": "dir",
+      "label": "vcs",
+      "source": "vcs",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "15",
+        "dir_languages": "go"
       }
     },
     {
@@ -20837,7 +22476,7 @@
       "label": "magus.diagnose_drift",
       "doc": "Diagnose why a generate gate's declared outputs drifted and RETURN the verdict {drifted, code, message, url, files} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility",
       "attrs": {
-        "buzz": "magus\\diagnoseDrift(outputs, [inputs]) → DriftVerdict"
+        "buzz": "magus\\diagnoseDrift(outputs, [inputs]) → DriftResult"
       }
     },
     {
@@ -68849,6 +70488,254 @@
     },
     {
       "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/archive.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/boundary_list.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/boundary_roundtrip_test.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/charm.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/crypto.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/encoding.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/env.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/fmt.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/fs.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/http.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/json.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/magus.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/markdown.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/modules.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/modules_test.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/modules_types.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/named_string_test.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/os.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/path.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/platform.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/runtime.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/runtime_test.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/semver.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/strings.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/template.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/time.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/toml.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/uuid.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/vcs.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/xml.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:internal/interp/bindings/gen/yaml.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
       "target": "target:.:types-generate",
       "relation": "depends_on",
       "confidence": "extracted",
@@ -68875,6 +70762,158 @@
       "source": "target:.:build",
       "target": "target:.:image-build",
       "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:changelog-generate",
+      "target": "file:cmd/magus-utils/api.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:changelog-generate",
+      "target": "file:cmd/magus-utils/bindings.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:changelog-generate",
+      "target": "file:cmd/magus-utils/bindings_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:changelog-generate",
+      "target": "file:cmd/magus-utils/boundary_types.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:changelog-generate",
+      "target": "file:cmd/magus-utils/boundarylist.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:changelog-generate",
+      "target": "file:cmd/magus-utils/buzzobjects.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:changelog-generate",
+      "target": "file:cmd/magus-utils/completions.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:changelog-generate",
+      "target": "file:cmd/magus-utils/config.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:changelog-generate",
+      "target": "file:cmd/magus-utils/enums.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:changelog-generate",
+      "target": "file:cmd/magus-utils/main.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:changelog-generate",
+      "target": "file:cmd/magus-utils/moduledecls.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:changelog-generate",
+      "target": "file:cmd/magus-utils/release.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:changelog-generate",
+      "target": "file:cmd/magus-utils/release_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:changelog-generate",
+      "target": "file:cmd/magus-utils/sign.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:changelog-generate",
+      "target": "file:cmd/magus-utils/sign_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:changelog-generate",
+      "target": "file:cmd/magus-utils/spells.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:changelog-generate",
+      "target": "file:cmd/magus-utils/types.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:changelog-generate",
+      "target": "file:cmd/magus-utils/verify.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:changelog-generate",
+      "target": "file:cmd/magus-utils/verify_test.go",
+      "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
       "provenance": "."
@@ -68945,6 +70984,38 @@
     },
     {
       "source": "target:.:compress-cgo-test",
+      "target": "file:internal/compress/compress.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:compress-cgo-test",
+      "target": "file:internal/compress/compress_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:compress-cgo-test",
+      "target": "file:internal/compress/xz_other.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:compress-cgo-test",
+      "target": "file:internal/compress/zstd_other.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:compress-cgo-test",
       "target": "op:go:go-test",
       "relation": "uses",
       "confidence": "extracted",
@@ -68955,6 +71026,38 @@
       "source": "target:.:compress-cgo-test",
       "target": "spell:go",
       "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:config-generate",
+      "target": "file:cmd/magus/gen/bind.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:config-generate",
+      "target": "file:cmd/magus/gen/config_flags.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:config-generate",
+      "target": "file:internal/config/gen/env.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:config-generate",
+      "target": "file:schema/gen/fields.go",
+      "relation": "produces",
       "confidence": "extracted",
       "score": 1,
       "provenance": "."
@@ -69209,6 +71312,38 @@
     },
     {
       "source": "target:.:lint",
+      "target": "file:libs/testsprawl/plugin/plugin.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:lint",
+      "target": "file:libs/testsprawl/plugin/plugin_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:lint",
+      "target": "file:libs/testsprawl/testsprawl.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:lint",
+      "target": "file:libs/testsprawl/testsprawl_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:lint",
       "target": "op:bash:shellcheck",
       "relation": "uses",
       "confidence": "extracted",
@@ -69267,6 +71402,46 @@
       "source": "target:.:lint",
       "target": "target:.:lint-build",
       "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:lint-build",
+      "target": "file:libs/testsprawl/plugin/plugin.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:lint-build",
+      "target": "file:libs/testsprawl/plugin/plugin_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:lint-build",
+      "target": "file:libs/testsprawl/testsprawl.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:lint-build",
+      "target": "file:libs/testsprawl/testsprawl_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:mocks-generate",
+      "target": "file:internal/dry/gen/mocks/spell_catalog.go",
+      "relation": "produces",
       "confidence": "extracted",
       "score": 1,
       "provenance": "."
@@ -69395,6 +71570,14 @@
       "source": "target:.:test",
       "target": "target:.:format",
       "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:types-generate",
+      "target": "file:types/buzzobject_gen.go",
+      "relation": "produces",
       "confidence": "extracted",
       "score": 1,
       "provenance": "."
@@ -70419,6 +72602,566 @@
       "source": "target:docs:content-generate",
       "target": "doc:docs/reference/skills/magus-vcs.md",
       "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:cmd/magus-docs/main.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:cmd/magus-docs/main_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:cmd/magus-examples/main.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:cmd/magus-examples/main_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:cmd/magus-manpage/main.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:cmd/magus-protodocs/main.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:cmd/magus-skilldocs/main.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:cmd/magus-skilldocs/main_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:cmd/magus-spelldocs/main.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:cmd/magus-spelldocs/main_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/agent/catalog.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/agent/catalog_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/agent/guard.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/config/config.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/config/config_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/config/envnames.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/config/envnames_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/config/fuzz_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/config/gen/env.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/config/generate/generate.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/config/generate/templates.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/config/load.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/config/load_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/config/save.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/config/save_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/config/validate.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/config/validate_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/manpage/api.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/manpage/api_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/manpage/example_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/manpage/prose.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/manpage/registry.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/manpage/render.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/manpage/render_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/manpage/roff.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/manpage/roff_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/manpage/self_selfupdate.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/manpage/self_shorthand.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/manpage/spec.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/render/graph_ir.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/render/graphexplain.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/render/graphexplain_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/render/insight.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/render/insight_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/render/knowledgegraph.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/render/knowledgegraph_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/render/md/md.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/render/md/md_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/render/mermaid_drift_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/render/render.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/render/render_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/render/targetgraph.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/render/targetgraph_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/spellruntime/builtins.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/spellruntime/builtins_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/spellruntime/charm_parity_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/spellruntime/contract.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/spellruntime/decode.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/spellruntime/decode_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/spellruntime/descriptor_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/spellruntime/hostdecls.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/spellruntime/hostdecls_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/spellruntime/hosttypes.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/spellruntime/patch.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/spellruntime/patch_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/spellruntime/readiness_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/spellruntime/resolve.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/spellruntime/resolve_test.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/spellruntime/target.go",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "file:internal/spellruntime/versionkey_builtin_test.go",
+      "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs"

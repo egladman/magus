@@ -196,7 +196,7 @@ var Magus = Module{
 				{Name: "outputs", Type: TypeStringSlice},
 				{Name: "inputs", Type: TypeStringSlice, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAny, Object: "DriftVerdict"}},
+			Returns: []Ret{{Type: TypeAny, Object: "DriftResult"}},
 			Impl:    MagusDiagnoseDrift,
 		},
 		{
@@ -676,10 +676,10 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 // It composes vcs.isDirty (called on outputs and inputs) rather than replacing it:
 // isDirty stays the general "is this path dirty" primitive; diagnoseDrift is the
 // drift-specific reading on top of it plus the version signal.
-func MagusDiagnoseDrift(ctx context.Context, outputs, inputs []string) (types.DriftVerdict, error) {
+func MagusDiagnoseDrift(ctx context.Context, outputs, inputs []string) (types.DriftResult, error) {
 	// Same keys as the drifted verdict, so a caller can read .files unconditionally
 	// rather than discovering the key is absent only on the clean path.
-	var clean types.DriftVerdict
+	var clean types.DriftResult
 	v, _ := resolveVCS(ctx)
 	if v == nil {
 		return clean, nil
@@ -698,7 +698,7 @@ func MagusDiagnoseDrift(ctx context.Context, outputs, inputs []string) (types.Dr
 		// Split from the !outDirty case below on purpose: they were one branch, so a
 		// failed probe returned the same "clean" verdict as a genuinely clean tree. A
 		// drift diagnosis that cannot read the tree has no verdict to give.
-		return types.DriftVerdict{}, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s status", v.Name())
+		return types.DriftResult{}, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s status", v.Name())
 	}
 	if len(dirtyFiles) == 0 {
 		return clean, nil
@@ -719,7 +719,7 @@ func MagusDiagnoseDrift(ctx context.Context, outputs, inputs []string) (types.Dr
 	for _, p := range statusPaths(v.Name(), dirtyFiles) {
 		files = append(files, types.Path{Value: p, Base: root})
 	}
-	return types.DriftVerdict{
+	return types.DriftResult{
 		Drifted: true,
 		Code:    string(code),
 		Message: msg,

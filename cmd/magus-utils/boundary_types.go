@@ -36,7 +36,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "CommitAuthor", Type: reflect.TypeFor[types.CommitAuthor](), RuntimeObject: true},
 	{Name: "Commit", Type: reflect.TypeFor[types.CommitRecord](), RuntimeObject: true},
 	{Name: "Status", Type: reflect.TypeFor[types.StatusRecord](), RuntimeObject: true},
-	{Name: "DriftVerdict", Type: reflect.TypeFor[types.DriftVerdictRecord](), RuntimeObject: true},
+	{Name: "DriftResult", Type: reflect.TypeFor[types.DriftResultRecord](), RuntimeObject: true},
 	{Name: "FileInfo", Type: reflect.TypeFor[types.FileInfo](), RuntimeObject: true},
 	{Name: "UncompressResult", Type: reflect.TypeFor[types.UncompressResult](), RuntimeObject: true},
 	{Name: "CompressResult", Type: reflect.TypeFor[types.CompressResult](), RuntimeObject: true},

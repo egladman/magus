@@ -47,7 +47,7 @@ func (v StatusRecord) BuzzObject() BuzzObject {
 	}
 }
 
-func (v DriftVerdictRecord) BuzzObject() BuzzObject {
+func (v DriftResultRecord) BuzzObject() BuzzObject {
 	itemsFiles := make([]any, len(v.Files))
 	for indexFiles := range v.Files {
 		itemsFiles[indexFiles] = v.Files[indexFiles].BuzzObject()

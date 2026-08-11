@@ -158,7 +158,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueMagusDriftVerdict(ret0), nil
+		return buzzValueMagusDriftResult(ret0), nil
 	}))
 	m.MapSet("bustCache", vm.DirectValue("magus.bustCache", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		project_path := Str(bzArgs, 0)
@@ -866,7 +866,7 @@ func buzzValueMagusPath(v types.Path) vm.Value {
 	return out
 }
 
-func buzzValueMagusDriftVerdict(v types.DriftVerdict) vm.Value {
+func buzzValueMagusDriftResult(v types.DriftResult) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("drifted", vm.BoolValue(v.Drifted))
 	out.MapSet("code", vm.StrValue(v.Code))

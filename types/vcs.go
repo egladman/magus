@@ -501,7 +501,7 @@ type StatusRecord struct {
 	Files []Path
 }
 
-// DriftVerdict is why a generate gate's declared outputs drifted: not merely THAT they
+// DriftResult is why a generate gate's declared outputs drifted: not merely THAT they
 // did, which a status call already answers, but which of three causes it was. A gate
 // fires when its reader is looking at a CI log rather than the tree, so the verdict
 // carries the diagnostic code, the sentence to print, its explainer URL, and the files.
@@ -510,7 +510,7 @@ type StatusRecord struct {
 // boundary, so it needs a mirror. The FUNCTION that produces it belongs to the magus
 // module rather than vcs - deciding that unchanged inputs plus a dev build means MGS4005
 // is magus policy, and vcs only supplies the dirty-file probe underneath it.
-type DriftVerdict struct {
+type DriftResult struct {
 	// Drifted is false with every other field zero when the outputs are clean, so a
 	// caller reads the fields unconditionally instead of testing for absent keys.
 	Drifted bool
@@ -525,7 +525,7 @@ type DriftVerdict struct {
 }
 
 // BuzzObject is the Buzz boundary map magus.diagnoseDrift returns.
-func (d DriftVerdict) BuzzObject() BuzzObject {
+func (d DriftResult) BuzzObject() BuzzObject {
 	files := make([]any, 0, len(d.Files))
 	for _, f := range d.Files {
 		files = append(files, f.BuzzObject())
@@ -630,14 +630,14 @@ func SourceProjects(files []FileEntry) map[string]bool {
 	return out
 }
 
-// StagingVerdict is what `magus vcs add` decided about a working tree, as a value.
+// StagingPlan is what `magus vcs add` decided about a working tree, as a value.
 //
 // A value rather than a pile of Printlns because the same decision has several
 // audiences: the terminal, `-o json`, and (next) a pre-commit hook that needs the
 // verdict as an exit status rather than as prose. Every one of those used to mean
 // another hand-written rendering of the same four groups, which is how `-o json` came to
 // be accepted and silently answer in text.
-type StagingVerdict struct {
+type StagingPlan struct {
 	// Sources and Outputs are what staging claimed: declared sources, and the declared
 	// outputs a source change in this same set accounts for.
 	Sources []string `json:"sources,omitempty" yaml:"sources,omitempty"`
@@ -658,9 +658,9 @@ type StagingVerdict struct {
 	URL     string `json:"url,omitempty" yaml:"url,omitempty"`
 }
 
-// DriftVerdictRecord is the boundary mirror cmd/magus-utils types reflects over; see
+// DriftResultRecord is the boundary mirror cmd/magus-utils types reflects over; see
 // CommitRecord for why it is separate from the type it mirrors.
-type DriftVerdictRecord struct {
+type DriftResultRecord struct {
 	Drifted bool
 	Code    string
 	Message string
