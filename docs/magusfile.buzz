@@ -163,7 +163,7 @@ final DOCS = "docs";        // source docs subtree under ROOT
 final BLOG = "blog";        // source blog subtree under ROOT
 final OUT  = "gen";         // generated site output, under this project
 
-export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
+export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install(); }
 
 // pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason.
 // Always let pnpm validate the install. A canceled or interrupted install leaves a
@@ -174,14 +174,14 @@ export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
 // tree. On a warm tree --frozen-lockfile is about a second and changes nothing.
 // Reached once per invocation through preflight, so the fan-out of build-* targets
 // below does not race several installs in the same directory.
-fun install() > void {
+fun install() > void !> any {
     proc\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
 }
 
 // index-generate refreshes MAGUS.md (the target catalog + dependency graph) from this
 // magusfile, so it stays in lockstep with the targets. generate calls it; run
 // standalone after editing targets: `magus run index-generate docs`.
-export fun index_generate(ctx: magus\Context, args: [str]) > void {
+export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("magusfile.buzz", workspace.file("**/magusfile.buzz"));
     ctx.writesFiles("MAGUS.md");
     final doc = magus\describe(["graph", "-o", "markdown", "docs"], {"quiet": true, "root": ROOT}).stdout;
@@ -199,7 +199,7 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void {
 // manpages (docs-site content, docs/manpage/*.md); the roff manpages are a distribution
 // artifact owned by the root magusfile (man-generate). generate depends on this and
 // drift-gates the result.
-export fun content_generate(ctx: magus\Context, args: [str]) > void {
+export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(workspace.file("std/**/*.go"), workspace.file("host/**/*.go"),
         workspace.file("spells/**/*.buzz"), workspace.file("internal/spellruntime/**/*.go"),
         workspace.file("internal/manpage/**/*.go"), workspace.file("internal/config/**/*.go"),
@@ -255,7 +255,7 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void {
 
 // site-generate owns publication. It cannot replay while it reads VCS state; the
 // public generate target still lets the independent content stages fan out first.
-export fun site_generate(ctx: magus\Context, args: [str]) > void {
+export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("render.buzz", "lib/**/*.buzz", "engine/**/*.buzz", "site/**/*.buzz", "**/*.md",
         "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html", "tour/*.buzz",
         "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json", "retired.urls.lock",
@@ -269,7 +269,7 @@ export fun site_generate(ctx: magus\Context, args: [str]) > void {
 
 // generate is the one public docs publication target. Its small drift gate always runs;
 // its content, catalog, changelog, and site stages replay independently when unchanged.
-export fun generate(ctx: magus\Context, args: [str]) > void {
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 	magus\hint("docs generate refreshes derived content and bundles; unchanged stages replay from cache; for a docs/blog preview use `magus run render docs`");
     ctx.needs(preflight);
     final CONTENT = ["reference/buzz", "reference/config.md", "concepts/spells", "concepts/spells.md",
@@ -338,7 +338,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 // the README as "docs lint failed", and a target that fails for reasons unrelated to its
 // name is a target people learn to ignore. It also means `magus run conventions docs` is a
 // two-second check you can run on its own while editing a page.
-export fun conventions(ctx: magus\Context, args: [str]) > void {
+export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("**/*.md", "lib/conventions.buzz", "engine/gates.buzz",
         workspace.file("README.md"), workspace.file("CONTRIBUTING.md"));
     renderer\conventionsCheck(ROOT, DOCS);
@@ -351,7 +351,7 @@ export fun conventions(ctx: magus\Context, args: [str]) > void {
 // Markdown formatting is dprint, run once from the root project (its scope is
 // dprint.json at the workspace root), so `format` here is a dependency edge and nothing
 // else. This project only lints prose; see docs/concepts/generated-files.md.
-export fun lint(ctx: magus\Context, args: [str]) > void {
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(format, conventions);
     // The site bundle imports the search grammar from the shared libs/textsearch source,
     // so gate its type-check + biome here: a lib edit fails docs lint through the graph.
@@ -370,7 +370,7 @@ export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); 
 // buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`, in
 // --embedded mode so render's markdown/encoding imports resolve. magus.cmd raises
 // on a non-zero exit, so a failing assertion fails this target.
-export fun buzz_test(ctx: magus\Context, args: [str]) > void {
+export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     magus\cmd("buzz", args: ["-t", "--embedded", "render.buzz"]);
 }
 
@@ -381,7 +381,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 // security audits what actually ships against the npm advisory database. See
 // console/magusfile.buzz for why it is --prod, why it is not folded into lint, and why the
 // .npmrc cooling period is the stronger half of this.
-export fun security(ctx: magus\Context, args: [str]) > void {
+export fun security(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     audit.audit();
 }
@@ -401,7 +401,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 // output. Keeping them in gen/ made that tree a mix of "rebuild at will" and "irreplaceable
 // if deleted", which is exactly the distinction gen/ is supposed to make obvious, and it is
 // what stopped gen/ from being untracked. site_render copies them into gen/playground/.
-export fun build_playground(ctx: magus\Context, args: [str]) > void {
+export fun build_playground(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     ctx.needs(gopherbuzz\build);
     // Run from the module root (..) so TinyGo resolves its go.mod. -stack-size lifts
@@ -422,7 +422,7 @@ export fun build_playground(ctx: magus\Context, args: [str]) > void {
 // diagrams and page styling work offline without any CDN. Bump the mermaid version in
 // package.json and the next generate picks it up; gen/ is not committed, so there is no
 // artifact to commit and generate runs this as one of its stages.
-export fun build_mermaid(ctx: magus\Context, args: [str]) > void {
+export fun build_mermaid(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     // Declared so the snapshot records THIS artifact. Without it the target inherits the
     // project baseline (the typescript spell's `dist/**`, which this project never writes).
@@ -435,7 +435,7 @@ export fun build_mermaid(ctx: magus\Context, args: [str]) > void {
 // into gen/assets/hljs.js. syntax-highlight.js imports it same-origin so syntax highlighting
 // works offline without any CDN. Bump the version in package.json and the next generate picks
 // it up; gen/ is not committed, so generate runs this as one of its stages.
-export fun build_hljs(ctx: magus\Context, args: [str]) > void {
+export fun build_hljs(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     // See build-mermaid: declare the real artifact rather than inheriting `dist/**`.
     ctx.writesFiles("gen/assets/hljs.js");
@@ -448,7 +448,7 @@ export fun build_hljs(ctx: magus\Context, args: [str]) > void {
 // was committed and a human ran it after a version bump. gen/ is no longer committed, so
 // every published byte needs a target CI can run - a script nothing invokes would have
 // shipped a playground with no editor.
-export fun build_playground_editor(ctx: magus\Context, args: [str]) > void {
+export fun build_playground_editor(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     // See build-mermaid: declare the real artifact rather than inheriting `dist/**`.
     ctx.writesFiles("gen/playground/editor.js");
@@ -456,7 +456,7 @@ export fun build_playground_editor(ctx: magus\Context, args: [str]) > void {
 }
 
 // render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.
-export fun render(ctx: magus\Context, args: [str]) > void {
+export fun render(ctx: magus\Context, args: [str]) > void !> any {
 	magus\hint("docs render updates the site only; run `magus run generate:rw docs` before committing generated docs or changing generator inputs");
     renderer\site_render(ROOT, DOCS, BLOG, OUT,
         magus\targets(), magus\graph());

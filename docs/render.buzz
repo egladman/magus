@@ -98,7 +98,7 @@ fun esbuild(args: [str]) > void {
 // walkBlog visits every blog/*.md post (skipping index.md and _underscored fixtures) in
 // fs.list's sorted order, so the walk is deterministic. Posts are flat: no nested subdirs
 // under blog/.
-fun walkBlog(site: Site) > void {
+fun walkBlog(site: Site) > void !> any {
     if (isDirectory(site.root + "/" + site.blog) == false) { return; }
     foreach (name in fs\list(site.root + "/" + site.blog)) {
         if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
@@ -110,7 +110,7 @@ fun walkBlog(site: Site) > void {
 
 // Recursively walk docs/ (the render reads its co-located markdown; the SSG's own
 // root children - gen/, src/, tour/, node_modules/, MAGUS.md - are skipped at the root).
-fun walk(rel: str, site: Site) > void {
+fun walk(rel: str, site: Site) > void !> any {
     var dir = site.root + "/" + site.docs;
     if (rel != "") { dir = site.root + "/" + site.docs + "/" + rel; }
 
@@ -138,7 +138,7 @@ fun walk(rel: str, site: Site) > void {
 
 // site_render rebuilds gen/ from ../docs and the root README. Pure function of git
 // history (footers) and the source tree - reproducible and gate-stable.
-export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: TargetGraph, graph: Graph) > Site {
+export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: TargetGraph, graph: Graph) > Site !> any {
     // Generator state for one render pass, threaded explicitly into every renderer as a
     // `site` arg - no module-global singleton, so parallel renders never share state.
     // (outDir, not out: `out` is a reserved word in buzz.)
@@ -374,7 +374,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
 // site_publish is the cacheable publication unit used by docs:site-generate. Keep every
 // output that belongs to the completed site in this one phase: the page tree, pnpm-backed
 // vendor bundles, the integrity manifest, and (only for rw) the URL ledger.
-export fun site_publish(root: str, docs: str, blog: str, outDir: str, targets: TargetGraph, graph: Graph, updateUrls: bool) > void {
+export fun site_publish(root: str, docs: str, blog: str, outDir: str, targets: TargetGraph, graph: Graph, updateUrls: bool) > void !> any {
     final site = site_render(root, docs, blog, outDir, targets, graph);
     generateJsBundles();
     writeSiteManifest(site);

@@ -49,7 +49,7 @@ magus\project({
 export fun preflight(ctx: magus\Context, args: [str]) > void {}
 
 // Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
-export fun generate(ctx: magus\Context, args: [str]) > void {
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     gomod\replaceWorkspaceModules(ctx, go, "libs/testsprawl");
     final before = drift.hashes(["MAGUS.md"]);
@@ -62,7 +62,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 }
 
 // Renders MAGUS.md (target catalog plus graph) from this magusfile.
-export fun index_generate(ctx: magus\Context, args: [str]) > void {
+export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs\writeFile("MAGUS.md", doc + "\n");
 }

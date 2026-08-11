@@ -118,7 +118,7 @@ fun install() > void {
 // (MGS8003/CrossOutputCycle) - correctly, since the root would then have to run both before and after
 // the console. Putting it on the site would mean widening render.buzz's asset copy, which is a
 // separate call about the site rather than about this gate.
-export fun test(ctx: magus\Context, args: [str]) > void {
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     ctx.writesFiles("coverage.svg");
     final before = drift.hashes(["coverage.svg"]);
@@ -142,7 +142,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 // assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes
 // dirty when a source edit was not rebuilt and committed. The `rw` charm (`build:rw`) keeps the result
 // instead of gating. esbuild is pinned (mise), so the output is byte-stable and the gate holds.
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     ctx.needs(root\graph_generate);
     // NOT drift.hashes: console/gen is gitignored, so there is nothing committed to drift
@@ -184,7 +184,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 // The cooling period in .npmrc is the other half and the stronger one: this catches a
 // KNOWN advisory, minimum-release-age keeps an unknown compromise out of the build for ten
 // days in the first place.
-export fun security(ctx: magus\Context, args: [str]) > void {
+export fun security(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     audit.audit();
 }

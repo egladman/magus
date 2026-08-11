@@ -24,13 +24,13 @@ magus\project({
     },
 });
 
-export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
+export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install(); }
 
 // pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason.
 // Always let pnpm validate the install. A canceled install can leave a
 // node_modules directory that exists but is incomplete, so isDir alone is not a
 // valid readiness check.
-fun install() > void {
+fun install() > void !> any {
     if (fs\isFile("pnpm-lock.yaml")) {
         os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
     } else {
@@ -68,7 +68,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 // security audits what actually ships against the npm advisory database. See
 // console/magusfile.buzz for why it is --prod, why it is not folded into lint, and why the
 // .npmrc cooling period is the stronger half of this.
-export fun security(ctx: magus\Context, args: [str]) > void {
+export fun security(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     audit.audit();
 }

@@ -244,7 +244,7 @@ export fun silences(labels: [str], name: str) > bool {
 }
 
 // silenced asks GitHub for this pull request's labels and applies the rule above.
-export fun silenced(repo: str, pr: str, name: str) > bool {
+export fun silenced(repo: str, pr: str, name: str) > bool !> any {
     final res = proc\exec("gh", args: ["api", "repos/" + repo + "/issues/" + pr + "/labels"],
         dir: ".", opts: {"quiet": true, "allow_failure": true});
     if (!res.ok) { return false; }
@@ -259,7 +259,7 @@ export fun silenced(repo: str, pr: str, name: str) > bool {
 // Read through `gh api` and decoded here rather than filtered with a jq expression: the
 // marker is an HTML comment, and quoting it through a jq -r filter inside YAML inside
 // bash is three layers of escaping to get wrong.
-fun find(repo: str, pr: str) > str {
+fun find(repo: str, pr: str) > str !> any {
     final listed = proc\exec("gh", args: ["api", "--paginate",
         "repos/" + repo + "/issues/" + pr + "/comments"], dir: ".", opts: {"quiet": true});
     foreach (c in serialize\jsonDecode(listed.stdout).listValue()) {
@@ -273,7 +273,7 @@ fun find(repo: str, pr: str) > str {
 // publish upserts one advisor's section into the PR's magus comment. An empty body
 // retracts the section, and a comment left with no sections at all is emptied to the
 // bare marker rather than deleted - deleting would lose the thread's history.
-export fun publish(repo: str, pr: str, name: str, title: str, body: str) > void {
+export fun publish(repo: str, pr: str, name: str, title: str, body: str) > void !> any {
     final id = find(repo, pr: pr);
     var current = "";
     if (id != "") {

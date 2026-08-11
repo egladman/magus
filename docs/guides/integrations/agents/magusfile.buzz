@@ -41,7 +41,7 @@ magus\project({
     },
 });
 
-export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
+export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install(); }
 
 // pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason.
 // Always let pnpm validate the install. An interrupted install leaves a node_modules
@@ -49,7 +49,7 @@ export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
 // handing the missing packages straight to tsc/esbuild. Reached once per invocation
 // through preflight, which every target below already needs, so the unconditional
 // --frozen-lockfile costs about a second on a warm tree and never races itself.
-fun install() > void {
+fun install() > void !> any {
     proc\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
 }
 
@@ -57,7 +57,7 @@ fun install() > void {
 // Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors
 // libs/textsearch's rules so the whole workspace writes TypeScript the same way).
 // proc.exec raises on a non-zero exit, so either gate fails lint.
-export fun lint(ctx: magus\Context, args: [str]) > void {
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     proc\exec("pnpm", ["run", "typecheck"], ".", {});
     proc\exec("pnpm", ["run", "biome"], ".", {});
@@ -79,7 +79,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 // The sh templates are covered elsewhere, by cmd/magus/testdata/script/guard_templates.txtar:
 // testscript already gives them a real magus on PATH, which is exactly what a shell template
 // needs and what this project cannot offer.
-export fun test(ctx: magus\Context, args: [str]) > void {
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     proc\exec("pnpm", ["run", "test"], ".", {});
 }

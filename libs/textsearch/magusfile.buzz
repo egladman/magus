@@ -79,7 +79,7 @@ magus\project({
     },
 });
 
-export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
+export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install(); }
 
 // pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason.
 // Always let pnpm validate the install. An interrupted install leaves a node_modules
@@ -87,7 +87,7 @@ export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
 // handing the missing packages straight to tsc/esbuild. Reached once per invocation
 // through preflight, which every target below already needs, so the unconditional
 // --frozen-lockfile costs about a second on a warm tree and never races itself.
-fun install() > void {
+fun install() > void !> any {
     proc\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
 }
 
@@ -95,7 +95,7 @@ fun install() > void {
 // measured by hashing MAGUS.md before and after (tools/drift.buzz), not by asking whether
 // it was clean, so the gate still fires when you already have it uncommitted. A
 // locally-regenerated MAGUS.md passes either way: its bytes do not move.
-export fun generate(ctx: magus\Context, args: [str]) > void {
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     final before = drift.hashes(["MAGUS.md"]);
     ctx.needs(index_generate);
@@ -107,7 +107,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 }
 
 // Renders MAGUS.md (target catalog plus graph) from this magusfile.
-export fun index_generate(ctx: magus\Context, args: [str]) > void {
+export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs\writeFile("MAGUS.md", doc + "\n");
 }
@@ -115,7 +115,7 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void {
 // lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit)
 // plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json).
 // proc.exec raises on a non-zero exit, so either gate fails lint.
-export fun lint(ctx: magus\Context, args: [str]) > void {
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     proc\exec("pnpm", ["run", "typecheck"], ".", {});
     proc\exec("pnpm", ["run", "biome"], ".", {});
@@ -130,7 +130,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 // esbuild is the compiler and tsc is only the type gate. Coverage therefore has to
 // travel back through a sourcemap - hence --sourcemap here - or every record would
 // name a .testcache bundle instead of the src/*.ts someone wrote.
-export fun test(ctx: magus\Context, args: [str]) > void {
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     ctx.writesFiles(workspace.file("assets/textsearch-coverage.svg"));
     final badge_path = fs\join("..", "..", "assets", "textsearch-coverage.svg");
