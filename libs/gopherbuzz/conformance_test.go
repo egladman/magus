@@ -80,6 +80,15 @@ func TestUpstreamConformance(t *testing.T) {
 	// Reading them from elsewhere failed on the working directory rather than on
 	// anything about the language. Done after loadAllowlist, which resolves
 	// allowlistPath relative to THIS package's directory.
+	//
+	// This is also why os.buzz cannot be closed here. It asserts
+	// `os\execute(["./zig-out/bin/buzz", "--version"]) == 0` - a fair test of
+	// os\execute, and gopherbuzz could build its own interpreter to stand in for
+	// upstream's. But the path resolves against THIS directory, the pinned upstream
+	// checkout, which is shared and must stay pristine; and the cwd cannot move
+	// because the files above need it. Staging the binary was tried and reverted:
+	// the only ways through are writing into the checkout or copying it wholesale
+	// per run, and neither is worth one file.
 	t.Chdir(dir)
 
 	seen := make(map[string]bool, len(files))

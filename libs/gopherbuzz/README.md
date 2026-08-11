@@ -151,9 +151,21 @@ evaluates its target twice, and generics are erased.
 property of the EMBEDDING rather than by unwritten code, so this list is not a
 backlog:
 
-- **A compiled native library.** `ffi`, `extern-library`, `c-buzz-api` and
-  `types-as-value` all `zdef` against `tests/utils/libforeign`, and `os` shells out
-  to upstream's own `./zig-out/bin/buzz`. All five need upstream built with Zig.
+- **A compiled native library.** `ffi` and `types-as-value` `zdef` against
+  `tests/utils/libforeign`, which `build.zig` compiles from `tests/utils/foreign.zig`
+  and which ships in no release; `extern-library` imports a file whose only export is
+  a body-less `extern fun`, so the "null is not callable" it fails with IS the
+  unbound extern. Those three need nothing from this VM - only Zig, to build the
+  library gopherbuzz would then `dlopen` through its own FFI.
+  `c-buzz-api` is deeper: `buzz_c_api.c` calls INTO buzz's C API (`buzz_api.zig`),
+  so satisfying it means exposing an equivalent C ABI over gopherbuzz's VM.
+- **`os` needs a binary inside the pinned checkout.** It asserts
+  `os\execute(["./zig-out/bin/buzz", "--version"]) == 0`, which is a fair test of
+  `os\execute` and could run gopherbuzz's own interpreter instead of upstream's.
+  But the harness must keep the working directory at the upstream checkout (other
+  files read README.md and tests/utils from it), so that path resolves inside a
+  shared, pinned tree this repo must not write to. Tried and reverted; see the note
+  in conformance_test.go.
 - **`math\deg` will not be matched.** Upstream's result implies a degrees-per-radian
   constant of 57.295779513082195; the correctly-rounded f64 value is
   57.29577951308232, which is what gopherbuzz returns. Matching upstream here would
