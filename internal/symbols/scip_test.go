@@ -109,7 +109,7 @@ func TestParseIndexRefLineCap(t *testing.T) {
 	assert.Len(t, syms[0].Refs[0].Lines, MaxRefLines, "lines are capped")
 }
 
-// An indexer that reports no language leaves every symbol unlabelled, which silently
+// An indexer that reports no language leaves every symbol unlabeled, which silently
 // empties `magus query language:<lang>` for that whole ecosystem - scip-typescript sets
 // Document.Language on nothing. The spell's declared language is what magus already used
 // to decide the project was symbol-capable, so it fills the gap.

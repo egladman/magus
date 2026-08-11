@@ -149,7 +149,7 @@ func sortedEnclosing(buf []enclosingDef, doc *scip.Document) []enclosingDef {
 //
 // declaredLanguage is the language the producing spell adapts, used when the index does
 // not say. SCIP makes Document.Language optional and scip-typescript sets it on nothing,
-// so reading the index alone leaves every TypeScript symbol unlabelled and
+// so reading the index alone leaves every TypeScript symbol unlabeled and
 // `magus query language:typescript` empty while `language:go` works. The document wins
 // when it has a value - an index may legitimately span languages - and the declaration
 // fills the gap rather than overriding it.

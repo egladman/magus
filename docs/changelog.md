@@ -91,7 +91,7 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   answer to a search.
 - **Symbols carry a language even when the indexer does not report one.** SCIP makes
   `Document.Language` optional and scip-typescript sets it on nothing, so every TypeScript
-  symbol landed unlabelled and `magus query language:typescript` returned 0 while
+  symbol landed unlabeled and `magus query language:typescript` returned 0 while
   `language:go` returned 22,245. magus now falls back to the language the producing spell
   declares - the same declaration that made the project symbol-capable in the first place.
   A document that names its own language still wins, since one index may span several.

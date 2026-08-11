@@ -469,7 +469,7 @@ func (m *Magus) SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, boo
 //
 // language is carried because an indexer may not report one. SCIP makes Document.Language
 // optional and scip-typescript sets it on nothing, so trusting the index alone leaves
-// every TypeScript symbol unlabelled and `magus query language:typescript` empty. It comes
+// every TypeScript symbol unlabeled and `magus query language:typescript` empty. It comes
 // from the project's spells, which is authoritative and free - and it is resolved for a
 // knowledge.symbols override too, since such a project is still bound to spells even
 // though the override names a path rather than one.
