@@ -35,6 +35,23 @@ func main() {
 }
 
 func run() error {
+	src, emitted, err := render()
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.FromSlash(outFile), src, 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", outFile, err)
+	}
+	fmt.Printf("wrote %s (%d modules)\n", outFile, emitted)
+	return nil
+}
+
+// render builds the manifest source without writing it, so a drift test can compare
+// it against the committed file. The manifest had gone stale by eleven modules with
+// nothing to catch it - completion and hover simply did not know base64, csv, hex,
+// ini, url, log, math, net, sort, term or diff existed - which is what the split is
+// for: the generator and the gate now read the same function.
+func render() (src []byte, emitted int, err error) {
 	// The list view names every module; the detail view (per name) is the only one
 	// that populates fields and methods, so fetch each module individually.
 	list := hostmodules.Describe("")
@@ -47,7 +64,6 @@ func run() error {
 	b.WriteString("// and hover. See cmd/langservice-manifest.\n")
 	b.WriteString("var modules = []Module{\n")
 
-	emitted := 0
 	for _, summary := range list {
 		m := hostmodules.Describe(summary.Name)
 		if len(m) == 0 {
@@ -76,13 +92,9 @@ func run() error {
 	}
 	b.WriteString("}\n")
 
-	src, err := format.Source(b.Bytes())
+	out, err := format.Source(b.Bytes())
 	if err != nil {
-		return fmt.Errorf("gofmt generated source: %w", err)
+		return nil, 0, fmt.Errorf("gofmt generated source: %w", err)
 	}
-	if err := os.WriteFile(filepath.FromSlash(outFile), src, 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", outFile, err)
-	}
-	fmt.Printf("wrote %s (%d modules)\n", outFile, emitted)
-	return nil
+	return out, emitted, nil
 }
