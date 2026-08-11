@@ -444,7 +444,7 @@ export fun preflight(ctx: magus\Context, args: [str]) > void { go["x"](); }
 func TestDependencyTokensInStringLiterals(t *testing.T) {
 	g := Extract(`import "project/../api" as api;
 export fun build(ctx: magus\Context, args: [str]) > void {
-    magus.info("run ctx.needs(setup) and api.compile first");
+    magus.log.info("run ctx.needs(setup) and api.compile first");
     go["go-build"]();
 }
 export fun setup(ctx: magus\Context, args: [str]) > void { go["x"](); }

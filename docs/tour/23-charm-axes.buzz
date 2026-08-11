@@ -80,19 +80,19 @@ fun channel(ctx: magus\Context) > str !> any {
 // release moves a tag every consumer follows.
 export fun publish(ctx: magus\Context, args: [str]) > void !> any {
     if (!ctx.has_charm("cd")) {
-        magus\info("publish: built " + version() + ", pushed nothing (add the cd charm to deliver)");
+        magus\log.info("publish: built " + version() + ", pushed nothing (add the cd charm to deliver)");
         return;
     }
     final ch = channel(ctx);
     if (ch == "commit") {
-        magus\info("publish: " + version() + " -> commit channel, tagged by hash, one registry");
+        magus\log.info("publish: " + version() + " -> commit channel, tagged by hash, one registry");
         return;
     }
     if (ch == "unstable") {
-        magus\info("publish: " + version() + " -> unstable channel, version tag only");
+        magus\log.info("publish: " + version() + " -> unstable channel, version tag only");
         return;
     }
-    magus\info("publish: " + version() + " -> stable channel, version tag and the moving tag");
+    magus\log.info("publish: " + version() + " -> stable channel, version tag and the moving tag");
 }
 
 test "a version with a prerelease belongs to the unstable channel" {

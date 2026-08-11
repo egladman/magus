@@ -371,7 +371,7 @@ func TestCheckMagusfileSyntax(t *testing.T) {
 	t.Run("embedding constructs are allowed", func(t *testing.T) {
 		// Top-level host calls and statements are embedding-only constructs that
 		// upstream-strict parsing rejects; magusfiles parse in embedded mode.
-		got := run(map[string]string{"magusfile.buzz": "magus.info(\"hi\");\nexport fun ci(ctx: magus\\Context, _a: [str]) > void {}\n"})
+		got := run(map[string]string{"magusfile.buzz": "magus.log.info(\"hi\");\nexport fun ci(ctx: magus\\Context, _a: [str]) > void {}\n"})
 		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
 

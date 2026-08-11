@@ -600,7 +600,7 @@ export fun image_registries(ctx: magus\Context, args: [str]) > void !> any {
     if (args.len() > 0) { host = args[0]; }
     final registries = select_registries(publish_registries(ctx), host);
     if (registries.len() == 0) {
-        magus\info("image-registries: this build pushes nowhere; add the cd charm to see where a delivery goes (`:cd` per-commit, `:cd,stable` a release)");
+        magus\log.info("image-registries: this build pushes nowhere; add the cd charm to see where a delivery goes (`:cd` per-commit, `:cd,stable` a release)");
         return;
     }
     // The CREDENTIALS column costs a provider round trip - and a prompt, on a provider
@@ -617,7 +617,7 @@ export fun image_registries(ctx: magus\Context, args: [str]) > void !> any {
     }
     // Lead line, then the table: magus\info prefixes only its FIRST line with a level
     // marker, which would otherwise shift the header out of line with its columns.
-    magus\info("image-build under these charms publishes to:\n" + table);
+    magus\log.info("image-build under these charms publishes to:\n" + table);
 
     if (!checking) { return; }
     var unready = mut [<str>];
@@ -702,7 +702,7 @@ export fun image_login(ctx: magus\Context, args: [str]) > void !> any {
         final token = magus\secret.read(reg.token_ref);
         proc\exec("docker", args: ["login", reg.host, "-u", user, "--password-stdin"],
             dir: ".", opts: {"stdin": token});
-        magus\info("image-login: " + reg.host + " authenticated as " + user);
+        magus\log.info("image-login: " + reg.host + " authenticated as " + user);
     }
 }
 
@@ -916,7 +916,7 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void !> any {
 // under the `gha` charm; that branch was unreachable (nothing set
 // MAGUS_INSIGHT_OUTPUT_PATH or ran this target in CI) and was removed.
 export fun postflight(ctx: magus\Context, args: [str]) > void !> any {
-    magus\info(magus\insight(["report", "--workspace"]).stdout);
+    magus\log.info(magus\insight(["report", "--workspace"]).stdout);
 }
 
 // Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).
@@ -963,7 +963,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
                 + "\n... truncated; `magus query output <ref>` has it all";
         }
         if (body != "") {
-            magus\info("generate: what changed on this runner:\n" + body);
+            magus\log.info("generate: what changed on this runner:\n" + body);
         }
         // Two causes land here and they have different owners: output that was never
         // regenerated, and a generator that does not emit the same bytes twice. Only a
@@ -1001,7 +1001,7 @@ export fun tapes(ctx: magus\Context, args: [str]) > void !> any {
             + "(see tapes/README.md)";
     }
     foreach (tape in fs\glob("tapes/*.tape")) {
-        magus\info("recording {tape.value}");
+        magus\log.info("recording {tape.value}");
         proc\exec("vhs", [tape.value], ".", {});
     }
 }
@@ -1088,7 +1088,7 @@ fun write_notices(stage: str, binary: str) > void !> any {
             + missing.join(separator: ", ");
     }
     fs\writeFile(fs\join(stage, "THIRD-PARTY-NOTICES"), body);
-    magus\info("notices: documented {count} third-party modules");
+    magus\log.info("notices: documented {count} third-party modules");
 }
 
 // Reads one module's license text from the module cache, or "" when none is present.
@@ -1393,12 +1393,12 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         final n = releaser\nextFor(cur);
         var at = "at " + cur;
         if (cur == "") { at = "unreleased"; }
-        magus\info("release: " + m["key"] + " - " + at
+        magus\log.info("release: " + m["key"] + " - " + at
             + ", next: patch " + n.patch + " | minor " + n.minor + " | major " + n.major);
     }
 
     if (wanted.keys().len() == 0) {
-        magus\info("release: nothing named, nothing released - e.g. `magus run release -- magus@0.4.0`");
+        magus\log.info("release: nothing named, nothing released - e.g. `magus run release -- magus@0.4.0`");
         return;
     }
 
@@ -1471,8 +1471,8 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
     }
 
     if (!deliver) {
-        magus\info("release: DRY RUN - add the cd charm to execute");
-        if (dirty) { magus\info("release: NOTE - tree is dirty; cd will refuse until it is clean"); }
+        magus\log.info("release: DRY RUN - add the cd charm to execute");
+        if (dirty) { magus\log.info("release: NOTE - tree is dirty; cd will refuse until it is clean"); }
     }
 
     // 1. Nested modules first: the root's go.mod must require a version that
@@ -1485,7 +1485,7 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
     foreach (m in modules) {
         final v = wanted[m["key"]];
         if (v == null or m["root"] != "") { continue; }
-        magus\info("release: tag " + m["prefix"] + "v" + v);
+        magus\log.info("release: tag " + m["prefix"] + "v" + v);
         if (deliver) { vcs\cmd(["tag", m["prefix"] + "v" + v]); }
         // Only a Go module is required by the root's go.mod; a library in another
         // language is tag-only, so there is nothing to repoint.
@@ -1496,9 +1496,9 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         // throws on a missing line, which is right for a module the root does
         // require and whose line moved.
         if (m["gomodule"] != "" and gomod.indexOf(m["gomodule"] + " v") == null) {
-            magus\info("release: go.mod  " + m["gomodule"] + "  - not required by the root; tag only");
+            magus\log.info("release: go.mod  " + m["gomodule"] + "  - not required by the root; tag only");
         } else if (m["gomodule"] != "") {
-            magus\info("release: go.mod  " + m["gomodule"] + "  ->  v" + v);
+            magus\log.info("release: go.mod  " + m["gomodule"] + "  ->  v" + v);
             gomod = releaser\rewriteRequire(gomod, m["gomodule"], "v" + v);
             rewrote = true;
         }
@@ -1508,26 +1508,26 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
     // 2. Root tag LAST, so it captures the go.mod rewrite above.
     final rootV = wanted["magus"];
     if (rootV != null) {
-        magus\info("release: tag v" + rootV);
+        magus\log.info("release: tag v" + rootV);
         if (deliver) { vcs\cmd(["tag", "v" + rootV]); }
     }
 
     if (deliver) {
-        magus\info("release: done - nothing was pushed. Push the tags deliberately when ready.");
+        magus\log.info("release: done - nothing was pushed. Push the tags deliberately when ready.");
     } else {
-        magus\info("release: dry run only - nothing was tagged or written");
+        magus\log.info("release: dry run only - nothing was tagged or written");
     }
 }
 
 // Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.
 export fun watch(ctx: magus\Context, args: [str]) > void !> any {
-    magus\info("watching cmd/ and internal/ — rebuilding on change (Ctrl-C to stop)");
+    magus\log.info("watching cmd/ and internal/ — rebuilding on change (Ctrl-C to stop)");
     fs\watch(["cmd", "internal"], fun(changed: [str]) > bool {
-        magus\info("change detected — rebuilding");
+        magus\log.info("change detected — rebuilding");
         try {
             go_build(ctx, []);
         } catch (e) {
-            magus\warn("build failed, still watching: " + e);
+            magus\log.warn("build failed, still watching: " + e);
         }
         return false;
     });
@@ -1857,7 +1857,7 @@ export fun ci_shard(ctx: magus\Context, args: [str]) > void !> any {
         + "max_parallel=" + plan.q("max_parallel").integerValue() + "\n";
 
     if (!ctx.has_charm("gha")) {
-        magus\info("ci-shard preview (add the gha charm — `magus run ci-shard:gha` — to write $GITHUB_OUTPUT):\n" + block);
+        magus\log.info("ci-shard preview (add the gha charm — `magus run ci-shard:gha` — to write $GITHUB_OUTPUT):\n" + block);
         return;
     }
     final path = os\env("GITHUB_OUTPUT");
@@ -2009,7 +2009,7 @@ export fun deploy_generate(ctx: magus\Context, args: [str]) > void !> any {
     if (fs\exists(OUT + "/console")) { fs\delete(OUT + "/console"); }
     fs\copyDir(CONSOLE_GEN, OUT + "/console");
 
-    magus\info("assembled " + OUT + " - docs at /, console at /console/");
+    magus\log.info("assembled " + OUT + " - docs at /, console at /console/");
 }
 
 // serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the
@@ -2037,10 +2037,10 @@ export fun serve(ctx: magus\Context, args: [str]) > void !> any {
     // the printed URL is correct even when 8080 is busy. "/console/" is longer than
     // "/", so a /console/ request routes (longest-prefix) to the console tree.
     final port = http\server({"mounts": {"/": DOCS_GEN, "/console/": CONSOLE_GEN}});
-    magus\info("serving the deploy at http://localhost:{port}/");
-    magus\info("  /          -> " + DOCS_GEN + "  (docs)");
-    magus\info("  /console/  -> " + CONSOLE_GEN + "  (console SPA, shadows the docs /console/ redirect)");
-    magus\info("watching docs/ + blog/ (re-render docs) and console/ sources (rebuild console); Ctrl-C to stop");
+    magus\log.info("serving the deploy at http://localhost:{port}/");
+    magus\log.info("  /          -> " + DOCS_GEN + "  (docs)");
+    magus\log.info("  /console/  -> " + CONSOLE_GEN + "  (console SPA, shadows the docs /console/ redirect)");
+    magus\log.info("watching docs/ + blog/ (re-render docs) and console/ sources (rebuild console); Ctrl-C to stop");
 
     // Watch SOURCES only, never the gen/ output trees: fs.watch's built-in ignore
     // prunes any dir named gen/ or node_modules/, so watching docs/, blog/, and
@@ -2079,11 +2079,11 @@ export fun serve(ctx: magus\Context, args: [str]) > void !> any {
             // precisely the callers that cannot infer the fix themselves. The watch is
             // ending here, so losing the remedy leaves no way forward. Hints carry what is
             // safe to lose; this is not.
-            magus\error("serve: the magus binary changed while this server was running (" + exe
+            magus\log.error("serve: the magus binary changed while this server was running (" + exe
                 + "); this process still runs the OLD code, so anything it regenerates now would be stale."
                 + " Stop it (Ctrl-C) and start it again to pick up the new build.");
             // Advisory, and safe to lose: the general rule behind this one instance.
-            magus\hint("a long-lived magus keeps regenerating with the logic it started with; restart it after a rebuild");
+            magus\log.hint("a long-lived magus keeps regenerating with the logic it started with; restart it after a rebuild");
             return true; // end the watch; a stale generator must not keep writing gen/
         }
         var docsHit = false;
@@ -2096,19 +2096,19 @@ export fun serve(ctx: magus\Context, args: [str]) > void !> any {
             }
         }
         if (docsHit) {
-            magus\info("docs/blog change - re-rendering " + DOCS_GEN);
+            magus\log.info("docs/blog change - re-rendering " + DOCS_GEN);
             try {
                 rerender_docs();
             } catch (e) {
-                magus\warn("docs render failed, still watching: " + e);
+                magus\log.warn("docs render failed, still watching: " + e);
             }
         }
         if (consoleHit) {
-            magus\info("console change - rebuilding " + CONSOLE_GEN);
+            magus\log.info("console change - rebuilding " + CONSOLE_GEN);
             try {
                 rebuild_console();
             } catch (e) {
-                magus\warn("console build failed, still watching: " + e);
+                magus\log.warn("console build failed, still watching: " + e);
             }
         }
         return false;

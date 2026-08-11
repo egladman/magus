@@ -190,7 +190,7 @@ func OsStdinIsTerminal(_ context.Context) (bool, error) {
 // missing tool a case the author has to answer, in the same shape as every other failure
 // in these modules:
 //
-//	try { final vhs = proc\which("vhs"); ... } catch (e) { magus\info("vhs not installed"); }
+//	try { final vhs = proc\which("vhs"); ... } catch (e) { magus\log.info("vhs not installed"); }
 func OsWhich(_ context.Context, cmd string) (string, error) {
 	path, err := exec.LookPath(cmd)
 	if err != nil {

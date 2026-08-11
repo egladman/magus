@@ -135,7 +135,7 @@ import "std";
 import "magus";
 
 fun main() > void {
-    std\assert(magus\normalize("HTTPServer") == "http-server", message: "normalize");
+    std\assert(magus\canonicalName("HTTPServer") == "http-server", message: "normalize");
 }
 main();
 `)
@@ -864,8 +864,8 @@ func TestMagusHint(t *testing.T) {
 import "magus";
 
 export fun nudge(ctx: magus\Context, _a: [str]) > void {
-    magus.hint("stale generated code — run: magus run generate -- --write");
-    magus.hint("stale generated code — run: magus run generate -- --write");
+    magus.log.hint("stale generated code — run: magus run generate -- --write");
+    magus.log.hint("stale generated code — run: magus run generate -- --write");
 }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "nudge"))
@@ -977,10 +977,10 @@ func TestMagusLoggingBuzz(t *testing.T) {
 import "magus";
 
 export fun logit(ctx: magus\Context, _a: [str]) > void {
-    magus.info("hello");
-    magus.debug("dbg", {"k": "v"});
-    magus.warn("warn");
-    magus.error("err");
+    magus.log.info("hello");
+    magus.log.debug("dbg", {"k": "v"});
+    magus.log.warn("warn");
+    magus.log.error("err");
 }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "logit"))

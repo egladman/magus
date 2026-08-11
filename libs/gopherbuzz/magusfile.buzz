@@ -69,7 +69,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
         // a CI log and no tree, and the index carries workspace-wide counts, so
         // "drifted" alone cannot say whether a count moved or a whole section did.
         final body = vcs\dirtyDiff(["MAGUS.md"]);
-        if (body != "") { magus\info("generate: what changed on this runner:\n" + body); }
+        if (body != "") { magus\log.info("generate: what changed on this runner:\n" + body); }
         throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/gopherbuzz` and commit" + drift.secondCause;
     }
 }
@@ -164,7 +164,7 @@ export fun conformance(ctx: magus\Context, args: [str]) > void {
     }
     proc\exec("git", ["checkout", pinned], cache_dir, {});
 
-    magus\info("running upstream conformance against {cache_dir} @ {pinned}");
+    magus\log.info("running upstream conformance against {cache_dir} @ {pinned}");
     os\withEnv({"GOPHERBUZZ_UPSTREAM_DIR": cache_dir}, fun() > void {
         proc\exec("go", ["test", "-run", "TestUpstreamConformance", "-v", "."], ".", {});
     });

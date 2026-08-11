@@ -368,30 +368,34 @@ export object TargetGraph {
 export extern fun affected(base: str = "") > Affected !> any;
 export extern fun affectedImpact(base: str = "", opts: {str: any} = {<str: any>}) > Impact !> any;
 export extern fun bustCache(project_path: str = "") > void !> any;
+export extern fun canonicalName(name: str) > str;
 export extern fun cmd(sub: str, args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
-export extern fun debug(msg: str = "", fields: {str: str} = {<str: str>}) > void;
 export extern fun describe(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
 export extern fun describeFile(paths: [str], opts: {str: any} = {<str: any>}) > FileReport !> any;
 export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftResult !> any;
 export extern fun doctor(args: [str], opts: {str: any} = {<str: any>}) > DoctorReport !> any;
-export extern fun error(msg: str = "", fields: {str: str} = {<str: str>}) > void;
 export extern fun fatal(msg: str = "") > void;
 export extern fun graph() > Graph !> any;
 export extern fun has_charm(name: str) > bool;
-export extern fun hint(msg: str = "") > void;
-export extern fun info(msg: str = "", fields: {str: str} = {<str: str>}) > void;
 export extern fun insight(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
 export extern fun insightReport(args: [str], opts: {str: any} = {<str: any>}) > InsightReport !> any;
 export extern fun ls() > Projects !> any;
-export extern fun normalize(name: str) > str;
 export extern fun project(config: any, opts: any = null) > void;
 export extern fun pry() > void;
 export extern fun raise(code: str, message: str, opts: {str: any} = {<str: any>}) > void !> any;
 export extern fun run(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
 export extern fun targetGraph(opts: {str: any} = {<str: any>}) > TargetGraph !> any;
 export extern fun targets() > TargetGraph !> any;
-export extern fun warn(msg: str = "", fields: {str: str} = {<str: str>}) > void;
 export extern fun where(dir: str) > str !> any;
+// Emitting a message without changing control flow: the four levels, plus hint. magus\fatal and magus\raise are deliberately NOT here - they END the run rather than report on it, and grouping them by how they look rather than what they do is what made this surface hard to read.
+export object log {
+    static extern fun debug(msg: str = "", fields: {str: str} = {<str: str>}) > void;
+    static extern fun error(msg: str = "", fields: {str: str} = {<str: str>}) > void;
+    static extern fun hint(msg: str = "") > void;
+    static extern fun info(msg: str = "", fields: {str: str} = {<str: str>}) > void;
+    static extern fun warn(msg: str = "", fields: {str: str} = {<str: str>}) > void;
+}
+
 // Remote cache backend selection.
 export object cache {
     static extern fun remote(spell: {str: any}) > void;

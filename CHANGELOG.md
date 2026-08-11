@@ -50,6 +50,21 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   produced an identifier inconsistent with `fs\readFile`, `fs\removeAll`, `fs\copyFile`,
   `fs\listDir`, and `fs\appendFile`. There is no alias: a magusfile calling
   `fs\mkdirall(...)` must be updated to `fs\mkdirAll(...)`.
+- **Logging moved to `magus\log`, and `magus\normalize` is now `magus\canonicalName`.**
+  `magus\info(...)` becomes `magus\log.info(...)`, and the same for `debug`, `warn`,
+  `error` and `hint`. `magus\fatal` and `magus\raise` deliberately did NOT move.
+  The line is what a member DOES, not what it looks like: everything in `log` emits a
+  message and returns, while `fatal` and `raise` end the run. Grouping the two together
+  would let `magus\log.fatal(...)` read as one more level, which is the confusion the
+  split exists to prevent. It also settles the surface's odd asymmetry - `magus\secret`
+  and `magus\cache` were grouped while five logging members sat loose beside them.
+  `normalize` was renamed because it named neither its input nor its output. It
+  canonicalizes a magus ENTITY NAME - a target, charm, or spell op - and the doc's own
+  word for the result was already "canonical": `build2` gains a `-` you did not type,
+  `HTTPServer` breaks before its last letter.
+  Both fail at LOAD, not at run time, because host-module members are typed to the
+  checker. See `internal/interp/bindings/testdata/magus-api.lock` for the full surface
+  before and after.
 - **`os\exec`, `os\shell` and `os\which` moved to a new `proc` module.** Import `proc` and
   call `proc\exec(...)`, `proc\shell(...)`, `proc\which(...)`; there is no alias in `os`.
   The three were the only members of `os` that start a CHILD PROCESS, and everything left

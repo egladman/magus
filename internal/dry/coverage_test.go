@@ -215,17 +215,17 @@ func TestRun_stubbedHostMembers(t *testing.T) {
 	const src = `
 import "magus";
 export fun work(ctx: magus\Context, args: [str]) > void !> any {
-    magus.info("i");
-    magus.warn("w");
-    magus.error("e");
-    magus.debug("d");
+    magus.log.info("i");
+    magus.log.warn("w");
+    magus.log.error("e");
+    magus.log.debug("d");
     magus.cmd("ls", []);
     magus.describe(["x"]);
     magus.insight(["y"]);
     magus.doctor(["z"]);
     magus.modules();
     magus.module("go");
-    magus.hint("h");
+    magus.log.hint("h");
     magus.pry();
     magus.bustCache();
     magus.affectedImpact("main");
@@ -247,12 +247,12 @@ export fun work(ctx: magus\Context, args: [str]) > void !> any {
 	}
 }
 
-// TestRun_logMissingArg drives strArg's fallback: magus.info() with no argument
+// TestRun_logMissingArg drives strArg's fallback: magus.log.info() with no argument
 // traces an empty-detail log op rather than panicking.
 func TestRun_logMissingArg(t *testing.T) {
 	const src = `
 import "magus";
-export fun work(ctx: magus\Context, args: [str]) > void { magus.info(); }
+export fun work(ctx: magus\Context, args: [str]) > void { magus.log.info(); }
 `
 	r := Run(context.Background(), src, "work", nil)
 	require.True(t, r.OK, "dry-run failed: %+v", r.Diag)
@@ -264,7 +264,7 @@ export fun work(ctx: magus\Context, args: [str]) > void { magus.info(); }
 // TestLoadMagusfile_topLevelLogNoAttribution: a log call at the top level (no
 // current target) has nowhere to attribute, so addOp drops it without erroring.
 func TestLoadMagusfile_topLevelLog(t *testing.T) {
-	const src = `import "magus"; magus.info("top-level");`
+	const src = `import "magus"; magus.log.info("top-level");`
 	g := LoadMagusfile(context.Background(), src)
 	require.True(t, g.OK, "a top-level log must not fail the load: %+v", g.Diag)
 }
@@ -460,8 +460,8 @@ func TestRun_insightReportLensesAreShaped(t *testing.T) {
 			src := `
 import "magus";
 export fun work(ctx: magus\Context, args: [str]) > void !> any {
-    magus.info("{magus.insightReport([]).` + lens + `.len()}");
-    magus.info("reached-the-end");
+    magus.log.info("{magus.insightReport([]).` + lens + `.len()}");
+    magus.log.info("reached-the-end");
 }
 `
 			r := Run(context.Background(), src, "work", nil)

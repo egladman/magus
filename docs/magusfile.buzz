@@ -270,7 +270,7 @@ export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
 // generate is the one public docs publication target. Its small drift gate always runs;
 // its content, catalog, changelog, and site stages replay independently when unchanged.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-	magus\hint("docs generate refreshes derived content and bundles; unchanged stages replay from cache; for a docs/blog preview use `magus run render docs`");
+	magus\log.hint("docs generate refreshes derived content and bundles; unchanged stages replay from cache; for a docs/blog preview use `magus run render docs`");
     ctx.needs(preflight);
     final CONTENT = ["reference/buzz", "reference/config.md", "concepts/spells", "concepts/spells.md",
         "concepts/knowledge.md", "reference/manpage", "reference/skills", "reference/api", "changelog.md"];
@@ -317,7 +317,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
             body = body.sub(0, len: 4000) + "\n... truncated; `magus query output <ref>` has it all";
         }
         if (body != "") {
-            magus\info("generate: what changed on this runner:\n" + body);
+            magus\log.info("generate: what changed on this runner:\n" + body);
         }
         throw "generate: regeneration changed " + moved.join(", ")
             + "; re-run `magus run generate:rw docs` and commit" + drift.secondCause;
@@ -414,7 +414,7 @@ export fun build_playground(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("sh",
         ["-c", "cp \"$(tinygo env TINYGOROOT)/targets/wasm_exec.js\" docs/vendor/playground/wasm_exec.js"],
         "..", {});
-    magus\info("rebuilt docs/vendor/playground/buzz.wasm + wasm_exec.js - commit the result");
+    magus\log.info("rebuilt docs/vendor/playground/buzz.wasm + wasm_exec.js - commit the result");
 }
 
 // build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11)
@@ -428,7 +428,7 @@ export fun build_mermaid(ctx: magus\Context, args: [str]) > void !> any {
     // project baseline (the typescript spell's `dist/**`, which this project never writes).
     ctx.writesFiles("gen/assets/mermaid.js");
     proc\exec("pnpm", ["run", "build-mermaid"], ".", {});
-    magus\info("rebuilt gen/assets/mermaid.js");
+    magus\log.info("rebuilt gen/assets/mermaid.js");
 }
 
 // build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11)
@@ -440,7 +440,7 @@ export fun build_hljs(ctx: magus\Context, args: [str]) > void !> any {
     // See build-mermaid: declare the real artifact rather than inheriting `dist/**`.
     ctx.writesFiles("gen/assets/hljs.js");
     proc\exec("pnpm", ["run", "build-hljs"], ".", {});
-    magus\info("rebuilt gen/assets/hljs.js");
+    magus\log.info("rebuilt gen/assets/hljs.js");
 }
 
 // build-playground-editor bundles the CodeMirror editor the playground loads into
@@ -457,7 +457,7 @@ export fun build_playground_editor(ctx: magus\Context, args: [str]) > void !> an
 
 // render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.
 export fun render(ctx: magus\Context, args: [str]) > void !> any {
-	magus\hint("docs render updates the site only; run `magus run generate:rw docs` before committing generated docs or changing generator inputs");
+	magus\log.hint("docs render updates the site only; run `magus run generate:rw docs` before committing generated docs or changing generator inputs");
     renderer\site_render(ROOT, DOCS, BLOG, OUT,
         magus\targets(), magus\graph());
 }

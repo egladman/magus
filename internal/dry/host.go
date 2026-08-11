@@ -175,8 +175,12 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	// ctx.has_charm (see buildCtx).
 	m.MapSet("has_charm", fn("magus.has_charm", traceHasCharm(tr)))
 
-	for _, level := range []string{"info", "warn", "error", "debug"} {
-		m.MapSet(level, fn("magus."+level, func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	// magus.log.* - the emitting members, grouped as they are in the real bindings.
+	// hint rides along here rather than with the runtime-only stubs below because it
+	// emits, and a dry run should show it in target order like any other message.
+	logNS := vm.NewMap()
+	for _, level := range []string{"info", "warn", "error", "debug", "hint"} {
+		logNS.MapSet(level, fn("magus.log."+level, func(_ context.Context, args []vm.Value) (vm.Value, error) {
 			// Traced as a per-target op (attributed to tr.cur) so a dry-run shows
 			// each target's logs in order; writing to the shared output buffer would
 			// mix every probed target's logs together.
@@ -184,6 +188,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 			return vm.Null, nil
 		}))
 	}
+	m.MapSet("log", logNS)
 
 	// magus.raise(code, message, cause?, url?) fails with a coded diagnostic. A dry run
 	// must not actually fail, so it traces the code and message and returns - the point
@@ -374,7 +379,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	// Runtime-only members (a debugger, hints, fatal-abort, cache busting) have no
 	// dry-run effect; stub them as no-ops so a reference resolves. They're here to
 	// satisfy the surface parity guard, not because the dry run acts on them.
-	for _, name := range []string{"hint", "fatal", "pry", "bustCache"} {
+	for _, name := range []string{"fatal", "pry", "bustCache"} {
 		m.MapSet(name, fn("magus."+name, retNull))
 	}
 
@@ -797,9 +802,9 @@ func normalizeTarget(name string) string {
 // rather than a share of the whole module.
 func addPureMagus(m vm.Value) {
 	// The one canonicalizer for every entity name: target, charm, spell op.
-	m.MapSet("normalize", fn("magus.normalize", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("canonicalName", fn("magus.canonicalName", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) == 0 || !args[0].IsStr() {
-			return vm.Null, fmt.Errorf("magus.normalize: expected a name string")
+			return vm.Null, fmt.Errorf("magus.canonicalName: expected a name string")
 		}
 		return vm.StrValue(types.Normalize(args[0].AsString())), nil
 	}))

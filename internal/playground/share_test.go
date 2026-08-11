@@ -13,7 +13,7 @@ func TestEncodeShare_roundTrips(t *testing.T) {
 		"empty":   "",
 		"ascii":   "import \"magus\";\nexport fun ci(ctx: magus\\Context, args: [str]) > void {}\n",
 		"unicode": "// magusfile — runs entirely in your browser ✨\nbuzz fibo(20)\n",
-		"large":   strings.Repeat("export fun target(ctx: magus\\Context, args: [str]) > void { magus.info(\"hi\"); }\n", 500),
+		"large":   strings.Repeat("export fun target(ctx: magus\\Context, args: [str]) > void { magus.log.info(\"hi\"); }\n", 500),
 	}
 	for name, src := range cases {
 		t.Run(name, func(t *testing.T) {

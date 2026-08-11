@@ -89,7 +89,7 @@ export fun registries(ctx: magus\Context, args: [str]) > void {
     if (args.len() > 0) { host = args[0]; }
     final selected = select(publish_registries(ctx), host);
     if (selected.len() == 0) {
-        magus\info("nothing is published under these charms; try `run registries:prod`");
+        magus\log.info("nothing is published under these charms; try `run registries:prod`");
         return;
     }
     var report = "";
@@ -100,7 +100,7 @@ export fun registries(ctx: magus\Context, args: [str]) > void {
         }
         report = report + "\n" + reg.host + "  ->  " + reg.repository + "  (" + state + ")";
     }
-    magus\info("publishes to:" + report);
+    magus\log.info("publishes to:" + report);
 }
 
 // Verb two: ACT. The same list, so the set logged into is by construction the set
@@ -128,6 +128,6 @@ export fun login(ctx: magus\Context, args: [str]) > void !> any {
         final token = magus\secret.read(reg.token_ref);
         proc\exec("env", args: ["echo", "login", reg.host, "-u", user, "--password-stdin"],
             dir: ".", opts: {"stdin": token});
-        magus\info("login: " + reg.host + " authenticated as " + user);
+        magus\log.info("login: " + reg.host + " authenticated as " + user);
     }
 }

@@ -96,7 +96,7 @@ fun main() > void !> any {
         foreach (t in project.nodes) {
             if (t.writesFiles.len() != 0) { continue; }
             foreach (n in names) {
-                if (magus\normalize(n) != t.name) { continue; }
+                if (magus\canonicalName(n) != t.name) { continue; }
                 if (!existed(n, base: base)) { bare.append(project.path + ":" + t.name); }
             }
         }

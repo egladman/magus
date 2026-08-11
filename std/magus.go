@@ -256,8 +256,8 @@ var Magus = Module{
 			Extern: true,
 		},
 		{
-			Name:    "normalize",
-			Doc:     "The canonical form of a magus entity name - a target, charm, or spell op. Returns the NAME, never a spell handle.",
+			Name:    "canonical_name",
+			Doc:     "The canonical form of a magus entity name - a target, charm, or spell op. `build2` gains a '-' you did not type; `HTTPServer` breaks before its last letter. Returns the NAME, never a spell handle: a handle can only come from a literal import, because the target graph is built by reading imports statically.",
 			Args:    []Arg{{Name: "name", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
 			// NOT Raises. The binding's only failure is a non-string argument, and the
@@ -265,36 +265,6 @@ var Magus = Module{
 			// unreachable for any call the checker admits. Declaring it would force a
 			// try/catch around a pure string transform, including in the `magus buzz -e`
 			// one-liners where there is no enclosing function to propagate from.
-			Extern: true,
-		},
-		{
-			Name:   "info",
-			Doc:    "Log at info level. The only way to log from a magusfile; there is no separate log module on this surface.",
-			Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}, {Name: "fields", Type: TypeStringMap, Optional: true}},
-			Extern: true,
-		},
-		{
-			Name:   "debug",
-			Doc:    "Log at debug level. See magus.info.",
-			Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}, {Name: "fields", Type: TypeStringMap, Optional: true}},
-			Extern: true,
-		},
-		{
-			Name:   "warn",
-			Doc:    "Log at warn level. See magus.info.",
-			Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}, {Name: "fields", Type: TypeStringMap, Optional: true}},
-			Extern: true,
-		},
-		{
-			Name:   "error",
-			Doc:    "Log at error level. See magus.info. Logging an error does not abort; magus.fatal does.",
-			Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}, {Name: "fields", Type: TypeStringMap, Optional: true}},
-			Extern: true,
-		},
-		{
-			Name:   "hint",
-			Doc:    "Emit an advisory nudge: non-fatal, deduped, and suppressed when hints are toggled off.",
-			Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}},
 			Extern: true,
 		},
 		{
@@ -321,6 +291,42 @@ var Magus = Module{
 	// catch with, so declaring them raising would make them unwritable - the same
 	// reason magus\project is not Raises.
 	Namespaces: []Namespace{
+		{
+			Name: "log",
+			Doc:  "Emitting a message without changing control flow: the four levels, plus hint. magus\\fatal and magus\\raise are deliberately NOT here - they END the run rather than report on it, and grouping them by how they look rather than what they do is what made this surface hard to read.",
+			Methods: []Method{
+				{
+					Name:   "debug",
+					Doc:    "Log at debug level. See magus.info.",
+					Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}, {Name: "fields", Type: TypeStringMap, Optional: true}},
+					Extern: true,
+				},
+				{
+					Name:   "error",
+					Doc:    "Log at error level. See magus.info. Logging an error does not abort; magus.fatal does.",
+					Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}, {Name: "fields", Type: TypeStringMap, Optional: true}},
+					Extern: true,
+				},
+				{
+					Name:   "hint",
+					Doc:    "Emit an advisory nudge: non-fatal, deduped, and suppressed when hints are toggled off.",
+					Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}},
+					Extern: true,
+				},
+				{
+					Name:   "info",
+					Doc:    "Log at info level. The only way to log from a magusfile; there is no separate log module on this surface.",
+					Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}, {Name: "fields", Type: TypeStringMap, Optional: true}},
+					Extern: true,
+				},
+				{
+					Name:   "warn",
+					Doc:    "Log at warn level. See magus.info.",
+					Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}, {Name: "fields", Type: TypeStringMap, Optional: true}},
+					Extern: true,
+				},
+			},
+		},
 		{
 			Name: "cache",
 			Doc:  "Remote cache backend selection.",
