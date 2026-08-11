@@ -13,6 +13,7 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/std"
 )
 
 // Module labels, continuing gopherbuzz's origin classification (see
@@ -44,18 +45,25 @@ func magusModules(modules bindinggen.Set) []buzz.Module {
 		if reg.Capabilities.Has(bindinggen.WASM) {
 			labels = append(labels, labelWASM)
 		}
+		// The registry key is the identifier the module BINDS as; reg.Path is what
+		// an import line spells when the two differ (`json` bound from
+		// `encoding/json`). Buzz resolves a native module by full path and defines
+		// it under the basename, so registering at the path is what makes
+		// `import "encoding/json"` resolve while call sites keep writing `json\parse`.
+		importPath := name
+		if reg.Path != "" {
+			importPath = reg.Path
+		}
 		mods = append(mods, buzz.Module{
-			Name:   name,
+			Name:   importPath,
 			Labels: labels,
 			Bind: func(s *buzz.Session, env buzz.ModuleEnv) error {
 				mod := reg.Register(env.Ctx, s)
-				// Byte-level companions so a script reaches a whole domain through
-				// one import: crypto.hmacSha256 beside crypto.sha256Hex,
-				// http.download beside http.get.
-				switch name {
-				case "crypto":
-					mergeModuleMap(mod, registerCryptoBytes())
-				case "http":
+				// http keeps two byte-level companions that no descriptor can yet
+				// declare: byteSize and upload_chunked. crypto no longer needs any -
+				// its HMAC and base64 methods became declared std.Module methods once
+				// TypeByteSlice existed, and this hook shrank by one domain as a result.
+				if name == "http" {
 					mergeModuleMap(mod, registerHTTPBytes())
 				}
 				// Layer this module's DECLARATIONS on as a source companion - the same
@@ -64,18 +72,40 @@ func magusModules(modules bindinggen.Set) []buzz.Module {
 				// gopherbuzz/session.go's resolveImport). They carry the return-type
 				// mirrors and an extern per method, so every call through this module
 				// types against a real signature instead of Unknown.
+				// Read the declarations by NAME - moduledecls writes one flat file per
+				// module, gen/decls/json.buzz - but register them under the IMPORT
+				// PATH, because resolveImport looks them up by the path the import
+				// line spelled.
 				if src, ok := spellruntime.ModuleDecls(name); ok {
-					s.SetModuleDecls(name, src)
+					s.SetModuleDecls(importPath, src)
 				}
 				// Buzz's stdlib may already own this bare name (os, fs, crypto):
 				// overlay the magus methods onto it so callers see the union (magus
 				// wins on the few shared keys, e.g. os.exit/fs.exists, its forms
 				// being sandbox- and context-aware). Otherwise install fresh.
-				if base, ok := s.NativeModule(name); ok {
+				if base, ok := s.NativeModule(importPath); ok {
 					mergeModuleMap(base, mod)
 				} else {
-					s.SetNativeModule(name, mod)
+					s.SetNativeModule(importPath, mod)
 				}
+				return nil
+			},
+		})
+	}
+	// Buzz-implemented modules bind through the SAME list, so a session sees one
+	// surface and nothing downstream can tell which language implemented what.
+	// They need no trampoline and no native value: SetModuleDecls on a path with no
+	// native module is executed by resolveImport, which is how magus/spell and
+	// upstream's own assert/suite/testing already ship.
+	for _, sm := range std.AllSource() {
+		mods = append(mods, buzz.Module{
+			Name: sm.ImportPath(),
+			// No WASM label: a Buzz module may import any host module, and whether
+			// its imports are browser-safe is not knowable from here. Marking one
+			// WASM-capable is a decision for whoever can vouch for its imports.
+			Labels: []string{labelMagus},
+			Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
+				s.SetModuleDecls(sm.ImportPath(), sm.Source)
 				return nil
 			},
 		})

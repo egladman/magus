@@ -8,7 +8,8 @@ namespace csp;
 import "crypto";
 import "fs";
 import "io";
-import "encoding";
+import "encoding/base64";
+import "encoding/hex";
 import "assert";
 
 // fileSha256 reads path and returns its lowercase-hex SHA-256 digest. Single place
@@ -25,7 +26,7 @@ export fun fileSha256(path: str) > str {
 // CSP hash-sources are base64, so hexDecode back to raw digest bytes before
 // base64-encoding.
 export fun scriptHash(js: str) > str {
-    return "sha256-" + encoding\base64Encode(encoding\hexDecode(crypto\hash(crypto\HashAlgorithm.Sha256, js).hex()));
+    return "sha256-" + base64\encode(hex\decode(crypto\hash(crypto\HashAlgorithm.Sha256, js).hex()));
 }
 
 // extractInlineScripts pulls the text of every attribute-less `<script>...</script>`

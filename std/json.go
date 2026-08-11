@@ -14,6 +14,7 @@ func init() { Register(JSON) }
 // JSON is the "json" host module: JSON encode/decode for spells.
 var JSON = Module{
 	Name: "json",
+	Path: "encoding/json",
 	Doc:  "JSON encode/decode.",
 	Methods: []Method{
 		{

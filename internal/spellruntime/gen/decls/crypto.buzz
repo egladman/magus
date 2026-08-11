@@ -10,6 +10,10 @@ export enum<str> SignAlgorithm {
     Ed25519 = "ed25519",
 }
 
+export extern fun base64DecodeBytes(s: str) > [int];
+export extern fun base64EncodeBytes(data: [int]) > str;
+export extern fun hmacSha256(key: [int], data: [int]) > [int];
+export extern fun hmacSha256Hex(key: [int], data: [int]) > str;
 export extern fun md5File(path: str) > str;
 export extern fun md5Hex(data: str) > str;
 export extern fun publicKey(alg: SignAlgorithm, key_env: str) > str;

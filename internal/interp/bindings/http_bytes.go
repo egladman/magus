@@ -30,21 +30,6 @@ const maxChunk = 32 * 1024 * 1024
 func registerHTTPBytes() vm.Value {
 	m := vm.NewMap()
 
-	// download(url, dest, headers?) -> int
-	// GET url, streaming the response body to dest (created/truncated). Returns
-	// the HTTP status code; the body is never materialised as a Buzz string, so
-	// arbitrary binary survives intact. A non-2xx status writes no file.
-	m.MapSet("download", vm.DirectValue("http.download", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		url := httpStrArg(args, 0)
-		dest := httpStrArg(args, 1)
-		headers := httpMapArg(args, 2)
-		status, err := httpDownload(ctx, url, dest, headers)
-		if err != nil {
-			return vm.Null, err
-		}
-		return vm.IntValue(int64(status)), nil
-	}))
-
 	// byteSize(path) -> int
 	// Byte length of the file at path. The companion to upload_chunked: a script
 	// needs the true byte count for a Content-Range total or a commit "size",
@@ -80,48 +65,6 @@ func registerHTTPBytes() vm.Value {
 	}))
 
 	return m
-}
-
-func httpDownload(ctx context.Context, url, dest string, headers map[string]string) (int, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return 0, fmt.Errorf("http.download: %w", err)
-	}
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return 0, fmt.Errorf("http.download %s: %w", url, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		// Only a 200 carries a full body worth persisting; for anything else
-		// (204 miss, 4xx, redirects) write nothing and let the caller branch on
-		// the returned status. Avoids leaving stray empty files on a miss.
-		return resp.StatusCode, nil
-	}
-
-	// Write atomically: temp + rename, so a reader never sees a partial file.
-	tmp := dest + ".dl.tmp"
-	f, err := os.Create(tmp)
-	if err != nil {
-		return resp.StatusCode, fmt.Errorf("http.download: create: %w", err)
-	}
-	if _, err := io.Copy(f, resp.Body); err != nil {
-		_ = f.Close()
-		_ = os.Remove(tmp)
-		return resp.StatusCode, fmt.Errorf("http.download: write: %w", err)
-	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(tmp)
-		return resp.StatusCode, err
-	}
-	if err := os.Rename(tmp, dest); err != nil {
-		_ = os.Remove(tmp)
-		return resp.StatusCode, err
-	}
-	return resp.StatusCode, nil
 }
 
 func httpUploadChunked(ctx context.Context, method, url, src string, chunkSize int64, headers map[string]string) (int, string, error) {

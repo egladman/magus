@@ -15,7 +15,14 @@ import (
 // empty Modules slice if the name is unknown. Routing both surfaces through this
 // one function is what guarantees they can't drift.
 func DescribeModules(name string) []types.ModuleEntry {
-	mods := All()
+	// Go modules and Buzz modules are ONE surface here, deliberately. This
+	// function is what `magus describe modules`, the knowledge graph, the docs
+	// site, REPL completion, MCP describe_kind and magus\describeModules all read,
+	// so folding both kinds in at this one point is what makes a Buzz-implemented
+	// module indistinguishable from a Go-implemented one everywhere it is seen.
+	// Which language implements a stdlib module is an implementation detail, and
+	// this is the line that keeps it one.
+	mods := append(All(), SourceModulesAsModules()...)
 	slices.SortFunc(mods, func(a, b Module) int { return strings.Compare(a.Name, b.Name) })
 
 	var out []types.ModuleEntry

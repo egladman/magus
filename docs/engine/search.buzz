@@ -6,7 +6,7 @@ namespace search;
 import "fs";
 import "io";
 import "std";
-import "encoding";
+import "encoding/url" as urlcodec;
 import "template";
 import "engine/types" as _;
 import "engine/route" as _;
@@ -21,7 +21,7 @@ import "engine/page" as _;
 // url-encoded for the href and entity-escaped for its <code> display.
 fun renderSyntaxRow(q: str, desc: str) > str {
     return template\render(`        <dt><a class="syntax-example" href="?q={{qEnc}}"><code>{{q}}</code></a></dt><dd>{{desc}}</dd>
-`, {"qEnc": encoding\urlEncode(q), "q": q, "desc": desc});
+`, {"qEnc": urlcodec\encode(q), "q": q, "desc": desc});
 }
 
 

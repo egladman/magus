@@ -39,14 +39,21 @@ func camelCaseKey(s string) string {
 // (not a bare import), must appear in Modules, and Modules must name nothing extra.
 func TestModulesMatchStd(t *testing.T) {
 	want := map[string]bool{}
+	paths := map[string]string{}
 	for _, m := range std.All() {
 		if m.Name == "magus" {
 			continue
 		}
 		want[m.Name] = true
+		paths[m.Name] = m.Path
 	}
-	for name := range Modules {
+	for name, reg := range Modules {
 		assert.Containsf(t, want, name, "Modules registry has %q but std.All() does not", name)
+		// The import path has to agree too: a Path here that std does not declare
+		// would register the module at an import path nothing else in magus knows,
+		// so `import` would resolve while describe, the docs, and the knowledge
+		// graph all named something else.
+		assert.Equalf(t, paths[name], reg.Path, "Modules[%q].Path disagrees with std.Module.Path", name)
 		delete(want, name)
 	}
 	assert.Emptyf(t, want, "std.All() modules missing from the Modules registry: %v", modKeySet(want))

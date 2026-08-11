@@ -796,9 +796,15 @@ export fun changelog_generate(ctx: magus\Context, args: [str]) > void {
 // Regenerates the runtime BuzzObject maps before anything imports a host binding.
 // Its reflection lives only in magus-utils while writing this Go file; the emitted
 // methods use direct field access, so Magus never reflects at a Buzz boundary.
+// The enum helpers (Values/Valid/String for each boundaryEnum) come from a SECOND
+// directive, and it lives in cmd/magus-utils rather than in types/, so
+// `go generate ./types` never ran it. Adding a boundaryEnums entry therefore left
+// types/enum_gen.go and spells/enum_gen.go stale with nothing to say so - found
+// when PlatformStyle was added and its Valid() simply was not there.
 export fun types_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("types/buzzobject_gen.go");
+    ctx.writesFiles("types/buzzobject_gen.go", "types/enum_gen.go", "spells/enum_gen.go");
     os\exec("go", ["generate", "./types"]);
+    os\exec("go", ["generate", "./cmd/magus-utils"]);
 }
 
 // Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.

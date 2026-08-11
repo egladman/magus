@@ -94,6 +94,46 @@ var Fs = Module{
 			Impl:    FsRemoveAll,
 		},
 		{
+			Name:    "remove",
+			Doc:     "Remove a single file or empty directory (no error if missing). Unlike remove_all it refuses a non-empty directory, so a wrong path costs one error rather than a recursive delete.",
+			Args:    []Arg{{Name: "path", Type: TypeString}},
+			Returns: nil,
+			Impl:    FsRemove,
+		},
+		{
+			Name:    "rename",
+			Doc:     "Move or rename src to dst, creating dst's parent directory if needed. Within one filesystem this is atomic, which is what makes it the last step of a write-to-temp-then-swap. Across filesystems the underlying rename fails rather than silently copying; copy_file plus remove is the explicit form for that.",
+			Args:    []Arg{{Name: "src", Type: TypeString}, {Name: "dst", Type: TypeString}},
+			Returns: nil,
+			Impl:    FsRename,
+		},
+		{
+			Name:    "size",
+			Doc:     "Return path's size in bytes. Raises when path does not exist; stat returns the whole FileInfo when more than the size is wanted.",
+			Args:    []Arg{{Name: "path", Type: TypeString}},
+			Returns: []Ret{{Type: TypeInt}},
+			Impl:    FsSize,
+		},
+		{
+			Name: "temp_file",
+			Doc:  "Create a new empty temporary file (in os.TempDir()) with an optional name prefix and return its path. The file is left in place for the caller to write and remove; temp_dir is the form for a whole tree.",
+			Args: []Arg{
+				{Name: "prefix", Type: TypeString, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    FsTempFile,
+		},
+		{
+			Name: "write_file_atomic",
+			Doc:  "Write content to path so a reader sees either the old bytes or the new ones, never a partial file: the content goes to a temporary file in the same directory, is flushed to disk, then renamed over path. Use it for anything another process may read while a target runs - a generated file, a lockfile, a cache index. write_file is the cheaper form when nothing else is looking.",
+			Args: []Arg{
+				{Name: "path", Type: TypeString},
+				{Name: "content", Type: TypeString},
+			},
+			Returns: nil,
+			Impl:    FsWriteFileAtomic,
+		},
+		{
 			Name:    "list_dir",
 			Doc:     "Return directory entries; empty if path does not exist.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
@@ -348,6 +388,134 @@ func FsRemoveAll(ctx context.Context, path string) error {
 	}
 	if err := os.RemoveAll(path); err != nil {
 		return fmt.Errorf("fs.remove_all %q: %w", path, err)
+	}
+	return nil
+}
+
+// FsRemove removes a single file or empty directory, subject to the sandbox write
+// policy. A missing path is not an error, matching remove_all.
+func FsRemove(ctx context.Context, path string) error {
+	if types.Tracing(ctx) {
+		return nil
+	}
+	path = resolvePath(ctx, path)
+	if err := checkWrite(ctx, path); err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("fs.remove %q: %w", path, err)
+	}
+	return nil
+}
+
+// FsRename moves src to dst, subject to the sandbox write policy on both ends.
+// dst's parent is created first so the common "rename into a fresh output dir"
+// does not need a separate mkdirall.
+func FsRename(ctx context.Context, src, dst string) error {
+	if types.Tracing(ctx) {
+		return nil
+	}
+	src = resolvePath(ctx, src)
+	dst = resolvePath(ctx, dst)
+	// Both ends are writes: src loses its contents, dst gains them. Checking only
+	// one would let a sandboxed target move a file out of, or into, a path its
+	// policy denies.
+	if err := checkWrite(ctx, src); err != nil {
+		return err
+	}
+	if err := checkWrite(ctx, dst); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return fmt.Errorf("fs.rename %q -> %q: %w", src, dst, err)
+	}
+	if err := os.Rename(src, dst); err != nil {
+		return fmt.Errorf("fs.rename %q -> %q: %w", src, dst, err)
+	}
+	return nil
+}
+
+// FsSize returns path's size in bytes, subject to the sandbox read policy.
+func FsSize(ctx context.Context, path string) (int, error) {
+	path = resolvePath(ctx, path)
+	if err := checkRead(ctx, path); err != nil {
+		return 0, err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0, fmt.Errorf("fs.size %q: %w", path, err)
+	}
+	return int(info.Size()), nil
+}
+
+// FsTempFile creates an empty temporary file and returns its path.
+func FsTempFile(ctx context.Context, prefix string) (string, error) {
+	if types.Tracing(ctx) {
+		// Dry run: name a plausible path without creating it, matching temp_dir.
+		// Writes to it are themselves recorded as skipped, so it never needs to exist.
+		return filepath.Join(os.TempDir(), prefix+"magus-dry-run"), nil
+	}
+	f, err := os.CreateTemp("", prefix)
+	if err != nil {
+		return "", fmt.Errorf("fs.temp_file: %w", err)
+	}
+	name := f.Name()
+	if err := f.Close(); err != nil {
+		return "", fmt.Errorf("fs.temp_file %q: %w", name, err)
+	}
+	return name, nil
+}
+
+// FsWriteFileAtomic writes content to path via a same-directory temporary file
+// renamed into place, subject to the sandbox write policy.
+func FsWriteFileAtomic(ctx context.Context, path string, content string) error {
+	if types.Tracing(ctx) {
+		return nil
+	}
+	path = resolvePath(ctx, path)
+	if err := checkWrite(ctx, path); err != nil {
+		return err
+	}
+	// The temporary file has to live in the SAME directory as the destination:
+	// rename is only atomic within one filesystem, and os.TempDir is routinely a
+	// different mount (tmpfs on Linux, a separate volume on macOS). Staging there
+	// would turn the final step into a cross-device copy - the exact partial-write
+	// window this method exists to close.
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("fs.write_file_atomic %q: %w", path, err)
+	}
+	f, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp")
+	if err != nil {
+		return fmt.Errorf("fs.write_file_atomic %q: %w", path, err)
+	}
+	tmp := f.Name()
+	// Any failure past this point leaves the temp file behind; remove it so a
+	// failed write does not litter the output directory with dotfiles that later
+	// glob into a target's sources.
+	defer func() { _ = os.Remove(tmp) }()
+
+	if _, err := f.WriteString(content); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("fs.write_file_atomic %q: %w", path, err)
+	}
+	// Flush to disk before the rename. Without it the rename can land while the
+	// contents are still only in the page cache, so a crash yields an empty file
+	// where the point was to never see one.
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("fs.write_file_atomic %q: sync: %w", path, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("fs.write_file_atomic %q: %w", path, err)
+	}
+	// CreateTemp makes the file 0600; match write_file's 0644 so an atomically
+	// written file is not readable by a narrower set of users than a plain one.
+	if err := os.Chmod(tmp, 0o644); err != nil {
+		return fmt.Errorf("fs.write_file_atomic %q: chmod: %w", path, err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("fs.write_file_atomic %q: %w", path, err)
 	}
 	return nil
 }

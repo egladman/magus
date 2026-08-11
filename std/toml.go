@@ -16,6 +16,7 @@ func init() { Register(TOML) }
 // pyproject.toml / Cargo.toml the same way it reads package.json.
 var TOML = Module{
 	Name: "toml",
+	Path: "encoding/toml",
 	Doc:  "TOML parse and stringify (TOML 1.0 via pelletier/go-toml/v2).",
 	Methods: []Method{
 		{

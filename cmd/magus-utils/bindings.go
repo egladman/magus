@@ -33,6 +33,8 @@ var wasmExcludedModules = map[string]bool{
 	"archive": true,
 	"vcs":     true,
 	"magus":   true,
+	"term":    true,
+	"net":     true,
 }
 
 func runBindings(args []string) error {
@@ -313,6 +315,14 @@ func emitBuzzArgDecode(w *bytes.Buffer, a std.Arg, idx int) {
 		fmt.Fprintf(w, "\t\t%s := Bool(bzArgs, %d, %s)\n", a.Name, idx, def)
 	case std.TypeStringSlice:
 		fmt.Fprintf(w, "\t\t%s := StrSlice(bzArgs, %d)\n", a.Name, idx)
+	case std.TypeFloatSlice:
+		fmt.Fprintf(w, "\t\t%s := FloatSlice(bzArgs, %d)\n", a.Name, idx)
+	case std.TypeByteSlice:
+		fmt.Fprintf(w, "\t\t%s := ByteSlice(bzArgs, %d)\n", a.Name, idx)
+	case std.TypeStringSliceSlice:
+		fmt.Fprintf(w, "\t\t%s := StrSliceSlice(bzArgs, %d)\n", a.Name, idx)
+	case std.TypeStringMapMap:
+		fmt.Fprintf(w, "\t\t%s := StrMapMap(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeStringMap:
 		fmt.Fprintf(w, "\t\t%s := StrMap(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeAnyMap:
@@ -445,6 +455,14 @@ func buzzValConv(t std.TypeTag, src string) string {
 		return fmt.Sprintf("FloatVal(%s)", src)
 	case std.TypeStringSlice:
 		return fmt.Sprintf("StrSliceVal(%s)", src)
+	case std.TypeFloatSlice:
+		return fmt.Sprintf("FloatSliceVal(%s)", src)
+	case std.TypeByteSlice:
+		return fmt.Sprintf("ByteSliceVal(%s)", src)
+	case std.TypeStringSliceSlice:
+		return fmt.Sprintf("StrSliceSliceVal(%s)", src)
+	case std.TypeStringMapMap:
+		return fmt.Sprintf("StrMapMapVal(%s)", src)
 	case std.TypeStringMap:
 		return fmt.Sprintf("StrMapVal(%s)", src)
 	case std.TypeAnyMap:

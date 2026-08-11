@@ -2,7 +2,7 @@
 // approximate - a fixed width per glyph, no font metrics - so a badge renders a touch wide,
 // which is fine.
 
-import "xml";
+import "encoding/xml";
 import "std";
 import "assert";
 

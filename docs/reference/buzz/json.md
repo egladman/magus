@@ -11,13 +11,18 @@ JSON encode/decode.
 
 > **Naming convention:** import the module under its bare name (`import "json"`), reach members with a backslash, and call methods in `camelCase`: `json\someMethod`.
 
+<!-- -->
+
+> [!NOTE]
+> The examples below are reference-only. `json` performs real IO (filesystem, process, network, or environment access) that the in-browser playground's sandbox cannot provide, so it is not registered there and its examples have no Run button. Pure-compute modules such as `strings` and `json` run their examples live in the page.
+
 ## Methods
 
 ### parse
 
 Decode a JSON string into a value (map, list, string, number, or boolean).
 
-**Signature:** `json\parse(s) → any`[^buzz-stdlib-json-parse] · [source](https://github.com/egladman/magus/blob/main/std/json.go#L40)
+**Signature:** `json\parse(s) → any`[^buzz-stdlib-json-parse] · [source](https://github.com/egladman/magus/blob/main/std/json.go#L41)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -27,10 +32,9 @@ Decode a JSON string into a value (map, list, string, number, or boolean).
 
 **Example:**
 
-<!-- magus-run -->
 ```buzz
 import "std";
-import "json";
+import "encoding/json";
 
 final v = json\parse("\{\"name\": \"api\", \"port\": 8080\}");
 std\print(v["name"]);
@@ -43,7 +47,7 @@ std\print(v["port"]);
 
 Encode a value as a JSON string. With no indent (or "") the output is compact; pass an indent string (e.g. "  " or "\t") for pretty, multi-line output.
 
-**Signature:** `json\stringify(value, [indent]) → string`[^buzz-stdlib-json-stringify] · [source](https://github.com/egladman/magus/blob/main/std/json.go#L53)
+**Signature:** `json\stringify(value, [indent]) → string`[^buzz-stdlib-json-stringify] · [source](https://github.com/egladman/magus/blob/main/std/json.go#L54)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -54,10 +58,9 @@ Encode a value as a JSON string. With no indent (or "") the output is compact; p
 
 **Example:**
 
-<!-- magus-run -->
 ```buzz
 import "std";
-import "json";
+import "encoding/json";
 
 final config = { "target": "build", "parallel": true };
 std\print(json\stringify(config));

@@ -10,4 +10,6 @@ export extern fun abs(path: str) > str;
 export extern fun clean(path: str) > str;
 export extern fun expandUser(path: str) > str;
 export extern fun isAbs(path: str) > bool;
+export extern fun matches(pattern: str, path: str) > bool;
+export extern fun matchesAny(patterns: [str], path: str) > bool;
 export extern fun rel(base: str, target: str) > str;

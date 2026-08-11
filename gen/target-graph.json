@@ -202,6 +202,12 @@
           "writes_files": [
             {
               "glob": "types/buzzobject_gen.go"
+            },
+            {
+              "glob": "types/enum_gen.go"
+            },
+            {
+              "glob": "spells/enum_gen.go"
             }
           ]
         },

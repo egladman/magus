@@ -14,7 +14,7 @@ import (
 )
 
 // RegisterHttp builds the "http" module map and returns it.
-// HTTP client with automatic retry on transient errors.
+// HTTP client. Requests run ONCE unless given a retry policy.
 func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
@@ -23,18 +23,32 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 		url := Str(bzArgs, 0)
 		headers := StrMap(bzArgs, 1)
 		opts := AnyMap(bzArgs, 2)
-		ret0, err := std.HTTPGet(ctx, url, headers, opts)
+		retry := AnyMap(bzArgs, 3)
+		ret0, err := std.HTTPGet(ctx, url, headers, opts, retry)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
 		return buzzValueHttpHTTPResponse(ret0), nil
+	}))
+	m.MapSet("download", vm.DirectValue("http.download", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		url := Str(bzArgs, 0)
+		dest := Str(bzArgs, 1)
+		headers := StrMap(bzArgs, 2)
+		opts := AnyMap(bzArgs, 3)
+		retry := AnyMap(bzArgs, 4)
+		ret0, err := std.HTTPDownload(ctx, url, dest, headers, opts, retry)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return IntVal(ret0), nil
 	}))
 	m.MapSet("post", vm.DirectValue("http.post", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		url := Str(bzArgs, 0)
 		body := Str(bzArgs, 1)
 		headers := StrMap(bzArgs, 2)
 		opts := AnyMap(bzArgs, 3)
-		ret0, err := std.HTTPPost(ctx, url, body, headers, opts)
+		retry := AnyMap(bzArgs, 4)
+		ret0, err := std.HTTPPost(ctx, url, body, headers, opts, retry)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
@@ -46,7 +60,8 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 		body := Str(bzArgs, 2)
 		headers := StrMap(bzArgs, 3)
 		opts := AnyMap(bzArgs, 4)
-		ret0, err := std.HTTPRequest(ctx, method, url, body, headers, opts)
+		retry := AnyMap(bzArgs, 5)
+		ret0, err := std.HTTPRequest(ctx, method, url, body, headers, opts, retry)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}

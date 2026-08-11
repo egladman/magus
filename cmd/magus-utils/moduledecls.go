@@ -174,6 +174,14 @@ func buzzArgType(t std.TypeTag) (string, error) {
 		return "bool", nil
 	case std.TypeStringSlice:
 		return "[str]", nil
+	case std.TypeFloatSlice:
+		return "[double]", nil
+	case std.TypeByteSlice:
+		return "[int]", nil
+	case std.TypeStringSliceSlice:
+		return "[[str]]", nil
+	case std.TypeStringMapMap:
+		return "{str: {str: str}}", nil
 	case std.TypeStringMap:
 		return "{str: str}", nil
 	case std.TypeAnyMap:
@@ -265,6 +273,14 @@ func buzzZero(t std.TypeTag) (string, error) {
 		return "false", nil
 	case std.TypeStringSlice:
 		return "[<str>]", nil
+	case std.TypeFloatSlice:
+		return "[<double>]", nil
+	case std.TypeByteSlice:
+		return "[<int>]", nil
+	case std.TypeStringSliceSlice:
+		return "[<[str]>]", nil
+	case std.TypeStringMapMap:
+		return "{<str: {str: str}>}", nil
 	case std.TypeStringMap:
 		return "{<str: str>}", nil
 	case std.TypeAnyMap:
@@ -344,6 +360,17 @@ func mirrorsFor(mod std.Module) ([]string, error) {
 		return nil
 	}
 	for _, m := range sortedMethods(mod) {
+		// ARGUMENTS as well as returns. An Arg.Object names a type the declaration
+		// references just as a return does, and emitting only the return side left
+		// http\get's `retry: HttpRetry` pointing at a type the file never declared -
+		// which the checker rejects, taking the whole module's signatures down with
+		// it. encoding\buildUrl never caught this because its URL argument is also
+		// parseUrl's return, so the type came along by accident.
+		for _, a := range m.Args {
+			if err := visit(strings.Trim(a.Object, "[]")); err != nil {
+				return nil, fmt.Errorf("%s: %w", m.Name, err)
+			}
+		}
 		for _, r := range m.Returns {
 			if err := visit(strings.Trim(r.Object, "[]")); err != nil {
 				return nil, fmt.Errorf("%s: %w", m.Name, err)

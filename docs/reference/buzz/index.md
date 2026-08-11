@@ -15,7 +15,7 @@ These are the runtime utility modules. Import each under its bare name - `import
 | Module | Description |
 |--------|-------------|
 | [`fs`](fs.md) | Filesystem and path primitives. |
-| [`path`](path.md) | Pure path-string math: abs, rel, clean, is_abs, expand_user. |
+| [`path`](path.md) | Pure path-string math: abs, rel, clean, is_abs, expand_user, and glob matching. |
 | [`archive`](archive.md) | Archive creation and extraction with automatic format detection. Supports tar, zip, tar.gz, tar.bz2, tar.xz, and tar.zst. Symlinks and non-regular entries are skipped. |
 
 ## Process and environment
@@ -30,7 +30,7 @@ These are the runtime utility modules. Import each under its bare name - `import
 
 | Module | Description |
 |--------|-------------|
-| [`strings`](strings.md) | Case conversion and word helpers (camel/snake/kebab/Pascal, capitalize, words, ellipsis). |
+| [`strings`](strings.md) | String helpers Buzz's builtins lack: case conversion, comparison, affix trimming, padding, and splitting into lines or fields. |
 | [`fmt`](fmt.md) | String formatting (printf-style). |
 | [`markdown`](markdown.md) | GitHub-Flavored Markdown to semantic HTML. |
 
@@ -40,7 +40,6 @@ These are the runtime utility modules. Import each under its bare name - `import
 |--------|-------------|
 | [`json`](json.md) | JSON encode/decode. |
 | [`yaml`](yaml.md) | YAML parse and stringify (YAML 1.2 via gopkg.in/yaml.v3). |
-| [`encoding`](encoding.md) | Base64/hex/URL text codecs. |
 
 ## Cryptography
 
@@ -52,7 +51,7 @@ These are the runtime utility modules. Import each under its bare name - `import
 
 | Module | Description |
 |--------|-------------|
-| [`http`](http.md) | HTTP client with automatic retry on transient errors. |
+| [`http`](http.md) | HTTP client. Requests run ONCE unless given a retry policy. |
 
 ## Time
 
@@ -82,8 +81,20 @@ Three provider namespaces are wired by the runtime rather than declared here, so
 
 | Module | Description |
 |--------|-------------|
+| [`base64`](base64.md) | Base64 text codec (standard and URL-safe, both padded). |
+| [`csv`](csv.md) | Delimiter-separated tabular text (CSV, TSV) parsing and rendering. |
+| [`diff`](diff.md) | Unified line diffs, for reporting what drifted rather than only that something did. |
+| [`hex`](hex.md) | Hex text codec. |
+| [`ini`](ini.md) | INI/properties config parsing and rendering (.npmrc, .gitconfig, .editorconfig). |
+| [`lcov`](lcov.md) | LCOV coverage reports: the percentage a badge or a floor gate shows, and the line-level merge that keeps it true across multiple test processes. |
+| [`log`](log.md) | Emit a message at a level through magus's own logger, so it honors -q/-v/-vv, renders in the run's format, is redacted, and is captured in the run log. Unlike std\print, which is an uncontrolled bare line. |
+| [`math`](math.md) | Rounding to a decimal place, clamping, and aggregation over a list of numbers. |
+| [`net`](net.md) | TCP readiness and port allocation: wait for a service to accept connections, and find a free port. |
+| [`sort`](sort.md) | Ordering for string lists: lexicographic, natural (digit-aware), and semver. |
 | [`template`](template.md) | Logic-less Mustache templating (Mustache spec, via github.com/cbroglie/mustache). |
+| [`term`](term.md) | Terminal interaction: capability probes, an interactive picker, and styled output. Renders to stderr; pick raises rather than hanging when there is no terminal. |
 | [`toml`](toml.md) | TOML parse and stringify (TOML 1.0 via pelletier/go-toml/v2). |
+| [`url`](url.md) | URL percent-encoding, parsing, and building. |
 | [`uuid`](uuid.md) | Unique identifiers and random tokens (v4 random, v7 time-ordered, plus raw random hex/tokens). |
 | [`xml`](xml.md) | Build, serialize, and parse XML/SVG. |
 

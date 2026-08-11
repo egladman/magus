@@ -39,8 +39,15 @@ var boundaryTypes = []boundaryType{
 	{Name: "DriftResult", Type: reflect.TypeFor[types.DriftResultRecord](), RuntimeObject: true},
 	{Name: "FileInfo", Type: reflect.TypeFor[types.FileInfo](), RuntimeObject: true},
 	{Name: "UncompressResult", Type: reflect.TypeFor[types.UncompressResult](), RuntimeObject: true},
+	{Name: "ArchiveEntry", Type: reflect.TypeFor[types.ArchiveEntry](), RuntimeObject: true},
 	{Name: "CompressResult", Type: reflect.TypeFor[types.CompressResult](), RuntimeObject: true},
 	{Name: "HttpResponse", Type: reflect.TypeFor[types.HTTPResponse](), RuntimeObject: true},
+	{Name: "TermSize", Type: reflect.TypeFor[types.TermSize](), RuntimeObject: true},
+	// NOT a RuntimeObject: HttpRetry only ever crosses INBOUND - a magusfile hands
+	// one in and the Impl receives the plain map - so nothing on the Go side has to
+	// encode one back out. Registering it here is purely so its declaration travels
+	// with the http module's signatures.
+	{Name: "HttpRetry", Type: reflect.TypeFor[types.HTTPRetry]()},
 	{Name: "SemverVersion", Type: reflect.TypeFor[types.SemverVersion](), RuntimeObject: true},
 	{Name: "SemverNext", Type: reflect.TypeFor[types.SemverNext](), RuntimeObject: true},
 	{Name: "URL", Type: reflect.TypeFor[types.URL](), RuntimeObject: true},
@@ -136,6 +143,31 @@ var boundaryEnums = []boundaryEnum{
 		Name:  "SignAlgorithm",
 		Type:  reflect.TypeFor[types.SignAlgorithm](),
 		Cases: []enumCase{{"Ed25519", "ed25519"}},
+	},
+	{
+		Name: "TermStyle",
+		Type: reflect.TypeFor[types.TermStyle](),
+		Cases: []enumCase{{"none", ""}, {"bold", "1"}, {"dim", "2"}, {"red", "31"}, {"green", "32"},
+			{"yellow", "33"}, {"dimGreen", "2;32"}, {"dimGrey", "2;37"}, {"brightGreen", "1;32"}},
+	},
+	{
+		Name: "TimeLayout",
+		Type: reflect.TypeFor[types.TimeLayout](),
+		Cases: []enumCase{{"rfc3339", "2006-01-02T15:04:05Z07:00"},
+			{"rfc3339Nano", "2006-01-02T15:04:05.999999999Z07:00"},
+			{"dateOnly", "2006-01-02"}, {"timeOnly", "15:04:05"},
+			{"dateTime", "2006-01-02 15:04:05"},
+			{"rfc1123", "Mon, 02 Jan 2006 15:04:05 MST"}, {"kitchen", "3:04PM"}},
+	},
+	{
+		Name:  "LogLevel",
+		Type:  reflect.TypeFor[types.LogLevel](),
+		Cases: []enumCase{{"trace", "trace"}, {"debug", "debug"}, {"info", "info"}, {"warn", "warn"}, {"error", "error"}},
+	},
+	{
+		Name:  "PlatformStyle",
+		Type:  reflect.TypeFor[types.PlatformStyle](),
+		Cases: []enumCase{{"none", ""}, {"go", "go"}, {"uname", "uname"}},
 	},
 	{
 		Name:  "DoctorCheckStatus",

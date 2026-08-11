@@ -18,10 +18,18 @@ export object CompressResult {
     bytes_out: int = 0,
 }
 
+export object ArchiveEntry {
+    name: str = "",
+    size: int = 0,
+    is_dir: bool = false,
+}
+
 export object UncompressResult {
     files: [Path] = [],
     bytes: int = 0,
 }
 
 export extern fun compress(src: str, dest: str, opts: {str: any} = {<str: any>}) > CompressResult;
+export extern fun list(src: str, opts: {str: any} = {<str: any>}) > [ArchiveEntry];
+export extern fun readFile(src: str, name: str, opts: {str: any} = {<str: any>}) > str;
 export extern fun uncompress(src: str, dest: str, opts: {str: any} = {<str: any>}) > UncompressResult;

@@ -34,6 +34,7 @@ import "magus/spell/typescript";
 import "../../badge" as badge;
 import "../../tools/toolchain-policy" as policy;
 import "../../coverage" as cov;
+import "lcov";
 
 // The badge is written into the ROOT project's assets/, not this project's own tree,
 // because the docs SSG copies exactly one directory into the site (docs/render.buzz
@@ -153,7 +154,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     foreach (b in fs\glob(".testcache/**/*.test.js")) { run.append(b.value); }
     os\exec("node", run, ".", {});
 
-    final pct = cov\lcovPercent(fs\readFile("coverage.lcov"), keep: "src/");
+    final pct = lcov\percent(fs\readFile("coverage.lcov"), keep: "src/");
     fs\writeFile(badge_path, badge\coverage("textsearch coverage", percent: pct, radius: 3));
     if (ctx.has_charm("rw")) { return; }
     if (drift.changedSince(before, [badge_path]).len() > 0) {

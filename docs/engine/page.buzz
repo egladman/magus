@@ -11,7 +11,7 @@ import "fs";
 import "io";
 import "std";
 import "serialize";
-import "encoding";
+import "encoding/url" as urlcodec;
 import "template";
 import "assert";
 import "lib/text" as _;
@@ -299,7 +299,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
             if (site.tagPages[slug] != null) {
                 chips = chips + "<a class=\"tag\" href=\"" + root + "tags/" + slug + "/\">" + escapeAttr(t) + "</a>";
             } else {
-                final tagQuery = encoding\urlEncode("tag:\"" + t + "\"");
+                final tagQuery = urlcodec\encode("tag:\"" + t + "\"");
                 chips = chips + "<a class=\"tag\" href=\"" + root + "search/?q=" + tagQuery + "\">" + escapeAttr(t) + "</a>";
             }
         }

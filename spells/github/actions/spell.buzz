@@ -38,7 +38,7 @@
 //   ACTIONS_RESULTS_URL    — cache service base URL (always ends in "/")
 //   ACTIONS_RUNTIME_TOKEN  — bearer token
 
-import "encoding"
+import "encoding/url"
 import "http"
 import "magus/spell"
 import "serialize"
@@ -410,7 +410,7 @@ fun oidcToken(audience: str) > str {
 fun tokenURL(endpoint: str, audience: str) > str {
     var sep = "&";
     if (endpoint.indexOf("?") == null) { sep = "?"; }
-    return endpoint + sep + "audience=" + encoding\urlEncode(audience);
+    return endpoint + sep + "audience=" + url\encode(audience);
 }
 
 import "assert";

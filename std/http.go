@@ -9,6 +9,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -26,8 +28,8 @@ func init() { Register(HTTP) }
 // optsDoc is the trailing line shared by every method's Doc describing the
 // optional curl-style options map (last argument).
 const optsDoc = " opts (curl-style): fail, fail_with_body, fail_early (bool); " +
-	"retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); " +
-	"retry_all_errors, retry_connrefused (bool)."
+	"timeout (seconds, default 30). Retrying is NOT configured here - pass a typed " +
+	"HttpRetry as the retry argument; without one the request runs exactly once."
 
 // defaultHTTPTimeout bounds a request (including any retries and backoff) so a
 // server that accepts the connection then stalls cannot hang a build forever.
@@ -43,7 +45,7 @@ const defaultHTTPTimeout = 30 * time.Second
 // pass URLs you trust.
 var HTTP = Module{
 	Name: "http",
-	Doc:  "HTTP client with automatic retry on transient errors.",
+	Doc:  "HTTP client. Requests run ONCE unless given a retry policy.",
 	Methods: []Method{
 		{
 			Name: "get",
@@ -52,9 +54,23 @@ var HTTP = Module{
 				{Name: "url", Type: TypeString},
 				{Name: "headers", Type: TypeStringMap, Optional: true},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
+				{Name: "retry", Type: TypeAnyMap, Optional: true, Object: "HttpRetry"},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "HttpResponse"}},
 			Impl:    HTTPGet,
+		},
+		{
+			Name: "download",
+			Doc:  "GET url and stream the response body straight to dest, returning the HTTP status. The body never becomes a Buzz string, so arbitrary binary (a release tarball, an image layer) survives intact and a large file costs no proportional memory. A non-2xx status writes nothing. Pair it with crypto.sha256_file to verify what you fetched before using it." + optsDoc,
+			Args: []Arg{
+				{Name: "url", Type: TypeString},
+				{Name: "dest", Type: TypeString},
+				{Name: "headers", Type: TypeStringMap, Optional: true},
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+				{Name: "retry", Type: TypeAnyMap, Optional: true, Object: "HttpRetry"},
+			},
+			Returns: []Ret{{Type: TypeInt}},
+			Impl:    HTTPDownload,
 		},
 		{
 			Name: "post",
@@ -64,6 +80,7 @@ var HTTP = Module{
 				{Name: "body", Type: TypeString},
 				{Name: "headers", Type: TypeStringMap, Optional: true},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
+				{Name: "retry", Type: TypeAnyMap, Optional: true, Object: "HttpRetry"},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "HttpResponse"}},
 			Impl:    HTTPPost,
@@ -77,6 +94,7 @@ var HTTP = Module{
 				{Name: "body", Type: TypeString, Optional: true},
 				{Name: "headers", Type: TypeStringMap, Optional: true},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
+				{Name: "retry", Type: TypeAnyMap, Optional: true, Object: "HttpRetry"},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "HttpResponse"}},
 			Impl:    HTTPRequest,
@@ -99,29 +117,104 @@ var HTTP = Module{
 	},
 }
 
+// defaultHTTPClient runs a request EXACTLY ONCE, bounded by the default timeout.
+//
+// It used to retry three times for every caller that never asked. That is the
+// wrong default for a build tool in both directions: a genuinely failing request
+// costs three round trips and their backoff before the failure is reported, and a
+// real outage reads as a slow build rather than a broken one. Retrying is now
+// something a caller states with an HttpRetry policy.
 var defaultHTTPClient = retry.NewHTTPClient(
 	nil,
-	retry.WithAttempts(3),
-	retry.WithDelay(500*time.Millisecond),
+	retry.WithAttempts(1),
 	retry.WithTimeout(defaultHTTPTimeout),
 )
 
 // HTTPGet sends a GET request to url with optional headers and curl-style opts,
 // returning {status, body, headers}.
-func HTTPGet(ctx context.Context, url string, headers map[string]string, opts map[string]any) (types.HTTPResponse, error) {
-	return doRequest(ctx, http.MethodGet, url, "", headers, opts)
+func HTTPGet(ctx context.Context, url string, headers map[string]string, opts, retryPolicy map[string]any) (types.HTTPResponse, error) {
+	return doRequest(ctx, http.MethodGet, url, "", headers, opts, retryPolicy)
+}
+
+// HTTPDownload GETs url and streams the body to dest, returning the HTTP status.
+//
+// It lives here rather than beside the other byte-level helpers in
+// internal/interp/bindings so it is a declared method like every other: visible in
+// `magus describe modules`, in the knowledge graph and the docs, and TYPED in the
+// checker. As an undeclared companion it was reachable but invisible, and its
+// signature was Unknown to every caller.
+//
+// Moving it also gained it two things the companion version never had: the
+// retrying client the rest of this module uses, and a sandbox write check on dest.
+func HTTPDownload(ctx context.Context, url, dest string, headers map[string]string, opts, retryPolicy map[string]any) (int, error) {
+	if types.Tracing(ctx) {
+		return 0, nil
+	}
+	dest = resolvePath(ctx, dest)
+	if err := checkWrite(ctx, dest); err != nil {
+		return 0, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return 0, fmt.Errorf("http.download: %w", err)
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+
+	o := parseHTTPOpts(opts)
+	r, err := parseHTTPRetry(retryPolicy)
+	if err != nil {
+		return 0, err
+	}
+	client := defaultHTTPClient
+	if o.custom() || r.retries() {
+		client = o.client(r)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("http.download %s: %w", url, err)
+	}
+	defer resp.Body.Close()
+
+	// A non-2xx writes NOTHING. Creating the file first and truncating it on a 404
+	// would leave an empty artifact that a later cache check reads as a hit.
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return resp.StatusCode, nil
+	}
+
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		return resp.StatusCode, fmt.Errorf("http.download %s: %w", dest, err)
+	}
+	f, err := os.Create(dest)
+	if err != nil {
+		return resp.StatusCode, fmt.Errorf("http.download %s: %w", dest, err)
+	}
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		_ = f.Close()
+		// A truncated download is not a usable file, and leaving it behind invites
+		// something downstream to treat a partial tarball as complete.
+		_ = os.Remove(dest)
+		return resp.StatusCode, fmt.Errorf("http.download %s: %w", dest, err)
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(dest)
+		return resp.StatusCode, fmt.Errorf("http.download %s: %w", dest, err)
+	}
+	return resp.StatusCode, nil
 }
 
 // HTTPPost sends a POST of body to url with optional headers and curl-style opts,
 // returning {status, body, headers}.
-func HTTPPost(ctx context.Context, url, body string, headers map[string]string, opts map[string]any) (types.HTTPResponse, error) {
-	return doRequest(ctx, http.MethodPost, url, body, headers, opts)
+func HTTPPost(ctx context.Context, url, body string, headers map[string]string, opts, retryPolicy map[string]any) (types.HTTPResponse, error) {
+	return doRequest(ctx, http.MethodPost, url, body, headers, opts, retryPolicy)
 }
 
 // HTTPRequest sends a request with the given method to url and returns
 // {status, body, headers}.
-func HTTPRequest(ctx context.Context, method, url, body string, headers map[string]string, opts map[string]any) (types.HTTPResponse, error) {
-	return doRequest(ctx, method, url, body, headers, opts)
+func HTTPRequest(ctx context.Context, method, url, body string, headers map[string]string, opts, retryPolicy map[string]any) (types.HTTPResponse, error) {
+	return doRequest(ctx, method, url, body, headers, opts, retryPolicy)
 }
 
 // HTTPServe starts a static file server on localhost in a background goroutine
@@ -330,7 +423,7 @@ func httpListen(port int) (net.Listener, error) {
 	return nil, fmt.Errorf("http.server: no bindable port in %d-%d", httpServerBasePort, httpServerBasePort+99)
 }
 
-func doRequest(ctx context.Context, method, url, body string, headers map[string]string, opts map[string]any) (types.HTTPResponse, error) {
+func doRequest(ctx context.Context, method, url, body string, headers map[string]string, opts, retryPolicy map[string]any) (types.HTTPResponse, error) {
 	if types.Tracing(ctx) {
 		return types.HTTPResponse{}, nil
 	}
@@ -344,6 +437,10 @@ func doRequest(ctx context.Context, method, url, body string, headers map[string
 	// as network auditing, is worse than an honest absence.
 
 	o := parseHTTPOpts(opts)
+	r, retryErr := parseHTTPRetry(retryPolicy)
+	if retryErr != nil {
+		return types.HTTPResponse{}, retryErr
+	}
 
 	var bodyReader io.Reader
 	if body != "" {
@@ -358,8 +455,8 @@ func doRequest(ctx context.Context, method, url, body string, headers map[string
 	}
 
 	client := defaultHTTPClient
-	if o.custom() {
-		client = o.client()
+	if o.custom() || r.retries() {
+		client = o.client(r)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -403,37 +500,113 @@ type httpOpts struct {
 	failWithBody bool // --fail-with-body: >= 400 status becomes an error, body kept
 	failEarly    bool // --fail-early: never retry an HTTP error status, fail at once
 
-	retry        int           // --retry N: number of retries (attempts = N+1); -1 = unset
-	retryDelay   time.Duration // --retry-delay: fixed pause between attempts; 0 = unset
-	retryMaxTime time.Duration // --retry-max-time: total wall-clock cap on retrying
-	retryAllErrs bool          // --retry-all-errors: retry any error, incl. 4xx
-	retryConnRef bool          // --retry-connrefused: treat connection-refused as retryable
-	timeout      time.Duration // --max-time: overall request timeout; 0 = use default
+	timeout time.Duration // --max-time: overall request timeout; 0 = use default
 }
 
-// custom reports whether any retry-affecting option was set, i.e. whether the
-// request needs a per-call client instead of the shared default. fail and
-// fail_with_body alone do not; they are applied after the response.
-func (o httpOpts) custom() bool {
-	return o.failEarly || o.retry >= 0 || o.retryDelay > 0 || o.retryMaxTime > 0 ||
-		o.retryAllErrs || o.retryConnRef || o.timeout > 0
+// custom reports whether this call needs a client of its own rather than the
+// shared default. fail and fail_with_body alone do not; they are applied after the
+// response comes back.
+func (o httpOpts) custom() bool { return o.failEarly || o.timeout > 0 }
+
+// httpRetry is the parsed HttpRetry policy: the caller's answer to "how hard
+// should this try", separate from httpOpts, which is everything else.
+type httpRetry struct {
+	attempts    int
+	delay       time.Duration
+	maxDelay    time.Duration
+	maxElapsed  time.Duration
+	fixed       bool
+	allErrs     bool
+	connRefused bool
 }
 
-// client builds a retrying *http.Client configured from the parsed options.
-func (o httpOpts) client() *http.Client {
-	attempts := 3 // default when retry is unset (matches defaultHTTPClient)
-	if o.retry >= 0 {
-		attempts = o.retry + 1
+// retries reports whether this policy asks for more than one attempt. A zero
+// policy - an omitted argument - does not, which is what makes "runs once" the
+// default without a separate flag saying so.
+func (r httpRetry) retries() bool { return r.attempts > 1 }
+
+// httpRetryKeys is every field HttpRetry declares. Kept beside the parser so an
+// added field cannot be silently unreadable.
+var httpRetryKeys = map[string]bool{
+	"attempts": true, "delay_ms": true, "max_delay_ms": true,
+	"max_elapsed_ms": true, "fixed": true, "all_errors": true, "conn_refused": true,
+}
+
+// parseHTTPRetry reads the HttpRetry object a caller passed. An absent map is the
+// zero policy: one attempt.
+//
+// AN UNKNOWN KEY IS AN ERROR, matching what http.server already does with its own
+// options. It matters more here than anywhere else in this module: a policy that
+// silently ignores "attemps" does not fail, it just never retries, and the only
+// evidence is a build that gives up on the first blip months after someone
+// believed they had configured otherwise. The declared HttpRetry object gives the
+// checker the same field list, so a magusfile writing HttpRetry{...} is caught
+// earlier still - this is the backstop for the map-literal form.
+//
+// Durations arrive in MILLISECONDS here while httpOpts.timeout is in seconds.
+// That is not an inconsistency to tidy away: timeout mirrors curl --max-time,
+// which is seconds, while a retry delay is routinely sub-second and expressing
+// 250ms as 0.25 invites a caller to write 250 and wait four minutes. The field
+// names carry the unit (delay_ms) so neither is guessable.
+func parseHTTPRetry(m map[string]any) (httpRetry, error) {
+	var r httpRetry
+	if m == nil {
+		return r, nil
+	}
+	unknown := make([]string, 0, len(m))
+	for k := range m {
+		if !httpRetryKeys[k] {
+			unknown = append(unknown, k)
+		}
+	}
+	if len(unknown) > 0 {
+		sort.Strings(unknown)
+		return r, fmt.Errorf("http: unknown retry option(s) %s (want attempts, delay_ms, max_delay_ms, max_elapsed_ms, fixed, all_errors, conn_refused)",
+			strings.Join(unknown, ", "))
+	}
+	if f, ok := retryFloat(m["attempts"]); ok && f > 0 {
+		r.attempts = int(f)
+	}
+	r.delay = httpMillis(m, "delay_ms")
+	r.maxDelay = httpMillis(m, "max_delay_ms")
+	r.maxElapsed = httpMillis(m, "max_elapsed_ms")
+	r.fixed = httpBool(m, "fixed")
+	r.allErrs = httpBool(m, "all_errors")
+	r.connRefused = httpBool(m, "conn_refused")
+	return r, nil
+}
+
+// httpMillis reads key as a duration expressed in (possibly fractional) ms.
+func httpMillis(m map[string]any, key string) time.Duration {
+	f, ok := retryFloat(m[key])
+	if !ok || f <= 0 {
+		return 0
+	}
+	return time.Duration(f * float64(time.Millisecond))
+}
+
+// client builds the *http.Client for one call from the options and the retry
+// policy. With no policy this is a single-attempt client.
+func (o httpOpts) client(r httpRetry) *http.Client {
+	attempts := 1
+	if r.retries() {
+		attempts = r.attempts
 	}
 	ropts := []retry.Option{retry.WithAttempts(attempts)}
-	if o.retryDelay > 0 {
-		// A fixed delay mirrors curl --retry-delay (a constant pause, no doubling).
-		ropts = append(ropts, retry.WithDelay(o.retryDelay), retry.WithFixedDelay())
-	} else {
+	switch {
+	case r.delay > 0 && r.fixed:
+		// A fixed delay mirrors curl --retry-delay: a constant pause, no doubling.
+		ropts = append(ropts, retry.WithDelay(r.delay), retry.WithFixedDelay())
+	case r.delay > 0:
+		ropts = append(ropts, retry.WithDelay(r.delay))
+	default:
 		ropts = append(ropts, retry.WithDelay(500*time.Millisecond))
 	}
-	if o.retryMaxTime > 0 {
-		ropts = append(ropts, retry.WithMaxElapsed(o.retryMaxTime))
+	if r.maxDelay > 0 {
+		ropts = append(ropts, retry.WithMaxDelay(r.maxDelay))
+	}
+	if r.maxElapsed > 0 {
+		ropts = append(ropts, retry.WithMaxElapsed(r.maxElapsed))
 	}
 	// Always carry an overall timeout: the per-call "timeout" opt when set, else
 	// the same default the shared client uses, so a custom client never reverts
@@ -443,8 +616,14 @@ func (o httpOpts) client() *http.Client {
 		timeout = o.timeout
 	}
 	ropts = append(ropts, retry.WithTimeout(timeout))
-	ropts = append(ropts, retry.WithRetryDecider(o.shouldRetry))
+	ropts = append(ropts, retry.WithRetryDecider(o.decider(r)))
 	return retry.NewHTTPClient(nil, ropts...)
+}
+
+// decider binds the options and the policy into the predicate the retry client
+// asks per attempt.
+func (o httpOpts) decider(r httpRetry) func(*http.Response, error) bool {
+	return func(resp *http.Response, err error) bool { return o.shouldRetry(r, resp, err) }
 }
 
 // shouldRetry is the retry policy derived from the curl-style options. Exactly
@@ -452,13 +631,13 @@ func (o httpOpts) client() *http.Client {
 // opted in, connection-refused or any error); HTTP responses retry on the curl
 // transient set (5xx/408/429) unless retry_all_errors widens it or fail_early
 // disables status retries entirely.
-func (o httpOpts) shouldRetry(resp *http.Response, err error) bool {
+func (o httpOpts) shouldRetry(r httpRetry, resp *http.Response, err error) bool {
 	if err != nil {
 		switch {
-		case o.retryAllErrs:
+		case r.allErrs:
 			return true
 		case isConnRefused(err):
-			return o.retryConnRef
+			return r.connRefused
 		case isTimeout(err):
 			return true
 		default:
@@ -472,7 +651,7 @@ func (o httpOpts) shouldRetry(resp *http.Response, err error) bool {
 	if o.failEarly {
 		return false
 	}
-	if o.retryAllErrs {
+	if r.allErrs {
 		return true
 	}
 	return code >= 500 || code == http.StatusRequestTimeout || code == http.StatusTooManyRequests
@@ -481,26 +660,13 @@ func (o httpOpts) shouldRetry(resp *http.Response, err error) bool {
 // parseHTTPOpts reads the curl-style options map. Unknown keys are ignored;
 // durations are read in seconds (curl's unit) and may be fractional.
 func parseHTTPOpts(m map[string]any) httpOpts {
-	o := httpOpts{retry: -1}
+	var o httpOpts
 	if m == nil {
 		return o
 	}
 	o.fail = httpBool(m, "fail")
 	o.failWithBody = httpBool(m, "fail_with_body")
 	o.failEarly = httpBool(m, "fail_early")
-	o.retryAllErrs = httpBool(m, "retry_all_errors")
-	o.retryConnRef = httpBool(m, "retry_connrefused")
-	if v, ok := m["retry"]; ok {
-		if f, ok := retryFloat(v); ok && f >= 0 {
-			o.retry = int(f)
-		}
-	}
-	if d, ok := httpSeconds(m, "retry_delay"); ok {
-		o.retryDelay = d
-	}
-	if d, ok := httpSeconds(m, "retry_max_time"); ok {
-		o.retryMaxTime = d
-	}
 	if d, ok := httpSeconds(m, "timeout"); ok {
 		o.timeout = d
 	}
