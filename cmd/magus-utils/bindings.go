@@ -21,23 +21,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// wasmExcludedModules names the host modules whose generated trampolines are
-// tagged //go:build !wasm: the IO leaves (process, filesystem, network, env, vcs,
-// and the magus meta-module) whose std Impls don't compile for wasm, so the
-// browser playground never registers them. Keep in sync with the //go:build !wasm
-// tags on the matching std/<name>.go files and with dry.WASMCompatibleMagusModules
-// (whose complement this is).
-var wasmExcludedModules = map[string]bool{
-	"fs":      true,
-	"os":      true,
-	"http":    true,
-	"archive": true,
-	"vcs":     true,
-	"magus":   true,
-	"term":    true,
-	"net":     true,
-}
-
 func runBindings(args []string) error {
 	fs := flag.NewFlagSet("bindings", flag.ExitOnError)
 	moduleName := fs.String("module", "", "module name to generate (e.g. fs)")
@@ -176,12 +159,16 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	fmt.Fprintln(&body, "}")
 
 	var b bytes.Buffer
-	// The IO-heavy modules (fs/os/http/archive/env/vcs/magus) call std functions
-	// that are themselves excluded from the wasm build, so their trampolines can't
-	// compile there; tag them off wasm to match. The browser playground registers
-	// only the pure-compute modules (dry.WASMCompatibleMagusModules), which stay in
-	// every build.
-	if wasmExcludedModules[m.Name] {
+	// An IO module calls std functions that are themselves excluded from the wasm
+	// build, so its trampoline cannot compile there either; tag it off wasm to match.
+	//
+	// Derived from std.Module.WASM rather than a list kept here. That list existed,
+	// carried "Keep in sync with the //go:build !wasm tags", and had drifted: `proc`
+	// was missing from it, so gen/proc.go was generated with NO build tag and broke
+	// the wasm build by referencing std.OsExec, which does not exist there. A
+	// classification with four copies (this map, the two Modules tables, and
+	// dry.WASMCompatibleMagusModules) is one nobody can keep true.
+	if !m.WASM {
 		fmt.Fprintln(&b, "//go:build !wasm")
 		fmt.Fprintln(&b)
 	}
