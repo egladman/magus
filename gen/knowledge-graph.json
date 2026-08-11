@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 1955,
-  "edge_count": 4783,
+  "edge_count": 4781,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -4527,7 +4527,7 @@
       "attrs": {
         "role": "doc",
         "section": "reference",
-        "tags": "cli,magus insight,analysis,hotspots,ownership,coupling,vcs,volatility,flaky",
+        "tags": "cli,magus insight,analysis,hotspots,ownership,coupling,vcs,volatility,flaky,unreferenced,symbols",
         "title": "magus insight"
       }
     },
@@ -34991,14 +34991,6 @@
       "provenance": "docs/reference/skills/magus-architecture.md"
     },
     {
-      "source": "doc:docs/reference/skills/magus-architecture.md",
-      "target": "doc:docs/reference/manpage/magus-status.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/reference/skills/magus-architecture.md"
-    },
-    {
       "source": "doc:docs/reference/skills/magus-buzz.md",
       "target": "diagnostic:MGS1022",
       "relation": "documents",
@@ -35153,14 +35145,6 @@
     {
       "source": "doc:docs/reference/skills/magus-query.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/reference/skills/magus-query.md"
-    },
-    {
-      "source": "doc:docs/reference/skills/magus-query.md",
-      "target": "doc:docs/reference/manpage/magus-status.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,

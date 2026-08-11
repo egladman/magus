@@ -2,8 +2,8 @@
 title: magus-query
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
-skill_full_bytes: 7785
-skill_simple_bytes: 5668
+skill_full_bytes: 7992
+skill_simple_bytes: 5782
 ---
 
 # magus-query
@@ -29,8 +29,8 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
 | `agent-skill-version` | `26` |
-| `knowledge-schema-version` | `7` |
-| `skill-content` | `4419face26cd` |
+| `knowledge-schema-version` | `8` |
+| `skill-content` | `fc67d0b22c77` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -90,9 +90,11 @@ unavailable too, or when a human explicitly asks what the committed index says.
    Prefer these over grep and glob for anything in the magus domain. `magus_refs`
    needs a workspace that declares a SCIP index (`knowledge.symbols` in config); it
    is the occurrence-shaped def/references answer, so use it over `magus_query` for a
-   symbol's fan-in. When refs (or `kind:symbol`) reports no match for a symbol that
-   plainly exists, the index is probably unbuilt, not the name wrong: `magus status`
-   lists each project's symbol-index state; `magus graph build` indexes and rebuilds.
+   symbol's fan-in. Every empty result carries a verdict: `absent` means magus
+   searched every symbol index this workspace declares and the thing is not there;
+   `unknown` names the projects it could not search, and building those with
+   `magus graph build` is what turns the answer into a fact. Read the verdict before
+   concluding anything from an empty result.
 
    The graph relates entities; the evaluated dispatch plan lives one verb over.
    `magus describe target <name>` prints, per project, the resolved source globs,
@@ -109,7 +111,8 @@ Free-text terms (AND) plus field filters and negation:
 - `project:pkg/foo` - everything the project owns: the project node, its
   targets, and the files/functions/docs whose source lives under it (nested
   projects claim their own; the root `.` owns only what no nested project does)
-- `relation:uses` - seed from nodes touching that edge
+- `relation:uses` - seed from nodes touching that edge (`relation:calls`
+  reaches symbol-to-symbol call edges, so it loads the lazy symbol shards)
 - `id:build` - substring match on the node ID
 - `id:target:*build` - `*` wildcard, matching any run (in a value or a free-text term)
 - `-kind:op` - negation, exclude these
@@ -217,9 +220,11 @@ only: no daemon AND no CLI, or a human asking what the committed index says.
    | what a branch changed in the graph            | (export + diff) | `magus graph diff <baseline.json>` |
 
    Prefer these over grep and glob for anything in the magus domain. `magus_refs`
-   needs a workspace that declares a SCIP index (`knowledge.symbols` in config); When refs (or `kind:symbol`) reports no match for a symbol that
-   plainly exists, the index is probably unbuilt, not the name wrong: `magus status`
-   lists each project's symbol-index state; `magus graph build` indexes and rebuilds.
+   needs a workspace that declares a SCIP index (`knowledge.symbols` in config); Every empty result carries a verdict: `absent` means magus
+   searched every symbol index this workspace declares and the thing is not there;
+   `unknown` names the projects it could not search, and building those with
+   `magus graph build` is what turns the answer into a fact. Read the verdict before
+   concluding anything from an empty result.
 
    `magus describe target <name>` prints, per project, the resolved source globs,
    output globs (the generated files), spells, and policy for that target.

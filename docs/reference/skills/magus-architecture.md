@@ -2,8 +2,8 @@
 title: magus-architecture
 description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition."
 tags: [agents, skills, magus-architecture]
-skill_full_bytes: 6277
-skill_simple_bytes: 5104
+skill_full_bytes: 6322
+skill_simple_bytes: 5123
 ---
 
 # magus-architecture
@@ -29,8 +29,8 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
 | `agent-skill-version` | `26` |
-| `knowledge-schema-version` | `7` |
-| `skill-content` | `4419face26cd` |
+| `knowledge-schema-version` | `8` |
+| `skill-content` | `fc67d0b22c77` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -104,9 +104,9 @@ and nothing it exports would need to be exported once merged.
    rename.
 2. Fan-in of a symbol: `magus refs <symbol>` lists the defining file and every
    referencing file:line from the SCIP index. Run it before moving or renaming
-   any exported symbol. (If it reports no match for a symbol that surely
-   exists, the index is likely unbuilt: check `magus status`, then
-   `magus graph build`.)
+   any exported symbol. An empty result states which kind of empty it is:
+   `absent` is verified, `unknown` names the projects with no symbol index - build
+   them with `magus graph build` before trusting it.
 3. How two things relate: `magus path <a> <b>` gives the shortest edge chain -
    use it to test whether a proposed boundary actually separates them.
 4. Owners: `magus query kind:owner` (populated from CODEOWNERS) tells you whose
@@ -234,8 +234,8 @@ and nothing it exports would need to be exported once merged.
    nodes reach it.
 2. Fan-in of a symbol: `magus refs <symbol>` lists the defining file and every
    referencing file:line from the SCIP index. Run it before moving or renaming
-   any exported symbol. No match for a symbol that exists means an unbuilt
-   index: `magus graph build`.
+   any exported symbol. An empty result carries a
+   verdict; `unknown` means an index is missing, not that nothing uses it.
 3. How two things relate: `magus path <a> <b>` gives the shortest edge chain.
 4. Owners: `magus query kind:owner` (populated from CODEOWNERS) tells you whose
    review a move needs.

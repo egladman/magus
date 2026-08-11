@@ -33,7 +33,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph (schema v7). Query it instead of grepping:
+This workspace has a knowledge graph (schema v8). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -55,10 +55,10 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | method | 100+ | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 60+ | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS1022` |
 | doc | 200+ | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
-| dir | 100+ | `magus query kind:dir` | `docs/reference/codes/magusfile`, `libs/gopherbuzz/examples/bubblegum`, `docs/concepts` |
-| file | 200+ | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 1000+ | `magus query kind:function` | `sel`, `sendObject`, `send` |
-| import | 100+ | `magus query kind:import` | `std`, `magus`, `fs` |
+| dir | 100+ | `magus query kind:dir` | `docs/reference/codes/magusfile`, `docs/concepts`, `std/examples/fs` |
+| file | 100+ | `magus query kind:file` | `magusfile.buzz`, `docs/render.buzz`, `docs/magusfile.buzz` |
+| function | 700+ | `magus query kind:function` | `tail`, `sign`, `renderContentHTML` |
+| import | 80+ | `magus query kind:import` | `magus`, `fs`, `std` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
