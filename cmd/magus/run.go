@@ -497,7 +497,7 @@ func targetUsage() error {
 	fmt.Fprintln(os.Stderr, "Conventional lifecycle names (you compose these in your magusfile from a")
 	fmt.Fprintln(os.Stderr, "spell's tool-native ops, e.g. global function build(_a) go.build() end):")
 	fmt.Fprintln(os.Stderr, "  build / test / lint / format / clean / generate / ci")
-	fmt.Fprintln(os.Stderr, "  (fmt → format and gen → generate are accepted as aliases)")
+	fmt.Fprintln(os.Stderr, "  (fmt -> format and gen -> generate are accepted as aliases)")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Spell-qualified targets run only the named spell's op:")
 	fmt.Fprintln(os.Stderr, "  magus run typescript::eslint api   # eslint op of the typescript spell on api")

@@ -109,7 +109,7 @@ func configMCPTokenGenerate(args []string) error {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Mint a new 256-bit MCP bearer token and store it 0600 in the user state dir.")
 		fmt.Fprintln(os.Stderr, "Refuses to overwrite an existing token unless --force is given. A running")
-		fmt.Fprintln(os.Stderr, "daemon picks up a rotated token automatically — no restart needed.")
+		fmt.Fprintln(os.Stderr, "daemon picks up a rotated token automatically - no restart needed.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
 		fs.PrintDefaults()
@@ -141,7 +141,7 @@ func configMCPTokenGenerate(args []string) error {
 	fmt.Printf("%s\n", tok)
 	fmt.Fprintf(os.Stderr, "\nmagus config mcp token generate: wrote %s\n", path)
 	fmt.Fprintf(os.Stderr, "Configure your MCP client with header:\n  Authorization: Bearer %s\n", tok)
-	fmt.Fprintln(os.Stderr, "A running daemon picks this up automatically — no restart needed.")
+	fmt.Fprintln(os.Stderr, "A running daemon picks this up automatically - no restart needed.")
 	return nil
 }
 

@@ -69,12 +69,12 @@ func configCacheKeyGenerate(args []string) error {
 	}
 
 	fmt.Printf("keyid: %s\n\n", km.KeyID)
-	fmt.Println("┌─ SECRET — the signing key. Anyone holding it can publish trusted cache")
+	fmt.Println("┌─ SECRET - the signing key. Anyone holding it can publish trusted cache")
 	fmt.Println("│  artifacts. Store it as the MAGUS_CACHE_SIGNING_KEY secret in your CI for")
 	fmt.Println("│  trusted pushes ONLY. Do NOT commit it, save it to disk, or paste it")
 	fmt.Println("│  anywhere else. It is shown once.")
 	fmt.Printf("└─ %s=%s\n\n", signingKeyEnv, km.SeedB64)
-	fmt.Println("Public key — not secret. Add it to cache.remote.trusted_keys in magus.yaml:")
+	fmt.Println("Public key - not secret. Add it to cache.remote.trusted_keys in magus.yaml:")
 	fmt.Println("    cache:")
 	fmt.Println("      remote:")
 	fmt.Println("        trusted_keys:")
@@ -95,7 +95,7 @@ func configCacheKeyID(args []string) error {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Show the derived keyid and pubkey for a public key. With no")
 		fmt.Fprintln(os.Stderr, "argument, reads MAGUS_CACHE_SIGNING_KEY (a seed) and derives its public")
-		fmt.Fprintln(os.Stderr, "identity — useful to confirm which key CI signs with. The seed is never")
+		fmt.Fprintln(os.Stderr, "identity - useful to confirm which key CI signs with. The seed is never")
 		fmt.Fprintln(os.Stderr, "printed.")
 	}
 	if err := fs.Parse(args); err != nil {

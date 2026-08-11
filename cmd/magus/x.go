@@ -29,7 +29,7 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Interactive project + target picker. Filters are AND-combined")
 			fmt.Fprintln(os.Stderr, "substrings; leaf-anchored longest match wins ranking.")
-			fmt.Fprintln(os.Stderr, "Requires an interactive terminal — for scripts use `magus run`.")
+			fmt.Fprintln(os.Stderr, "Requires an interactive terminal - for scripts use `magus run`.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()

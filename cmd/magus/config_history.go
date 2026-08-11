@@ -195,7 +195,7 @@ func runHistoryDedup(ctx context.Context, args []string) error {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Reads per-shard JSONL report files and reports cross-shard redundant builds.")
 		fmt.Fprintln(os.Stderr, "A build is redundant if the same (project, target, hash) appears as a cache")
-		fmt.Fprintln(os.Stderr, "miss in more than one shard — work a shared remote cache would eliminate.")
+		fmt.Fprintln(os.Stderr, "miss in more than one shard - work a shared remote cache would eliminate.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
 		fs.PrintDefaults()
@@ -238,7 +238,7 @@ func runHistoryDedup(ctx context.Context, args []string) error {
 
 	approxNote := ""
 	if res.Approx {
-		approxNote = " (approximate: some events missing hash field — upgrade magus to get exact dedup)"
+		approxNote = " (approximate: some events missing hash field - upgrade magus to get exact dedup)"
 	}
 
 	fmt.Printf("cross-shard dedup analysis%s\n", approxNote)

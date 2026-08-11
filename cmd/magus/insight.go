@@ -140,7 +140,7 @@ func insightSetup(ctx context.Context, root, lens, def string, args []string,
 func insightHotspots(ctx context.Context, root string, args []string) error {
 	a, opts, outOpts, err := insightSetup(ctx, root, "hotspots", types.HotspotDefinition, args,
 		func(fs *flag.FlagSet, o *types.InsightOptions) {
-			fs.BoolVar(&o.Files, "files", false, "rank individual files by churn × complexity instead of projects")
+			fs.BoolVar(&o.Files, "files", false, "rank individual files by churn x complexity instead of projects")
 		}, outputMermaid)
 	if err != nil {
 		return err

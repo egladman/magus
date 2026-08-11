@@ -93,7 +93,7 @@ func describeModules(args []string) error {
 		for _, f := range m.Fields {
 			fmt.Printf("  %s: %s", f.Name, f.Type)
 			if f.Doc != "" {
-				fmt.Printf("  — %s", firstLine(f.Doc))
+				fmt.Printf("  - %s", firstLine(f.Doc))
 			}
 			fmt.Println()
 		}
@@ -107,7 +107,7 @@ func describeModules(args []string) error {
 		}
 		fmt.Printf("    Signature: %s\n", meth.Buzz)
 		if meth.BuzzStdlib != "" {
-			fmt.Printf("    (also in Buzz's stdlib: %s — the extra form is sandbox-aware)\n", meth.BuzzStdlib)
+			fmt.Printf("    (also in Buzz's stdlib: %s - the extra form is sandbox-aware)\n", meth.BuzzStdlib)
 		}
 	}
 	return nil

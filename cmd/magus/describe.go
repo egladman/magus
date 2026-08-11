@@ -203,11 +203,11 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 		}
 		fmt.Printf("project: %s  (%d targets)\n", p.Label(), len(p.Nodes))
 		if len(p.Cycle) > 0 {
-			fmt.Printf("  CYCLE: %s\n", strings.Join(p.Cycle, " → "))
+			fmt.Printf("  CYCLE: %s\n", strings.Join(p.Cycle, " -> "))
 		}
 		for _, n := range p.Nodes {
 			if len(n.Dependencies) > 0 {
-				fmt.Printf("  %s → %s\n", n.Name, strings.Join(n.Dependencies, ", "))
+				fmt.Printf("  %s -> %s\n", n.Name, strings.Join(n.Dependencies, ", "))
 			} else {
 				fmt.Printf("  %s\n", n.Name)
 			}
@@ -840,11 +840,11 @@ func describeTargets(ctx context.Context, root string) error {
 	for _, t := range targets {
 		switch t.Kind {
 		case "canonical":
-			fmt.Printf("  %s  [canonical — affected/pipeline anchor; composed in the magusfile]\n", t.Name)
+			fmt.Printf("  %s  [canonical - affected/pipeline anchor; composed in the magusfile]\n", t.Name)
 		case "spell":
 			fmt.Printf("  %s  [spell: %s]\n", t.Name, strings.Join(t.Spells, ", "))
 		case "custom":
-			fmt.Printf("  %s  [custom — projects: %s]\n", t.Name, strings.Join(t.Projects, ", "))
+			fmt.Printf("  %s  [custom - projects: %s]\n", t.Name, strings.Join(t.Projects, ", "))
 		default:
 			fmt.Printf("  %s\n", t.Name)
 		}
