@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `30` |
+| `agent-skill-version` | `31` |
 | `knowledge-schema-version` | `8` |
-| `skill-content` | `f0425d4b8a54` |
+| `skill-content` | `36de22dd8c77` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.

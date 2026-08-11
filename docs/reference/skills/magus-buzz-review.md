@@ -2,8 +2,8 @@
 title: magus-buzz-review
 description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance."
 tags: [agents, skills, magus-buzz-review]
-skill_full_bytes: 17483
-skill_simple_bytes: 13661
+skill_full_bytes: 18320
+skill_simple_bytes: 14135
 ---
 
 # magus-buzz-review
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `30` |
+| `agent-skill-version` | `31` |
 | `knowledge-schema-version` | `8` |
-| `skill-content` | `f0425d4b8a54` |
+| `skill-content` | `36de22dd8c77` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -243,6 +243,17 @@ were the language.
   evaluates it once.** Authority: GOPHERBUZZ. See Lens 2 - flagged there as a
   correctness bug when the target has a side effect, flagged here as the
   reason it will not misbehave the same way upstream.
+- **A declared `!>` error set is parsed and thrown away; nothing enforces it.**
+  Authority: GOPHERBUZZ. Upstream Buzz treats `!> ErrType` as a real error set.
+  gopherbuzz consumes the annotation and calls skipType, and no AST node stores
+  it, so a function declaring `> str !> str` that throws, called
+  with no try/catch from a function declaring no raise at all, compiles and runs
+  clean. Read a `!>` as documentation, never as a checked contract: it
+  tells you what the author BELIEVED raises, and the checker will not tell you
+  when that stops being true. Do NOT treat its absence as proof a call cannot
+  raise, and do not add one expecting it to gate anything - adding
+  `!>` to a signature that enforces nothing makes the docs assert a guarantee
+  the language does not keep, which is worse than the current honest silence.
 - **An anonymous object field shadows a same-named builtin method.**
   Authority: GOPHERBUZZ. `rec.map` reads the FIELD `map` if the object was
   built with one, not the builtin `.map()` transform - the field wins. A
@@ -504,6 +515,13 @@ That is the fixture doing its job.
   evaluates it once.** Authority: GOPHERBUZZ. See Lens 2 - flagged there as a
   correctness bug when the target has a side effect, flagged here as the
   reason it will not misbehave the same way upstream.
+- **A declared `!>` error set is parsed and thrown away; nothing enforces it.**
+  Authority: GOPHERBUZZ. Upstream Buzz treats `!> ErrType` as a real error set.
+  gopherbuzz consumes the annotation and calls skipType, and no AST node stores
+  it. Read a `!>` as documentation, never as a checked contract: it
+  tells you what the author BELIEVED raises, and the checker will not tell you
+  when that stops being true. Do NOT treat its absence as proof a call cannot
+  raise.
 - **An anonymous object field shadows a same-named builtin method.**
   Authority: GOPHERBUZZ. `rec.map` reads the FIELD `map` if the object was
   built with one, not the builtin `.map()` transform - the field wins. A

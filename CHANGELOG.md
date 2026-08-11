@@ -391,6 +391,14 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   own imported module needs when tested (its imports parse embedded, not
   strict); the review skill's idiom lens adds the one-line finding and points
   back rather than restating it. Skill contract v30.
+- **`magus-buzz-review` now records that a declared `!>` error set is
+  unenforced.** Upstream Buzz treats `!> ErrType` as a real error set;
+  gopherbuzz's parser consumes the annotation and calls skipType, and no AST
+  node stores it, so a function declaring a raise that throws compiles clean
+  when called with no try/catch from a function declaring none. The
+  upstream-conformance lens now says to read a `!>` as documentation rather than
+  a checked contract, and not to take its absence as proof a call cannot raise.
+  Skill contract v31.
 - **Host parity is now a build gate rather than a table nobody re-reads.** Each guard
   template declares, per guard surface, how much of a verdict it can carry
   (`magus-guard-coverage`), and the guard's own vocabulary moved into an importable

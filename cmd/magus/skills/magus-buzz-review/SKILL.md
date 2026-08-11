@@ -201,6 +201,17 @@ were the language.{{end}}
   evaluates it once.** Authority: GOPHERBUZZ. See Lens 2 - flagged there as a
   correctness bug when the target has a side effect, flagged here as the
   reason it will not misbehave the same way upstream.
+- **A declared `!>` error set is parsed and thrown away; nothing enforces it.**
+  Authority: GOPHERBUZZ. Upstream Buzz treats `!> ErrType` as a real error set.
+  gopherbuzz consumes the annotation and calls skipType, and no AST node stores
+  it{{if .Full}}, so a function declaring `> str !> str` that throws, called
+  with no try/catch from a function declaring no raise at all, compiles and runs
+  clean{{end}}. Read a `!>` as documentation, never as a checked contract: it
+  tells you what the author BELIEVED raises, and the checker will not tell you
+  when that stops being true. Do NOT treat its absence as proof a call cannot
+  raise{{if .Full}}, and do not add one expecting it to gate anything - adding
+  `!>` to a signature that enforces nothing makes the docs assert a guarantee
+  the language does not keep, which is worse than the current honest silence{{end}}.
 - **An anonymous object field shadows a same-named builtin method.**
   Authority: GOPHERBUZZ. `rec.map` reads the FIELD `map` if the object was
   built with one, not the builtin `.map()` transform - the field wins. A
