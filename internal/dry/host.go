@@ -841,8 +841,13 @@ func pureMagus() vm.Value {
 func secretGrantStubArg(method string, args []vm.Value) error {
 	// MapView, not IsMap - see bindings.secretGrantArg. An object INSTANCE is tagObject,
 	// not tagMap, so the documented spelling was rejected here too.
+	// Length first: indexing args[0] to build the view before checking it exists
+	// panics on a no-argument call instead of reporting the error below.
+	if len(args) == 0 {
+		return fmt.Errorf(`magus\secret.%s: expected an object with ref/host/header/prefix fields, e.g. SecretGrant{ ref = "...", host = "api.example.com", header = "Authorization", prefix = "Bearer " } declared in your magusfile`, method)
+	}
 	fields, viewOK := args[0].MapView()
-	if len(args) == 0 || !viewOK {
+	if !viewOK {
 		return fmt.Errorf(`magus\secret.%s: expected an object with ref/host/header/prefix fields, e.g. SecretGrant{ ref = "...", host = "api.example.com", header = "Authorization", prefix = "Bearer " } declared in your magusfile`, method)
 	}
 	var bad error

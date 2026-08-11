@@ -297,8 +297,13 @@ func secretGrantArg(method string, args []vm.Value) (types.SecretGrant, error) {
 	// struct directly instead of going through Buzz; magus's own GitHub Actions cache
 	// spell was the first caller to use the surface as written. MapView accepts a map and
 	// an object instance both, which is what this always meant to take.
+	// Length first: indexing args[0] to build the view before checking it exists
+	// panics on a no-argument call instead of reporting the error below.
+	if len(args) == 0 {
+		return types.SecretGrant{}, fmt.Errorf(`magus\secret.%s: expected an object with ref/host/header/prefix fields, e.g. SecretGrant{ ref = "...", host = "api.example.com", header = "Authorization", prefix = "Bearer " } declared in your magusfile`, method)
+	}
 	fields, viewOK := args[0].MapView()
-	if len(args) == 0 || !viewOK {
+	if !viewOK {
 		return types.SecretGrant{}, fmt.Errorf(`magus\secret.%s: expected an object with ref/host/header/prefix fields, e.g. SecretGrant{ ref = "...", host = "api.example.com", header = "Authorization", prefix = "Bearer " } declared in your magusfile`, method)
 	}
 	var bad error

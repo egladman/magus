@@ -513,3 +513,19 @@ func TestSecretNSReadIsAudited(t *testing.T) {
 	assert.Contains(t, found.Text, "built-in environment provider", "so is which backend served it")
 	assert.NotContains(t, found.Text, "ghp_audit_me_never", "the VALUE must never be recorded")
 }
+
+// TestSecretGrantArgRejectsNoArguments pins the argument-count guard. Building the
+// map view before checking len(args) panicked with index out of range on a
+// no-argument call, so the friendly error below was unreachable for the one caller
+// shape most likely to hit it.
+func TestSecretGrantArgRejectsNoArguments(t *testing.T) {
+	for _, method := range []string{"grant", "endpoint"} {
+		t.Run(method, func(t *testing.T) {
+			require.NotPanics(t, func() {
+				_, err := secretGrantArg(method, nil)
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "expected an object")
+			})
+		})
+	}
+}
