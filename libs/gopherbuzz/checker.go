@@ -1192,6 +1192,24 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 		// resolved, so arguments pass in written order. Upstream-style call
 		// sites write them in declaration order, which makes this correct.
 		v.ArgNames = nil
+		// A plain NAME whose type is known and is not a function can never be called.
+		//
+		// Restricted to an identifier callee on purpose. A built-in collection or
+		// string method is not modelled as a FuncType at all - inferMember answers
+		// with the method's RESULT type, so `xs.len()` arrives here with an int
+		// callee and would read as uncallable. Nine upstream behavior files failed
+		// exactly that way before this narrowing. Any/Unknown stay silent as
+		// everywhere else.
+		if _, isName := v.Callee.(*ast.IdentExpr); isName {
+			switch calleeTyp.(type) {
+			case *types.PrimitiveType:
+				if calleeTyp != types.Any && calleeTyp != types.Unknown {
+					c.errorfc(v.Pos, TypeMismatch, "%s is not callable", calleeTyp.TypeName())
+				}
+			case *types.ListType, *types.MapType:
+				c.errorfc(v.Pos, TypeMismatch, "%s is not callable", calleeTyp.TypeName())
+			}
+		}
 	}
 	for i, a := range v.Args {
 		// Each argument is inferred against its parameter's type, so a construct
@@ -1536,6 +1554,15 @@ func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {
 				// and the case could never resolve against it.
 				c.inferExpected(v.Values[i], c.resolveType(ft))
 				continue
+			}
+			// A NAMED field the target object does not declare. Without this the
+			// literal quietly stayed a map, so the annotation was accepted and every
+			// later member access answered against something that was never the
+			// object it claimed to be. A positional (tuple) key is exempt: it names
+			// no field, and reporting it would just be the tuple-vs-object mismatch
+			// twice.
+			if isField && !v.Tuple {
+				c.errorf(ast.NodePos(k), "object %s has no field %q", ot.Name, name.Val)
 			}
 			c.infer(v.Values[i])
 		}
