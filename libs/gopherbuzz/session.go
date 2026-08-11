@@ -167,6 +167,16 @@ func (s *Session) SetModuleDecls(importPath, src string) {
 	if s.moduleDecls == nil {
 		s.moduleDecls = map[string]string{}
 	}
+	// APPEND rather than replace. A module can be declared by more than one owner:
+	// `crypto` is half Buzz's own stdlib (hash, HashAlgorithm, in std/crypto.buzz) and
+	// half the host's (sha256Hex, hmacSha256, from magus's descriptors), and the two
+	// register independently. Assigning here meant last-writer-wins, so one half's
+	// declarations were silently dropped and its members read as untyped - which is
+	// how `crypto\hash` had no signature despite being declared in this very package.
+	if prev := s.moduleDecls[importPath]; prev != "" {
+		s.moduleDecls[importPath] = prev + "\n" + src
+		return
+	}
 	s.moduleDecls[importPath] = src
 }
 

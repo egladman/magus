@@ -1079,3 +1079,40 @@ func TestExternObjectMethod(t *testing.T) {
 }
 `)
 }
+
+// TestSetModuleDeclsMerges covers a module declared by more than one owner.
+//
+// `crypto` is the real case: half of it is Buzz's own stdlib (hash, HashAlgorithm,
+// declared in std/crypto.buzz) and half is the embedding host's (sha256Hex and
+// friends, generated from magus's descriptors). The two register independently, so
+// SetModuleDecls is called twice for the same path.
+//
+// It used to ASSIGN, which made that last-writer-wins and dropped one half silently.
+// The symptom was not a missing declaration but a member with no signature: a call to
+// `crypto\hash` type-checked as untyped, so neither its arity nor its argument types
+// were enforced, and a member that had genuinely been removed looked identical to one
+// declared by the other owner.
+func TestSetModuleDeclsMerges(t *testing.T) {
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer sess.Close()
+
+	sess.SetModuleDecls("twoowners", `export extern fun fromFirst(a: str) > str;`)
+	sess.SetModuleDecls("twoowners", `export extern fun fromSecond(b: int) > int;`)
+
+	_, err := sess.Eval(ctx, `
+import "twoowners";
+fun main() > void {
+    final _ = twoowners\fromFirst("x");
+    final _ = twoowners\fromSecond(1);
+}
+`)
+	// Both halves resolve. Either would fail with "no member" if the other had won.
+	assert.NoError(t, err, "both owners' declarations must survive")
+
+	// NOT asserted here: that a wrong argument type is rejected. Measured while
+	// writing this - an extern's parameter types are not enforced at the call site
+	// today, merged or not - so asserting it would be testing a wish. That gap is
+	// real and separate; this test's subject is only that neither owner's
+	// declarations are lost.
+}
