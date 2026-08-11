@@ -457,6 +457,13 @@ func (c *checker) checkStmt(n ast.Node) {
 		}
 	case *ast.ThrowStmt:
 		c.infer(v.Value)
+		// A direct throw is NOT held to propagate-or-catch, though a CALL to a raising
+		// function is. That asymmetry is deliberate and measured (2026-08-11): applying
+		// the rule closes upstream's fiber-error-location.buzz and nothing else, while
+		// breaking seven of magus's own suites - its spells, tour files and scripts
+		// throw from functions that declare no !>. Closing it is a corpus-wide
+		// annotation migration for one file, so it is a decision rather than an
+		// oversight.
 	case *ast.OutStmt:
 		c.infer(v.Value)
 	}

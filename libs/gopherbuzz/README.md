@@ -54,13 +54,18 @@ answer calls live code dead); reporting a missing return under-claims (a wrong a
 invents an error on a correct function). `terminates` and `terminatesForReturn` exist
 because those two biases disagree about try/catch.
 
-Some of what is left is a DIALECT DECISION rather than a missing check, and the two
-`yield` files are the example. Upstream requires a `*>` annotation on any function
-that yields; gopherbuzz deliberately does not, dismisses a yield outside a fiber
-(documented on `ast.YieldExpr`, pinned by `TestYieldOutsideFiberDismissed`), and both
-this package's fiber fixtures and magus's own s3-cache spell rely on that. Closing
-those two costs a migration and reverses a recorded choice -- which is a call to make
-deliberately, not a gap to patch.
+Most of what is left is a DIALECT DECISION or a disproportionate migration rather
+than a missing check. Each of these was implemented, measured, and reverted:
+
+| File(s) | What it needs | Measured cost |
+| --- | --- | --- |
+| `yield-location`, `yield-without-annotation` | require `*>` on any function that yields | reverses a recorded choice (`ast.YieldExpr`, `TestYieldOutsideFiberDismissed`); ~18 fixtures here plus magus's s3-cache spell |
+| `fiber-error-location` | hold a direct `throw` to propagate-or-catch, as a CALL already is | breaks seven of magus's suites: its spells, tour files and scripts throw without `!>` |
+| `unused-import` | make BZZ3001 an error | impossible as stated -- see the note in `session.go` |
+| `selective-import` | stop `assert` resolving unimported | blocked on `registerBuiltins`, which pre-defines the stdlib names on purpose |
+
+Each is a call to make deliberately, with the migration budgeted -- not a gap to
+patch.
 
 The fuzz corpus is upstream's checked-in AFL output, not hand-written tests: the
 filenames are AFL's (`id_000123,sig_06,src_000051,op_flip1,pos_1`), where `sig_06` is
