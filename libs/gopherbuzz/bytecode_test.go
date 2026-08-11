@@ -2120,3 +2120,42 @@ func TestImport_NamespaceRelativeToImporter(t *testing.T) {
 	require.True(t, ok, "`other` must carry the sibling's exports")
 	assert.Equal(t, "from sibling", note.String())
 }
+
+// TestImport_ResolvesRelativeToImportingFile covers a nested import resolving against
+// the directory of the file that WRITES it, not the entry program's.
+//
+// Upstream's tests/behavior/mutual-import.buzz is the case: the entry file is in
+// tests/behavior and imports ../utils/import-b, which imports a bare `import-a` that
+// sits beside IT in tests/utils. Only the entry file's directory was searched, so the
+// inner import resolved against tests/behavior and was reported missing - which reads
+// as a circular-import failure and is plain path resolution.
+//
+// The cycle itself was never the problem: loadedPaths already guards that, and
+// TestCyclicImportTerminates covers it.
+func TestImport_ResolvesRelativeToImportingFile(t *testing.T) {
+	root := t.TempDir()
+	entry := filepath.Join(root, "entry")
+	nested := filepath.Join(root, "nested")
+	require.NoError(t, os.MkdirAll(entry, 0o755))
+	require.NoError(t, os.MkdirAll(nested, 0o755))
+
+	// leaf sits beside mid, and mid imports it by BARE name - resolvable only from
+	// mid's own directory.
+	require.NoError(t, os.WriteFile(filepath.Join(nested, "leaf.buzz"),
+		[]byte("export final leafValue = 5;\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(nested, "mid.buzz"),
+		[]byte("import \"leaf\";\nexport final midValue = leafValue + 1;\n"), 0644))
+
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer sess.Close()
+	// Only the ENTRY directory is on the include path, exactly as the upstream
+	// harness configures it.
+	sess.SetIncludeDirs([]string{entry, root})
+
+	require.NoError(t, sess.Exec(ctx, `import "nested/mid"; final got = midValue;`), "exec")
+
+	got, ok := sess.Globals()["got"]
+	require.True(t, ok, "got not set")
+	assert.Equal(t, "6", got.String(), "the nested bare import must resolve beside mid.buzz")
+}

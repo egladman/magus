@@ -66,6 +66,9 @@ type Session struct {
 	// after searchPaths, for the `-L` CLI flag and BUZZ_INCLUDE_PATH. NewSession
 	// populates it from BUZZ_INCLUDE_PATH; the host may override via SetIncludeDirs.
 	includeDirs []string
+	// importingDirs is the stack of directories of the files currently being
+	// imported, innermost last. See findIncludeFile.
+	importingDirs []string
 	// loadedPaths tracks absolute paths already loaded to prevent re-execution
 	// and break import cycles.
 	loadedPaths map[string]bool
@@ -1062,6 +1065,10 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (Impor
 	if err != nil {
 		return ImportFile, bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", imp.Path, err)
 	}
+	// Everything this file imports resolves relative to IT, not to whoever imported
+	// it. Popped on the way out so a sibling import of the parent is unaffected.
+	s.importingDirs = append(s.importingDirs, filepath.Dir(abs))
+	defer func() { s.importingDirs = s.importingDirs[:len(s.importingDirs)-1] }()
 
 	if imp.Alias != "" && imp.Alias != "_" {
 		// Aliased import: exec in an isolated sub-session so the file's
@@ -1465,6 +1472,19 @@ func (s *Session) loadImportAsAlias(ctx context.Context, importPath, src, alias 
 // name), then falls back to the plain includeDirs (-L / BUZZ_INCLUDE_PATH),
 // searching importPath.buzz (flat). This matches upstream resolution exactly.
 func (s *Session) findIncludeFile(importPath string) string {
+	// The directory of the file whose import this is, tried FIRST. Upstream resolves
+	// an import relative to the importing file, and only the entry file's directory
+	// was ever searched: a module in tests/utils importing a bare sibling name
+	// resolved against tests/behavior and was reported missing, which read as a
+	// circular-import failure but was plain path resolution.
+	//
+	// Innermost first, so a deep chain resolves against whichever file is actually
+	// doing the importing rather than the one that started the chain.
+	for i := len(s.importingDirs) - 1; i >= 0; i-- {
+		if p := filepath.Join(s.importingDirs[i], importPath+".buzz"); bzzExists(p) {
+			return p
+		}
+	}
 	for _, tmpl := range s.searchPaths {
 		p := expandSearchPath(tmpl, importPath)
 		if p == "" {
