@@ -17,7 +17,7 @@ import (
 // interactive wait branch instead of failing fast.
 type alwaysTerminalProbe struct{}
 
-func (alwaysTerminalProbe) IsTerminal(fd uintptr) bool                { return true }
+func (alwaysTerminalProbe) IsTerminal(fd uintptr) bool                     { return true }
 func (alwaysTerminalProbe) Size(fd uintptr) (width, height int, err error) { return 80, 24, nil }
 
 // A failing probe must stop the op BEFORE it forks, and say what is actually wrong.

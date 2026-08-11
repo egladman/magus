@@ -382,6 +382,7 @@ func validateTools(m spells.Descriptor) error {
 func decodeTools(src Obj) (map[string]spells.Tool, error) {
 	rec, ok := src.Obj("tools")
 	if !ok {
+		//nolint:nilnil // declaring no tools is not an error, and a nil map is the correct empty value here: every caller ranges it or takes its len, both of which read a nil map fine.
 		return nil, nil
 	}
 	var out map[string]spells.Tool
