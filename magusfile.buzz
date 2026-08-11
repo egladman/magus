@@ -1726,6 +1726,21 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("libs/testsprawl/.custom-gcl.yml", "libs/testsprawl/**/*.go");
     proc\exec("./custom-gcl", ["run"]);
     go["go-vet"](ctx);
+    // Compile the browser playground for wasm. COMPILE only, to /dev/null: TinyGo
+    // builds the shipped artifact, but that runs by hand and never in ci, so nothing
+    // here ever type-checked the wasm configuration. Two breaks reached main that way -
+    // std/crypto.go calling a checkRead that is //go:build !wasm, and a generated
+    // trampoline missing its !wasm tag - each invisible until someone rebuilt the
+    // playground.
+    //
+    // The stock go toolchain, not TinyGo: it is already pinned, it is fast, and the
+    // failures worth catching are unresolved symbols under the wasm build tags, which
+    // both compilers see identically. Not ./... either - the daemon and internal/proc
+    // legitimately do not build for wasm (syscall.SIGHUP), so only the playground's
+    // own dependency tree is graded.
+    os\withEnv({"GOOS": "js", "GOARCH": "wasm"}, fun () > void !> any {
+        proc\exec("go", ["build", "-o", "/dev/null", "./cmd/buzz-playground"]);
+    });
     markdown.markdownlint(ctx);
     // The repo-root prose, named rather than walked. NOT markdown.typos: that op takes no
     // paths and walks the project directory, and THIS project's directory is the whole

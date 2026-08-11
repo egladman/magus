@@ -166,8 +166,11 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	// carried "Keep in sync with the //go:build !wasm tags", and had drifted: `proc`
 	// was missing from it, so gen/proc.go was generated with NO build tag and broke
 	// the wasm build by referencing std.OsExec, which does not exist there. A
-	// classification with four copies (this map, the two Modules tables, and
-	// dry.WASMCompatibleMagusModules) is one nobody can keep true.
+	// classification kept in three hand-maintained places (this map and the two
+	// Modules tables) is one nobody can keep true. It now has one source: std
+	// declares it, this tag and both tables are generated from it, and everything
+	// downstream - dry.WASMCompatibleMagusModules, and the docs generator's
+	// runs-in-the-browser marker through it - was already derived.
 	if !m.WASM {
 		fmt.Fprintln(&b, "//go:build !wasm")
 		fmt.Fprintln(&b)
