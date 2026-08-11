@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -39,18 +38,18 @@ func TestCacheOperationsWithoutOpenCache(t *testing.T) {
 	assert.Nil(t, collector)
 	assert.False(t, enabled)
 	assert.Equal(t, struct {
-		Stats     cache.Stats
+		Stats     CacheStats
 		DiskBytes int64
 		Metrics   []byte
 		CacheDir  string
 		Workspace string
 	}{
-		Stats:     cache.Stats{},
+		Stats:     CacheStats{},
 		Metrics:   nil,
 		CacheDir:  workspace.CacheDir(),
 		Workspace: workspace.Root(),
 	}, struct {
-		Stats     cache.Stats
+		Stats     CacheStats
 		DiskBytes int64
 		Metrics   []byte
 		CacheDir  string

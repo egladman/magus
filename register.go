@@ -28,8 +28,8 @@ func WithLoadedConfig(cfg config.Config) Option {
 }
 
 // WithMetricsCollection builds an always-on in-process metrics collector for this workspace
-// (OTel instruments record even with telemetry export off), so the daemon can serve OTLP
-// snapshots to the /dashboard via [Magus.MetricsSnapshot]. The CLI leaves it off.
+// (OTel instruments record even with telemetry export off), so the daemon can derive the
+// /dashboard's metrics via [Magus.MetricsCollector]. The CLI leaves it off.
 func WithMetricsCollection() Option {
 	return workspace.WithMetricsCollection()
 }

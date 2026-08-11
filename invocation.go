@@ -87,3 +87,86 @@ func withCaptureLogger(ctx context.Context, handlers []slog.Handler) context.Con
 	}
 	return journal.WithLogger(ctx, journal.NewLogger(handlers...))
 }
+
+// Command is a magus invocation's lineage - the caller-facing projection of
+// [journal.Command]. Field tags match it exactly for JSON wire compat.
+type Command struct {
+	Arguments []string `json:"arguments,omitempty"` // the full argument vector, subcommand included (e.g. ["run", "build", "api"])
+	Cwd       string   `json:"cwd,omitempty"`       // directory the command was invoked in
+	Trigger   string   `json:"trigger,omitempty"`   // one of the journal.Trigger* constants
+}
+
+// Invocation is one magus command, launch to exit, read back from the journal - the
+// caller-facing projection of [journal.Invocation]. See [Magus.InvocationByID]. Field
+// tags match journal.Invocation's exactly for JSON wire compat.
+type Invocation struct {
+	ID           string  `json:"id"`
+	Command      Command `json:"command"`
+	StartedMs    int64   `json:"started_ms"`            // unix milliseconds
+	FinishedMs   int64   `json:"finished_ms,omitempty"` // unix milliseconds; 0 while running
+	Status       string  `json:"status,omitempty"`      // overall outcome (pass|fail), from the finished event
+	MagusVersion string  `json:"magus_version,omitempty"`
+}
+
+func newInvocation(inv journal.Invocation) Invocation {
+	return Invocation{
+		ID: inv.ID,
+		Command: Command{
+			Arguments: inv.Command.Arguments,
+			Cwd:       inv.Command.Cwd,
+			Trigger:   inv.Command.Trigger,
+		},
+		StartedMs:    inv.StartedMs,
+		FinishedMs:   inv.FinishedMs,
+		Status:       inv.Status,
+		MagusVersion: inv.MagusVersion,
+	}
+}
+
+// Event is one journal entry (output line, magus log line, or a run's result) - the
+// caller-facing projection of [journal.Event]. See [Magus.InvocationEventsByID]. Field
+// tags match journal.Event's exactly for JSON wire compat.
+type Event struct {
+	Ts      int64  `json:"ts"`                // unix milliseconds
+	Inv     string `json:"inv,omitempty"`     // invocation id (one per run command)
+	Project string `json:"project,omitempty"` // repo-relative project path
+	Target  string `json:"target,omitempty"`  // target name (with charms, as the CLI spells it)
+	Kind    string `json:"kind"`              // one of the journal.Kind* constants
+	Stream  string `json:"stream,omitempty"`  // stdout|stderr, for output events
+	Level   string `json:"level,omitempty"`   // info|warn|error, for magus events
+	Status  string `json:"status,omitempty"`  // pass|fail|cached, for result events
+	Ref     string `json:"ref,omitempty"`     // target-output ref, for result events
+	DurMs   int64  `json:"dur_ms,omitempty"`  // duration in ms, for result events
+	Text    string `json:"text,omitempty"`    // output line or message
+
+	// Set only on the started event (Kind==journal.KindStarted): the run's identity.
+	Command      *Command `json:"command,omitempty"`
+	MagusVersion string   `json:"magus_version,omitempty"`
+}
+
+func newEvent(e journal.Event) Event {
+	ev := Event{
+		Ts: e.Ts, Inv: e.Inv, Project: e.Project, Target: e.Target, Kind: e.Kind,
+		Stream: e.Stream, Level: e.Level, Status: e.Status, Ref: e.Ref, DurMs: e.DurMs,
+		Text: e.Text, MagusVersion: e.MagusVersion,
+	}
+	if e.Command != nil {
+		ev.Command = &Command{
+			Arguments: e.Command.Arguments,
+			Cwd:       e.Command.Cwd,
+			Trigger:   e.Command.Trigger,
+		}
+	}
+	return ev
+}
+
+func newEvents(events []journal.Event) []Event {
+	if events == nil {
+		return nil
+	}
+	out := make([]Event, len(events))
+	for i, e := range events {
+		out[i] = newEvent(e)
+	}
+	return out
+}

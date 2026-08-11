@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -25,7 +26,7 @@ import (
 // matches as the `magus run` command that would reproduce it. *magus.Magus
 // satisfies it.
 type outputReader interface {
-	OutputByRef(ref string) ([]byte, cache.OutputDescriptor, error)
+	OutputByRef(ref string) ([]byte, magus.OutputDescriptor, error)
 	IdentifyRef(ctx context.Context, ref string) ([]types.RefMatch, error)
 	RefMatchCommand(mt types.RefMatch) string
 }

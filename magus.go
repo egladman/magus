@@ -296,7 +296,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	for _, fn := range opts {
 		fn(&vo)
 	}
-	if d := ward.RequiredVersion(cfg.RequiredVersion, vo.Version); d != nil {
+	if d := ward.CheckRequiredVersion(cfg.RequiredVersion, vo.Version); d != nil {
 		return nil, d
 	}
 	ws, err := project.Discover(ctx, root)
