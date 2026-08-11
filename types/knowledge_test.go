@@ -20,9 +20,9 @@ func TestAnswerAbsent(t *testing.T) {
 func TestAnswerIndexMissing(t *testing.T) {
 	gaps := []KnowledgeSymbolGap{{Project: NewProjectRef("libs/api", ""), State: SymbolIndexNotBuilt}}
 	want := KnowledgeAnswer{
-		Verdict:   VerdictUnknown,
-		Reason:    ReasonSymbolIndexMissing,
-		Uncovered: gaps,
+		Verdict: VerdictUnknown,
+		Reason:  ReasonSymbolIndexMissing,
+		Gaps:    gaps,
 	}
 	assert.Equal(t, want, Answer(false, "", gaps))
 }
@@ -42,7 +42,7 @@ func TestAnswerStatedReasonWinsOverMissingIndex(t *testing.T) {
 	gaps := []KnowledgeSymbolGap{{Project: NewProjectRef("libs/api", ""), State: SymbolIndexNotBuilt}}
 	got := Answer(false, ReasonSymbolsNotLoaded, gaps)
 	assert.Equal(t, ReasonSymbolsNotLoaded, got.Reason)
-	assert.Equal(t, gaps, got.Uncovered, "the gaps still ride along; only the reason changes")
+	assert.Equal(t, gaps, got.Gaps, "the gaps still ride along; only the reason changes")
 }
 
 // The wire keys are a contract with agents and external consumers, so pin them. Verdict
@@ -59,7 +59,7 @@ func TestKnowledgeAnswerJSONKeys(t *testing.T) {
 	assert.JSONEq(t, `{
 		"verdict": "unknown",
 		"reason": "symbol-index-missing",
-		"uncovered": [{
+		"gaps": [{
 			"project": {"path": "libs/api", "name": "libs/api"},
 			"state": "not-indexed",
 			"detail": "unreadable"

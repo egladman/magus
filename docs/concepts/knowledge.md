@@ -449,12 +449,18 @@ The verdict rides the structured output as an `answer` field, so an agent branch
 `answer.verdict` rather than pattern-matching prose:
 
 ```sh
-magus refs SomeSymbol -o json    # .answer.verdict, .answer.reason, .answer.uncovered[]
+magus refs SomeSymbol -o json    # .answer.verdict, .answer.reason, .answer.gaps[]
 ```
+
+Over MCP every verdict comes back as a result rather than an error, so an agent branches
+on the field in all three cases rather than pattern-matching an error string for one of
+them.
 
 Exit codes follow the same split. `refs` and `explain` exit 2 on `absent` - the request
 cannot be carried out as stated, and magus verified that - and 1 on `unknown`, where the
-invocation was fine and a prerequisite artifact was missing. `magus query` always exits 0:
+invocation was fine and a prerequisite artifact was missing. A `refs` lookup that resolved
+but found no references follows the verdict too, exiting 1 when magus could not verify the
+emptiness: "nothing uses this" is a negative claim like any other. `magus query` always exits 0:
 an empty result set is a legitimate answer to a search, so its verdict rides the output
 only.
 

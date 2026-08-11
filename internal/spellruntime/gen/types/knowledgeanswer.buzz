@@ -8,5 +8,5 @@
 export object KnowledgeAnswer {
     verdict: str = "",
     reason: str = "",
-    uncovered: [KnowledgeSymbolGap] = [],
+    gaps: [KnowledgeSymbolGap] = [],
 }

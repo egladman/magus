@@ -280,9 +280,9 @@ func DescribeGaps(gaps []KnowledgeSymbolGap) string {
 // `absent` must be positively asserted, or a reader cannot tell a verified absence from
 // an older magus that had no verdict at all.
 type KnowledgeAnswer struct {
-	Verdict   KnowledgeVerdict       `json:"verdict"             yaml:"verdict"`
-	Reason    KnowledgeUnknownReason `json:"reason,omitempty"    yaml:"reason,omitempty"`
-	Uncovered []KnowledgeSymbolGap   `json:"uncovered,omitempty" yaml:"uncovered,omitempty"`
+	Verdict KnowledgeVerdict       `json:"verdict"             yaml:"verdict"`
+	Reason  KnowledgeUnknownReason `json:"reason,omitempty"    yaml:"reason,omitempty"`
+	Gaps    []KnowledgeSymbolGap   `json:"gaps,omitempty"      yaml:"gaps,omitempty"`
 }
 
 // Answer classifies a lookup's result against what magus was actually able to search.
@@ -299,9 +299,9 @@ type KnowledgeAnswer struct {
 func Answer(matched bool, reason KnowledgeUnknownReason, gaps []KnowledgeSymbolGap) KnowledgeAnswer {
 	switch {
 	case reason != "":
-		return KnowledgeAnswer{Verdict: VerdictUnknown, Reason: reason, Uncovered: gaps}
+		return KnowledgeAnswer{Verdict: VerdictUnknown, Reason: reason, Gaps: gaps}
 	case len(gaps) > 0:
-		return KnowledgeAnswer{Verdict: VerdictUnknown, Reason: ReasonSymbolIndexMissing, Uncovered: gaps}
+		return KnowledgeAnswer{Verdict: VerdictUnknown, Reason: ReasonSymbolIndexMissing, Gaps: gaps}
 	case matched:
 		return KnowledgeAnswer{Verdict: VerdictFound}
 	default:

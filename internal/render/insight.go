@@ -371,10 +371,10 @@ func uncoveredPhrase(ans types.KnowledgeAnswer) string {
 	case types.ReasonCoverageUnknown:
 		return "magus could not determine which projects it searched"
 	}
-	if len(ans.Uncovered) == 0 {
+	if len(ans.Gaps) == 0 {
 		return "part of the workspace was outside coverage"
 	}
-	return "no symbol index for " + types.DescribeGaps(ans.Uncovered)
+	return "no symbol index for " + types.DescribeGaps(ans.Gaps)
 }
 
 func writeVolatilitySection(b *md.Builder, v types.VolatilityReport) {

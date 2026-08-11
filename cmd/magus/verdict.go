@@ -78,8 +78,8 @@ func printVerdict(w io.Writer, ans types.KnowledgeAnswer, searchHint string) {
 		case types.ReasonCoverageUnknown:
 			fmt.Fprintln(w, "  magus could not determine which projects it searched, so this is not a verified absence")
 		}
-		if len(ans.Uncovered) > 0 {
-			fmt.Fprintf(w, "  outside coverage: %s\n", types.DescribeGaps(ans.Uncovered))
+		if len(ans.Gaps) > 0 {
+			fmt.Fprintf(w, "  outside coverage: %s\n", types.DescribeGaps(ans.Gaps))
 			fmt.Fprintf(w, "  build the missing index with: %s\n", clihint.GraphBuild)
 		}
 	}

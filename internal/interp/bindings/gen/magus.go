@@ -612,11 +612,11 @@ func buzzValueMagusKnowledgeAnswer(v types.KnowledgeAnswer) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("verdict", vm.StrValue(string(v.Verdict)))
 	out.MapSet("reason", vm.StrValue(string(v.Reason)))
-	itemsUncovered := make([]vm.Value, len(v.Uncovered))
-	for indexUncovered := range v.Uncovered {
-		itemsUncovered[indexUncovered] = buzzValueMagusKnowledgeSymbolGap(v.Uncovered[indexUncovered])
+	itemsGaps := make([]vm.Value, len(v.Gaps))
+	for indexGaps := range v.Gaps {
+		itemsGaps[indexGaps] = buzzValueMagusKnowledgeSymbolGap(v.Gaps[indexGaps])
 	}
-	out.MapSet("uncovered", vm.ListValue(itemsUncovered))
+	out.MapSet("gaps", vm.ListValue(itemsGaps))
 	return out
 }
 

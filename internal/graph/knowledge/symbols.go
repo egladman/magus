@@ -51,7 +51,7 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		seenFiles[path] = true
 		var attrs map[string]string
 		if language != "" {
-			attrs = map[string]string{"language": language}
+			attrs = map[string]string{AttrLanguage: language}
 		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{ID: fileID(path), Kind: types.KindFile, Label: path, Source: path, Attrs: attrs})
 		if owner, ok := owningProjectPath(path, projects); ok {
@@ -64,10 +64,10 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		sID := symbolID(sym.Key)
 		attrs := map[string]string{}
 		if sym.Language != "" {
-			attrs["language"] = sym.Language
+			attrs[AttrLanguage] = sym.Language
 		}
 		if sym.SymbolKind != "" {
-			attrs["symbol_kind"] = sym.SymbolKind
+			attrs[AttrSymbolKind] = sym.SymbolKind
 		}
 		if sym.Moniker != "" {
 			attrs["moniker"] = sym.Moniker

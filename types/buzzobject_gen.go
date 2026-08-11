@@ -625,14 +625,14 @@ func (v KnowledgeSymbolGap) BuzzObject() BuzzObject {
 }
 
 func (v KnowledgeAnswer) BuzzObject() BuzzObject {
-	itemsUncovered := make([]any, len(v.Uncovered))
-	for indexUncovered := range v.Uncovered {
-		itemsUncovered[indexUncovered] = v.Uncovered[indexUncovered].BuzzObject()
+	itemsGaps := make([]any, len(v.Gaps))
+	for indexGaps := range v.Gaps {
+		itemsGaps[indexGaps] = v.Gaps[indexGaps].BuzzObject()
 	}
 	return BuzzObject{
-		"verdict":   string(v.Verdict),
-		"reason":    string(v.Reason),
-		"uncovered": itemsUncovered,
+		"verdict": string(v.Verdict),
+		"reason":  string(v.Reason),
+		"gaps":    itemsGaps,
 	}
 }
 

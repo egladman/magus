@@ -67,6 +67,16 @@ func (f fakeGraphResolver) SymbolGaps(context.Context) ([]types.KnowledgeSymbolG
 // which is what the paging tests are about. The verdict tests supply their own.
 func noGaps() ([]types.KnowledgeSymbolGap, bool) { return nil, true }
 
+// verdictFor builds the classifier pagedQuery takes, from the two facts the real caller
+// derives it from.
+func verdictFor(seedsSymbols bool, probe gapProbe) answerFn {
+	var reason types.KnowledgeUnknownReason
+	if !seedsSymbols {
+		reason = types.ReasonSymbolsNotLoaded
+	}
+	return func(matched bool) types.KnowledgeAnswer { return answerFor(matched, reason, probe) }
+}
+
 // TestQueryToolInvokeThroughFake drives queryTool.Invoke through the graphResolver
 // seam: a non-symbol query resolves the warm graph via the fake and returns the
 // matching targets, demonstrating the tool is testable with a hand-built graph.
@@ -138,7 +148,7 @@ func TestQueryHashDiffersByQuery(t *testing.T) {
 // TestPagedQueryUnpaged: no limit and no cursor returns the plain result with no
 // cursor attached (backward compatible).
 func TestPagedQueryUnpaged(t *testing.T) {
-	resp, err := pagedQuery(pagedGraph(5), "kind:target", 50, 0, "", false, noGaps)
+	resp, err := pagedQuery(pagedGraph(5), "kind:target", 50, 0, "", verdictFor(false, noGaps))
 	require.NoError(t, err)
 	assert.Equal(t, 5, resp.MatchCount)
 	assert.Empty(t, resp.NextCursor, "an unpaged query has no next cursor")
@@ -152,7 +162,7 @@ func TestPagedQueryWalksAllPages(t *testing.T) {
 	cursor := ""
 	pages := 0
 	for {
-		resp, err := pagedQuery(g, "kind:target", 50, 2, cursor, false, noGaps)
+		resp, err := pagedQuery(g, "kind:target", 50, 2, cursor, verdictFor(false, noGaps))
 		require.NoError(t, err)
 		assert.Equal(t, 5, resp.MatchCount)
 		seen += len(resp.Matches)
@@ -169,17 +179,17 @@ func TestPagedQueryWalksAllPages(t *testing.T) {
 
 func TestPagedQueryRejectsStaleCursor(t *testing.T) {
 	g := pagedGraph(5)
-	first, err := pagedQuery(g, "kind:target", 50, 2, "", false, noGaps)
+	first, err := pagedQuery(g, "kind:target", 50, 2, "", verdictFor(false, noGaps))
 	require.NoError(t, err)
 	require.NotEmpty(t, first.NextCursor)
 
 	// A cursor from a different query is rejected.
-	_, err = pagedQuery(g, "kind:spell", 50, 2, first.NextCursor, false, noGaps)
+	_, err = pagedQuery(g, "kind:spell", 50, 2, first.NextCursor, verdictFor(false, noGaps))
 	assert.ErrorContains(t, err, "does not match this query")
 
 	// A cursor issued against a since-changed graph is rejected.
 	g.AddNode(types.KnowledgeNode{ID: "target:pkg/a:zzz", Kind: types.KindTarget, Label: "zzz"})
-	_, err = pagedQuery(g, "kind:target", 50, 2, first.NextCursor, false, noGaps)
+	_, err = pagedQuery(g, "kind:target", 50, 2, first.NextCursor, verdictFor(false, noGaps))
 	assert.ErrorContains(t, err, "graph changed")
 }
 
@@ -227,11 +237,14 @@ func TestPagedRefsRejectsStaleCursor(t *testing.T) {
 	assert.ErrorContains(t, err, "graph changed")
 }
 
-func TestPagedRefsNoSuchSymbol(t *testing.T) {
-	// A graph that HAS symbols and every declared index readable: the name is genuinely
-	// wrong, and an error saying so is the right answer.
-	_, err := pagedRefs(refsGraph(1), "symbol:nope Missing#", 0, "", noGaps)
-	assert.ErrorContains(t, err, "no symbol matches")
+// Every verdict comes back as a result, never an error: an agent told to read
+// answer.verdict cannot read it off an error string, and leaving one of the three
+// reachable only by pattern-matching prose is what the field exists to end.
+func TestPagedRefsNoSuchSymbolIsAbsentResult(t *testing.T) {
+	resp, err := pagedRefs(refsGraph(1), "symbol:nope Missing#", 0, "", noGaps)
+	require.NoError(t, err)
+	assert.Equal(t, types.VerdictAbsent, resp.Answer.Verdict)
+	assert.Equal(t, "symbol:nope Missing#", resp.Symbol)
 }
 
 // A project that declares an index magus could not read means nothing could have matched
@@ -251,12 +264,13 @@ func TestPagedRefsNoIndexBuiltIsUnknownResult(t *testing.T) {
 }
 
 // A workspace that declares no symbol index at all has no code-symbol layer to miss, so
-// an unmatched name there is a verified absence and stays an error.
+// an unmatched name there is a verified absence.
 func TestPagedRefsNoDeclaredIndexIsAbsent(t *testing.T) {
 	g := knowledge.NewGraph()
 	g.AddNode(types.KnowledgeNode{ID: "project:pkg/a", Kind: types.KindProject, Label: "pkg/a"})
-	_, err := pagedRefs(g, "Foo", 0, "", noGaps)
-	assert.ErrorContains(t, err, "no symbol matches")
+	resp, err := pagedRefs(g, "Foo", 0, "", noGaps)
+	require.NoError(t, err)
+	assert.Equal(t, types.VerdictAbsent, resp.Answer.Verdict)
 }
 
 // Symbols WERE loaded, but a project's index could not be read, so a definition there is
@@ -270,7 +284,7 @@ func TestPagedRefsCoverageGapIsUnknownResult(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, types.VerdictUnknown, resp.Answer.Verdict)
 	assert.Equal(t, types.ReasonSymbolIndexMissing, resp.Answer.Reason)
-	assert.Equal(t, gaps, resp.Answer.Uncovered)
+	assert.Equal(t, gaps, resp.Answer.Gaps)
 }
 
 // A resolved symbol with referencing files is found, and the verdict must survive paging
@@ -293,14 +307,14 @@ func TestPagedRefsVerdictSurvivesPaging(t *testing.T) {
 // Zero matches on a query that never seeded symbols says nothing about whether a code
 // symbol by that name exists, and the output has to say so.
 func TestPagedQueryVerdictOnZeroMatches(t *testing.T) {
-	resp, err := pagedQuery(pagedGraph(3), "kind:target nothingmatchesthis", 50, 0, "", false, noGaps)
+	resp, err := pagedQuery(pagedGraph(3), "kind:target nothingmatchesthis", 50, 0, "", verdictFor(false, noGaps))
 	require.NoError(t, err)
 	require.Zero(t, resp.MatchCount)
 	assert.Equal(t, types.VerdictUnknown, resp.Answer.Verdict)
 	assert.Equal(t, types.ReasonSymbolsNotLoaded, resp.Answer.Reason)
 
 	// The same query with symbols loaded and full coverage is a verified absence.
-	resp, err = pagedQuery(pagedGraph(3), "kind:target nothingmatchesthis", 50, 0, "", true, noGaps)
+	resp, err = pagedQuery(pagedGraph(3), "kind:target nothingmatchesthis", 50, 0, "", verdictFor(true, noGaps))
 	require.NoError(t, err)
 	assert.Equal(t, types.VerdictAbsent, resp.Answer.Verdict)
 }

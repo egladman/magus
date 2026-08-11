@@ -80,8 +80,8 @@ func MissText(query string, ans types.KnowledgeAnswer) string {
 	if ans.Reason == types.ReasonCoverageUnknown {
 		b.WriteString("magus could not determine which projects it searched, so this is not a verified absence.\n")
 	}
-	if len(ans.Uncovered) > 0 {
-		fmt.Fprintf(&b, "outside coverage: %s\n", types.DescribeGaps(ans.Uncovered))
+	if len(ans.Gaps) > 0 {
+		fmt.Fprintf(&b, "outside coverage: %s\n", types.DescribeGaps(ans.Gaps))
 		fmt.Fprintf(&b, "build the missing index from a shell with `%s`.\n", clihint.GraphBuild)
 	}
 	return b.String()

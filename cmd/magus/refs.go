@@ -66,7 +66,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		ans := types.Answer(false, reason, gaps)
 		fmt.Fprintf(os.Stderr, "magus refs: no node matches %q\n", pos[0])
 		printVerdict(os.Stderr, ans, "")
-		if len(ans.Uncovered) > 0 {
+		if len(ans.Gaps) > 0 {
 			fmt.Fprintf(os.Stderr, "  the daemon's auto-indexer also keeps indexes current while `%s` runs\n", clihint.ServerStart)
 		}
 		return exitForVerdict(ans.Verdict)
@@ -104,6 +104,13 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	if len(out.Refs) == 0 {
 		fmt.Println("no references found")
 		printVerdict(os.Stdout, out.Answer, "")
+		// "nothing uses this" is a NEGATIVE claim, so it follows the verdict the same way
+		// an unresolved name does: exit 1 when magus could not verify it. Absent stays 0
+		// here, unlike the unresolved branch above - the symbol resolved and its empty
+		// reference list is a real, verified answer, not a request magus could not carry out.
+		if out.Answer.Verdict == types.VerdictUnknown {
+			return errSilent{exitCode: 1}
+		}
 		return nil
 	}
 	fmt.Printf("referenced in %d file(s), %d occurrence(s):\n", out.FileCount, out.RefCount)

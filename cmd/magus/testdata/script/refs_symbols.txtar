@@ -19,6 +19,9 @@
 stderr 'magus refs: no node matches "Foo"'
 stderr 'verdict: absent \(magus searched everything it could reach, so this is not there\)'
 
+# Exit 2, not 1: the name named nothing and magus verified that, so the request cannot be
+# carried out as stated. An unknown verdict would be exit 1 instead.
+
 # An absent verdict must NOT suggest building an index. Nothing is missing, so
 # the remedy would send the reader somewhere with nothing to fix.
 ! stderr 'graph build'

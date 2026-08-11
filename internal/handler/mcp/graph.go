@@ -29,6 +29,11 @@ type graphResolver interface {
 	SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool)
 }
 
+// answerFn classifies a result once its match count is known. The tools pass one rather
+// than the two values it is built from, because those two only ever travel together and
+// only ever feed this.
+type answerFn func(matched bool) types.KnowledgeAnswer
+
 // gapProbe defers the coverage lookup to the branch that needs it. It stats one file per
 // declared index, and only an answer that reports nothing has anything to explain, so the
 // tools pass a thunk rather than paying for it on every call. It also keeps
@@ -86,7 +91,14 @@ func (t *queryTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spell
 	if err != nil {
 		return spells.InvokeResponse{}, err
 	}
-	resp, err := pagedQuery(g, terms, budget, limit, cursor, seedsSymbols, func() ([]types.KnowledgeSymbolGap, bool) { return t.graph.SymbolGaps(ctx) })
+	probe := func() ([]types.KnowledgeSymbolGap, bool) { return t.graph.SymbolGaps(ctx) }
+	var reason types.KnowledgeUnknownReason
+	if !seedsSymbols {
+		reason = types.ReasonSymbolsNotLoaded
+	}
+	resp, err := pagedQuery(g, terms, budget, limit, cursor, func(matched bool) types.KnowledgeAnswer {
+		return answerFor(matched, reason, probe)
+	})
 	if err != nil {
 		return spells.InvokeResponse{}, err
 	}
@@ -131,21 +143,17 @@ func pagedRefs(g *knowledge.Graph, symbol string, limit int, cursor string, prob
 	if !ok {
 		// refs always resolves against a symbol-merged graph, so the question is never
 		// whether symbols were loaded, only whether every declared index was readable.
-		ans := answerFor(false, "", probe)
-		// An unknown verdict is a RESULT, not an error: the tool succeeded at working out
-		// that it cannot answer, and that conclusion has to be machine-branchable. An
-		// error string is not - an agent would have to pattern-match prose to tell "this
-		// name does not exist" from "I could not look". Absent stays an error, where the
-		// existing hint already tells the agent to relocate the symbol.
-		if ans.Verdict == types.VerdictUnknown {
-			return paginatedRefs{KnowledgeRefsOutput: types.KnowledgeRefsOutput{
-				Definition:    types.KnowledgeRefsDefinition,
-				SchemaVersion: types.KnowledgeSchemaVersion,
-				Symbol:        symbol,
-				Answer:        ans,
-			}}, nil
-		}
-		return paginatedRefs{}, errors.New("mcp: no symbol matches " + symbol)
+		// Both verdicts come back as a RESULT, never an error. The tool succeeded at
+		// working out what it could say, and that conclusion has to be machine-branchable:
+		// an agent told to read answer.verdict cannot read it off an error string, and
+		// returning absent out-of-band would leave one of the three verdicts reachable
+		// only by pattern-matching prose.
+		return paginatedRefs{KnowledgeRefsOutput: types.KnowledgeRefsOutput{
+			Definition:    types.KnowledgeRefsDefinition,
+			SchemaVersion: types.KnowledgeSchemaVersion,
+			Symbol:        symbol,
+			Answer:        answerFor(false, "", probe),
+		}}, nil
 	}
 	out.Answer = answerFor(len(out.Refs) > 0, "", probe)
 	if limit <= 0 && cursor == "" {
@@ -191,15 +199,11 @@ func pagedRefs(g *knowledge.Graph, symbol string, limit int, cursor string, prob
 // matches remain. Split from Invoke so it is testable with a hand-built graph. The
 // unpaged result is wrapped too (with an empty, omitted NextCursor) so the return
 // type is always concrete.
-func pagedQuery(g *knowledge.Graph, terms string, budget, limit int, cursor string, seedsSymbols bool, probe gapProbe) (paginatedQuery, error) {
+func pagedQuery(g *knowledge.Graph, terms string, budget, limit int, cursor string, verdict answerFn) (paginatedQuery, error) {
 	// The verdict is computed from the UNPAGED match count and copied onto every page, so
 	// an agent reading page three sees the same coverage statement as page one.
 	answer := func(out types.KnowledgeQueryOutput) types.KnowledgeQueryOutput {
-		var reason types.KnowledgeUnknownReason
-		if !seedsSymbols {
-			reason = types.ReasonSymbolsNotLoaded
-		}
-		out.Answer = answerFor(out.MatchCount > 0, reason, probe)
+		out.Answer = verdict(out.MatchCount > 0)
 		return out
 	}
 	if limit <= 0 && cursor == "" {

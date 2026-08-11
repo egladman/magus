@@ -25,7 +25,7 @@ import (
 // symbol used thousands of times in one file keeps a bounded provenance list.
 const MaxRefLines = 20
 
-// callableSuffix reports whether a SCIP descriptor suffix names something that can be
+// isCallableSuffix reports whether a SCIP descriptor suffix names something that can be
 // invoked. An indexer's enclosing range spans a whole declaration, signature included, so
 // the occurrences inside it are every symbol the definition mentions - not just the ones
 // it calls. Measured over this repo's own index, only 26.4% of the in-workspace
@@ -40,13 +40,13 @@ const MaxRefLines = 20
 // UnspecifiedKind on all 9137 of this workspace's console symbols, while its monikers carry
 // 8440 Method descriptors. Reading the grammar keeps the rule language-neutral and
 // independent of what any one indexer chooses to populate.
-func callableSuffix(suffix scip.Descriptor_Suffix) bool {
+func isCallableSuffix(suffix scip.Descriptor_Suffix) bool {
 	// Macro counts because a macro invocation is a call in the languages that have them
 	// (Rust macro_rules!, C #define); Type, Term, Namespace, Parameter, and Meta do not.
 	return suffix == scip.Descriptor_Method || suffix == scip.Descriptor_Macro
 }
 
-// enclosing is one definition's body span and the symbol key it attributes occurrences to.
+// enclosingDef is one definition's body span and the symbol key it attributes occurrences to.
 //
 // optimization: maxEnd is the greatest End among this entry and every earlier one, filled
 // as a running prefix maximum after the sort. It bounds the backward walk in enclosingKey:
@@ -55,7 +55,7 @@ func callableSuffix(suffix scip.Descriptor_Suffix) bool {
 // O(occurrences x definitions). Most occurrences are that case, so the guard is what keeps
 // attribution proportional to nesting depth rather than to document size.
 // measured: BenchmarkParseIndex/enclosing=on funcsPerDoc 8 -> 512 (benchstat, n=10).
-type enclosing struct {
+type enclosingDef struct {
 	rng    scip.Range
 	maxEnd scip.Position
 	key    string
@@ -72,10 +72,10 @@ type enclosing struct {
 // occurrenceLine returns. A line-granular test is wrong wherever a body starts or ends on
 // a line it shares with another - impossible for a Go top-level func, routine for a
 // one-line TypeScript arrow function.
-func enclosingKey(encl []enclosing, pos scip.Position) (string, bool) {
+func enclosingKey(encl []enclosingDef, pos scip.Position) (string, bool) {
 	// The first entry starting strictly after pos bounds the candidates: everything that
 	// could contain pos begins at or before it.
-	i, _ := slices.BinarySearchFunc(encl, pos, func(e enclosing, p scip.Position) int {
+	i, _ := slices.BinarySearchFunc(encl, pos, func(e enclosingDef, p scip.Position) int {
 		if e.rng.Start.Compare(p) <= 0 {
 			return -1
 		}
@@ -89,11 +89,15 @@ func enclosingKey(encl []enclosing, pos scip.Position) (string, bool) {
 	return "", false
 }
 
-// buildEnclosing collects the definition occurrences in one document that carry an
-// enclosing range, into dst (reused across documents so the whole parse costs one
-// amortized allocation rather than one per document).
-func buildEnclosing(dst []enclosing, doc *scip.Document) []enclosing {
-	dst = dst[:0]
+// sortedEnclosing collects the definition occurrences in one document that carry an
+// enclosing range, sorted and prefix-maxed into the exact shape enclosingKey requires.
+// The name states that invariant because enclosingKey depends on it silently and would
+// return wrong answers, not errors, without it.
+//
+// buf is reused across documents (truncated, not appended to) so the whole parse costs
+// one amortized allocation rather than one per document.
+func sortedEnclosing(buf []enclosingDef, doc *scip.Document) []enclosingDef {
+	dst := buf[:0]
 	for _, occ := range doc.Occurrences {
 		if occ.SymbolRoles&int32(scip.SymbolRole_Definition) == 0 {
 			continue
@@ -111,9 +115,9 @@ func buildEnclosing(dst []enclosing, doc *scip.Document) []enclosing {
 		if !ok {
 			continue
 		}
-		dst = append(dst, enclosing{rng: r, key: info.Key})
+		dst = append(dst, enclosingDef{rng: r, key: info.Key})
 	}
-	slices.SortFunc(dst, func(a, b enclosing) int {
+	slices.SortFunc(dst, func(a, b enclosingDef) int {
 		if c := a.rng.Start.Compare(b.rng.Start); c != 0 {
 			return c
 		}
@@ -139,7 +143,7 @@ func buildEnclosing(dst []enclosing, doc *scip.Document) []enclosing {
 // Calls are attributed the same way, from the same occurrences: a reference that falls
 // inside a definition's enclosing range was written in that definition's body, so the
 // enclosing symbol is the caller. Collapsed per (caller, callee), restricted to callees
-// the workspace defines and that are callable at all (see callableSuffix). An indexer that
+// the workspace defines and that are callable at all (see isCallableSuffix). An indexer that
 // emits no enclosing ranges yields no calls, which is the honest result - nothing here
 // reconstructs a call from source text.
 //
@@ -186,8 +190,15 @@ func ParseIndex(ctx context.Context, data []byte, projectPath, declaredLanguage 
 	// rather than on acc because a callee can be seen before the enclosing definition's
 	// own occurrence has created that accumulator; folding it in at output time makes the
 	// result independent of occurrence order within a document.
+	//
+	// It therefore buffers callees the workspace does not define, which sortedCalls drops
+	// at output. Filtering earlier is not possible - a callee's own definition may appear
+	// in a later document - and measured on this repo's index the buffering is 34728 pairs
+	// held to keep 12909, roughly 1-2 MB against a parse that already allocates 14 MB. A
+	// two-pass restructure would halve that and double the document walk; the numbers do
+	// not justify it.
 	calls := map[string]map[string]int{}
-	var encl []enclosing
+	var encl []enclosingDef
 
 	for _, doc := range idx.Documents {
 		// Rebase the indexer-relative document path onto the workspace once per document.
@@ -206,7 +217,7 @@ func ParseIndex(ctx context.Context, data []byte, projectPath, declaredLanguage 
 		if docLanguage == "" {
 			docLanguage = strings.ToLower(strings.TrimSpace(declaredLanguage))
 		}
-		encl = buildEnclosing(encl, doc)
+		encl = sortedEnclosing(encl, doc)
 		for _, occ := range doc.Occurrences {
 			moniker := occ.Symbol
 			if moniker == "" || scip.IsLocalSymbol(moniker) {
@@ -255,19 +266,20 @@ func ParseIndex(ctx context.Context, data []byte, projectPath, declaredLanguage 
 		}
 	}
 
-	// A callee outside the workspace gets no call edge. It has no definition to navigate
-	// to, its usage is already recorded by the referencing file's `references` edge, and
-	// including it would make the hottest stdlib helpers the graph's top god nodes.
-	inWorkspace := func(key string) bool {
-		a := byKey[key]
-		return a != nil && len(a.defs) > 0
+	// The set of keys this workspace defines, resolved once: a callee's own definition
+	// may sit in any document, so membership is only knowable after the whole walk.
+	defined := make(map[string]bool, len(byKey))
+	for k, a := range byKey {
+		if len(a.defs) > 0 {
+			defined[k] = true
+		}
 	}
 
 	out := make([]types.KnowledgeSymbol, 0, len(byKey))
 	for _, a := range byKey {
 		a.sym.Defs = sortedKeys(a.defs)
 		a.sym.Refs = sortedRefs(a.refs)
-		a.sym.Calls = sortedCalls(calls[a.sym.Key], inWorkspace)
+		a.sym.Calls = sortedCalls(calls[a.sym.Key], defined)
 		out = append(out, a.sym)
 	}
 	// byKey iteration is unordered; the sort is what makes the output deterministic.
@@ -362,7 +374,7 @@ func parseMoniker(moniker string) (info monikerInfo, ok bool) {
 	info.Key = strings.TrimSpace(pkg + " " + desc)
 	if n := len(sym.Descriptors); n > 0 {
 		info.Label = sym.Descriptors[n-1].Name
-		info.Callable = callableSuffix(sym.Descriptors[n-1].Suffix)
+		info.Callable = isCallableSuffix(sym.Descriptors[n-1].Suffix)
 	}
 	return info, true
 }
@@ -395,7 +407,7 @@ func sortedKeys(m map[string]bool) []string {
 // body encloses it, when the callee is something that can be called. Occurrences outside
 // every body (a package-level declaration, an import) and self-references (recursion,
 // which would mint a source==target edge) are dropped.
-func attributeCall(calls map[string]map[string]int, encl []enclosing, occ *scip.Occurrence, calleeKey string, callable bool) {
+func attributeCall(calls map[string]map[string]int, encl []enclosingDef, occ *scip.Occurrence, calleeKey string, callable bool) {
 	if len(encl) == 0 || !callable {
 		return
 	}
@@ -416,15 +428,19 @@ func attributeCall(calls map[string]map[string]int, encl []enclosing, occ *scip.
 }
 
 // sortedCalls turns one caller's tallied callees into a deterministic slice, dropping any
-// callee the workspace does not define. Sorted by key, like sortedRefs, so a shard's bytes
-// do not churn on map iteration order.
-func sortedCalls(m map[string]int, inWorkspace func(string) bool) []types.KnowledgeSymbolCall {
+// callee not in defined. Sorted by key, like sortedRefs, so a shard's bytes do not churn
+// on map iteration order.
+//
+// A callee outside the workspace gets no call edge: it has no definition to navigate to,
+// its usage is already recorded by the referencing file's `references` edge, and including
+// it would make the hottest stdlib helpers the graph's top god nodes.
+func sortedCalls(m map[string]int, defined map[string]bool) []types.KnowledgeSymbolCall {
 	if len(m) == 0 {
 		return nil
 	}
 	out := make([]types.KnowledgeSymbolCall, 0, len(m))
 	for k, n := range m {
-		if !inWorkspace(k) {
+		if !defined[k] {
 			continue
 		}
 		out = append(out, types.KnowledgeSymbolCall{Key: k, Count: n})

@@ -469,10 +469,10 @@ func (m *Magus) SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, boo
 //
 // language is carried because an indexer may not report one. SCIP makes Document.Language
 // optional and scip-typescript sets it on nothing, so trusting the index alone leaves
-// every TypeScript symbol unlabelled and `magus query language:typescript` empty. The
-// spell's declared language is what magus already used to decide the project was
-// symbol-capable at all, so it is both authoritative and free. Empty for a
-// knowledge.symbols override, which names a path rather than a spell.
+// every TypeScript symbol unlabelled and `magus query language:typescript` empty. It comes
+// from the project's spells, which is authoritative and free - and it is resolved for a
+// knowledge.symbols override too, since such a project is still bound to spells even
+// though the override names a path rather than one.
 type resolvedSymbolIndex struct {
 	project  string
 	path     string
@@ -500,11 +500,39 @@ type symbolIngestInputs struct {
 // workspace-relative path in the tree for a project whose indexer writes somewhere
 // non-standard. The result is sorted by project for deterministic ingestion.
 func symbolIndexDeclarations(ctx context.Context, in symbolIngestInputs) []resolvedSymbolIndex {
-	capable := map[string]string{}
+	capable := map[string]bool{}
+	langBySpell := map[string]string{}
 	for _, sp := range in.spells {
+		langBySpell[sp.Name] = sp.Language
 		if slices.Contains(sp.Targets, symbols.IndexOp) {
-			capable[sp.Name] = sp.Language
+			capable[sp.Name] = true
 		}
+	}
+	// The language a project's symbols are written in, resolved from its spells rather
+	// than from the index: SCIP makes Document.Language optional and scip-typescript sets
+	// it on nothing. Prefer the symbol-capable spell, but fall back to any bound spell so
+	// a knowledge.symbols OVERRIDE - which names a path, not a spell, and so never reaches
+	// the capable branch below - still labels its symbols.
+	languageOf := func(p types.ProjectEntry) string {
+		bound := p.Spells
+		if len(bound) == 0 && p.Spell != "" {
+			bound = []string{p.Spell}
+		}
+		for _, name := range bound {
+			if capable[name] {
+				return langBySpell[name]
+			}
+		}
+		for _, name := range bound {
+			if lang := langBySpell[name]; lang != "" {
+				return lang
+			}
+		}
+		return ""
+	}
+	languageByProject := map[string]string{}
+	for _, p := range in.projects.Projects {
+		languageByProject[p.Path] = languageOf(p)
 	}
 
 	byProject := map[string]resolvedSymbolIndex{}
@@ -514,14 +542,13 @@ func symbolIndexDeclarations(ctx context.Context, in symbolIngestInputs) []resol
 			bound = []string{p.Spell}
 		}
 		for _, name := range bound {
-			language, ok := capable[name]
-			if !ok {
+			if !capable[name] {
 				continue
 			}
 			// One index per project: the cache location is keyed by the project dir, so
 			// the first symbol-capable spell wins and the rest would name the same file.
 			absDir := filepath.Join(in.root, filepath.FromSlash(p.Path))
-			byProject[p.Path] = resolvedSymbolIndex{project: p.Path, path: symbols.IndexPath(in.cacheDir, absDir), language: language}
+			byProject[p.Path] = resolvedSymbolIndex{project: p.Path, path: symbols.IndexPath(in.cacheDir, absDir), language: languageByProject[p.Path]}
 			break
 		}
 	}
@@ -535,7 +562,7 @@ func symbolIndexDeclarations(ctx context.Context, in symbolIngestInputs) []resol
 			in.log.WarnContext(ctx, "knowledge: symbol index path escapes the workspace, skipping", slog.String("project", decl.Project), slog.String("index", decl.Index))
 			continue
 		}
-		byProject[decl.Project] = resolvedSymbolIndex{project: decl.Project, path: filepath.Join(in.root, decl.Index)}
+		byProject[decl.Project] = resolvedSymbolIndex{project: decl.Project, path: filepath.Join(in.root, decl.Index), language: languageByProject[decl.Project]}
 	}
 
 	out := make([]resolvedSymbolIndex, 0, len(byProject))
