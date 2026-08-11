@@ -1047,3 +1047,35 @@ func TestConformance_GAP_ArrowLambda(t *testing.T) {
 	s := conf(t, `final double = fun (n: int) > int => n * 2; final r = double(21);`)
 	assert.Equal(t, int64(42), s.GetGlobal("r").AsInt())
 }
+
+// TestExternObjectMethod covers `extern fun` inside an object: a method the HOST
+// binds, declared with a semicolon where a body would be.
+//
+// It exists because Buzz has no nested namespace - `NamespaceStmt` carries a single
+// name - so a group of related host functions reached as `magus\cache.remote(...)`
+// is not a sub-module. It is an OBJECT held by the module, exactly as upstream's
+// `io\File.open(...)` is, and its members are static methods. Without extern here
+// the only way to declare one was to give it a body that never runs, which states
+// something false in a file whose entire purpose is to state signatures.
+//
+// The payoff is the last case: an object reports an unknown member, where a
+// namespace could not. A typo in `magus\cache.remote` used to type-check and reach
+// the VM as null.
+func TestExternObjectMethod(t *testing.T) {
+	const decl = `export object cache {
+    static extern fun remote(spell: any) > void;
+}
+`
+	checkOK(t, decl+`fun main() > void { cache.remote(null); }`)
+	checkErr(t, decl+`fun main() > void { cache.nosuch(null); }`, `has no field or method "nosuch"`)
+
+	// The signature is real, not a formality: arity is enforced like any other call.
+	checkErr(t, decl+`fun main() > void { cache.remote(); }`, "argument")
+
+	// An extern INSTANCE method (no `static`) is accepted too - the modifier is
+	// orthogonal to where the implementation comes from.
+	checkOK(t, `export object handle {
+    extern fun close() > void;
+}
+`)
+}

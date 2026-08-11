@@ -1636,6 +1636,22 @@ func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 		if p.check(token.Mut) && p.peekAt(1).Kind == token.Fun {
 			p.advance()
 		}
+		// `extern fun` inside an object declares a method the HOST binds, with a
+		// semicolon where a body would be - the same form and meaning top-level
+		// `extern fun` already has. It is what lets a namespace the runtime assembles
+		// (`magus\\cache.remote(...)`) be DECLARED: Buzz has no nested namespace, so
+		// such a group is an object reached through the module, and without this its
+		// methods could only be declared by giving them a fake body that never runs.
+		if p.check(token.Ident) && p.peek().Val == "extern" && p.peekAt(1).Kind == token.Fun {
+			method, err := p.parseExternFunDecl()
+			if err != nil {
+				return nil, err
+			}
+			method.IsStatic = isStatic
+			decl.Methods = append(decl.Methods, method)
+			p.optSemicolon()
+			continue
+		}
 		if p.check(token.Fun) {
 			method, err := p.parseFunDecl()
 			if err != nil {

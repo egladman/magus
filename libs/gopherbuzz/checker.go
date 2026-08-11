@@ -657,6 +657,12 @@ func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
 		// exists by now, and call sites read ot.Methods, not this local.
 		ft := c.funDeclType(m)
 		ot.Methods[m.Name] = ft
+		// An extern method IS the signature and nothing else, exactly as a top-level
+		// extern is: recording ft above was the whole point, and there is no body to
+		// descend into.
+		if m.IsExtern {
+			continue
+		}
 		savedRet := c.retTyp
 		savedRaise := c.raiseDeclared
 		c.retTyp = ft.Ret

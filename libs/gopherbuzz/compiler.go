@@ -1550,6 +1550,13 @@ func (c *compiler) compileObjectDecl(v *ast.ObjectDecl) error {
 		thisFields[f.Name] = int32(i)
 	}
 	for _, m := range v.Methods {
+		// An extern method emits NOTHING, for the same reason a top-level extern does:
+		// it declares a signature the checker consumes, and the implementation is
+		// whatever the host already bound onto this object at run time. Emitting a
+		// closure would shadow that native member with an empty one.
+		if m.IsExtern {
+			continue
+		}
 		// A static method has no receiver, so it compiles without this-field access.
 		tf := thisFields
 		if m.IsStatic {
