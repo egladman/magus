@@ -38,7 +38,7 @@ export fun added(diff: str) > [str] {
 // Editing a target's body rewrites its `export fun` line, so the diff calls it added -
 // which is how a comment about NEW targets listed `preflight`, a target older than the
 // pull request. The base tree is the only thing that settles it.
-fun existed(name: str, base: str) > bool {
+fun existed(name: str, base: str) > bool !> any {
     final res = proc\exec("git", args: ["grep", "-q", "export fun " + name + "(",
         "origin/" + base, "--", "*.buzz"], dir: ".", opts: {"allow_failure": true});
     return res.ok;
@@ -56,7 +56,7 @@ fun body(targets: [str]) > str {
         + "gates have no outputs. See [Cache model](https://eli.gladman.cc/magus/concepts/cache/).\n";
 }
 
-fun main() > void {
+fun main() > void !> any {
     final repo = advice\env("REPO");
     final pr = advice\env("PR_NUMBER");
     final base = advice\env("PR_BASE");
@@ -110,7 +110,11 @@ fun main() > void {
     std\print("target-outputs: advised on " + bare.join(", "));
 }
 
-main();
+try {
+    main();
+} catch (e) {
+    throw e;
+}
 
 test "added reads new target names out of a diff" {
     final diff = "+export fun release(ctx: magus\\Context, args: [str]) > void\n"

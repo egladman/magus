@@ -27,7 +27,7 @@ import "std";
 
 final section = "blast-radius";
 
-fun changed(base: str, head: str) > [str] {
+fun changed(base: str, head: str) > [str] !> any {
     proc\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
     final res = proc\exec("git", args: ["diff", "--name-only", "origin/" + base + "..." + head],
         dir: ".", opts: {"allow_failure": true});
@@ -75,7 +75,7 @@ fun body(projects: [str], reasons: [str], total: int, diagram: str) > str {
         + "`magus path <a> <b>` shows how any two connect.\n";
 }
 
-fun main() > void {
+fun main() > void !> any {
     final repo = advice\env("REPO");
     final pr = advice\env("PR_NUMBER");
     final base = advice\env("PR_BASE");
@@ -138,7 +138,11 @@ fun main() > void {
     std\print("blast-radius: advised on {reached.len()} of {total}");
 }
 
-main();
+try {
+    main();
+} catch (e) {
+    throw e;
+}
 
 test "trips fires when the reach is at or over the share" {
     std\assert(trips(5, total: 10, share: 0.5), message: "half the workspace");

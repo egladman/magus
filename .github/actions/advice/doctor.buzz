@@ -32,7 +32,7 @@ export fun summarize(fails: [str], advisories: [str]) > str {
     return text + "\nRun `magus doctor` locally for the detail behind each one.\n";
 }
 
-fun main() > void {
+fun main() > void !> any {
     final repo = advice\env("REPO");
     final pr = advice\env("PR_NUMBER");
     if (repo == "" or pr == "") {
@@ -61,7 +61,11 @@ fun main() > void {
     std\print("doctor: advised on {fails.len()} failure(s), {advisories.len()} advisory");
 }
 
-main();
+try {
+    main();
+} catch (e) {
+    throw e;
+}
 
 test "summarize separates failures from advice" {
     final body = summarize(["`sockets` - no daemon"], advisories: ["`naming` - bespoke name"]);

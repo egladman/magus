@@ -40,7 +40,7 @@ fun body(floor: str) > str {
         + "```sh\nmagus self update\n```\n";
 }
 
-fun main() > void {
+fun main() > void !> any {
     final repo = advice\env("REPO");
     final pr = advice\env("PR_NUMBER");
     final base = advice\env("PR_BASE");
@@ -74,7 +74,11 @@ fun main() > void {
     std\print("version-floor: advised on " + floor);
 }
 
-main();
+try {
+    main();
+} catch (e) {
+    throw e;
+}
 
 test "raised reads a newly set floor" {
     std\assert(raised("+required_version: \">= 0.4.0\"\n") == ">= 0.4.0", message: "unquoted value");

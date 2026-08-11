@@ -39,7 +39,7 @@ fun body(entries: [str]) > str {
         + "make sure it is the reason you meant.\n";
 }
 
-fun main() > void {
+fun main() > void !> any {
     final repo = advice\env("REPO");
     final pr = advice\env("PR_NUMBER");
     final base = advice\env("PR_BASE");
@@ -72,7 +72,11 @@ fun main() > void {
     std\print("skip-cache: advised on {entries.len()} declaration(s)");
 }
 
-main();
+try {
+    main();
+} catch (e) {
+    throw e;
+}
 
 test "optedOut keeps added skip_cache lines with their reason" {
     // A raw string: the fixture is a magusfile fragment full of braces, and a plain
