@@ -115,6 +115,7 @@ type Server struct {
 	// intermittently, because it needs a stop to land while accept is mid-flight.
 	mu       sync.Mutex
 	listener net.Listener
+	closing  bool // set under mu once Close begins; gates connWg.Add (see trackConn)
 	cancel   context.CancelFunc
 	once     sync.Once
 	connWg   sync.WaitGroup // tracks in-flight handleConn goroutines
@@ -135,13 +136,37 @@ func (s *Server) currentListener() net.Listener {
 	return s.listener
 }
 
-// takeListener returns the listener and clears it, so only the first caller closes it.
-func (s *Server) takeListener() net.Listener {
+// beginShutdown marks the server closing and returns the listener, clearing it so
+// only the first caller closes it. Both happen under one acquisition of mu because
+// they are one transition: publishing closing is what stops trackConn registering
+// another connection, and that is what makes Close's connWg.Wait safe.
+func (s *Server) beginShutdown() net.Listener {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.closing = true
 	ln := s.listener
 	s.listener = nil
 	return ln
+}
+
+// trackConn registers an accepted connection with connWg, reporting whether the
+// caller may hand it to a handler. A false means shutdown has begun and the
+// connection must be closed instead.
+//
+// sync.WaitGroup forbids a positive Add that starts once Wait is under way, and
+// that pair is reachable here rather than theoretical: Accept can return a
+// connection accepted moments before Close shut the listener, so Add(1) lands
+// while Close is already inside connWg.Wait. The detector caught it about one run
+// in eight of TestShutdownRPC. Gating Add on the same mu that publishes closing
+// makes the two mutually exclusive.
+func (s *Server) trackConn() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closing {
+		return false
+	}
+	s.connWg.Add(1)
+	return true
 }
 
 // Addr returns the canonical unix:// URL that children dial. Valid after New.
@@ -162,7 +187,7 @@ func (s *Server) Close() {
 		if s.cancel != nil {
 			s.cancel()
 		}
-		if ln := s.takeListener(); ln != nil {
+		if ln := s.beginShutdown(); ln != nil {
 			_ = ln.Close()
 		}
 		_ = os.Remove(s.ep.Addr)
@@ -291,7 +316,14 @@ func serve(srv *Server, svc *service) {
 		if err != nil {
 			return // listener was closed
 		}
-		srv.connWg.Add(1)
+		if !srv.trackConn() {
+			// Close is already waiting on connWg; registering now would be the
+			// Add-during-Wait the WaitGroup contract forbids. Drop the connection
+			// instead - the client sees the same closed socket it would have seen
+			// had Accept lost the race by a microsecond.
+			_ = conn.Close()
+			return
+		}
 		go handleConn(svc, conn, &srv.connWg)
 	}
 }
