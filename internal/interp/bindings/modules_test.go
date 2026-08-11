@@ -1227,8 +1227,8 @@ export fun check(ctx: magus\Context, args: [str]) > void !> any {
     if (rc != 0) {
         throw "proc.shell('true') exited {rc}";
     }
-    var bad = proc.shell("false");
-    var rc2 = proc.exec(bad.bin, bad.args, "", {"allow_failure": true}).code;
+    final bad = proc.shell("false");
+    final rc2 = proc.exec(bad.bin, bad.args, "", {"allow_failure": true}).code;
     if (rc2 == 0) {
         throw "proc.shell('false') exited 0, expected non-zero";
     }

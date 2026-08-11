@@ -23,7 +23,7 @@ func TestHeapProfileAcrossManyPrograms(t *testing.T) {
 fun work() > str {
     var parts = mut [<str>];
     foreach (j in 0..50) { parts.append("row %d " + "{j}"); }
-    final m = {"a": parts.len(), "b": %d};
+    final _m = {"a": parts.len(), "b": %d};
     return parts.join(",");
 }
 work();

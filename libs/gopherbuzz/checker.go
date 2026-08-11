@@ -42,6 +42,10 @@ type scopeEntry struct {
 	// reports. Both stay false for a parameter, a global, or a final.
 	varDecl  bool
 	assigned bool
+	// declaredLocal marks a local (or parameter) whose USE should be tracked, and
+	// read records whether anything ever evaluated it.
+	declaredLocal bool
+	read          bool
 	pos      ast.Pos
 	name     string
 }
@@ -142,6 +146,7 @@ func (c *checker) registerBuiltins() {
 func (c *checker) pushScope() { c.scopes = append(c.scopes, map[string]scopeEntry{}) }
 func (c *checker) popScope() {
 	c.checkUnassignedVars()
+	c.checkUnusedLocals()
 	c.scopes = c.scopes[:len(c.scopes)-1]
 }
 
@@ -503,6 +508,7 @@ func (c *checker) checkDecl(v *ast.DeclStmt) {
 	// assigned here" says nothing.
 	// `_` is the discard name, never assigned by construction, so it is exempt -
 	// upstream's own anonymous-objects.buzz writes `var _ = ...`.
+	c.declareTracked(v.Name, v.Pos)
 	if !v.IsConst && v.Name != "_" && len(c.scopes) > 1 {
 		e := c.scopes[len(c.scopes)-1][v.Name]
 		e.varDecl, e.pos, e.name = true, v.Pos, v.Name
@@ -1055,6 +1061,7 @@ func (c *checker) infer(n ast.Node) types.Type {
 
 func (c *checker) inferIdent(v *ast.IdentExpr) types.Type {
 	if e, ok := c.lookup(v.Name); ok {
+		c.markRead(v.Name)
 		return e.typ
 	}
 	if c.private[v.Name] {
@@ -2358,5 +2365,56 @@ func (c *checker) noteMutatingUse(v *ast.MemberExpr) {
 	}
 	if id, ok := v.Object.(*ast.IdentExpr); ok {
 		c.markAssigned(id.Name)
+	}
+}
+
+// markRead records that name was evaluated, so checkUnusedLocals can tell a local
+// that is genuinely consumed from one that is dead.
+func (c *checker) markRead(name string) {
+	for i := len(c.scopes) - 1; i >= 0; i-- {
+		if e, ok := c.scopes[i][name]; ok {
+			if !e.read {
+				e.read = true
+				c.scopes[i][name] = e
+			}
+			return
+		}
+	}
+}
+
+// declareTracked marks the local just defined in the innermost scope as one whose
+// use is worth reporting. Parameters and locals both qualify; a name beginning with
+// `_` does not, which is the conventional spelling for "deliberately unused" and is
+// how magus's own handlers write an ignored parameter (`_a: [str]`).
+func (c *checker) declareTracked(name string, pos ast.Pos) {
+	if name == "_" || strings.HasPrefix(name, "_") || len(c.scopes) <= 1 {
+		return
+	}
+	e := c.scopes[len(c.scopes)-1][name]
+	e.declaredLocal, e.pos, e.name = true, pos, name
+	c.scopes[len(c.scopes)-1][name] = e
+}
+
+// checkUnusedLocals reports every tracked local in the scope about to be popped
+// that nothing ever read.
+func (c *checker) checkUnusedLocals() {
+	scope := c.scopes[len(c.scopes)-1]
+	unused := make([]scopeEntry, 0, len(scope))
+	for _, e := range scope {
+		// A local that is WRITTEN counts as used even if nothing reads it back:
+		// upstream's protocols.buzz assigns `nameable` a second value and never reads
+		// it, and accepts that. Only a local neither read nor written is dead.
+		if e.declaredLocal && !e.read && !e.assigned {
+			unused = append(unused, e)
+		}
+	}
+	sort.Slice(unused, func(i, j int) bool {
+		if unused[i].pos.Line != unused[j].pos.Line {
+			return unused[i].pos.Line < unused[j].pos.Line
+		}
+		return unused[i].pos.Col < unused[j].pos.Col
+	})
+	for _, e := range unused {
+		c.errorf(e.pos, "local %q is never used; remove it or rename it with a leading underscore", e.name)
 	}
 }

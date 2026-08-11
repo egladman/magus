@@ -98,7 +98,7 @@ fun op(p: {str: str}) > bool { return true; }
 fun list() > {str: fun({str: str}) bool} { return {"op": op}; }
 `)
 	// Arrowless '{' is still the body (void return), not a map type.
-	checkOK(t, `fun g() { final x = 1; }`)
+	checkOK(t, `fun g() { final _x = 1; }`)
 }
 
 func TestCheck_FunctionArity(t *testing.T) {
@@ -360,7 +360,7 @@ func TestCheck_ForEachMap(t *testing.T) {
 	checkOK(t, `
 final m = {"a": 1, "b": 2};
 foreach (k, v in m) {
-    final combined = k + v;
+    final _combined = k + v;
 }
 `)
 }

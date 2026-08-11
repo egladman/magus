@@ -27,6 +27,7 @@ empty-import.buzz
 final-objects.buzz
 function-param-mutable-default-value.buzz
 immutable-list.buzz
+import-syntax-error.buzz
 inferred-enum-case-invalid.buzz
 invalid-float-literal.buzz
 invalid-int-bin-literal.buzz
@@ -72,6 +73,7 @@ tuple-shorthand-hex-index.buzz
 tuple-shorthand-named-object.buzz
 tuple-shorthand-out-of-range.buzz
 tuple-shorthand-underscore-index.buzz
+unused-local.buzz
 var-decl-without-value.buzz
 var-not-assigned.buzz
 yield-wrong-value-type.buzz

@@ -82,8 +82,8 @@ func TestMagusGraphReturnTypesMatchMirrors(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 export fun preflight(ctx: magus\Context, args: [str]) > void {
-    final targets: TargetGraph = null;
-    final graph: Graph = null;
+    final _targets: TargetGraph = null;
+    final _graph: Graph = null;
 }`)
 
 	_, err := interp.RunDir(context.Background(), dir, "preflight", nil)
