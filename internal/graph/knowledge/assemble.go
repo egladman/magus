@@ -105,6 +105,13 @@ func AssembleShards(in Inputs) []Shard {
 	// I/O pass can resolve each target's output/input globs to the nodes they produce or
 	// consume. Populated as the path-bearing shards (docs, buzz, symbols) are built.
 	pathToNode := map[string]string{}
+	// symbolPaths is the subset of pathToNode contributed by a SCIP index. It is tracked
+	// separately because a symbol index is CACHE state, not source: it lives under the
+	// gitignored cache dir and exists only on a machine that has run the scip op. Anything
+	// it contributes must therefore stay in the lazily-loaded @symbols shards, or a
+	// committed, drift-gated artifact would vary with whether a developer happened to have
+	// built one. See the split at the @dirs pass below, which is where it used to leak.
+	symbolPaths := map[string]bool{}
 	if in.Root != "" {
 		if d := assembleDocs(in.Root, in.Spells, in.Graph.Projects); len(d.Nodes) > 0 {
 			for _, n := range d.Nodes {
@@ -155,15 +162,29 @@ func AssembleShards(in Inputs) []Shard {
 			for _, n := range s.Nodes {
 				if n.Kind == types.KindFile {
 					pathToNode[n.Source] = n.ID
+					symbolPaths[n.Source] = true
 				}
 			}
 			shards = append(shards, s)
 		}
 	}
 	// The build I/O layer: produces/consumes edges from each target's declared outputs and
-	// inputs to the file and doc nodes they match. Runs last, so every path-bearing node
-	// (docs, buzz, symbols) is known; it links only existing nodes, never a phantom.
-	if io := assembleIO(in.Graph.Projects, pathToNode); len(io.Edges) > 0 {
+	// inputs to the file and doc nodes they match. Runs after the path-bearing shards so
+	// every node is known; it links only existing nodes, never a phantom.
+	//
+	// Symbol paths are excluded for the same reason @dirs excludes them, and here the old
+	// behavior was not merely nondeterministic but broken: @io IS merged into the default
+	// graph while symbol file nodes are not, so a declared input matching a .go file
+	// produced an edge in the default graph pointing at a node only the lazy shard holds.
+	// Measured on this workspace: 138 dangling produces/consumes edges. Each symbols shard
+	// now carries its own, so the edge and its endpoint appear together or not at all.
+	defaultPathToNode := make(map[string]string, len(pathToNode))
+	for p, id := range pathToNode {
+		if !symbolPaths[p] {
+			defaultPathToNode[p] = id
+		}
+	}
+	if io := assembleIO(in.Graph.Projects, defaultPathToNode); len(io.Edges) > 0 {
 		shards = append(shards, io)
 	}
 	// The observed coverage overlay: a single isolated shard folding a coverage ratio
@@ -173,16 +194,51 @@ func AssembleShards(in Inputs) []Shard {
 		shards = append(shards, c)
 	}
 	// Directory aggregates: roll up file count, summed churn, and languages onto each
-	// dir node from every path-bearing leaf (pathToNode). Runs last so it sees every
-	// file/doc/symbol path across the shards above; its dir attrs fold onto the
-	// structural dir nodes containsChain emitted in those shards.
+	// dir node from every path-bearing leaf. Runs last so it sees every file/doc/symbol
+	// path across the shards above; its dir attrs fold onto the structural dir nodes
+	// containsChain emitted in those shards.
+	//
+	// Symbol paths are held OUT of @dirs and aggregated into their own project's @symbols
+	// shard instead. @dirs is merged into the default graph, and assembleDirs emits a node
+	// per directory - so folding symbol paths in here MINTED dir nodes for directories the
+	// default graph does not otherwise contain, purely because a local SCIP index existed.
+	// That made MAGUS.md and gen/knowledge-graph.json vary between a developer who had run
+	// `magus graph build` and CI, which never does: the same source produced different
+	// committed bytes, and the drift gate fired on the difference. A shard's contents must
+	// be visible exactly when its own layer is loaded.
 	if len(pathToNode) > 0 {
 		churnByPath := make(map[string]int, len(in.VCS))
 		for _, e := range in.VCS {
 			churnByPath[e.Path] = e.Commits
 		}
-		if d := assembleDirs(in.Graph.Projects, slices.Sorted(maps.Keys(pathToNode)), churnByPath); len(d.Nodes) > 0 {
+		var defaultPaths []string
+		for p := range pathToNode {
+			if !symbolPaths[p] {
+				defaultPaths = append(defaultPaths, p)
+			}
+		}
+		slices.Sort(defaultPaths)
+		if d := assembleDirs(in.Graph.Projects, defaultPaths, churnByPath); len(d.Nodes) > 0 {
 			shards = append(shards, d)
+		}
+		// The symbol layer keeps its own aggregates, so a loaded symbol view is still
+		// complete rather than merely deterministic.
+		for i, sh := range shards {
+			if !IsSymbolsShard(sh.Name) {
+				continue
+			}
+			own := map[string]string{}
+			for _, n := range sh.Nodes {
+				if n.Kind == types.KindFile && symbolPaths[n.Source] {
+					own[n.Source] = n.ID
+				}
+			}
+			if a := assembleDirs(in.Graph.Projects, slices.Sorted(maps.Keys(own)), churnByPath); len(a.Nodes) > 0 {
+				shards[i].Nodes = append(shards[i].Nodes, a.Nodes...)
+			}
+			if io := assembleIO(in.Graph.Projects, own); len(io.Edges) > 0 {
+				shards[i].Edges = append(shards[i].Edges, io.Edges...)
+			}
 		}
 	}
 	return shards

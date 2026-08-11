@@ -190,3 +190,56 @@ func TestAssembleSymbolsRefOnly(t *testing.T) {
 	assert.True(t, ok, "reference-only symbol still gets a node")
 	assert.True(t, hasEdge(out, "file:pkg/a/a.go", "symbol:other.com/dep Qux#", types.RelationReferences))
 }
+
+// The default graph must not change when a SCIP index exists. A symbol index is CACHE
+// state - gitignored, per-worktree, present only where the scip op has run - so anything
+// it contributes has to stay in the lazily-loaded @symbols shards. When it did not, the
+// aggregate @dirs shard minted dir nodes and @io minted produces/consumes edges for
+// symbol paths, both merged into the default graph: MAGUS.md and gen/knowledge-graph.json
+// then differed between a developer who had run `magus graph build` and CI, which never
+// does, and the drift gate fired on the difference.
+//
+// The @io half was worse than nondeterministic. Those edges landed in the default graph
+// while their target file nodes did not, so the committed graph carried 138 references to
+// nodes it does not contain.
+func TestSymbolsDoNotChangeTheDefaultGraph(t *testing.T) {
+	base := sampleInputs()
+	base.Root = ""
+
+	withSyms := sampleInputs()
+	withSyms.Root = ""
+	withSyms.Symbols = map[string][]types.KnowledgeSymbol{
+		"pkg/a": {{
+			Key:    "example.com/foo Bar#",
+			Label:  "Bar",
+			Source: "pkg/a/deep/nested/a.go:1",
+			Defs:   []string{"pkg/a/deep/nested/a.go"},
+			Refs:   []types.KnowledgeSymbolRef{{Path: "pkg/a/other/b.go", Count: 1, Lines: []int{4}}},
+		}},
+	}
+
+	// merge exactly as Store.Sync does: every shard except the lazily-loaded ones.
+	defaultGraph := func(in Inputs) types.KnowledgeGraphOutput {
+		g := NewGraph()
+		for _, sh := range AssembleShards(in) {
+			if IsSymbolsShard(sh.Name) || IsCoverageShard(sh.Name) {
+				continue
+			}
+			g.Merge(sh.Nodes, sh.Edges)
+		}
+		return g.Output()
+	}
+
+	got, want := defaultGraph(withSyms), defaultGraph(base)
+	assert.Equal(t, want.NodeCount, got.NodeCount, "a symbol index must not add default-graph nodes")
+	assert.Equal(t, want.EdgeCount, got.EdgeCount, "a symbol index must not add default-graph edges")
+
+	// And every edge in the default graph must land on a node it actually contains.
+	ids := make(map[string]bool, len(got.Nodes))
+	for _, n := range got.Nodes {
+		ids[n.ID] = true
+	}
+	for _, e := range got.Links {
+		require.Truef(t, ids[e.Target], "edge %s -%s-> %s targets a node the default graph does not hold", e.Source, e.Relation, e.Target)
+	}
+}

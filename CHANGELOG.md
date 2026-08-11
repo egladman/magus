@@ -48,6 +48,16 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Added
 
+- **A built symbol index no longer changes the committed graph.** A SCIP index is cache
+  state - gitignored, per-worktree, present only where the `scip` op has run - but two
+  aggregate shards folded its paths into the DEFAULT graph: `@dirs` minted a dir node per
+  symbol directory, and `@io` minted produces/consumes edges for symbol files. So
+  `MAGUS.md` and `gen/knowledge-graph.json` differed between a developer who had run
+  `magus graph build` and CI, which never does, and the drift gate fired on the difference.
+  The `@io` half was worse than nondeterministic: those edges sat in the default graph
+  while their target file nodes did not, so the committed graph carried 138 references to
+  nodes it does not contain. Both now stay in the per-project `@symbols` shards, so an edge
+  and its endpoint appear together or not at all.
 - **The knowledge graph now has a call graph.** SCIP records an enclosing range for each
   definition, so a reference occurrence inside one was written in that definition's body
   and the enclosing symbol is the caller. `magus explain symbol:X` gains "calls" and
