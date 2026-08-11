@@ -748,22 +748,31 @@ func (g *Graph) projectOf(n types.KnowledgeNode, id string) (string, bool) {
 // projectPaths returns every project node's path, longest first so projectOf's
 // prefix scan resolves nested projects before the root "." catch-all. Built
 // lazily and invalidated with the adjacency indices.
+//
+// Guarded by projMu for the same reason ensureAdj is guarded by adjMu: this runs
+// on the query path against a *Graph the daemon's warm graph can hand to several
+// concurrent requests, so a bare nil check would let two first-queries race
+// writing g.projPaths - a concurrent map/slice write that crashes the process.
 func (g *Graph) projectPaths() []string {
+	g.projMu.Lock()
+	defer g.projMu.Unlock()
 	if g.projPaths != nil {
 		return g.projPaths
 	}
+	var paths []string
 	for id := range g.nodes {
 		if p, ok := strings.CutPrefix(id, types.KindProject+":"); ok {
-			g.projPaths = append(g.projPaths, p)
+			paths = append(paths, p)
 		}
 	}
 	// Longest first; ties break lexically so the order is deterministic.
-	slices.SortFunc(g.projPaths, func(a, b string) int {
+	slices.SortFunc(paths, func(a, b string) int {
 		if c := cmp.Compare(len(b), len(a)); c != 0 {
 			return c
 		}
 		return cmp.Compare(a, b)
 	})
+	g.projPaths = paths
 	return g.projPaths
 }
 

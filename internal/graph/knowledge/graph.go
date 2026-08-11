@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"slices"
+	"sync"
 
 	"github.com/egladman/magus/types"
 )
@@ -13,17 +14,27 @@ import (
 // edges, keyed for dedup and emitted in deterministic order. It is assembled at
 // load time (shards are authoritative on disk; there is no continuously merged
 // file). Not safe for concurrent mutation - build it on one goroutine, then read.
+//
+// Reads ARE safe for concurrent use, including from many goroutines that have
+// never seen each other: the daemon's warm graph hands the same *Graph to
+// concurrent HTTP/MCP requests once assembly finishes. The lazy indices below are
+// the one place a "read" still writes, so they coalesce concurrent first-builds
+// under a mutex rather than racing (see ensureAdj, projectPaths).
 type Graph struct {
 	nodes map[string]types.KnowledgeNode // by node ID
 	edges map[edgeKey]types.KnowledgeEdge
 
 	// Adjacency indices for traversal, built lazily on first query and assumed
-	// stable thereafter (queries run after load/merge completes).
-	out map[string][]types.KnowledgeEdge // by source ID
-	in  map[string][]types.KnowledgeEdge // by target ID
+	// stable thereafter (queries run after load/merge completes). adjMu guards
+	// the build so concurrent first-queries coalesce instead of racing on out/in.
+	adjMu sync.Mutex
+	out   map[string][]types.KnowledgeEdge // by source ID
+	in    map[string][]types.KnowledgeEdge // by target ID
 
 	// Project paths sorted longest-first, built lazily for source-path ownership
 	// resolution (the project: query filter). Invalidated with the adjacency.
+	// projMu guards the build the same way adjMu guards out/in.
+	projMu    sync.Mutex
 	projPaths []string
 }
 
@@ -111,16 +122,26 @@ func (g *Graph) node(id string) (types.KnowledgeNode, bool) {
 
 // ensureAdj builds the out/in adjacency indices from the (sorted) edge set on
 // first use. Iterating Edges() keeps each adjacency list in deterministic order.
+//
+// Guarded by adjMu rather than a bare nil check: this runs on the query path, and
+// the daemon's warm graph publishes one *Graph to concurrent requests, so two
+// first-queries after a rebuild can call this at once. A bare nil check let both
+// goroutines write g.out/g.in together - a concurrent map write, which is an
+// unrecoverable Go runtime fatal, not a recoverable panic. The mutex makes the
+// second caller block and then see the already-built index instead of racing.
 func (g *Graph) ensureAdj() {
+	g.adjMu.Lock()
+	defer g.adjMu.Unlock()
 	if g.out != nil {
 		return
 	}
-	g.out = map[string][]types.KnowledgeEdge{}
-	g.in = map[string][]types.KnowledgeEdge{}
+	out := map[string][]types.KnowledgeEdge{}
+	in := map[string][]types.KnowledgeEdge{}
 	for _, e := range g.Edges() {
-		g.out[e.Source] = append(g.out[e.Source], e)
-		g.in[e.Target] = append(g.in[e.Target], e)
+		out[e.Source] = append(out[e.Source], e)
+		in[e.Target] = append(in[e.Target], e)
 	}
+	g.out, g.in = out, in
 }
 
 // edgeStronger reports whether a should be kept over b (a is at least as strong).

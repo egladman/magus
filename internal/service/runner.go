@@ -140,12 +140,17 @@ func runStopCommand(stop spells.Command, grace time.Duration) {
 
 // waitReady polls the readiness probe until it exits 0 or the timeout elapses. The
 // probe is a command whose exit code is the signal (the Kubernetes exec-probe
-// model), run repeatedly at a fixed interval.
+// model), run repeatedly at a fixed interval. Each attempt is bounded by the
+// remaining time to deadline (mirroring runStopCommand's use of CommandContext) so a
+// probe binary that never exits cannot block past ReadyTimeout or an outer ctx
+// cancellation - a plain exec.Command here would run inside c.Run() uninterruptibly.
 func (r ExecRunner) waitReady(ctx context.Context, probe spells.Command) error {
 	deadline := time.Now().Add(r.readyTimeout())
 	for {
-		c := exec.Command(probe.Bin, probe.Args...)
-		if c.Run() == nil {
+		attemptCtx, cancel := context.WithDeadline(ctx, deadline)
+		err := exec.CommandContext(attemptCtx, probe.Bin, probe.Args...).Run()
+		cancel()
+		if err == nil {
 			return nil
 		}
 		if time.Now().After(deadline) {

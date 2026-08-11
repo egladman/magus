@@ -6,11 +6,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// alwaysTerminalProbe reports every fd as a terminal, so probeUntilReady takes its
+// interactive wait branch instead of failing fast.
+type alwaysTerminalProbe struct{}
+
+func (alwaysTerminalProbe) IsTerminal(fd uintptr) bool                { return true }
+func (alwaysTerminalProbe) Size(fd uintptr) (width, height int, err error) { return 80, 24, nil }
 
 // A failing probe must stop the op BEFORE it forks, and say what is actually wrong.
 // Without this the op ran, the tool failed on its own terms, and magus reported a
@@ -114,4 +122,40 @@ func TestReadinessDoesNotWaitWhenNotInteractive(t *testing.T) {
 	require.Error(t, err)
 	assert.Less(t, elapsed, readinessGrace/2,
 		"a non-interactive run waited %s; the grace period must not apply without a TTY", elapsed)
+}
+
+// TestReadinessCancelledProbeIsNotMemoized proves a run cancelled mid-probe (Ctrl-C)
+// does not poison the memo for the process's remaining lifetime. Before the fix,
+// checkReady stored whatever probeUntilReady returned unconditionally, including
+// ctx.Err() from the interactive wait loop's `case <-ctx.Done()` branch - so one
+// cancelled run made every later op on the same (bin, dir) fail with "context
+// canceled" for as long as the daemon lived, even once the tool was actually ready.
+func TestReadinessCancelledProbeIsNotMemoized(t *testing.T) {
+	readinessMemo.Clear()
+	prev := tty.SystemProbe
+	tty.SystemProbe = alwaysTerminalProbe{}
+	defer func() { tty.SystemProbe = prev }()
+
+	dir := t.TempDir()
+	readiness := map[string]spells.Tool{
+		// Fails on the first attempt so probeUntilReady enters the interactive wait
+		// loop, where an already-cancelled context is picked up by ctx.Done().
+		"faketool": {Ready: spells.Command{Bin: "sh", Args: []string{"-c", "exit 1"}}},
+	}
+	op := spells.Op{Command: spells.Command{Bin: "faketool"}}
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := checkReady(cancelled, readiness, op, dir)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, context.Canceled), "want context.Canceled, got %v", err)
+
+	if _, hit := readinessMemo.Load("faketool\x00" + dir); hit {
+		t.Fatal("a cancelled probe's outcome must not be memoized")
+	}
+
+	// A later call with a live context must re-probe rather than return the stale
+	// cancellation - swap in a passing probe to prove the probe actually re-ran.
+	readiness["faketool"] = spells.Tool{Ready: spells.Command{Bin: "sh", Args: []string{"-c", "exit 0"}}}
+	assert.NoError(t, checkReady(context.Background(), readiness, op, dir))
 }

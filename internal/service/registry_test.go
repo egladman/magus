@@ -307,6 +307,31 @@ func TestSessionRoutesToDaemonWhenPresent(t *testing.T) {
 	assert.Equal(t, []string{"pg"}, released)
 }
 
+// TestSessionReleaseAllMatchesAcquireCount is the regression test for the daemon
+// ref-leak: the daemon-side Registry ref-counts per Acquire, so two acquires of the
+// same key in one run must be released twice, not deduped to one release.
+func TestSessionReleaseAllMatchesAcquireCount(t *testing.T) {
+	f := &fakeRunner{}
+	var acquireCount, releaseCount int
+	sess := NewSession(New(f, time.Hour),
+		func(context.Context, string, spells.Service) error {
+			acquireCount++
+			return nil
+		},
+		func(string) { releaseCount++ },
+	)
+	ctx := WithSupervision(WithSession(context.Background(), sess))
+
+	_, err := TrySupervise(ctx, "pg", svc())
+	require.NoError(t, err)
+	_, err = TrySupervise(ctx, "pg", svc())
+	require.NoError(t, err)
+	require.Equal(t, 2, acquireCount, "test acquired the same key twice")
+
+	sess.ReleaseAll()
+	assert.Equal(t, acquireCount, releaseCount, "every daemon acquire must be matched by a release")
+}
+
 func TestSessionFallsBackToInProcessOnDaemonFailure(t *testing.T) {
 	f := &fakeRunner{}
 	var released []string
