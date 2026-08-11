@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +21,44 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestExportArtifactStreamsBlobsWithoutFullyBuffering verifies exportArtifact
+// does not hold a whole CAS blob in memory before writing it to the tar. Before
+// the fix, addFile read each blob wholly via os.ReadFile - a single allocation
+// the size of the blob - on the push path that runs at the end of every
+// cacheable miss. TotalAlloc (cumulative bytes allocated, unaffected by GC
+// timing) is measured across one export of a large blob and must stay well
+// under the blob's size; a full-buffer implementation cannot avoid allocating
+// at least that much in one shot.
+func TestExportArtifactStreamsBlobsWithoutFullyBuffering(t *testing.T) {
+	root, _, c := newMutableCache(t)
+	writeMain(t, root, "package main")
+	out := touchOut(t, root)
+
+	const blobSize = 128 << 20 // 128 MiB
+	big := bytes.Repeat([]byte("x"), blobSize)
+
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
+	result, err := c.Run(context.Background(), step, func(context.Context) error {
+		return os.WriteFile(out, big, 0o644)
+	})
+	require.NoError(t, err, "Run")
+	require.False(t, result.Hit)
+	big = nil // let the setup buffer go before measuring
+
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+
+	require.NoError(t, c.exportArtifact(context.Background(), step.ProjectPath, result.Hash, io.Discard))
+
+	runtime.ReadMemStats(&after)
+	delta := after.TotalAlloc - before.TotalAlloc
+
+	assert.Less(t, delta, uint64(blobSize/2),
+		"exportArtifact allocated %d bytes exporting a %d-byte blob: it must stream, not buffer the whole blob at once", delta, blobSize)
+}
 
 // TestRemoteBackendFSBuiltOnce verifies that two independent caches sharing a
 // single FSRemoteBackend dedup builds: the first workspace misses (builds, pushes

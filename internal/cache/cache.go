@@ -425,8 +425,11 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				c.hits.Add(1)
 				logData, _ := os.ReadFile(c.logPath(s.ProjectPath, hash))
 				// Quiet mode suppresses log replay; passing projects stay silent.
+				// Stderr, not stdout, matching captureRun's miss path: stdout is
+				// reserved for structured output (-o json|yaml|jsonl|template) and
+				// nothing else, so a replayed log on stdout corrupted it on a hit.
 				if c.logLevel < slog.LevelError && len(logData) > 0 {
-					_, _ = os.Stdout.Write(logData)
+					_, _ = os.Stderr.Write(logData)
 				}
 				// A hit regenerated nothing, so reuse the existing ref for this cache
 				// key rather than minting a duplicate; persist fresh only if the store
@@ -541,7 +544,27 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 		endSnap(err)
 		if err != nil {
 			result.Duration = time.Since(start)
-			return result, fmt.Errorf("magus/cache: snapshot %q: %w", s.ProjectPath, err)
+			snapErr := fmt.Errorf("magus/cache: snapshot %q: %w", s.ProjectPath, err)
+			// Report like the sibling runErr path above: fn already succeeded, so
+			// without this the journal and any observer never see the step finish -
+			// it just vanishes mid-run instead of failing loudly.
+			c.errs.Add(1)
+			ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, snapErr)
+			result.Ref = ref
+			c.log.ErrorContext(ctx,
+				"cache.error",
+				slog.String("project", s.ProjectPath),
+				slog.String("label", s.Label),
+				slog.String("target", reproTarget(s)),
+				slog.Int64("duration", int64(result.Duration)),
+				slog.String("error", types.CauseText(snapErr)),
+				slog.String("ref", ref),
+			)
+			if rc.onError != nil {
+				rc.onError(snapErr)
+			}
+			rc.fireResults(rc.step, &result, snapErr)
+			return result, snapErr
 		}
 		result.Outputs = outs
 	}
@@ -1221,12 +1244,16 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 	collapse := c.collapse && !c.silent && !quiet
 	withhold := quiet || collapse
 
+	// A log-path failure fails the run outright rather than degrading silently:
+	// running fn without capture writers, journal step tagging, or failure-dump
+	// machinery would leave observers and the journal never seeing the step
+	// finish, and no log file for a later hit to replay.
 	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
-		return nil, fn(ctx)
+		return nil, fmt.Errorf("magus/cache: create log dir for %s: %w", logPath, err)
 	}
 	logF, err := os.Create(logPath)
 	if err != nil {
-		return nil, fn(ctx)
+		return nil, fmt.Errorf("magus/cache: create log file %s: %w", logPath, err)
 	}
 
 	col := newLineEmitter(ctx, projectPath, target)

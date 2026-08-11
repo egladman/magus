@@ -226,11 +226,27 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 		if err != nil {
 			return err
 		}
-		data, err := os.ReadFile(absPath)
+		// Stream rather than os.ReadFile: this runs at the end of every cacheable
+		// miss, and a blob-sized buffer per export adds up on a large artifact.
+		f, err := os.Open(absPath)
 		if err != nil {
 			return err
 		}
-		return addBytes(rel, data)
+		defer f.Close()
+		info, err := f.Stat()
+		if err != nil {
+			return err
+		}
+		if err := tw.WriteHeader(&tar.Header{
+			Typeflag: tar.TypeReg,
+			Name:     filepath.ToSlash(rel),
+			Size:     info.Size(),
+			Mode:     0o644,
+		}); err != nil {
+			return err
+		}
+		_, err = io.Copy(tw, f)
+		return err
 	}
 
 	// addSigned adds an extra member and records its digest for the signature. Unlike

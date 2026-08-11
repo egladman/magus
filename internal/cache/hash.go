@@ -432,6 +432,14 @@ func (c *Cache) hashFileWithMtime(abs string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// Re-stat: if (mtime,size) changed between the pre-read stat and the hash
+	// read, skip the store to avoid recording a stale fingerprint - matches the
+	// io_uring tier's same guard above.
+	info2, err := os.Stat(abs)
+	if err != nil || info2.ModTime().UnixNano() != mtime || info2.Size() != size {
+		//nolint:nilerr // a failed re-stat means skip the fingerprint store, not fail the hash: h was computed from bytes we did read, and the store is an optimisation.
+		return h, nil
+	}
 	c.mtimes.set(abs, h, mtime, size)
 	return h, nil
 }

@@ -94,6 +94,89 @@ func TestMissThenHit(t *testing.T) {
 	assert.Equal(t, r1.Hash, r2.Hash, "hit hash must equal miss hash")
 }
 
+// TestCacheHitReplaysLogToStderrNotStdout verifies a cache hit's log replay
+// goes to stderr, matching the miss path (captureRun streams a live run to
+// stderr specifically so stdout stays reserved for structured output like
+// `-o json`). Before the fix, the hit path wrote the replayed log straight to
+// os.Stdout, so a fully-cached `-o json` run had a subprocess's log bytes
+// interleaved into the JSON document.
+func TestCacheHitReplaysLogToStderrNotStdout(t *testing.T) {
+	root, cdir, c := newMutableCache(t)
+	writeMain(t, root, "package main")
+	out := touchOut(t, root)
+
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
+
+	const marker = "BUILD OUTPUT MARKER"
+	fn := func(ctx context.Context) error {
+		stdout, _ := runPkg.OutputWriters(ctx)
+		fmt.Fprintln(stdout, marker)
+		return os.WriteFile(out, []byte("built"), 0o644)
+	}
+
+	r1, err := c.Run(context.Background(), step, fn)
+	require.NoError(t, err, "Run(miss)")
+	require.False(t, r1.Hit, "first Run must miss")
+
+	// Re-open read-only so the second call can hit.
+	c2, err := Open(t.Context(), cdir, WithMutable(false))
+	require.NoError(t, err, "cache.Open(read)")
+
+	var stdoutOut, stderrOut string
+	stdoutOut = captureStdout(t, func() {
+		stderrOut = captureStderr(t, func() {
+			r2, err := c2.Run(context.Background(), step, fn)
+			require.NoError(t, err, "Run(hit)")
+			require.True(t, r2.Hit, "second Run must hit")
+		})
+	})
+
+	assert.NotContains(t, stdoutOut, marker, "hit replay must not write to stdout")
+	assert.Contains(t, stderrOut, marker, "hit replay must write to stderr, like the miss path")
+}
+
+// TestRunSnapshotFailureReportsLikeRunErr verifies that a snapshot failure
+// after a successful fn is reported the same way an fn failure is: onError
+// fires, OnResult fires with the error, the Error stat is incremented, and
+// recordOutput runs (result.Ref is set). Before the fix, this path returned
+// bare, so observers and the journal never saw the step finish.
+func TestRunSnapshotFailureReportsLikeRunErr(t *testing.T) {
+	root, _, c := newMutableCache(t)
+	writeMain(t, root, "package main")
+	out := touchOut(t, root)
+
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
+	// A required output that fn never produces forces snapshot to fail
+	// deterministically, after fn itself has already succeeded.
+	step.RequiredOutputs = []string{"other/project/missing.txt"}
+
+	fn := func(_ context.Context) error {
+		return os.WriteFile(out, []byte("built"), 0o644)
+	}
+
+	var onErrorErr error
+	var onResultErr error
+	var onResultCalled bool
+	opts := []RunOption{
+		OnError(func(err error) { onErrorErr = err }),
+		OnResult(func(_ *Step, _ *Result, err error) {
+			onResultCalled = true
+			onResultErr = err
+		}),
+	}
+
+	r, err := c.Run(context.Background(), step, fn, opts...)
+	require.Error(t, err, "snapshot failure must surface as Run's error")
+
+	assert.Error(t, onErrorErr, "onError must fire on a snapshot failure")
+	assert.True(t, onResultCalled, "OnResult must fire on a snapshot failure")
+	assert.Error(t, onResultErr, "OnResult must receive the snapshot error")
+	assert.Equal(t, 1, c.Stats().Error, "the Error stat must count a snapshot failure")
+	assert.NotEmpty(t, r.Ref, "recordOutput must still run so the failure is queryable by ref")
+}
+
 // TestNoCacheAlwaysRuns verifies that a Step with NoCache=true never replays:
 // fn runs on every Run with identical inputs (no snapshot, no hit), so a
 // long-running target re-executes instead of replaying a cached completion.
@@ -527,6 +610,22 @@ func TestCaptureRunCollapseShowsFailureExcerpt(t *testing.T) {
 	data, statErr := os.ReadFile(lp)
 	require.NoError(t, statErr, "collapse failure log should be retained after replay")
 	assert.Contains(t, string(data), "lint: undefined symbol foo")
+}
+
+// captureStdout redirects os.Stdout for the duration of fn and returns what was written.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	orig := os.Stdout
+	os.Stdout = w
+	defer func() { os.Stdout = orig }()
+
+	fn()
+	require.NoError(t, w.Close())
+	out, err := io.ReadAll(r)
+	require.NoError(t, err)
+	return string(out)
 }
 
 // captureStderr redirects os.Stderr for the duration of fn and returns what was written.

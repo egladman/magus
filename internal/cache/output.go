@@ -199,7 +199,10 @@ func (s *OutputStore) Persist(ctx context.Context, cacheKey string, output []byt
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return OutputDescriptor{}, err
 	}
-	if err := os.WriteFile(filepath.Join(dir, d.Attempt+outExt), output, 0o644); err != nil {
+	// Temp + rename, matching AdoptImported: newestAttemptBlob picks the freshest
+	// blob by modtime, which - written in place with plain os.WriteFile - is
+	// exactly the file a concurrent reader could catch mid-write.
+	if err := writeAtomic(filepath.Join(dir, d.Attempt+outExt), output); err != nil {
 		return OutputDescriptor{}, err
 	}
 	descriptor, err := json.Marshal(d)
@@ -210,7 +213,7 @@ func (s *OutputStore) Persist(ctx context.Context, cacheKey string, output []byt
 	// the capture tap, so this is their only write boundary. Redacting the marshaled bytes
 	// rather than each field keeps a field added later covered by construction.
 	descriptor = secret.Redact(ctx, descriptor)
-	if err := os.WriteFile(filepath.Join(dir, d.Attempt+descExt), descriptor, 0o644); err != nil {
+	if err := writeAtomic(filepath.Join(dir, d.Attempt+descExt), descriptor); err != nil {
 		return OutputDescriptor{}, err
 	}
 	s.pruneKey(dir, defaultOutputKeepLast)
