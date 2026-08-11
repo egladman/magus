@@ -63,13 +63,19 @@ func WithMetricsCollection() Option {
 	return func(o *Load) { o.MetricsCollect = true }
 }
 
-// WithProvider injects an already-constructed observability provider so several Magus
-// instances (a daemon's bridge plus each of its per-workspace registry Magus) share ONE
-// set of OTel instruments and one metrics collector. The provider is owned by the caller
-// (the daemon process), not by any single workspace, so workspace eviction never discards
-// accumulated metrics. It supersedes WithMetricsCollection: Open adopts the injected
-// provider instead of constructing its own.
-func WithProvider(p observability.Provider) Option {
+// WithTelemetryProvider injects an already-constructed observability provider so several
+// Magus instances (a daemon's bridge plus each of its per-workspace registry Magus) share
+// ONE set of OTel instruments and one metrics collector. The provider is owned by the
+// caller (the daemon process), not by any single workspace, so workspace eviction never
+// discards accumulated metrics. It supersedes WithMetricsCollection: Open adopts the
+// injected provider instead of constructing its own.
+//
+// Named Telemetry, not just WithProvider, because "provider" is already taken twice over
+// in this package: ProviderRunner/ProviderCache/RegisterProviderRunner/
+// WithoutWorkspaceProviders all mean a WORKSPACE provider (magus\workspace.provider), and
+// observability.WithProvider (a different package, same short name) stores a Provider on a
+// context rather than an Option. This is the one that meant something else entirely.
+func WithTelemetryProvider(p observability.Provider) Option {
 	return func(o *Load) { o.Provider = p }
 }
 
@@ -90,7 +96,7 @@ func WithVersion(v string) Option {
 // command with it. The base side of a diff is deliberately narrower rather than
 // broken; a project that only a provider knows about shows up as added.
 //
-// Unrelated to WithProvider above, which injects an observability provider.
+// Unrelated to WithTelemetryProvider above, which injects an observability provider.
 func WithoutWorkspaceProviders() Option {
 	return func(o *Load) { o.SkipWorkspaceProviders = true }
 }

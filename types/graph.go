@@ -34,7 +34,8 @@ func WithGraphObserver(o Observer) GraphOption {
 	}
 }
 
-// TopoSort returns project paths in topological order (dependencies before dependents).
+// TopoSort returns project paths in topological order (dependents before dependencies -
+// see View's doc comment for the measured example).
 func (g *Graph) TopoSort() []string {
 	return g.repo.TopoSort()
 }
@@ -107,7 +108,7 @@ type GraphView struct {
 // depends on and TopoSort yields dependents before dependencies. A caller wanting a
 // build order needs the reverse, which is what Nodes gives. (Measured, not assumed:
 // for web depending on api, TopoSort returns [. web api] and Successors(web) is
-// [api]. Note TopoSort's own doc comment claims the opposite order.)
+// [api].)
 func (g *Graph) View() GraphView {
 	topo := g.TopoSort()
 	nodes := make([]string, len(topo))

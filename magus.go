@@ -53,7 +53,15 @@ func collapseOnSuccess(l config.Log) bool {
 	return true
 }
 
-// Magus is the high-level orchestrator. Not safe for concurrent use. Inspect-constructed workspaces have no cache.
+// Magus is the high-level orchestrator. Read paths and the daemon's warm caches
+// (warmGraph, symbolStatus) are safe for concurrent use - that is what backs
+// daemon mode, where one Magus is shared across goroutines; concurrent callers
+// should use types.ContextWithGraphObserver rather than a shared default observer.
+// SetGraphObserver and SetDaemon are NOT concurrency-safe - each mutates shared
+// state with no lock and is meant to be called once, before the workspace is
+// shared (SetGraphObserver mutates the underlying *types.Workspace, which
+// documents itself as safe only for a sole owner). Inspect-constructed
+// workspaces have no cache.
 type Magus struct {
 	ws    *types.Workspace
 	cfg   config.Config
@@ -713,12 +721,25 @@ func (m *Magus) buzzPoolRegistry() *buzz.PoolRegistry {
 	return m.buzzPoolReg
 }
 
-// Close releases workspace resources (VM pools); cache and limiter are caller-owned.
+// Close releases workspace resources (VM pools, telemetry); cache and limiter are
+// caller-owned. A provider built by Open is shut down here so its spans/metrics
+// flush rather than being lost on exit. An injected provider (WithProvider) is
+// left running - it is shared across every workspace the daemon holds (and the
+// bridge Magus), so one workspace's eviction must not stop telemetry for the
+// rest; the daemon itself owns and shuts down that provider.
 func (m *Magus) Close() error {
-	if m.buzzPoolReg == nil {
-		return nil
+	var errs []error
+	if m.tel != nil && m.injectedTel == nil {
+		if err := m.tel.Shutdown(context.Background()); err != nil {
+			errs = append(errs, fmt.Errorf("magus: shut down telemetry provider: %w", err))
+		}
 	}
-	return m.buzzPoolReg.Close()
+	if m.buzzPoolReg != nil {
+		if err := m.buzzPoolReg.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (m *Magus) volatilityConfig() volatility.Config {

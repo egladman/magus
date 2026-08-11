@@ -224,16 +224,6 @@ func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOp
 	return m.redactError(m.runResolved(ctx, targets, o))
 }
 
-// anyProjectDeclaresCI reports whether any project in scope declares a ci target.
-// ci lives in the magusfile (composed via magus.needs), never in a spell - except
-// for a provided project, which has no magusfile at all, so its bound spell's ci
-// op is the only place ci can live. A magusfile project is checked by extracting
-// its declared target nodes statically (the same AST extractor TargetGraph uses,
-// never a raw text scan, so `ci` in a comment or string can't false-positive) and
-// short-circuiting on the first ci found; a spell op named ci must NOT satisfy the
-// anchor there, since the magusfile is the definition. The returned error is
-// non-nil if a source couldn't be located, so a (false, err) result means "couldn't
-// determine", not "definitely no ci" - the caller must not block on it.
 // allProvided reports whether every project in the scope came from a workspace
 // provider, which is the case where the no-ci hint must point at the provider
 // spell rather than at a magusfile none of them have.
@@ -246,6 +236,16 @@ func allProvided(projects []*types.Project) bool {
 	return true
 }
 
+// anyProjectDeclaresCI reports whether any project in scope declares a ci target.
+// ci lives in the magusfile (composed via magus.needs), never in a spell - except
+// for a provided project, which has no magusfile at all, so its bound spell's ci
+// op is the only place ci can live. A magusfile project is checked by extracting
+// its declared target nodes statically (the same AST extractor TargetGraph uses,
+// never a raw text scan, so `ci` in a comment or string can't false-positive) and
+// short-circuiting on the first ci found; a spell op named ci must NOT satisfy the
+// anchor there, since the magusfile is the definition. The returned error is
+// non-nil if a source couldn't be located, so a (false, err) result means "couldn't
+// determine", not "definitely no ci" - the caller must not block on it.
 func anyProjectDeclaresCI(projects []*types.Project) (bool, error) {
 	var scanErr error
 	for _, p := range projects {
@@ -1086,7 +1086,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		}
 	}
 
-	checkOutputOverlap(dedupeByProject(steps), scopeLabel, opts.Report)
+	checkOutputOverlap(dedupeByProject(steps), opts.Report)
 
 	var raceRT *race.Runtime
 	if opts.Race {
@@ -1304,8 +1304,16 @@ func runReplay(ctx context.Context, ws *types.Workspace, projects []*types.Proje
 
 // checkMissingDependencies audits for undeclared dependencies (MGS4004).
 // For each written path, finds workspace projects that consume it but weren't dispatched.
+//
+// scope is the invocation's display label (see TargetLabel), not a target name; the
+// parameter is named scope rather than target because there genuinely is no single
+// target to attribute a write to here: written comes from race.Runtime.WrittenPaths,
+// which is keyed by project only (no per-target breakdown), and one invocation of
+// executeStages can cover several target stages at once. report.MissingDependency's
+// Target field still carries this label - the best identifier available for which
+// run flagged it - so callers reading it should treat it as a run scope, not a target.
 func checkMissingDependencies(allProjects []*types.Project, dispatched map[string]*types.Project,
-	written map[string][]string, target string, w *report.Writer,
+	written map[string][]string, scope string, w *report.Writer,
 ) {
 	if len(written) == 0 {
 		return
@@ -1329,13 +1337,13 @@ func checkMissingDependencies(allProjects []*types.Project, dispatched map[strin
 				for _, glob := range consumerGlobs {
 					if ok, _ := doublestar.PathMatch(glob, path); ok {
 						fmt.Fprintln(os.Stderr, types.FormatDiagnostic(types.MissingDependencyDetected,
-							fmt.Sprintf("potential undeclared dependency\n  consumer=%s producer=%s path=%s target=%s",
-								consumer.Path, producer, path, target)))
+							fmt.Sprintf("potential undeclared dependency\n  consumer=%s producer=%s path=%s scope=%s",
+								consumer.Path, producer, path, scope)))
 						_ = report.Record(w, report.MissingDependency{
 							Consumer: consumer.Path,
 							Producer: producer,
 							Path:     path,
-							Target:   target,
+							Target:   scope,
 						})
 						break
 					}
@@ -1347,7 +1355,13 @@ func checkMissingDependencies(allProjects []*types.Project, dispatched map[strin
 
 // checkOutputOverlap detects projects in the same dispatch that declare the same
 // output glob (MGS4002). Runs at graph construction time.
-func checkOutputOverlap(steps []cache.Step, target string, w *report.Writer) {
+//
+// Each cache.Step already carries its own Target, so the overlap is reported against
+// the two steps' real targets rather than the whole invocation's scope label - a
+// single executeStages call can cover several target stages at once (runResolved
+// groups multi-target requests into one call), so a blanket label would misattribute
+// the overlap to a target that may not even be one of the two involved.
+func checkOutputOverlap(steps []cache.Step, w *report.Writer) {
 	for i := 0; i < len(steps); i++ {
 		if len(steps[i].Outputs) == 0 {
 			continue
@@ -1370,8 +1384,14 @@ func checkOutputOverlap(steps []cache.Step, target string, w *report.Writer) {
 				continue
 			}
 			pA, pB := steps[i].ProjectPath, steps[j].ProjectPath
+			tA, tB := steps[i].Target, steps[j].Target
 			if pA > pB {
 				pA, pB = pB, pA
+				tA, tB = tB, tA
+			}
+			target := tA
+			if tA != tB {
+				target = tA + "," + tB
 			}
 			fmt.Fprintln(os.Stderr, types.FormatDiagnostic(types.OutputOverlapDetected,
 				fmt.Sprintf("declared output overlap\n  projects=[%s,%s] target=%s overlapping=%v",

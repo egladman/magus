@@ -40,8 +40,14 @@ func WithMetricsCollection() Option {
 // process, not any single workspace, so workspace eviction never discards accumulated
 // metrics. It supersedes [WithMetricsCollection]: Open adopts the injected provider instead
 // of constructing its own.
+//
+// Keeps the shorter public name even though the internal option it wraps was renamed to
+// WithTelemetryProvider (disambiguating it from [WithoutWorkspaceProviders] and
+// internal/workspace's workspace-provider family): cmd/magus/mcp.go also calls this
+// exported symbol, so renaming it here is a separate, wider change than this package's own
+// internal cleanup.
 func WithProvider(p observability.Provider) Option {
-	return workspace.WithProvider(p)
+	return workspace.WithTelemetryProvider(p)
 }
 
 // WithVersion supplies the running build's version so Open and Inspect can check it
