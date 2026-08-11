@@ -92,9 +92,6 @@ func UserCacheDir() (string, error) {
 	return filepath.Join(home, ".cache"), nil
 }
 
-// EnvPrefix is the lowercase env-var prefix; Cache.Dir → MAGUS_CACHE_DIR.
-const EnvPrefix = "magus"
-
 // Load merges defaults → user-global → workspace → cwd → MAGUS_* env vars.
 // If explicitPath is non-empty only that file is loaded (missing = hard error).
 func Load(explicitPath string) (Config, error) {

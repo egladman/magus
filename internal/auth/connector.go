@@ -200,9 +200,10 @@ func (s *ConnectorStore) List() []ConnectorToken {
 // Create mints a new connector token named name that expires at expires (a zero
 // time means it never expires), stores its SHA-256, and returns the plaintext
 // secret ONCE - it cannot be recovered later. name must be non-empty and unique
-// (ErrConnectorExists otherwise). The check-and-append runs under a cross-process
-// lock against the freshly re-read store, so a concurrent Create/Revoke cannot
-// lose the new entry or duplicate a name.
+// (ErrConnectorExists otherwise). Uniqueness comes from dropin.Publish's O_EXCL
+// create against the token file itself, not a lock, so a concurrent Create of
+// the same name cannot duplicate it; only the final append to the in-memory
+// snapshot runs under s.mu.
 func (s *ConnectorStore) Create(name string, expires time.Time) (secret string, c ConnectorToken, err error) {
 	name = strings.TrimSpace(name)
 	if err := dropin.ValidName(name); err != nil {
@@ -259,8 +260,9 @@ func connectorPath(dir, name string) string { return filepath.Join(dir, name+".j
 // Revoke deletes the record matching nameOrFingerprint, resolved as: an exact
 // name, then an exact fingerprint, then a unique fingerprint prefix. It returns
 // the removed record, ErrConnectorNotFound if nothing matches, or an error if a
-// short prefix is ambiguous. The lookup-and-delete runs under the store lock
-// against the freshly re-read store.
+// short prefix is ambiguous. The re-read, resolve, and os.Remove all run outside
+// s.mu against the freshly re-read store; only the final splice of the in-memory
+// snapshot is locked.
 func (s *ConnectorStore) Revoke(nameOrFingerprint string) (ConnectorToken, error) {
 	q := strings.TrimSpace(nameOrFingerprint)
 	if q == "" {

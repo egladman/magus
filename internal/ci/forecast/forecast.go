@@ -37,7 +37,7 @@ type Forecaster struct {
 // Go build cache, node, and the toolchains all sit in the same memory, and the
 // measured peaks this is compared against are the projects alone. Three quarters
 // leaves that headroom without buying runners for work that would have fit.
-const usableMemoryFraction = 3
+const usableMemoryFraction = 0.75
 
 // memoryBudget returns the byte budget for one shard: the explicit setting when
 // a caller pinned one, otherwise three quarters of the host's memory, otherwise
@@ -47,7 +47,7 @@ func (f Forecaster) memoryBudget() int64 {
 		return f.MemoryBudgetBytes
 	}
 	if total := hostmem.TotalBytes(context.Background()); total > 0 {
-		return total / 4 * usableMemoryFraction
+		return int64(float64(total) * usableMemoryFraction)
 	}
 	return 0
 }

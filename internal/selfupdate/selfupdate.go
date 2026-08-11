@@ -194,7 +194,7 @@ type IndexArtifact struct {
 }
 
 // FetchAndVerifyIndex fetches index.json, verifies its Ed25519 signature
-// against opts.PubKey, and returns the parsed index. The signature file is
+// against opts.Keys, and returns the parsed index. The signature file is
 // fetched from the same base URL with ".sig" appended.
 //
 // If the index is unreachable, FetchAndVerifyIndex returns an error and stops.
@@ -527,17 +527,30 @@ func FetchLimited(ctx context.Context, url string, maxBytes int64, opts Options)
 	return data, err
 }
 
+// compareParsed is Compare's logic plus the ok bit Compare itself drops: callers
+// that need to tell "genuinely equal" apart from "could not parse" (PrintUpdateStatus,
+// for a dev build's non-semver version) use this instead.
+func compareParsed(a, b string) (cmp int, ok bool) {
+	if !semver.IsValid(a) || !semver.IsValid(b) {
+		return 0, false
+	}
+	return semver.Compare(a, b), true
+}
+
 // Compare returns -1, 0, or 1. Non-semver inputs are treated as equal.
 func Compare(a, b string) int {
-	if !semver.IsValid(a) || !semver.IsValid(b) {
-		return 0
-	}
-	return semver.Compare(a, b)
+	cmp, _ := compareParsed(a, b)
+	return cmp
 }
 
 // PrintUpdateStatus writes a one-line current-vs-available comparison.
 func PrintUpdateStatus(tagName, currentVersion string) {
-	switch Compare(tagName, currentVersion) {
+	cmp, ok := compareParsed(tagName, currentVersion)
+	if !ok {
+		fmt.Printf("cannot compare %s with %s: not a recognized version\n", currentVersion, tagName)
+		return
+	}
+	switch cmp {
 	case 1:
 		fmt.Printf("update available: %s -> %s\n", currentVersion, tagName)
 	case 0:
