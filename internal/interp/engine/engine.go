@@ -16,9 +16,6 @@ import (
 // Engine creates Sessions for script execution.
 // Implementations register themselves at init() time via Register.
 type Engine interface {
-	// ID returns a stable identifier included in compile-cache keys so
-	// compiled entries from different engines never cross-pollute.
-	ID() string
 	// NewSession returns a fresh session with standard libraries loaded
 	// and ctx bound for cancellation. Pass context.Background() for no cancellation.
 	NewSession(ctx context.Context) (Session, error)

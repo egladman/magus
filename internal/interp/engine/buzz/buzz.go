@@ -25,8 +25,6 @@ func init() {
 
 type engineImpl struct{}
 
-func (engineImpl) ID() string { return "buzz" }
-
 func (engineImpl) NewSession(ctx context.Context) (engine.Session, error) {
 	return &session{core: core.NewSession(ctx, core.WithEmbedded()), ctx: ctx}, nil
 }

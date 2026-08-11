@@ -246,4 +246,29 @@ func TestParseBuzzProjectOpts_Tools(t *testing.T) {
 		p := applyOpts(t, toolsOpts("node", map[string]string{}))
 		assert.Empty(t, p.ToolBounds)
 	})
+
+	// A non-string min/below (e.g. an unquoted number: `tools = {go = {min = 22}}`)
+	// must be a load error naming the offending field, not a crash: AsString() on a
+	// non-string Value is an unchecked cast in the nanbox/unsafe representations.
+	t.Run("a non-string min is a load error, not a crash", func(t *testing.T) {
+		bounds := vm.NewMap()
+		bounds.MapSet("min", vm.IntValue(22))
+		tools := vm.NewMap()
+		tools.MapSet("go", bounds)
+		opts := vm.NewMap()
+		opts.MapSet("tools", tools)
+		_, err := parseBuzzProjectOpts(context.Background(), opts)
+		assert.ErrorContains(t, err, `tools["go"].min must be a string version`)
+	})
+
+	t.Run("a non-string below is a load error, not a crash", func(t *testing.T) {
+		bounds := vm.NewMap()
+		bounds.MapSet("below", vm.IntValue(25))
+		tools := vm.NewMap()
+		tools.MapSet("go", bounds)
+		opts := vm.NewMap()
+		opts.MapSet("tools", tools)
+		_, err := parseBuzzProjectOpts(context.Background(), opts)
+		assert.ErrorContains(t, err, `tools["go"].below must be a string version`)
+	})
 }

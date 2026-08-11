@@ -319,15 +319,21 @@ func execCommand(ctx context.Context, dir, cmd string, args []string, env map[st
 		}
 		return res, ctx.Err()
 	}
-	if !res.Started || res.Code != 0 {
-		code := res.Code
-		if code <= 0 {
-			code = 1 // a start failure (binary not found) reports exit 1, as before
+	if !res.Started {
+		if err != nil {
+			// A process that never started has no exit code of its own - fabricating
+			// "%s exited %d" here would discard run.Exec's classified error (e.g. the
+			// MGS3003 tool-not-on-PATH diagnostic) and print a verdict on a tool that
+			// never ran. Mirrors the cancellation branch above: propagate, don't invent.
+			return res, err
 		}
+		return res, fmt.Errorf("%s exited %d", cmd, 1) // start failure with no error to propagate
+	}
+	if res.Code != 0 {
 		// cmd is the executable that was exec'd (markdownlint, go, tsc), not a spell:
 		// a spell is the adapter that chose to run it. Calling it one taught readers
 		// a wrong mapping and sent them looking for a spell by the tool's name.
-		return res, fmt.Errorf("%s exited %d", cmd, code)
+		return res, fmt.Errorf("%s exited %d", cmd, res.Code)
 	}
 	return res, nil
 }

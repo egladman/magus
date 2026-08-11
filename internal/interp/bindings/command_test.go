@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -106,6 +107,22 @@ func TestExecCommandReportsRealExitCode(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "sh exited 3")
+}
+
+// TestExecCommandReportsNotStartedErrorNotExitCode proves a process that never
+// started (binary missing from PATH) reports run.Exec's classified error, not a
+// fabricated "exited 1". A process with no PID has no exit code of its own, and
+// synthesizing one discards the MGS3003 tool-not-on-PATH diagnostic that explains
+// WHY it failed - the same shape TestExecCommandReportsCancellationNotExitCode
+// pins for the cancellation case.
+func TestExecCommandReportsNotStartedErrorNotExitCode(t *testing.T) {
+	_, err := execCommand(context.Background(), t.TempDir(), "magus-does-not-exist-on-path", nil, nil, "", true)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, exec.ErrNotFound,
+		"a start failure must propagate run.Exec's classified error, not a fabricated exit code")
+	assert.NotContains(t, err.Error(), "exited",
+		"a process that never started has no exit code of its own to report")
 }
 
 // TestAdviceFor pins the failure-classification rule a command op declares. Declaration

@@ -427,6 +427,38 @@ func TestDecodeToolsCarriesProbeKeyAndReady(t *testing.T) {
 	assert.Empty(t, h.Ready.Bin, "linting a Dockerfile must not wait on the docker daemon")
 }
 
+// A malformed probe or ready command must be a load error, not a silently dropped
+// declaration: decodeTools used to swallow decodeCommand's error with `err == nil`,
+// which left a typo'd tool command decoding as "no command at all" with nothing to
+// tell the author why the tool never gets probed.
+func TestDecodeToolsPropagatesMalformedProbeError(t *testing.T) {
+	_, err := Decode(mapObj{
+		"name": "docker",
+		"tools": map[string]any{
+			"docker": map[string]any{
+				"probe": map[string]any{"bin": "docker", "args": []string{"--version"}, "secrets": "not-a-map"},
+			},
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `spell "docker"`)
+	assert.Contains(t, err.Error(), `tools["docker"].probe`)
+}
+
+func TestDecodeToolsPropagatesMalformedReadyError(t *testing.T) {
+	_, err := Decode(mapObj{
+		"name": "docker",
+		"tools": map[string]any{
+			"docker": map[string]any{
+				"ready": map[string]any{"bin": "docker", "args": []string{"info"}, "secrets": "not-a-map"},
+			},
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `spell "docker"`)
+	assert.Contains(t, err.Error(), `tools["docker"].ready`)
+}
+
 // A constant stands in for a tool that cannot report a version, and needs no probe.
 func TestDecodeToolsConstNeedsNoProbe(t *testing.T) {
 	m, err := Decode(mapObj{

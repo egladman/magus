@@ -306,9 +306,15 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			}
 			var b spells.VersionBounds
 			if mv, ok := bv.MapGet("min"); ok {
+				if !mv.IsStr() {
+					return nil, fmt.Errorf("magus.project: tools[%q].min must be a string version, e.g. \"22\"", bin)
+				}
 				b.Min = mv.AsString()
 			}
 			if lv, ok := bv.MapGet("below"); ok {
+				if !lv.IsStr() {
+					return nil, fmt.Errorf("magus.project: tools[%q].below must be a string version, e.g. \"25\"", bin)
+				}
 				b.Below = lv.AsString()
 			}
 			if !b.IsZero() {
