@@ -3,6 +3,7 @@ package bindings
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -304,6 +305,40 @@ func TestRunCommandSourcesBatchesAllMatches(t *testing.T) {
 	lines := logLines(t, logFile)
 	require.Len(t, lines, 1, "batched mode must run Bin exactly once")
 	assert.Equal(t, strings.Join(files, " "), lines[0], "every matched file must be on the one invocation, in sorted order")
+}
+
+// TestRunCommandSourcesChunksPastTheBatchLimit proves batched mode SPLITS once the
+// match set exceeds sourcesBatchLimit, rather than handing the OS one oversized argv.
+// The other batch test uses a small fixture, so it only ever exercised the
+// single-invocation path: the chunking loop this asserts had no coverage at all, and a
+// regression to "one invocation, every file" would have passed the whole suite while
+// blowing ARG_MAX on any real repo.
+func TestRunCommandSourcesChunksPastTheBatchLimit(t *testing.T) {
+	dir := t.TempDir()
+	// One and a half batches: enough to prove it splits AND that the tail is a short
+	// batch rather than being dropped or padded.
+	const n = sourcesBatchLimit + sourcesBatchLimit/2
+	for i := range n {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, fmt.Sprintf("f%04d.txt", i)), nil, 0o644))
+	}
+	ctx := std.WithCwd(context.Background(), dir)
+	logFile := filepath.Join(dir, "calls.log")
+
+	op := logInvocationOp([]string{"*.txt"}, false)
+	_, err := runCommand(ctx, op, commandOpts{env: map[string]string{"LOGFILE": logFile}})
+	require.NoError(t, err)
+
+	lines := logLines(t, logFile)
+	require.Len(t, lines, 2, "%d files must split into two batches at a limit of %d", n, sourcesBatchLimit)
+	assert.Len(t, strings.Fields(lines[0]), sourcesBatchLimit, "first batch is full")
+	assert.Len(t, strings.Fields(lines[1]), n-sourcesBatchLimit, "second batch carries the remainder")
+
+	// No file may be lost or repeated across the split.
+	var got []string
+	for _, l := range lines {
+		got = append(got, strings.Fields(l)...)
+	}
+	assert.Len(t, got, n, "every matched file reaches exactly one invocation")
 }
 
 // TestRunCommandSourcesEachInvokesPerFile proves SourcesEach = true invokes
