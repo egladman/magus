@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 
-	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/render/md"
 	"github.com/egladman/magus/types"
 )
@@ -21,28 +20,14 @@ import (
 // of truth on the docs site.
 const glossaryDocURL = "https://eli.gladman.cc/magus/glossary/"
 
-// EncodeFragment JSON-marshals v, gzip-compresses (BestCompression) the result,
-// and returns a base64url-encoded string (no padding) suitable for use as a
-// #data= URL fragment. The browser reverses it with DecompressionStream('gzip').
-// gzip header fields are left at their zero values to guarantee byte-stable
-// output across calls.
-//
-// This is the single canonical encoder shared by the render package and
-// cmd/magus (graph open --targets and the knowledge-graph #data= path). Both
-// feed the same browser decode contract, so byte-for-byte wire-format parity is
-// required.
-func EncodeFragment(v any) (string, error) {
-	raw, err := json.Marshal(v)
-	if err != nil {
-		return "", err
-	}
-	return encodeFragmentRaw(raw)
-}
-
 // EncodeFragmentRaw gzip-compresses (BestCompression) raw and returns a
 // base64url-encoded string (no padding) suitable for use as a #data= URL
-// fragment. Use this when the caller has already JSON-marshalled its payload;
-// use EncodeFragment when marshalling is also needed.
+// fragment. The browser reverses it with DecompressionStream('gzip'). gzip
+// header fields are left at their zero values to guarantee byte-stable output
+// across calls. Callers marshal their payload to JSON first; this is the
+// canonical encoder shared by the render package and cmd/magus (graph open
+// --targets and the knowledge-graph #data= path), both of which feed the same
+// browser decode contract, so byte-for-byte wire-format parity is required.
 func EncodeFragmentRaw(raw []byte) (string, error) {
 	return encodeFragmentRaw(raw)
 }

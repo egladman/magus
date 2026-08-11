@@ -90,7 +90,8 @@ func (c *bitClosure) ReverseClosure(dst []ID, seeds []ID, n int32) []ID {
 	return dst
 }
 
-// BlastRadius returns, for each node, the count of nodes that can transitively reach it.
+// BlastRadius returns, for each node, the count of nodes that can transitively reach it,
+// INCLUDING the node itself (revRow sets its own bit, so every count is self-inclusive).
 func (c *bitClosure) BlastRadius() []int32 {
 	n := int(c.n)
 	out := make([]int32, n)

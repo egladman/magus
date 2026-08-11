@@ -55,8 +55,9 @@ func NewGraph() *Graph {
 
 // AddNode inserts a node, or upgrades an existing one with the same ID by filling
 // empty fields from the newcomer. Idempotent: the same node from two shards (e.g.
-// an op node the registry declares and a project references) merges cleanly, and
-// the richer description wins regardless of insertion order.
+// an op node the registry declares and a project references) merges cleanly. Only
+// EMPTY fields are filled - when both shards carry a non-empty Doc/Source/Label,
+// the first writer wins and insertion order decides.
 func (g *Graph) AddNode(n types.KnowledgeNode) {
 	n.Label = sanitize(n.Label, maxLabelLen)
 	n.Doc = sanitize(n.Doc, maxDocLen)

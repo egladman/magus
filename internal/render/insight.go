@@ -318,9 +318,6 @@ func writeGitHubMermaid(w io.Writer, graph renderGraph) error {
 	return writeMermaid(w, graph)
 }
 
-// writeVolatilitySection renders the run-outcome axis (`magus insight volatility`) into the
-// combined report: each (project, target) pair's Wilson-scored flakiness against the threshold.
-// Empty when no history was read or it held no targets (the report is best-effort here).
 // unreferencedReportRows caps the committed report's table; the full list is a command away.
 const unreferencedReportRows = 50
 
@@ -377,6 +374,9 @@ func uncoveredPhrase(ans types.KnowledgeAnswer) string {
 	return "no symbol index for " + types.DescribeGaps(ans.Gaps)
 }
 
+// writeVolatilitySection renders the run-outcome axis (`magus insight volatility`) into the
+// combined report: each (project, target) pair's Wilson-scored flakiness against the threshold.
+// Empty when no history was read or it held no targets (the report is best-effort here).
 func writeVolatilitySection(b *md.Builder, v types.VolatilityReport) {
 	if len(v.Targets) == 0 {
 		return

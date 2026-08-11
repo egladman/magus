@@ -70,6 +70,25 @@ func TestRoutingProjects(t *testing.T) {
 	assert.True(t, slices.IsSorted(paths), "projects sorted by path")
 }
 
+// TestRoutingIncludesOwnerKind pins that owner nodes - merged into the default graph by
+// store.go (it excludes only symbol/coverage shards) - actually surface in the routing
+// table, not just get loaded and then dropped by an incomplete kind allowlist.
+func TestRoutingIncludesOwnerKind(t *testing.T) {
+	g := NewGraph()
+	g.AddNode(types.KnowledgeNode{ID: "owner:@alice", Kind: types.KindOwner, Label: "@alice"})
+	g.AddNode(types.KnowledgeNode{ID: "project:pkg/a", Kind: types.KindProject, Label: "pkg/a"})
+	g.AddEdge(types.KnowledgeEdge{
+		Source: "owner:@alice", Target: "project:pkg/a",
+		Relation: types.RelationOwns, Confidence: types.ConfidenceExtracted, Score: 1,
+	})
+
+	r := g.Routing()
+	row, ok := routingKind(r, types.KindOwner)
+	require.True(t, ok, "owner kind row present in Routing")
+	assert.Equal(t, 1, row.Count)
+	assert.Contains(t, row.Anchors, "@alice")
+}
+
 // TestRoutingIgnoresRuntimeShard pins the summary against local run history. All three
 // runtime inputs are populated, so the partial nodes are covered along with the edges.
 func TestRoutingIgnoresRuntimeShard(t *testing.T) {

@@ -221,11 +221,12 @@ func mermaidIDs(paths []string) map[string]string {
 	ids := make(map[string]string, len(sorted))
 	seen := make(map[string]int)
 	for _, p := range sorted {
-		id := mermaidID(p)
-		if count := seen[id]; count > 0 {
-			id = fmt.Sprintf("%s_%d", id, count)
+		base := mermaidID(p)
+		id := base
+		if count := seen[base]; count > 0 {
+			id = fmt.Sprintf("%s_%d", base, count)
 		}
-		seen[id]++
+		seen[base]++
 		ids[p] = id
 	}
 	return ids

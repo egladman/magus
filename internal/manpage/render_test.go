@@ -22,6 +22,22 @@ func TestRoffPages(t *testing.T) {
 	assert.Contains(t, byName["magus-man.1"], "embedded section 1 man pages")
 }
 
+// TestInitCommandHasSynopsis pins that magus-init.1's SYNOPSIS section actually names
+// the command, rather than emitting a bare ".B " line - which happens whenever a
+// Command carries no Usage field (renderCommandRoff has nothing to escape and print).
+func TestInitCommandHasSynopsis(t *testing.T) {
+	pages := RoffPages("2026-07-26", "v1.2.3")
+	byName := make(map[string]string, len(pages))
+	for _, page := range pages {
+		byName[page.Name] = string(page.Content)
+	}
+	content, ok := byName["magus-init.1"]
+	require.True(t, ok, "magus-init.1 rendered")
+	assert.NotContains(t, content, ".SH SYNOPSIS\n.B \n.SH DESCRIPTION",
+		"SYNOPSIS must not be a bare .B line")
+	assert.Contains(t, content, ".B magus\n.RI \"init [flags]\"", "SYNOPSIS names the command")
+}
+
 func TestRoffPagesAreDeterministic(t *testing.T) {
 	first := RoffPages("", "")
 	second := RoffPages("", "")
