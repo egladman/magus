@@ -299,6 +299,15 @@ deliberately instead:
   a standing decision, not an oversight - the `compat(until:)` marker above is the
   one comment convention worth enforcing, and even it is served better by a
   structural check than by keyword matching.
+- Regenerate in the SAME commit as the source change that invalidated the output.
+  A one-word `Name:` edit in a `std/` descriptor left four generated files stale
+  and three tests red across three commits; `go generate` reaches
+  `cmd/magus-utils`, so it needs no magus binary. CI runs generate as a drift
+  gate, so a split commit is also a red CI you did not have to have.
+- Before "fixing" behavior that looks wrong, look for the test that pins it.
+  `TestCheckExecRequiresReadNotExec` exists to say exec-collapsing-into-read is
+  deliberate and names the "fix" as a known mistake. Roughly one review finding in
+  ten is wrong this way. See the `magus-local` skill for the rest of this method.
 
 ## Working style
 
