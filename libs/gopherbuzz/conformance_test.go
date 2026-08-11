@@ -2,8 +2,12 @@ package buzz_test
 
 // This file automates the "strict superset of upstream" claim in README.md and
 // the UpstreamRef pin in version.go. Nothing previously ran the upstream
-// behavior suite against gopherbuzz; measured reality (2026-07-28) is that only
-// 13 of the 84 files pass. TestUpstreamConformance makes that number a checked,
+// behavior suite against gopherbuzz. This comment used to name a score, and the
+// score it named was wrong twice over: "13 of 84" came from a hand-count against
+// an UNPINNED upstream checkout, which is both the wrong file count (83 at the
+// pin) and the wrong result - README.md calls out that exact mistake. The count
+// belongs in one place only, testdata/upstream-behavior-allowlist.txt, which this
+// test enforces. TestUpstreamConformance makes that number a checked,
 // monotonic fact instead of an unverified claim: it fails if a passing file
 // regresses, and it also fails if an un-listed file starts passing, so an
 // improvement cannot land without updating testdata/upstream-behavior-allowlist.txt.
