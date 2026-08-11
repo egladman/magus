@@ -35,7 +35,7 @@ magus\project({
     "spells": [bash, typescript],
     // Affected tracking is glob-based, not import-graph-based, so every input must be named to
     // be watched: the templates themselves, and the config files that drive the gates.
-    "sources": ["magusfile.buzz", "*.ts", "*.sh", "codex-hooks.json",
+    "sources": ["*.ts", "*.sh", "codex-hooks.json",
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json"],
     "targets": {
     },

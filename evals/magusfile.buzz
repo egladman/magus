@@ -10,7 +10,7 @@ import "os";
 // judgement. Live model runs are opt-in: `ci` is lint-only so `magus affected ci`
 // stays offline and keyless.
 magus\project({
-    "sources": ["magusfile.buzz", "*.buzz",
+    "sources": ["*.buzz",
                 "tasks/**/*.yaml", "lib/**/*.mjs", "tools/**/*.mjs", "tools/**/*.py",
                 "promptfooconfig.*.yaml",
                 "fixtures/**", "README.md", ".gitignore", ".npmrc", "package.json", "pnpm-lock.yaml",
