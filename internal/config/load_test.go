@@ -94,3 +94,39 @@ func TestWarnIfConcurrencyHigh(t *testing.T) {
 	t.Run("way over", func(t *testing.T) { run(t, 200, 8, true) })
 	t.Run("unknown cpu", func(t *testing.T) { run(t, 16, 0, false) })
 }
+
+// TestExtractFlag pins every spelling ExtractFlag must recognize for -config/--config,
+// including the short -c form main.go advertises in its help text but never actually wired
+// through (cfgPath had zero readers after fs.Parse). -C is a DIFFERENT flag (short for
+// --root, bound only in cmd/magus/main.go) and flag matching is case-sensitive, so -C must
+// never be read as config.
+func TestExtractFlag(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"long form space", []string{"-config", "a.yaml"}, "a.yaml"},
+		{"long form dashdash space", []string{"--config", "a.yaml"}, "a.yaml"},
+		{"long form equals", []string{"-config=a.yaml"}, "a.yaml"},
+		{"long form dashdash equals", []string{"--config=a.yaml"}, "a.yaml"},
+		{"short form space", []string{"-c", "a.yaml"}, "a.yaml"},
+		{"short form dashdash space", []string{"--c", "a.yaml"}, "a.yaml"},
+		{"short form equals", []string{"-c=a.yaml"}, "a.yaml"},
+		{"short form dashdash equals", []string{"--c=a.yaml"}, "a.yaml"},
+		{"short form among other args", []string{"run", "-c", "a.yaml", "build"}, "a.yaml"},
+		{"missing value", []string{"-c"}, ""},
+		{"no flag at all", []string{"run", "build"}, ""},
+		{"-C is root, not config", []string{"-C", "a.yaml"}, ""},
+		{"--root is not config either", []string{"--root", "a.yaml"}, ""},
+		{"stops at -- separator", []string{"run", "build", "--", "-c", "a.yaml"}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, ExtractFlag(tc.args))
+		})
+	}
+}

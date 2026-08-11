@@ -329,4 +329,7 @@ func TestWithoutDetachFlagStripsEverySpelling(t *testing.T) {
 
 	assert.Equal(t, []string{"ci", "."}, withoutDetachFlag([]string{"ci", "."}),
 		"an argv without the flag is unchanged")
+
+	assert.Equal(t, []string{"ci", "--", "--detach"}, withoutDetachFlag([]string{"ci", "--", "--detach"}),
+		"a --detach past the -- separator belongs to the forwarded tool and must survive verbatim")
 }

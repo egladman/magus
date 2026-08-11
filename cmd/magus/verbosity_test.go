@@ -48,3 +48,37 @@ func TestCtxAttrHandlerInjectsDir(t *testing.T) {
 		}
 	})
 }
+
+// TestExpandVerbosityArgsStopsAtSeparator pins the transformer half of the "--"
+// guard: expandVerbosityArgs builds the master argv startup() parses (main.go's
+// startup calls extractVerbosityCount(args), which itself calls this), so a token
+// meant verbatim for a forwarded tool (e.g. `-vvv` as a literal positional the tool
+// expects) must survive past "--" unchanged rather than being expanded into a run
+// of "-v" tokens or dropped.
+func TestExpandVerbosityArgsStopsAtSeparator(t *testing.T) {
+	got := expandVerbosityArgs([]string{"run", "-vv", "build", "--", "-vvv", "--other"})
+	want := []string{"run", "-v", "-v", "build", "--", "-vvv", "--other"}
+	if len(got) != len(want) {
+		t.Fatalf("expandVerbosityArgs = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("expandVerbosityArgs = %v, want %v", got, want)
+		}
+	}
+}
+
+// TestExpandVerbosityArgsNoSeparator confirms the ordinary expansion still works
+// when there is no "--" at all.
+func TestExpandVerbosityArgsNoSeparator(t *testing.T) {
+	got := expandVerbosityArgs([]string{"run", "-vvv", "build"})
+	want := []string{"run", "-v", "-v", "-v", "build"}
+	if len(got) != len(want) {
+		t.Fatalf("expandVerbosityArgs = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("expandVerbosityArgs = %v, want %v", got, want)
+		}
+	}
+}

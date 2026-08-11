@@ -623,7 +623,14 @@ const detachFlagName = "detach"
 // daemon detach again - handing the work to itself, forever.
 func withoutDetachFlag(args []string) []string {
 	out := make([]string, 0, len(args))
-	for _, a := range args {
+	for i, a := range args {
+		if a == "--" {
+			// Past the separator the tokens belong to the forwarded tool, not to
+			// magus; the argv is re-submitted verbatim, so copy the rest through
+			// unchanged instead of scanning it for --detach.
+			out = append(out, args[i:]...)
+			break
+		}
 		trimmed := strings.TrimLeft(a, "-")
 		if key, _, _ := strings.Cut(trimmed, "="); key == detachFlagName && strings.HasPrefix(a, "-") {
 			continue

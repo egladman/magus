@@ -61,7 +61,14 @@ func (*verbosity) IsBoolFlag() bool   { return true }
 
 func expandVerbosityArgs(args []string) []string {
 	out := make([]string, 0, len(args))
-	for _, a := range args {
+	for i, a := range args {
+		if a == "--" {
+			// Past the separator the tokens belong to a forwarded tool, not to magus;
+			// this builds the master argv startup() parses, so copy the rest through
+			// unchanged instead of expanding -vvv-lookalikes meant for the tool.
+			out = append(out, args[i:]...)
+			break
+		}
 		if len(a) > 2 && a[0] == '-' && a[1] != '-' {
 			allV := true
 			for _, c := range a[1:] {

@@ -328,12 +328,18 @@ func findWorkspaceRoot() string {
 	}
 }
 
-// ExtractFlag pre-scans args for -config/--config so the config file can
-// be loaded before each subcommand registers its real flag set.
+// ExtractFlag pre-scans args for -config/--config (and its -c/--c short form) so the
+// config file can be loaded before each subcommand registers its real flag set. -c is
+// case-sensitive and distinct from -C (short for --root, bound in cmd/magus/main.go) -
+// matching is exact, so -C is never read as config here. Scanning stops at "--": past
+// that separator the tokens belong to a forwarded tool, not to magus.
 func ExtractFlag(args []string) string {
 	for i, a := range args {
+		if a == "--" {
+			return ""
+		}
 		switch {
-		case a == "-config" || a == "--config":
+		case a == "-config" || a == "--config" || a == "-c" || a == "--c":
 			if i+1 < len(args) {
 				return args[i+1]
 			}
@@ -341,6 +347,10 @@ func ExtractFlag(args []string) string {
 			return strings.TrimPrefix(a, "-config=")
 		case strings.HasPrefix(a, "--config="):
 			return strings.TrimPrefix(a, "--config=")
+		case strings.HasPrefix(a, "-c="):
+			return strings.TrimPrefix(a, "-c=")
+		case strings.HasPrefix(a, "--c="):
+			return strings.TrimPrefix(a, "--c=")
 		}
 	}
 	return ""
