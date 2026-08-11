@@ -73,4 +73,5 @@ tuple-shorthand-named-object.buzz
 tuple-shorthand-out-of-range.buzz
 tuple-shorthand-underscore-index.buzz
 var-decl-without-value.buzz
+var-not-assigned.buzz
 yield-wrong-value-type.buzz

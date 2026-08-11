@@ -27,7 +27,7 @@ fun _charmAnchorIndex(argv: [str], anchor: str) > int {
 }
 
 fun _charmAddOps(start: int, vals: [str]) > Charm {
-    var ops = mut [<PatchOp>];
+    final ops = mut [<PatchOp>];
     for (var k = 0; k < vals.len(); k = k + 1) {
         ops.append(PatchOp{ op = PatchOpKind.add, path = "/{start + k}", value = vals[k] });
     }
@@ -36,7 +36,7 @@ fun _charmAddOps(start: int, vals: [str]) > Charm {
 
 // append adds vals to the end of the argv.
 export fun append(vals: [str]) > Charm {
-    var ops = mut [<PatchOp>];
+    final ops = mut [<PatchOp>];
     foreach (v in vals) { ops.append(PatchOp{ op = PatchOpKind.add, path = "/-", value = v }); }
     return Charm{ ops = ops };
 }

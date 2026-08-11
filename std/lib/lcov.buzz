@@ -82,7 +82,7 @@ export fun percent(lcov: str, keep: str) > str !> str {
 export fun mergePercent(reports: [str], keep: str) > str !> str {
     // "<file>\u{0}<line>" -> was it ever hit. One flat map rather than a map of maps: the key
     // only has to be unique per (file, line), and \0 cannot appear in either half.
-    var lines = mut {<str: bool>};
+    final lines = mut {<str: bool>};
     foreach (lcov in reports) {
         var sf = "";
         var counting = false;

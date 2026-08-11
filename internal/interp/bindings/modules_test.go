@@ -534,8 +534,8 @@ import "fs";
 import "charm";
 
 export fun verify(ctx: magus\Context, _opts: [str]) > void !> any {
-    var joined = fs.join("a", "b", "c");
-    var patch = charm.append(["y", "z"]);
+    final joined = fs.join("a", "b", "c");
+    final patch = charm.append(["y", "z"]);
     fs.writeFile("ran", joined + "|" + patch.ops[1].value);
 }
 `), 0o644))
@@ -579,8 +579,8 @@ import "fmt";
 import "fs";
 
 export fun verify(ctx: magus\Context, _opts: [str]) > void !> any {
-    var asset = fmt.sprintf("magus_%s_%s_%s.tar.gz", "1.0", "linux", "amd64");
-    var none = fmt.sprintf("literal");
+    final asset = fmt.sprintf("magus_%s_%s_%s.tar.gz", "1.0", "linux", "amd64");
+    final none = fmt.sprintf("literal");
     fs.writeFile("ran", asset + "|" + none);
 }
 `), 0o644))
@@ -609,10 +609,10 @@ import "proc";
 import "crypto";
 
 export fun verify(ctx: magus\Context, _opts: [str]) > void !> any {
-    var joined = fs.join("a", "b", "c");
-    var sc = proc.shell("printf hello");
-    var res = proc.exec(sc.bin, sc.args, "", {}).stdout;
-    var digest = crypto.hash(crypto.HashAlgorithm.Sha256, "").hex();
+    final joined = fs.join("a", "b", "c");
+    final sc = proc.shell("printf hello");
+    final res = proc.exec(sc.bin, sc.args, "", {}).stdout;
+    final digest = crypto.hash(crypto.HashAlgorithm.Sha256, "").hex();
     fs.writeFile("ran", joined + "|" + res + "|" + digest);
 }
 `), 0o644))
@@ -900,7 +900,7 @@ import "magus";
 import "proc";
 
 export fun viash(ctx: magus\Context, _a: [str]) > void !> any {
-    var c = proc.shell("true", "sh");
+    final c = proc.shell("true", "sh");
     proc.exec(c.bin, c.args, "", {});
 }
 `), 0o644))
@@ -917,7 +917,7 @@ import "magus";
 import "os";
 import "proc";
 
-export fun dep(ctx: magus\Context, _a: [str]) > void !> any { var c = proc.shell("printf x >> mark"); proc.exec(c.bin, c.args, "", {}); }
+export fun dep(ctx: magus\Context, _a: [str]) > void !> any { final c = proc.shell("printf x >> mark"); proc.exec(c.bin, c.args, "", {}); }
 export fun top(ctx: magus\Context, _a: [str]) > void { ctx.needs(dep, dep); }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "top"))
@@ -1019,7 +1019,7 @@ import "magus";
 import "os";
 import "proc";
 fun note(s: str) > void !> any {
-   var c = proc.shell("printf '%s\n' " + s + " >> ran");
+   final c = proc.shell("printf '%s\n' " + s + " >> ran");
    proc.exec(c.bin, c.args, "", {});
 }
 export fun go_build(ctx: magus\Context, _a: [str]) > void !> any { note("go-build"); }
@@ -1069,7 +1069,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
     fs.copyFile("sub/a.txt", "sub/b.txt");
     // glob returns paths relative to the project dir, sorted, each carrying that dir
     // as its base - so a caller can resolve one without knowing where the target ran.
-    var hits = fs.glob("sub/*.txt");
+    final hits = fs.glob("sub/*.txt");
     var acc = "";
     var first = true;
     var base = "";
@@ -1222,8 +1222,8 @@ import "magus";
 import "proc";
 
 export fun check(ctx: magus\Context, args: [str]) > void !> any {
-    var ok = proc.shell("true");
-    var rc = proc.exec(ok.bin, ok.args, "", {"allow_failure": true}).code;
+    final ok = proc.shell("true");
+    final rc = proc.exec(ok.bin, ok.args, "", {"allow_failure": true}).code;
     if (rc != 0) {
         throw "proc.shell('true') exited {rc}";
     }
@@ -1248,8 +1248,8 @@ import "proc";
 
 export fun check(ctx: magus\Context, args: [str]) > void !> any {
     os.withEnv({"MY_BUZZ_VAR": "hello"}, fun() > void !> any {
-        var ec = proc.shell("echo $MY_BUZZ_VAR");
-        var captured = proc.exec(ec.bin, ec.args, "", {}).stdout;
+        final ec = proc.shell("echo $MY_BUZZ_VAR");
+        final captured = proc.exec(ec.bin, ec.args, "", {}).stdout;
         if (captured != "hello") {
             throw "expected 'hello', got: [" + captured + "]";
         }
@@ -1268,7 +1268,7 @@ import "magus";
 import "fs";
 
 export fun check(ctx: magus\Context, args: [str]) > void {
-    var p = fs.join("a", "b", "c");
+    final p = fs.join("a", "b", "c");
     if (p == "") {
         throw "fs.join returned empty string";
     }
@@ -1290,7 +1290,7 @@ import "magus";
 import "fs";
 
 export fun check(ctx: magus\Context, args: [str]) > void !> any {
-    var entries = fs.listDir("subdir");
+    final entries = fs.listDir("subdir");
     if (entries.len() == 0) {
         throw "expected at least one entry in subdir";
     }

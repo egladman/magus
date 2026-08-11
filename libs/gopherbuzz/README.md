@@ -23,13 +23,13 @@ rather than only the flattering one.
 | upstream suite          | files |      gopherbuzz | what it asks                                                     |
 | ----------------------- | ----: | --------------: | ---------------------------------------------------------------- |
 | `tests/behavior/`       |    83 |     **74 pass** | does correct source produce the right answer?                    |
-| `tests/compile_errors/` |    77 | **65 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
+| `tests/compile_errors/` |    77 | **66 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
 | `tests/fuzzed/`         |   644 |    **0 panics** | can malformed input crash the front end?                         |
 | `tests/bench/`          |    11 |         not run | upstream's benchmarks (ours are in [`benchmarks/`](benchmarks/)) |
 | `tests/manual/`         |     9 |         not run | interactive                                                      |
 | `tests/utils/`          |    10 |             n/a | helper modules the behavior tests import                         |
 
-**The compile-error row is the uncomfortable one and the most important.** 12 of those
+**The compile-error row is the uncomfortable one and the most important.** 11 of those
 77 programs compile CLEAN here that upstream refuses. That is not a missing feature, it
 is missing strictness: gopherbuzz will accept source upstream tells you is wrong. If
 you are evaluating this VM as a Buzz implementation, weigh that at least as heavily as
@@ -65,7 +65,7 @@ than a missing check. Each of these was implemented, measured, and reverted:
 | `selective-import` | stop `assert` resolving unimported | blocked on `registerBuiltins`, which pre-defines the stdlib names on purpose |
 | `import-syntax-error` | type comparison operands | erased generics make it misfire: `extractList::<int>(...) == list` compares a call whose result type was never substituted |
 | `nullable-list-index`, `arrow-return-match-optional` | track OPTIONALITY in the type system | optionals are erased here -- `int?` and `int` are one type, so neither "index must be non-null" nor "returned `int?` where `int` declared" is expressible |
-| `unused-local`, `var-not-assigned` | per-local usage and assignment tracking | lint-shaped rules over 589 `var` declarations in magus alone; new machinery for two files |
+| `unused-local` | per-local USE tracking | the assignment half landed (`var-not-assigned`); this needs the read side too |
 | `error-message`, `placeholder-nested-call` | runtime error rendering; inferring an arrow method's return type | one-off, no shared machinery left to reuse |
 
 Each is a call to make deliberately, with the migration budgeted -- not a gap to

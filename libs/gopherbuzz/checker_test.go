@@ -456,7 +456,7 @@ func TestCheckTypeSoundness(t *testing.T) {
 	// The reassignment must now assert the type and error instead.
 	t.Run("laundered str into int errors", func(t *testing.T) {
 		sess := newSession(ctx)
-		err := sess.Exec(ctx, `fun f() > int { var i = 0; var a = "hello"; var b: any = a; i = b; return i + 1; }
+		err := sess.Exec(ctx, `fun f() > int { var i = 0; final a = "hello"; final b: any = a; i = b; return i + 1; }
 final __r = f();`)
 		require.Errorf(t, err, "expected a type error, got none (__r=%q)", sess.GetGlobal("__r").String())
 		assert.Containsf(t, err.Error(), "expected int, got str", "error = %q, want it to mention expected int, got str", err.Error())
@@ -466,7 +466,7 @@ final __r = f();`)
 	// the assertion and the program runs normally.
 	t.Run("matching any into int passes", func(t *testing.T) {
 		sess := newSession(ctx)
-		require.NoError(t, sess.Exec(ctx, `fun f() > int { var i = 0; var a = 41; var b: any = a; i = b; return i + 1; }
+		require.NoError(t, sess.Exec(ctx, `fun f() > int { var i = 0; final a = 41; final b: any = a; i = b; return i + 1; }
 final __r = f();`))
 		assert.Equal(t, int64(42), sess.GetGlobal("__r").AsInt(), "__r")
 	})

@@ -38,7 +38,7 @@ import (
 func TestImportedBuzzSpellInvokesExportedFunc(t *testing.T) {
 	src := `
 export fun mgs_getName() > str { return "echo-import"; }
-export fun echo(target: any, cb: fun(any)) > str { var p = {}; cb(p); return "yo " + p["x"]; }
+export fun echo(target: any, cb: fun(any)) > str { final p = {}; cb(p); return "yo " + p["x"]; }
 `
 	path := filepath.Join(t.TempDir(), "echo-import.buzz")
 	require.NoError(t, os.WriteFile(path, []byte(src), 0o644))
@@ -97,13 +97,13 @@ export fun mgs_getName() > str { return %q; }
 final BASE = %q;
 
 export fun get_artifact(target: any, cb: fun(any)) > bool !> any {
-    var io = {};
+    final io = {};
     cb(io);
     final url = BASE + "/blob/" + io["hash"];
     return xhttp.download(url, "" + io["dest"], {}) == 200;
 }
 export fun put_artifact(target: any, cb: fun(any)) > bool !> any {
-    var io = {};
+    final io = {};
     cb(io);
     final url = BASE + "/blob/" + io["hash"];
     final res = xhttp.upload_chunked("PUT", url, "" + io["src"], 0, {});
@@ -177,7 +177,7 @@ func TestResolveBackendSpellMissingName(t *testing.T) {
 func TestLoadSpellFileHandlerOp(t *testing.T) {
 	src := `
 export fun mgs_getName() > str { return "echo-spell"; }
-export fun echo(target: any, cb: fun(any)) > str { var p = {}; cb(p); return "hi " + p["who"]; }
+export fun echo(target: any, cb: fun(any)) > str { final p = {}; cb(p); return "hi " + p["who"]; }
 `
 	path := filepath.Join(t.TempDir(), "echo-spell.buzz")
 	require.NoError(t, os.WriteFile(path, []byte(src), 0o644))

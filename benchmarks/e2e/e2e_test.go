@@ -150,7 +150,7 @@ import "os";
 import "proc";
 magus.project("svc", {});
 export fun hit(ctx: magus\Context, args: [str]) > void !> any {
-    var c = proc.shell("printf x >> count");
+    final c = proc.shell("printf x >> count");
     proc.exec(c.bin, c.args, "", {});
 }
 `
@@ -251,7 +251,7 @@ import "magus";
 import "os";
 import "proc";
 fun record(name: str) > void !> any {
-    var c = proc.shell("printf '%s\n' " + name + " >> ci-order");
+    final c = proc.shell("printf '%s\n' " + name + " >> ci-order");
     proc.exec(c.bin, c.args, "", {});
 }
 export fun build(ctx: magus\Context, args: [str]) > void !> any { record("build"); }

@@ -66,8 +66,8 @@ export fun tools(ctx: magus\Context, args: [str]) > void {
 // actionable, report the rest, and carry on. Fail on what nobody can fix and someone will
 // mute the gate within a week.
 export fun gate(ctx: magus\Context, args: [str]) > void {
-    var blocking = mut [<str>];
-    var deferred = mut [<str>];
+    final blocking = mut [<str>];
+    final deferred = mut [<str>];
 
     foreach (tool in ["sh", "definitely-absent-zzz"]) {
         try {

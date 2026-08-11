@@ -1186,7 +1186,7 @@ fun probe() > str {
     final bandit = mut Pet{ name = "bandit" };
     // A protocol-typed binding accepts a declared conformer, and dispatch on it is
     // ordinary dynamic dispatch on the object actually there.
-    var named: Nameable = bandit;
+    final named: Nameable = bandit;
     named.rename("Chili");
     final sized: [Sized] = [ bandit ];
     return "{bandit.name}:{sized[0].size()}";
