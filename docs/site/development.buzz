@@ -91,7 +91,7 @@ fun projectLabel(path: str) > str {
 // pages answer "what can I run here"; this answers "what does changing it reach", which
 // no page showed before.
 //
-// It reads magus.graph()'s typed view: nodes already in topological order (so the table
+// It reads magus.projectGraph()'s typed view: nodes already in topological order (so the table
 // IS a valid build order, sorted by nobody here), each node's direct dependencies, and
 // its blast radius - the count of projects a change can transitively affect, which is
 // the number that tells a contributor whether an edit is contained or workspace-wide.

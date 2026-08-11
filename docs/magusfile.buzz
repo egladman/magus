@@ -263,7 +263,7 @@ export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
         workspace.file("assets/**"), workspace.file("releases/*.yaml"));
     ctx.writesFiles("gen/**", "src/gen/**", "active.urls.lock");
     renderer\site_publish(ROOT, DOCS, BLOG, OUT,
-        magus\targets(), magus\graph(),
+        magus\targets(), magus\projectGraph(),
         ctx.has_charm("rw"));
 }
 
@@ -459,5 +459,5 @@ export fun build_playground_editor(ctx: magus\Context, args: [str]) > void !> an
 export fun render(ctx: magus\Context, args: [str]) > void !> any {
 	magus\log.hint("docs render updates the site only; run `magus run generate:rw docs` before committing generated docs or changing generator inputs");
     renderer\site_render(ROOT, DOCS, BLOG, OUT,
-        magus\targets(), magus\graph());
+        magus\targets(), magus\projectGraph());
 }

@@ -109,12 +109,6 @@ export object DoctorReport {
     summary: DoctorSummary = DoctorSummary{},
 }
 
-export object Graph {
-    nodes: [str] = [],
-    dependsOn: {str: [str]} = {},
-    blastRadius: {str: int} = {},
-}
-
 export object Node {
     path: str = "",
     name: str = "",
@@ -311,6 +305,12 @@ export object Projects {
     projects: [ProjectEntry] = [],
 }
 
+export object Graph {
+    nodes: [str] = [],
+    dependsOn: {str: [str]} = {},
+    blastRadius: {str: int} = {},
+}
+
 export object TargetSpellUse {
     spell: str = "",
     ops: [str] = [],
@@ -375,12 +375,12 @@ export extern fun describeFile(paths: [str], opts: {str: any} = {<str: any>}) > 
 export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftResult !> any;
 export extern fun doctor(args: [str], opts: {str: any} = {<str: any>}) > DoctorReport !> any;
 export extern fun fatal(msg: str = "") > void;
-export extern fun graph() > Graph !> any;
 export extern fun has_charm(name: str) > bool;
 export extern fun insight(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
 export extern fun insightReport(args: [str], opts: {str: any} = {<str: any>}) > InsightReport !> any;
 export extern fun ls() > Projects !> any;
 export extern fun project(config: any, opts: any = null) > void;
+export extern fun projectGraph() > Graph !> any;
 export extern fun pry() > void;
 export extern fun raise(code: str, message: str, opts: {str: any} = {<str: any>}) > void !> any;
 export extern fun run(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;

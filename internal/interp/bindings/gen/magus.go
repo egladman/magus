@@ -56,7 +56,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return buzzValueMagusAffectedResult(ret0), nil
 	}))
-	m.MapSet("graph", vm.DirectValue("magus.graph", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+	m.MapSet("projectGraph", vm.DirectValue("magus.projectGraph", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.MagusGraph(ctx)
 		if err != nil {
 			return vm.Null, HostError(err)

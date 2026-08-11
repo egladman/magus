@@ -50,6 +50,12 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   produced an identifier inconsistent with `fs\readFile`, `fs\removeAll`, `fs\copyFile`,
   `fs\listDir`, and `fs\appendFile`. There is no alias: a magusfile calling
   `fs\mkdirall(...)` must be updated to `fs\mkdirAll(...)`.
+- **`magus\graph` is now `magus\projectGraph`.** It returns the PROJECT dependency DAG,
+  and sat beside `magus\targetGraph`, which returns a different graph entirely. Named
+  `graph` and `targetGraph`, the second read as a variant of the first; they are
+  siblings, so each is now named for what it contains. It also settles the surface's one
+  inconsistent qualifier: every other pair suffixes (`describe`/`describeFile`,
+  `affected`/`affectedImpact`, `insight`/`insightReport`) while this one prefixed.
 - **Logging moved to `magus\log`, and `magus\normalize` is now `magus\canonicalName`.**
   `magus\info(...)` becomes `magus\log.info(...)`, and the same for `debug`, `warn`,
   `error` and `hint`. `magus\fatal` and `magus\raise` deliberately did NOT move.

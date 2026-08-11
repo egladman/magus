@@ -12,7 +12,6 @@ describeFile
 diagnoseDrift
 doctor
 fatal
-graph
 has_charm
 insight
 insightReport
@@ -26,6 +25,7 @@ ls
 module
 modules
 project
+projectGraph
 pry
 raise
 run

@@ -59,11 +59,11 @@ Compute the VCS-affected project set against base (empty uses the configured bas
 
 **Returns:** map[string]any
 
-### graph
+### projectGraph
 
 The project dependency DAG as {nodes, dependsOn, blastRadius}. nodes is in TOPOLOGICAL order, so iterating it is already a valid build order; dependsOn gives each node's direct predecessors and blastRadius how many projects it can transitively affect. Served in-process from the workspace on the context - no subprocess.
 
-**Signature:** `magus\graph() → Graph` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L574)
+**Signature:** `magus\projectGraph() → Graph` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L574)
 
 **Returns:** map[string]any
 

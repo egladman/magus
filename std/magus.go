@@ -88,7 +88,7 @@ var Magus = Module{
 			Impl:    MagusAffected,
 		},
 		{
-			Name:    "graph",
+			Name:    "project_graph",
 			Doc:     "The project dependency DAG as {nodes, dependsOn, blastRadius}. nodes is in TOPOLOGICAL order, so iterating it is already a valid build order; dependsOn gives each node's direct predecessors and blastRadius how many projects it can transitively affect. Served in-process from the workspace on the context - no subprocess.",
 			Args:    nil,
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Graph"}},

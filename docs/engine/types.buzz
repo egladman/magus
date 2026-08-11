@@ -144,12 +144,12 @@ export object Site {
     // file-imported renderer module. null is only this pre-injection placeholder.
     targets: TargetGraph = null,
 
-    // The PROJECT dependency DAG, injected the same way from magus.graph(). targets
+    // The PROJECT dependency DAG, injected the same way from magus.projectGraph(). targets
     // above carries the targets inside each project; this carries how the projects
     // themselves relate - nodes in topological order, each node's direct dependencies,
     // and its blast radius. /development/ needs both: one answers "what can I run in
     // this project", the other "what does changing it reach".
-    // Graph is the generated Buzz return type of magus.graph().
+    // Graph is the generated Buzz return type of magus.projectGraph().
     graph: Graph = null,
 
     // The site-specific config, injected once by site_render() from site/config.buzz.
