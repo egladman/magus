@@ -1,0 +1,69 @@
+namespace os;
+
+/// The `os` module's DECLARATIONS, matching upstream Buzz's src/lib/os.buzz.
+///
+/// The implementations are native (std/os.go); this file exists only so the CHECKER
+/// has signatures for them. A host module built directly as a Go value carries none,
+/// which means a call to a member that does not exist cannot be told apart from one
+/// that does - the gap that let `crypto\hash` type-check against a module that never
+/// had it.
+///
+/// NOT declared here: SocketProtocol, Socket and TcpServer. They exist at run time,
+/// but gopherbuzz's argument order diverges from upstream's - our Socket.connect
+/// takes (protocol, host, port) where upstream's takes (address, port, protocol),
+/// and TcpServer.init likewise. Declaring upstream's shape would describe a function
+/// this implementation does not have, which is worse than declaring nothing.
+/// Reconcile the runtime first, then declare them.
+
+/// Sleep for `ms` milliseconds.
+export extern fun sleep(ms: double) > void;
+
+/// Current UNIX time in milliseconds.
+export extern fun time() > double;
+
+/// The value of environment variable `key`, or null when it is unset.
+export extern fun env(key: str) > str?;
+
+/// The system temporary directory.
+export extern fun tmpDir() > str;
+
+/// A path for a new temporary file, optionally prefixed.
+export extern fun tmpFilename(prefix: str?) > str;
+
+/// Exit the program with `exitCode`.
+export extern fun exit(exitCode: int) > void;
+
+/// Run `command` and return its exit code.
+export extern fun execute(command: [str]) > int !> any;
+
+/// Socket protocols.
+export enum SocketProtocol {
+    tcp,
+    udp,
+    ipc,
+}
+
+/// A socket.
+///
+/// Declared with gopherbuzz's OWN argument order, which diverges from upstream:
+/// connect takes (protocol, host, port) where upstream's takes (address, port,
+/// protocol). Declaring upstream's order would describe a function this
+/// implementation does not have. Reconciling the two is a separate change; this file
+/// states what is actually callable.
+export object Socket {
+    static extern fun connect(protocol: SocketProtocol, host: str, port: int) > Socket !> any;
+
+    extern fun send(payload: str) > void !> any;
+    extern fun receive() > str? !> any;
+    extern fun close() > void;
+    extern fun collect() > void;
+}
+
+/// A TCP server. Same divergence note as Socket: init takes (port, protocol).
+export object TcpServer {
+    static extern fun init(port: int, protocol: SocketProtocol) > TcpServer !> any;
+
+    extern fun accept() > Socket !> any;
+    extern fun close() > void;
+    extern fun collect() > void;
+}

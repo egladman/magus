@@ -35,6 +35,9 @@ var cryptoSource string
 //go:embed io.buzz
 var ioSource string
 
+//go:embed os.buzz
+var osSource string
+
 // The test surface — assertcore, assert, suite, and testing — installs through
 // std.Modules (each labeled buzz.LabelGopherbuzz), not a separate RegisterExtensions
 // entry point. assertcore is the native primitive layer; assert/suite/testing are

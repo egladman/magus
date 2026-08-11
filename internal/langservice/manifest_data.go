@@ -230,6 +230,8 @@ var modules = []Module{
 			{Name: "bust_cache", Doc: "Invalidate the build cache. Escape hatch - prefer modeling missing inputs as Sources. No arg clears all; a project path clears one project.", Sig: "magus\\bustCache([project_path])"},
 			{Name: "has_charm", Doc: "True when execution charm `name` is active, letting a target body branch on a charm carried in context (e.g. has_charm(\"rw\")).", Sig: "magus\\hasCharm(name) → bool"},
 			{Name: "project", Doc: "Declare this directory's project: its spell, sources, outputs, and options. A magusfile calls it once at top level. Raises MGS1022 in a `magus buzz` script, which has no workspace to declare into.", Sig: "magus\\project(config, [opts])"},
+			{Name: "modules", Doc: "Every host module magus exposes, as the records `magus describe modules` prints.", Sig: "magus\\modules() → [Module]"},
+			{Name: "module", Doc: "One host module by name, with its fields and methods. Raises when no module has that name.", Sig: "magus\\module(name) → Module"},
 			{Name: "canonical_name", Doc: "The canonical form of a magus entity name - a target, charm, or spell op. `build2` gains a '-' you did not type; `HTTPServer` breaks before its last letter. Returns the NAME, never a spell handle: a handle can only come from a literal import, because the target graph is built by reading imports statically.", Sig: "magus\\canonicalName(name) → string"},
 			{Name: "fatal", Doc: "Log at error level, then abort the run with exit status 1.", Sig: "magus\\fatal([msg])"},
 			{Name: "pry", Doc: "Drop into an interactive REPL at this point, with the calling scope in hand. A no-op while the magusfile is only being parsed.", Sig: "magus\\pry()"},

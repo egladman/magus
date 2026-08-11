@@ -255,6 +255,25 @@ var Magus = Module{
 			Extern: true,
 		},
 		{
+			Name: "modules",
+			Doc:  "Every host module magus exposes, as the records `magus describe modules` prints.",
+			// `[Module]`, not `any`. A bare TypeAny return is not field accessible in
+			// Buzz, so declaring one is WORSE than leaving the member undeclared: the
+			// caller's `.name` stops compiling where before it resolved dynamically.
+			// The brackets live in Object, which is how a list-of-object return is
+			// spelled (see vcs.history's `[Commit]`).
+			Returns: []Ret{{Type: TypeAny, Object: "[Module]"}},
+			Extern:  true,
+		},
+		{
+			Name:    "module",
+			Doc:     "One host module by name, with its fields and methods. Raises when no module has that name.",
+			Args:    []Arg{{Name: "name", Type: TypeString}},
+			Returns: []Ret{{Type: TypeAny, Object: "Module"}},
+			Raises:  true,
+			Extern:  true,
+		},
+		{
 			Name:    "canonical_name",
 			Doc:     "The canonical form of a magus entity name - a target, charm, or spell op. `build2` gains a '-' you did not type; `HTTPServer` breaks before its last letter. Returns the NAME, never a spell handle: a handle can only come from a literal import, because the target graph is built by reading imports statically.",
 			Args:    []Arg{{Name: "name", Type: TypeString}},

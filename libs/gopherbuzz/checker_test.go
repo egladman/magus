@@ -17,7 +17,7 @@ func checkSrc(src string) []typeError {
 	if err != nil {
 		return []typeError{{Line: 0, Col: 0, Msg: err.Error()}}
 	}
-	return checkWithGlobals(prog, nil, nil, nil, nil, nil)
+	return checkWithGlobals(prog, nil, nil, nil, nil, nil, nil)
 }
 
 // checkOK asserts that Check reports no errors for src.
@@ -342,7 +342,7 @@ func TestCheck_InjectedGlobalMemberCall(t *testing.T) {
 	// registers none, so exercise checkWithGlobals with a neutral injected name.
 	prog, err := ParseEmbedded(`host.project.register(".");`)
 	require.NoError(t, err, "parse")
-	errs := checkWithGlobals(prog, []string{"host"}, nil, nil, nil, nil)
+	errs := checkWithGlobals(prog, []string{"host"}, nil, nil, nil, nil, nil)
 	assert.Emptyf(t, errs, "expected no errors, got:\n%s", fmtErrors(errs))
 }
 

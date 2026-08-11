@@ -305,6 +305,26 @@ export object Projects {
     projects: [ProjectEntry] = [],
 }
 
+export object ModuleFieldEntry {
+    name: str = "",
+    @"type": str = "",
+    doc: str = "",
+}
+
+export object ModuleMethodEntry {
+    name: str = "",
+    doc: str = "",
+    buzz: str = "",
+    buzzStdlib: str = "",
+}
+
+export object Module {
+    name: str = "",
+    doc: str = "",
+    fields: [ModuleFieldEntry] = [],
+    methods: [ModuleMethodEntry] = [],
+}
+
 export object Graph {
     nodes: [str] = [],
     dependsOn: {str: [str]} = {},
@@ -379,6 +399,8 @@ export extern fun hasCharm(name: str) > bool;
 export extern fun insight(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
 export extern fun insightReport(args: [str], opts: {str: any} = {<str: any>}) > InsightReport !> any;
 export extern fun ls() > Projects !> any;
+export extern fun module(name: str) > Module !> any;
+export extern fun modules() > [Module];
 export extern fun project(config: any, opts: any = null) > void;
 export extern fun projectGraph() > Graph !> any;
 export extern fun pry() > void;

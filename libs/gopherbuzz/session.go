@@ -100,6 +100,9 @@ type Session struct {
 	// types, registered under their bare names); this keeps the per-module grouping a
 	// namespace object needs, so `io\File` resolves as well as a bare `File`.
 	importedModuleTypes map[string][]ast.Node
+	// importedModuleVars maps the same bound name to the module's exported
+	// `final`/`var` declarations. See collectImportedModule.
+	importedModuleVars map[string][]*ast.DeclStmt
 	// moduleDecls maps an import path to embedded .buzz source. Unlike a
 	// native module (a host Value carrying functions), a declaration module is
 	// real Buzz source, so its exported object/enum *types* are visible to the
@@ -705,7 +708,7 @@ func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Progr
 		globals = append(globals, name)
 	}
 	checkStart := time.Now()
-	errs := checkWithGlobals(prog, globals, s.importedTypes, s.importedModuleFuncs, s.importedModuleTypes, s.importPrivateHint())
+	errs := checkWithGlobals(prog, globals, s.importedTypes, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars, s.importPrivateHint())
 	if obs := s.compileObserver; obs != nil {
 		var firstErr error
 		if len(errs) > 0 {
@@ -1141,6 +1144,17 @@ func (s *Session) collectImportedModule(boundName, src string) {
 					s.importedModuleFuncs = map[string][]*ast.FunDecl{}
 				}
 				s.importedModuleFuncs[boundName] = append(s.importedModuleFuncs[boundName], d)
+			}
+		case *ast.DeclStmt:
+			// An exported `final`/`var` is a namespace member exactly as a fun is.
+			// Collected for COMPLETENESS rather than for its type: without it a
+			// namespace has untracked members, so a MISS cannot be told from a member
+			// that does not exist - which is what BZZ1007 needs to be able to say.
+			if d.IsExported {
+				if s.importedModuleVars == nil {
+					s.importedModuleVars = map[string][]*ast.DeclStmt{}
+				}
+				s.importedModuleVars[boundName] = append(s.importedModuleVars[boundName], d)
 			}
 		}
 	}

@@ -293,7 +293,7 @@ func TestMagusModulesEndToEnd(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
-export fun check(ctx: magus\Context, args: [str]) > void {
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
     final mods = magus.modules();
     if (mods.len() == 0) { magus.fatal("magus.modules() returned nothing"); }
 

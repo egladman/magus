@@ -63,6 +63,7 @@ var Modules = []buzz.Module{
 	{Name: "io", Labels: []string{buzz.LabelUpstream}, Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
 		s.SetNativeModule("io", ioCoreModule(s))
 		s.SetModuleDecls("io", ioSource)
+		s.SetModuleDecls("os", osSource)
 		return nil
 	}},
 	{Name: "serialize", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("serialize", serializeModule)},

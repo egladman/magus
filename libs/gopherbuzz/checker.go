@@ -63,6 +63,9 @@ type checker struct {
 	// moduleTypes holds each imported module's exported object/enum declarations,
 	// so a namespace object can carry them as fields (`io\File`, `io\FileMode`).
 	moduleTypes map[string][]ast.Node
+	// moduleVars holds each imported module's exported `final`/`var` names, so the
+	// namespace object is COMPLETE and a missing member can be reported.
+	moduleVars map[string][]*ast.DeclStmt
 	// enumNS maps an enum's bare name to the namespace it is reachable through, for
 	// a module imported without flattening. See ast.EnumCaseExpr.EnumNS.
 	enumNS map[string]string
@@ -77,11 +80,12 @@ type checker struct {
 // checker doesn't flag them as undefined. private names are hidden by exports-only
 // import visibility: referencing one is undefined here, but the checker points at
 // the missing `export` instead of a bare "undefined".
-func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.Node, moduleFuncs map[string][]*ast.FunDecl, moduleTypes map[string][]ast.Node, private map[string]bool) []typeError {
+func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.Node, moduleFuncs map[string][]*ast.FunDecl, moduleTypes map[string][]ast.Node, moduleVars map[string][]*ast.DeclStmt, private map[string]bool) []typeError {
 	c := &checker{
 		types:       map[string]types.Type{},
 		moduleFuncs: moduleFuncs,
 		moduleTypes: moduleTypes,
+		moduleVars:  moduleVars,
 		private:     private,
 	}
 	c.pushScope()
@@ -193,10 +197,22 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 			// propagate types through cross-module calls and enforce E28 correctly.
 			fds := c.moduleFuncs[name]
 			decls := c.moduleTypes[name]
-			if len(fds) > 0 || len(decls) > 0 {
+			vars := c.moduleVars[name]
+			if len(fds) > 0 || len(decls) > 0 || len(vars) > 0 {
 				nt := &types.ObjectType{Name: name, Fields: map[string]types.Type{}, Methods: map[string]*types.FuncType{}, IsNamespace: true}
 				for _, fd := range fds {
 					nt.Fields[fd.Name] = c.funDeclType(fd)
+				}
+				// An exported final/var is a member too. The TYPE is best-effort - an
+				// unannotated one stays Unknown rather than being inferred, since its
+				// initializer may name things private to the defining module. Recording
+				// the NAME is the point.
+				for _, vd := range vars {
+					var vt types.Type = types.Unknown
+					if vd.TypeAnnot != "" {
+						vt = c.resolveAnnot(vd.TypeAnnot)
+					}
+					nt.Fields[vd.Name] = vt
 				}
 				// An exported TYPE is reachable through the namespace too, as the type value
 				// itself, so `io\File.open(...)` resolves the same static method a bare
@@ -1264,9 +1280,12 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 		if mt, ok := t.Methods[v.Name]; ok {
 			return mt
 		}
-		// Namespace objects (built from imported module exports) may have
-		// untracked exported finals/vars; treat missing fields as Unknown.
 		if t.IsNamespace {
+			// A namespace's members are collected in full now - funs, objects, enums,
+			// AND exported finals/vars - so a miss is a real error rather than an
+			// untracked export. This returned Unknown before, which meant a call to a
+			// member that does not exist type-checked and failed at RUN time.
+			c.errorfc(v.Pos, UnknownMember, "module %s has no member %q", t.Name, v.Name)
 			return types.Unknown
 		}
 		c.errorf(v.Pos, "object %s has no field or method %q", t.Name, v.Name)

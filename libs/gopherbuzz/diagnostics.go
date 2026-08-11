@@ -31,6 +31,7 @@ const (
 	ArgumentError    diagnostics.Code = "BZZ1004" // a call with the wrong count, an unknown/duplicate name, or a missing argument
 	TypeMismatch     diagnostics.Code = "BZZ1005" // an assignment, return, yield, or operand whose type does not match what is expected
 	UnhandledRaise   diagnostics.Code = "BZZ1006" // a call to a !> function from a caller that neither declares !> nor catches it
+	UnknownMember    diagnostics.Code = "BZZ1007" // access to a member an imported module does not export
 
 	// Session / runtime errors (session.go).
 	UnresolvedImport diagnostics.Code = "BZZ2001" // an import that cannot be resolved to a module or file
@@ -44,7 +45,7 @@ const (
 // allBZZCodes enumerates every BZZ code, in ascending order. Kept in sync with the const block above by
 // TestAllBZZCodesEnumerated; it is the source of truth for the doc-coverage drift test.
 var allBZZCodes = []diagnostics.Code{
-	UndefinedName, UndefinedType, NonBoolCondition, ArgumentError, TypeMismatch, UnhandledRaise,
+	UndefinedName, UndefinedType, NonBoolCondition, ArgumentError, TypeMismatch, UnhandledRaise, UnknownMember,
 	UnresolvedImport, FiberMisuse,
 	UnusedImport,
 }
