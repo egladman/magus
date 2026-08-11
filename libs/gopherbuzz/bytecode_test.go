@@ -2075,3 +2075,48 @@ func TestImport_AsAliasExportedObjectType(t *testing.T) {
 	require.True(t, ok, "l not set")
 	assert.Equal(t, "hi", l.String(), "string default must come from the imported declaration")
 }
+
+// TestImport_NamespaceRelativeToImporter covers resolving an import relative to the
+// importing file's OWN namespace, upstream's tests/behavior/common-namespace.buzz.
+//
+// A file declaring `namespace a\b` that imports `a\b\here` reaches it as `here\...`,
+// and a sibling at `a\other` as `other\...`. Only the FULL path was bound before, so
+// both spellings were undefined even though the modules loaded fine.
+//
+// Both shapes come from one importer because they exercise the same rule at different
+// depths: the child shares two segments, the sibling only one, and what binds is
+// whatever remains after the shared prefix.
+//
+// Asserted on the BINDINGS rather than on a variable the program computes: a namespaced
+// program stores its own globals under NUL-delimited module-scoped keys, and reaching
+// through that encoding would pin an internal detail this test does not care about.
+func TestImport_NamespaceRelativeToImporter(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "child.buzz"),
+		[]byte("namespace a\\b\\here;\nexport final message = \"from child\";\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "sib.buzz"),
+		[]byte("namespace a\\other;\nexport final note = \"from sibling\";\n"), 0644))
+
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer sess.Close()
+	sess.SetIncludeDirs([]string{dir})
+
+	// The program READS both spellings, so it would fail to compile if either were
+	// unbound - which is the regression this guards.
+	require.NoError(t, sess.Exec(ctx, "namespace a\\b;\nimport \"child\";\nimport \"sib\";\n"+
+		"final m = here\\message;\nfinal n = other\\note;"), "exec")
+
+	globals := sess.Globals()
+	here, ok := globals["here"]
+	require.True(t, ok, "child shares a\\b, so it must bind as `here`")
+	msg, ok := here.MapGet("message")
+	require.True(t, ok, "`here` must carry the child's exports")
+	assert.Equal(t, "from child", msg.String())
+
+	other, ok := globals["other"]
+	require.True(t, ok, "sibling shares only `a`, so it must bind as `other`")
+	note, ok := other.MapGet("note")
+	require.True(t, ok, "`other` must carry the sibling's exports")
+	assert.Equal(t, "from sibling", note.String())
+}

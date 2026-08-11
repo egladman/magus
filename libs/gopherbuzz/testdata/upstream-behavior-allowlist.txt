@@ -19,6 +19,7 @@ block-expression.buzz
 break-continue.buzz
 call-without-parentheses.buzz
 checked-subscript.buzz
+common-namespace.buzz
 composite-assign.buzz
 control-flow.buzz
 crypto.buzz

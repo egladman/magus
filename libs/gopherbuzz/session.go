@@ -126,6 +126,9 @@ type Session struct {
 	// sharing one namespace; gopherbuzz mirrors both (see bindNamespacePath),
 	// on top of its own basename/splat access conveniences.
 	declaredNamespaces map[string]string
+	// ownNamespace is the ENTRY program's declared namespace, split on the
+	// separator. Imports bind relative to it; see bindNamespaceRelative.
+	ownNamespace []string
 	// lastWarnings holds the non-fatal diagnostics (currently just BZZ3001 unused
 	// imports) compileShared computed for the most recent Exec/Compile call - last
 	// compile, not accumulated. A Session is reused across many compiles (a session
@@ -474,6 +477,12 @@ func (s *Session) Targets() map[string]vmpackage.Callable { return s.targets }
 // Exec parses, type-checks, compiles, and executes Buzz source code in the session's environment.
 // Type errors are returned as hard errors (Buzz is statically typed).
 func (s *Session) Exec(ctx context.Context, code string) error {
+	// The ENTRY program's namespace, recorded before anything it imports is
+	// resolved. An import binds relative to it: a file in `commom\part\here`
+	// imported from `commom\part` binds as `here`, not under its full path. Set
+	// here rather than in exec, which imported files also go through - they must
+	// not overwrite the importer's.
+	s.ownNamespace = s.declaredNamespace(code)
 	_, err := s.exec(ctx, code)
 	return err
 }
@@ -1091,6 +1100,7 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (Impor
 		if err := s.bindNamespacePath(ns, exports, imp.Path); err != nil {
 			return ImportFile, err
 		}
+		s.bindNamespaceRelative(ns, exports)
 	}
 	return ImportFile, nil
 }
@@ -1283,6 +1293,49 @@ func (s *Session) declaredNamespace(src string) []string {
 // (e.g. the module's basename equals its namespace) is left as-is: the basename
 // object already resolves it. Returns an error on a duplicate namespace or a
 // segment that collides with a non-map binding.
+// bindNamespaceRelative binds an imported module's exports under the part of its
+// namespace that is NOT shared with the importing file's own.
+//
+// Upstream resolves a namespace relative to where you are: a file declaring
+// `namespace commom\part` that imports `commom\part\here` reaches it as
+// `here\message`, and a sibling at `commom\sibling` as `sibling\siblingMessage`.
+// Only the full path was bound before, so both of those were undefined.
+//
+// The shared prefix is computed segment-wise, so the sibling case (sharing only
+// `commom`) and the child case (sharing `commom\part`) fall out of one rule. With no
+// namespace on either side there is no prefix to strip and this does nothing.
+func (s *Session) bindNamespaceRelative(ns []string, exports []string) {
+	shared := 0
+	for shared < len(ns) && shared < len(s.ownNamespace) && ns[shared] == s.ownNamespace[shared] {
+		shared++
+	}
+	rest := ns[shared:]
+	// Nothing shared, or the paths are identical: the full-path binding already
+	// covers it and there is no shorter name to add.
+	if shared == 0 || len(rest) == 0 {
+		return
+	}
+
+	leaf := vmpackage.NewMap()
+	for _, n := range exports {
+		if v, ok := s.env.Get(n); ok {
+			leaf.MapSet(n, v)
+		}
+	}
+	// Walk the remainder from the leaf outward, so a multi-segment remainder nests
+	// the same way the full path does.
+	cur := leaf
+	for i := len(rest) - 1; i > 0; i-- {
+		parent := vmpackage.NewMap()
+		parent.MapSet(rest[i], cur)
+		cur = parent
+	}
+	// An existing binding wins: a local name must never be shadowed by an import.
+	if _, exists := s.env.Get(rest[0]); !exists {
+		s.env.Define(rest[0], cur)
+	}
+}
+
 func (s *Session) bindNamespacePath(segments []string, exports []string, importPath string) error {
 	if len(segments) == 0 {
 		return nil

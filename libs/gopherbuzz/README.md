@@ -113,7 +113,7 @@ exhaustiveness analysis, protocol conformance is unverified, and generics are er
 
 ### What does not
 
-Six of the fifteen remaining failures are open gaps, each with a known cause:
+Five of the fourteen remaining failures are open gaps, each with a known cause:
 
 | Gap                                  |                     Blocks | Cause                                                                                                                                                                                                                                       |
 | ------------------------------------ | -------------------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -121,7 +121,6 @@ Six of the fifteen remaining failures are open gaps, each with a known cause:
 | Object-keyed maps                    |                `protocols` | `mapObj` is keyed by `string` throughout, and a map literal stores a bare identifier key as its literal name rather than evaluating it. Upstream allows any value as a key.                                                                 |
 | Tuple types                          |                   `tuples` | `obj{ :str, :str }` (positional fields) and the matching `.{ a, b }` literal.                                                                                                                                                               |
 | `typeof` and mutability              | `clone-mutability-methods` | `cloneMutable()` has to retype to `<mut [int]>`; mutability is a property no runtime value carries.                                                                                                                                         |
-| Namespaces sharing a leading segment |         `common-namespace` | Two imports whose namespaces share a first part must both bind under it.                                                                                                                                                                    |
 | Circular imports                     |            `mutual-import` | Two modules importing each other.                                                                                                                                                                                                           |
 
 The other nine cannot be accommodated here, which is a property of the embedding
