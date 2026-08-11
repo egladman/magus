@@ -1,0 +1,8 @@
+// @error: return value may be null
+// A match arm passes its value straight out, so an optional parameter can reach a
+// non-optional return through one.
+fun score(points: int?) > int => match (true) {
+    true -> points,
+    false -> 0,
+};
+final __r = 0;

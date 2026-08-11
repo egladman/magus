@@ -59,6 +59,9 @@ type checker struct {
 	errors   []typeError
 	scopes   []map[string]scopeEntry
 	retTyp   types.Type
+	// retOptional records that the enclosing function's return annotation ended in
+	// `?`. Like scopeEntry.optional it exists because ParseAnnot erases the marker.
+	retOptional bool
 	yieldTyp types.Type // non-nil when inside a function with a *> yield annotation
 	// raiseDeclared is true while checking the body of a function that declared
 	// !> - a call to a raising function is legal there without a surrounding
@@ -568,6 +571,14 @@ func (c *checker) checkReturn(v *ast.ReturnStmt) {
 	// the declared return type in these cases represents the fiber value type, not
 	// the checked function return type.
 	_, retIsFibType := c.retTyp.(*types.FibType)
+	// A non-optional return cannot yield a possibly-null value. Optionality is
+	// erased in the type system, so this reads the declared `?` recorded on the
+	// scope entry - see possiblyNullName.
+	if v.Value != nil && !c.retOptional && c.retTyp != nil && c.retTyp != types.Void && c.retTyp != types.Any && c.retTyp != types.Unknown {
+		if name, isNull := c.possiblyNullName(v.Value); isNull {
+			c.errorfc(ast.NodePos(v.Value), TypeMismatch, "return value may be null: %q is optional but %s declares a non-optional return", name, "this function")
+		}
+	}
 	if c.retTyp != nil && c.retTyp != types.Any && c.retTyp != types.Fib && !retIsFibType && c.yieldTyp == nil && !types.Compat(ret, c.retTyp) {
 		c.errorfc(v.Pos, TypeMismatch, "return type mismatch: got %s, want %s",
 			ret.TypeName(), c.retTyp.TypeName())
@@ -657,9 +668,11 @@ func (c *checker) checkFunDecl(fd *ast.FunDecl) {
 	}
 
 	savedRet := c.retTyp
+	savedRetOpt := c.retOptional
 	savedYield := c.yieldTyp
 	savedRaise := c.raiseDeclared
 	c.retTyp = ft.Ret
+	c.retOptional = strings.HasSuffix(fd.RetAnnot, "?")
 	if fd.YieldAnnot != "" {
 		c.yieldTyp = c.resolveAnnot(fd.YieldAnnot)
 	} else {
@@ -683,6 +696,11 @@ func (c *checker) checkFunDecl(fd *ast.FunDecl) {
 			}
 		}
 		c.define(name, pt, false)
+		if i < len(fd.ParamAnnots) && strings.HasSuffix(fd.ParamAnnots[i], "?") {
+			e := c.scopes[len(c.scopes)-1][name]
+			e.optional = true
+			c.scopes[len(c.scopes)-1][name] = e
+		}
 	}
 	for _, s := range fd.Body.Stmts {
 		c.checkStmt(s)
@@ -695,6 +713,7 @@ func (c *checker) checkFunDecl(fd *ast.FunDecl) {
 	c.checkFunReturns(fd)
 	c.popScope()
 	c.retTyp = savedRet
+	c.retOptional = savedRetOpt
 	c.yieldTyp = savedYield
 	c.raiseDeclared = savedRaise
 }
@@ -742,9 +761,11 @@ func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
 			continue
 		}
 		savedRet := c.retTyp
+		savedRetOpt := c.retOptional
 		savedRaise := c.raiseDeclared
 		savedYield := c.yieldTyp
 		c.retTyp = ft.Ret
+		c.retOptional = strings.HasSuffix(m.RetAnnot, "?")
 		c.raiseDeclared = m.ErrAnnot != ""
 		// A method's *> annotation was never recorded here, unlike a free function's
 		// in checkFunDecl. Nothing surfaced it because every yield check is guarded on
@@ -780,6 +801,7 @@ func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
 		c.checkUnreachable(m.Body)
 		c.popScope()
 		c.retTyp = savedRet
+		c.retOptional = savedRetOpt
 		c.raiseDeclared = savedRaise
 		c.yieldTyp = savedYield
 	}
@@ -2517,4 +2539,33 @@ func (c *checker) fillReturn(fd *ast.FunDecl, ft *types.FuncType, recv types.Typ
 	if got != types.Unknown {
 		ft.Ret = got
 	}
+}
+
+// possiblyNullName reports whether n can evaluate to a value that was DECLARED
+// optional, naming it when so.
+//
+// It looks through the forms that pass a value straight out - a match or inline-if
+// arm - because that is how upstream's arrow-return-match-optional.buzz smuggles an
+// `int?` parameter out of a `> int` function. It deliberately does NOT look through
+// `??`, a force-unwrap, or anything computed: those produce a new value whose
+// nullability this narrow record cannot speak to.
+func (c *checker) possiblyNullName(n ast.Node) (string, bool) {
+	switch e := n.(type) {
+	case *ast.IdentExpr:
+		if entry, found := c.lookup(e.Name); found && entry.optional {
+			return e.Name, true
+		}
+	case *ast.MatchExpr:
+		for _, br := range e.Branches {
+			if name, ok := c.possiblyNullName(br.Body); ok {
+				return name, true
+			}
+		}
+	case *ast.IfExpr:
+		if name, ok := c.possiblyNullName(e.Then); ok {
+			return name, true
+		}
+		return c.possiblyNullName(e.Else)
+	}
+	return "", false
 }

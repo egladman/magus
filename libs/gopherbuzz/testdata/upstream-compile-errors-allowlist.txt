@@ -10,6 +10,7 @@
 # compiling clean (gopherbuzz got laxer) or if an unlisted file starts failing
 # (progress that must be recorded here).
 anonymous-object-extra-field.buzz
+arrow-return-match-optional.buzz
 bad-fun-signature.buzz
 bad-pattern.buzz
 block-expression-partial-out.buzz

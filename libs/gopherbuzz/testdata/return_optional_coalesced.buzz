@@ -1,0 +1,9 @@
+// @expect: 7
+// Coalescing produces a new value, so it satisfies the non-optional return. The
+// check looks through match and inline-if arms only - never through `??` or a
+// force-unwrap, whose results this narrow record cannot speak to.
+fun score(points: int?) > int => match (true) {
+    true -> points ?? 7,
+    false -> 0,
+};
+final __r = score(null);

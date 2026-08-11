@@ -23,13 +23,13 @@ rather than only the flattering one.
 | upstream suite          | files |      gopherbuzz | what it asks                                                     |
 | ----------------------- | ----: | --------------: | ---------------------------------------------------------------- |
 | `tests/behavior/`       |    83 |     **74 pass** | does correct source produce the right answer?                    |
-| `tests/compile_errors/` |    77 | **70 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
+| `tests/compile_errors/` |    77 | **71 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
 | `tests/fuzzed/`         |   644 |    **0 panics** | can malformed input crash the front end?                         |
 | `tests/bench/`          |    11 |         not run | upstream's benchmarks (ours are in [`benchmarks/`](benchmarks/)) |
 | `tests/manual/`         |     9 |         not run | interactive                                                      |
 | `tests/utils/`          |    10 |             n/a | helper modules the behavior tests import                         |
 
-**The compile-error row is the uncomfortable one and the most important.** 7 of those
+**The compile-error row is the uncomfortable one and the most important.** 6 of those
 77 programs compile CLEAN here that upstream refuses. That is not a missing feature, it
 is missing strictness: gopherbuzz will accept source upstream tells you is wrong. If
 you are evaluating this VM as a Buzz implementation, weigh that at least as heavily as
@@ -63,7 +63,6 @@ than a missing check. Each of these was implemented, measured, and reverted:
 | `fiber-error-location` | hold a direct `throw` to propagate-or-catch, as a CALL already is | breaks seven of magus's suites: its spells, tour files and scripts throw without `!>` |
 | `unused-import` | make BZZ3001 an error | impossible as stated -- see the note in `session.go` |
 | `selective-import` | stop `assert` resolving unimported | blocked on `registerBuiltins`, which pre-defines the stdlib names on purpose |
-| `arrow-return-match-optional` | track OPTIONALITY through a RETURN | optionals are erased (`ParseAnnot` consumes the `?`). `nullable-list-index` was closed by recording the declared `?` on the scope entry, which is deliberately narrow and does not generalise to return positions |
 | `error-message` | rendering a thrown object's message | the test body never runs under `Exec`, so nothing can surface it here |
 
 Each is a call to make deliberately, with the migration budgeted -- not a gap to
