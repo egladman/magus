@@ -16,9 +16,12 @@ const maxParseDepth = 200
 
 // parser produces a Program AST from a token stream.
 type parser struct {
-	tokens []token.Token
-	pos    int
-	depth  int
+	// pendingExports holds names from standalone  statements, resolved
+	// against the file's declarations once parsing finishes. See applyPendingExports.
+	pendingExports []string
+	tokens         []token.Token
+	pos            int
+	depth          int
 	// strict enables the script-conformance rules upstream Buzz enforces: no
 	// control-flow statements at the program top level, and labeled call
 	// arguments. On by default via Parse (upstream parity); ParseEmbedded clears
@@ -283,7 +286,44 @@ func (p *parser) parseProgram() (*ast.Program, error) {
 			prog.Stmts = append(prog.Stmts, s)
 		}
 	}
+	if err := p.applyPendingExports(prog); err != nil {
+		return nil, err
+	}
 	return prog, nil
+}
+
+// applyPendingExports marks each declaration named by a standalone `export name;`
+// statement as exported. Deferred to here because the statement may precede or follow
+// the declaration it names, and only now is the whole file known.
+func (p *parser) applyPendingExports(prog *ast.Program) error {
+	for _, name := range p.pendingExports {
+		found := false
+		for _, st := range prog.Stmts {
+			switch d := st.(type) {
+			case *ast.FunDecl:
+				if d.Name == name {
+					d.IsExported, found = true, true
+				}
+			case *ast.ObjectDecl:
+				if d.Name == name {
+					d.IsExported, found = true, true
+				}
+			case *ast.EnumDecl:
+				if d.Name == name {
+					d.IsExported, found = true, true
+				}
+			case *ast.DeclStmt:
+				if d.Name == name {
+					d.IsExported, found = true, true
+				}
+			}
+		}
+		if !found {
+			return fmt.Errorf("export %s: no declaration named %s in this file", name, name)
+		}
+	}
+	p.pendingExports = nil
+	return nil
 }
 
 // checkTopLevelStmt enforces the strict-mode rule that a program's top level
@@ -423,6 +463,40 @@ func (p *parser) parseStmt() (ast.Node, error) {
 			n.IsExported = true
 		case *ast.EnumDecl:
 			n.IsExported = true
+		default:
+			// `export name;` - upstream's standalone form, where the declaration is
+			// written plainly and exported by a later statement (see its
+			// tests/utils/testing.buzz). It parses as an expression statement, so the
+			// cases above do not match it, and it used to fall through here and be
+			// DISCARDED: the export vanished with no diagnostic, and the name stayed
+			// invisible to importers.
+			//
+			// Recorded by name and resolved once the whole program is parsed, because
+			// the declaration may come either before or after this statement.
+			es, ok := node.(*ast.ExprStmt)
+			if !ok {
+				return nil, fmt.Errorf("buzz: line %d:%d: export must name a declaration", t.Line, t.Col)
+			}
+			// `export X as Y;` re-exports a value under a new name. `as` is Buzz's cast
+			// operator, so it parses as an AsExpr whose "type" is really the alias -
+			// and the meaning is exactly `export final Y = X`, so it DESUGARS into
+			// one. That reuses the declaration export path whole; a re-export needs no
+			// runtime machinery of its own.
+			if as, ok := es.Expr.(*ast.AsExpr); ok && !as.Optional {
+				return &ast.DeclStmt{
+					Pos:        ast.Pos{Line: t.Line, Col: t.Col},
+					IsExported: true,
+					IsConst:    true,
+					Name:       as.TypeName,
+					Value:      as.Expr,
+				}, nil
+			}
+			id, ok := es.Expr.(*ast.IdentExpr)
+			if !ok {
+				return nil, fmt.Errorf("buzz: line %d:%d: export must name a declaration or re-export a value with `as`", t.Line, t.Col)
+			}
+			p.pendingExports = append(p.pendingExports, id.Name)
+			return nil, nil
 		}
 		return node, nil
 	case token.Final, token.Var:
