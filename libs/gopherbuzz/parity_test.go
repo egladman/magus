@@ -1269,13 +1269,43 @@ fun probe() > str {
 	assert.Equal(t, "dtrue", v.AsString(), "both positions resolve without naming the enum")
 }
 
-func TestParity_MatchYieldsNullWhenNoArmMatches(t *testing.T) {
-	v := evalParity(t, `
+func TestParity_MatchWithoutElseIsRejected(t *testing.T) {
+	// This test used to assert the opposite of what it now does. It ran
+	// `match (99) { 1 -> "one", 2 -> "two" }` and pinned that falling off the last
+	// arm yields null - correct as a description of the VM, but NOT parity, which
+	// is what the name claimed. Upstream rejects that source outright
+	// (tests/compile_errors/match-non-exhaustive.buzz, "Non-exhaustive `match`,
+	// `else` branch required"), so upstream never lets the null be observed. The
+	// checker now rejects it too, and the guarantee worth pinning is the rejection.
+	//
+	// The VM's fall-through-yields-null behaviour is deliberately UNCHANGED: a `.bo`
+	// blob compiled before this check exists still runs, and the compiler still
+	// emits the trailing push.
+	ctx := context.Background()
+	s := buzz.NewSession(ctx)
+	t.Cleanup(func() { _ = s.Close() })
+	err := s.Exec(ctx, `
 fun probe() > bool {
     final r = match (99) { 1 -> "one", 2 -> "two" };
     return r == null;
 }`)
-	assert.True(t, v.AsBool(), "falling off the last arm with no else yields null")
+	require.Error(t, err, "a non-enum, non-bool match with no else must be rejected")
+	assert.Contains(t, err.Error(), "non-exhaustive match")
+}
+
+func TestParity_MatchExhaustiveWithoutElse(t *testing.T) {
+	// The flip side: a subject with a finite case set needs no else. Upstream's
+	// match.buzz asserts this for bool in so many words ("boolean match can be
+	// exhaustive without else"), and the same reasoning covers a fully-named enum.
+	v := evalParity(t, `
+enum Side { left, right }
+
+fun probe() > bool {
+    final b = match (true) { true -> "y", false -> "n" };
+    final e = match (Side.left) { Side.left -> "l", Side.right -> "r" };
+    return b == "y" and e == "l";
+}`)
+	assert.True(t, v.AsBool(), "bool and fully-covered enum matches need no else")
 }
 
 func TestParity_MatchEvaluatesSubjectOnce(t *testing.T) {

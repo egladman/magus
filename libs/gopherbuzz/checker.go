@@ -3,6 +3,7 @@ package buzz
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/libs/diagnostics"
@@ -878,6 +879,10 @@ func (c *checker) infer(n ast.Node) types.Type {
 				result = bodyTyp
 			}
 		}
+		// Arm analysis runs AFTER the loop above: a bare enum case (`.one`) only
+		// knows which enum it belongs to once inferExpected has resolved it against
+		// the subject, and coverage cannot be computed before that.
+		c.checkMatchArms(v, subjTyp)
 		if result == nil {
 			return types.Unknown
 		}
@@ -1602,4 +1607,227 @@ func mutSpelling(mut bool) string {
 		return "mut "
 	}
 	return ""
+}
+
+// --- match arm analysis ---
+//
+// Upstream rejects a `match` whose arms cannot all be reached (a repeated
+// condition, a range overlapping another range or swallowing a literal), whose
+// conditions cannot possibly compare against the subject, or which does not cover
+// the subject. gopherbuzz performed none of these checks, which made the largest
+// single cluster in tests/compile_errors: eleven files that compiled clean here.
+
+// matchCondKind classifies an arm condition by what it can be compared against.
+// matchCondOther is the escape hatch for anything not statically known (a call, a
+// variable): it is recorded but never reported, because a false positive here
+// rejects a correct program.
+type matchCondKind int
+
+const (
+	matchCondOther matchCondKind = iota
+	matchCondNumber
+	matchCondString
+	matchCondBool
+	matchCondEnumCase
+	matchCondRange
+	matchCondPattern
+	matchCondType
+)
+
+// matchCondShape is one condition reduced to the form the analyses compare.
+type matchCondShape struct {
+	kind   matchCondKind
+	num    float64 // matchCondNumber
+	text   string  // matchCondString contents, or matchCondEnumCase case name
+	lo, hi float64 // matchCondRange, half-open [lo, hi)
+	pos    ast.Pos
+}
+
+// foldConstNumber evaluates a condition to a constant number when it is one.
+// Upstream folds before comparing, so `1 + 1` duplicates `2` and `1..(2 + 3)` is
+// the range `1..5`. Division is deliberately NOT folded: `1 / 2` is integer
+// division for two ints and folding it as float64 would invent a value the VM
+// never produces.
+func foldConstNumber(n ast.Node) (float64, bool) {
+	switch e := n.(type) {
+	case *ast.IntLit:
+		return float64(e.Val), true
+	case *ast.FloatLit:
+		return e.Val, true
+	case *ast.UnaryExpr:
+		v, ok := foldConstNumber(e.Operand)
+		if !ok {
+			return 0, false
+		}
+		switch e.Op {
+		case "-":
+			return -v, true
+		case "+":
+			return v, true
+		}
+	case *ast.BinaryExpr:
+		l, lok := foldConstNumber(e.Left)
+		r, rok := foldConstNumber(e.Right)
+		if !lok || !rok {
+			return 0, false
+		}
+		switch e.Op {
+		case "+":
+			return l + r, true
+		case "-":
+			return l - r, true
+		case "*":
+			return l * r, true
+		}
+	}
+	return 0, false
+}
+
+// matchCondOf reduces one condition to its comparable shape.
+func (c *checker) matchCondOf(n ast.Node) matchCondShape {
+	pos := ast.NodePos(n)
+	if v, ok := foldConstNumber(n); ok {
+		return matchCondShape{kind: matchCondNumber, num: v, pos: pos}
+	}
+	switch e := n.(type) {
+	case *ast.StringLit:
+		return matchCondShape{kind: matchCondString, text: e.Val, pos: pos}
+	case *ast.BoolLit:
+		// text carries the value so `true`/`false` coverage can be counted, the same
+		// way enum cases are: a bool subject naming both arms needs no else.
+		return matchCondShape{kind: matchCondBool, text: strconv.FormatBool(e.Val), pos: pos}
+	case *ast.PatLit:
+		return matchCondShape{kind: matchCondPattern, pos: pos}
+	case *ast.TypeExpr:
+		return matchCondShape{kind: matchCondType, pos: pos}
+	case *ast.EnumCaseExpr:
+		return matchCondShape{kind: matchCondEnumCase, text: e.Name, pos: pos}
+	case *ast.MemberExpr:
+		// `Kind.two`: an enum case written explicitly. Only treated as one when the
+		// base is a bare identifier naming an enum, so `someRecord.field` stays
+		// matchCondOther and is never compared.
+		if id, isID := e.Object.(*ast.IdentExpr); isID {
+			if _, isEnum := c.types[id.Name].(*types.EnumType); isEnum {
+				return matchCondShape{kind: matchCondEnumCase, text: e.Name, pos: pos}
+			}
+		}
+	case *ast.RangeExpr:
+		lo, lok := foldConstNumber(e.Lo)
+		hi, rok := foldConstNumber(e.Hi)
+		if !lok || !rok {
+			break
+		}
+		// Normalized so lo < hi. A descending range is legal (matchTest handles
+		// hi < lo separately) and covers the same span for overlap purposes.
+		if hi < lo {
+			lo, hi = hi, lo
+		}
+		return matchCondShape{kind: matchCondRange, lo: lo, hi: hi, pos: pos}
+	}
+	return matchCondShape{kind: matchCondOther, pos: pos}
+}
+
+// checkMatchArms reports unreachable, ill-typed and non-exhaustive arms.
+func (c *checker) checkMatchArms(v *ast.MatchExpr, subjTyp types.Type) {
+	hasElse := false
+	covered := map[string]bool{}
+	var seen []matchCondShape
+	for _, br := range v.Branches {
+		if len(br.Conds) == 0 {
+			hasElse = true
+			continue
+		}
+		for _, cond := range br.Conds {
+			s := c.matchCondOf(cond)
+			c.checkMatchCondType(s, subjTyp)
+			if s.kind == matchCondEnumCase || s.kind == matchCondBool {
+				covered[s.text] = true
+			}
+			// Compared against every EARLIER condition, including others in this same
+			// arm: `1, 1 -> ...` is a duplicate upstream rejects.
+			c.checkMatchCondReachable(s, seen)
+			if s.kind != matchCondOther {
+				seen = append(seen, s)
+			}
+		}
+	}
+	if hasElse {
+		return
+	}
+	if et := enumOf(subjTyp); et != nil {
+		var missing []string
+		for _, name := range et.Cases {
+			if !covered[name] {
+				missing = append(missing, name)
+			}
+		}
+		if len(missing) > 0 {
+			c.errorf(v.Pos, "non-exhaustive match over enum %s, missing case(s): %s", et.Name, strings.Join(missing, ", "))
+		}
+		return
+	}
+	// A bool is the other finitely-enumerable subject: naming both arms is
+	// exhaustive without an else, which upstream's match.buzz asserts in so many
+	// words ("boolean match can be exhaustive without else").
+	if subjTyp == types.Bool {
+		if !covered["true"] || !covered["false"] {
+			c.errorf(v.Pos, "non-exhaustive match over bool: cover both `true` and `false`, or add an `else` branch")
+		}
+		return
+	}
+	// Nothing else has a finite case set to enumerate, so it needs an else.
+	c.errorf(v.Pos, "non-exhaustive match: an `else` branch is required")
+}
+
+// checkMatchCondType reports a condition that could never compare against the
+// subject. Only the subject types whose comparable set upstream pins are checked;
+// an enum, list or unknown subject is left alone rather than guessed at.
+func (c *checker) checkMatchCondType(s matchCondShape, subjTyp types.Type) {
+	// A type value (`<[str]>`) is legal against ANY subject, and an unrecognized
+	// condition is never reported.
+	if s.kind == matchCondType || s.kind == matchCondOther {
+		return
+	}
+	switch subjTyp {
+	case types.Int, types.Double:
+		if s.kind != matchCondNumber && s.kind != matchCondRange {
+			c.errorf(s.pos, "match condition must be of type `int`, `double`, `rng` or `type`")
+		}
+	case types.Str:
+		if s.kind != matchCondString && s.kind != matchCondPattern {
+			c.errorf(s.pos, "match condition must be of type `str`, `pat` or `type`")
+		}
+	case types.Bool:
+		if s.kind != matchCondBool {
+			c.errorf(s.pos, "bad match condition type: a `bool` subject compares against `bool` or `type`")
+		}
+	}
+}
+
+// checkMatchCondReachable reports a condition already covered by an earlier one.
+// Ranges are HALF-OPEN, matching the VM's matchTest (`n >= lo && n < hi`), which is
+// what lets `0..5` and `5..10` sit side by side while `1..5` and `4..8` overlap.
+func (c *checker) checkMatchCondReachable(s matchCondShape, seen []matchCondShape) {
+	for _, p := range seen {
+		switch {
+		case s.kind == matchCondNumber && p.kind == matchCondNumber && s.num == p.num:
+			// Compared numerically, so `1` and `1.0` are one condition.
+			c.errorf(s.pos, "duplicate match condition")
+		case s.kind == matchCondString && p.kind == matchCondString && s.text == p.text:
+			c.errorf(s.pos, "duplicate match condition")
+		case s.kind == matchCondEnumCase && p.kind == matchCondEnumCase && s.text == p.text:
+			c.errorf(s.pos, "duplicate match condition")
+		case s.kind == matchCondBool && p.kind == matchCondBool && s.text == p.text:
+			c.errorf(s.pos, "duplicate match condition")
+		case s.kind == matchCondRange && p.kind == matchCondRange && s.lo < p.hi && p.lo < s.hi:
+			c.errorf(s.pos, "overlapping match condition")
+		case s.kind == matchCondRange && p.kind == matchCondNumber && p.num >= s.lo && p.num < s.hi:
+			c.errorf(s.pos, "overlapping match condition")
+		case s.kind == matchCondNumber && p.kind == matchCondRange && s.num >= p.lo && s.num < p.hi:
+			c.errorf(s.pos, "overlapping match condition")
+		default:
+			continue
+		}
+		return // one report per condition
+	}
 }

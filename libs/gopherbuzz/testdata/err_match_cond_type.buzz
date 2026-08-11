@@ -1,0 +1,2 @@
+// @error: must be of type `int`, `double`, `rng` or `type`
+final __r = match (1) { "one" -> "string", else -> "number" };

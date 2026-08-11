@@ -23,20 +23,27 @@ rather than only the flattering one.
 | upstream suite          | files |      gopherbuzz | what it asks                                                     |
 | ----------------------- | ----: | --------------: | ---------------------------------------------------------------- |
 | `tests/behavior/`       |    83 |     **74 pass** | does correct source produce the right answer?                    |
-| `tests/compile_errors/` |    77 | **26 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
+| `tests/compile_errors/` |    77 | **37 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
 | `tests/fuzzed/`         |   644 |    **0 panics** | can malformed input crash the front end?                         |
 | `tests/bench/`          |    11 |         not run | upstream's benchmarks (ours are in [`benchmarks/`](benchmarks/)) |
 | `tests/manual/`         |     9 |         not run | interactive                                                      |
 | `tests/utils/`          |    10 |             n/a | helper modules the behavior tests import                         |
 
-**The compile-error row is the uncomfortable one and the most important.** 51 of those
+**The compile-error row is the uncomfortable one and the most important.** 40 of those
 77 programs compile CLEAN here that upstream refuses. That is not a missing feature, it
 is missing strictness: gopherbuzz will accept source upstream tells you is wrong. If
 you are evaluating this VM as a Buzz implementation, weigh that at least as heavily as
 the behavior row -- a permissive checker is the failure mode a subset does not warn you
-about. The largest cluster is `match`, which has no exhaustiveness, duplicate-condition
-or overlapping-range analysis at all (8 files); the rest is spread across type-mismatch,
-mutability, shadowing and terminal-flow checks.
+about.
+
+`match` used to be the largest cluster and is now analysed in full (11 files):
+exhaustiveness, duplicate conditions, and overlapping ranges. What remains is led by
+terminal-flow and reachability (8 files), fiber and `yield` typing (7), then `out`
+and block expressions, mutability, unused locals and shadowing, and a tail of
+signature checks. One caveat worth knowing before working the row: upstream's own
+suite is not internally consistent everywhere, so check whether a rule you are about
+to add contradicts a `tests/behavior/` file before writing it. `unused-import` is the
+worked example -- see the note in `session.go`.
 
 The fuzz corpus is upstream's checked-in AFL output, not hand-written tests: the
 filenames are AFL's (`id_000123,sig_06,src_000051,op_flip1,pos_1`), where `sig_06` is
@@ -168,8 +175,11 @@ reproducible difference at the pinned ref.
   (`x is obj{...}`) does check field presence, so the two disagree.
 - **Protocol conformance is declared, never verified.** `object<Drawable> Foo {}`
   type-checks with none of `Drawable`'s methods. `Compat` consults the declaration only.
-- **`match` has no exhaustiveness, duplicate-condition or overlapping-range analysis** --
-  the 8-file cluster in the compile-error row above.
+- **`match` analysis is narrower than the runtime.** Exhaustiveness, duplicate
+  conditions and overlapping ranges are all checked now, but only over conditions that
+  fold to a CONSTANT: `1 + 1` duplicates `2`, while two conditions naming the same
+  `final` do not. That is deliberately one-sided -- an unfoldable condition is recorded
+  and never reported, because a false positive here rejects a correct program.
 - **Generics are erased.** There is no reified type argument, so `assertOfType::<int>`
   cannot inspect anything; gopherbuzz's own `testing` module takes a type NAME string
   instead. This is the one "cannot accommodate" above that is really a design choice.

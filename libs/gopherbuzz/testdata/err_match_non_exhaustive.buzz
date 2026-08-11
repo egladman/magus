@@ -1,0 +1,2 @@
+// @error: non-exhaustive match
+final __r = match (1) { 1 -> "one" };
