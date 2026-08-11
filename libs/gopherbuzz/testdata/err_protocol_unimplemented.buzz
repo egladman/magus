@@ -1,0 +1,5 @@
+// @error: does not implement method "live"
+// Conformance was declared and then trusted; the declaration is now a promise.
+protocol Living { fun live() > void; }
+object<Living> Ant { name: str }
+final __r = 0;

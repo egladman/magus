@@ -1,0 +1,10 @@
+// @error: already exists in an enclosing scope
+// Shadowing a GLOBAL stays legal; only an enclosing LOCAL counts.
+fun f() > void {
+    final local = "hello";
+    if (true) {
+        final local = "bye";
+        _ = local;
+    }
+}
+final __r = 0;

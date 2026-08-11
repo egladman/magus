@@ -23,13 +23,13 @@ rather than only the flattering one.
 | upstream suite          | files |      gopherbuzz | what it asks                                                     |
 | ----------------------- | ----: | --------------: | ---------------------------------------------------------------- |
 | `tests/behavior/`       |    83 |     **74 pass** | does correct source produce the right answer?                    |
-| `tests/compile_errors/` |    77 | **62 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
+| `tests/compile_errors/` |    77 | **64 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
 | `tests/fuzzed/`         |   644 |    **0 panics** | can malformed input crash the front end?                         |
 | `tests/bench/`          |    11 |         not run | upstream's benchmarks (ours are in [`benchmarks/`](benchmarks/)) |
 | `tests/manual/`         |     9 |         not run | interactive                                                      |
 | `tests/utils/`          |    10 |             n/a | helper modules the behavior tests import                         |
 
-**The compile-error row is the uncomfortable one and the most important.** 15 of those
+**The compile-error row is the uncomfortable one and the most important.** 13 of those
 77 programs compile CLEAN here that upstream refuses. That is not a missing feature, it
 is missing strictness: gopherbuzz will accept source upstream tells you is wrong. If
 you are evaluating this VM as a Buzz implementation, weigh that at least as heavily as
@@ -135,8 +135,8 @@ program using `typeof` from ever being a built-in spell. [Bytecode version](#byt
 VM must reject a newer blob.
 
 Read that list as "the shape parses and runs", not as "matches upstream in every
-detail". Several entries carry a caveat recorded under [Where the skeletons are](#where-the-skeletons-are) -- `as` coerces rather than asserts, `match` does no
-exhaustiveness analysis, protocol conformance is unverified, and generics are erased.
+detail". Several entries carry a caveat recorded under [Where the skeletons are](#where-the-skeletons-are) -- `as` coerces rather than asserts, a compound assign
+evaluates its target twice, and generics are erased.
 
 ### What does not
 
@@ -190,8 +190,6 @@ reproducible difference at the pinned ref.
 - **`obj{...}` annotations are erased in the checker**, so an annotated discard
   (`_: obj{ nope: str } = ...`) asserts nothing statically. The RUNTIME test
   (`x is obj{...}`) does check field presence, so the two disagree.
-- **Protocol conformance is declared, never verified.** `object<Drawable> Foo {}`
-  type-checks with none of `Drawable`'s methods. `Compat` consults the declaration only.
 - **`match` analysis is narrower than the runtime.** Exhaustiveness, duplicate
   conditions and overlapping ranges are all checked now, but only over conditions that
   fold to a CONSTANT: `1 + 1` duplicates `2`, while two conditions naming the same

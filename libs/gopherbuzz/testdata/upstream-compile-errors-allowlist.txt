@@ -34,6 +34,7 @@ invalid-int-literal.buzz
 label-not-found.buzz
 labeled-continue-terminal-flow.buzz
 local-assignment-value-type.buzz
+local-shadowing.buzz
 long-tuple.buzz
 main-signature.buzz
 match-duplicate-condition-folded.buzz
@@ -57,6 +58,7 @@ object-assignment-value-type.buzz
 object-field-default.buzz
 object-prop-immutable-value.buzz
 out-last-statement.buzz
+protocol.buzz
 terminal-break-unreachable.buzz
 terminal-continue-unreachable.buzz
 terminal-if-unreachable.buzz

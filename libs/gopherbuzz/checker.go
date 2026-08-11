@@ -3,6 +3,7 @@ package buzz
 import (
 	"fmt"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -478,6 +479,7 @@ func (c *checker) checkDecl(v *ast.DeclStmt) {
 		}
 		declTyp = annotTyp
 	}
+	c.checkLocalShadowing(v)
 	c.define(v.Name, declTyp, v.IsConst)
 }
 
@@ -663,6 +665,7 @@ func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
 	if ot == nil {
 		ot = c.buildObjectType(v)
 	}
+	c.checkProtocolConformance(v, ot)
 	// Field defaults were previously never inferred at all. They have to be, because
 	// `mouse: MouseKind = .drag` is the enum shorthand's most common home and its
 	// field annotation is the only thing that says which enum `.drag` names. Inferred,
@@ -2214,6 +2217,54 @@ func (c *checker) checkCollectionMutator(pos ast.Pos, recv types.Type, name stri
 	case *types.MapType:
 		if !t.Mut && mapMutators[name] {
 			c.errorf(pos, "method `%s` requires a mutable map: declare it with `mut`", name)
+		}
+	}
+}
+
+// checkProtocolConformance verifies that an object declaring `object<P> Name`
+// actually implements every method P names.
+//
+// Conformance was DECLARED and then trusted: `Compat` consults the declaration
+// only, so `object<Drawable> Foo {}` with none of Drawable's methods type-checked,
+// and every call through a Drawable-typed value failed at run time instead. The
+// declaration is the promise; this is what makes it one.
+func (c *checker) checkProtocolConformance(v *ast.ObjectDecl, ot *types.ObjectType) {
+	for _, name := range v.Conforms {
+		pt, ok := c.types[name].(*types.ObjectType)
+		if !ok || !pt.IsProtocol {
+			// An unresolved or non-protocol name is a different error, reported where
+			// the conformance list is built. Nothing to verify against here.
+			continue
+		}
+		// Sorted so the diagnostics are deterministic: Methods is a map.
+		missing := make([]string, 0, len(pt.Methods))
+		for m := range pt.Methods {
+			if _, has := ot.Methods[m]; !has {
+				missing = append(missing, m)
+			}
+		}
+		sort.Strings(missing)
+		for _, m := range missing {
+			c.errorf(v.Pos, "object %s is declared as conforming to protocol %s but does not implement method %q", v.Name, name, m)
+		}
+	}
+}
+
+// checkLocalShadowing reports a local declaration that reuses the name of a local
+// already visible from an ENCLOSING block.
+//
+// Shadowing a GLOBAL stays legal, which is why scopes[0] is skipped: upstream
+// allows it and TestConformance_LocalShadowsGlobal pins it here. So does redeclaring
+// in a sibling block, since neither is visible from the other - only a name still
+// live at the point of declaration counts.
+func (c *checker) checkLocalShadowing(v *ast.DeclStmt) {
+	// The innermost scope is where this declaration lands. A clash THERE is a
+	// redeclaration in the same block, which is a different diagnostic; walk only
+	// the enclosing local scopes, stopping before the global one.
+	for i := len(c.scopes) - 2; i >= 1; i-- {
+		if _, exists := c.scopes[i][v.Name]; exists {
+			c.errorf(v.Pos, "a local named %q already exists in an enclosing scope", v.Name)
+			return
 		}
 	}
 }
