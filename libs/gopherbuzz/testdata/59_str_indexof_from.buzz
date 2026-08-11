@@ -1,6 +1,6 @@
 // @expect: true
-// str.indexOf takes an optional start position, in RUNES like every other index this
-// type exposes. It is an ADDITION to upstream's one-argument form, which is why the
+// str.indexOf takes an optional start position, in BYTES like every other index this
+// type exposes (upstream indexes bytes throughout - see fixture 58). It is an ADDITION to upstream's one-argument form, which is why the
 // first assertions here pin that the old shape is untouched.
 //
 // It exists because resuming a scan without it means slicing the haystack and searching
@@ -25,8 +25,8 @@ final negative = s.indexOf("ab", from: 0 - 5);
 // A start past the end finds nothing rather than erroring.
 final beyond = s.indexOf("ab", from: 99);
 
-// The multibyte path indexes by rune too: the needle sits at rune 6 and byte 9, and
-// resuming from rune 3 must still report rune 6.
+// Multibyte indexes by byte too: the needle sits at byte 9 (rune 6), and resuming from
+// byte 3 - which lands mid-character, inside the e-acute - must still find it.
 final wide = "abéⅢabNEEDLE";
 final wideFrom = wide.indexOf("NEEDLE", from: 3);
 final wideAll = wide.indexOf("ab", from: 1);
@@ -38,5 +38,5 @@ final __r = first == 0
     and zero == 0
     and negative == 0
     and beyond == null
-    and wideFrom == 6
-    and wideAll == 4;
+    and wideFrom == 9
+    and wideAll == 7;

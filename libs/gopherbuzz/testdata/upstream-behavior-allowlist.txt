@@ -17,6 +17,7 @@ basic-types.buzz
 bitwise.buzz
 block-expression.buzz
 break-continue.buzz
+buffer.buzz
 call-without-parentheses.buzz
 checked-subscript.buzz
 common-namespace.buzz

@@ -363,10 +363,13 @@ type iterStateObj struct {
 	// enumDef holds an enum being iterated; its cases become enum VALUES, so the
 	// loop variable behaves the same as one written Enum.case.
 	enumDef *enumDefObj
-	// strRunes holds a string being iterated, pre-split into runes. Split once at
-	// OpIterInit rather than decoded per step so idx stays a plain index like every
-	// other iterable, and so a multi-byte character counts as one element.
-	strRunes []rune
+	// strBytes holds a string being iterated, as its raw BYTES. Upstream iterates a
+	// string bytewise (its str builtins index bytes throughout), and decoding runes
+	// here made iteration LOSSY for a string holding arbitrary binary: every invalid
+	// UTF-8 byte came back as U+FFFD, so a buffer written with a double could not be
+	// read back a byte at a time. Concatenating the elements still reproduces the
+	// original string, which is what upstream's foreach.buzz checks.
+	strBytes []byte
 	mapObj   *mapObj
 	rng      *rangeObj
 	fib      *fibObj

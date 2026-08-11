@@ -113,11 +113,10 @@ exhaustiveness analysis, protocol conformance is unverified, and generics are er
 
 ### What does not
 
-Four of the thirteen remaining failures are open gaps, each with a known cause:
+Three of the twelve remaining failures are open gaps, each with a known cause:
 
 | Gap                                  |                     Blocks | Cause                                                                                                                                                                                                                                       |
 | ------------------------------------ | -------------------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| String bytes vs runes                |                   `buffer` | The binary API (`writeInt`/`readInt` as an i48, `writeDouble`, `writeBoolean`, `empty`) is implemented and round-trips. What remains is upstream's byte-wise walk of `toString()`: gopherbuzz strings iterate by RUNE, so the non-UTF-8 bytes a double writes come back as U+FFFD. The bytes written are correct; only reading them back through string iteration is lossy. Same root as `str.len()` counting runes.                                        |
 | Object-keyed maps                    |                `protocols` | `mapObj` is keyed by `string` throughout, and a map literal stores a bare identifier key as its literal name rather than evaluating it. Upstream allows any value as a key.                                                                 |
 | Tuple types                          |                   `tuples` | `obj{ :str, :str }` (positional fields) and the matching `.{ a, b }` literal.                                                                                                                                                               |
 | `typeof` and mutability              | `clone-mutability-methods` | `cloneMutable()` has to retype to `<mut [int]>`; mutability is a property no runtime value carries.                                                                                                                                         |
@@ -150,9 +149,6 @@ reproducible difference at the pinned ref.
 
 **Silently different answers.** The dangerous class -- these do not error.
 
-- **`str.len()` counts RUNES; upstream documents byte length** ("Returns the byte
-  length of the string"). Any non-ASCII or binary string measures short here: a 16-byte
-  MD5 digest reports 15. Every rune-indexed string method inherits the question.
 - **A bare `as` COERCES instead of asserting.** `3.9 as int` is 3 here; upstream's `as`
   is a statically checked cast, not a conversion. Only `as?` was fixed to be a real type
   test. gopherbuzz's own testdata depends on the coercion, which is why it still stands.

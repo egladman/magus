@@ -1279,7 +1279,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			case tagList:
 				st.list = vm.asList(iter)
 			case tagStr:
-				st.strRunes = []rune(vm.asStr(iter).V)
+				st.strBytes = []byte(vm.asStr(iter).V)
 			case tagEnumDef:
 				st.enumDef = vm.asEnumDef(iter)
 			case tagMap:
@@ -1323,14 +1323,16 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				} else {
 					done = true
 				}
-			} else if state.strRunes != nil {
-				// Yields one-character strings, not codepoints: upstream's foreach.buzz
-				// interpolates each element back together and compares to the original.
-				if state.idx < len(state.strRunes) {
+			} else if state.strBytes != nil {
+				// Yields one-BYTE strings, not codepoints: upstream's foreach.buzz
+				// interpolates each element back together and compares to the original,
+				// which bytes satisfy as well as runes did - and unlike runes they
+				// survive arbitrary binary rather than decoding it to U+FFFD.
+				if state.idx < len(state.strBytes) {
 					if wantKey {
 						vm.push(IntValue(int64(state.idx)))
 					}
-					vm.push(StrValue(string(state.strRunes[state.idx])))
+					vm.push(StrValue(string(state.strBytes[state.idx : state.idx+1])))
 					state.idx++
 				} else {
 					done = true

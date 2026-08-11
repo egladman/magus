@@ -1005,8 +1005,12 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 	str := sobj.V
 	switch name {
 	case "len":
+		// BYTES, matching upstream (src/builtin/str.zig: `@intCast(str.string.len)`).
+		// This counted runes, which measured every non-ASCII or binary string short -
+		// a 16-byte MD5 digest reported 15 - and did so silently. utf8Len is the
+		// codepoint count, and upstream has both for exactly this reason.
 		return newDirect("str.len", func(_ context.Context, _ []Value) (Value, error) {
-			return IntValue(int64(utf8.RuneCountInString(str))), nil
+			return IntValue(int64(len(str))), nil
 		})
 	case "upper":
 		return newDirect("str.upper", func(_ context.Context, _ []Value) (Value, error) {
@@ -1026,27 +1030,15 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 			if len(args) >= 1 && args[0].IsInt() {
 				at = int(args[0].AsInt())
 			}
-			// Fast path, same cached-isASCII test str.sub uses: for pure ASCII a rune
-			// index is a byte index, so this is a direct index instead of a []rune copy
-			// of the whole string. That copy made `.byte(i)` O(len) PER CALL, which turns
-			// any character-at-a-time scan into a quadratic one - and scanning a string
-			// byte by byte is precisely what this method exists for. The docs site's
-			// glossary linker walks every rendered page this way.
-			if sobj.isASCII() {
-				if at < 0 || at >= len(str) {
-					return Null, fmt.Errorf("str.byte: index %d out of range", at)
-				}
-				return IntValue(int64(str[at])), nil
-			}
-			// Multibyte: walk from the memoized cursor instead of converting the whole
-			// string. The ASCII test above is all-or-nothing, so a single accented
-			// character anywhere in a document put every one of its lookups on this path -
-			// which is how the docs site spent 14% of its render here.
-			r, _, ok := sobj.scanRune(at)
-			if !ok {
+			// A BYTE index, as upstream has it (`self.string[index]`). It walked runes
+			// before, so a method named `byte` handed back a CODE POINT on any string
+			// holding one: "héllo".byte(2) was 233 rather than the second byte of the
+			// e-acute. That also made it O(len) per call on such a string, which is
+			// quadratic for the byte-at-a-time scans this method exists for.
+			if at < 0 || at >= len(str) {
 				return Null, fmt.Errorf("str.byte: index %d out of range", at)
 			}
-			return IntValue(int64(r)), nil
+			return IntValue(int64(str[at])), nil
 		})
 	case "indexOf":
 		return newDirect("str.indexOf", func(_ context.Context, args []Value) (Value, error) {
@@ -1075,42 +1067,17 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 			// index IS a byte offset, so neither the start conversion nor the result
 			// conversion below has to walk the string. A found needle near the end of a
 			// large string used to pay for the entire prefix on every call.
-			if sobj.isASCII() {
-				if from >= len(str) {
-					return Null, nil
-				}
-				idx := strings.Index(str[from:], args[0].AsString())
-				if idx < 0 {
-					return Null, nil
-				}
-				return IntValue(int64(from + idx)), nil
+			// BYTE offsets in and out, matching upstream (`std.mem.indexOf(u8, ...)`).
+			// The multibyte path used to convert a rune start in and a rune index out,
+			// walking the string twice and disagreeing with len() and sub().
+			if from >= len(str) {
+				return Null, nil
 			}
-
-			// Multibyte: convert the rune start to a byte offset, search from there,
-			// and convert the hit back. Still one pass per call rather than a copy.
-			byteStart := 0
-			if from > 0 {
-				byteStart = -1
-				runes := 0
-				// range over a string yields the byte index of each rune's first byte,
-				// so runes counts positions while i tracks where that position starts.
-				for i := range str {
-					if runes == from {
-						byteStart = i
-						break
-					}
-					runes++
-				}
-				if byteStart < 0 {
-					return Null, nil // start is past the end
-				}
-			}
-			idx := strings.Index(str[byteStart:], args[0].AsString())
+			idx := strings.Index(str[from:], args[0].AsString())
 			if idx < 0 {
 				return Null, nil
 			}
-			// Return byte offset converted to rune index.
-			return IntValue(int64(utf8.RuneCountInString(str[:byteStart+idx]))), nil
+			return IntValue(int64(from + idx)), nil
 		})
 	case "startsWith":
 		return newDirect("str.startsWith", func(_ context.Context, args []Value) (Value, error) {
@@ -1171,30 +1138,15 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 			if start < 0 {
 				start = 0
 			}
-			// Fast path: for a pure-ASCII string a rune index equals a byte index,
-			// so the substring is a direct byte slice - no []rune copy of the whole
-			// string per call. The result is identical to the rune path below.
-			if sobj.isASCII() {
-				if start >= len(str) {
-					return StrValue(""), nil
-				}
-				end := len(str)
-				if len(args) >= 2 && args[1].IsInt() {
-					length := int(args[1].AsInt())
-					if length < 0 {
-						length = 0
-					}
-					if start+length < end {
-						end = start + length
-					}
-				}
-				return StrValue(str[start:end]), nil
-			}
-			runes := []rune(str)
-			if start >= len(runes) {
+			// BYTE offsets, matching upstream (`self.string[start..limit]`). This used
+			// to slice runes for a multibyte string, which disagreed with len() and
+			// made `s.sub(s.len())` incoherent the moment a string held one non-ASCII
+			// character. Dropping that branch also removes a whole-string []rune copy
+			// per call.
+			if start >= len(str) {
 				return StrValue(""), nil
 			}
-			end := len(runes)
+			end := len(str)
 			if len(args) >= 2 && args[1].IsInt() {
 				length := int(args[1].AsInt())
 				if length < 0 {
@@ -1204,7 +1156,7 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 					end = start + length
 				}
 			}
-			return StrValue(string(runes[start:end])), nil
+			return StrValue(str[start:end]), nil
 		})
 	case "repeat":
 		return newDirect("str.repeat", func(_ context.Context, args []Value) (Value, error) {

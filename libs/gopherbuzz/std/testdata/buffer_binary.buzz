@@ -5,11 +5,9 @@
 // buffer is a wire format, so a width that only round-trips within gopherbuzz would
 // disagree with every other Buzz program reading the same bytes.
 //
-// The one part of upstream's case NOT asserted here is its byte-wise walk of
-// toString(). That is blocked by a separate divergence: gopherbuzz strings iterate by
-// RUNE, so the non-UTF-8 bytes a double writes (158, 239, 167, ...) come back as
-// U+FFFD. The bytes written are correct - len() is 26 either way - and only reading
-// them back through string iteration is lossy.
+// Upstream's own case additionally walks toString() byte by byte; that works now too
+// (strings iterate bytewise), and tests/behavior/buffer.buzz covers it, so this file
+// stays focused on the read/write round trip.
 import "buffer";
 final b = buffer.Buffer.init();
 b.writeInt("hello world".len());
