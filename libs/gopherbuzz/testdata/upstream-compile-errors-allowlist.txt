@@ -23,6 +23,8 @@ early-return.buzz
 early-throw.buzz
 empty-import.buzz
 final-objects.buzz
+function-param-mutable-default-value.buzz
+immutable-list.buzz
 inferred-enum-case-invalid.buzz
 invalid-float-literal.buzz
 invalid-int-bin-literal.buzz
@@ -50,6 +52,7 @@ missing-return-one-branch.buzz
 multiple-location.buzz
 multiple-out.buzz
 object-assignment-value-type.buzz
+object-field-default.buzz
 object-prop-immutable-value.buzz
 out-last-statement.buzz
 terminal-break-unreachable.buzz

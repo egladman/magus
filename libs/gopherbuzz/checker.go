@@ -631,6 +631,9 @@ func (c *checker) checkFunDecl(fd *ast.FunDecl) {
 		// It is resolved here, once at the declaration, not at every call site.
 		if i < len(fd.ParamDefaults) && fd.ParamDefaults[i] != nil {
 			c.inferExpected(fd.ParamDefaults[i], pt)
+			if i < len(fd.ParamAnnots) {
+				c.checkMutableDefault(fd.Pos, "parameter", name, fd.ParamAnnots[i], fd.ParamDefaults[i])
+			}
 		}
 		c.define(name, pt, false)
 	}
@@ -674,6 +677,7 @@ func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
 		// types, so an enum field would arrive here as something that is not an
 		// EnumType and the case could never resolve.
 		c.inferExpected(f.Default, c.resolveAnnot(f.TypeAnnot))
+		c.checkMutableDefault(v.Pos, "field", f.Name, f.TypeAnnot, f.Default)
 	}
 	for _, m := range v.Methods {
 		// Rebuilt, then written back: buildObjectType runs while the top level is
@@ -714,6 +718,9 @@ func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
 			// against that parameter's type, which is what tells `.two` its enum.
 			if i < len(m.ParamDefaults) && m.ParamDefaults[i] != nil {
 				c.inferExpected(m.ParamDefaults[i], pt)
+				if i < len(m.ParamAnnots) {
+					c.checkMutableDefault(m.Pos, "parameter", name, m.ParamAnnots[i], m.ParamDefaults[i])
+				}
 			}
 			c.define(name, pt, false)
 		}
@@ -1367,6 +1374,7 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 		if v.Name == "len" {
 			return types.Int
 		}
+		c.checkCollectionMutator(v.Pos, t, v.Name)
 		if mut, ok := collectionSelfMethodMut(listSelfMethods, t.Mut, v.Name); ok {
 			return selfReturning(&types.ListType{Elem: t.Elem, Mut: mut})
 		}
@@ -1375,6 +1383,7 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 		if v.Name == "len" {
 			return types.Int
 		}
+		c.checkCollectionMutator(v.Pos, t, v.Name)
 		if mut, ok := collectionSelfMethodMut(mapSelfMethods, t.Mut, v.Name); ok {
 			return selfReturning(&types.MapType{Key: t.Key, Val: t.Val, Mut: mut})
 		}
@@ -2136,5 +2145,48 @@ func (c *checker) checkMainSig(fd *ast.FunDecl, ft *types.FuncType) {
 	}
 	if ft.Ret != nil && ft.Ret != types.Void && ft.Ret != types.Int {
 		c.errorf(fd.Pos, "expected `main` to return void or int, got %s", ft.Ret.TypeName())
+	}
+}
+
+// checkMutableDefault reports a default value on a slot whose declared type is
+// mutable. A default is evaluated ONCE and shared by every call or instance that
+// omits it, so a mutable one is aliased state everybody can write through - the
+// classic shared-mutable-default bug. Upstream states it as "default value must be
+// constant", which is the same rule from the other side: a mutable collection is
+// not a constant.
+//
+// Only the DEFAULT is restricted. `final xs: mut [int] = mut [1]` is an ordinary
+// local with its own value per execution and stays legal.
+func (c *checker) checkMutableDefault(pos ast.Pos, what, name, annot string, def ast.Node) {
+	if def == nil || !strings.HasPrefix(annot, "mut ") {
+		return
+	}
+	c.errorf(pos, "%s %s declares a mutable type and cannot have a default value: it would be created once and shared", what, name)
+}
+
+// listMutators and mapMutators name the built-in collection methods that mutate the
+// receiver IN PLACE, so calling one on an immutable collection cannot work. The sets
+// mirror the VM's own guards exactly (vm/operators.go, `errImmutable`) - the runtime
+// already refuses these, so this only moves a guaranteed failure from run time to
+// compile time. Keep the two in step: a mutator added there and missed here silently
+// loses the static check.
+var (
+	listMutators = map[string]bool{"append": true, "insert": true, "remove": true, "pop": true, "fill": true, "sort": true}
+	mapMutators  = map[string]bool{"remove": true, "sort": true}
+)
+
+// checkCollectionMutator reports an in-place mutator called on an immutable
+// receiver. It fires only when the receiver's type is KNOWN to be immutable, so an
+// untracked collection stays silent rather than guessing.
+func (c *checker) checkCollectionMutator(pos ast.Pos, recv types.Type, name string) {
+	switch t := recv.(type) {
+	case *types.ListType:
+		if !t.Mut && listMutators[name] {
+			c.errorf(pos, "method `%s` requires a mutable list: declare it with `mut`", name)
+		}
+	case *types.MapType:
+		if !t.Mut && mapMutators[name] {
+			c.errorf(pos, "method `%s` requires a mutable map: declare it with `mut`", name)
+		}
 	}
 }

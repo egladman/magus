@@ -1590,18 +1590,26 @@ fun probe() > str {
 }
 
 func TestParity_ImmutableCollectionsRejectSorting(t *testing.T) {
-	v := evalParity(t, `
+	// This used to run the program and assert that `sort` refused at RUNTIME via
+	// `catch null`. The checker now rejects an in-place mutator on a receiver it can
+	// see is immutable, so the source no longer compiles - a strictly earlier failure
+	// for the same rule, and what upstream does (compile_errors/immutable-list.buzz).
+	//
+	// The VM's own guard is unchanged and still load-bearing: it catches a receiver
+	// whose mutability the checker cannot determine, which is why errImmutable is not
+	// dead code.
+	ctx := context.Background()
+	s := buzz.NewSession(ctx)
+	t.Cleanup(func() { _ = s.Close() })
+	err := s.Exec(ctx, `
 fun probe() > bool {
     final l = [ 2, 1 ];
-    final m = { "b": 2, "a": 1 };
-    // sort returns the receiver on success, so a null here means it refused.
-    final listRefused = (l.sort(fun (a: int, b: int) => a < b) catch null) == null;
-    final mapRefused = (m.sort(fun (x: str, y: str) => x < y) catch null) == null;
-    return listRefused and mapRefused and l[0] == 2 and m.keys()[0] == "b";
+    _ = l.sort(fun (a: int, b: int) => a < b);
+    return true;
 }`)
-	assert.True(t, v.AsBool(), "an in-place reorder needs a mut receiver, for maps as well as lists")
+	require.Error(t, err, "sorting an immutable list must be rejected")
+	assert.Contains(t, err.Error(), "requires a mutable list")
 }
-
 func TestParity_StoredMapKeyWinsOverBuiltinMethod(t *testing.T) {
 	// An anonymous object literal is represented as a map, so a field whose name
 	// collides with a map builtin must still read as the field.

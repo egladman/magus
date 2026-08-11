@@ -1,3 +1,6 @@
-// @error: cannot mutate immutable list
+// @error: requires a mutable list
+// Caught at COMPILE time now. The VM still refuses it too (vm/operators.go's
+// errImmutable), which is what catches a receiver whose mutability the checker
+// cannot see.
 final xs = [1, 2, 3];
 xs.append(4);
