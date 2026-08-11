@@ -6,7 +6,7 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
-export extern fun randomHex(n: int) > str;
-export extern fun randomToken(n: int) > str;
-export extern fun v4() > str;
-export extern fun v7() > str;
+export extern fun randomHex(n: int) > str !> any;
+export extern fun randomToken(n: int) > str !> any;
+export extern fun v4() > str !> any;
+export extern fun v7() > str !> any;

@@ -58,7 +58,7 @@ import "proc";
 magus\project({
     "targets": {"check": {"skip_cache": "must re-run on every invocation, not replay"}},
 });
-export fun check(ctx: magus\Context, args: [str]) > void {
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("ran.txt");
     proc\exec("sleep", args: ["4"], dir: ".", opts: {});
     fs\writeFile("ran.txt", "ran\n");
@@ -70,7 +70,7 @@ import "proc";
 magus\project({
     "targets": {"check": {"skip_cache": "must re-run on every invocation, not replay"}},
 });
-export fun check(ctx: magus\Context, args: [str]) > void {
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("ran.txt");
     proc\exec("sleep", args: ["4"], dir: ".", opts: {});
     fs\writeFile("ran.txt", "ran\n");

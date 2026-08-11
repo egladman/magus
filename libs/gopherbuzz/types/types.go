@@ -60,6 +60,13 @@ type FuncType struct {
 	Ret      Type
 	Variadic bool // if true, caller may pass any number of args beyond len(Params)
 	Yield    Type // the *> yield type, when the function is wrapped in a fiber; nil if unannotated. Not part of TypeName/Compat — two functions differing only in Yield stay assignable.
+	// Raises is true when the function declares a !> error set (or, for a host
+	// extern, is authored as raising in std.Method). Like Yield it is not part
+	// of TypeName/Compat — two functions differing only in Raises stay
+	// assignable — but the checker reads it at call sites to enforce
+	// propagate-or-catch: a call to a Raises function is illegal unless the
+	// enclosing function also declares !> or the call is inside a try/catch.
+	Raises bool
 	// ParamNames carries the declared parameter names so the checker can
 	// resolve named arguments at call sites. Like Yield, it is not part of
 	// TypeName/Compat — names never affect assignability.

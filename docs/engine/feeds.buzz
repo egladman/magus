@@ -13,7 +13,7 @@ import "lib/feed" as _;
 // site.blogPosts, newest first. Per <entry>: title, link (absolute), id (same URL),
 // updated (post date), summary (description), author. Feed-level updated = newest
 // post's date. Gated on site.config.baseURL so it can ship dark until the host is confirmed.
-export fun renderBlogAtom(site: Site) > void {
+export fun renderBlogAtom(site: Site) > void !> any {
     if (site.config.baseURL == "") { return; }
     if (site.blogPosts.len() == 0) { return; }
     final sorted = site.blogPosts.sort(fun (a: BlogPost, b: BlogPost) > bool {
@@ -52,7 +52,7 @@ export fun renderBlogAtom(site: Site) > void {
 // site.config.repoURL/releases/tag/<ver>, id = same, updated = release date, summary = the section
 // body. Feed-level updated = newest release's date. Gated on site.config.baseURL and on
 // having at least one released version.
-export fun renderReleasesAtom(site: Site) > void {
+export fun renderReleasesAtom(site: Site) > void !> any {
     if (site.config.baseURL == "") { return; }
     if (site.releases.len() == 0) { return; }
     final feedUpdated = atomDate(site.releases[0].date);

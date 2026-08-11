@@ -14,7 +14,7 @@ export enum<str> LogLevel {
     error = "error",
 }
 
-export extern fun at(level: LogLevel, message: str, attrs: {str: any} = {<str: any>}) > void;
+export extern fun at(level: LogLevel, message: str, attrs: {str: any} = {<str: any>}) > void !> any;
 export extern fun debug(message: str, attrs: {str: any} = {<str: any>}) > void;
 export extern fun error(message: str, attrs: {str: any} = {<str: any>}) > void;
 export extern fun info(message: str, attrs: {str: any} = {<str: any>}) > void;

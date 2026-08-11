@@ -99,6 +99,7 @@ var Platform = Module{
 				{Name: "style", Type: TypeString, Optional: true, Enum: "PlatformStyle"},
 			},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    PlatformArch,
 		},
 		{
@@ -109,6 +110,7 @@ var Platform = Module{
 				{Name: "style", Type: TypeString, Optional: true, Enum: "PlatformStyle"},
 			},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    PlatformOS,
 		},
 		{

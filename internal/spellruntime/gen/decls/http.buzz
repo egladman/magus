@@ -22,8 +22,8 @@ export object HttpResponse {
     headers: {str: str} = {},
 }
 
-export extern fun download(url: str, dest: str, headers: {str: str} = {<str: str>}, opts: {str: any} = {<str: any>}, retry: HttpRetry = {<str: any>}) > int;
-export extern fun get(url: str, headers: {str: str} = {<str: str>}, opts: {str: any} = {<str: any>}, retry: HttpRetry = {<str: any>}) > HttpResponse;
-export extern fun post(url: str, body: str, headers: {str: str} = {<str: str>}, opts: {str: any} = {<str: any>}, retry: HttpRetry = {<str: any>}) > HttpResponse;
-export extern fun request(method: str, url: str, body: str = "", headers: {str: str} = {<str: str>}, opts: {str: any} = {<str: any>}, retry: HttpRetry = {<str: any>}) > HttpResponse;
-export extern fun server(opts: {str: any}) > int;
+export extern fun download(url: str, dest: str, headers: {str: str} = {<str: str>}, opts: {str: any} = {<str: any>}, retry: HttpRetry = {<str: any>}) > int !> any;
+export extern fun get(url: str, headers: {str: str} = {<str: str>}, opts: {str: any} = {<str: any>}, retry: HttpRetry = {<str: any>}) > HttpResponse !> any;
+export extern fun post(url: str, body: str, headers: {str: str} = {<str: str>}, opts: {str: any} = {<str: any>}, retry: HttpRetry = {<str: any>}) > HttpResponse !> any;
+export extern fun request(method: str, url: str, body: str = "", headers: {str: str} = {<str: str>}, opts: {str: any} = {<str: any>}, retry: HttpRetry = {<str: any>}) > HttpResponse !> any;
+export extern fun server(opts: {str: any}) > int !> any;

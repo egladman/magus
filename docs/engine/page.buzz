@@ -31,7 +31,7 @@ import "engine/nav" as _;
 // deliberate exception to the relative-link scheme. basePath comes from site.config.baseURL
 // (https://eli.gladman.cc/magus/ -> "/magus/"), falling back to "/" when empty so the page
 // still renders locally from the server root.
-export fun render404(site: Site) > void {
+export fun render404(site: Site) > void !> any {
     final basePath = sitePathPrefix(site.config.baseURL);
     final title = "Page not found - magus";
     final desc = "You have warped off the map. That page is not here; head back to the documentation, install page, or playground.";
@@ -86,7 +86,7 @@ export fun render404(site: Site) > void {
 // navigation fails (network down, no cached copy). Like render404 it uses root-absolute
 // asset paths, since its URL depth differs from the rest of the site. Playground is called
 // out because it is precached and fully functional offline.
-export fun writeOffline(site: Site) > void {
+export fun writeOffline(site: Site) > void !> any {
     final basePath = sitePathPrefix(site.config.baseURL);
     final title = "You are offline - magus";
     final desc = "No network connection. The graph explorer and playground are fully functional offline.";
@@ -139,7 +139,7 @@ export fun writeOffline(site: Site) > void {
 
 // renderPagerLink renders one prev/next card, reading the sibling's source so it credits
 // the same title (frontmatter title, else first H1) the sibling page renders with.
-fun renderPagerLink(srcDir: str, name: str, dir: str, cls: str, climbPrefix: str) > str {
+fun renderPagerLink(srcDir: str, name: str, dir: str, cls: str, climbPrefix: str) > str !> any {
     final f = io\File.open(srcDir + "/" + name, io\FileMode.read);
     final md = f.readAll();
     f.close();
@@ -160,7 +160,7 @@ final UNORDERED = 1000000;
 
 // pageOrder reads one sibling's frontmatter `order:`. Orders start at 1; absent reads as 0
 // from .integer(), which is why 0 counts as unordered rather than first.
-fun pageOrder(srcDir: str, name: str) > int {
+fun pageOrder(srcDir: str, name: str) > int !> any {
     final f = io\File.open(srcDir + "/" + name, io\FileMode.read);
     final md = f.readAll();
     f.close();
@@ -179,7 +179,7 @@ fun pageOrder(srcDir: str, name: str) > int {
 // Ordered by frontmatter `order:`, falling back to filename. Filename order alone was an
 // accident presented as a sequence: on concepts/targets.md it produced "Previous: Spells,
 // Next: Telemetry" purely because s < t < t, implying a reading path that did not exist.
-fun renderPager(rel: str, site: Site) > str {
+fun renderPager(rel: str, site: Site) > str !> any {
     final parts = rel.split("/");
     final base = parts[parts.len() - 1];
     var srcDir = site.root + "/" + site.docs;
@@ -236,7 +236,7 @@ fun renderPager(rel: str, site: Site) > str {
 // the commit footer and "Suggest an edit" link. description is resolved (frontmatter, else
 // derived, else site default), always non-empty so the meta tag fires. canonUrl is the
 // clean gen-root URL ("" for home). pager is the prev/next nav (may be "").
-export fun renderPage(title: str, description: str, content: str, srcRel: str, pager: str, canonUrl: str, reading: str, tags: [str], site: Site) > str {
+export fun renderPage(title: str, description: str, content: str, srcRel: str, pager: str, canonUrl: str, reading: str, tags: [str], site: Site) > str !> any {
     final root = rootPrefix(srcRel, site);
     // Which top-nav item to mark current. Docs pages hang off the documentation index,
     // except the setup section; the home page (README) highlights nothing.
@@ -474,7 +474,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
 // Render the repo's top-level README.md as the landing page (index.html). Links like
 // href="docs/X" (repo-root-relative) resolve from gen/index.html as href="X", so strip
 // the docs/ prefix.
-export fun renderRoot(site: Site) > void {
+export fun renderRoot(site: Site) > void !> any {
     final f = io\File.open(site.root + "/README.md", io\FileMode.read);
     final rawMd = f.readAll();
     f.close();
@@ -556,7 +556,7 @@ fun injectDemoCallout(html: str, href: str) > str {
 
 // Render one docs/*.md file to a sibling *.html under gen. rel is relative to the
 // docs/ subtree; srcRel (site.docs/rel) is magus/-relative for the footer/edit link.
-export fun renderFile(rel: str, site: Site) > void {
+export fun renderFile(rel: str, site: Site) > void !> any {
     final f = io\File.open(site.root + "/" + site.docs + "/" + rel, io\FileMode.read);
     var md = f.readAll();
     f.close();

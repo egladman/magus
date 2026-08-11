@@ -51,7 +51,7 @@ final KEY_ENV = "MAGUS_REGISTRY_KEY";
 //
 // Kept apart from the transform so a network failure stops here rather than being
 // folded into a build that would then publish a half-refreshed snapshot.
-fun fetchAll(dir: str) > int {
+fun fetchAll(dir: str) > int !> any {
     fs\makeDirectory(dir);
     final listBody = http\get(UPSTREAM + "/", opts: {"fail": true}).body;
     final list = serialize\jsonDecode(listBody);
@@ -78,7 +78,7 @@ fun productSlugs(dir: str) > [str] {
 
 // buildDoc is the pure transform: files in, one document out. It reads no clock and
 // sends no request, so two runs over the same inputs produce identical bytes.
-fun buildDoc(upstreamDir: str, releasesDir: str, expiresAt: str) > {str: any} {
+fun buildDoc(upstreamDir: str, releasesDir: str, expiresAt: str) > {str: any} !> any {
     var eol: {str: any} = mut {};
     var inputs: [{str: any}] = mut [<{str: any}>];
     var newest = "";
@@ -135,7 +135,7 @@ fun buildDoc(upstreamDir: str, releasesDir: str, expiresAt: str) > {str: any} {
 // loadReleases projects releases/*.yaml into the registry, newest first. The same
 // list public/release/index.json serves, carried here so a new binary needs one
 // file rather than two half-synced ones.
-fun loadReleases(dir: str) > [{str: any}] {
+fun loadReleases(dir: str) > [{str: any}] !> any {
     var names: [str] = mut [<str>];
     foreach (name in fs\list(dir)) {
         if (name.endsWith(".yaml")) { names.append(name); }
@@ -173,7 +173,7 @@ fun encode(doc: {str: any}) > str {
     return serialize\jsonEncode(serialize\Boxed.init(doc)) + "\n";
 }
 
-export fun main() > void {
+export fun main() > void !> any {
     final mode = os\env("REGISTRY_MODE") ?? "build";
     final upstreamDir = os\env("REGISTRY_UPSTREAM") ?? "upstream";
     final releasesDir = os\env("REGISTRY_RELEASES") ?? "releases";
@@ -213,4 +213,8 @@ export fun main() > void {
     std\print("signed {path} (readers pin: {crypto\publicKey(.Ed25519, key_env: KEY_ENV)})");
 }
 
-main();
+try {
+    main();
+} catch (e) {
+    throw e;
+}

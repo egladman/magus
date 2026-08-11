@@ -21,11 +21,11 @@ export object SemverVersion {
     original: str = "",
 }
 
-export extern fun canonical(v: str) > str;
-export extern fun compare(a: str, b: str) > int;
+export extern fun canonical(v: str) > str !> any;
+export extern fun compare(a: str, b: str) > int !> any;
 export extern fun isValid(v: str) > bool;
-export extern fun major(v: str) > str;
-export extern fun majorMinor(v: str) > str;
-export extern fun next(v: str) > SemverNext;
-export extern fun parse(v: str) > SemverVersion;
-export extern fun satisfies(v: str, constraint: str) > bool;
+export extern fun major(v: str) > str !> any;
+export extern fun majorMinor(v: str) > str !> any;
+export extern fun next(v: str) > SemverNext !> any;
+export extern fun parse(v: str) > SemverVersion !> any;
+export extern fun satisfies(v: str, constraint: str) > bool !> any;

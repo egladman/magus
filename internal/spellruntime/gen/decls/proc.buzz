@@ -18,8 +18,8 @@ export object ShellCommand {
     args: [str] = [],
 }
 
-export extern fun exec(cmd: str, args: [str] = [<str>], dir: str = "", opts: {str: any} = {<str: any>}) > ExecResult;
+export extern fun exec(cmd: str, args: [str] = [<str>], dir: str = "", opts: {str: any} = {<str: any>}) > ExecResult !> any;
 export extern fun shell(line: str, shell: str = "") > ShellCommand;
 export extern fun stdinIsTerminal() > bool;
-export extern fun which(cmd: str) > str;
-export extern fun withSlots(n: int, callback: Function) > void;
+export extern fun which(cmd: str) > str !> any;
+export extern fun withSlots(n: int, callback: Function) > void !> any;

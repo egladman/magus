@@ -273,7 +273,7 @@ export object Site {
     // alias pass catches a redirect shadowing a real page). Also records the index.html in
     // writtenPaths (root's url is bare "index.html", every other ends in "/") so
     // pruneStaleOutputs knows the page is current.
-    fun addRecord(url: str, title: str, desc: str, md: str) > void {
+    fun addRecord(url: str, title: str, desc: str, md: str) > void !> any {
         this.pageUrls[url] = true;
         var filePath = url;
         if (filePath.endsWith("/")) { filePath = filePath + "index.html"; }
@@ -305,7 +305,7 @@ export object Site {
     // writeAliases writes one redirect stub per collected alias (after the walk, so
     // every real page URL is known for the collision guard). It throws if an alias
     // would shadow a real generated page.
-    fun writeAliases() > void {
+    fun writeAliases() > void !> any {
         foreach (a in this.aliasTarget.keys()) {
             if (this.pageUrls[a + "/"] != null or this.pageUrls[a] != null) {
                 throw "alias \"" + a + "\" collides with a real page at the same path";
@@ -320,7 +320,7 @@ export object Site {
 
     // collectDocPage reads one docs page's frontmatter into a DocPage on docPages
     // (the relatedness/breadcrumb corpus). rel is the path under docs/.
-    fun collectDocPage(rel: str) > void {
+    fun collectDocPage(rel: str) > void !> any {
         final f = io\File.open(this.root + "/" + this.docs + "/" + rel, io\FileMode.read);
         final md = f.readAll();
         f.close();
@@ -350,7 +350,7 @@ export object Site {
 
     // collectDocPages walks the docs/ subtree (same order as walk()) filling docPages
     // before any page renders, so renderRelated() sees the whole corpus.
-    fun collectDocPages(rel: str) > void {
+    fun collectDocPages(rel: str) > void !> any {
         var dir = this.root + "/" + this.docs;
         if (rel != "") { dir = this.root + "/" + this.docs + "/" + rel; }
         foreach (name in fs\list(dir)) {
@@ -372,7 +372,7 @@ export object Site {
     // /public/, and /development/ get their own flat trails; docs pages hang off the
     // documentation index, each intermediate crumb showing the linked page's real
     // title (looked up in docPages via lookupTitle).
-    fun renderBreadcrumb(srcRel: str, title: str, root: str) > str {
+    fun renderBreadcrumb(srcRel: str, title: str, root: str) > str !> any {
         if (srcRel == "README.md") { return ""; }
         // Each branch below builds its own crumb <li>s; this template wraps whichever list.
         // li injects raw - it is assembled markup, not a value to escape.
@@ -477,7 +477,7 @@ export object Site {
     // documentation index +1) as the tiebreaker. It leads with the nearest-ancestor
     // overview. Up to four cards; ties (same term overlap AND same tag signal) broken by
     // URL for stability.
-    fun renderRelated(srcRel: str, root: str) > str {
+    fun renderRelated(srcRel: str, root: str) > str !> any {
         var curTags = "";
         var curSection = "";
         var curUrl = "";
@@ -579,7 +579,7 @@ export object Site {
     // page, it falls back to listing its OWN direct children (a non-overview parent like
     // concepts/targets/ still gets a down-axis). "" when the page is a leaf with no children.
     // curUrl is the page's clean URL; root is its gen-root-relative prefix.
-    fun renderSectionNav(srcRel: str, curUrl: str, root: str) > str {
+    fun renderSectionNav(srcRel: str, curUrl: str, root: str) > str !> any {
         if (curUrl == "") { return ""; }
         // The section root: this page if it is itself an overview, else the longest
         // overview-URL prefix of this page's URL (the nearest-ancestor overview).
@@ -644,7 +644,7 @@ export object Site {
     //
     // Depth is carried as an indent class rather than nested <ul>s, so the markup
     // stays one flat list a screen reader reads in order.
-    fun renderSubtree(curUrl: str, root: str) > str {
+    fun renderSubtree(curUrl: str, root: str) > str !> any {
         if (curUrl == "") { return ""; }
 
         // Every descendant, with its depth relative to this page.
@@ -732,7 +732,7 @@ export object Site {
 
     // fileDescription reads a doc file's frontmatter `description` (the entity popover
     // summary), or "" if absent.
-    fun fileDescription(path: str) > str {
+    fun fileDescription(path: str) > str !> any {
         final f = io\File.open(path, io\FileMode.read);
         final md = f.readAll();
         f.close();
@@ -744,7 +744,7 @@ export object Site {
     // commands (reference/manpage/magus-<sub>.md -> "magus <sub>"). token = the string matched
     // in inline code, url = its clean page, summary = its frontmatter description. Sorted
     // longest-match-first so "magus affected ci" wins over "magus affected".
-    fun collectEntities() > void {
+    fun collectEntities() > void !> any {
         final ents: [Entity] = mut [<Entity>];
 
         final codesBase = this.root + "/" + this.docs + "/reference/codes";

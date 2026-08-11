@@ -58,6 +58,7 @@ var Net = Module{
 				{Name: "timeout_ms", Type: TypeInt, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeBool}},
+			Raises:  true,
 			Impl:    NetWaitForPort,
 		},
 		{
@@ -68,12 +69,14 @@ var Net = Module{
 				{Name: "port", Type: TypeInt},
 			},
 			Returns: []Ret{{Type: TypeBool}},
+			Raises:  true,
 			Impl:    NetIsPortOpen,
 		},
 		{
 			Name:    "free_port",
 			Doc:     "Ask the operating system for an unused TCP port and return it. Bind it promptly: the port is released before this returns, so between the call and your server's own bind another process could take it. That race is unavoidable for any \"find a free port\" answer and is why this is for choosing a dev-server port, not for anything that must not collide.",
 			Returns: []Ret{{Type: TypeInt}},
+			Raises:  true,
 			Impl:    NetFreePort,
 		},
 	},

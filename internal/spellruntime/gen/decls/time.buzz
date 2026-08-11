@@ -16,9 +16,9 @@ export enum<str> TimeLayout {
     kitchen = "3:04PM",
 }
 
-export extern fun add(unix_millis: double, duration: str) > double;
+export extern fun add(unix_millis: double, duration: str) > double !> any;
 export extern fun diff(a: double, b: double) > double;
 export extern fun format(layout: TimeLayout, unix_millis: double) > str;
 export extern fun nowIso() > str;
-export extern fun parse(layout: TimeLayout, value: str) > double;
-export extern fun parseDuration(duration: str) > double;
+export extern fun parse(layout: TimeLayout, value: str) > double !> any;
+export extern fun parseDuration(duration: str) > double !> any;

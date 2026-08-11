@@ -38,6 +38,7 @@ var Module = std.Module{
 			Doc:     "Serialize an XML node to a string. A node is a string (text) or an element map {\"tag\": name, \"attrs\": [name, value, ...], \"children\": [node, ...]}. Empty-children elements self-close; no whitespace is emitted between tags.",
 			Args:    []std.Arg{{Name: "node", Type: std.TypeAny}},
 			Returns: []std.Ret{{Type: std.TypeString}},
+			Raises:  true,
 			Impl:    XMLRender,
 		},
 		{
@@ -49,6 +50,7 @@ var Module = std.Module{
 				{Name: "children", Type: std.TypeAny},
 			},
 			Returns: []std.Ret{{Type: std.TypeAny}},
+			Raises:  true,
 			Impl:    XMLElement,
 		},
 		{
@@ -56,6 +58,7 @@ var Module = std.Module{
 			Doc:     "Parse an XML string into a node tree: each element becomes {\"tag\": name, \"attrs\": [name, value, ...], \"children\": [node, ...]}, character data becomes a string. The inverse shape of render.",
 			Args:    []std.Arg{{Name: "s", Type: std.TypeString}},
 			Returns: []std.Ret{{Type: std.TypeAny}},
+			Raises:  true,
 			Impl:    XMLParse,
 		},
 	},

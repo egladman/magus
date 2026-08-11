@@ -25,6 +25,7 @@ var Module = std.Module{
 			Doc:     "Decode a JSON string into a value (map, list, string, number, or boolean).",
 			Args:    []std.Arg{{Name: "s", Type: std.TypeString}},
 			Returns: []std.Ret{{Type: std.TypeAny}},
+			Raises:  true,
 			Impl:    JSONParse,
 		},
 		{
@@ -35,6 +36,7 @@ var Module = std.Module{
 				{Name: "indent", Type: std.TypeString, Optional: true},
 			},
 			Returns: []std.Ret{{Type: std.TypeString}},
+			Raises:  true,
 			Impl:    JSONStringify,
 		},
 	},

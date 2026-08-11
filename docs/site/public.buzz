@@ -39,7 +39,7 @@ import "engine/page" as _;
 // ever shipped" (see its binding doc). Rendering zero releases there would blank
 // the version across the site on a clone depth setting, so when no tags are visible
 // the manifests are used as the list, exactly as before.
-export fun loadReleases(site: Site) > void {
+export fun loadReleases(site: Site) > void !> any {
     site.releases = mut [<Release>];
 
     // Phase 1: read every manifest, keyed by version. manifestOrder preserves the
@@ -164,7 +164,7 @@ export fun loadReleases(site: Site) > void {
 // Only the HTML went. The feeds (public/atom/*.xml, written by engine/feeds.buzz)
 // are real files and are written exactly as before; the signed release manifest at
 // public/release/index.json is tracked rather than rendered, for the reason above.
-export fun renderPublic(site: Site) > void {
+export fun renderPublic(site: Site) > void !> any {
     if (site.config.baseURL == "") { return; }
 
     // Releases stay newest-first (loadReleases sorts by semver); each card is a

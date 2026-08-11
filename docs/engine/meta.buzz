@@ -21,7 +21,7 @@ export fun deriveTitle(md: str, rel: str) > str {
 
 // parseTags reads the frontmatter `tags:` list as [str] (empty when absent). The one
 // extraction point, so rendered chips and the search index draw from the same source.
-export fun parseTags(md: str) > [str] {
+export fun parseTags(md: str) > [str] !> any {
     final fm = serialize\jsonDecode(markdown\frontmatter(md));
     final tags: [str] = mut [];
     foreach (t in fm.q("tags").listValue()) {
@@ -37,7 +37,7 @@ export fun parseTags(md: str) > [str] {
 // matters is "overview": a landing/index page that orients and routes to others. Related
 // ranking favors these hubs and the reachability gate trusts them as roots, so declaring
 // the type in frontmatter beats guessing it from a URL shape.
-export fun pageType(md: str) > str {
+export fun pageType(md: str) > str !> any {
     final fm = serialize\jsonDecode(markdown\frontmatter(md));
     return fm.q("page_type").stringValue();
 }

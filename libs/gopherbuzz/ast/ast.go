@@ -147,8 +147,15 @@ type FunDecl struct {
 	// declares no `= expr` default. A call may omit any parameter that has one.
 	ParamDefaults []Node
 	RetAnnot      string // return type annotation; "" = unannotated
-	YieldAnnot    string // yield type annotation after *>; "" = non-fiber function
-	Body          *BlockStmt
+	// ErrAnnot is the error-set annotation after !> (fun f() > T !> ErrType {}).
+	// "" means the function declares no raise: a call to a raising function from
+	// its body must be try/catch-caught, never propagated. Non-"" is the
+	// authored error type name (or union); the checker does not currently type
+	// -check it against the throw sites, only its presence, which is what makes
+	// propagate-or-catch enforceable.
+	ErrAnnot   string
+	YieldAnnot string // yield type annotation after *>; "" = non-fiber function
+	Body       *BlockStmt
 	// Doc is the documentation comment block immediately preceding the
 	// declaration (see token.Token.Doc); "" when undocumented. Carried onto the
 	// compiled chunk so host code (spell resolution, magus describe/doctor) can
@@ -365,8 +372,10 @@ type FunExpr struct {
 	// declares no `= expr` default. A call may omit any parameter that has one.
 	ParamDefaults []Node
 	RetAnnot      string // return type annotation; "" = unannotated
-	YieldAnnot    string // yield type annotation after *>; "" = non-fiber function
-	Body          *BlockStmt
+	// ErrAnnot is the error-set annotation after !>; see FunDecl.ErrAnnot.
+	ErrAnnot   string
+	YieldAnnot string // yield type annotation after *>; "" = non-fiber function
+	Body       *BlockStmt
 }
 
 // MapExpr: {"key": val, ...}. Mut is set for the `mut {…}` form (a mutable map);

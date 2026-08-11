@@ -6,6 +6,6 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
-export extern fun freePort() > int;
-export extern fun isPortOpen(host: str, port: int) > bool;
-export extern fun waitForPort(host: str, port: int, timeout_ms: int = 0) > bool;
+export extern fun freePort() > int !> any;
+export extern fun isPortOpen(host: str, port: int) > bool !> any;
+export extern fun waitForPort(host: str, port: int, timeout_ms: int = 0) > bool !> any;

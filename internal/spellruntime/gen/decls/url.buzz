@@ -16,6 +16,6 @@ export object URL {
 }
 
 export extern fun build(parts: URL) > str;
-export extern fun decode(s: str) > str;
+export extern fun decode(s: str) > str !> any;
 export extern fun encode(s: str) > str;
-export extern fun parse(raw_url: str) > URL;
+export extern fun parse(raw_url: str) > URL !> any;

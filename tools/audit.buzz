@@ -52,7 +52,7 @@ fun isBlockingSeverity(severity: str) > bool {
 // `pnpm view <pkg> time --json` returns a version -> ISO-8601 map plus the non-version
 // keys "created" and "modified", which are skipped. A version that fails to parse is
 // skipped rather than fatal: an odd tag upstream must not take a build down.
-fun hasInstallablePatch(pkg: str, patched: str, installed: str) > bool {
+fun hasInstallablePatch(pkg: str, patched: str, installed: str) > bool !> any {
     // "<0.0.0" is the advisory database's way of saying no patch has been published.
     if (patched == "" or patched == "<0.0.0") {
         return false;
@@ -109,7 +109,7 @@ fun hasInstallablePatch(pkg: str, patched: str, installed: str) > bool {
 
 // audit scans the current project and fails ONLY on findings that are actionable today.
 // Everything else is printed and carried. Throws to fail the calling target.
-export fun audit() > void {
+export fun audit() > void !> any {
     final res = proc\exec("pnpm", args: ["audit", "--json"], dir: ".",
         opts: {"allow_failure": true});
     if (res.code == 0) {

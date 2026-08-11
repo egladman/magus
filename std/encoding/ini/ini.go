@@ -56,6 +56,7 @@ var Module = std.Module{
 			Doc:     "Parse INI text into {section: {key: value}}. Entries before the first [section] header are under the \"\" key, which is where a flat file like .npmrc puts everything. Values are always strings; a repeated key takes the last value.",
 			Args:    []std.Arg{{Name: "source", Type: std.TypeString}},
 			Returns: []std.Ret{{Type: std.TypeStringMapMap}},
+			Raises:  true,
 			Impl:    INIParse,
 		},
 		{

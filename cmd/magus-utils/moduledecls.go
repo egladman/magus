@@ -159,7 +159,17 @@ func externDecl(m std.Method) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("export extern fun %s(%s) > %s;\n", name, strings.Join(params, ", "), ret), nil
+	// A raising Method emits `!> any`, not a specific error type: every host error
+	// crosses the VM boundary through gen.HostError, which wraps it in a map
+	// (StructuredError.BuzzError()) rather than a plain str - see
+	// internal/interp/bindings/gen/runtime.go. `any` is the honest declared shape,
+	// and it is also what an untyped `catch (e)` already binds to, so it costs
+	// existing call sites nothing.
+	raises := ""
+	if m.Raises {
+		raises = " !> any"
+	}
+	return fmt.Sprintf("export extern fun %s(%s) > %s%s;\n", name, strings.Join(params, ", "), ret, raises), nil
 }
 
 // buzzArgType maps a parameter's TypeTag to its Buzz annotation.

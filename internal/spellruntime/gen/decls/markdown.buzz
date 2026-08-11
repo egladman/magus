@@ -6,6 +6,6 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
-export extern fun frontmatter(source: str) > str;
+export extern fun frontmatter(source: str) > str !> any;
 export extern fun stripFrontmatter(source: str) > str;
 export extern fun toHtml(source: str) > str;

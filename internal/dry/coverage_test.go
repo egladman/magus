@@ -214,7 +214,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void { ctx.needs(ctx.glob
 func TestRun_stubbedHostMembers(t *testing.T) {
 	const src = `
 import "magus";
-export fun work(ctx: magus\Context, args: [str]) > void {
+export fun work(ctx: magus\Context, args: [str]) > void !> any {
     magus.info("i");
     magus.warn("w");
     magus.error("e");
@@ -274,7 +274,7 @@ func TestLoadMagusfile_topLevelLog(t *testing.T) {
 func TestRun_magusRunEmptyArgv(t *testing.T) {
 	const src = `
 import "magus";
-export fun release(ctx: magus\Context, args: [str]) > void { magus.run([]); }
+export fun release(ctx: magus\Context, args: [str]) > void !> any { magus.run([]); }
 `
 	r := Run(context.Background(), src, "release", nil)
 	require.True(t, r.OK, "dry-run failed: %+v", r.Diag)
@@ -287,7 +287,7 @@ func TestRun_magusRunWithCharmSuffix(t *testing.T) {
 	const src = `
 import "magus";
 export fun image_build(ctx: magus\Context, args: [str]) > void {}
-export fun release(ctx: magus\Context, args: [str]) > void { magus.run(["image-build:cd,fast"]); }
+export fun release(ctx: magus\Context, args: [str]) > void !> any { magus.run(["image-build:cd,fast"]); }
 `
 	r := Run(context.Background(), src, "release", nil)
 	require.True(t, r.OK, "dry-run failed: %+v", r.Diag)
@@ -459,7 +459,7 @@ func TestRun_insightReportLensesAreShaped(t *testing.T) {
 		t.Run(lens, func(t *testing.T) {
 			src := `
 import "magus";
-export fun work(ctx: magus\Context, args: [str]) > void {
+export fun work(ctx: magus\Context, args: [str]) > void !> any {
     magus.info("{magus.insightReport([]).` + lens + `.len()}");
     magus.info("reached-the-end");
 }

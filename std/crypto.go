@@ -63,6 +63,7 @@ var Crypto = Module{
 			Doc:     "Return the lowercase hex SHA-256 digest of the file at path.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    CryptoSha256File,
 		},
 		{
@@ -77,6 +78,7 @@ var Crypto = Module{
 			Doc:     "Return the lowercase hex SHA-512 digest of the file at path.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    CryptoSha512File,
 		},
 		{
@@ -91,6 +93,7 @@ var Crypto = Module{
 			Doc:     "Return the lowercase hex SHA-1 digest of the file at path. For interop with legacy/git checksums only - SHA-1 is not collision-resistant; use sha256 for anything security-relevant.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    CryptoSha1File,
 		},
 		{
@@ -99,6 +102,7 @@ var Crypto = Module{
 				"The key is NAMED, never passed: a value that never enters Buzz cannot be interpolated into a log.",
 			Args:    []Arg{{Name: "alg", Type: TypeString, Enum: "SignAlgorithm"}, {Name: "data", Type: TypeString}, {Name: "key_env", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    CryptoSign,
 		},
 		{
@@ -106,6 +110,7 @@ var Crypto = Module{
 			Doc:     "Sign the file at path, write the detached signature to path + \".sig\", and return the lowercase hex signature. alg is \"ed25519\".",
 			Args:    []Arg{{Name: "alg", Type: TypeString, Enum: "SignAlgorithm"}, {Name: "path", Type: TypeString}, {Name: "key_env", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    CryptoSignFile,
 		},
 		{
@@ -113,6 +118,7 @@ var Crypto = Module{
 			Doc:     "Report whether sig_hex is a valid signature over data for the hex public key pub_hex. alg is \"ed25519\".",
 			Args:    []Arg{{Name: "alg", Type: TypeString, Enum: "SignAlgorithm"}, {Name: "data", Type: TypeString}, {Name: "sig_hex", Type: TypeString}, {Name: "pub_hex", Type: TypeString}},
 			Returns: []Ret{{Type: TypeBool}},
+			Raises:  true,
 			Impl:    CryptoVerify,
 		},
 		{
@@ -120,6 +126,7 @@ var Crypto = Module{
 			Doc:     "Return the lowercase hex PUBLIC key for the private key in the named environment variable, so a publisher can print what its readers must pin. alg is \"ed25519\".",
 			Args:    []Arg{{Name: "alg", Type: TypeString, Enum: "SignAlgorithm"}, {Name: "key_env", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    CryptoPublicKey,
 		},
 		{
@@ -134,6 +141,7 @@ var Crypto = Module{
 			Doc:     "Return the lowercase hex MD5 digest of the file at path. For interop with legacy checksum manifests only - MD5 is broken; use sha256 for anything security-relevant.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    CryptoMd5File,
 		},
 		{
@@ -168,6 +176,7 @@ var Crypto = Module{
 			Doc:     "Decode standard (padded) base64 into a byte list; errors on invalid input. Returns bytes rather than a str so arbitrary binary survives - a decoded key or archive would not.",
 			Args:    []Arg{{Name: "s", Type: TypeString}},
 			Returns: []Ret{{Type: TypeByteSlice}},
+			Raises:  true,
 			Impl:    CryptoBase64DecodeBytes,
 		},
 	},

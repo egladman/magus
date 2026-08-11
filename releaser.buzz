@@ -92,7 +92,7 @@ export fun releasableModules(projects: [any]) > [{str: str}] {
 // Build metadata does NOT disqualify a tag. Item 10 says metadata is ignored when
 // determining precedence, so v1.0.0+ci42 IS v1.0.0; excluding it would re-offer a
 // version already released.
-export fun currentVersion(prefix: str) > str {
+export fun currentVersion(prefix: str) > str !> any {
     var best = "";
     var bestMajor = 0 - 1;
     var bestMinor = 0 - 1;
@@ -121,7 +121,7 @@ export fun currentVersion(prefix: str) > str {
 // An unreleased module is treated as sitting at 0.0.0, so its candidates fall out
 // of the same rule as everyone else's (0.0.1 | 0.1.0 | 1.0.0) rather than being a
 // special case someone has to remember.
-export fun nextFor(cur: str) > SemverNext {
+export fun nextFor(cur: str) > SemverNext !> any {
     if (cur == "") { return semver\next("0.0.0"); }
     return semver\next(cur);
 }
@@ -130,7 +130,7 @@ export fun nextFor(cur: str) > SemverNext {
 // comparing the RELEASE part only - so v0.4.0-rc1 and v0.4.0+ci both count as the
 // minor candidate. A prerelease of a legal next version is itself legal; that is
 // how you cut an rc without first inventing a version nobody agreed to.
-export fun isCandidate(v: str, cur: str) > bool {
+export fun isCandidate(v: str, cur: str) > bool !> any {
     final want = semver\parse(v);
     final n = nextFor(cur);
     foreach (c in [n.patch, n.minor, n.major]) {

@@ -1416,7 +1416,7 @@ func (p *parser) parseFunDecl() (*ast.FunDecl, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ast.FunDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, YieldAnnot: fr.yieldAnnot, Body: fr.body, Doc: t.Doc}, nil
+	return &ast.FunDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, ErrAnnot: fr.errAnnot, YieldAnnot: fr.yieldAnnot, Body: fr.body, Doc: t.Doc}, nil
 }
 
 // parseExternFunDecl parses `extern fun name(params) > T;` - the signature of a
@@ -1441,7 +1441,7 @@ func (p *parser) parseExternFunDecl() (*ast.FunDecl, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ast.FunDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, IsExtern: true, Name: nameTok.Val, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, YieldAnnot: fr.yieldAnnot, Doc: t.Doc}, nil
+	return &ast.FunDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, IsExtern: true, Name: nameTok.Val, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, ErrAnnot: fr.errAnnot, YieldAnnot: fr.yieldAnnot, Doc: t.Doc}, nil
 }
 
 // parseTestDecl parses `test "name" { body }`. The name is a string literal, as
@@ -1570,7 +1570,7 @@ func (p *parser) parseProtocolDecl() (*ast.ObjectDecl, error) {
 		decl.Methods = append(decl.Methods, &ast.FunDecl{
 			Pos: ast.Pos{Line: ft.Line, Col: ft.Col}, Name: mName.Val,
 			Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults,
-			RetAnnot: fr.retAnnot, YieldAnnot: fr.yieldAnnot,
+			RetAnnot: fr.retAnnot, ErrAnnot: fr.errAnnot, YieldAnnot: fr.yieldAnnot,
 		})
 		p.optSemicolon()
 	}
@@ -2535,7 +2535,7 @@ func (p *parser) parseFunExpr() (*ast.FunExpr, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ast.FunExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, YieldAnnot: fr.yieldAnnot, Body: fr.body}, nil
+	return &ast.FunExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, ErrAnnot: fr.errAnnot, YieldAnnot: fr.yieldAnnot, Body: fr.body}, nil
 }
 
 // funRest is the shared tail of a function: (params) rettype *> yieldtype { body }.
@@ -2546,6 +2546,7 @@ type funRest struct {
 	// declares no `= expr` default.
 	paramDefaults []ast.Node
 	retAnnot      string
+	errAnnot      string
 	yieldAnnot    string
 	body          *ast.BlockStmt
 }
@@ -2618,13 +2619,23 @@ func (p *parser) parseFunRest(extern bool) (funRest, error) {
 		rt := p.peek()
 		return funRest{}, fmt.Errorf("buzz: line %d:%d: return type must be preceded by '>' (write `> %s ...`)", rt.Line, rt.Col, rt.Val)
 	}
-	// Consume optional !> error-set annotation: fun f() > T !> ErrType { }
+	// !> error-set annotation: fun f() > T !> ErrType { }. Stored (not discarded)
+	// so the checker can enforce propagate-or-catch: a function with a non-empty
+	// errAnnot has declared it may raise, and a call to a raising function is
+	// legal in its body without a surrounding try/catch. A bare `!>` with no
+	// following type (permitted by the grammar below) still counts as a
+	// declared raise, of an unnamed error set - recorded as "any" to match the
+	// checker's existing convention for an untyped catch clause.
 	if p.check(token.ErrArrow) {
 		p.advance()
 		if p.isTypeStart() {
-			if err := p.skipType(); err != nil {
+			ea, err := p.readType()
+			if err != nil {
 				return funRest{}, err
 			}
+			out.errAnnot = ea
+		} else {
+			out.errAnnot = "any"
 		}
 	}
 	// Consume optional *> yield-type annotation: fun f() > R *> Y { }

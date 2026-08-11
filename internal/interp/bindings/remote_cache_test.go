@@ -96,7 +96,7 @@ export fun mgs_getName() > str { return %q; }
 
 final BASE = %q;
 
-export fun get_artifact(target: any, cb: fun(any)) > bool {
+export fun get_artifact(target: any, cb: fun(any)) > bool !> any {
     var io = {};
     cb(io);
     final url = BASE + "/blob/" + io["hash"];

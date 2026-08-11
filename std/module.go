@@ -164,6 +164,14 @@ type Method struct {
 	// Returns lists return values. An error is always implicit on Impls
 	// and surfaces as a Buzz runtime error; do not list it here.
 	Returns []Ret
+	// Raises is authored, not derived: true when Impl can return a non-nil error
+	// to the Buzz caller under real inputs (not merely when its signature ends in
+	// `error` - many Impls declare one and never return it non-nil). moduledecls
+	// reads this to emit `!> any` on the generated extern declaration, which is
+	// what makes the checker's propagate-or-catch enforcement (BZZ1006) apply to
+	// host calls. Get this wrong and either a caller loses a real error path
+	// unchecked (false), or every call site needs a needless try/catch (true).
+	Raises bool
 	// Impl is the typed Go function bound by this Method. Codegen reflects
 	// over it to discover its package-qualified name and validates that its
 	// signature matches Args + Returns + (error).

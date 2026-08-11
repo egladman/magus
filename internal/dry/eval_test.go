@@ -168,7 +168,7 @@ func TestRun_magusRunInvocation(t *testing.T) {
 	const src = `
 import "magus";
 export fun image_build(ctx: magus\Context, args: [str]) > void {}
-export fun release(ctx: magus\Context, args: [str]) > void { magus.run(["image-build:cd"]); }
+export fun release(ctx: magus\Context, args: [str]) > void !> any { magus.run(["image-build:cd"]); }
 `
 	g := LoadMagusfile(context.Background(), src)
 	require.True(t, g.OK, "load failed: %+v", g.Diag)

@@ -16,7 +16,7 @@ import "assert";
 // file bytes get hashed (writeServiceWorker's cache-version stamp and
 // writeSiteManifest's per-asset integrity list), so the two never compute "the same
 // hash" two different ways.
-export fun fileSha256(path: str) > str {
+export fun fileSha256(path: str) > str !> any {
     return crypto\hash(crypto\HashAlgorithm.Sha256, fs\readFile(path)).hex();
 }
 
@@ -25,7 +25,7 @@ export fun fileSha256(path: str) > str {
 // bytes, so .hex() renders the lowercase hex this decodes;
 // CSP hash-sources are base64, so hexDecode back to raw digest bytes before
 // base64-encoding.
-export fun scriptHash(js: str) > str {
+export fun scriptHash(js: str) > str !> any {
     return "sha256-" + base64\encode(hex\decode(crypto\hash(crypto\HashAlgorithm.Sha256, js).hex()));
 }
 
@@ -94,7 +94,7 @@ export final CSP_IMG_SRC_HOME = CSP_IMG_SRC_DEFAULT + " https://github.com https
 //     fetched, and both loaders handle the fetch failure gracefully.
 //   - form-action/object-src/frame-src 'none': no <form>, <object>/<embed>, <iframe>.
 //   - base-uri 'self': nothing sets <base>; pins it against injection anyway.
-export fun computeCSP(imgSrc: str) > str {
+export fun computeCSP(imgSrc: str) > str !> any {
     var scriptSrc = "'self' 'wasm-unsafe-eval'";
     foreach (path in CSP_INLINE_SCRIPT_SOURCES) {
         final f = io\File.open(path, io\FileMode.read);
@@ -116,7 +116,7 @@ export fun computeCSP(imgSrc: str) > str {
 // external script; its only content is one inline <script> that differs per stub, so it
 // cannot share the site-wide hash list. script is the exact text redirectScript(rel)
 // (lib/html.buzz) produces, so the hash always matches what ships.
-export fun cspForRedirectStub(script: str) > str {
+export fun cspForRedirectStub(script: str) > str !> any {
     return "default-src 'none'; script-src '" + scriptHash(script) + "'"
         + "; base-uri 'self'; form-action 'none'; object-src 'none'; frame-src 'none'";
 }

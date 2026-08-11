@@ -20,13 +20,13 @@ fun module_path(mod: any) > str {
     return serialize\jsonDecode(module_json(mod)).q(["Module", "Path"]).stringValue();
 }
 
-fun replace_path(base: str, to: str) > str {
+fun replace_path(base: str, to: str) > str !> any {
     final rel = path\rel(base, target: to);
     if (rel == "." or rel.startsWith("../") or rel.startsWith("./")) { return rel; }
     return "./" + rel;
 }
 
-fun same_replace_path(dir: str, got: str, want: str) > bool {
+fun same_replace_path(dir: str, got: str, want: str) > bool !> any {
     return path\abs(dir + "/" + got) == path\abs(dir + "/" + want);
 }
 
@@ -40,7 +40,7 @@ fun sorted_keys(values: {str: any}) > [str] {
 // `go mod edit -json` result for a workspace module, captured by the go spell in the
 // caller's context. Only replacements whose old path names a workspace module are
 // touched; third-party replacements are deliberately preserved.
-export fun replaceArgs(currentJSON: str, modules: [any]) > [str] {
+export fun replaceArgs(currentJSON: str, modules: [any]) > [str] !> any {
 	final currentName = serialize\jsonDecode(currentJSON).q(["Module", "Path"]).stringValue();
     var current: any = null;
     var byPath: {str: any} = mut {};
@@ -92,7 +92,7 @@ export fun replaceArgs(currentJSON: str, modules: [any]) > [str] {
 // The go spell arrives as a parameter because a spell file cannot import another spell
 // (`magus/spell/go` is bound only for magusfiles), which is also why this file's header
 // says the caller supplies the two ops it needs.
-fun workspace_go_mods(ctx: magus\Context, go: any) > [any] {
+fun workspace_go_mods(ctx: magus\Context, go: any) > [any] !> any {
     final projects: Projects = magus\ls();
     var modules: [any] = mut [<any>];
     foreach (project in projects.projects) {
@@ -112,7 +112,7 @@ fun workspace_go_mods(ctx: magus\Context, go: any) > [any] {
 // modifiesExistingFiles, not writesFiles: as an output go.mod would be snapshotted and
 // replayable, so a cache hit could restore a pre-release go.mod over the version bump
 // `release` had just written - the two-owner hazard MGS1020 reports.
-export fun replaceWorkspaceModules(ctx: magus\Context, go: any, project: str) > void {
+export fun replaceWorkspaceModules(ctx: magus\Context, go: any, project: str) > void !> any {
     ctx.modifiesExistingFiles("go.mod");
     final flags = replaceArgs(go["go-mod-json"](ctx).stdout, modules: workspace_go_mods(ctx, go));
     if (flags.len() == 0) { return; }

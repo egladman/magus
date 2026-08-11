@@ -24,7 +24,7 @@ import "engine/path" as _;
 // writeTagPage renders one synthesized page and records it everywhere the site tracks output.
 // srcRel carries the "/_index.md" synthesized-page marker so renderPage knows there is no
 // source to view or edit, and so rootPrefix climbs the right number of levels.
-fun writeTagPage(url: str, srcRel: str, title: str, desc: str, body: str, searchText: str, site: Site) > void {
+fun writeTagPage(url: str, srcRel: str, title: str, desc: str, body: str, searchText: str, site: Site) > void !> any {
     final doc = renderPage(title, desc, body, srcRel, "", url, "", mut [], site);
     final dir = site.outDir + "/" + url.sub(0, url.len() - 1);
     fs\makeDirectory(dir);
@@ -53,7 +53,7 @@ export fun collectTagIndex(site: Site) > void {
     }
 }
 
-export fun renderTagPages(site: Site) > void {
+export fun renderTagPages(site: Site) > void !> any {
     // slug -> the display spelling. Last writer wins, which is fine: two tags that kebab to the
     // same slug ARE the same topic, and either spelling names it. Restricted to the slugs
     // collectTagIndex already promised a page for, so chips and pages cannot disagree.

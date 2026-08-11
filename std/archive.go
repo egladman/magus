@@ -47,6 +47,7 @@ var Archive = Module{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "UncompressResult"}},
+			Raises:  true,
 			Impl:    ArchiveUncompress,
 		},
 		{
@@ -58,6 +59,7 @@ var Archive = Module{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "CompressResult"}},
+			Raises:  true,
 			Impl:    ArchiveCompress,
 		},
 		{
@@ -68,6 +70,7 @@ var Archive = Module{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "[ArchiveEntry]"}},
+			Raises:  true,
 			Impl:    ArchiveList,
 		},
 		{
@@ -79,6 +82,7 @@ var Archive = Module{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    ArchiveReadFile,
 		},
 	},

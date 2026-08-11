@@ -45,6 +45,7 @@ var Module = std.Module{
 			Doc:     "Decode a standard (padded) base64 string; errors on malformed input.",
 			Args:    []std.Arg{{Name: "s", Type: std.TypeString}},
 			Returns: []std.Ret{{Type: std.TypeString}},
+			Raises:  true,
 			Impl:    Base64Decode,
 		},
 		{
@@ -59,6 +60,7 @@ var Module = std.Module{
 			Doc:     "Decode a URL-safe (padded) base64 string; errors on malformed input.",
 			Args:    []std.Arg{{Name: "s", Type: std.TypeString}},
 			Returns: []std.Ret{{Type: std.TypeString}},
+			Raises:  true,
 			Impl:    Base64URLDecode,
 		},
 	},

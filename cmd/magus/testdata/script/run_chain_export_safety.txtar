@@ -50,7 +50,7 @@ import "magus";
 import "proc";
 import "spells/acme" as acme;
 magus.project({ "spells": [acme] });
-export fun bundle(ctx: magus\Context, args: [str]) > void {
+export fun bundle(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("dist/*.txt");
     // Executable on purpose: the +x is what case 3 asserts survives an export over
     // an existing, non-executable destination.

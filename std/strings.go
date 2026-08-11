@@ -126,6 +126,7 @@ var Strings = Module{
 				{Name: "pad", Type: TypeString, Optional: true, Default: " "},
 			},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    StringsPadLeft,
 		},
 		{
@@ -137,6 +138,7 @@ var Strings = Module{
 				{Name: "pad", Type: TypeString, Optional: true, Default: " "},
 			},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    StringsPadRight,
 		},
 		{

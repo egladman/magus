@@ -58,6 +58,7 @@ var Magus = Module{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
+			Raises:  true,
 			Impl:    MagusCmd,
 		},
 		{
@@ -65,6 +66,7 @@ var Magus = Module{
 			Doc:     "List the workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Annotate the result `> Projects` (magus's own type, no import needed) for compile-checked field access. Unlike magus.cmd(\"ls\"), this reads the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip.",
 			Args:    nil,
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Projects"}},
+			Raises:  true,
 			Impl:    MagusLs,
 		},
 		{
@@ -72,6 +74,7 @@ var Magus = Module{
 			Doc:     "The TARGET dependency graph of every project: {projects}, each project {path, name, engine, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs, outputs}. Annotate the result `> TargetGraph` (magus's own type, no import needed) for compile-checked field access. This is the per-project view magus.graph() does not carry: graph() is the project-level DAG, this is the targets inside each one. Read statically from the magusfile source, so it never runs a target body, and served in-process from the workspace on the context - no subprocess, no markdown to re-parse.",
 			Args:    nil,
 			Returns: []Ret{{Type: TypeAnyMap, Object: "TargetGraph"}},
+			Raises:  true,
 			Impl:    MagusTargets,
 		},
 		{
@@ -81,6 +84,7 @@ var Magus = Module{
 				{Name: "base", Type: TypeString, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Affected"}},
+			Raises:  true,
 			Impl:    MagusAffected,
 		},
 		{
@@ -88,6 +92,7 @@ var Magus = Module{
 			Doc:     "The project dependency DAG as {nodes, dependsOn, blastRadius}. nodes is in TOPOLOGICAL order, so iterating it is already a valid build order; dependsOn gives each node's direct predecessors and blastRadius how many projects it can transitively affect. Served in-process from the workspace on the context - no subprocess.",
 			Args:    nil,
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Graph"}},
+			Raises:  true,
 			Impl:    MagusGraph,
 		},
 		{
@@ -97,6 +102,7 @@ var Magus = Module{
 				{Name: "dir", Type: TypeString},
 			},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    MagusWhere,
 		},
 		{
@@ -108,6 +114,7 @@ var Magus = Module{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: nil,
+			Raises:  true,
 			Impl:    MagusRaise,
 		},
 		{
@@ -118,6 +125,7 @@ var Magus = Module{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
+			Raises:  true,
 			Impl:    MagusRun,
 		},
 		{
@@ -128,6 +136,7 @@ var Magus = Module{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
+			Raises:  true,
 			Impl:    MagusDescribe,
 		},
 		{
@@ -138,6 +147,7 @@ var Magus = Module{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
+			Raises:  true,
 			Impl:    MagusInsight,
 		},
 		{
@@ -148,6 +158,7 @@ var Magus = Module{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "InsightReport"}},
+			Raises:  true,
 			Impl:    MagusInsightReport,
 		},
 		{
@@ -158,6 +169,7 @@ var Magus = Module{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Impact"}},
+			Raises:  true,
 			Impl:    MagusAffectedImpact,
 		},
 		{
@@ -167,6 +179,7 @@ var Magus = Module{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "TargetGraph"}},
+			Raises:  true,
 			Impl:    MagusTargetGraph,
 		},
 		{
@@ -177,16 +190,18 @@ var Magus = Module{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "FileReport"}},
+			Raises:  true,
 			Impl:    MagusDescribeFile,
 		},
 		{
 			Name: "doctor",
-			Doc:  "Validate the workspace and return what every check found: {workspace, checks, summary}, each check {name, status, message, details} with status `ok`, `fail`, or `advice` (advice is worth knowing and never a gate). Annotate the result `> DoctorReport` for compile-checked field access. A caller branches on a check's status rather than grepping console text for the word fail. It does NOT raise when a check fails: doctor exits non-zero precisely when it has something to report, and raising would discard the report. Gate on `summary.fail` instead, which says more than an exit code does. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec).",
+			Doc:  "Validate the workspace and return what every check found: {workspace, checks, summary}, each check {name, status, message, details} with status `ok`, `fail`, or `advice` (advice is worth knowing and never a gate). Annotate the result `> DoctorReport` for compile-checked field access. A caller branches on a check's status rather than grepping console text for the word fail. It does NOT raise when a check fails: doctor exits non-zero precisely when it has something to report, and raising would discard the report. Gate on `summary.fail` instead, which says more than an exit code does. It DOES raise when the underlying `magus doctor` subprocess itself cannot be launched or its output cannot be decoded - an infrastructure failure, not a check result. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec).",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "DoctorReport"}},
+			Raises:  true,
 			Impl:    MagusDoctor,
 		},
 		{
@@ -197,6 +212,7 @@ var Magus = Module{
 				{Name: "inputs", Type: TypeStringSlice, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "DriftResult"}},
+			Raises:  true,
 			Impl:    MagusDiagnoseDrift,
 		},
 		{
@@ -206,6 +222,7 @@ var Magus = Module{
 				{Name: "project_path", Type: TypeString, Optional: true},
 			},
 			Returns: nil,
+			Raises:  true,
 			Impl:    MagusBustCache,
 		},
 		{

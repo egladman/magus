@@ -6,10 +6,10 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
-export extern fun abs(path: str) > str;
+export extern fun abs(path: str) > str !> any;
 export extern fun clean(path: str) > str;
-export extern fun expandUser(path: str) > str;
+export extern fun expandUser(path: str) > str !> any;
 export extern fun isAbs(path: str) > bool;
-export extern fun matches(pattern: str, path: str) > bool;
-export extern fun matchesAny(patterns: [str], path: str) > bool;
-export extern fun rel(base: str, target: str) > str;
+export extern fun matches(pattern: str, path: str) > bool !> any;
+export extern fun matchesAny(patterns: [str], path: str) > bool !> any;
+export extern fun rel(base: str, target: str) > str !> any;

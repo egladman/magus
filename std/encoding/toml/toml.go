@@ -28,6 +28,7 @@ var Module = std.Module{
 			Doc:     "Decode a TOML document into a value (tables become maps, arrays become lists, plus strings, numbers, bools, and datetimes); errors on invalid input.",
 			Args:    []std.Arg{{Name: "source", Type: std.TypeString}},
 			Returns: []std.Ret{{Type: std.TypeAny}},
+			Raises:  true,
 			Impl:    TOMLParse,
 		},
 		{
@@ -35,6 +36,7 @@ var Module = std.Module{
 			Doc:     "Encode a value to a TOML string; the top level must be a table/map, as TOML requires. Errors on unencodable input.",
 			Args:    []std.Arg{{Name: "value", Type: std.TypeAny}},
 			Returns: []std.Ret{{Type: std.TypeString}},
+			Raises:  true,
 			Impl:    TOMLStringify,
 		},
 	},

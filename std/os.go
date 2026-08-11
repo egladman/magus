@@ -75,6 +75,7 @@ var Os = Module{
 				{Name: "callback", Type: TypeFunc},
 			},
 			Returns: nil,
+			Raises:  true,
 			Impl:    OsWithEnv,
 		},
 		{
@@ -89,6 +90,7 @@ var Os = Module{
 			Doc:     "Abort the current run with the given exit code - typically after logging an error. Does NOT call os.Exit (that would kill a shared daemon); it raises, ending the target, and the code becomes magus's process exit status.",
 			Args:    []Arg{{Name: "code", Type: TypeInt}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    OsExit,
 		},
 		{
@@ -96,6 +98,7 @@ var Os = Module{
 			Doc:     "Pause for the given number of milliseconds (fractional allowed), matching Buzz's os.sleep. Cancellable: if the run is interrupted it returns early with the cancellation error rather than blocking.",
 			Args:    []Arg{{Name: "ms", Type: TypeFloat}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    OsSleep,
 		},
 		{
@@ -110,6 +113,7 @@ var Os = Module{
 			Doc:     "Return the host machine's name.",
 			Args:    nil,
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    OsHostname,
 		},
 		{
@@ -117,6 +121,7 @@ var Os = Module{
 			Doc:     "Return the absolute path of the running magus binary. Pair it with fs.stat inside a long-lived watch loop to detect that the binary was rebuilt or upgraded underneath the process, which means any output it goes on to generate would be stale.",
 			Args:    nil,
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    OsExecutable,
 		},
 		{
@@ -128,6 +133,7 @@ var Os = Module{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAny}},
+			Raises:  true,
 			Impl:    OsRetry,
 		},
 	},

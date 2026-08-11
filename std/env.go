@@ -39,6 +39,7 @@ var Env = Module{
 			Doc:     "Set name to value in the current process environment.",
 			Args:    []Arg{{Name: "name", Type: TypeString}, {Name: "value", Type: TypeString}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    EnvSet,
 		},
 		{
@@ -53,6 +54,7 @@ var Env = Module{
 			Doc:     "Remove name from the current process environment.",
 			Args:    []Arg{{Name: "name", Type: TypeString}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    EnvUnset,
 		},
 		{
@@ -67,6 +69,7 @@ var Env = Module{
 			Doc:     "Return the current user's home directory.",
 			Args:    nil,
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    EnvHome,
 		},
 		{
@@ -81,6 +84,7 @@ var Env = Module{
 			Doc:     "Return the value of name, or raise when it is unset or stripped by the sandbox. The fail-fast complement to get/lookup: a CI magusfile that needs GITHUB_TOKEN states the requirement once instead of threading a lookup-then-fatal check through every caller. A set-but-empty variable satisfies the requirement (its empty value is returned).",
 			Args:    []Arg{{Name: "name", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    EnvRequire,
 		},
 		{
@@ -95,6 +99,7 @@ var Env = Module{
 			Doc:     "Read a .env file and return its name->value map (parse_dotenv over the file contents). Errors if the file cannot be read.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeStringMap}},
+			Raises:  true,
 			Impl:    EnvReadDotenv,
 		},
 		{
@@ -102,6 +107,7 @@ var Env = Module{
 			Doc:     "Read a .env file and set each variable in the process environment, without overwriting names already set (the dotenv convention) or names the sandbox strips. A no-op in a recording/dry-run.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    EnvLoadDotenv,
 		},
 	},

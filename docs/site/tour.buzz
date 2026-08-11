@@ -26,7 +26,7 @@ object TourStep {
 
     // renderCard renders this step's numbered <li>: code teaser, Open-in-Playground
     // deep link, and concept cross-link, all resolved against root.
-    fun renderCard(root: str, num: int) > str {
+    fun renderCard(root: str, num: int) > str !> any {
         final src = tourSrc(this.file);
         // The cross-link is inline at the end of the description, not a separate line.
         return template\render(`      <li class="tour-card" id="step-{{num}}">
@@ -47,7 +47,7 @@ object TourStep {
 // playground is standalone (custom head, wasm, own scripts), so it skips renderPage();
 // templating just the nav keeps it in lockstep with every other page. Its bottom
 // chrome is the console status bar (in playground.html), not the docs footer.
-export fun renderPlayground(site: Site) > void {
+export fun renderPlayground(site: Site) > void !> any {
     final f = io\File.open("playground.html", io\FileMode.read);
     var html = f.readAll();
     f.close();
@@ -109,7 +109,7 @@ fun playgroundLink(root: str, src: str) > str {
 // guards drop the provenance/edit chrome.
 // tourSteps is the ordered curriculum, shared by the tour page and collectDemos (which
 // inverts each step's docSlug into a "see the demo" callout on the matching concept page).
-export fun tourSteps() > [TourStep] {
+export fun tourSteps() > [TourStep] !> any {
     final steps: [TourStep] = mut [<TourStep>];
     // Discovered from the directory, not from a list kept here. A hand-maintained
     // registry silently omitted steps 19 through 22 for as long as they existed: the
@@ -170,7 +170,7 @@ fun tourDocLabel(src: str) > str {
 // collectDemos maps each concept docSlug to the FIRST tour step that demonstrates it (its
 // title + card anchor), pre-walk, so renderFile can inject a "see the demo" callout on the
 // matching concept page.
-export fun collectDemos(site: Site) > void {
+export fun collectDemos(site: Site) > void !> any {
     var n = 1;
     foreach (step in tourSteps()) {
         if (step.docSlug != "" and site.demoBySlug[step.docSlug] == null) {
@@ -180,7 +180,7 @@ export fun collectDemos(site: Site) > void {
     }
 }
 
-export fun renderTourPage(site: Site) > void {
+export fun renderTourPage(site: Site) > void !> any {
     final root = rootPrefix("tour/index.md", site);
     final steps = tourSteps();
 

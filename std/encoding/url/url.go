@@ -40,6 +40,7 @@ var Module = std.Module{
 			Doc:     "Decode a percent-encoded URL query component; errors on malformed input.",
 			Args:    []std.Arg{{Name: "s", Type: std.TypeString}},
 			Returns: []std.Ret{{Type: std.TypeString}},
+			Raises:  true,
 			Impl:    URLDecode,
 		},
 		{
@@ -47,6 +48,7 @@ var Module = std.Module{
 			Doc:     "Parse a URL string into {scheme, host, port, path, query, fragment}; errors on malformed input.",
 			Args:    []std.Arg{{Name: "raw_url", Type: std.TypeString}},
 			Returns: []std.Ret{{Type: std.TypeAnyMap, Object: "URL"}},
+			Raises:  true,
 			Impl:    URLParse,
 		},
 		{

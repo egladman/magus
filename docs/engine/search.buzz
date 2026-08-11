@@ -19,13 +19,13 @@ import "engine/page" as _;
 // renderSyntaxRow renders one Search Syntax entry: a clickable example that runs itself
 // (search.js intercepts the ?q= link) beside a plain-language description. The query is
 // url-encoded for the href and entity-escaped for its <code> display.
-fun renderSyntaxRow(q: str, desc: str) > str {
+fun renderSyntaxRow(q: str, desc: str) > str !> any {
     return template\render(`        <dt><a class="syntax-example" href="?q={{qEnc}}"><code>{{q}}</code></a></dt><dd>{{desc}}</dd>
 `, {"qEnc": urlcodec\encode(q), "q": q, "desc": desc});
 }
 
 
-export fun renderSearchPage(site: Site) > void {
+export fun renderSearchPage(site: Site) > void !> any {
     final root = rootPrefix("search/index.md", site);
     // Always-open syntax reference: on the dedicated page the query language is first-class,
     // not a disclosure to hunt for. Each example is a real ?q= link, so it works without JS

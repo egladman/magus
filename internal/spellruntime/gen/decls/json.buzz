@@ -6,5 +6,5 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
-export extern fun parse(s: str) > any;
-export extern fun stringify(value: any, indent: str = "") > str;
+export extern fun parse(s: str) > any !> any;
+export extern fun stringify(value: any, indent: str = "") > str !> any;

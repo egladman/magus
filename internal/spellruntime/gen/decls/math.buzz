@@ -6,11 +6,11 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
-export extern fun clamp(x: double, lo: double, hi: double) > double;
-export extern fun max(nums: [double]) > double;
-export extern fun mean(nums: [double]) > double;
-export extern fun median(nums: [double]) > double;
-export extern fun min(nums: [double]) > double;
-export extern fun round(x: double, places: int = 0) > double;
+export extern fun clamp(x: double, lo: double, hi: double) > double !> any;
+export extern fun max(nums: [double]) > double !> any;
+export extern fun mean(nums: [double]) > double !> any;
+export extern fun median(nums: [double]) > double !> any;
+export extern fun min(nums: [double]) > double !> any;
+export extern fun round(x: double, places: int = 0) > double !> any;
 export extern fun sum(nums: [double]) > double;
 export extern fun trunc(x: double) > double;

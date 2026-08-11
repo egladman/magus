@@ -26,6 +26,7 @@ var Module = std.Module{
 			Doc:     "Decode a YAML string into a value (maps, lists, strings, numbers, bools, null); errors on invalid input.",
 			Args:    []std.Arg{{Name: "source", Type: std.TypeString}},
 			Returns: []std.Ret{{Type: std.TypeAny}},
+			Raises:  true,
 			Impl:    YAMLParse,
 		},
 		{
@@ -33,6 +34,7 @@ var Module = std.Module{
 			Doc:     "Encode a value to a YAML string; errors on unencodable input.",
 			Args:    []std.Arg{{Name: "value", Type: std.TypeAny}},
 			Returns: []std.Ret{{Type: std.TypeString}},
+			Raises:  true,
 			Impl:    YAMLStringify,
 		},
 	},

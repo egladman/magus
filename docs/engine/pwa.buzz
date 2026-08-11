@@ -16,7 +16,7 @@ import "engine/route" as _;
 // "install this site". scope/start_url match the deploy base so a nested install stays
 // inside /magus/. Gated on baseURL so the scope is well-defined; without it we'd default
 // to "/" and mis-scope.
-export fun writeManifest(site: Site) > void {
+export fun writeManifest(site: Site) > void !> any {
     if (site.config.baseURL == "") { return; }
     final basePath = sitePathPrefix(site.config.baseURL);
     // Buzz interpolates { ... } in strings, so JSON braces are escaped as \{ \}
@@ -67,7 +67,7 @@ export fun writeManifest(site: Site) > void {
 // digest of the precached assets' own digests, so it changes exactly when a cached asset
 // does (and is byte-stable otherwise) - and that byte change is the signal a browser uses
 // to fetch the new worker.
-export fun buildServiceWorker(site: Site) > void {
+export fun buildServiceWorker(site: Site) > void !> any {
     if (site.config.baseURL == "") { return; }
     var manifest = "";
     foreach (asset in site.config.precacheAssets) {

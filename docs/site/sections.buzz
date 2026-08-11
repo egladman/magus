@@ -93,7 +93,7 @@ export fun collectSectionIndexes(site: Site) > void {
 // Only DIRECT children get cards. The full branch is already in the sidebar's
 // "Everything here" list, which this page now qualifies for, so repeating the
 // whole subtree in the body would say the same thing twice at different sizes.
-export fun renderSectionIndexes(site: Site) > void {
+export fun renderSectionIndexes(site: Site) > void !> any {
     foreach (p in site.docPages) {
         if (p.srcRel.endsWith("/_index.md") == false) { continue; }
 

@@ -39,6 +39,7 @@ var Math = Module{
 				{Name: "places", Type: TypeInt, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeFloat}},
+			Raises:  true,
 			Impl:    MathRound,
 		},
 		{
@@ -57,6 +58,7 @@ var Math = Module{
 				{Name: "hi", Type: TypeFloat},
 			},
 			Returns: []Ret{{Type: TypeFloat}},
+			Raises:  true,
 			Impl:    MathClamp,
 		},
 		{
@@ -71,6 +73,7 @@ var Math = Module{
 			Doc:     "The arithmetic mean. Raises on an empty list rather than returning 0, because 0 is a real average and \"there was nothing to average\" is not - returning it would let an empty set silently pass a floor check.",
 			Args:    []Arg{{Name: "nums", Type: TypeFloatSlice}},
 			Returns: []Ret{{Type: TypeFloat}},
+			Raises:  true,
 			Impl:    MathMean,
 		},
 		{
@@ -78,6 +81,7 @@ var Math = Module{
 			Doc:     "The middle value, averaging the two middle values for an even count. Prefer it to mean when reporting what a TYPICAL run costs: one pathological outlier moves a mean and barely moves a median. Raises on an empty list, like mean.",
 			Args:    []Arg{{Name: "nums", Type: TypeFloatSlice}},
 			Returns: []Ret{{Type: TypeFloat}},
+			Raises:  true,
 			Impl:    MathMedian,
 		},
 		{
@@ -85,6 +89,7 @@ var Math = Module{
 			Doc:     "The smallest number in the list. Distinct from Buzz's own minInt/minDouble, which compare exactly two values. Raises on an empty list.",
 			Args:    []Arg{{Name: "nums", Type: TypeFloatSlice}},
 			Returns: []Ret{{Type: TypeFloat}},
+			Raises:  true,
 			Impl:    MathMin,
 		},
 		{
@@ -92,6 +97,7 @@ var Math = Module{
 			Doc:     "The largest number in the list. Distinct from Buzz's own maxInt/maxDouble, which compare exactly two values. Raises on an empty list.",
 			Args:    []Arg{{Name: "nums", Type: TypeFloatSlice}},
 			Returns: []Ret{{Type: TypeFloat}},
+			Raises:  true,
 			Impl:    MathMax,
 		},
 	},

@@ -69,7 +69,7 @@ export fun axisReport(site: Site) > void {
 
 // assetIntegrityCheck throws on any dangling href/src in the written output, so a
 // renamed bundle or forgotten alias fails the build instead of shipping a 404.
-export fun assetIntegrityCheck(site: Site) > void {
+export fun assetIntegrityCheck(site: Site) > void !> any {
     var files: [str] = mut [<str>];
     walkGen("", files, site);
     foreach (f in files) {
@@ -93,7 +93,7 @@ export fun assetIntegrityCheck(site: Site) > void {
 
 // orphanCheck proves every docs page is reachable by BFS from the nav roots, so a
 // page with no inbound link fails the build instead of shipping unreachable.
-export fun orphanCheck(site: Site) > void {
+export fun orphanCheck(site: Site) > void !> any {
     // Every written page, keyed the way pageKey() yields, so BFS can tell a page
     // link from an asset link.
     var files: [str] = mut [<str>];
@@ -208,7 +208,7 @@ export fun buildCommits(site: Site) > {str: str} {
 // of fork+exec pairs is what put the render's kernel time at more than twice its user
 // time - the gate that proves the site has no dangling link cost more than rendering the
 // site did.
-export fun checkPathExists(target: str, site: Site) > bool {
+export fun checkPathExists(target: str, site: Site) > bool !> any {
     // Empty target = gen/'s root, always the index.html landing. This shows up
     // when a page links to "../" (Parent Directory in an autoindex root) and the
     // resolver pops back to the root.
@@ -278,7 +278,7 @@ export fun scanReferencesInHTML(html: str, pageDir: str) > [str] {
 
 // walkGen recursively enumerates every written file under gen/ so the integrity check
 // reads each once.
-export fun walkGen(rel: str, acc: [str], site: Site) > void {
+export fun walkGen(rel: str, acc: [str], site: Site) > void !> any {
     var dir = site.outDir;
     if (rel != "") { dir = site.outDir + "/" + rel; }
     foreach (name in fs\list(dir)) {
@@ -298,7 +298,7 @@ export fun walkGen(rel: str, acc: [str], site: Site) > void {
 // every "<dir>/index.html" not in writtenPaths and not in alwaysKeep, delete the whole
 // directory (sibling index.md and all). Runs before assetIntegrityCheck/orphanCheck so
 // neither trips on a stale page's dangling reference to content removed with it.
-export fun pruneStaleOutputs(site: Site) > void {
+export fun pruneStaleOutputs(site: Site) > void !> any {
     // Outputs never eligible for pruning: paths a normal render always rewrites regardless
     // of docs/blog content, plus the playground's committed WASM/editor bundle, which this
     // render never touches (build-playground / build-playground-editor refresh it out of
@@ -352,7 +352,7 @@ export fun pruneStaleOutputs(site: Site) > void {
 // site_render(), because generateJsBundles() writes gen/assets/mermaid.js and hljs.js
 // (served assets) only after site_render() returns - computing the manifest earlier would
 // omit them. Excludes its own output path (a file cannot hash itself).
-export fun writeSiteManifest(site: Site) > void {
+export fun writeSiteManifest(site: Site) > void !> any {
     final acc: [str] = mut [<str>];
     walkGen("", acc, site);
     final sorted = acc.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
@@ -385,7 +385,7 @@ final RETIRED_URLS = "retired.urls.lock";
 
 // readURLSet reads a newline-delimited URL file into a set, skipping blanks and
 // "#" comments. Missing file -> empty set (the bootstrap case for URL_LOCK).
-export fun readURLSet(path: str) > {str: bool} {
+export fun readURLSet(path: str) > {str: bool} !> any {
     var set: {str: bool} = mut {};
     if (fs\isFile(path) == false) { return set; }
     final f = io\File.open(path, io\FileMode.read);
@@ -404,7 +404,7 @@ export fun readURLSet(path: str) > {str: bool} {
 // purpose, either add a redirect (frontmatter `aliases:`, whose stub keeps the old
 // URL resolving) or list it in retired.urls.lock. Runs every render; the lock only
 // grows (updateUrlLock, under the rw charm).
-export fun abandonedLinkCheck(site: Site) > void {
+export fun abandonedLinkCheck(site: Site) > void !> any {
     final locked = readURLSet(URL_LOCK);
     final retired = readURLSet(RETIRED_URLS);
     var abandoned: [str] = mut [<str>];
@@ -423,7 +423,7 @@ export fun abandonedLinkCheck(site: Site) > void {
 // only adds - a URL that drops out of the build stays in the ledger so the gate
 // keeps demanding a redirect or an explicit retirement for it. Called under the rw
 // charm so a plain (checking) render never mutates the tree.
-export fun updateUrlLock(site: Site) > void {
+export fun updateUrlLock(site: Site) > void !> any {
     var set = readURLSet(URL_LOCK);
     foreach (u in site.pageUrls.keys()) { set[u] = true; }
     var lines: [str] = mut [<str>];
@@ -448,7 +448,7 @@ fun lintSkipDir(name: str) > bool {
 
 // collectMarkdown appends every .md file under dir (recursively) to acc, as a path relative
 // to the walk root.
-fun collectMarkdown(base: str, rel: str, acc: [str]) > void {
+fun collectMarkdown(base: str, rel: str, acc: [str]) > void !> any {
     var dir = base;
     if (rel != "") { dir = base + "/" + rel; }
     foreach (name in fs\list(dir)) {
@@ -464,7 +464,7 @@ fun collectMarkdown(base: str, rel: str, acc: [str]) > void {
 }
 
 // pathExists is the one filesystem question the conventions lint asks.
-fun pathExists(p: str) > bool {
+fun pathExists(p: str) > bool !> any {
     return fs\exists(p);
 }
 
@@ -486,7 +486,7 @@ fun pathExists(p: str) > bool {
 //
 // Every violation is collected before either happens. Failing on the first would turn a
 // three-minute fix into three round trips.
-export fun conventionsCheck(root: str, docs: str) > void {
+export fun conventionsCheck(root: str, docs: str) > void !> any {
     var files: [str] = mut [<str>];
     collectMarkdown(root + "/" + docs, "", files);
     final sorted = files.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
@@ -527,7 +527,7 @@ export fun conventionsCheck(root: str, docs: str) > void {
 
 // collectFindings runs both halves over one file and sorts what they report into the tier
 // that throws and the tier that prints.
-fun collectFindings(root: str, file: str, abs: str, violations: [str], broken: [str]) > void {
+fun collectFindings(root: str, file: str, abs: str, violations: [str], broken: [str]) > void !> any {
     final md = fs\readFile(abs);
     foreach (f in lintMarkdown(file, md)) {
         violations.append(f.file + ":" + "{f.line}" + ": [" + f.rule + "] " + f.message);

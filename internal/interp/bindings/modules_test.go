@@ -316,7 +316,7 @@ func TestTemplatePartialsEndToEnd(t *testing.T) {
 	t.Chdir(dir)
 	writeFile(t, dir, "magusfile.buzz", "import \"magus\";\n"+
 		"import \"template\";\n"+
-		"export fun check(ctx: magus\\Context, args: [str]) > void {\n"+
+		"export fun check(ctx: magus\\Context, args: [str]) > void !> any {\n"+
 		"    final page = `{{>header}}[{{body}}]{{>footer}}`;\n"+
 		"    final partials = {\"header\": `<h>{{title}}</h>`, \"footer\": `<f/>`};\n"+
 		"    final got = template.renderPartials(page, {\"title\": \"magus\", \"body\": \"hi & <b>\"}, partials);\n"+
@@ -337,7 +337,7 @@ func TestMagusBustCacheReachable(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     magus.bustCache();
     fs.writeFile("ran", "ok");
 }
@@ -367,7 +367,7 @@ export fun build(args: [str]) > void {}
 		dir := t.TempDir()
 		writeMagusfile(t, dir, `import "magus";
 import "fs";
-export fun build(ctx: magus\Context, args: [str]) > void { fs.writeFile("ran", "ok"); }
+export fun build(ctx: magus\Context, args: [str]) > void !> any { fs.writeFile("ran", "ok"); }
 `)
 		require.NoError(t, runTargetIn(t, dir, "build"))
 		got, err := os.ReadFile(sentinel(dir))
@@ -421,7 +421,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 		writeMagusfile(t, dir, `import "magus";
 import "fs";
 export fun format(ctx: magus\Context, args: [str]) > void {}
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(format);
     ctx.needs(ctx.glob("form*"));
     fs.writeFile("ran", "ok");
@@ -437,7 +437,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 		writeMagusfile(t, dir, `import "magus";
 import "fs";
 export fun format(ctx: magus\Context, args: [str]) > void {}
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     // magus.needs( was removed; so was magus.glob(
     final note = "magus.needs(";
     ctx.needs(format);
@@ -455,7 +455,7 @@ func TestRunTopLevelTarget(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     fs.writeFile("ran", "build");
 }
 `)
@@ -470,7 +470,7 @@ func TestRunPathTarget(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
-export fun db_migrate(ctx: magus\Context, args: [str]) > void {
+export fun db_migrate(ctx: magus\Context, args: [str]) > void !> any {
     fs.writeFile("ran", "db:migrate");
 }
 `)
@@ -510,7 +510,7 @@ func TestRunImportsMagusfilesSibling(t *testing.T) {
 import "magus";
 import "fs";
 import "lib/calc";
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     fs.writeFile("ran", tag);
 }
 `)
@@ -533,7 +533,7 @@ import "magus";
 import "fs";
 import "charm";
 
-export fun verify(ctx: magus\Context, _opts: [str]) > void {
+export fun verify(ctx: magus\Context, _opts: [str]) > void !> any {
     var joined = fs.join("a", "b", "c");
     var patch = charm.append(["y", "z"]);
     fs.writeFile("ran", joined + "|" + patch.ops[1].value);
@@ -556,7 +556,7 @@ import "magus";
 import "fs";
 import "markdown";
 
-export fun verify(ctx: magus\Context, _opts: [str]) > void {
+export fun verify(ctx: magus\Context, _opts: [str]) > void !> any {
     fs.writeFile("ran", markdown.toHtml("# Hi"));
 }
 `), 0o644))
@@ -578,7 +578,7 @@ import "magus";
 import "fmt";
 import "fs";
 
-export fun verify(ctx: magus\Context, _opts: [str]) > void {
+export fun verify(ctx: magus\Context, _opts: [str]) > void !> any {
     var asset = fmt.sprintf("magus_%s_%s_%s.tar.gz", "1.0", "linux", "amd64");
     var none = fmt.sprintf("literal");
     fs.writeFile("ran", asset + "|" + none);
@@ -608,7 +608,7 @@ import "os";
 import "proc";
 import "crypto";
 
-export fun verify(ctx: magus\Context, _opts: [str]) > void {
+export fun verify(ctx: magus\Context, _opts: [str]) > void !> any {
     var joined = fs.join("a", "b", "c");
     var sc = proc.shell("printf hello");
     var res = proc.exec(sc.bin, sc.args, "", {}).stdout;
@@ -633,7 +633,7 @@ func TestRunTargetWithArgs(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
-export fun db_migrate(ctx: magus\Context, args: [str]) > void {
+export fun db_migrate(ctx: magus\Context, args: [str]) > void !> any {
     fs.writeFile("ran", args.join(" "));
 }
 `)
@@ -651,7 +651,7 @@ func TestRunTargetWithNoArgs(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
-export fun probe(ctx: magus\Context, args: [str]) > void {
+export fun probe(ctx: magus\Context, args: [str]) > void !> any {
     fs.writeFile("ran", "len={args.len()}");
 }
 `)
@@ -737,11 +737,11 @@ func TestNeedsForwardReference(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
-export fun top(ctx: magus\Context, _a: [str]) > void {
+export fun top(ctx: magus\Context, _a: [str]) > void !> any {
     ctx.needs(dep);
     fs.writeFile("ran", "top");
 }
-export fun dep(ctx: magus\Context, _a: [str]) > void { fs.writeFile("dep-ran", "dep"); }
+export fun dep(ctx: magus\Context, _a: [str]) > void !> any { fs.writeFile("dep-ran", "dep"); }
 `)
 	require.NoError(t, runTargetIn(t, dir, "top"))
 	_, err := os.Stat(filepath.Join(dir, "dep-ran"))
@@ -804,7 +804,7 @@ func TestOsExitRaisesExitError(t *testing.T) {
 import "magus";
 import "os";
 
-export fun bail(ctx: magus\Context, _a: [str]) > void { os.exit(3); }
+export fun bail(ctx: magus\Context, _a: [str]) > void !> any { os.exit(3); }
 `), 0o644))
 	err := runTargetIn(t, dir, "bail")
 	require.Error(t, err, "expected error from os.exit")
@@ -823,7 +823,7 @@ func TestOsSleep(t *testing.T) {
 import "magus";
 import "os";
 
-export fun nap(ctx: magus\Context, _a: [str]) > void {
+export fun nap(ctx: magus\Context, _a: [str]) > void !> any {
     os.sleep(1.5);
     os.sleep(0);
 }
@@ -845,7 +845,7 @@ import "magus";
 import "os";
 import "proc";
 
-export fun checkwhich(ctx: magus\Context, _a: [str]) > void {
+export fun checkwhich(ctx: magus\Context, _a: [str]) > void !> any {
     if (proc.which("sh") == "") { os.exit(2); }
     var raised = false;
     try { proc.which("definitely-no-such-cmd-zzz"); } catch (e) { raised = true; }
@@ -899,7 +899,7 @@ func TestProcShellChoosesShell(t *testing.T) {
 import "magus";
 import "proc";
 
-export fun viash(ctx: magus\Context, _a: [str]) > void {
+export fun viash(ctx: magus\Context, _a: [str]) > void !> any {
     var c = proc.shell("true", "sh");
     proc.exec(c.bin, c.args, "", {});
 }
@@ -917,7 +917,7 @@ import "magus";
 import "os";
 import "proc";
 
-export fun dep(ctx: magus\Context, _a: [str]) > void { var c = proc.shell("printf x >> mark"); proc.exec(c.bin, c.args, "", {}); }
+export fun dep(ctx: magus\Context, _a: [str]) > void !> any { var c = proc.shell("printf x >> mark"); proc.exec(c.bin, c.args, "", {}); }
 export fun top(ctx: magus\Context, _a: [str]) > void { ctx.needs(dep, dep); }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "top"))
@@ -1018,14 +1018,14 @@ func TestNeedsGlobHandle(t *testing.T) {
 import "magus";
 import "os";
 import "proc";
-fun note(s: str) > void {
+fun note(s: str) > void !> any {
    var c = proc.shell("printf '%s\n' " + s + " >> ran");
    proc.exec(c.bin, c.args, "", {});
 }
-export fun go_build(ctx: magus\Context, _a: [str]) > void { note("go-build"); }
-export fun image_build(ctx: magus\Context, _a: [str]) > void { note("image-build"); }
-export fun go_test(ctx: magus\Context, _a: [str]) > void { note("go-test"); }
-export fun build(ctx: magus\Context, _a: [str]) > void {
+export fun go_build(ctx: magus\Context, _a: [str]) > void !> any { note("go-build"); }
+export fun image_build(ctx: magus\Context, _a: [str]) > void !> any { note("image-build"); }
+export fun go_test(ctx: magus\Context, _a: [str]) > void !> any { note("go-test"); }
+export fun build(ctx: magus\Context, _a: [str]) > void !> any {
    ctx.needs(ctx.glob("*-build"));
    note("build-body");
 }
@@ -1063,7 +1063,7 @@ func TestRunRelativeFsResolvesToProjectDir(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     fs.mkdirAll("sub");
     fs.writeFile("sub/a.txt", "alpha");
     fs.copyFile("sub/a.txt", "sub/b.txt");
@@ -1116,7 +1116,7 @@ import "magus";
 import "os";
 import "proc";
 import "fs";
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     final r: ExecResult = proc.exec("echo", ["hi"]);
     fs.writeFile("ran", r.stdout);
 }
@@ -1130,7 +1130,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 import "magus";
 import "os";
 import "proc";
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     final r: ExecResult = proc.exec("echo", ["hi"]);
     final x = r.stduot;
 }
@@ -1166,11 +1166,11 @@ func TestObjectAnnotationsCheckFields(t *testing.T) {
 import "magus";
 import "fs";
 %s
-fun probe() > void {
+fun probe() > void !> any {
     final r: %s = %s;
     final _ = r.%s;
 }
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     fs.writeFile("ran", "ok");
 }
 `, c.imports, c.typ, c.expr, field)
@@ -1221,7 +1221,7 @@ func TestProcShellExitCode(t *testing.T) {
 import "magus";
 import "proc";
 
-export fun check(ctx: magus\Context, args: [str]) > void {
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
     var ok = proc.shell("true");
     var rc = proc.exec(ok.bin, ok.args, "", {"allow_failure": true}).code;
     if (rc != 0) {
@@ -1246,8 +1246,8 @@ import "magus";
 import "os";
 import "proc";
 
-export fun check(ctx: magus\Context, args: [str]) > void {
-    os.withEnv({"MY_BUZZ_VAR": "hello"}, fun() > void {
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
+    os.withEnv({"MY_BUZZ_VAR": "hello"}, fun() > void !> any {
         var ec = proc.shell("echo $MY_BUZZ_VAR");
         var captured = proc.exec(ec.bin, ec.args, "", {}).stdout;
         if (captured != "hello") {
@@ -1289,7 +1289,7 @@ func TestFsListDirBinding(t *testing.T) {
 import "magus";
 import "fs";
 
-export fun check(ctx: magus\Context, args: [str]) > void {
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
     var entries = fs.listDir("subdir");
     if (entries.len() == 0) {
         throw "expected at least one entry in subdir";
@@ -1310,7 +1310,7 @@ func TestFsRemoveAllBinding(t *testing.T) {
 import "magus";
 import "fs";
 
-export fun check(ctx: magus\Context, args: [str]) > void {
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
     fs.removeAll("todelete");
 }
 `)
@@ -1347,7 +1347,7 @@ func TestVcsBindings(t *testing.T) {
 import "magus";
 import "vcs";
 
-export fun check(ctx: magus\Context, args: [str]) > void {
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
     // The target's own directory is a git repo, so every accessor answers about THAT
     // repo. The no-VCS path, where these RAISE rather than hand back "", is covered by
     // TestVcsCommitRaisesOutsideRepo.
@@ -1678,11 +1678,11 @@ func TestMagusNamespaceIsTyped(t *testing.T) {
 		return runTargetIn(t, dir, "build")
 	}
 
-	err := wrongReturn(t, `fun probe() > int { return magus\where("x"); }`)
+	err := wrongReturn(t, `fun probe() > int !> any { return magus\where("x"); }`)
 	require.Error(t, err, "magus\\where returns str; using it as int must be caught by the checker")
 	assert.Contains(t, err.Error(), "return type mismatch")
 
-	err = wrongReturn(t, `fun probe() > int { return proc\which("ls"); }`)
+	err = wrongReturn(t, `fun probe() > int !> any { return proc\which("ls"); }`)
 	require.Error(t, err, "control: a bare-import module must stay typed")
 	assert.Contains(t, err.Error(), "return type mismatch")
 }
@@ -1740,7 +1740,7 @@ func TestDeclaringObjectsKeepsNativeMethods(t *testing.T) {
 import "std";
 import "http";
 final _p = HttpRetry{ attempts = 2 };
-final port = http\server({"dir": "."});
+final port = http\server({"dir": "."}) catch -1;
 std\assert(port > 0, message: "native http.server still bound a port");
 `)
 	require.NoError(t, err)

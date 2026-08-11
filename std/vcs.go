@@ -37,6 +37,7 @@ var Vcs = Module{
 			Name:    "root",
 			Doc:     "Absolute path of the repository root.",
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    VcsRoot,
 		},
 		{
@@ -46,12 +47,14 @@ var Vcs = Module{
 				{Name: "base", Type: TypeString, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "[Path]"}},
+			Raises:  true,
 			Impl:    VcsChangedFiles,
 		},
 		{
 			Name:    "ref",
 			Doc:     "The movable name pointing at the current revision, or \"\" when there is none. Backend-specific by nature: a git branch, a Mercurial named branch, a Jujutsu bookmark. jj's working copy is usually an anonymous change, so \"\" is an ordinary answer there, not a failure. Raises when no VCS is resolved or its metadata cannot be read - use vcs.name() to test for a VCS first.",
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    VcsRef,
 		},
 		{
@@ -61,6 +64,7 @@ var Vcs = Module{
 				{Name: "paths", Type: TypeStringSlice, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "Status"}},
+			Raises:  true,
 			Impl:    VcsStatus,
 		},
 		{
@@ -70,6 +74,7 @@ var Vcs = Module{
 				{Name: "paths", Type: TypeStringSlice, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeBool}},
+			Raises:  true,
 			Impl:    VcsIsDirty,
 		},
 		{
@@ -88,6 +93,7 @@ var Vcs = Module{
 				{Name: "rev", Type: TypeString, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "Commit"}},
+			Raises:  true,
 			Impl:    VcsCommit,
 		},
 		{
@@ -97,6 +103,7 @@ var Vcs = Module{
 				{Name: "limit", Type: TypeInt, Optional: true, Default: 10},
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "[Commit]"}},
+			Raises:  true,
 			Impl:    VcsHistory,
 		},
 		{
@@ -107,6 +114,7 @@ var Vcs = Module{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
+			Raises:  true,
 			Impl:    VcsCmd,
 		},
 		{
@@ -116,12 +124,14 @@ var Vcs = Module{
 				{Name: "pattern", Type: TypeString, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "[Tag]"}},
+			Raises:  true,
 			Impl:    VcsTags,
 		},
 		{
 			Name:    "describe",
 			Doc:     "Human-readable version string from the nearest tag (git's `describe --tags --always --dirty`: tag, else short hash, with a -dirty suffix for a modified tree). \"\" when no VCS is resolved, or for a backend without a tag-describe concept (jj) - so a magusfile stamps a version without shelling out to git. Pair with vcs.commit().short as a fallback.",
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    VcsDescribe,
 		},
 	},

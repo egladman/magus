@@ -321,7 +321,7 @@ func TestVcsCommitFacadeBuzz(t *testing.T) {
 
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "vcs";
-export fun check(ctx: magus\Context, args: [str]) > void {
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
     final c = vcs.commit();
     if (c.subject != "hello") { error("subject: " + c.subject); }
     if (c.author.name != "A") { error("author: " + c.author.name); }

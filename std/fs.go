@@ -32,6 +32,7 @@ var Fs = Module{
 			Doc:     "Return paths matching pattern (doublestar-style).",
 			Args:    []Arg{{Name: "pattern", Type: TypeString}},
 			Returns: []Ret{{Type: TypeAny, Object: "[Path]"}},
+			Raises:  true,
 			Impl:    FsGlob,
 		},
 		{
@@ -53,6 +54,7 @@ var Fs = Module{
 			Doc:     "True iff path exists.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeBool}},
+			Raises:  true,
 			Impl:    FsExists,
 		},
 		{
@@ -60,6 +62,7 @@ var Fs = Module{
 			Doc:     "Return the contents of path as a string.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    FsReadFile,
 		},
 		{
@@ -67,6 +70,7 @@ var Fs = Module{
 			Doc:     "Write content to path (mode 0644).",
 			Args:    []Arg{{Name: "path", Type: TypeString}, {Name: "content", Type: TypeString}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsWriteFile,
 		},
 		{
@@ -77,6 +81,7 @@ var Fs = Module{
 				{Name: "perm", Type: TypeInt, Optional: true, Default: int(0o755)},
 			},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsMkdirAll,
 		},
 		{
@@ -91,6 +96,7 @@ var Fs = Module{
 			Doc:     "Recursively remove path (no error if missing).",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsRemoveAll,
 		},
 		{
@@ -98,6 +104,7 @@ var Fs = Module{
 			Doc:     "Remove a single file or empty directory (no error if missing). Unlike remove_all it refuses a non-empty directory, so a wrong path costs one error rather than a recursive delete.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsRemove,
 		},
 		{
@@ -105,6 +112,7 @@ var Fs = Module{
 			Doc:     "Move or rename src to dst, creating dst's parent directory if needed. Within one filesystem this is atomic, which is what makes it the last step of a write-to-temp-then-swap. Across filesystems the underlying rename fails rather than silently copying; copy_file plus remove is the explicit form for that.",
 			Args:    []Arg{{Name: "src", Type: TypeString}, {Name: "dst", Type: TypeString}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsRename,
 		},
 		{
@@ -112,6 +120,7 @@ var Fs = Module{
 			Doc:     "Return path's size in bytes. Raises when path does not exist; stat returns the whole FileInfo when more than the size is wanted.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeInt}},
+			Raises:  true,
 			Impl:    FsSize,
 		},
 		{
@@ -121,6 +130,7 @@ var Fs = Module{
 				{Name: "prefix", Type: TypeString, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    FsTempFile,
 		},
 		{
@@ -131,6 +141,7 @@ var Fs = Module{
 				{Name: "content", Type: TypeString},
 			},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsWriteFileAtomic,
 		},
 		{
@@ -138,6 +149,7 @@ var Fs = Module{
 			Doc:     "Return directory entries; empty if path does not exist.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeStringSlice}},
+			Raises:  true,
 			Impl:    FsListDir,
 		},
 		{
@@ -152,6 +164,7 @@ var Fs = Module{
 			Doc:     "True iff path exists and is a directory. A sandbox-denied path raises rather than reading as false.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeBool}},
+			Raises:  true,
 			Impl:    FsIsDir,
 		},
 		{
@@ -159,6 +172,7 @@ var Fs = Module{
 			Doc:     "True iff path exists and is a regular file. A sandbox-denied path raises rather than reading as false.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeBool}},
+			Raises:  true,
 			Impl:    FsIsFile,
 		},
 		{
@@ -166,6 +180,7 @@ var Fs = Module{
 			Doc:     "Return metadata for path as {size, mtime, mode, is_dir}: size in bytes, mtime as Unix millis, mode as the integer permission bits. Errors if path is missing.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "FileInfo"}},
+			Raises:  true,
 			Impl:    FsStat,
 		},
 		{
@@ -173,6 +188,7 @@ var Fs = Module{
 			Doc:     "Copy the file at src to dst (overwriting), preserving its permission bits.",
 			Args:    []Arg{{Name: "src", Type: TypeString}, {Name: "dst", Type: TypeString}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsCopyFile,
 		},
 		{
@@ -180,6 +196,7 @@ var Fs = Module{
 			Doc:     "Recursively copy the directory tree at src to dst, preserving permission bits.",
 			Args:    []Arg{{Name: "src", Type: TypeString}, {Name: "dst", Type: TypeString}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsCopyDir,
 		},
 		{
@@ -190,6 +207,7 @@ var Fs = Module{
 				{Name: "callback", Type: TypeFunc},
 			},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsWatch,
 		},
 		{
@@ -200,6 +218,7 @@ var Fs = Module{
 				{Name: "callback", Type: TypeFunc},
 			},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsWalk,
 		},
 		{
@@ -207,6 +226,7 @@ var Fs = Module{
 			Doc:     "Append content to path (creating if absent, mode 0644).",
 			Args:    []Arg{{Name: "path", Type: TypeString}, {Name: "content", Type: TypeString}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsAppendFile,
 		},
 		{
@@ -214,6 +234,7 @@ var Fs = Module{
 			Doc:     "Change the permission bits of path to mode (octal integer, e.g. 0755).",
 			Args:    []Arg{{Name: "path", Type: TypeString}, {Name: "mode", Type: TypeInt}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsChmod,
 		},
 		{
@@ -221,6 +242,7 @@ var Fs = Module{
 			Doc:     "Create a symbolic link at link pointing to target.",
 			Args:    []Arg{{Name: "target", Type: TypeString}, {Name: "link", Type: TypeString}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsSymlink,
 		},
 		{
@@ -228,6 +250,7 @@ var Fs = Module{
 			Doc:     "Return the target of the symbolic link at path.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    FsReadlink,
 		},
 		{
@@ -237,6 +260,7 @@ var Fs = Module{
 				{Name: "prefix", Type: TypeString, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    FsTempDir,
 		},
 		{
@@ -244,6 +268,7 @@ var Fs = Module{
 			Doc:     "Read path and return its lines as a list, with the line terminators stripped. A single trailing newline yields no extra empty element; an empty file yields an empty list.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeStringSlice}},
+			Raises:  true,
 			Impl:    FsReadLines,
 		},
 		{
@@ -251,6 +276,7 @@ var Fs = Module{
 			Doc:     "Write lines to path (mode 0644), each followed by a newline. The companion to read_lines: write_lines(p, read_lines(p)) round-trips a newline-terminated file.",
 			Args:    []Arg{{Name: "path", Type: TypeString}, {Name: "lines", Type: TypeStringSlice}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsWriteLines,
 		},
 	},

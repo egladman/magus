@@ -29,6 +29,7 @@ var Path = Module{
 			Doc:     "Return the absolute form of path, resolved against the current directory and lexically cleaned.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    PathAbs,
 		},
 		{
@@ -36,6 +37,7 @@ var Path = Module{
 			Doc:     "Return a relative path from base to target; errors if no relative path exists.",
 			Args:    []Arg{{Name: "base", Type: TypeString}, {Name: "target", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    PathRel,
 		},
 		{
@@ -60,6 +62,7 @@ var Path = Module{
 				{Name: "path", Type: TypeString},
 			},
 			Returns: []Ret{{Type: TypeBool}},
+			Raises:  true,
 			Impl:    PathMatch,
 		},
 		{
@@ -70,6 +73,7 @@ var Path = Module{
 				{Name: "path", Type: TypeString},
 			},
 			Returns: []Ret{{Type: TypeBool}},
+			Raises:  true,
 			Impl:    PathMatchAny,
 		},
 		{
@@ -77,6 +81,7 @@ var Path = Module{
 			Doc:     "Expand a leading ~ (or ~/...) to the current user's home directory; other paths are returned unchanged.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    PathExpandUser,
 		},
 	},

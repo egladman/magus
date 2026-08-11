@@ -91,6 +91,7 @@ var Log = Module{
 				{Name: "attrs", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: nil,
+			Raises:  true,
 			Impl:    LogAt,
 		},
 	},

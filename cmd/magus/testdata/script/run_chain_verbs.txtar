@@ -96,7 +96,7 @@ import "magus";
 import "proc";
 import "spells/acme" as acme;
 magus.project({ "spells": [acme] });
-export fun bundle(ctx: magus\Context, args: [str]) > void {
+export fun bundle(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("dist/*.txt");
     proc\exec("sh", ["-c", "mkdir -p dist && echo built > dist/app.txt"]);
 }

@@ -34,6 +34,7 @@ var Time = Module{
 			Doc:     "Parse a string with a Go reference layout into Unix-millis (UTC); errors on mismatch.",
 			Args:    []Arg{{Name: "layout", Type: TypeString, Enum: "TimeLayout"}, {Name: "value", Type: TypeString}},
 			Returns: []Ret{{Type: TypeFloat}},
+			Raises:  true,
 			Impl:    TimeParse,
 		},
 		{
@@ -41,6 +42,7 @@ var Time = Module{
 			Doc:     "Parse a Go duration string (e.g. \"168h\", \"1h30m\") into milliseconds; errors on mismatch.",
 			Args:    []Arg{{Name: "duration", Type: TypeString}},
 			Returns: []Ret{{Type: TypeFloat}},
+			Raises:  true,
 			Impl:    TimeParseDuration,
 		},
 		{
@@ -55,6 +57,7 @@ var Time = Module{
 			Doc:     "Add a Go duration string (e.g. \"24h\", \"-1h30m\") to a Unix-millis timestamp; returns the new Unix-millis timestamp.",
 			Args:    []Arg{{Name: "unix_millis", Type: TypeFloat}, {Name: "duration", Type: TypeString}},
 			Returns: []Ret{{Type: TypeFloat}},
+			Raises:  true,
 			Impl:    TimeAdd,
 		},
 		{

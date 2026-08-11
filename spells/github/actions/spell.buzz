@@ -95,7 +95,7 @@ fun cache_key(hash: str) > str { return "magus-" + hash; }
 
 // rpc POSTs a JSON Twirp request to the named CacheService method and returns the
 // host http response map ({status, body}).
-fun rpc(method: str, payload: any) > any {
+fun rpc(method: str, payload: any) > any !> any {
     final url = base() + SERVICE + method;
     final headers = mut {
         "Authorization": "Bearer " + token(),
@@ -107,7 +107,7 @@ fun rpc(method: str, payload: any) > any {
 
 // get_artifact downloads the cache artifact for payload.hash into payload.dest. Returns
 // true on a hit (dest written), false on a miss or when not running under Actions.
-export fun get_artifact(target: Target, cb: fun(any)) > bool {
+export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
     if (base() == "" or token() == "") { return false; }
     var io = {};
     cb(io);
@@ -125,7 +125,7 @@ export fun get_artifact(target: Target, cb: fun(any)) > bool {
 
 // put_artifact uploads the artifact at payload.src for payload.hash. Returns true on
 // success or when another runner already stored the same key, else false.
-export fun put_artifact(target: Target, cb: fun(any)) > bool {
+export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
     if (base() == "" or token() == "") { return false; }
     var io = {};
     cb(io);
@@ -281,7 +281,7 @@ final OIDC_PREFIX = "oidc:";
 
 // resolve_secret is the secret-provider contract, detected by name and invoked by
 // magus\secret.read(). It receives the reference as payload.ref.
-export fun resolve_secret(target: Target, cb: fun(any)) > str {
+export fun resolve_secret(target: Target, cb: fun(any)) > str !> any {
     final io = {<str, any>};
     cb(io);
     final ref = "" + io["ref"];
@@ -357,7 +357,7 @@ fun workflowEnv(name: str) > str {
 // The audience identifies the relying party: "sts.amazonaws.com" for AWS, the
 // workload-identity-pool provider URL for GCP, whatever the trust policy on the
 // other end was written against.
-fun oidcToken(audience: str) > str {
+fun oidcToken(audience: str) > str !> any {
     if (audience == "") {
         throw "github-actions: an oidc: reference needs an audience, as in "
             + "magus\\secret.read(\"oidc:sts.amazonaws.com\")";

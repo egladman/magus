@@ -80,7 +80,7 @@ export fun isGeneratedSource(body: str) > bool {
 //
 // prefix is the module path plus a trailing slash; each profile line begins with
 // an import path, so removing it yields a workspace-relative file.
-export fun stripGenerated(profile: str, prefix: str) > str {
+export fun stripGenerated(profile: str, prefix: str) > str !> any {
     // Collect into a LIST and join once. `kept = kept + line` looks harmless and is
     // catastrophic here: every concatenation allocates a whole new string, and this
     // VM's heap is append-only - "objects are never removed (pinned for the process

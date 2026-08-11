@@ -43,10 +43,10 @@ func TestRunMultipleTargetsRunsAllProjectTargetPairs(t *testing.T) {
 	body := `
 import "magus";
 import "fs";
-export fun alpha(ctx: magus\Context, args: [str]) > void {
+export fun alpha(ctx: magus\Context, args: [str]) > void !> any {
     fs.writeFile("ran-alpha", "1");
 }
-export fun beta(ctx: magus\Context, args: [str]) > void {
+export fun beta(ctx: magus\Context, args: [str]) > void !> any {
     fs.writeFile("ran-beta", "1");
 }
 `
@@ -149,7 +149,7 @@ func TestMagusfileTargetsRunWithoutBeingDeclared(t *testing.T) {
 import "os";
 import "proc";
 magus.project("svc", {});
-export fun hit(ctx: magus\Context, args: [str]) > void {
+export fun hit(ctx: magus\Context, args: [str]) > void !> any {
     var c = proc.shell("printf x >> count");
     proc.exec(c.bin, c.args, "", {});
 }
@@ -250,12 +250,12 @@ func TestRunCIComposesMagusfileTarget(t *testing.T) {
 import "magus";
 import "os";
 import "proc";
-fun record(name: str) > void {
+fun record(name: str) > void !> any {
     var c = proc.shell("printf '%s\n' " + name + " >> ci-order");
     proc.exec(c.bin, c.args, "", {});
 }
-export fun build(ctx: magus\Context, args: [str]) > void { record("build"); }
-export fun test(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any { record("build"); }
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(build);
     record("test");
 }

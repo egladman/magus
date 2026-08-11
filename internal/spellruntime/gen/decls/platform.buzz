@@ -12,7 +12,7 @@ export enum<str> PlatformStyle {
     uname = "uname",
 }
 
-export extern fun arch(name: str, style: PlatformStyle = "") > str;
+export extern fun arch(name: str, style: PlatformStyle = "") > str !> any;
 export extern fun cpus() > int;
 export extern fun memoryBytes() > int;
-export extern fun os(name: str, style: PlatformStyle = "") > str;
+export extern fun os(name: str, style: PlatformStyle = "") > str !> any;

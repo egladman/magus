@@ -22,7 +22,7 @@ JSON encode/decode.
 
 Decode a JSON string into a value (map, list, string, number, or boolean).
 
-**Signature:** `json\parse(s) → any`[^buzz-stdlib-json-parse] · [source](https://github.com/egladman/magus/blob/main/std/encoding/json/json.go#L44)
+**Signature:** `json\parse(s) → any`[^buzz-stdlib-json-parse] · [source](https://github.com/egladman/magus/blob/main/std/encoding/json/json.go#L46)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -47,7 +47,7 @@ std\print(v["port"]);
 
 Encode a value as a JSON string. With no indent (or "") the output is compact; pass an indent string (e.g. "  " or "\t") for pretty, multi-line output.
 
-**Signature:** `json\stringify(value, [indent]) → string`[^buzz-stdlib-json-stringify] · [source](https://github.com/egladman/magus/blob/main/std/encoding/json/json.go#L57)
+**Signature:** `json\stringify(value, [indent]) → string`[^buzz-stdlib-json-stringify] · [source](https://github.com/egladman/magus/blob/main/std/encoding/json/json.go#L59)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

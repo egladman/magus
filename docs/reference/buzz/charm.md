@@ -17,7 +17,7 @@ Constructors for charm values: RFC 6902 JSON Patches over a target's argv (see d
 
 Append vals to the end of the argv.
 
-**Signature:** `charm\append(vals) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L199)
+**Signature:** `charm\append(vals) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L215)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -29,7 +29,7 @@ Append vals to the end of the argv.
 
 Insert vals at the front of the argv, in order.
 
-**Signature:** `charm\prepend(vals) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L208)
+**Signature:** `charm\prepend(vals) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L224)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -41,7 +41,7 @@ Insert vals at the front of the argv, in order.
 
 Insert vals immediately after the first argv element equal to anchor.
 
-**Signature:** `charm\after(argv, anchor, vals) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L213)
+**Signature:** `charm\after(argv, anchor, vals) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L229)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -55,7 +55,7 @@ Insert vals immediately after the first argv element equal to anchor.
 
 Insert vals immediately before the first argv element equal to anchor.
 
-**Signature:** `charm\before(argv, anchor, vals) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L222)
+**Signature:** `charm\before(argv, anchor, vals) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L238)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -69,7 +69,7 @@ Insert vals immediately before the first argv element equal to anchor.
 
 Replace the first argv element equal to anchor with val.
 
-**Signature:** `charm\set(argv, anchor, val) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L231)
+**Signature:** `charm\set(argv, anchor, val) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L247)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -83,7 +83,7 @@ Replace the first argv element equal to anchor with val.
 
 Drop (remove) the first argv element equal to anchor.
 
-**Signature:** `charm\drop(argv, anchor) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L240)
+**Signature:** `charm\drop(argv, anchor) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L256)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -96,7 +96,7 @@ Drop (remove) the first argv element equal to anchor.
 
 Insert vals after the first argv element for which fn(s) is truthy.
 
-**Signature:** `charm\afterFunc(argv, fn, vals) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L249)
+**Signature:** `charm\afterFunc(argv, fn, vals) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L265)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -110,7 +110,7 @@ Insert vals after the first argv element for which fn(s) is truthy.
 
 Insert vals before the first argv element for which fn(s) is truthy.
 
-**Signature:** `charm\beforeFunc(argv, fn, vals) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L258)
+**Signature:** `charm\beforeFunc(argv, fn, vals) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L274)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -124,7 +124,7 @@ Insert vals before the first argv element for which fn(s) is truthy.
 
 Replace the first argv element for which fn(s) is truthy with val.
 
-**Signature:** `charm\setFunc(argv, fn, val) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L267)
+**Signature:** `charm\setFunc(argv, fn, val) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L283)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -138,7 +138,7 @@ Replace the first argv element for which fn(s) is truthy with val.
 
 Drop (remove) the first argv element for which fn(s) is truthy.
 
-**Signature:** `charm\dropFunc(argv, fn) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L276)
+**Signature:** `charm\dropFunc(argv, fn) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L292)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -151,7 +151,7 @@ Drop (remove) the first argv element for which fn(s) is truthy.
 
 Return the JSON Pointer ("/N") of the first argv element equal to anchor - the index, auto-calculated, for hand-built move/copy/test ops.
 
-**Signature:** `charm\path(argv, anchor) → string` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L285)
+**Signature:** `charm\path(argv, anchor) → string` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L301)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -164,7 +164,7 @@ Return the JSON Pointer ("/N") of the first argv element equal to anchor - the i
 
 Return the JSON Pointer ("/N") of the first argv element for which fn(s) is truthy.
 
-**Signature:** `charm\pathFunc(argv, fn) → string` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L294)
+**Signature:** `charm\pathFunc(argv, fn) → string` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L310)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -177,7 +177,7 @@ Return the JSON Pointer ("/N") of the first argv element for which fn(s) is trut
 
 Move the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/0" front, or charm.path(...)).
 
-**Signature:** `charm\move(argv, anchor, to) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L312)
+**Signature:** `charm\move(argv, anchor, to) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L328)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -191,7 +191,7 @@ Move the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/
 
 Move the first argv element for which fn(s) is truthy to the JSON Pointer to.
 
-**Signature:** `charm\moveFunc(argv, fn, to) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L324)
+**Signature:** `charm\moveFunc(argv, fn, to) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L340)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -205,7 +205,7 @@ Move the first argv element for which fn(s) is truthy to the JSON Pointer to.
 
 Copy the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/0" front, or charm.path(...)).
 
-**Signature:** `charm\copy(argv, anchor, to) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L336)
+**Signature:** `charm\copy(argv, anchor, to) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L352)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -219,7 +219,7 @@ Copy the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/
 
 Copy the first argv element for which fn(s) is truthy to the JSON Pointer to.
 
-**Signature:** `charm\copyFunc(argv, fn, to) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L348)
+**Signature:** `charm\copyFunc(argv, fn, to) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L364)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -233,7 +233,7 @@ Copy the first argv element for which fn(s) is truthy to the JSON Pointer to.
 
 Guard: assert the first argv element equal to anchor is still at its position when the patch applies (else the run errors).
 
-**Signature:** `charm\test(argv, anchor) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L361)
+**Signature:** `charm\test(argv, anchor) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L377)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -246,7 +246,7 @@ Guard: assert the first argv element equal to anchor is still at its position wh
 
 Guard: assert the first argv element for which fn(s) is truthy is still at its position when the patch applies.
 
-**Signature:** `charm\testFunc(argv, fn) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L370)
+**Signature:** `charm\testFunc(argv, fn) → Charm` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L386)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

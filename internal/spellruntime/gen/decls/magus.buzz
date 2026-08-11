@@ -365,21 +365,21 @@ export object TargetGraph {
     projects: [TargetGraphProject] = [],
 }
 
-export extern fun affected(base: str = "") > Affected;
-export extern fun affectedImpact(base: str = "", opts: {str: any} = {<str: any>}) > Impact;
-export extern fun bustCache(project_path: str = "") > void;
-export extern fun cmd(sub: str, args: [str], opts: {str: any} = {<str: any>}) > ExecResult;
-export extern fun describe(args: [str], opts: {str: any} = {<str: any>}) > ExecResult;
-export extern fun describeFile(paths: [str], opts: {str: any} = {<str: any>}) > FileReport;
-export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftResult;
-export extern fun doctor(args: [str], opts: {str: any} = {<str: any>}) > DoctorReport;
-export extern fun graph() > Graph;
+export extern fun affected(base: str = "") > Affected !> any;
+export extern fun affectedImpact(base: str = "", opts: {str: any} = {<str: any>}) > Impact !> any;
+export extern fun bustCache(project_path: str = "") > void !> any;
+export extern fun cmd(sub: str, args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
+export extern fun describe(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
+export extern fun describeFile(paths: [str], opts: {str: any} = {<str: any>}) > FileReport !> any;
+export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftResult !> any;
+export extern fun doctor(args: [str], opts: {str: any} = {<str: any>}) > DoctorReport !> any;
+export extern fun graph() > Graph !> any;
 export extern fun has_charm(name: str) > bool;
-export extern fun insight(args: [str], opts: {str: any} = {<str: any>}) > ExecResult;
-export extern fun insightReport(args: [str], opts: {str: any} = {<str: any>}) > InsightReport;
-export extern fun ls() > Projects;
-export extern fun raise(code: str, message: str, opts: {str: any} = {<str: any>}) > void;
-export extern fun run(args: [str], opts: {str: any} = {<str: any>}) > ExecResult;
-export extern fun targetGraph(opts: {str: any} = {<str: any>}) > TargetGraph;
-export extern fun targets() > TargetGraph;
-export extern fun where(dir: str) > str;
+export extern fun insight(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
+export extern fun insightReport(args: [str], opts: {str: any} = {<str: any>}) > InsightReport !> any;
+export extern fun ls() > Projects !> any;
+export extern fun raise(code: str, message: str, opts: {str: any} = {<str: any>}) > void !> any;
+export extern fun run(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
+export extern fun targetGraph(opts: {str: any} = {<str: any>}) > TargetGraph !> any;
+export extern fun targets() > TargetGraph !> any;
+export extern fun where(dir: str) > str !> any;

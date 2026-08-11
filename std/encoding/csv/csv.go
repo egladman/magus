@@ -42,6 +42,7 @@ var Module = std.Module{
 				{Name: "comment", Type: std.TypeString, Optional: true},
 			},
 			Returns: []std.Ret{{Type: std.TypeStringSliceSlice}},
+			Raises:  true,
 			Impl:    CSVParse,
 		},
 		{
@@ -52,6 +53,7 @@ var Module = std.Module{
 				{Name: "delimiter", Type: std.TypeString, Optional: true, Default: ","},
 			},
 			Returns: []std.Ret{{Type: std.TypeString}},
+			Raises:  true,
 			Impl:    CSVStringify,
 		},
 	},

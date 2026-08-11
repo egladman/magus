@@ -176,6 +176,99 @@ func TestCheck_WhileConditionInvalid(t *testing.T) {
 	checkErr(t, `while ("yes") { }`, "while condition must be bool")
 }
 
+// TestCheck_UnhandledRaise covers BZZ1006's propagate-or-catch rule: a call to
+// a !> function must be either propagated (the caller also declares !>) or
+// caught (try/catch, or the inline `catch` form). Each shape below is checked
+// both as an error and as its fixed-up, passing counterpart, so the test also
+// pins that the fix actually works rather than just that the bare case fails.
+func TestCheck_UnhandledRaise(t *testing.T) {
+	checkErr(t, `
+fun risky() > int !> str { return 1; }
+fun caller() > int {
+    return risky();
+}
+`, "call may raise but is neither declared with !> nor caught")
+
+	checkOK(t, `
+fun risky() > int !> str { return 1; }
+fun caller() > int !> str {
+    return risky();
+}
+`)
+
+	checkOK(t, `
+fun risky() > int !> str { return 1; }
+fun caller() > int {
+    try {
+        return risky();
+    } catch (e: str) {
+        return 0;
+    }
+}
+`)
+
+	checkOK(t, `
+fun risky() > int !> str { return 1; }
+fun caller() > int {
+    return risky() catch 0;
+}
+`)
+
+	// A call inside a catch clause's OWN body is not shielded by the try it sits
+	// beside - it needs its own handling.
+	checkErr(t, `
+fun risky() > int !> str { return 1; }
+fun caller() > int {
+    try {
+        return 1;
+    } catch (e: str) {
+        return risky();
+    }
+}
+`, "call may raise but is neither declared with !> nor caught")
+
+	// Top-level code has no enclosing function to propagate through, so it must
+	// catch.
+	checkErr(t, `
+fun risky() > int !> str { return 1; }
+final x = risky();
+`, "call may raise but is neither declared with !> nor caught")
+
+	checkOK(t, `
+fun risky() > int !> str { return 1; }
+var x = 0;
+try {
+    x = risky();
+} catch (e: str) {
+    x = 0;
+}
+`)
+}
+
+// TestCheck_UnhandledRaise_ObjectMethod pins that an object METHOD threads
+// raiseDeclared the same way a free function does - checkObjectDecl has its own
+// inline body-checking loop (it does not call checkFunDecl), which is exactly
+// the kind of second code path that silently misses a state save/restore.
+func TestCheck_UnhandledRaise_ObjectMethod(t *testing.T) {
+	checkErr(t, `
+fun risky() > int !> str { return 1; }
+object Foo {
+    fun bar() > int {
+        return risky();
+    }
+}
+`, "call may raise but is neither declared with !> nor caught")
+
+	checkOK(t, `
+fun risky() > int !> str { return 1; }
+object Foo {
+    fun bar() > int !> str {
+        return risky();
+    }
+}
+`)
+}
+
 func TestCheck_ObjectDecl(t *testing.T) {
 	checkOK(t, `
 object Point {

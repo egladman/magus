@@ -40,6 +40,7 @@ var Proc = Module{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
+			Raises:  true,
 			Impl:    OsExec,
 		},
 		{
@@ -57,6 +58,7 @@ var Proc = Module{
 			Doc:     "Resolve cmd against PATH and return its absolute path. RAISES when the command is not found - wrap it in try/catch to check a tool is installed and emit a clear hint instead of a cryptic exec failure.",
 			Args:    []Arg{{Name: "cmd", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    OsWhich,
 		},
 		{
@@ -67,6 +69,7 @@ var Proc = Module{
 				{Name: "callback", Type: TypeFunc},
 			},
 			Returns: nil,
+			Raises:  true,
 			Impl:    OsWithSlots,
 		},
 		{

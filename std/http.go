@@ -57,6 +57,7 @@ var HTTP = Module{
 				{Name: "retry", Type: TypeAnyMap, Optional: true, Object: "HttpRetry"},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "HttpResponse"}},
+			Raises:  true,
 			Impl:    HTTPGet,
 		},
 		{
@@ -70,6 +71,7 @@ var HTTP = Module{
 				{Name: "retry", Type: TypeAnyMap, Optional: true, Object: "HttpRetry"},
 			},
 			Returns: []Ret{{Type: TypeInt}},
+			Raises:  true,
 			Impl:    HTTPDownload,
 		},
 		{
@@ -83,6 +85,7 @@ var HTTP = Module{
 				{Name: "retry", Type: TypeAnyMap, Optional: true, Object: "HttpRetry"},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "HttpResponse"}},
+			Raises:  true,
 			Impl:    HTTPPost,
 		},
 		{
@@ -97,6 +100,7 @@ var HTTP = Module{
 				{Name: "retry", Type: TypeAnyMap, Optional: true, Object: "HttpRetry"},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "HttpResponse"}},
+			Raises:  true,
 			Impl:    HTTPRequest,
 		},
 		{
@@ -112,6 +116,7 @@ var HTTP = Module{
 				{Name: "opts", Type: TypeAnyMap},
 			},
 			Returns: []Ret{{Type: TypeInt}},
+			Raises:  true,
 			Impl:    HTTPServe,
 		},
 	},

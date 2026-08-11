@@ -41,8 +41,18 @@ type checker struct {
 	errors   []typeError
 	scopes   []map[string]scopeEntry
 	retTyp   types.Type
-	yieldTyp types.Type            // non-nil when inside a function with a *> yield annotation
-	types    map[string]types.Type // named type definitions (objects, enums)
+	yieldTyp types.Type // non-nil when inside a function with a *> yield annotation
+	// raiseDeclared is true while checking the body of a function that declared
+	// !> - a call to a raising function is legal there without a surrounding
+	// try/catch, because the caller's own caller must handle it (or itself
+	// propagate). Set per-FunDecl in checkFunDecl, alongside retTyp/yieldTyp.
+	raiseDeclared bool
+	// catchDepth counts enclosing try/catch bodies and catch-expression
+	// operands (`expr catch default`). A call to a raising function is legal
+	// inside either without the enclosing function declaring !>, since the
+	// error is handled right there rather than propagated.
+	catchDepth int
+	types      map[string]types.Type // named type definitions (objects, enums)
 	// expected is the stack of types expected at the position being inferred; see
 	// inferExpected. Empty outside any annotated context.
 	expected []types.Type
@@ -310,7 +320,7 @@ func (c *checker) funDeclType(fd *ast.FunDecl) *types.FuncType {
 	if fd.YieldAnnot != "" {
 		yield = c.resolveAnnot(fd.YieldAnnot)
 	}
-	return &types.FuncType{Params: params, Ret: ret, Yield: yield, ParamNames: fd.Params, ParamDefaults: fd.ParamDefaults}
+	return &types.FuncType{Params: params, Ret: ret, Yield: yield, Raises: fd.ErrAnnot != "", ParamNames: fd.Params, ParamDefaults: fd.ParamDefaults}
 }
 
 // resolveAnnot parses a type annotation string and resolves NamedType references.
@@ -396,7 +406,13 @@ func (c *checker) checkStmt(n ast.Node) {
 		c.checkFunDecl(v)
 	case *ast.TestDecl:
 		// A test block body is checked in its own scope, like a void function body.
+		// It also runs like an implicit catch: the runner (runTests in
+		// cmd/buzz/main.go) invokes the compiled closure and reports any raised
+		// error as a FAIL rather than propagating it, so a raising call inside a
+		// test needs no !> declaration or explicit try/catch of its own.
+		c.catchDepth++
 		c.checkBlock(v.Body)
+		c.catchDepth--
 	case *ast.ObjectDecl:
 		c.checkObjectDecl(v)
 	case *ast.EnumDecl:
@@ -404,7 +420,9 @@ func (c *checker) checkStmt(n ast.Node) {
 	case *ast.BreakStmt, *ast.ContinueStmt:
 		// nothing
 	case *ast.TryStmt:
+		c.catchDepth++
 		c.checkBlock(v.Body)
+		c.catchDepth--
 		for _, cl := range v.Catches {
 			c.pushScope()
 			// The binding takes the clause's declared error type when it has one;
@@ -574,12 +592,14 @@ func (c *checker) checkFunDecl(fd *ast.FunDecl) {
 
 	savedRet := c.retTyp
 	savedYield := c.yieldTyp
+	savedRaise := c.raiseDeclared
 	c.retTyp = ft.Ret
 	if fd.YieldAnnot != "" {
 		c.yieldTyp = c.resolveAnnot(fd.YieldAnnot)
 	} else {
 		c.yieldTyp = nil
 	}
+	c.raiseDeclared = fd.ErrAnnot != ""
 	c.pushScope()
 	c.define("this", types.Unknown, false)
 	for i, name := range fd.Params {
@@ -601,6 +621,7 @@ func (c *checker) checkFunDecl(fd *ast.FunDecl) {
 	c.popScope()
 	c.retTyp = savedRet
 	c.yieldTyp = savedYield
+	c.raiseDeclared = savedRaise
 }
 
 func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
@@ -637,7 +658,9 @@ func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
 		ft := c.funDeclType(m)
 		ot.Methods[m.Name] = ft
 		savedRet := c.retTyp
+		savedRaise := c.raiseDeclared
 		c.retTyp = ft.Ret
+		c.raiseDeclared = m.ErrAnnot != ""
 		c.pushScope()
 		c.define("this", ot, false)
 		for i, name := range m.Params {
@@ -657,6 +680,7 @@ func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
 		}
 		c.popScope()
 		c.retTyp = savedRet
+		c.raiseDeclared = savedRaise
 	}
 }
 
@@ -861,7 +885,11 @@ func (c *checker) infer(n ast.Node) types.Type {
 		// `expr catch default` evaluates to expr's success type, which is therefore also
 		// the expected type for the default -- the two are alternatives for one value,
 		// so a default that needs a hint resolves against it (`failLocale() catch .en`).
+		// The raise, if any, is handled right here (the default IS the catch), so
+		// Expr is inferred under catchDepth like a try body.
+		c.catchDepth++
 		t := c.infer(v.Expr)
+		c.catchDepth--
 		c.inferExpected(v.Default, t)
 		return t
 	case *ast.YieldExpr:
@@ -1058,6 +1086,15 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 	calleeTyp := c.infer(v.Callee)
 	ft, ok := calleeTyp.(*types.FuncType)
 	if ok {
+		// Propagate-or-catch: a call to a function that declared !> (or, for a
+		// host extern, is authored as raising in std.Method) is only legal when
+		// the enclosing function also declared !> - so the error keeps
+		// propagating outward - or the call sits inside a try/catch or `catch`
+		// expression that handles it right here. Neither means the error can
+		// reach a caller with no way to know it might.
+		if ft.Raises && !c.raiseDeclared && c.catchDepth == 0 {
+			c.errorfc(v.Pos, UnhandledRaise, "call may raise but is neither declared with !> nor caught")
+		}
 		c.resolveNamedArgs(v, ft)
 	} else {
 		// Dynamic callee (any-typed value, host function): labels cannot be
@@ -1292,8 +1329,10 @@ func (c *checker) inferFunExpr(v *ast.FunExpr) types.Type {
 
 	savedRet := c.retTyp
 	savedYield := c.yieldTyp
+	savedRaise := c.raiseDeclared
 	c.retTyp = ret
 	c.yieldTyp = yield
+	c.raiseDeclared = v.ErrAnnot != ""
 	c.pushScope()
 	for i, name := range v.Params {
 		c.define(name, params[i], false)
@@ -1304,8 +1343,9 @@ func (c *checker) inferFunExpr(v *ast.FunExpr) types.Type {
 	c.popScope()
 	c.retTyp = savedRet
 	c.yieldTyp = savedYield
+	c.raiseDeclared = savedRaise
 
-	return &types.FuncType{Params: params, Ret: ret, Yield: yield, ParamNames: v.Params, ParamDefaults: v.ParamDefaults}
+	return &types.FuncType{Params: params, Ret: ret, Yield: yield, Raises: v.ErrAnnot != "", ParamNames: v.Params, ParamDefaults: v.ParamDefaults}
 }
 
 func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {

@@ -14,7 +14,7 @@ import "lib/feed" as _;
 // byte-stable), each an absolute baseURL loc - "index.html" maps to the bare site root.
 // Aliases are omitted (only canonical pages belong in a sitemap). Gated on baseURL so the
 // site can ship dark until the host is confirmed. robots points crawlers at the sitemap.
-export fun writeSEOFiles(site: Site) > void {
+export fun writeSEOFiles(site: Site) > void !> any {
     if (site.config.baseURL == "") { return; }
     var urls: [str] = mut [<str>];
     foreach (u in site.pageUrls.keys()) { urls.append(u); }
@@ -59,7 +59,7 @@ fun llmsIndexBody(pages: [DocPage], base: str, title: str) > str {
 
 // writeLLMsIndex writes gen/llms.txt from the collected docs corpus. Links are absolute
 // under baseURL when set (so an external agent can follow them), else root-relative.
-export fun writeLLMsIndex(site: Site) > void {
+export fun writeLLMsIndex(site: Site) > void !> any {
     var base = "/";
     if (site.config.baseURL != "") {
         base = site.config.baseURL;

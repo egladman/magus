@@ -22,7 +22,7 @@ HTTP client. Requests run ONCE unless given a retry policy.
 
 Send a GET request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry argument; without one the request runs exactly once.
 
-**Signature:** `http\get(url, [headers], [opts], [retry]) → HttpResponse` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L135)
+**Signature:** `http\get(url, [headers], [opts], [retry]) → HttpResponse` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L140)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -48,7 +48,7 @@ std\print(r.body.sub(0, 80) + "...");
 
 GET url and stream the response body straight to dest, returning the HTTP status. The body never becomes a Buzz string, so arbitrary binary (a release tarball, an image layer) survives intact and a large file costs no proportional memory. A non-2xx status writes nothing. Pair it with crypto.sha256_file to verify what you fetched before using it. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry argument; without one the request runs exactly once.
 
-**Signature:** `http\download(url, dest, [headers], [opts], [retry]) → int` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L149)
+**Signature:** `http\download(url, dest, [headers], [opts], [retry]) → int` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L154)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -64,7 +64,7 @@ GET url and stream the response body straight to dest, returning the HTTP status
 
 Send a POST request with body; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry argument; without one the request runs exactly once.
 
-**Signature:** `http\post(url, body, [headers], [opts], [retry]) → HttpResponse` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L210)
+**Signature:** `http\post(url, body, [headers], [opts], [retry]) → HttpResponse` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L215)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -97,7 +97,7 @@ final r = http\post(
 
 Send an HTTP request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry argument; without one the request runs exactly once.
 
-**Signature:** `http\request(method, url, [body], [headers], [opts], [retry]) → HttpResponse` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L216)
+**Signature:** `http\request(method, url, [body], [headers], [opts], [retry]) → HttpResponse` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L221)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -129,7 +129,7 @@ final r = http\request(
 
 Start a static file server in the background from an options map and return the bound port. opts keys: dir (string) serves a single directory; OR mounts (a map of URL-prefix -> dir, e.g. {"/": "docs/gen", "/console/": "console/gen"}) serves multiple roots where a request routes to the LONGEST matching prefix, so "/console/" wins over "/" for a /console/ path and the matched prefix is stripped before the file lookup. Exactly one of dir or mounts is required. port (int, optional) binds that port; 0 (the default) scans upward from 8080 and binds the first available one. Unknown keys are rejected. Serves localhost only and runs until the process exits, so pair it with a blocking call like fs.watch.
 
-**Signature:** `http\server(opts) → int` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L228)
+**Signature:** `http\server(opts) → int` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L233)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

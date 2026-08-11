@@ -35,6 +35,7 @@ var Module = std.Module{
 			Doc:     "Decode a hex string; errors on malformed input.",
 			Args:    []std.Arg{{Name: "s", Type: std.TypeString}},
 			Returns: []std.Ret{{Type: std.TypeString}},
+			Raises:  true,
 			Impl:    HexDecode,
 		},
 	},

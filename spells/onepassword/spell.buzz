@@ -57,7 +57,7 @@ final SCHEME = "op://";
 // output, so nothing here has to. proc\exec raises on a non-zero exit, which is the
 // behavior wanted: a locked vault, an expired session, or a typo'd path all fail the
 // read rather than returning a blank that fails later at whatever consumes it.
-export fun resolve_secret(target: Target, cb: fun(any)) > str {
+export fun resolve_secret(target: Target, cb: fun(any)) > str !> any {
     var io = {};
     cb(io);
     final ref = "" + io["ref"];
