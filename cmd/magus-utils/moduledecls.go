@@ -191,7 +191,7 @@ func buzzArgType(t std.TypeTag) (string, error) {
 // omit it.
 //
 // Arg.Default is what the caller gets, NOT the type's zero, and the difference is not
-// cosmetic: fs.mkdirall's perm defaults to 0o755, so declaring the zero would have Buzz
+// cosmetic: fs.mkdirAll's perm defaults to 0o755, so declaring the zero would have Buzz
 // pass an explicit mode 0 and create a directory nothing can then write into. Before
 // these declarations existed the trampoline applied the default itself and the omission
 // never reached the host; now the declaration is what fills the gap, so it has to carry

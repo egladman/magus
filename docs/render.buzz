@@ -199,7 +199,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // command line, so a path with a space in it was a latent bug rather than a caught
     // one. The typed calls are also the readable form - the intent is "keep these two
     // files, drop the rest", which the find invocation stated as a double negative.
-    fs\mkdirall(site.outDir + "/assets");
+    fs\mkdirAll(site.outDir + "/assets");
     foreach (name in fs\listDir(site.outDir + "/assets")) {
         if (name != "mermaid.js" and name != "hljs.js") {
             fs\removeAll(site.outDir + "/assets/" + name);
@@ -224,7 +224,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     fs\removeAll(site.outDir + "/libs");
     foreach (svg in fs\glob(site.root + "/libs/*/coverage.svg")) {
         final project = fs\basename(fs\dirname(svg.value));
-        fs\mkdirall(site.outDir + "/libs/" + project);
+        fs\mkdirAll(site.outDir + "/libs/" + project);
         fs\copyFile(svg.value, site.outDir + "/libs/" + project + "/coverage.svg");
     }
 

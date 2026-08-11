@@ -70,7 +70,7 @@ var Fs = Module{
 			Impl:    FsWriteFile,
 		},
 		{
-			Name: "mkdirall",
+			Name: "mkdir_all",
 			Doc:  "Create path and parents (default mode 0755).",
 			Args: []Arg{
 				{Name: "path", Type: TypeString},
@@ -328,7 +328,7 @@ func FsMkdirAll(ctx context.Context, path string, perm int) error {
 		return err
 	}
 	if err := os.MkdirAll(path, os.FileMode(perm)); err != nil {
-		return fmt.Errorf("fs.mkdirall %q: %w", path, err)
+		return fmt.Errorf("fs.mkdirAll %q: %w", path, err)
 	}
 	return nil
 }

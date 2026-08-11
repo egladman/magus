@@ -17,7 +17,7 @@ package std
 // blocks), and crypto.*_file hashes a file (Buzz's hash only takes a string).
 var buzzStdlibEquiv = map[string]string{
 	"fs.exists":              "fs.exists",
-	"fs.mkdirall":            "fs.makeDirectory",
+	"fs.mkdir_all":           "fs.makeDirectory",
 	"fs.remove_all":          "fs.delete",
 	"fs.list_dir":            "fs.list",
 	"crypto.sha256_hex":      "crypto.hash(HashAlgorithm.Sha256, …)",

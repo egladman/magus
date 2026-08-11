@@ -1047,7 +1047,7 @@ func TestRunRelativeFsResolvesToProjectDir(t *testing.T) {
 import "magus";
 import "fs";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    fs.mkdirall("sub");
+    fs.mkdirAll("sub");
     fs.writeFile("sub/a.txt", "alpha");
     fs.copyFile("sub/a.txt", "sub/b.txt");
     // glob returns paths relative to the project dir, sorted, each carrying that dir

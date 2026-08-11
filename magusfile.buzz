@@ -888,7 +888,7 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void {
 // from inside a project only sees that project.
 export fun graph_generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/*.json");
-    fs\mkdirall("gen");
+    fs\mkdirAll("gen");
     // The knowledge graph (nodes/links). No dedicated binding for `graph export`, so
     // magus.cmd is the documented escape hatch.
     final knowledge = magus\cmd("graph", args: ["export", "--static", "-o", "json"], opts: {"quiet": true}).stdout;

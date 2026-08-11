@@ -45,6 +45,11 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   paste from install's offer is; and this repo's own `generate` target no longer rewrites
   `AGENTS.md`, which makes that file plain hand-authored prose instead of a hybrid of
   prose and generated block.
+- **`fs\mkdirall` is now `fs\mkdirAll`.** The descriptor's underlying name was one mashed
+  word instead of the snake_case every other multi-word `fs` method declares, so codegen
+  produced an identifier inconsistent with `fs\readFile`, `fs\removeAll`, `fs\copyFile`,
+  `fs\listDir`, and `fs\appendFile`. There is no alias: a magusfile calling
+  `fs\mkdirall(...)` must be updated to `fs\mkdirAll(...)`.
 
 ### Added
 
