@@ -242,7 +242,7 @@ func TestRunRequestArgsCapEnforced(t *testing.T) {
 // the supplied context is already cancelled, rather than blocking until an OS
 // timeout fires.
 func TestDialRespectsContextCancellation(t *testing.T) {
-	ep, err := endpoint.ParseEndpoint("/nonexistent/magus-test-cancel.sock")
+	ep, err := endpoint.Parse("/nonexistent/magus-test-cancel.sock")
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -412,7 +412,7 @@ func TestWireIsJSONL(t *testing.T) {
 	defer srv.Close()
 	require.NoError(t, srv.Start())
 
-	ep, err := endpoint.ParseEndpoint(srv.Addr())
+	ep, err := endpoint.Parse(srv.Addr())
 	require.NoError(t, err)
 	conn, err := ep.Dial(context.Background())
 	require.NoError(t, err)
@@ -445,7 +445,7 @@ func TestProtocolMismatchRejectsV1(t *testing.T) {
 	defer srv.Close()
 	require.NoError(t, srv.Start())
 
-	ep, err := endpoint.ParseEndpoint(srv.Addr())
+	ep, err := endpoint.Parse(srv.Addr())
 	require.NoError(t, err)
 	conn, err := ep.Dial(context.Background())
 	require.NoError(t, err)

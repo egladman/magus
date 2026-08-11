@@ -41,7 +41,7 @@ func newValidator() *validator.Validate {
 		if !strings.HasPrefix(s, "unix://") {
 			return false
 		}
-		_, err := endpoint.ParseEndpoint(s)
+		_, err := endpoint.Parse(s)
 		return err == nil
 	})
 

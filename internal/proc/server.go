@@ -209,7 +209,7 @@ func New(opts Options) (*Server, error) {
 	var ep endpoint.Endpoint
 	if opts.Address != "" {
 		var err error
-		ep, err = endpoint.ParseEndpoint(opts.Address)
+		ep, err = endpoint.Parse(opts.Address)
 		if err != nil {
 			return nil, fmt.Errorf("proc: invalid address: %w", err)
 		}

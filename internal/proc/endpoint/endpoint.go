@@ -18,8 +18,8 @@ type Endpoint struct {
 	Addr   string // filesystem path for unix, "host:port" for tcp
 }
 
-// ParseEndpoint parses a unix:// URL or bare path into an Endpoint.
-func ParseEndpoint(s string) (Endpoint, error) {
+// Parse parses a unix:// URL or bare path into an Endpoint.
+func Parse(s string) (Endpoint, error) {
 	switch {
 	case strings.HasPrefix(s, "unix://"):
 		path := strings.TrimPrefix(s, "unix://")

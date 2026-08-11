@@ -54,7 +54,7 @@ func StableSocketName() string { return stableSocketName }
 // the daemon is actually gone after a shutdown request). A malformed address is treated
 // as not-live rather than an error, since callers only care whether a daemon answers.
 func SocketLive(ctx context.Context, addr string) bool {
-	ep, err := endpoint.ParseEndpoint(addr)
+	ep, err := endpoint.Parse(addr)
 	if err != nil {
 		return false
 	}

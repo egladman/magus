@@ -414,7 +414,7 @@ type Knowledge struct {
 	// default, and a non-git workspace simply yields no shard. The history scan is
 	// bounded and cached against HEAD, so it runs at build time on a commit change,
 	// never per query.
-	VCS VCSConfig `json:"vcs" yaml:"vcs"`
+	VCS KnowledgeVCSConfig `json:"vcs" yaml:"vcs"`
 	// SymbolIndexing configures the daemon's background auto-indexing: it runs each
 	// symbol-capable project's `scip` op for you when its sources change, so symbols
 	// stay fresh with no manual `magus run ::scip`. ON by default in the daemon (a
@@ -440,8 +440,8 @@ type SymbolIndexingConfig struct {
 	MinIntervalSeconds int `json:"min_interval_seconds" yaml:"min_interval_seconds" validate:"gte=0"`
 }
 
-// VCSConfig configures git-history ingestion into the @vcs shard (see Knowledge.VCS).
-type VCSConfig struct {
+// KnowledgeVCSConfig configures git-history ingestion into the @vcs shard (see Knowledge.VCS).
+type KnowledgeVCSConfig struct {
 	Enabled bool `json:"enabled" yaml:"enabled"`
 	// MaxCommits bounds the history walk to the most recent N commits. 0 uses a
 	// built-in default; a small value keeps the scan fast on a large repo at the cost
@@ -567,7 +567,7 @@ func Defaults() Config {
 		},
 		Hints:     Hints{Enabled: boolPtr(true)},
 		Console:   Console{URL: DefaultConsoleURL},
-		Knowledge: Knowledge{VCS: VCSConfig{Authorship: boolPtr(true)}},
+		Knowledge: Knowledge{VCS: KnowledgeVCSConfig{Authorship: boolPtr(true)}},
 		Telemetry: Telemetry{
 			Protocol:    "grpc",
 			ServiceName: "magus",

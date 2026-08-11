@@ -362,7 +362,7 @@ func TestForwardDevDifferentFingerprintRefused(t *testing.T) {
 	defer srv.Close()
 	require.NoError(t, srv.Start())
 
-	ep, err := endpoint.ParseEndpoint(srv.Addr())
+	ep, err := endpoint.Parse(srv.Addr())
 	require.NoError(t, err)
 	conn, err := ep.Dial(context.Background())
 	require.NoError(t, err)
