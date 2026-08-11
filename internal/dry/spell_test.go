@@ -155,7 +155,7 @@ func TestRunSpell_badCharmPatchSurfaces(t *testing.T) {
 export fun mgs_getName() > str { return "linter"; }
 fun lint(t: Target) > Command {
     return Command{ bin = "x", args = ["run"], charms = {
-        "bad": Charm{ ops = [PatchOp{ op = "replace", path = "/9", value = "z" }] },
+        "bad": Charm{ ops = [PatchOp{ op = PatchOpKind.replace, path = "/9", value = "z" }] },
     }};
 }
 export fun mgs_listTargets() > any { return {"lint": lint}; }

@@ -854,6 +854,13 @@ func (c *checker) infer(n ast.Node) types.Type {
 		for _, s := range v.Body.Stmts {
 			c.checkStmt(s)
 		}
+		c.checkUnreachable(v.Body)
+		// Every path has to produce a value. `terminates` answers that here because
+		// `out` counts as terminal: a body that does not terminate has a path falling
+		// off the end, which would make the block silently null.
+		if !terminates(v.Body) {
+			c.errorf(v.Pos, "all block expression paths must end with `out`")
+		}
 		c.popScope()
 		return types.Unknown
 	case *ast.ForceExpr:
@@ -1619,7 +1626,22 @@ func (c *checker) inferObjectLit(v *ast.ObjectLit) types.Type {
 		// primitives but not this checker's named types, so an enum field arrives as a
 		// NamedType the case could never resolve against -- the same reason the
 		// anonymous `.{ ... }` path in inferMapExpr resolves it.
-		c.inferExpected(v.Values[i], c.resolveType(ft))
+		want := c.resolveType(ft)
+		got := c.inferExpected(v.Values[i], want)
+		// The value was inferred against the field type but never CHECKED against it,
+		// so an object literal was the one assignment position with no type
+		// enforcement at all. Mutability is what made it visible: `data: mut [int]`
+		// happily took an immutable `[]`, which Compat rejects everywhere else.
+		// An unresolved NamedType is a generic parameter (`value: T`). Type arguments
+		// are ERASED here, so there is nothing to compare against and any answer would
+		// be invented - the same reason inferMember returns Unknown rather than
+		// erroring on one.
+		if _, unresolved := want.(*types.NamedType); unresolved {
+			continue
+		}
+		if !types.Compat(got, want) {
+			c.errorfc(ast.NodePos(v.Values[i]), TypeMismatch, "wrong property type: field %s.%s is %s, got %s", v.TypeName, key, want.TypeName(), got.TypeName())
+		}
 	}
 	return ot
 }
@@ -1911,6 +1933,11 @@ func terminatesWith(n ast.Node, tryCounts bool) bool {
 	terminates := func(x ast.Node) bool { return terminatesWith(x, tryCounts) }
 	switch s := n.(type) {
 	case *ast.ReturnStmt, *ast.ThrowStmt, *ast.BreakStmt, *ast.ContinueStmt:
+		return true
+	case *ast.OutStmt:
+		// `out` leaves the enclosing `from { }` with a value, so it ends that block
+		// the way a return ends a function - which is what makes a second `out`, or
+		// any statement after one, dead code.
 		return true
 	case *ast.ExprStmt:
 		return terminates(s.Expr)

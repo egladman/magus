@@ -422,6 +422,21 @@ fun probe() > int {
 	assert.Contains(t, err.Error(), "elsewhere")
 }
 
+func TestParity_BlockExpressionWithoutOutIsRejected(t *testing.T) {
+	// This case used to live in TestParity_BlockExpression asserting the opposite:
+	// that `from { final unused = 1; }` evaluates to null. Upstream rejects it
+	// (tests/compile_errors/block-expression-partial-out.buzz, "All block expression
+	// paths must end with `out`"), and a block expression that silently produces null
+	// is the dangerous kind of divergence - the value is consumed somewhere. Nothing
+	// in this repo or in magus used the form, so the rule was adopted.
+	ctx := context.Background()
+	s := buzz.NewSession(ctx)
+	t.Cleanup(func() { _ = s.Close() })
+	err := s.Exec(ctx, `fun probe() > any { return from { final unused = 1; }; }`)
+	require.Error(t, err, "a block expression with no out must be rejected")
+	assert.Contains(t, err.Error(), "must end with `out`")
+}
+
 func TestParity_BlockExpression(t *testing.T) {
 	cases := []struct {
 		name string
@@ -455,7 +470,6 @@ func TestParity_BlockExpression(t *testing.T) {
     };`,
 			want: "early",
 		},
-		{name: "no out yields null", body: `return from { final unused = 1; };`, want: nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -11,6 +11,7 @@
 # (progress that must be recorded here).
 bad-fun-signature.buzz
 bad-pattern.buzz
+block-expression-partial-out.buzz
 break.buzz
 collect-signature.buzz
 const.buzz
@@ -24,6 +25,8 @@ empty-import.buzz
 final-objects.buzz
 inferred-enum-case-invalid.buzz
 invalid-float-literal.buzz
+invalid-int-bin-literal.buzz
+invalid-int-hex-literal.buzz
 invalid-int-literal.buzz
 label-not-found.buzz
 labeled-continue-terminal-flow.buzz
@@ -45,7 +48,10 @@ match-value-condition-type.buzz
 misplaced-out.buzz
 missing-return-one-branch.buzz
 multiple-location.buzz
+multiple-out.buzz
 object-assignment-value-type.buzz
+object-prop-immutable-value.buzz
+out-last-statement.buzz
 terminal-break-unreachable.buzz
 terminal-continue-unreachable.buzz
 terminal-if-unreachable.buzz

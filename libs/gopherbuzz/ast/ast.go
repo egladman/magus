@@ -234,8 +234,10 @@ type IfExpr struct {
 	Else Node
 }
 
-// BlockExpr: from { stmts } — a block used as an expression. Its value is the
-// one an `out` statement inside it produces, or null if none runs.
+// BlockExpr: from { stmts } — a block used as an expression. Its value is the one
+// an `out` statement inside it produces. Every path must reach one: the checker
+// rejects a body that can fall off the end, because the value is consumed at the use
+// site and silently substituting null there is the divergence upstream refuses.
 type BlockExpr struct {
 	Pos
 	Body *BlockStmt
