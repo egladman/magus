@@ -113,6 +113,7 @@ flag run/dry-run
 flag run/graph
 flag run/no-cache
 flag run/upstream
+flag server/foreground
 flag status/compact
 flag status/probe
 flag status/socket

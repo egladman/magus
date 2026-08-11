@@ -67,7 +67,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return vm.Null, nil
 	}))
-	m.MapSet("mkdirall", vm.DirectValue("fs.mkdirall", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+	m.MapSet("mkdirAll", vm.DirectValue("fs.mkdirAll", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		path := Str(bzArgs, 0)
 		perm := Int(bzArgs, 1, 493)
 		if err := std.FsMkdirAll(ctx, path, perm); err != nil {
