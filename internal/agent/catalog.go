@@ -25,7 +25,7 @@ import (
 
 // SkillVersion changes when the installed skill contract changes. It is part
 // of the generated provenance and lets verification explain stale installs.
-const SkillVersion = 31
+const SkillVersion = 32
 
 const skillLicense = "GPL-3.0-or-later"
 

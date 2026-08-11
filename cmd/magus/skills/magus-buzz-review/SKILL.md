@@ -85,6 +85,25 @@ That is the fixture doing its job.
   ordinary member access, not a namespace-access mistake, even though `path`
   is also an importable module name. Only flag the dot when the receiver is
   the actual imported module identifier itself.{{end}}
+- **A flat import (`import "x" as _`) is a finding.** The `_` alias binds no
+  name and merges every export of `x` into the importing scope, so a call site
+  reads `escapeAttr(s)` with nothing on the line, or anywhere in the file, saying
+  where `escapeAttr` came from. The reader's only recourse is to grep each
+  candidate module in turn, and that cost is paid per call site rather than per
+  import. It also makes the module boundary unenforceable in the direction that
+  matters: adding an export to a flat-imported module can silently shadow or
+  collide with a name in every importer, and nothing at the import line records
+  which names were claimed.
+  Prefer a named import and namespaced calls (`import "lib/text" as text;` then
+  `text\escapeAttr(s)`). Where a specific unprefixed name is genuinely wanted,
+  the selective form `import escapeAttr, slugify from "lib/text";` states exactly
+  what enters the scope, which is the part `as _` throws away.
+  {{if .Full}}Note the flat and selective forms are BOTH excluded from
+  unused-import tracking (BZZ3001) - a flat import has no bound name to mark
+  unused - so an `as _` that has stopped being needed will never be reported.
+  Weigh the finding by blast radius, not by count: a leaf module flat-importing
+  one helper is a nit, while a tree where every file flat-imports every other is
+  a single structural finding, not one per line.{{end}}
 - **`export fun test(...)` is not a naming smell.** `test` is a contextual
   soft keyword rather than a reserved one, specifically so magus's canonical
   test-target name stays usable. Authority: GOPHERBUZZ - it is the one
