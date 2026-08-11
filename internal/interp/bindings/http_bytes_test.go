@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/egladman/magus/internal/sandbox"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
@@ -157,4 +158,76 @@ export fun up(url: str, src: str) > any {
 	assert.Equal(t, int64(200), got.ListItems()[0].AsInt(), "status")
 	assert.Empty(t, gotRange, "single-shot upload sent Content-Range %q, want none", gotRange)
 	assert.Equal(t, blob, gotBody, "uploaded bytes")
+}
+
+func TestDownloadHonorsSandboxWrite(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(blob)
+	}))
+	defer srv.Close()
+
+	dest := filepath.Join(t.TempDir(), "out.bin")
+	src := `
+import "http" as xhttp
+export fun dl(url: str, dest: str) > int {
+    return xhttp.download(url, dest, {});
+}`
+	sess := newHTTPBytesSession(t)
+	require.NoError(t, sess.Exec(context.Background(), src), "Exec")
+	fn, ok := sess.Exports()["dl"]
+	require.True(t, ok, "export dl not found")
+
+	// A policy with no matching rule denies the write.
+	p := &sandbox.Policy{Workspace: t.TempDir()}
+	ctx := sandbox.WithPolicy(context.Background(), p)
+
+	_, err := sess.CallValue(ctx, fn, []vm.Value{vm.StrValue(srv.URL), vm.StrValue(dest)})
+	assert.Error(t, err, "expected sandbox write denial")
+	_, statErr := os.Stat(dest)
+	assert.True(t, os.IsNotExist(statErr), "sandbox-denied download must not write dest")
+}
+
+func TestUploadChunkedHonorsSandboxRead(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	srcFile := filepath.Join(t.TempDir(), "upload.bin")
+	require.NoError(t, os.WriteFile(srcFile, blob, 0o644))
+	src := `
+import "http" as xhttp
+export fun up(url: str, src: str) > any {
+    return xhttp.upload_chunked("PUT", url, src, 0, {});
+}`
+	sess := newHTTPBytesSession(t)
+	require.NoError(t, sess.Exec(context.Background(), src), "Exec")
+	fn, ok := sess.Exports()["up"]
+	require.True(t, ok, "export up not found")
+
+	// A policy with no matching rule denies the read.
+	p := &sandbox.Policy{Workspace: t.TempDir()}
+	ctx := sandbox.WithPolicy(context.Background(), p)
+
+	_, err := sess.CallValue(ctx, fn, []vm.Value{vm.StrValue(srv.URL), vm.StrValue(srcFile)})
+	assert.Error(t, err, "expected sandbox read denial")
+}
+
+func TestByteSizeHonorsSandboxRead(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "blob.bin")
+	require.NoError(t, os.WriteFile(p, blob, 0o644))
+	src := `
+import "http" as xhttp
+export fun sz(p: str) > int { return xhttp.byteSize(p); }`
+	sess := newHTTPBytesSession(t)
+	require.NoError(t, sess.Exec(context.Background(), src), "Exec")
+	fn, ok := sess.Exports()["sz"]
+	require.True(t, ok, "export sz not found")
+
+	// A policy with no matching rule denies the read.
+	policy := &sandbox.Policy{Workspace: t.TempDir()}
+	ctx := sandbox.WithPolicy(context.Background(), policy)
+
+	_, err := sess.CallValue(ctx, fn, []vm.Value{vm.StrValue(p)})
+	assert.Error(t, err, "expected sandbox read denial")
 }

@@ -6,8 +6,11 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 
+	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/std"
 )
 
 // maxChunk caps a single upload chunk; callers may request less but not more.
@@ -51,8 +54,15 @@ func registerHTTPBytes() vm.Value {
 	// which len() on a Buzz string cannot give for binary data. Named byteSize
 	// (not size) because a module map's built-in .size() method — its entry count —
 	// shadows a stored key of the same name.
-	m.MapSet("byteSize", vm.DirectValue("http.byteSize", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		fi, err := os.Stat(httpStrArg(args, 0))
+	m.MapSet("byteSize", vm.DirectValue("http.byteSize", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+		path, err := resolveHTTPPath(ctx, httpStrArg(args, 0))
+		if err != nil {
+			return vm.Null, fmt.Errorf("http.byteSize: %w", err)
+		}
+		if err := sandbox.FromContext(ctx).CheckReadCtx(ctx, path); err != nil {
+			return vm.Null, fmt.Errorf("http.byteSize: %w", err)
+		}
+		fi, err := os.Stat(path)
 		if err != nil {
 			return vm.Null, fmt.Errorf("http.byteSize: %w", err)
 		}
@@ -83,6 +93,13 @@ func registerHTTPBytes() vm.Value {
 }
 
 func httpDownload(ctx context.Context, url, dest string, headers map[string]string) (int, error) {
+	dest, err := resolveHTTPPath(ctx, dest)
+	if err != nil {
+		return 0, fmt.Errorf("http.download: %w", err)
+	}
+	if err := sandbox.FromContext(ctx).CheckWriteCtx(ctx, dest); err != nil {
+		return 0, fmt.Errorf("http.download: %w", err)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return 0, fmt.Errorf("http.download: %w", err)
@@ -125,6 +142,13 @@ func httpDownload(ctx context.Context, url, dest string, headers map[string]stri
 }
 
 func httpUploadChunked(ctx context.Context, method, url, src string, chunkSize int64, headers map[string]string) (int, string, error) {
+	src, err := resolveHTTPPath(ctx, src)
+	if err != nil {
+		return 0, "", fmt.Errorf("http.upload_chunked: %w", err)
+	}
+	if err := sandbox.FromContext(ctx).CheckReadCtx(ctx, src); err != nil {
+		return 0, "", fmt.Errorf("http.upload_chunked: %w", err)
+	}
 	f, err := os.Open(src)
 	if err != nil {
 		return 0, "", fmt.Errorf("http.upload_chunked: open: %w", err)
@@ -187,6 +211,21 @@ func httpSendChunk(ctx context.Context, method, url string, body io.Reader, leng
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 	return resp.StatusCode, string(rb), nil
+}
+
+// resolveHTTPPath resolves a relative path against the context working
+// directory (see command.go's dir resolution, std.EffectiveCwd), matching
+// every other host module: a spell target's project directory, not the
+// process cwd.
+func resolveHTTPPath(ctx context.Context, path string) (string, error) {
+	if path == "" || filepath.IsAbs(path) {
+		return path, nil
+	}
+	base, err := std.EffectiveCwd(ctx)
+	if err != nil {
+		return path, err
+	}
+	return filepath.Join(base, path), nil
 }
 
 func httpStrArg(args []vm.Value, i int) string {

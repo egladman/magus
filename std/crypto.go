@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/types"
 )
 
 //go:generate go run ../cmd/magus-utils bindings -module crypto -lang buzz -out ../internal/interp/bindings/gen/crypto.go
@@ -265,6 +266,18 @@ func CryptoSignFile(ctx context.Context, alg, path, keyEnv string) (string, erro
 		return "", err
 	}
 	full := resolvePath(ctx, path)
+	// Read check first, tracing gate second: reads are left alone even in a dry
+	// run (types/trace.go), so a sandbox denial is still reported rather than
+	// silently skipped by the trace stub.
+	if err := checkRead(ctx, full); err != nil {
+		return "", err
+	}
+	if types.Tracing(ctx) {
+		return "", nil
+	}
+	if err := checkWrite(ctx, full+".sig"); err != nil {
+		return "", err
+	}
 	data, err := os.ReadFile(full)
 	if err != nil {
 		return "", fmt.Errorf("crypto.sign_file: read %s: %w", path, err)

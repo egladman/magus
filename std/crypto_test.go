@@ -2,10 +2,14 @@ package std
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -66,6 +70,44 @@ func TestCryptoDigests(t *testing.T) {
 	t.Run("md5/empty", func(t *testing.T) {
 		assert.Equal(t, "d41d8cd98f00b204e9800998ecf8427e", digest(CryptoMd5Hex, ""))
 	})
+}
+
+func TestCryptoSignFileHonorsSandbox(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "artifact.bin")
+	require.NoError(t, os.WriteFile(path, []byte("payload"), 0o644))
+
+	keyEnv := "MAGUS_TEST_SIGN_KEY"
+	_, priv, err := ed25519.GenerateKey(nil)
+	require.NoError(t, err)
+	t.Setenv(keyEnv, hex.EncodeToString(priv))
+
+	// A policy with no matching rule denies both read and write.
+	p := &sandbox.Policy{Workspace: t.TempDir()}
+	ctx := sandbox.WithPolicy(context.Background(), p)
+
+	_, err = CryptoSignFile(ctx, SignEd25519, path, keyEnv)
+	assert.Error(t, err, "expected sandbox read denial")
+	_, statErr := os.Stat(path + ".sig")
+	assert.True(t, os.IsNotExist(statErr), "a sandbox-denied sign_file must not write a .sig")
+}
+
+func TestCryptoSignFileTracingNoop(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "artifact.bin")
+	require.NoError(t, os.WriteFile(path, []byte("payload"), 0o644))
+
+	keyEnv := "MAGUS_TEST_SIGN_KEY_TRACE"
+	_, priv, err := ed25519.GenerateKey(nil)
+	require.NoError(t, err)
+	t.Setenv(keyEnv, hex.EncodeToString(priv))
+
+	ctx := types.WithTrace(context.Background())
+	got, err := CryptoSignFile(ctx, SignEd25519, path, keyEnv)
+	require.NoError(t, err)
+	assert.Equal(t, "", got, "a dry run must not produce a real signature")
+	_, statErr := os.Stat(path + ".sig")
+	assert.True(t, os.IsNotExist(statErr), "a dry run must not write a .sig file")
 }
 
 // TestCryptoSha512File exercises hashFile through one of the new algorithms.

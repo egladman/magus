@@ -238,8 +238,12 @@ func EnvParseDotenv(_ context.Context, content string) (map[string]string, error
 	return parseDotenv(content), nil
 }
 
-// EnvReadDotenv reads a .env file and parses it.
-func EnvReadDotenv(_ context.Context, path string) (map[string]string, error) {
+// EnvReadDotenv reads a .env file and parses it, subject to the sandbox read policy.
+func EnvReadDotenv(ctx context.Context, path string) (map[string]string, error) {
+	path = resolvePath(ctx, path)
+	if err := checkRead(ctx, path); err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("env.read_dotenv: %w", err)
@@ -251,6 +255,10 @@ func EnvReadDotenv(_ context.Context, path string) (map[string]string, error) {
 // environment. Existing names win (the dotenv convention), sandbox-stripped names
 // are skipped (matching EnvSet), and a recording/dry-run is a no-op.
 func EnvLoadDotenv(ctx context.Context, path string) error {
+	path = resolvePath(ctx, path)
+	if err := checkRead(ctx, path); err != nil {
+		return err
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("env.load_dotenv: %w", err)

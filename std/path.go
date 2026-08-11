@@ -60,9 +60,12 @@ var Path = Module{
 	},
 }
 
-// PathAbs returns the cleaned absolute form of path (resolved against the cwd).
-func PathAbs(_ context.Context, path string) (string, error) {
-	abs, err := filepath.Abs(path)
+// PathAbs returns the cleaned absolute form of path, resolved against the
+// context working directory (see resolvePath), not the process cwd - a target
+// running in another project's directory would otherwise get an answer for the
+// wrong place (see vcsDir in vcs.go for the same bug class).
+func PathAbs(ctx context.Context, path string) (string, error) {
+	abs, err := filepath.Abs(resolvePath(ctx, path))
 	if err != nil {
 		return "", fmt.Errorf("path.abs %q: %w", path, err)
 	}

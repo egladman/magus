@@ -32,6 +32,15 @@ func TestPathIsAbs(t *testing.T) {
 	assert.False(t, rel, "is_abs of a relative path should be false")
 }
 
+func TestPathAbsUsesContextCwd(t *testing.T) {
+	dir := t.TempDir()
+	ctx := WithCwd(context.Background(), dir)
+
+	got, err := PathAbs(ctx, "x")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(dir, "x"), got, "path.abs should resolve against the context cwd, not the process cwd")
+}
+
 func TestPathExpandUser(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {
