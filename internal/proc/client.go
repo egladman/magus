@@ -53,7 +53,7 @@ func Forward(ctx context.Context, args []string, version, root string) (int, err
 		return 0, fmt.Errorf("proc: forward: write: %w", err)
 	}
 
-	typ, line, err := readFrame(conn)
+	typ, line, err := readFrameCtx(ctx, conn)
 	if err != nil {
 		return 0, fmt.Errorf("proc: forward: read: %w", err)
 	}
@@ -207,7 +207,7 @@ func Shutdown(ctx context.Context, addr string) error {
 		return fmt.Errorf("proc: shutdown: write: %w", err)
 	}
 
-	typ, line, err := readFrame(conn)
+	typ, line, err := readFrameCtx(ctx, conn)
 	if err != nil {
 		return fmt.Errorf("proc: shutdown: read: %w", err)
 	}
@@ -242,7 +242,7 @@ func AcquireService(ctx context.Context, addr, key string, svc spells.Service) e
 	if err := writeFrame(conn, typeServiceAcquire, req); err != nil {
 		return fmt.Errorf("proc: service.acquire: write: %w", err)
 	}
-	typ, line, err := readFrame(conn)
+	typ, line, err := readFrameCtx(ctx, conn)
 	if err != nil {
 		return fmt.Errorf("proc: service.acquire: read: %w", err)
 	}
@@ -326,7 +326,7 @@ func StopAllServices(ctx context.Context, addr string) (int, error) {
 	if err := writeFrame(conn, typeServiceStopAll, ServiceStopAllRequest{Protocol: ProtocolV2}); err != nil {
 		return 0, fmt.Errorf("proc: service.stopall: write: %w", err)
 	}
-	typ, line, err := readFrame(conn)
+	typ, line, err := readFrameCtx(ctx, conn)
 	if err != nil {
 		return 0, fmt.Errorf("proc: service.stopall: read: %w", err)
 	}
@@ -377,7 +377,7 @@ func ReloadConfig(ctx context.Context, addr string) (dropped, busy int, err erro
 	if err := writeFrame(conn, typeConfigReload, ConfigReloadRequest{Protocol: ProtocolV2}); err != nil {
 		return 0, 0, fmt.Errorf("proc: config.reload: write: %w", err)
 	}
-	typ, line, err := readFrame(conn)
+	typ, line, err := readFrameCtx(ctx, conn)
 	if err != nil {
 		return 0, 0, fmt.Errorf("proc: config.reload: read: %w", err)
 	}

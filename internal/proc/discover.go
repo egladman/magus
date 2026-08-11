@@ -98,7 +98,11 @@ func DiscoverSocket(ctx context.Context) (string, error) {
 		}
 		p := filepath.Join(dir, name)
 		if isSocketLive(ctx, p) {
-			candidates = append(candidates, p)
+			// unix:// URL, matching LookupStableSocket's return format above -
+			// functionally inert either way (endpoint.Parse accepts both back-compat),
+			// but a caller comparing addresses across the two branches should not see
+			// two different shapes for the same kind of thing.
+			candidates = append(candidates, "unix://"+p)
 			continue
 		}
 		reapDeadSocket(p, e)

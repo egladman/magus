@@ -33,6 +33,21 @@ func TestValidateGlobs_RejectsBareWildcard(t *testing.T) {
 	})
 }
 
+// TestValidateGlobs_EmptyStringPatternIsDistinguishableFromSuccess guards against a
+// validator whose failure and success outputs collide: an empty-string glob is
+// invalid (it satisfies none of the well-formed-pattern rules), but before the fix
+// ValidateGlobs returned the offending pattern verbatim - so ValidateGlobs([""])
+// returned "", the same value used to report "all patterns valid".
+func TestValidateGlobs_EmptyStringPatternIsDistinguishableFromSuccess(t *testing.T) {
+	got := ValidateGlobs([]string{""})
+	assert.NotEmpty(t, got, "an empty-string pattern must be reported as invalid, not conflated with success")
+
+	t.Run("empty pattern among valid ones", func(t *testing.T) {
+		got := ValidateGlobs([]string{"MISE_*", ""})
+		assert.NotEmpty(t, got, "an empty-string pattern anywhere in the list must fail validation")
+	})
+}
+
 // TestScrub_BareWildcardDoesNotLeakEnv is the defence-in-depth check: even if a
 // bare "*" glob slips past ValidateGlobs, matchGlobs must not treat it as
 // matching everything — that would defeat the secret-stripping allowlist.

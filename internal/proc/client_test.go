@@ -5,7 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sync/atomic"
 	"testing"
@@ -252,6 +255,81 @@ func TestDialRespectsContextCancellation(t *testing.T) {
 	assert.Error(t, err, "expected error from Dial with cancelled ctx")
 	// A context-aware dialer should return well under 1 second.
 	assert.LessOrEqual(t, elapsed, time.Second, "Dial should return near-instantly with cancelled ctx")
+}
+
+// newWedgedServer starts a raw unix-socket listener that accepts one connection,
+// drains the request frame, and then never replies - simulating the wedged-daemon
+// symptom documented elsewhere in this repo as "daemon-adopted runs ignore
+// SIGTERM ... the goroutine parked in proc.readFrame". It returns a unix:// address.
+//
+// The accept goroutine blocks in io.Copy(io.Discard, conn) rather than forever: once
+// the client gives up (its deferred conn.Close fires after readFrameCtx returns) the
+// server side sees EOF and this goroutine exits, so the test leaks nothing.
+//
+// Uses a short-named temp dir (like New's real sockName, not t.TempDir()): the
+// unix socket path max is ~104 bytes on darwin, and t.TempDir() embeds the full
+// test name, which overflows that limit for these test names.
+func newWedgedServer(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "magus-w")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	addr := filepath.Join(dir, "w.sock")
+	ln, err := net.Listen("unix", addr)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ln.Close() })
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		_, _, _ = readFrame(conn) // drain the request so the client's write never blocks
+		_, _ = io.Copy(io.Discard, conn)
+	}()
+	return "unix://" + addr
+}
+
+// TestShutdownRespectsContextCancellation is the B-1 regression test: before the
+// fix, Shutdown's readFrame(conn) call used a plain io.Reader with no deadline and
+// completely ignored ctx once past Dial, so a daemon that accepted the connection
+// and never replied blocked Shutdown forever - ctx cancellation could not unblock
+// it. Pre-fix this test hangs past the hard bound below; post-fix it returns
+// promptly with a context error.
+func TestShutdownRespectsContextCancellation(t *testing.T) {
+	addr := newWedgedServer(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	err := Shutdown(ctx, addr)
+	elapsed := time.Since(start)
+
+	require.Error(t, err, "Shutdown against a wedged daemon must return an error, not hang")
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Less(t, elapsed, 5*time.Second,
+		"Shutdown must return once ctx is done, not block on the unresponsive daemon")
+}
+
+// TestForwardRespectsContextCancellation is B-1's highest-value case: Forward is the
+// hot path every adopted run takes, so a wedged daemon must not be able to hang the
+// client's whole process past ctx cancellation.
+func TestForwardRespectsContextCancellation(t *testing.T) {
+	t.Setenv("MAGUS_DAEMON_SOCKET", newWedgedServer(t))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, err := Forward(ctx, []string{"run", "build"}, "test", "")
+	elapsed := time.Since(start)
+
+	require.Error(t, err, "Forward against a wedged daemon must return an error, not hang")
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Less(t, elapsed, 5*time.Second,
+		"Forward must return once ctx is done, not block on the unresponsive daemon")
 }
 
 // TestStartCloseGoroutineLeak verifies that repeated Start/Close cycles do not
