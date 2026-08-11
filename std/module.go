@@ -362,8 +362,10 @@ func All() []Module {
 }
 
 // validateModule (and its validateField/validateMethod helpers) reflect over
-// each Impl's signature to catch declaration/Impl mismatches at init. They live
-// in validate.go (native) with a no-op stub in validate_wasm.go, because TinyGo's
-// wasm reflect omits (reflect.Type).NumIn/NumOut and would panic at startup. The
-// check is a programmer-error guard that has already run on the host by the time a
-// wasm build exists, so skipping it in the browser is safe.
+// each Impl's signature to catch declaration/Impl mismatches at init.
+//
+// It runs in EVERY build now, including wasm. It used to be native-only, stubbed out
+// by a validate_wasm.go no-op, because TinyGo's wasm reflect omits
+// (reflect.Type).NumIn/NumOut and panicked at startup. The playground is built with
+// the stock Go toolchain, whose wasm reflect is complete, so the stub and its build
+// tags are gone and the browser gets the same guard as the host.
