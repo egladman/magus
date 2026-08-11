@@ -88,7 +88,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	modules := std.All()
+	// Both kinds of stdlib module, so the docs site cannot tell a Buzz-implemented
+	// one from a Go-implemented one. std.SourceModulesAsModules derives the method
+	// list from the Buzz source, which is the same shape writeModule already
+	// renders - the alternative was a second template nobody would keep in step.
+	modules := append(std.All(), std.SourceModulesAsModules()...)
 	slices.SortFunc(modules, func(a, b std.Module) int {
 		return strings.Compare(a.Name, b.Name)
 	})

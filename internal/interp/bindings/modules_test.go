@@ -242,8 +242,10 @@ func TestEveryHostModuleIsWired(t *testing.T) {
 		if m.Name == "magus" {
 			continue
 		}
-		mod, ok := sess.NativeModule(m.Name)
-		if !assert.Truef(t, ok, "host module %q is declared in std but not wired into a Buzz session; add it to magusModules", m.Name) {
+		// Looked up by IMPORT PATH, not Name: a nested module registers at
+		// `encoding/json` and only binds as `json` once an import line names it.
+		mod, ok := sess.NativeModule(m.ImportPath())
+		if !assert.Truef(t, ok, "host module %q is declared in std but not wired into a Buzz session; add it to magusModules", m.ImportPath()) {
 			continue
 		}
 		if len(m.Methods) == 0 {
@@ -1155,7 +1157,7 @@ func TestObjectAnnotationsCheckFields(t *testing.T) {
 		{"FileInfo", `fs.stat(".")`, "size", "sizes", `import "fs";`},
 		{"HttpResponse", `http.get("http://x")`, "status", "staus", `import "http";`},
 		{"SemverVersion", `semver.parse("1.2.3")`, "major", "majr", `import "semver";`},
-		{"URL", `encoding.parseUrl("http://x")`, "scheme", "sceme", `import "encoding";`},
+		{"URL", `url.parse("http://x")`, "scheme", "sceme", `import "encoding/url";`},
 	}
 
 	mkfile := func(c struct{ typ, expr, good, bad, imports string }, field string) string {
@@ -1707,4 +1709,118 @@ func TestMagusMirrorsResolveInAnnotations(t *testing.T) {
 			assert.NoError(t, runTargetIn(t, dir, "build"), "mirror must resolve in an annotation")
 		})
 	}
+}
+
+// TestDeclaredObjectsAreConstructible guards the runtime half of a declared
+// boundary object. The checker knowing HttpRetry is not enough - a caller has to
+// be able to BUILD one, and before declareObjectTypes existed this type-checked
+// and then threw "unknown object type" at run time.
+func TestDeclaredObjectsAreConstructible(t *testing.T) {
+	sess := scriptSession(t)
+	err := sess.Exec(context.Background(), `
+import "std";
+import "http";
+
+test "construct a declared boundary object" {
+    final p = HttpRetry{ attempts = 3, delay_ms = 250.0 };
+    std\assert(p.attempts == 3, message: "field set");
+    std\assert(p.all_errors == false, message: "field default");
+}
+`)
+	require.NoError(t, err)
+}
+
+// TestDeclaringObjectsKeepsNativeMethods is the other half: executing a module's
+// declarations must not replace the native module value with the extern-only
+// stub, or every host method it carries would silently become a no-op.
+func TestDeclaringObjectsKeepsNativeMethods(t *testing.T) {
+	sess := scriptSession(t)
+	err := sess.Exec(context.Background(), `
+import "std";
+import "http";
+final _p = HttpRetry{ attempts = 2 };
+final port = http\server({"dir": "."});
+std\assert(port > 0, message: "native http.server still bound a port");
+`)
+	require.NoError(t, err)
+}
+
+// TestCrossBundleDeclarationsStillImport is the degradation path. magus's own
+// declarations name DoctorCheckStatus, which is declared in a DIFFERENT bundle,
+// so executing them standalone fails. That must leave the import working exactly
+// as it did before - collected and checkable - rather than taking it down.
+func TestCrossBundleDeclarationsStillImport(t *testing.T) {
+	sess := scriptSession(t)
+	err := sess.Exec(context.Background(), `
+import "std";
+import "magus";
+std\assert(true, message: "magus imported despite non-self-contained declarations");
+`)
+	require.NoError(t, err)
+}
+
+// TestDeclarationsWithRealFunctionsAreNotExecuted is the guard for the narrowest
+// part of declareObjectTypes: a declaration source may only run if it is PURELY
+// declarations.
+//
+// Buzz's own io.buzz carries an `export object File` beside a real
+// `export fun runFile`. Executing it flat-merges runFile into the importing
+// scope, and for a magusfile that means magus reads it as a target - which broke
+// every workspace load with "MGS1008: target runFile must receive a magus\Context".
+// Nothing else in the suite caught that; it only showed up running the CLI.
+func TestDeclarationsWithRealFunctionsAreNotExecuted(t *testing.T) {
+	sess := scriptSession(t)
+	require.NoError(t, sess.Exec(context.Background(), `import "io";`))
+
+	_, leaked := sess.Exports()["runFile"]
+	assert.False(t, leaked,
+		"io.buzz's runFile leaked into the importing scope; a magusfile would read it as a target (MGS1008)")
+}
+
+// TestSourceModuleIsIndistinguishable is the whole point of the Buzz-source
+// module kind: which language implements a stdlib module must be an
+// implementation detail, invisible from every surface a user or a tool reads.
+//
+// It walks the surfaces that matter rather than asserting registration, because
+// registration was never the hard part - being SEEN was.
+func TestSourceModuleIsIndistinguishable(t *testing.T) {
+	// 1. It imports and RUNS like any other module.
+	sess := scriptSession(t)
+	err := sess.Exec(context.Background(), `
+import "std";
+import "lcov";
+
+test "a Buzz-implemented stdlib module behaves like a Go one" {
+    final report = "SF:/w/src/a.ts" + std\char(10) + "LF:4" + std\char(10) + "LH:2" + std\char(10);
+    std\assert(lcov\percent(report, keep: "src/") == "50.0", message: lcov\percent(report, keep: "src/"));
+}
+`)
+	require.NoError(t, err)
+
+	// 2. describe modules lists it in the catalogue, with its doc.
+	var summary *types.ModuleEntry
+	for _, m := range std.DescribeModules("") {
+		if m.Name == "lcov" {
+			summary = &m
+			break
+		}
+	}
+	require.NotNil(t, summary, "a source module must appear in the module catalogue")
+	assert.NotEmpty(t, summary.Doc)
+
+	// 3. Its methods and their docs are derived from the Buzz source, so the
+	//    detail view is populated exactly as a Go module's is.
+	detail := std.DescribeModules("lcov")
+	require.Len(t, detail, 1)
+	byName := map[string]types.ModuleMethodEntry{}
+	for _, meth := range detail[0].Methods {
+		byName[meth.Name] = meth
+	}
+	require.Contains(t, byName, "percent")
+	require.Contains(t, byName, "mergePercent")
+	assert.NotEmpty(t, byName["percent"].Doc, "the doc comment must come off the Buzz source")
+	assert.Contains(t, byName["percent"].Buzz, "lcov\\percent", "the Buzz signature must render")
+
+	// 4. A non-exported helper stays private, like an unexported Go function.
+	assert.NotContains(t, byName, "keepsSource")
 }

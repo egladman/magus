@@ -6,7 +6,7 @@ namespace tour;
 import "fs";
 import "io";
 import "std";
-import "encoding";
+import "encoding/base64";
 import "template";
 import "engine/types" as _;
 import "engine/route" as _;
@@ -98,7 +98,7 @@ fun tourSrc(file: str) > str {
 // url-safe unpadded base64 (matching src/site/run-example.ts and the wasm's
 // applyHashSource decoder), so the code stays client-side, never hitting server/CDN.
 fun playgroundLink(root: str, src: str) > str {
-    var enc = encoding\base64urlEncode(src);
+    var enc = base64\urlEncode(src);
     while (enc.endsWith("=")) { enc = enc.sub(0, enc.len() - 1); }
     return root + "playground/#source=" + enc;
 }

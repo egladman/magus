@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -58,4 +59,42 @@ func TestTimeParseDuration(t *testing.T) {
 
 	_, err = TimeParseDuration(context.Background(), "banana")
 	assert.Error(t, err, "TimeParseDuration of garbage should error")
+}
+
+func TestTimeLayoutEnumRendersRealFormats(t *testing.T) {
+	ctx := context.Background()
+	// 2026-08-11T14:30:00Z
+	const ms = 1786458600000
+
+	for _, tc := range []struct {
+		layout types.TimeLayout
+		want   string
+	}{
+		{types.TimeRFC3339, "2026-08-11T14:30:00Z"},
+		{types.TimeDateOnly, "2026-08-11"},
+		{types.TimeTimeOnly, "14:30:00"},
+		{types.TimeDateTime, "2026-08-11 14:30:00"},
+		{types.TimeKitchen, "2:30PM"},
+	} {
+		got, err := TimeFormat(ctx, string(tc.layout), ms)
+		require.NoError(t, err)
+		assert.Equal(t, tc.want, got, "layout %q", tc.layout)
+	}
+}
+
+func TestTimeLayoutEnumDoesNotCloseTheParameter(t *testing.T) {
+	// The escape hatch: an arbitrary Go reference layout still works, because
+	// there is no finite set of timestamp formats a build might have to read.
+	got, err := TimeFormat(context.Background(), "2006/01/02", 1786458600000)
+	require.NoError(t, err)
+	assert.Equal(t, "2026/08/11", got)
+}
+
+func TestTimeLayoutEnumRoundTrips(t *testing.T) {
+	ctx := context.Background()
+	ms, err := TimeParse(ctx, string(types.TimeRFC3339), "2026-08-11T14:30:00Z")
+	require.NoError(t, err)
+	back, err := TimeFormat(ctx, string(types.TimeRFC3339), ms)
+	require.NoError(t, err)
+	assert.Equal(t, "2026-08-11T14:30:00Z", back)
 }

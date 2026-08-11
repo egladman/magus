@@ -25,14 +25,14 @@ var Time = Module{
 		{
 			Name:    "format",
 			Doc:     "Render Unix-millis as a string using a Go reference layout (UTC).",
-			Args:    []Arg{{Name: "layout", Type: TypeString}, {Name: "unix_millis", Type: TypeFloat}},
+			Args:    []Arg{{Name: "layout", Type: TypeString, Enum: "TimeLayout"}, {Name: "unix_millis", Type: TypeFloat}},
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    TimeFormat,
 		},
 		{
 			Name:    "parse",
 			Doc:     "Parse a string with a Go reference layout into Unix-millis (UTC); errors on mismatch.",
-			Args:    []Arg{{Name: "layout", Type: TypeString}, {Name: "value", Type: TypeString}},
+			Args:    []Arg{{Name: "layout", Type: TypeString, Enum: "TimeLayout"}, {Name: "value", Type: TypeString}},
 			Returns: []Ret{{Type: TypeFloat}},
 			Impl:    TimeParse,
 		},

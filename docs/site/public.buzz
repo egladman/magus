@@ -10,7 +10,7 @@ import "io";
 import "os";
 import "serialize";
 import "template";
-import "yaml";
+import "encoding/yaml";
 import "lib/text" as _;
 import "lib/feed" as _;
 import "site/release" as _;

@@ -3,10 +3,12 @@ package std
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/hmac"
 	"crypto/md5"  //nolint:gosec // G501: MD5 is exposed for interop with legacy checksum manifests, not security.
 	"crypto/sha1" //nolint:gosec // G505: SHA-1 is exposed for interop with legacy/git checksums, not security.
 	"crypto/sha256"
 	"crypto/sha512"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"hash"
@@ -23,10 +25,16 @@ import (
 func init() { Register(Crypto) }
 
 // Crypto is the "crypto" host module: content digests for checksum manifests
-// (SHA256SUMS for release assets) and verifying downloads. Digests only - not a
-// general crypto toolkit (no HMAC and no encryption). SHA-256/512 are the strong
-// defaults; SHA-1 and MD5 exist for interop with legacy checksums and are not
+// (SHA256SUMS for release assets), Ed25519 signing, and HMAC. Not a general
+// crypto toolkit - there is no encryption. SHA-256/512 are the strong defaults;
+// SHA-1 and MD5 exist for interop with legacy checksums and are not
 // collision-resistant - never use them for anything security-relevant.
+//
+// The HMAC and byte-list methods moved here from
+// internal/interp/bindings/crypto_bytes.go once the descriptor gained a byte-list
+// type tag. They worked as undeclared companions but were invisible to
+// `magus describe modules`, the knowledge graph and the docs, and untyped in the
+// checker - reachable only by knowing they existed.
 //
 // Signing is here so a magusfile can publish a signed artifact without a Go program
 // in the middle. Two things about its shape:
@@ -128,7 +136,78 @@ var Crypto = Module{
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    CryptoMd5File,
 		},
+		{
+			Name: "hmac_sha256",
+			Doc:  "Return the raw HMAC-SHA256 of data keyed by key, as a BYTE LIST. key and data may each be a str or a byte list, which is what lets one result key the next call - the shape an AWS SigV4 signing chain needs (kDate to kRegion to kService to kSigning). Use hmac_sha256_hex for the final signature you actually send.",
+			Args: []Arg{
+				{Name: "key", Type: TypeByteSlice},
+				{Name: "data", Type: TypeByteSlice},
+			},
+			Returns: []Ret{{Type: TypeByteSlice}},
+			Impl:    CryptoHmacSha256,
+		},
+		{
+			Name: "hmac_sha256_hex",
+			Doc:  "Return the lowercase hex HMAC-SHA256 of data keyed by key - the form a signature header carries, once the signing key has been derived with hmac_sha256.",
+			Args: []Arg{
+				{Name: "key", Type: TypeByteSlice},
+				{Name: "data", Type: TypeByteSlice},
+			},
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    CryptoHmacSha256Hex,
+		},
+		{
+			Name:    "base64_encode_bytes",
+			Doc:     "Encode raw bytes as standard (padded) base64. The byte-list counterpart to encoding/base64's encode, for data that came from another byte-level call and must not round-trip through a rune-oriented str.",
+			Args:    []Arg{{Name: "data", Type: TypeByteSlice}},
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    CryptoBase64EncodeBytes,
+		},
+		{
+			Name:    "base64_decode_bytes",
+			Doc:     "Decode standard (padded) base64 into a byte list; errors on invalid input. Returns bytes rather than a str so arbitrary binary survives - a decoded key or archive would not.",
+			Args:    []Arg{{Name: "s", Type: TypeString}},
+			Returns: []Ret{{Type: TypeByteSlice}},
+			Impl:    CryptoBase64DecodeBytes,
+		},
 	},
+}
+
+// CryptoHmacSha256 returns the raw HMAC-SHA256 of data keyed by key.
+//
+// Bytes in and bytes out, which is the whole point: the result keys the next call
+// in a signing chain, and a str would not survive the round trip. It moved here
+// from internal/interp/bindings/crypto_bytes.go once a byte-list type tag existed
+// to declare it with - as an undeclared companion it worked but was invisible to
+// `magus describe modules`, the knowledge graph and the docs, and untyped in the
+// checker.
+func CryptoHmacSha256(_ context.Context, key, data []byte) ([]byte, error) {
+	m := hmac.New(sha256.New, key)
+	m.Write(data)
+	return m.Sum(nil), nil
+}
+
+// CryptoHmacSha256Hex returns the hex HMAC-SHA256 of data keyed by key.
+func CryptoHmacSha256Hex(ctx context.Context, key, data []byte) (string, error) {
+	sum, err := CryptoHmacSha256(ctx, key, data)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(sum), nil
+}
+
+// CryptoBase64EncodeBytes encodes raw bytes as standard padded base64.
+func CryptoBase64EncodeBytes(_ context.Context, data []byte) (string, error) {
+	return base64.StdEncoding.EncodeToString(data), nil
+}
+
+// CryptoBase64DecodeBytes decodes standard padded base64 into raw bytes.
+func CryptoBase64DecodeBytes(_ context.Context, s string) ([]byte, error) {
+	b, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		return nil, fmt.Errorf("crypto.base64_decode_bytes: %w", err)
+	}
+	return b, nil
 }
 
 // hashHex returns the lowercase hex digest of data using the hash from newHash.

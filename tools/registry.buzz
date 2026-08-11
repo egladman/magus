@@ -34,7 +34,7 @@ import "std";
 import "fs";
 import "os";
 import "http";
-import "yaml";
+import "encoding/yaml";
 import "serialize";
 import "crypto";
 

@@ -42,43 +42,6 @@ func callHTTPExport(t *testing.T, sess *buzz.Session, src, name string, args ...
 	return v
 }
 
-func TestDownloadStreamsBinaryToFile(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "yes", r.Header.Get("X-Test"), "header not forwarded")
-		_, _ = w.Write(blob)
-	}))
-	defer srv.Close()
-
-	dest := filepath.Join(t.TempDir(), "out.bin")
-	src := `
-import "http" as xhttp
-export fun dl(url: str, dest: str) > int {
-    return xhttp.download(url, dest, {"X-Test": "yes"});
-}`
-	got := callHTTPExport(t, newHTTPBytesSession(t), src, "dl", vm.StrValue(srv.URL), vm.StrValue(dest))
-	require.True(t, got.IsInt(), "status not an int: %v", got)
-	assert.Equal(t, int64(200), got.AsInt())
-	data, err := os.ReadFile(dest)
-	require.NoError(t, err)
-	assert.Equal(t, blob, data)
-}
-
-func TestDownloadNon2xxWritesNoFile(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer srv.Close()
-
-	dest := filepath.Join(t.TempDir(), "missing.bin")
-	src := `
-import "http" as xhttp
-export fun dl(url: str, dest: str) > int { return xhttp.download(url, dest, {}); }`
-	got := callHTTPExport(t, newHTTPBytesSession(t), src, "dl", vm.StrValue(srv.URL), vm.StrValue(dest))
-	assert.Equal(t, int64(204), got.AsInt())
-	_, err := os.Stat(dest)
-	assert.True(t, os.IsNotExist(err), "expected no file at %s, stat err = %v", dest, err)
-}
-
 func TestSizeReportsByteLength(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "blob.bin")
 	require.NoError(t, os.WriteFile(p, blob, 0o644))

@@ -1,0 +1,9 @@
+import "std";
+import "strings";
+
+// Buzz has no `<` on str, so sorting strings means handing list.sort a
+// comparator built from compare.
+final names = mut ["charlie", "alice", "bob"];
+names.sort(fun (a: str, b: str) > bool => strings\compare(a, b) < 0);
+std\print(names.join(", "));
+// -> "alice, bob, charlie"

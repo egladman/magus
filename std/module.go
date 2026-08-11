@@ -32,7 +32,22 @@ const (
 	TypeFloat
 	TypeBool
 	TypeStringSlice
+	// TypeFloatSlice is a list of numbers. Buzz has one numeric list, so an int
+	// list and a double list are the same value crossing here; the Impl takes
+	// []float64 and a caller that means integers rounds on the way out.
+	TypeFloatSlice
+	// TypeByteSlice is raw bytes, crossing as a Buzz list of ints rather than a
+	// str. A Buzz string is rune-oriented, so arbitrary binary - a NUL, a 0xFF -
+	// does not survive a round trip through one; anything that must move bytes
+	// opaquely (an HMAC digest, a decoded base64 payload) uses this.
+	TypeByteSlice
+	// TypeStringSliceSlice is a list of string lists, e.g. csv.parse's rows of
+	// fields.
+	TypeStringSliceSlice
 	TypeStringMap
+	// TypeStringMapMap is a map of string maps, e.g. ini.parse's sections of
+	// key-value pairs.
+	TypeStringMapMap
 	TypeAnyMap
 	TypeFunc
 	TypeAny
@@ -56,6 +71,14 @@ func (t TypeTag) GoType() string {
 		return "bool"
 	case TypeStringSlice:
 		return "[]string"
+	case TypeFloatSlice:
+		return "[]float64"
+	case TypeByteSlice:
+		return "[]byte"
+	case TypeStringSliceSlice:
+		return "[][]string"
+	case TypeStringMapMap:
+		return "map[string]map[string]string"
 	case TypeStringMap:
 		return "map[string]string"
 	case TypeAnyMap:
@@ -174,10 +197,38 @@ type Field struct {
 // bare name: after `import "fs"`, fs.glob; after `import "os"`, proc.exec. magus
 // layers these methods onto Buzz's own stdlib module of the same name.
 type Module struct {
-	Name    string
+	// Name is the identifier a magusfile calls the module by: `json` in
+	// `json\parse(...)`. It is also the key for everything derived from the
+	// module - the generated trampoline's Go function name, its file name, the
+	// Modules registry key - so it must stay a legal identifier.
+	Name string
+	// Path is the import spelling, when it differs from Name: `encoding/json` for
+	// the module bound as `json`. Empty means the two are the same, which is the
+	// case for every top-level module.
+	//
+	// The split exists because Buzz binds a slash-path import under its BASENAME
+	// (see gopherbuzz/session.go's resolveImport, the same rule `magus/spell/go`
+	// already follows). So the path is only the spelling of the import line; the
+	// name is what every call site actually writes, and what codegen has to be
+	// able to put in a Go identifier. Conflating them would mean a module called
+	// `encoding/json` whose generated function was RegisterEncoding/json.
+	//
+	// Two modules may not share a Name even under different paths: Register
+	// panics on the collision, which is correct rather than incidental, because a
+	// magusfile cannot import both unaliased anyway.
+	Path    string
 	Doc     string
 	Fields  []Field
 	Methods []Method
+}
+
+// ImportPath returns the path a magusfile imports this module by: Path when it
+// declares one, otherwise Name.
+func (m Module) ImportPath() string {
+	if m.Path != "" {
+		return m.Path
+	}
+	return m.Name
 }
 
 var (

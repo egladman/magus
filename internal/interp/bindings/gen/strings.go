@@ -11,7 +11,7 @@ import (
 )
 
 // RegisterStrings builds the "strings" module map and returns it.
-// Case conversion and word helpers (camel/snake/kebab/Pascal, capitalize, words, ellipsis).
+// String helpers Buzz's builtins lack: case conversion, comparison, affix trimming, padding, and splitting into lines or fields.
 func RegisterStrings(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
@@ -68,6 +68,104 @@ func RegisterStrings(ctx context.Context, sess *buzz.Session) vm.Value {
 		s := Str(bzArgs, 0)
 		length := Int(bzArgs, 1, 0)
 		ret0, err := std.StringsEllipsis(ctx, s, length)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrVal(ret0), nil
+	}))
+	m.MapSet("upperFirst", vm.DirectValue("strings.upperFirst", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		s := Str(bzArgs, 0)
+		ret0, err := std.StringsUpperFirst(ctx, s)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrVal(ret0), nil
+	}))
+	m.MapSet("compare", vm.DirectValue("strings.compare", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		a := Str(bzArgs, 0)
+		b := Str(bzArgs, 1)
+		ret0, err := std.StringsCompare(ctx, a, b)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return IntVal(ret0), nil
+	}))
+	m.MapSet("contains", vm.DirectValue("strings.contains", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		s := Str(bzArgs, 0)
+		substr := Str(bzArgs, 1)
+		ret0, err := std.StringsContains(ctx, s, substr)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return BoolVal(ret0), nil
+	}))
+	m.MapSet("trimPrefix", vm.DirectValue("strings.trimPrefix", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		s := Str(bzArgs, 0)
+		prefix := Str(bzArgs, 1)
+		ret0, err := std.StringsTrimPrefix(ctx, s, prefix)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrVal(ret0), nil
+	}))
+	m.MapSet("trimSuffix", vm.DirectValue("strings.trimSuffix", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		s := Str(bzArgs, 0)
+		suffix := Str(bzArgs, 1)
+		ret0, err := std.StringsTrimSuffix(ctx, s, suffix)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrVal(ret0), nil
+	}))
+	m.MapSet("padLeft", vm.DirectValue("strings.padLeft", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		s := Str(bzArgs, 0)
+		length := Int(bzArgs, 1, 0)
+		pad := Str(bzArgs, 2)
+		ret0, err := std.StringsPadLeft(ctx, s, length, pad)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrVal(ret0), nil
+	}))
+	m.MapSet("padRight", vm.DirectValue("strings.padRight", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		s := Str(bzArgs, 0)
+		length := Int(bzArgs, 1, 0)
+		pad := Str(bzArgs, 2)
+		ret0, err := std.StringsPadRight(ctx, s, length, pad)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrVal(ret0), nil
+	}))
+	m.MapSet("lines", vm.DirectValue("strings.lines", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		s := Str(bzArgs, 0)
+		ret0, err := std.StringsLines(ctx, s)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrSliceVal(ret0), nil
+	}))
+	m.MapSet("fields", vm.DirectValue("strings.fields", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		s := Str(bzArgs, 0)
+		ret0, err := std.StringsFields(ctx, s)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrSliceVal(ret0), nil
+	}))
+	m.MapSet("splitN", vm.DirectValue("strings.splitN", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		s := Str(bzArgs, 0)
+		sep := Str(bzArgs, 1)
+		n := Int(bzArgs, 2, 0)
+		ret0, err := std.StringsSplitN(ctx, s, sep, n)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrSliceVal(ret0), nil
+	}))
+	m.MapSet("collapseWs", vm.DirectValue("strings.collapseWs", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		s := Str(bzArgs, 0)
+		ret0, err := std.StringsCollapseWs(ctx, s)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}

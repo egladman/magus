@@ -12,12 +12,11 @@ import "io";
 import "os";
 import "std";
 import "serialize";
-import "encoding";
 import "time";
 import "template";
 import "crypto";
 import "assert";
-import "yaml";
+import "encoding/yaml";
 // Text/path/URL helpers. Flat import (`as _`) merges a module's exports into this scope,
 // so callers name them unqualified (escapeAttr, relativePath, ...); same for the imports
 // below.

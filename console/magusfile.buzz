@@ -19,6 +19,7 @@ import "project/.." as root;
 // badge renders the coverage SVG; cov merges the per-process lcov reports into one figure.
 import "../badge" as badge;
 import "../coverage" as cov;
+import "lcov";
 
 // magusfile binds this file's own exported targets (build, typecheck, test, ci); ts adds the
 // TypeScript spell so the app's src/ is symbol-capable - its `scip` op indexes it (via tsconfig.json)
@@ -84,7 +85,7 @@ fun install() > void {
 // the DOM setup globally (one --import for everything) breaks them. Unifying the runs was tried and
 // reverted.
 //
-// Which is why the figure needs cov.lcovMergePercent rather than lcovPercent: three processes means
+// Which is why the figure needs lcov.mergePercent rather than lcov.percent: three processes means
 // three reports, and each one lists the whole line table of every shared module it imported. Summing
 // their LF/LH would count those files once per process and report a number that is not about
 // anything. The merge unions DA: records instead, so a line is found once and hit if any run hit it.
@@ -124,7 +125,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     install();
     os\exec("pnpm", ["run", "test"], ".", {});
 
-    final pct = cov\lcovMergePercent(
+    final pct = lcov\mergePercent(
         [fs\readFile("coverage.plain.lcov"), fs\readFile("coverage.dom.lcov")],
         keep: "src/");
     fs\writeFile("coverage.svg", badge\coverage("console coverage", percent: pct, radius: 3));

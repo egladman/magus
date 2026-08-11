@@ -14,6 +14,7 @@ func init() { Register(YAML) }
 // YAML is the "yaml" host module: YAML parse and stringify via gopkg.in/yaml.v3.
 var YAML = Module{
 	Name: "yaml",
+	Path: "encoding/yaml",
 	Doc:  "YAML parse and stringify (YAML 1.2 via gopkg.in/yaml.v3).",
 	Methods: []Method{
 		{

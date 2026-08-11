@@ -1,0 +1,181 @@
+/// lcov reads the LCOV coverage-report format: the percentage a badge or a floor
+/// gate shows, and the merge that makes that percentage true when tests run in
+/// more than one process.
+///
+/// WRITTEN IN BUZZ rather than Go, and that is the point of it being here. It is
+/// the first module to use magus's Buzz-source stdlib registration, chosen because
+/// it is genuinely generic - LCOV is a format, not a magus concept - and because
+/// it is small enough to read in one sitting, which is the property that makes a
+/// stdlib module worth keeping in the workspace's own language.
+///
+/// It came out of coverage.buzz, which mixed this with Go-specific profile
+/// handling (reading a module path out of go.mod, Go's generated-file marker).
+/// Only the language-neutral half moved; the Go half stays beside the go spell.
+namespace lcov;
+
+import "std";
+
+// keepsSource decides whether one lcov SF: path counts toward the figure.
+//
+// Anchored at a path boundary, both forms: node:test writes paths relative to the cwd
+// ("src/foo.ts") while other producers write absolute ones ("/w/src/foo.ts"). A bare substring
+// test would also match "vendor/notsrc/...".
+//
+// node_modules is excluded FIRST and separately, because the boundary anchor alone does not
+// exclude it: a dependency that ships its own src/ directory gives "/node_modules/x/src/y.js",
+// which contains "/src/" and so passed the anchor test. The comment here claimed that case was
+// covered for a while before a test went looking for it - the existing one only ever tried
+// "node_modules/x/index.js", which has no src/ in it and would pass either way.
+/// keepsSource decides whether one lcov SF: path counts toward the figure.
+/// Not exported: it is this module's filtering rule, not an API.
+fun keepsSource(sf: str, keep: str) > bool {
+    if (sf.indexOf("/node_modules/") != null or sf.startsWith("node_modules/")) { return false; }
+    return sf.startsWith(keep) or sf.indexOf("/" + keep) != null;
+}
+
+/// percent is the covered-line percentage across an lcov report, as a string
+/// rounded to one decimal ("87.6").
+///
+/// keep filters by source path so the figure describes code someone wrote:
+/// a report routinely carries dependencies and generated files, and counting
+/// those measures the ecosystem rather than the project.
+///
+/// Raises rather than reporting 0.0 when nothing matched, because a zero and a
+/// mismatched filter look identical to a badge and only one of them is a fact.
+export fun percent(lcov: str, keep: str) > str !> str {
+    var found = 0;
+    var hit = 0;
+    var counting = false;
+    foreach (line in lcov.split("\n")) {
+        if (line.startsWith("SF:")) {
+            counting = keepsSource(line.sub(3).trim(), keep: keep);
+            continue;
+        }
+        if (!counting) { continue; }
+        if (line.startsWith("LF:")) { found = found + std\parseInt(line.sub(3).trim()) ?? 0; }
+        if (line.startsWith("LH:")) { hit = hit + std\parseInt(line.sub(3).trim()) ?? 0; }
+    }
+    if (found == 0) {
+        throw "lcov: report has no lines under \"" + keep + "\"; did the sourcemaps resolve?";
+    }
+    // Integer math throughout: a rounded tenth rendered by hand avoids depending
+    // on float formatting for a string that ends up in a committed SVG.
+    final tenths = (hit * 1000 + found / 2) / found;
+    return "{tenths / 10}.{tenths % 10}";
+}
+
+/// mergePercent is percent over SEVERAL lcov reports of the same sources,
+/// merged at line level so overlapping reports are not double counted.
+//
+// It exists because a project whose tests run in more than one process gets one report per
+// process, and those reports OVERLAP: every process that imports a shared module reports that
+// module's whole line table, so summing their LF/LH counts that file once per process. The
+// figure comes out looking like a weighted average of how many processes happened to touch
+// each file, which is not a fact about anything.
+//
+// So the merge is at LINE level, over DA: records (DA:<line>,<hits>), not at the LF/LH
+// summary. A line is FOUND if any report mentions it and HIT if any report ran it - a union,
+// because the processes are covering one body of code between them, not sampling it. LF/LH
+// are then recomputed from the union rather than trusted from the inputs.
+//
+// keep filters by source path exactly as percent does, and for the same reason.
+export fun mergePercent(reports: [str], keep: str) > str !> str {
+    // "<file>\u{0}<line>" -> was it ever hit. One flat map rather than a map of maps: the key
+    // only has to be unique per (file, line), and \0 cannot appear in either half.
+    var lines = mut {<str: bool>};
+    foreach (lcov in reports) {
+        var sf = "";
+        var counting = false;
+        foreach (line in lcov.split("\n")) {
+            if (line.startsWith("SF:")) {
+                sf = line.sub(3).trim();
+                counting = keepsSource(sf, keep: keep);
+                continue;
+            }
+            if (!counting) { continue; }
+            if (!line.startsWith("DA:")) { continue; }
+            final parts = line.sub(3).trim().split(",");
+            if (parts.len() < 2) { continue; }
+            final key = sf + "\0" + parts[0];
+            final hit = (std\parseInt(parts[1]) ?? 0) > 0;
+            // Union: once hit, always hit. A later report that did not exercise the line must
+            // not un-hit what an earlier one covered.
+            lines[key] = hit or (lines[key] ?? false);
+        }
+    }
+    var found = 0;
+    var hit = 0;
+    foreach (_, wasHit in lines) {
+        found = found + 1;
+        if (wasHit) { hit = hit + 1; }
+    }
+    if (found == 0) {
+        throw "lcov: merged reports have no DA records under \"" + keep + "\"; did the sourcemaps resolve?";
+    }
+    final tenths = (hit * 1000 + found / 2) / found;
+    return "{tenths / 10}.{tenths % 10}";
+}
+
+test "mergePercent unions overlapping reports instead of double counting" {
+    // The same file reported by two processes. Summing LF/LH would call this 4 lines found
+    // and 3 hit (75%); the file actually has 2 lines and both are covered between the runs.
+    final a = "SF:/w/src/shared.ts\nDA:1,1\nDA:2,0\nLF:2\nLH:1\nend_of_record\n";
+    final b = "SF:/w/src/shared.ts\nDA:1,0\nDA:2,5\nLF:2\nLH:1\nend_of_record\n";
+    std\assert(mergePercent([a, b], keep: "src/") == "100.0",
+        message: "a line hit in either report is hit");
+}
+
+test "mergePercent counts a line found in every report exactly once" {
+    final a = "SF:/w/src/a.ts\nDA:1,1\nDA:2,0\nend_of_record\n";
+    final b = "SF:/w/src/a.ts\nDA:1,1\nDA:2,0\nend_of_record\n";
+    // 2 distinct lines, 1 hit -> 50.0, NOT 4 lines / 2 hit dressed up as the same ratio by luck.
+    std\assert(mergePercent([a, b], keep: "src/") == "50.0", message: "50.0");
+}
+
+test "mergePercent keeps distinct files apart" {
+    final a = "SF:/w/src/a.ts\nDA:1,1\nend_of_record\nSF:/w/src/b.ts\nDA:1,0\nend_of_record\n";
+    std\assert(mergePercent([a], keep: "src/") == "50.0", message: "one of two lines hit");
+}
+
+test "mergePercent ignores records outside the kept path" {
+    final a = "SF:/w/node_modules/x/src/y.js\nDA:1,0\nend_of_record\n"
+        + "SF:/w/src/a.ts\nDA:1,1\nend_of_record\n";
+    std\assert(mergePercent([a], keep: "src/") == "100.0", message: "node_modules excluded");
+}
+
+test "mergePercent refuses reports with no kept records rather than reporting zero" {
+    var threw = false;
+    try {
+        _ = mergePercent(["SF:/w/vendor/a.js\nDA:1,1\nend_of_record\n"], keep: "src/");
+    } catch (_: str) {
+        threw = true;
+    }
+    std\assert(threw, message: "an empty merge is a setup failure, not 0%");
+}
+
+test "percent totals counts rather than averaging per-file percentages" {
+    // 1/1 in a tiny file and 1/9 in a big one is 20%, not the 55.6% an average gives.
+    final lcov = "SF:/w/src/small.ts\nLF:1\nLH:1\nend_of_record\n"
+        + "SF:/w/src/big.ts\nLF:9\nLH:1\nend_of_record\n";
+    assert\equal(percent(lcov, keep: "src/"), want: "20.0", message: "summed, not averaged");
+}
+
+test "percent ignores records outside the kept path" {
+    final lcov = "SF:/w/src/a.ts\nLF:4\nLH:3\nend_of_record\n"
+        + "SF:/w/node_modules/x/index.js\nLF:100\nLH:0\nend_of_record\n"
+        + "SF:/w/.testcache/a.test.js\nLF:50\nLH:50\nend_of_record\n";
+    assert\equal(percent(lcov, keep: "src/"), want: "75.0", message: "only src counted");
+}
+
+test "percent rounds to one decimal" {
+    assert\equal(percent("SF:/w/src/a.ts\nLF:3\nLH:2\nend_of_record\n", keep: "src/"),
+        want: "66.7", message: "2 of 3 rounds up");
+}
+
+test "percent refuses an empty report rather than reporting zero" {
+    // Reporting 0.0% here would look like a real regression; the actual cause is a
+    // report with nothing under src, which almost always means sourcemaps did not
+    // resolve and every record still points at the bundle.
+    assert\throws(fun () > void !> str { final _ = percent("SF:other/a.js\nLF:2\nLH:1\nend_of_record\n", keep: "src/"); },
+        message: "empty selection errors");
+}

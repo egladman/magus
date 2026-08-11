@@ -60,7 +60,288 @@ var Archive = Module{
 			Returns: []Ret{{Type: TypeAnyMap, Object: "CompressResult"}},
 			Impl:    ArchiveCompress,
 		},
+		{
+			Name: "list",
+			Doc:  "List the archive at src without extracting it, as entries of {name, size, is_dir} sorted by name. Use it to check what an archive holds - that a release tarball carries the binary you expect, or how large an entry is - before paying to extract it. Symlinks and devices are skipped, matching uncompress. opts keys: threads (int, parallel decode workers; 0 or omitted = auto).",
+			Args: []Arg{
+				{Name: "src", Type: TypeString},
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAny, Object: "[ArchiveEntry]"}},
+			Impl:    ArchiveList,
+		},
+		{
+			Name: "read_file",
+			Doc:  "Return the contents of the single entry named name inside the archive at src, without extracting anything to disk. Reading one manifest out of a release tarball is the usual reason. Raises when name is not in the archive, or when the entry exceeds max_size. opts keys: max_size (int, byte cap on the entry, default 10 GiB), threads (int, parallel decode workers; 0 or omitted = auto).",
+			Args: []Arg{
+				{Name: "src", Type: TypeString},
+				{Name: "name", Type: TypeString},
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    ArchiveReadFile,
+		},
 	},
+}
+
+// archiveOpenRead opens src for a READ-ONLY walk: it applies the sandbox read
+// policy, sniffs the format, and returns the file handle plus the sniffed header.
+// The caller closes the handle.
+//
+// Read-only walks share this instead of archiveDispatch because dispatch is built
+// around extraction - every branch it selects takes a destination directory and
+// writes. Listing and reading one entry need the same format detection and none of
+// the writing.
+func archiveOpenRead(ctx context.Context, method, src string) (*os.File, []byte, error) {
+	src = resolvePath(ctx, src)
+	if p := sandbox.FromContext(ctx); p != nil {
+		if err := p.CheckReadCtx(ctx, src); err != nil {
+			return nil, nil, fmt.Errorf("archive.%s: %w", method, err)
+		}
+	}
+	f, err := os.Open(src)
+	if err != nil {
+		return nil, nil, fmt.Errorf("archive.%s: %w", method, err)
+	}
+	var sniff [262]byte
+	n, _ := f.Read(sniff[:])
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		_ = f.Close()
+		return nil, nil, fmt.Errorf("archive.%s: seek: %w", method, err)
+	}
+	return f, sniff[:n], nil
+}
+
+// archiveTarStream returns a tar reader over f's decompressed contents, or - when
+// the stream turns out to hold a single compressed file rather than a tar - a
+// reader over that file's bytes and the name it should carry. Exactly one of the
+// two is non-nil. closeFn releases the decompressor.
+//
+// The zip case is NOT handled here: zip is a random-access container read through
+// zip.NewReader over the whole file, not a stream, so its callers branch first.
+func archiveTarStream(f *os.File, hdr []byte, threads int) (tr *tar.Reader, single io.Reader, singleName string, closeFn func(), err error) {
+	noop := func() {}
+	base := strings.TrimSuffix(filepath.Base(f.Name()), filepath.Ext(f.Name()))
+
+	// Decompress by magic bytes, falling back to the extension - the same order
+	// archiveDispatch uses, so a read-only walk and an extraction never disagree
+	// about what an archive is.
+	var (
+		r      io.Reader
+		closer io.Closer
+	)
+	switch {
+	case len(hdr) >= 262 && string(hdr[257:262]) == "ustar":
+		r = f
+	case len(hdr) >= 2 && hdr[0] == 0x1F && hdr[1] == 0x8B:
+		gr, gerr := pgzip.NewReaderN(f, 256<<10, threads)
+		if gerr != nil {
+			return nil, nil, "", noop, fmt.Errorf("gzip: %w", gerr)
+		}
+		r, closer = gr, gr
+	case len(hdr) >= 3 && hdr[0] == 'B' && hdr[1] == 'Z' && hdr[2] == 'h':
+		r = bzip2.NewReader(f)
+	case len(hdr) >= 6 && hdr[0] == 0xFD && hdr[1] == 0x37 && hdr[2] == 0x7A && hdr[3] == 0x58 && hdr[4] == 0x5A && hdr[5] == 0x00:
+		xr, xerr := compress.NewXzReader(f)
+		if xerr != nil {
+			return nil, nil, "", noop, fmt.Errorf("xz: %w", xerr)
+		}
+		r, closer = xr, xr
+	case len(hdr) >= 4 && hdr[0] == 0x28 && hdr[1] == 0xB5 && hdr[2] == 0x2F && hdr[3] == 0xFD:
+		zr, zerr := compress.NewZstdReader(f, threads)
+		if zerr != nil {
+			return nil, nil, "", noop, fmt.Errorf("zstd: %w", zerr)
+		}
+		r, closer = zr, zr
+	default:
+		switch strings.ToLower(filepath.Ext(f.Name())) {
+		case ".tar":
+			r = f
+		default:
+			return nil, nil, "", noop, fmt.Errorf("unrecognized archive format")
+		}
+	}
+
+	closeFn = noop
+	if closer != nil {
+		closeFn = func() { _ = closer.Close() }
+	}
+	tr, rest, err := openTarInStream(r)
+	if err != nil {
+		closeFn()
+		return nil, nil, "", noop, err
+	}
+	if tr != nil {
+		return tr, nil, "", closeFn, nil
+	}
+	return nil, rest, base, closeFn, nil
+}
+
+// isZip reports whether hdr or the file extension says this is a zip container.
+func isZip(hdr []byte, name string) bool {
+	if len(hdr) >= 4 && hdr[0] == 'P' && hdr[1] == 'K' {
+		return true
+	}
+	return strings.ToLower(filepath.Ext(name)) == ".zip"
+}
+
+// ArchiveList reports an archive's entries without extracting it.
+func ArchiveList(ctx context.Context, src string, opts map[string]any) ([]types.ArchiveEntry, error) {
+	f, hdr, err := archiveOpenRead(ctx, "list", src)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	threads := resolveThreads(opts, cache.LimiterFromContext(ctx))
+	out := []types.ArchiveEntry{}
+
+	if isZip(hdr, f.Name()) {
+		fi, serr := f.Stat()
+		if serr != nil {
+			return nil, fmt.Errorf("archive.list: %w", serr)
+		}
+		zr, zerr := zip.NewReader(f, fi.Size())
+		if zerr != nil {
+			return nil, fmt.Errorf("archive.list: zip: %w", zerr)
+		}
+		for _, e := range zr.File {
+			out = append(out, types.ArchiveEntry{
+				Name:  e.Name,
+				Size:  int(e.UncompressedSize64),
+				IsDir: e.FileInfo().IsDir(),
+			})
+		}
+		sortArchiveEntries(out)
+		return out, nil
+	}
+
+	tr, single, singleName, closeFn, terr := archiveTarStream(f, hdr, threads)
+	if terr != nil {
+		return nil, fmt.Errorf("archive.list %s: %w", filepath.Base(src), terr)
+	}
+	defer closeFn()
+
+	if tr == nil {
+		// A bare compressed file (foo.gz that is not a tar): one entry, named the
+		// way uncompress would write it, sized by draining the stream. There is no
+		// header to read the size from, which is why this costs a full decompress.
+		n, cerr := io.Copy(io.Discard, single)
+		if cerr != nil {
+			return nil, fmt.Errorf("archive.list %s: %w", filepath.Base(src), cerr)
+		}
+		return []types.ArchiveEntry{{Name: singleName, Size: int(n)}}, nil
+	}
+
+	for {
+		h, nerr := tr.Next()
+		if errors.Is(nerr, io.EOF) {
+			break
+		}
+		if nerr != nil {
+			return nil, fmt.Errorf("archive.list %s: %w", filepath.Base(src), nerr)
+		}
+		// Match uncompress, which extracts regular files and directories and skips
+		// symlinks and devices: listing something extraction would not produce would
+		// make list a poor preview of it.
+		switch h.Typeflag {
+		case tar.TypeReg, tar.TypeDir:
+		default:
+			continue
+		}
+		out = append(out, types.ArchiveEntry{
+			Name:  h.Name,
+			Size:  int(h.Size),
+			IsDir: h.Typeflag == tar.TypeDir,
+		})
+	}
+	sortArchiveEntries(out)
+	return out, nil
+}
+
+// sortArchiveEntries orders entries by name so a listing is stable across formats
+// and across runs - zip preserves central-directory order and tar preserves write
+// order, neither of which a caller should have to depend on.
+func sortArchiveEntries(entries []types.ArchiveEntry) {
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
+}
+
+// ArchiveReadFile returns one entry's contents without extracting the archive.
+func ArchiveReadFile(ctx context.Context, src, name string, opts map[string]any) (string, error) {
+	f, hdr, err := archiveOpenRead(ctx, "read_file", src)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	threads := resolveThreads(opts, cache.LimiterFromContext(ctx))
+	maxSize := archiveOptInt64(opts, "max_size", archiveDefaultMaxSize)
+
+	if isZip(hdr, f.Name()) {
+		fi, serr := f.Stat()
+		if serr != nil {
+			return "", fmt.Errorf("archive.read_file: %w", serr)
+		}
+		zr, zerr := zip.NewReader(f, fi.Size())
+		if zerr != nil {
+			return "", fmt.Errorf("archive.read_file: zip: %w", zerr)
+		}
+		for _, e := range zr.File {
+			if e.Name != name || e.FileInfo().IsDir() {
+				continue
+			}
+			rc, oerr := e.Open()
+			if oerr != nil {
+				return "", fmt.Errorf("archive.read_file %q: %w", name, oerr)
+			}
+			defer rc.Close()
+			return readCapped(rc, maxSize, name)
+		}
+		return "", fmt.Errorf("archive.read_file: %q is not in %s", name, filepath.Base(src))
+	}
+
+	tr, single, singleName, closeFn, terr := archiveTarStream(f, hdr, threads)
+	if terr != nil {
+		return "", fmt.Errorf("archive.read_file %s: %w", filepath.Base(src), terr)
+	}
+	defer closeFn()
+
+	if tr == nil {
+		if name != singleName {
+			return "", fmt.Errorf("archive.read_file: %q is not in %s (it holds one entry, %q)",
+				name, filepath.Base(src), singleName)
+		}
+		return readCapped(single, maxSize, name)
+	}
+
+	for {
+		h, nerr := tr.Next()
+		if errors.Is(nerr, io.EOF) {
+			break
+		}
+		if nerr != nil {
+			return "", fmt.Errorf("archive.read_file %s: %w", filepath.Base(src), nerr)
+		}
+		if h.Name == name && h.Typeflag == tar.TypeReg {
+			return readCapped(tr, maxSize, name)
+		}
+	}
+	return "", fmt.Errorf("archive.read_file: %q is not in %s", name, filepath.Base(src))
+}
+
+// readCapped reads at most maxSize bytes, raising rather than truncating when the
+// entry is larger. Truncating would hand back a prefix that looks like a whole
+// file, which is the failure mode a size cap exists to prevent.
+func readCapped(r io.Reader, maxSize int64, name string) (string, error) {
+	var buf bytes.Buffer
+	n, err := io.Copy(&buf, io.LimitReader(r, maxSize+1))
+	if err != nil {
+		return "", fmt.Errorf("archive.read_file %q: %w", name, err)
+	}
+	if n > maxSize {
+		return "", fmt.Errorf("archive.read_file %q: entry exceeds max_size (%d bytes)", name, maxSize)
+	}
+	return buf.String(), nil
 }
 
 // defaultArchiveThreads returns the auto thread count for archive operations:

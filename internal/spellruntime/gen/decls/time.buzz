@@ -6,9 +6,19 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+export enum<str> TimeLayout {
+    rfc3339 = "2006-01-02T15:04:05Z07:00",
+    rfc3339Nano = "2006-01-02T15:04:05.999999999Z07:00",
+    dateOnly = "2006-01-02",
+    timeOnly = "15:04:05",
+    dateTime = "2006-01-02 15:04:05",
+    rfc1123 = "Mon, 02 Jan 2006 15:04:05 MST",
+    kitchen = "3:04PM",
+}
+
 export extern fun add(unix_millis: double, duration: str) > double;
 export extern fun diff(a: double, b: double) > double;
-export extern fun format(layout: str, unix_millis: double) > str;
+export extern fun format(layout: TimeLayout, unix_millis: double) > str;
 export extern fun nowIso() > str;
-export extern fun parse(layout: str, value: str) > double;
+export extern fun parse(layout: TimeLayout, value: str) > double;
 export extern fun parseDuration(duration: str) > double;

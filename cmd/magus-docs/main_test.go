@@ -21,7 +21,10 @@ import (
 func TestModuleDocsUpToDate(t *testing.T) {
 	docsDir := filepath.Join("..", "..", "docs", "reference", "buzz")
 
-	modules := std.All()
+	// BOTH kinds, matching main.go. Reading only std.All() here would call a
+	// Buzz-implemented module's committed doc an orphan and demand its deletion -
+	// the gate would enforce the opposite of what it is for.
+	modules := append(std.All(), std.SourceModulesAsModules()...)
 	slices.SortFunc(modules, func(a, b std.Module) int { return strings.Compare(a.Name, b.Name) })
 
 	expected := map[string]bool{"index.md": true}

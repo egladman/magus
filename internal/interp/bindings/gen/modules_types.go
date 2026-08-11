@@ -38,6 +38,14 @@ func (c Capabilities) Has(want Capability) bool { return c&Capabilities(want) !=
 type ModuleReg struct {
 	Register     RegisterFunc
 	Capabilities Capabilities
+	// Path is the import spelling when it differs from the registry key: the key
+	// is the identifier the module binds as (`json`), while Path is what an
+	// import line says (`encoding/json`). Empty means the two are the same.
+	//
+	// It mirrors std.Module.Path, and TestModulesMatchStd checks the two agree -
+	// a Path here that std does not declare would register a module at an import
+	// path nothing else in magus knows about.
+	Path string
 }
 
 // Set is a module registry. Its With method returns a copy so tests can replace

@@ -26,6 +26,7 @@ func init() { Register(XML) }
 // render emits no whitespace between tags, so the caller controls the exact bytes.
 var XML = Module{
 	Name: "xml",
+	Path: "encoding/xml",
 	Doc:  "Build, serialize, and parse XML/SVG.",
 	Methods: []Method{
 		{

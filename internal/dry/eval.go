@@ -47,9 +47,18 @@ var WASMCompatibleMagusModules = wasmCompatibleMagusModules()
 func wasmCompatibleMagusModules() map[string]func(context.Context, *buzz.Session) vm.Value {
 	out := make(map[string]func(context.Context, *buzz.Session) vm.Value)
 	for name, reg := range bindinggen.Modules {
-		if reg.Capabilities.Has(bindinggen.WASM) {
-			out[name] = reg.Register
+		if !reg.Capabilities.Has(bindinggen.WASM) {
+			continue
 		}
+		// Keyed by IMPORT PATH, not by the registry key: a nested module resolves
+		// as `encoding/json` and only binds as `json` once an import names it.
+		// Keying by the bare name here left the playground unable to import one at
+		// all, while the same module worked everywhere else.
+		key := name
+		if reg.Path != "" {
+			key = reg.Path
+		}
+		out[key] = reg.Register
 	}
 	return out
 }

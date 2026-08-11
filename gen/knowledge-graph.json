@@ -3,8 +3,8 @@
   "schema_version": 8,
   "directed": true,
   "multigraph": false,
-  "node_count": 1955,
-  "edge_count": 4786,
+  "node_count": 1997,
+  "edge_count": 4838,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -974,7 +974,7 @@
       "source": "docs/reference",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "161",
+        "dir_files": "166",
         "dir_languages": "markdown"
       }
     },
@@ -996,7 +996,7 @@
       "source": "docs/reference/buzz",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "24",
+        "dir_files": "29",
         "dir_languages": "markdown"
       }
     },
@@ -1964,7 +1964,7 @@
       "source": "std",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "41",
+        "dir_files": "42",
         "dir_languages": "buzz,markdown"
       }
     },
@@ -1975,7 +1975,7 @@
       "source": "std/examples",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "40",
+        "dir_files": "41",
         "dir_languages": "buzz"
       }
     },
@@ -2019,7 +2019,7 @@
       "source": "std/examples/strings",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "7",
+        "dir_files": "8",
         "dir_languages": "buzz"
       }
     },
@@ -3200,6 +3200,18 @@
       }
     },
     {
+      "id": "doc:docs/reference/buzz/base64.md",
+      "kind": "doc",
+      "label": "docs/reference/buzz/base64.md",
+      "source": "docs/reference/buzz/base64.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "base64,module,stdlib,magusfile",
+        "title": "base64 module"
+      }
+    },
+    {
       "id": "doc:docs/reference/buzz/charm.md",
       "kind": "doc",
       "label": "docs/reference/buzz/charm.md",
@@ -3224,15 +3236,15 @@
       }
     },
     {
-      "id": "doc:docs/reference/buzz/encoding.md",
+      "id": "doc:docs/reference/buzz/csv.md",
       "kind": "doc",
-      "label": "docs/reference/buzz/encoding.md",
-      "source": "docs/reference/buzz/encoding.md",
+      "label": "docs/reference/buzz/csv.md",
+      "source": "docs/reference/buzz/csv.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
-        "tags": "encoding,module,stdlib,magusfile",
-        "title": "encoding module"
+        "tags": "csv,module,stdlib,magusfile",
+        "title": "csv module"
       }
     },
     {
@@ -3272,6 +3284,18 @@
       }
     },
     {
+      "id": "doc:docs/reference/buzz/hex.md",
+      "kind": "doc",
+      "label": "docs/reference/buzz/hex.md",
+      "source": "docs/reference/buzz/hex.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "hex,module,stdlib,magusfile",
+        "title": "hex module"
+      }
+    },
+    {
       "id": "doc:docs/reference/buzz/http.md",
       "kind": "doc",
       "label": "docs/reference/buzz/http.md",
@@ -3296,6 +3320,18 @@
       }
     },
     {
+      "id": "doc:docs/reference/buzz/ini.md",
+      "kind": "doc",
+      "label": "docs/reference/buzz/ini.md",
+      "source": "docs/reference/buzz/ini.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "ini,module,stdlib,magusfile",
+        "title": "ini module"
+      }
+    },
+    {
       "id": "doc:docs/reference/buzz/json.md",
       "kind": "doc",
       "label": "docs/reference/buzz/json.md",
@@ -3305,6 +3341,18 @@
         "section": "reference",
         "tags": "json,module,stdlib,magusfile",
         "title": "json module"
+      }
+    },
+    {
+      "id": "doc:docs/reference/buzz/log.md",
+      "kind": "doc",
+      "label": "docs/reference/buzz/log.md",
+      "source": "docs/reference/buzz/log.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "log,module,stdlib,magusfile",
+        "title": "log module"
       }
     },
     {
@@ -3425,6 +3473,18 @@
         "section": "reference",
         "tags": "toml,module,stdlib,magusfile",
         "title": "toml module"
+      }
+    },
+    {
+      "id": "doc:docs/reference/buzz/url.md",
+      "kind": "doc",
+      "label": "docs/reference/buzz/url.md",
+      "source": "docs/reference/buzz/url.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "url,module,stdlib,magusfile",
+        "title": "url module"
       }
     },
     {
@@ -6941,6 +7001,15 @@
       }
     },
     {
+      "id": "file:std/examples/strings/compare.buzz",
+      "kind": "file",
+      "label": "std/examples/strings/compare.buzz",
+      "source": "std/examples/strings/compare.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
       "id": "file:std/examples/strings/ellipsis.buzz",
       "kind": "file",
       "label": "std/examples/strings/ellipsis.buzz",
@@ -8266,7 +8335,7 @@
       "kind": "function",
       "label": "computeCSP",
       "doc": "computeCSP builds one page's Content-Security-Policy meta content (see Site.csp/ Site.cspHome for which pages get which img-src). default-src is 'self', not 'none': manifest-src, the same-origin <link rel=prefetch> hover-warm, and the service worker registration all fall back to default-src (via worker-src -> child-src), and 'none' would break the service worker outright. 'self' is the minimal fallback that keeps them working without opening any directive wider than same-origin. Every directive the site nee",
-      "source": "docs/lib/csp.buzz:96",
+      "source": "docs/lib/csp.buzz:97",
       "attrs": {
         "exported": "true"
       }
@@ -8276,7 +8345,7 @@
       "kind": "function",
       "label": "cspForRedirectStub",
       "doc": "cspForRedirectStub builds the CSP a plain alias redirect page needs - distinct from the site-wide policy because a stub (aliasStub) loads no stylesheet, image, or external script; its only content is one inline <script> that differs per stub, so it cannot share the site-wide hash list. script is the exact text redirectScript(rel) (lib/html.buzz) produces, so the hash always matches what ships.",
-      "source": "docs/lib/csp.buzz:118",
+      "source": "docs/lib/csp.buzz:119",
       "attrs": {
         "exported": "true"
       }
@@ -8286,7 +8355,7 @@
       "kind": "function",
       "label": "extractInlineScripts",
       "doc": "extractInlineScripts pulls the text of every attribute-less `<script>...</script>` block out of html, in order. Matches only the literal \"<script>\" open tag: a `<script src=...>` is an external load already covered by script-src 'self', not a hash-source candidate.",
-      "source": "docs/lib/csp.buzz:35",
+      "source": "docs/lib/csp.buzz:36",
       "attrs": {
         "exported": "true"
       }
@@ -8296,7 +8365,7 @@
       "kind": "function",
       "label": "fileSha256",
       "doc": "fileSha256 reads path and returns its lowercase-hex SHA-256 digest. Single place file bytes get hashed (writeServiceWorker's cache-version stamp and writeSiteManifest's per-asset integrity list), so the two never compute \"the same hash\" two different ways.",
-      "source": "docs/lib/csp.buzz:18",
+      "source": "docs/lib/csp.buzz:19",
       "attrs": {
         "exported": "true"
       }
@@ -8306,7 +8375,7 @@
       "kind": "function",
       "label": "scriptHash",
       "doc": "scriptHash returns a CSP `sha256-<base64>` source for js's exact text (the same bytes a browser hashes against a hash-source script-src). crypto.hash returns raw digest bytes, so .hex() renders the lowercase hex this decodes; CSP hash-sources are base64, so hexDecode back to raw digest bytes before base64-encoding.",
-      "source": "docs/lib/csp.buzz:27",
+      "source": "docs/lib/csp.buzz:28",
       "attrs": {
         "exported": "true"
       }
@@ -9216,21 +9285,21 @@
       "kind": "function",
       "label": "esbuild",
       "doc": "esbuild runs the pinned esbuild binary with an exact argv.  os\\exec, not os\\execute([\"sh\", \"-c\", ...]): the shell form spawned a second process per call purely to parse a string this code had just finished building, and every path went through it as an interpolated command-line token rather than an argument. It also swallowed failures - os\\execute RETURNS the exit code, and none of these calls read it, so a broken bundle wrote nothing and the render carried on to fail later somewhere else. os\\exec raises on",
-      "source": "docs/render.buzz:95"
+      "source": "docs/render.buzz:94"
     },
     {
       "id": "function:docs/render.buzz:generateJsBundles",
       "kind": "function",
       "label": "generateJsBundles",
       "doc": "generateJsBundles builds the committed browser bundles that import npm packages. pnpm is pinned by package.json and pnpm-lock.yaml, and --frozen-lockfile runs every time rather than behind an isDir check: an interrupted install leaves a node_modules that exists but is incomplete, and the guard read that as ready and fed esbuild a half tree. See the install() note in magusfile.buzz.",
-      "source": "docs/render.buzz:390"
+      "source": "docs/render.buzz:389"
     },
     {
       "id": "function:docs/render.buzz:site_publish",
       "kind": "function",
       "label": "site_publish",
       "doc": "site_publish is the cacheable publication unit used by docs:site-generate. Keep every output that belongs to the completed site in this one phase: the page tree, pnpm-backed vendor bundles, the integrity manifest, and (only for rw) the URL ledger.",
-      "source": "docs/render.buzz:378",
+      "source": "docs/render.buzz:377",
       "attrs": {
         "exported": "true"
       }
@@ -9240,7 +9309,7 @@
       "kind": "function",
       "label": "site_render",
       "doc": "site_render rebuilds gen/ from ../docs and the root README. Pure function of git history (footers) and the source tree - reproducible and gate-stable.",
-      "source": "docs/render.buzz:142",
+      "source": "docs/render.buzz:141",
       "attrs": {
         "exported": "true"
       }
@@ -9250,14 +9319,14 @@
       "kind": "function",
       "label": "walk",
       "doc": "Recursively walk docs/ (the render reads its co-located markdown; the SSG's own root children - gen/, src/, tour/, node_modules/, MAGUS.md - are skipped at the root).",
-      "source": "docs/render.buzz:114"
+      "source": "docs/render.buzz:113"
     },
     {
       "id": "function:docs/render.buzz:walkBlog",
       "kind": "function",
       "label": "walkBlog",
       "doc": "walkBlog visits every blog/*.md post (skipping index.md and _underscored fixtures) in fs.list's sorted order, so the walk is deterministic. Posts are flat: no nested subdirs under blog/.",
-      "source": "docs/render.buzz:102"
+      "source": "docs/render.buzz:101"
     },
     {
       "id": "function:docs/site/config.buzz:magusConfig",
@@ -11087,7 +11156,7 @@
       "kind": "function",
       "label": "advice_test",
       "doc": "Runs the PR advisors' `test \"...\" {}` blocks.  They are the only .buzz sources in this tree that parse standalone: everything else imports magus/magus\\spell and uses embedding-only constructs, which is why the old standalone-Buzz test targets were deleted rather than repointed. The advisors run under a plain `magus buzz` in CI, so upstream-strict is exactly the parse they need checked, and `-t` is the runner.  Run from each script's own directory, not the project root, because they do `import \"advice\"` for",
-      "source": "magusfile.buzz:1546",
+      "source": "magusfile.buzz:1552",
       "attrs": {
         "exported": "true"
       }
@@ -11097,7 +11166,7 @@
       "kind": "function",
       "label": "bindings_generate",
       "doc": "Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.",
-      "source": "magusfile.buzz:805",
+      "source": "magusfile.buzz:811",
       "attrs": {
         "exported": "true"
       }
@@ -11107,7 +11176,7 @@
       "kind": "function",
       "label": "build",
       "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
-      "source": "magusfile.buzz:1661",
+      "source": "magusfile.buzz:1667",
       "attrs": {
         "exported": "true"
       }
@@ -11123,7 +11192,7 @@
       "id": "function:magusfile.buzz:build_release_variant",
       "kind": "function",
       "label": "build_release_variant",
-      "source": "magusfile.buzz:1110"
+      "source": "magusfile.buzz:1116"
     },
     {
       "id": "function:magusfile.buzz:built_by",
@@ -11137,7 +11206,7 @@
       "kind": "function",
       "label": "buzz_test",
       "doc": "Runs the in-file `test \"...\" {}` blocks in this repo's own root Buzz modules, through magus's embedded engine.  NOT the buzz spell's buzz-test op: that one forks the UPSTREAM `buzz` toolchain, which is not reliably on PATH, and it globs `find . -name '*.buzz'` from the project root - which here would sweep in magusfile.buzz, releaser.buzz, every spell and every worktree copy, none of which run standalone (they import magus host modules the bare toolchain cannot resolve). `magus buzz -t` is always present an",
-      "source": "magusfile.buzz:1624",
+      "source": "magusfile.buzz:1630",
       "attrs": {
         "exported": "true"
       }
@@ -11164,7 +11233,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "Runs the CI gates through their declared dependencies.",
-      "source": "magusfile.buzz:1755",
+      "source": "magusfile.buzz:1761",
       "attrs": {
         "exported": "true"
       }
@@ -11174,7 +11243,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.",
-      "source": "magusfile.buzz:1831",
+      "source": "magusfile.buzz:1837",
       "attrs": {
         "exported": "true"
       }
@@ -11191,7 +11260,7 @@
       "kind": "function",
       "label": "completion_test",
       "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell. Part of ci, and it REQUIRES a docker daemon rather than skipping without one: a gate that silently skips when a tool is missing is how the zsh recipe stayed broken - it told users to append a script to ~/.zshrc that registers nothing, and nothing ever ran it to find out. Its declared footprint keeps the cost off every run: affected only reaches it when the completion scripts or their checks change.  One image per she",
-      "source": "magusfile.buzz:1776",
+      "source": "magusfile.buzz:1782",
       "attrs": {
         "exported": "true"
       }
@@ -11201,7 +11270,7 @@
       "kind": "function",
       "label": "compress_cgo_test",
       "doc": "Runs internal/compress's tests under the CGO tags, which the ordinary test target cannot reach.  `go-test` passes no tags, so it compiles the pure-Go fallbacks and never the ~470 lines of zstd_cgo.go and xz_cgo.go - exactly the files a release binary ships. The coverage figure hid it: 78.9% while the shipped half sat at zero.  It cost correctness. The cgo zstd reader dropped ZSTD_decompressStream's hint, so a stream cut mid-frame returned io.EOF with a NIL error and a truncated cache artifact extracted as a",
-      "source": "magusfile.buzz:1819",
+      "source": "magusfile.buzz:1825",
       "attrs": {
         "exported": "true"
       }
@@ -11211,7 +11280,7 @@
       "kind": "function",
       "label": "config_generate",
       "doc": "Regenerates the CLI config-flag plumbing from internal/config/config.go. One generator invocation, four trees: the flag/bind plumbing beside the CLI, the schema field list, and the env applier next to config itself. All four are declared - undeclared they classified as ordinary source, so magus told a reader they were safe to hand-edit.",
-      "source": "magusfile.buzz:862",
+      "source": "magusfile.buzz:868",
       "attrs": {
         "exported": "true"
       }
@@ -11228,7 +11297,7 @@
       "kind": "function",
       "label": "deploy_generate",
       "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/.  It lives here rather than in the Pages workflow because that workflow is meant to be thin - set up a toolchain, name targets, upload the artifact - and the layout below is portable logic that would otherwise be GitHub-specific shell. It is also what makes the deploy reproducible locally: run the same three commands, then serve gen/site, and what you see is what publishe",
-      "source": "magusfile.buzz:1970",
+      "source": "magusfile.buzz:1976",
       "attrs": {
         "exported": "true"
       }
@@ -11248,7 +11317,7 @@
       "kind": "function",
       "label": "escape_module_path",
       "doc": "Applies the module cache's case encoding: an uppercase letter becomes \"!\" plus its lowercase form, so github.com/Masterminds/sprig is stored at github.com/!masterminds/sprig. Without this every capitalised module path looks unlicensed - a false \"missing license\" that would abort a release for no reason.",
-      "source": "magusfile.buzz:1098"
+      "source": "magusfile.buzz:1104"
     },
     {
       "id": "function:magusfile.buzz:exact_release_tag",
@@ -11269,7 +11338,7 @@
       "kind": "function",
       "label": "format",
       "doc": "Regenerates, then formats Go, tidies `go.mod`, and formats Markdown. dprint rather than prettier because it needs no Node in the format path, and rather than biome because biome does not read Markdown at all. Every project with Markdown carries its own dprint.json and runs the op itself; see this project's for what a root-started run covers.",
-      "source": "magusfile.buzz:1737",
+      "source": "magusfile.buzz:1743",
       "attrs": {
         "exported": "true"
       }
@@ -11279,7 +11348,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd). Drift = a path whose bytes the generators changed, measured by hashing before and after rather than by asking whether the tree is clean, so the gate works on a dirty tree. An uncommitted-but-current generated file still passes: its bytes do not move.",
-      "source": "magusfile.buzz:915",
+      "source": "magusfile.buzz:921",
       "attrs": {
         "exported": "true"
       }
@@ -11299,14 +11368,14 @@
       "kind": "function",
       "label": "goarm_level",
       "doc": "Builds one (goos, goarch) release binary and archives it into dist/, writing a standard one-line <asset>.sha256 sidecar alongside it (sha256sum-compatible format). No cross-job aggregation needed: CD's publish job later does `cat dist/*.sha256 > dist/SHA256SUMS`, a plain shell one-liner, not a magus target. release-build's cgo and static (charm) modes both call this, differing only in CGO_ENABLED and the asset suffix. Maps an ASSET architecture token to the GOARM level it implies, or \"\" for the arches that",
-      "source": "magusfile.buzz:1018"
+      "source": "magusfile.buzz:1024"
     },
     {
       "id": "function:magusfile.buzz:graph_generate",
       "kind": "function",
       "label": "graph_generate",
       "doc": "Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects. Written into gen/ because they are generated, not authored: the knowledge graph previously sat at docs/graph.json as a hand-run export with no generating target at all, which made it stale by construction with nothing to say so. Whole-workspace scope is why this lives at the root rather than in docs/ - a describe from inside a pro",
-      "source": "magusfile.buzz:889",
+      "source": "magusfile.buzz:895",
       "attrs": {
         "exported": "true"
       }
@@ -11369,7 +11438,7 @@
       "kind": "function",
       "label": "index_generate",
       "doc": "Renders MAGUS.md via `magus describe graph`.",
-      "source": "magusfile.buzz:876",
+      "source": "magusfile.buzz:882",
       "attrs": {
         "exported": "true"
       }
@@ -11385,7 +11454,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "Formats and builds the linter first, then golangci-lint, go vet, markdownlint, and shellcheck. STATIC ANALYSIS only - govulncheck lives in `security` with the other scanners, because a scanner's answer changes when its advisory database does, with no edit to this tree. golangci-lint USED to go through the go spell's op so the spell's version probe (mgs_getVersionProbes) reached the cache key - without it a linter upgrade changes which code passes while every cache entry replays the old verdict. It no longer",
-      "source": "magusfile.buzz:1707",
+      "source": "magusfile.buzz:1713",
       "attrs": {
         "exported": "true"
       }
@@ -11395,7 +11464,7 @@
       "kind": "function",
       "label": "lint_build",
       "doc": "Builds ./custom-gcl, the golangci-lint carrying this repo's own linters. golangci-lint compiles plugins in rather than loading them at runtime, so an in-repo rule only runs through a binary built here.  The build runs in libs/testsprawl because `golangci-lint custom` reads .custom-gcl.yml from its working directory and takes no config flag. That file lives with the linter it declares; `destination: ../..` puts the binary back at the root, where .golangci.yml and lint expect it.  No declared outputs, for go-",
-      "source": "magusfile.buzz:1682",
+      "source": "magusfile.buzz:1688",
       "attrs": {
         "exported": "true"
       }
@@ -11429,14 +11498,14 @@
       "kind": "function",
       "label": "missing_input",
       "doc": "missing_input phrases a deploy-generate precondition that ANOTHER project owns.  Naming one single-project command teaches the wrong habit: the reader runs it, gets the next precondition, runs another, and learns the set by failing once per producer. So name every producer in one command. `magus run <target> [project...]` takes a LIST - `magus run build docs console` is one dispatch over both - which is the idiom this message teaches.  Deliberately NOT \"magus affected build\" or \"magus run build /\". Both wou",
-      "source": "magusfile.buzz:1931"
+      "source": "magusfile.buzz:1937"
     },
     {
       "id": "function:magusfile.buzz:mocks_generate",
       "kind": "function",
       "label": "mocks_generate",
       "doc": "Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir. Mocks are committed and drift-gated like every other generated tree; mockery is pinned in the go.mod tool block.",
-      "source": "magusfile.buzz:829",
+      "source": "magusfile.buzz:835",
       "attrs": {
         "exported": "true"
       }
@@ -11452,7 +11521,7 @@
       "kind": "function",
       "label": "postflight",
       "doc": "Renders the insight report (hotspots, affinity, ownership, trend) to stdout. Local only: no workflow invokes this target, and ci-outcome.buzz's volatility-lens step summary is the CI-facing equivalent now. It used to also append to a host path under the `gha` charm; that branch was unreachable (nothing set MAGUS_INSIGHT_OUTPUT_PATH or ran this target in CI) and was removed.",
-      "source": "magusfile.buzz:907",
+      "source": "magusfile.buzz:913",
       "attrs": {
         "exported": "true"
       }
@@ -11476,20 +11545,20 @@
       "kind": "function",
       "label": "read_module_license",
       "doc": "Reads one module's license text from the module cache, or \"\" when none is present.",
-      "source": "magusfile.buzz:1084"
+      "source": "magusfile.buzz:1090"
     },
     {
       "id": "function:magusfile.buzz:rebuild_console",
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json. Always let pnpm validate the install, matching console/magusfile.buzz. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready and handed the missing packages to esbuild. On a warm tree --frozen-lockfile is about a second and",
-      "source": "magusfile.buzz:1893"
+      "source": "magusfile.buzz:1899"
     },
     {
       "id": "function:magusfile.buzz:release",
       "kind": "function",
       "label": "release",
-      "source": "magusfile.buzz:1340",
+      "source": "magusfile.buzz:1346",
       "attrs": {
         "exported": "true"
       }
@@ -11499,7 +11568,7 @@
       "kind": "function",
       "label": "release_build",
       "doc": "Builds one release binary for one platform. Default is STATIC (CGO_ENABLED=0), and the `dynamic` charm (`magus run release-build:dynamic`) opts into the cgo build.  The default is static so that every layer says the same thing: the bare command produces the bare asset, and that asset is the one that runs anywhere - no loader, no glibc, no system libzstd. It used to be inverted, with the bare command producing the cgo build while the bare ARCHIVE was the static one, so `release-build` and `magus_<v>_<os>_<ar",
-      "source": "magusfile.buzz:1254",
+      "source": "magusfile.buzz:1260",
       "attrs": {
         "exported": "true"
       }
@@ -11509,7 +11578,7 @@
       "kind": "function",
       "label": "release_sign",
       "doc": "Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos).",
-      "source": "magusfile.buzz:1297",
+      "source": "magusfile.buzz:1303",
       "attrs": {
         "exported": "true"
       }
@@ -11519,14 +11588,14 @@
       "kind": "function",
       "label": "release_target_platform",
       "doc": "Resolves which platform to build: the explicit (goos, goarch) args when given, else the current runner's own native platform. So a bare `magus run release-build` (with or without the static charm) builds exactly one binary — the one you're standing on — never a silent \"all 5\" surprise.",
-      "source": "magusfile.buzz:1218"
+      "source": "magusfile.buzz:1224"
     },
     {
       "id": "function:magusfile.buzz:rerender_docs",
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:1905"
+      "source": "magusfile.buzz:1911"
     },
     {
       "id": "function:magusfile.buzz:resolvable",
@@ -11556,7 +11625,7 @@
       "kind": "function",
       "label": "serve",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than",
-      "source": "magusfile.buzz:2019",
+      "source": "magusfile.buzz:2025",
       "attrs": {
         "exported": "true"
       }
@@ -11566,7 +11635,7 @@
       "kind": "function",
       "label": "skills_generate",
       "doc": "Reinstalls the agent skills from their embedded sources in cmd/magus/skills.  The installed copies are GENERATED, and declaring them says so: without this they classified as ordinary source, so `magus describe file .claude/skills/...` reported a hand-editable file and the agent guard stayed silent on the one edit that is always wrong. CLAUDE.md has said \"edit the sources, not the installed copies\" all along; this is the declaration that makes the tooling say it too.  AGENTS.md is absent here, and no longer",
-      "source": "magusfile.buzz:850",
+      "source": "magusfile.buzz:856",
       "attrs": {
         "exported": "true"
       }
@@ -11576,7 +11645,7 @@
       "kind": "function",
       "label": "spells_generate",
       "doc": "Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen), the Buzz value-type mirrors (internal/spellruntime/gen/types) and the per-module host declarations (internal/spellruntime/gen/decls), all driven by the go:generate directives in internal/spellruntime.  Both trees are declared: undeclared, magus classified them as ordinary source, so `magus describe file` told a reader a generated file was safe to hand-edit and the agent guard's generated-file advisory stayed silent on every one of",
-      "source": "magusfile.buzz:819",
+      "source": "magusfile.buzz:825",
       "attrs": {
         "exported": "true"
       }
@@ -11586,7 +11655,7 @@
       "kind": "function",
       "label": "tapes",
       "doc": "Records every VHS tape in tapes/ into assets/gen/. Each tape drives a real magus binary through a real terminal, so the GIFs are documentation that cannot quietly go stale the way a pasted transcript does - re-record and the drift is visible.  Opt-in, never wired into `generate` or `ci`: a render takes tens of seconds, needs vhs (and the ttyd/ffmpeg it pulls in) on PATH, and produces a different file every time. Run it when the CLI's output actually changes, then commit the result.  The GIFs are declared ou",
-      "source": "magusfile.buzz:978",
+      "source": "magusfile.buzz:984",
       "attrs": {
         "exported": "true"
       }
@@ -11596,7 +11665,7 @@
       "kind": "function",
       "label": "test",
       "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
-      "source": "magusfile.buzz:1556",
+      "source": "magusfile.buzz:1562",
       "attrs": {
         "exported": "true"
       }
@@ -11606,14 +11675,14 @@
       "kind": "function",
       "label": "total_coverage",
       "doc": "Renders a Go coverage badge locally (no third-party service, no network).",
-      "source": "magusfile.buzz:1526"
+      "source": "magusfile.buzz:1532"
     },
     {
       "id": "function:magusfile.buzz:types_generate",
       "kind": "function",
       "label": "types_generate",
-      "doc": "Regenerates the runtime BuzzObject maps before anything imports a host binding. Its reflection lives only in magus-utils while writing this Go file; the emitted methods use direct field access, so Magus never reflects at a Buzz boundary.",
-      "source": "magusfile.buzz:799",
+      "doc": "Regenerates the runtime BuzzObject maps before anything imports a host binding. Its reflection lives only in magus-utils while writing this Go file; the emitted methods use direct field access, so Magus never reflects at a Buzz boundary. The enum helpers (Values/Valid/String for each boundaryEnum) come from a SECOND directive, and it lives in cmd/magus-utils rather than in types/, so `go generate ./types` never ran it. Adding a boundaryEnums entry therefore left types/enum_gen.go and spells/enum_gen.go stal",
+      "source": "magusfile.buzz:804",
       "attrs": {
         "exported": "true"
       }
@@ -11629,7 +11698,7 @@
       "kind": "function",
       "label": "watch",
       "doc": "Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.",
-      "source": "magusfile.buzz:1512",
+      "source": "magusfile.buzz:1518",
       "attrs": {
         "exported": "true"
       }
@@ -11646,7 +11715,7 @@
       "kind": "function",
       "label": "write_notices",
       "doc": "Writes THIRD-PARTY-NOTICES beside the staged binary, reading the module list OUT OF THAT BINARY rather than out of go.mod.  That distinction is the whole point. The two variants link different modules - the dynamic build carries ebitengine/purego for FFI, the static build carries ulikunitz/xz for pure-Go compression, and no shipped artifact contains both. A notices file resolved from go.mod would name modules that are not in the archive it sits in, which is the precise inaccuracy this file exists to prevent",
-      "source": "magusfile.buzz:1041"
+      "source": "magusfile.buzz:1047"
     },
     {
       "id": "function:proto/magusfile.buzz:ci",
@@ -13869,9 +13938,49 @@
       }
     },
     {
-      "id": "import:encoding",
+      "id": "import:encoding/base64",
       "kind": "import",
-      "label": "encoding",
+      "label": "encoding/base64",
+      "attrs": {
+        "diagnostic": "MGS7001"
+      }
+    },
+    {
+      "id": "import:encoding/hex",
+      "kind": "import",
+      "label": "encoding/hex",
+      "attrs": {
+        "diagnostic": "MGS7001"
+      }
+    },
+    {
+      "id": "import:encoding/json",
+      "kind": "import",
+      "label": "encoding/json",
+      "attrs": {
+        "diagnostic": "MGS7001"
+      }
+    },
+    {
+      "id": "import:encoding/url",
+      "kind": "import",
+      "label": "encoding/url",
+      "attrs": {
+        "diagnostic": "MGS7001"
+      }
+    },
+    {
+      "id": "import:encoding/xml",
+      "kind": "import",
+      "label": "encoding/xml",
+      "attrs": {
+        "diagnostic": "MGS7001"
+      }
+    },
+    {
+      "id": "import:encoding/yaml",
+      "kind": "import",
+      "label": "encoding/yaml",
       "attrs": {
         "diagnostic": "MGS7001"
       }
@@ -14007,14 +14116,6 @@
       "id": "import:iocore",
       "kind": "import",
       "label": "iocore",
-      "attrs": {
-        "diagnostic": "MGS7001"
-      }
-    },
-    {
-      "id": "import:json",
-      "kind": "import",
-      "label": "json",
       "attrs": {
         "diagnostic": "MGS7001"
       }
@@ -14340,22 +14441,6 @@
       }
     },
     {
-      "id": "import:xml",
-      "kind": "import",
-      "label": "xml",
-      "attrs": {
-        "diagnostic": "MGS7001"
-      }
-    },
-    {
-      "id": "import:yaml",
-      "kind": "import",
-      "label": "yaml",
-      "attrs": {
-        "diagnostic": "MGS7001"
-      }
-    },
-    {
       "id": "method:archive.compress",
       "kind": "method",
       "label": "archive.compress",
@@ -14365,12 +14450,66 @@
       }
     },
     {
+      "id": "method:archive.list",
+      "kind": "method",
+      "label": "archive.list",
+      "doc": "List the archive at src without extracting it, as entries of {name, size, is_dir} sorted by name. Use it to check what an archive holds - that a release tarball carries the binary you expect, or how large an entry is - before paying to extract it. Symlinks and devices are skipped, matching uncompress. opts keys: threads (int, parallel decode workers; 0 or omitted = auto).",
+      "attrs": {
+        "buzz": "archive\\list(src, [opts]) → [ArchiveEntry]"
+      }
+    },
+    {
+      "id": "method:archive.read_file",
+      "kind": "method",
+      "label": "archive.read_file",
+      "doc": "Return the contents of the single entry named name inside the archive at src, without extracting anything to disk. Reading one manifest out of a release tarball is the usual reason. Raises when name is not in the archive, or when the entry exceeds max_size. opts keys: max_size (int, byte cap on the entry, default 10 GiB), threads (int, parallel decode workers; 0 or omitted = auto).",
+      "attrs": {
+        "buzz": "archive\\readFile(src, name, [opts]) → string"
+      }
+    },
+    {
       "id": "method:archive.uncompress",
       "kind": "method",
       "label": "archive.uncompress",
       "doc": "Extract the archive at src into dest. Returns a table with fields: files (extracted paths relative to dest) and bytes (total uncompressed bytes written). opts keys: strip (int, strip N leading path components), max_size (int, uncompressed byte cap, default 10 GiB), threads (int, parallel decode workers; 0 or omitted = auto).",
       "attrs": {
         "buzz": "archive\\uncompress(src, dest, [opts]) → UncompressResult"
+      }
+    },
+    {
+      "id": "method:base64.decode",
+      "kind": "method",
+      "label": "base64.decode",
+      "doc": "Decode a standard (padded) base64 string; errors on malformed input.",
+      "attrs": {
+        "buzz": "base64\\decode(s) → string"
+      }
+    },
+    {
+      "id": "method:base64.encode",
+      "kind": "method",
+      "label": "base64.encode",
+      "doc": "Encode data as standard (padded) base64.",
+      "attrs": {
+        "buzz": "base64\\encode(data) → string"
+      }
+    },
+    {
+      "id": "method:base64.url_decode",
+      "kind": "method",
+      "label": "base64.url_decode",
+      "doc": "Decode a URL-safe (padded) base64 string; errors on malformed input.",
+      "attrs": {
+        "buzz": "base64\\urlDecode(s) → string"
+      }
+    },
+    {
+      "id": "method:base64.url_encode",
+      "kind": "method",
+      "label": "base64.url_encode",
+      "doc": "Encode data as URL-safe (padded) base64.",
+      "attrs": {
+        "buzz": "base64\\urlEncode(data) → string"
       }
     },
     {
@@ -14644,93 +14783,21 @@
       }
     },
     {
-      "id": "method:encoding.base64_decode",
+      "id": "method:csv.parse",
       "kind": "method",
-      "label": "encoding.base64_decode",
-      "doc": "Decode a standard (padded) base64 string; errors on malformed input.",
+      "label": "csv.parse",
+      "doc": "Parse delimiter-separated text into a list of rows, each a list of fields. ANNOTATE THE RESULT `[[str]]` - the return declares as `any`, and Buzz refuses field access on an unannotated `any`, so `final rows: [[str]] = csv\\parse(...)` is what makes rows.len() and rows[0][1] compile. Quoted fields, embedded delimiters, and embedded newlines are handled per RFC 4180. delimiter defaults to \",\" - pass \"\\t\" for TSV. When comment is a single character, lines starting with it are skipped. Raises when a row has a di",
       "attrs": {
-        "buzz": "encoding\\base64Decode(s) → string"
+        "buzz": "csv\\parse(s, [delimiter], [comment]) → any"
       }
     },
     {
-      "id": "method:encoding.base64_encode",
+      "id": "method:csv.stringify",
       "kind": "method",
-      "label": "encoding.base64_encode",
-      "doc": "Encode data as standard (padded) base64.",
+      "label": "csv.stringify",
+      "doc": "Render rows (a list of lists of fields) as delimiter-separated text, quoting any field that needs it. delimiter defaults to \",\". The output ends with a newline, so it is ready to write.",
       "attrs": {
-        "buzz": "encoding\\base64Encode(data) → string"
-      }
-    },
-    {
-      "id": "method:encoding.base64url_decode",
-      "kind": "method",
-      "label": "encoding.base64url_decode",
-      "doc": "Decode a URL-safe (padded) base64 string; errors on malformed input.",
-      "attrs": {
-        "buzz": "encoding\\base64urlDecode(s) → string"
-      }
-    },
-    {
-      "id": "method:encoding.base64url_encode",
-      "kind": "method",
-      "label": "encoding.base64url_encode",
-      "doc": "Encode data as URL-safe (padded) base64.",
-      "attrs": {
-        "buzz": "encoding\\base64urlEncode(data) → string"
-      }
-    },
-    {
-      "id": "method:encoding.build_url",
-      "kind": "method",
-      "label": "encoding.build_url",
-      "doc": "Build a URL string from a URL object - the same shape parse_url returns, so the two round-trip. Missing fields are treated as empty.",
-      "attrs": {
-        "buzz": "encoding\\buildUrl(parts) → string"
-      }
-    },
-    {
-      "id": "method:encoding.hex_decode",
-      "kind": "method",
-      "label": "encoding.hex_decode",
-      "doc": "Decode a hex string; errors on malformed input.",
-      "attrs": {
-        "buzz": "encoding\\hexDecode(s) → string"
-      }
-    },
-    {
-      "id": "method:encoding.hex_encode",
-      "kind": "method",
-      "label": "encoding.hex_encode",
-      "doc": "Encode data as lowercase hex.",
-      "attrs": {
-        "buzz": "encoding\\hexEncode(data) → string"
-      }
-    },
-    {
-      "id": "method:encoding.parse_url",
-      "kind": "method",
-      "label": "encoding.parse_url",
-      "doc": "Parse a URL string into {scheme, host, port, path, query, fragment}; errors on malformed input.",
-      "attrs": {
-        "buzz": "encoding\\parseUrl(raw_url) → URL"
-      }
-    },
-    {
-      "id": "method:encoding.url_decode",
-      "kind": "method",
-      "label": "encoding.url_decode",
-      "doc": "Decode a percent-encoded URL query component; errors on malformed input.",
-      "attrs": {
-        "buzz": "encoding\\urlDecode(s) → string"
-      }
-    },
-    {
-      "id": "method:encoding.url_encode",
-      "kind": "method",
-      "label": "encoding.url_encode",
-      "doc": "Percent-encode s for use in a URL query component.",
-      "attrs": {
-        "buzz": "encoding\\urlEncode(s) → string"
+        "buzz": "csv\\stringify(rows, [delimiter]) → string"
       }
     },
     {
@@ -15004,12 +15071,39 @@
       }
     },
     {
+      "id": "method:fs.remove",
+      "kind": "method",
+      "label": "fs.remove",
+      "doc": "Remove a single file or empty directory (no error if missing). Unlike remove_all it refuses a non-empty directory, so a wrong path costs one error rather than a recursive delete.",
+      "attrs": {
+        "buzz": "fs\\remove(path)"
+      }
+    },
+    {
       "id": "method:fs.remove_all",
       "kind": "method",
       "label": "fs.remove_all",
       "doc": "Recursively remove path (no error if missing).",
       "attrs": {
         "buzz": "fs\\removeAll(path)"
+      }
+    },
+    {
+      "id": "method:fs.rename",
+      "kind": "method",
+      "label": "fs.rename",
+      "doc": "Move or rename src to dst, creating dst's parent directory if needed. Within one filesystem this is atomic, which is what makes it the last step of a write-to-temp-then-swap. Across filesystems the underlying rename fails rather than silently copying; copy_file plus remove is the explicit form for that.",
+      "attrs": {
+        "buzz": "fs\\rename(src, dst)"
+      }
+    },
+    {
+      "id": "method:fs.size",
+      "kind": "method",
+      "label": "fs.size",
+      "doc": "Return path's size in bytes. Raises when path does not exist; stat returns the whole FileInfo when more than the size is wanted.",
+      "attrs": {
+        "buzz": "fs\\size(path) → int"
       }
     },
     {
@@ -15040,6 +15134,15 @@
       }
     },
     {
+      "id": "method:fs.temp_file",
+      "kind": "method",
+      "label": "fs.temp_file",
+      "doc": "Create a new empty temporary file (in os.TempDir()) with an optional name prefix and return its path. The file is left in place for the caller to write and remove; temp_dir is the form for a whole tree.",
+      "attrs": {
+        "buzz": "fs\\tempFile([prefix]) → string"
+      }
+    },
+    {
       "id": "method:fs.walk",
       "kind": "method",
       "label": "fs.walk",
@@ -15067,6 +15170,15 @@
       }
     },
     {
+      "id": "method:fs.write_file_atomic",
+      "kind": "method",
+      "label": "fs.write_file_atomic",
+      "doc": "Write content to path so a reader sees either the old bytes or the new ones, never a partial file: the content goes to a temporary file in the same directory, is flushed to disk, then renamed over path. Use it for anything another process may read while a target runs - a generated file, a lockfile, a cache index. write_file is the cheaper form when nothing else is looking.",
+      "attrs": {
+        "buzz": "fs\\writeFileAtomic(path, content)"
+      }
+    },
+    {
       "id": "method:fs.write_lines",
       "kind": "method",
       "label": "fs.write_lines",
@@ -15076,30 +15188,57 @@
       }
     },
     {
+      "id": "method:hex.decode",
+      "kind": "method",
+      "label": "hex.decode",
+      "doc": "Decode a hex string; errors on malformed input.",
+      "attrs": {
+        "buzz": "hex\\decode(s) → string"
+      }
+    },
+    {
+      "id": "method:hex.encode",
+      "kind": "method",
+      "label": "hex.encode",
+      "doc": "Encode data as lowercase hex.",
+      "attrs": {
+        "buzz": "hex\\encode(data) → string"
+      }
+    },
+    {
+      "id": "method:http.download",
+      "kind": "method",
+      "label": "http.download",
+      "doc": "GET url and stream the response body straight to dest, returning the HTTP status. The body never becomes a Buzz string, so arbitrary binary (a release tarball, an image layer) survives intact and a large file costs no proportional memory. A non-2xx status writes nothing. Pair it with crypto.sha256_file to verify what you fetched before using it. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry arg",
+      "attrs": {
+        "buzz": "http\\download(url, dest, [headers], [opts], [retry]) → int"
+      }
+    },
+    {
       "id": "method:http.get",
       "kind": "method",
       "label": "http.get",
-      "doc": "Send a GET request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).",
+      "doc": "Send a GET request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry argument; without one the request runs exactly once.",
       "attrs": {
-        "buzz": "http\\get(url, [headers], [opts]) → HttpResponse"
+        "buzz": "http\\get(url, [headers], [opts], [retry]) → HttpResponse"
       }
     },
     {
       "id": "method:http.post",
       "kind": "method",
       "label": "http.post",
-      "doc": "Send a POST request with body; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).",
+      "doc": "Send a POST request with body; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry argument; without one the request runs exactly once.",
       "attrs": {
-        "buzz": "http\\post(url, body, [headers], [opts]) → HttpResponse"
+        "buzz": "http\\post(url, body, [headers], [opts], [retry]) → HttpResponse"
       }
     },
     {
       "id": "method:http.request",
       "kind": "method",
       "label": "http.request",
-      "doc": "Send an HTTP request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).",
+      "doc": "Send an HTTP request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry argument; without one the request runs exactly once.",
       "attrs": {
-        "buzz": "http\\request(method, url, [body], [headers], [opts]) → HttpResponse"
+        "buzz": "http\\request(method, url, [body], [headers], [opts], [retry]) → HttpResponse"
       }
     },
     {
@@ -15109,6 +15248,24 @@
       "doc": "Start a static file server in the background from an options map and return the bound port. opts keys: dir (string) serves a single directory; OR mounts (a map of URL-prefix -> dir, e.g. {\"/\": \"docs/gen\", \"/console/\": \"console/gen\"}) serves multiple roots where a request routes to the LONGEST matching prefix, so \"/console/\" wins over \"/\" for a /console/ path and the matched prefix is stripped before the file lookup. Exactly one of dir or mounts is required. port (int, optional) binds that port; 0 (the defau",
       "attrs": {
         "buzz": "http\\server(opts) → int"
+      }
+    },
+    {
+      "id": "method:ini.parse",
+      "kind": "method",
+      "label": "ini.parse",
+      "doc": "Parse INI text into {section: {key: value}}. ANNOTATE THE RESULT `{str: {str: str}}`, so the nested lookup cfg[\"user\"][\"name\"] compiles - the declared return only carries the outer map. Entries before the first [section] header are under the \"\" key, which is where a flat file like .npmrc puts everything. Values are always strings; a repeated key takes the last value.",
+      "attrs": {
+        "buzz": "ini\\parse(source) → map[string]any"
+      }
+    },
+    {
+      "id": "method:ini.stringify",
+      "kind": "method",
+      "label": "ini.stringify",
+      "doc": "Render {section: {key: value}} back to INI text. The \"\" section is written first with no header, then the rest sorted by name with their keys sorted, so the output is byte-stable and diffs cleanly.",
+      "attrs": {
+        "buzz": "ini\\stringify(sections) → string"
       }
     },
     {
@@ -15127,6 +15284,60 @@
       "doc": "Encode a value as a JSON string. With no indent (or \"\") the output is compact; pass an indent string (e.g. \"  \" or \"\\t\") for pretty, multi-line output.",
       "attrs": {
         "buzz": "json\\stringify(value, [indent]) → string"
+      }
+    },
+    {
+      "id": "method:log.at",
+      "kind": "method",
+      "label": "log.at",
+      "doc": "Log at a level chosen at runtime. Use it when the level is DATA rather than a literal - mapping a scanner's severity onto magus's levels, say - and the five named methods when it is not.",
+      "attrs": {
+        "buzz": "log\\at(level, message, [attrs])"
+      }
+    },
+    {
+      "id": "method:log.debug",
+      "kind": "method",
+      "label": "log.debug",
+      "doc": "Log at debug level (shown at -v).",
+      "attrs": {
+        "buzz": "log\\debug(message, [attrs])"
+      }
+    },
+    {
+      "id": "method:log.error",
+      "kind": "method",
+      "label": "log.error",
+      "doc": "Log at error level. This RECORDS a problem; it does not fail the target - raise (or os\\exit) is what ends a run.",
+      "attrs": {
+        "buzz": "log\\error(message, [attrs])"
+      }
+    },
+    {
+      "id": "method:log.info",
+      "kind": "method",
+      "label": "log.info",
+      "doc": "Log at info level (shown by default, hidden by -q).",
+      "attrs": {
+        "buzz": "log\\info(message, [attrs])"
+      }
+    },
+    {
+      "id": "method:log.trace",
+      "kind": "method",
+      "label": "log.trace",
+      "doc": "Log at trace level (shown at -vvv). For detail worth having when reconstructing a run and noise at any other time.",
+      "attrs": {
+        "buzz": "log\\trace(message, [attrs])"
+      }
+    },
+    {
+      "id": "method:log.warn",
+      "kind": "method",
+      "label": "log.warn",
+      "doc": "Log at warn level: something the reader should act on eventually.",
+      "attrs": {
+        "buzz": "log\\warn(message, [attrs])"
       }
     },
     {
@@ -15607,6 +15818,33 @@
       }
     },
     {
+      "id": "method:strings.collapse_ws",
+      "kind": "method",
+      "label": "strings.collapse_ws",
+      "doc": "Fold every run of whitespace in s into a single space and trim the ends, so a multi-line value reads as one clean line.",
+      "attrs": {
+        "buzz": "strings\\collapseWs(s) → string"
+      }
+    },
+    {
+      "id": "method:strings.compare",
+      "kind": "method",
+      "label": "strings.compare",
+      "doc": "Compare a and b lexicographically by byte, returning -1, 0, or 1. Buzz has no < operator on str, so this is what a list.sort comparator over strings is built from.",
+      "attrs": {
+        "buzz": "strings\\compare(a, b) → int"
+      }
+    },
+    {
+      "id": "method:strings.contains",
+      "kind": "method",
+      "label": "strings.contains",
+      "doc": "Report whether s contains substr.",
+      "attrs": {
+        "buzz": "strings\\contains(s, substr) → bool"
+      }
+    },
+    {
       "id": "method:strings.ellipsis",
       "kind": "method",
       "label": "strings.ellipsis",
@@ -15616,12 +15854,48 @@
       }
     },
     {
+      "id": "method:strings.fields",
+      "kind": "method",
+      "label": "strings.fields",
+      "doc": "Split s around runs of whitespace, discarding empties. Picking a column out of a tool's version banner is what this is for; str.split(\" \") cannot, because it yields an empty element per extra space.",
+      "attrs": {
+        "buzz": "strings\\fields(s) → []string"
+      }
+    },
+    {
       "id": "method:strings.kebab_case",
       "kind": "method",
       "label": "strings.kebab_case",
       "doc": "Convert s to kebab-case.",
       "attrs": {
         "buzz": "strings\\kebabCase(s) → string"
+      }
+    },
+    {
+      "id": "method:strings.lines",
+      "kind": "method",
+      "label": "strings.lines",
+      "doc": "Split s into lines on \\n, tolerating \\r\\n endings and dropping the trailing empty element a final newline would produce. Reading a command's stdout line by line is what this is for; fs.read_lines is the same shape over a file.",
+      "attrs": {
+        "buzz": "strings\\lines(s) → []string"
+      }
+    },
+    {
+      "id": "method:strings.pad_left",
+      "kind": "method",
+      "label": "strings.pad_left",
+      "doc": "Left-pad s with pad until it is length runes wide; s is returned unchanged when already that wide or wider. pad defaults to a space. Zero-padding a number so it sorts lexically is the usual reason.",
+      "attrs": {
+        "buzz": "strings\\padLeft(s, length, [pad]) → string"
+      }
+    },
+    {
+      "id": "method:strings.pad_right",
+      "kind": "method",
+      "label": "strings.pad_right",
+      "doc": "Right-pad s with pad until it is length runes wide; s is returned unchanged when already that wide or wider. pad defaults to a space. Aligning a column of output is the usual reason.",
+      "attrs": {
+        "buzz": "strings\\padRight(s, length, [pad]) → string"
       }
     },
     {
@@ -15640,6 +15914,42 @@
       "doc": "Convert s to snake_case.",
       "attrs": {
         "buzz": "strings\\snakeCase(s) → string"
+      }
+    },
+    {
+      "id": "method:strings.split_n",
+      "kind": "method",
+      "label": "strings.split_n",
+      "doc": "Split s on sep into at most n pieces, leaving any remaining separators in the final piece; n of -1 means no limit. Parsing a KEY=VALUE line whose value itself contains the separator needs this rather than str.split.",
+      "attrs": {
+        "buzz": "strings\\splitN(s, sep, n) → []string"
+      }
+    },
+    {
+      "id": "method:strings.trim_prefix",
+      "kind": "method",
+      "label": "strings.trim_prefix",
+      "doc": "Remove prefix from the start of s if present, otherwise return s unchanged. Buzz's str.trim only strips whitespace, so there is no built-in way to drop a known affix.",
+      "attrs": {
+        "buzz": "strings\\trimPrefix(s, prefix) → string"
+      }
+    },
+    {
+      "id": "method:strings.trim_suffix",
+      "kind": "method",
+      "label": "strings.trim_suffix",
+      "doc": "Remove suffix from the end of s if present, otherwise return s unchanged.",
+      "attrs": {
+        "buzz": "strings\\trimSuffix(s, suffix) → string"
+      }
+    },
+    {
+      "id": "method:strings.upper_first",
+      "kind": "method",
+      "label": "strings.upper_first",
+      "doc": "Uppercase the first rune of s, leaving the rest untouched. Unlike capitalize, which lowercases the remainder, this preserves interior casing - the form a label or breadcrumb built from an existing string needs.",
+      "attrs": {
+        "buzz": "strings\\upperFirst(s) → string"
       }
     },
     {
@@ -15739,6 +16049,42 @@
       "doc": "Encode a value to a TOML string; the top level must be a table/map, as TOML requires. Errors on unencodable input.",
       "attrs": {
         "buzz": "toml\\stringify(value) → string"
+      }
+    },
+    {
+      "id": "method:url.build",
+      "kind": "method",
+      "label": "url.build",
+      "doc": "Build a URL string from a URL object - the same shape parse returns, so the two round-trip. Missing fields are treated as empty.",
+      "attrs": {
+        "buzz": "url\\build(parts) → string"
+      }
+    },
+    {
+      "id": "method:url.decode",
+      "kind": "method",
+      "label": "url.decode",
+      "doc": "Decode a percent-encoded URL query component; errors on malformed input.",
+      "attrs": {
+        "buzz": "url\\decode(s) → string"
+      }
+    },
+    {
+      "id": "method:url.encode",
+      "kind": "method",
+      "label": "url.encode",
+      "doc": "Percent-encode s for use in a URL query component.",
+      "attrs": {
+        "buzz": "url\\encode(s) → string"
+      }
+    },
+    {
+      "id": "method:url.parse",
+      "kind": "method",
+      "label": "url.parse",
+      "doc": "Parse a URL string into {scheme, host, port, path, query, fragment}; errors on malformed input.",
+      "attrs": {
+        "buzz": "url\\parse(raw_url) → URL"
       }
     },
     {
@@ -15946,6 +16292,12 @@
       "doc": "Archive creation and extraction with automatic format detection. Supports tar, zip, tar.gz, tar.bz2, tar.xz, and tar.zst. Symlinks and non-regular entries are skipped."
     },
     {
+      "id": "module:base64",
+      "kind": "module",
+      "label": "base64",
+      "doc": "Base64 text codec (standard and URL-safe, both padded)."
+    },
+    {
       "id": "module:charm",
       "kind": "module",
       "label": "charm",
@@ -15958,10 +16310,10 @@
       "doc": "Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop) and Ed25519 signing."
     },
     {
-      "id": "module:encoding",
+      "id": "module:csv",
       "kind": "module",
-      "label": "encoding",
-      "doc": "Base64/hex/URL text codecs."
+      "label": "csv",
+      "doc": "Delimiter-separated tabular text (CSV, TSV) parsing and rendering."
     },
     {
       "id": "module:env",
@@ -15982,16 +16334,34 @@
       "doc": "Filesystem and path primitives."
     },
     {
+      "id": "module:hex",
+      "kind": "module",
+      "label": "hex",
+      "doc": "Hex text codec."
+    },
+    {
       "id": "module:http",
       "kind": "module",
       "label": "http",
-      "doc": "HTTP client with automatic retry on transient errors."
+      "doc": "HTTP client. Requests run ONCE unless given a retry policy."
+    },
+    {
+      "id": "module:ini",
+      "kind": "module",
+      "label": "ini",
+      "doc": "INI/properties config parsing and rendering (.npmrc, .gitconfig, .editorconfig)."
     },
     {
       "id": "module:json",
       "kind": "module",
       "label": "json",
       "doc": "JSON encode/decode."
+    },
+    {
+      "id": "module:log",
+      "kind": "module",
+      "label": "log",
+      "doc": "Emit a message at a level through magus's own logger, so it honors -q/-v/-vv, renders in the run's format, is redacted, and is captured in the run log. Unlike std\\print, which is an uncontrolled bare line."
     },
     {
       "id": "module:magus",
@@ -16033,7 +16403,7 @@
       "id": "module:strings",
       "kind": "module",
       "label": "strings",
-      "doc": "Case conversion and word helpers (camel/snake/kebab/Pascal, capitalize, words, ellipsis)."
+      "doc": "String helpers Buzz's builtins lack: case conversion, comparison, affix trimming, padding, and splitting into lines or fields."
     },
     {
       "id": "module:template",
@@ -16052,6 +16422,12 @@
       "kind": "module",
       "label": "toml",
       "doc": "TOML parse and stringify (TOML 1.0 via pelletier/go-toml/v2)."
+    },
+    {
+      "id": "module:url",
+      "kind": "module",
+      "label": "url",
+      "doc": "URL percent-encoding, parsing, and building."
     },
     {
       "id": "module:uuid",
@@ -16733,11 +17109,11 @@
       }
     },
     {
-      "id": "rationale:magusfile.buzz:1776:TODO",
+      "id": "rationale:magusfile.buzz:1782:TODO",
       "kind": "rationale",
       "label": "TODO",
       "doc": "zsh is uncovered - it has no official image (zshusers/zsh is community-run), so",
-      "source": "magusfile.buzz:1776"
+      "source": "magusfile.buzz:1782"
     },
     {
       "id": "rationale:spells/aws/s3-cache/spell.buzz:123:NOTE",
@@ -19536,6 +19912,14 @@
     },
     {
       "source": "dir:docs/reference/buzz",
+      "target": "doc:docs/reference/buzz/base64.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/base64.md"
+    },
+    {
+      "source": "dir:docs/reference/buzz",
       "target": "doc:docs/reference/buzz/charm.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -19552,11 +19936,11 @@
     },
     {
       "source": "dir:docs/reference/buzz",
-      "target": "doc:docs/reference/buzz/encoding.md",
+      "target": "doc:docs/reference/buzz/csv.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/buzz/encoding.md"
+      "provenance": "docs/reference/buzz/csv.md"
     },
     {
       "source": "dir:docs/reference/buzz",
@@ -19584,6 +19968,14 @@
     },
     {
       "source": "dir:docs/reference/buzz",
+      "target": "doc:docs/reference/buzz/hex.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/hex.md"
+    },
+    {
+      "source": "dir:docs/reference/buzz",
       "target": "doc:docs/reference/buzz/http.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -19600,11 +19992,27 @@
     },
     {
       "source": "dir:docs/reference/buzz",
+      "target": "doc:docs/reference/buzz/ini.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/ini.md"
+    },
+    {
+      "source": "dir:docs/reference/buzz",
       "target": "doc:docs/reference/buzz/json.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/buzz/json.md"
+    },
+    {
+      "source": "dir:docs/reference/buzz",
+      "target": "doc:docs/reference/buzz/log.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/log.md"
     },
     {
       "source": "dir:docs/reference/buzz",
@@ -19685,6 +20093,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/buzz/toml.md"
+    },
+    {
+      "source": "dir:docs/reference/buzz",
+      "target": "doc:docs/reference/buzz/url.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/url.md"
     },
     {
       "source": "dir:docs/reference/buzz",
@@ -22661,6 +23077,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "std/examples/strings/capitalize.buzz"
+    },
+    {
+      "source": "dir:std/examples/strings",
+      "target": "file:std/examples/strings/compare.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "std/examples/strings/compare.buzz"
     },
     {
       "source": "dir:std/examples/strings",
@@ -28231,6 +28655,14 @@
       "provenance": "docs/reference/buzz/archive.md"
     },
     {
+      "source": "doc:docs/reference/buzz/base64.md",
+      "target": "module:base64",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/base64.md"
+    },
+    {
       "source": "doc:docs/reference/buzz/charm.md",
       "target": "module:charm",
       "relation": "documents",
@@ -28247,12 +28679,12 @@
       "provenance": "docs/reference/buzz/crypto.md"
     },
     {
-      "source": "doc:docs/reference/buzz/encoding.md",
-      "target": "module:encoding",
+      "source": "doc:docs/reference/buzz/csv.md",
+      "target": "module:csv",
       "relation": "documents",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/buzz/encoding.md"
+      "provenance": "docs/reference/buzz/csv.md"
     },
     {
       "source": "doc:docs/reference/buzz/env.md",
@@ -28277,6 +28709,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/buzz/fs.md"
+    },
+    {
+      "source": "doc:docs/reference/buzz/hex.md",
+      "target": "module:hex",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/hex.md"
     },
     {
       "source": "doc:docs/reference/buzz/http.md",
@@ -28352,6 +28792,14 @@
     },
     {
       "source": "doc:docs/reference/buzz/index.md",
+      "target": "doc:docs/reference/buzz/base64.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/index.md"
+    },
+    {
+      "source": "doc:docs/reference/buzz/index.md",
       "target": "doc:docs/reference/buzz/charm.md",
       "relation": "references",
       "confidence": "extracted",
@@ -28368,7 +28816,7 @@
     },
     {
       "source": "doc:docs/reference/buzz/index.md",
-      "target": "doc:docs/reference/buzz/encoding.md",
+      "target": "doc:docs/reference/buzz/csv.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -28400,6 +28848,14 @@
     },
     {
       "source": "doc:docs/reference/buzz/index.md",
+      "target": "doc:docs/reference/buzz/hex.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/index.md"
+    },
+    {
+      "source": "doc:docs/reference/buzz/index.md",
       "target": "doc:docs/reference/buzz/http.md",
       "relation": "references",
       "confidence": "extracted",
@@ -28408,7 +28864,23 @@
     },
     {
       "source": "doc:docs/reference/buzz/index.md",
+      "target": "doc:docs/reference/buzz/ini.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/index.md"
+    },
+    {
+      "source": "doc:docs/reference/buzz/index.md",
       "target": "doc:docs/reference/buzz/json.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/index.md"
+    },
+    {
+      "source": "doc:docs/reference/buzz/index.md",
+      "target": "doc:docs/reference/buzz/log.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -28496,6 +28968,14 @@
     },
     {
       "source": "doc:docs/reference/buzz/index.md",
+      "target": "doc:docs/reference/buzz/url.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/index.md"
+    },
+    {
+      "source": "doc:docs/reference/buzz/index.md",
       "target": "doc:docs/reference/buzz/uuid.md",
       "relation": "references",
       "confidence": "extracted",
@@ -28543,12 +29023,28 @@
       "provenance": "docs/reference/buzz/index.md"
     },
     {
+      "source": "doc:docs/reference/buzz/ini.md",
+      "target": "module:ini",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/ini.md"
+    },
+    {
       "source": "doc:docs/reference/buzz/json.md",
       "target": "module:json",
       "relation": "documents",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/buzz/json.md"
+    },
+    {
+      "source": "doc:docs/reference/buzz/log.md",
+      "target": "module:log",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/log.md"
     },
     {
       "source": "doc:docs/reference/buzz/magus.md",
@@ -28693,6 +29189,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/buzz/toml.md"
+    },
+    {
+      "source": "doc:docs/reference/buzz/url.md",
+      "target": "module:url",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/url.md"
     },
     {
       "source": "doc:docs/reference/buzz/uuid.md",
@@ -35992,7 +36496,7 @@
     },
     {
       "source": "file:badge.buzz",
-      "target": "import:std",
+      "target": "import:encoding/xml",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -36000,7 +36504,7 @@
     },
     {
       "source": "file:badge.buzz",
-      "target": "import:xml",
+      "target": "import:std",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -37240,7 +37744,7 @@
     },
     {
       "source": "file:docs/engine/page.buzz",
-      "target": "import:encoding",
+      "target": "import:encoding/url",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -37592,7 +38096,7 @@
     },
     {
       "source": "file:docs/engine/search.buzz",
-      "target": "import:encoding",
+      "target": "import:encoding/url",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -38072,7 +38576,15 @@
     },
     {
       "source": "file:docs/lib/csp.buzz",
-      "target": "import:encoding",
+      "target": "import:encoding/base64",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/lib/csp.buzz"
+    },
+    {
+      "source": "file:docs/lib/csp.buzz",
+      "target": "import:encoding/hex",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -39160,7 +39672,7 @@
     },
     {
       "source": "file:docs/render.buzz",
-      "target": "import:encoding",
+      "target": "import:encoding/yaml",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -39447,14 +39959,6 @@
       "provenance": "docs/render.buzz"
     },
     {
-      "source": "file:docs/render.buzz",
-      "target": "import:yaml",
-      "relation": "imports",
-      "confidence": "inferred",
-      "score": 0.7,
-      "provenance": "docs/render.buzz"
-    },
-    {
       "source": "file:docs/site/config.buzz",
       "target": "function:docs/site/config.buzz:magusConfig",
       "relation": "contains",
@@ -39632,6 +40136,14 @@
     },
     {
       "source": "file:docs/site/public.buzz",
+      "target": "import:encoding/yaml",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/public.buzz"
+    },
+    {
+      "source": "file:docs/site/public.buzz",
       "target": "import:engine/page",
       "relation": "imports",
       "confidence": "inferred",
@@ -39713,14 +40225,6 @@
     {
       "source": "file:docs/site/public.buzz",
       "target": "import:vcs",
-      "relation": "imports",
-      "confidence": "inferred",
-      "score": 0.7,
-      "provenance": "docs/site/public.buzz"
-    },
-    {
-      "source": "file:docs/site/public.buzz",
-      "target": "import:yaml",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -40008,7 +40512,7 @@
     },
     {
       "source": "file:docs/site/tour.buzz",
-      "target": "import:encoding",
+      "target": "import:encoding/base64",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -44896,7 +45400,7 @@
     },
     {
       "source": "file:spells/github/actions/spell.buzz",
-      "target": "import:encoding",
+      "target": "import:encoding/url",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -46336,7 +46840,7 @@
     },
     {
       "source": "file:std/examples/json/parse.buzz",
-      "target": "import:json",
+      "target": "import:encoding/json",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -46352,7 +46856,7 @@
     },
     {
       "source": "file:std/examples/json/stringify.buzz",
-      "target": "import:json",
+      "target": "import:encoding/json",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -46397,6 +46901,22 @@
       "confidence": "inferred",
       "score": 0.7,
       "provenance": "std/examples/strings/capitalize.buzz"
+    },
+    {
+      "source": "file:std/examples/strings/compare.buzz",
+      "target": "import:std",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "std/examples/strings/compare.buzz"
+    },
+    {
+      "source": "file:std/examples/strings/compare.buzz",
+      "target": "import:strings",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "std/examples/strings/compare.buzz"
     },
     {
       "source": "file:std/examples/strings/ellipsis.buzz",
@@ -46536,7 +47056,7 @@
     },
     {
       "source": "file:tools/audit.buzz",
-      "target": "import:json",
+      "target": "import:encoding/json",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -46672,6 +47192,14 @@
     },
     {
       "source": "file:tools/registry.buzz",
+      "target": "import:encoding/yaml",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "tools/registry.buzz"
+    },
+    {
+      "source": "file:tools/registry.buzz",
       "target": "import:fs",
       "relation": "imports",
       "confidence": "inferred",
@@ -46705,14 +47233,6 @@
     {
       "source": "file:tools/registry.buzz",
       "target": "import:std",
-      "relation": "imports",
-      "confidence": "inferred",
-      "score": 0.7,
-      "provenance": "tools/registry.buzz"
-    },
-    {
-      "source": "file:tools/registry.buzz",
-      "target": "import:yaml",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -49423,7 +49943,49 @@
     },
     {
       "source": "module:archive",
+      "target": "method:archive.list",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:archive",
+      "target": "method:archive.read_file",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:archive",
       "target": "method:archive.uncompress",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:base64",
+      "target": "method:base64.decode",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:base64",
+      "target": "method:base64.encode",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:base64",
+      "target": "method:base64.url_decode",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:base64",
+      "target": "method:base64.url_encode",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
@@ -49639,71 +50201,15 @@
       "score": 1
     },
     {
-      "source": "module:encoding",
-      "target": "method:encoding.base64_decode",
+      "source": "module:csv",
+      "target": "method:csv.parse",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "module:encoding",
-      "target": "method:encoding.base64_encode",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1
-    },
-    {
-      "source": "module:encoding",
-      "target": "method:encoding.base64url_decode",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1
-    },
-    {
-      "source": "module:encoding",
-      "target": "method:encoding.base64url_encode",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1
-    },
-    {
-      "source": "module:encoding",
-      "target": "method:encoding.build_url",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1
-    },
-    {
-      "source": "module:encoding",
-      "target": "method:encoding.hex_decode",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1
-    },
-    {
-      "source": "module:encoding",
-      "target": "method:encoding.hex_encode",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1
-    },
-    {
-      "source": "module:encoding",
-      "target": "method:encoding.parse_url",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1
-    },
-    {
-      "source": "module:encoding",
-      "target": "method:encoding.url_decode",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1
-    },
-    {
-      "source": "module:encoding",
-      "target": "method:encoding.url_encode",
+      "source": "module:csv",
+      "target": "method:csv.stringify",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
@@ -49920,7 +50426,28 @@
     },
     {
       "source": "module:fs",
+      "target": "method:fs.remove",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:fs",
       "target": "method:fs.remove_all",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:fs",
+      "target": "method:fs.rename",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:fs",
+      "target": "method:fs.size",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
@@ -49948,6 +50475,13 @@
     },
     {
       "source": "module:fs",
+      "target": "method:fs.temp_file",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:fs",
       "target": "method:fs.walk",
       "relation": "contains",
       "confidence": "extracted",
@@ -49969,7 +50503,35 @@
     },
     {
       "source": "module:fs",
+      "target": "method:fs.write_file_atomic",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:fs",
       "target": "method:fs.write_lines",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:hex",
+      "target": "method:hex.decode",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:hex",
+      "target": "method:hex.encode",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:http",
+      "target": "method:http.download",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
@@ -50003,6 +50565,20 @@
       "score": 1
     },
     {
+      "source": "module:ini",
+      "target": "method:ini.parse",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:ini",
+      "target": "method:ini.stringify",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
       "source": "module:json",
       "target": "method:json.parse",
       "relation": "contains",
@@ -50012,6 +50588,48 @@
     {
       "source": "module:json",
       "target": "method:json.stringify",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:log",
+      "target": "method:log.at",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:log",
+      "target": "method:log.debug",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:log",
+      "target": "method:log.error",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:log",
+      "target": "method:log.info",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:log",
+      "target": "method:log.trace",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:log",
+      "target": "method:log.warn",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
@@ -50389,6 +51007,27 @@
     },
     {
       "source": "module:strings",
+      "target": "method:strings.collapse_ws",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:strings",
+      "target": "method:strings.compare",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:strings",
+      "target": "method:strings.contains",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:strings",
       "target": "method:strings.ellipsis",
       "relation": "contains",
       "confidence": "extracted",
@@ -50396,7 +51035,35 @@
     },
     {
       "source": "module:strings",
+      "target": "method:strings.fields",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:strings",
       "target": "method:strings.kebab_case",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:strings",
+      "target": "method:strings.lines",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:strings",
+      "target": "method:strings.pad_left",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:strings",
+      "target": "method:strings.pad_right",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
@@ -50411,6 +51078,34 @@
     {
       "source": "module:strings",
       "target": "method:strings.snake_case",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:strings",
+      "target": "method:strings.split_n",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:strings",
+      "target": "method:strings.trim_prefix",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:strings",
+      "target": "method:strings.trim_suffix",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:strings",
+      "target": "method:strings.upper_first",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
@@ -50488,6 +51183,34 @@
     {
       "source": "module:toml",
       "target": "method:toml.stringify",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:url",
+      "target": "method:url.build",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:url",
+      "target": "method:url.decode",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:url",
+      "target": "method:url.encode",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:url",
+      "target": "method:url.parse",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
@@ -52419,12 +53142,12 @@
       "provenance": "proto"
     },
     {
-      "source": "rationale:magusfile.buzz:1776:TODO",
+      "source": "rationale:magusfile.buzz:1782:TODO",
       "target": "function:magusfile.buzz:completion_test",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "magusfile.buzz:1776"
+      "provenance": "magusfile.buzz:1782"
     },
     {
       "source": "rationale:spells/aws/s3-cache/spell.buzz:123:NOTE",
@@ -54193,6 +54916,14 @@
     },
     {
       "source": "target:docs:content-generate",
+      "target": "doc:docs/reference/buzz/base64.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
       "target": "doc:docs/reference/buzz/charm.md",
       "relation": "produces",
       "confidence": "extracted",
@@ -54209,7 +54940,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/buzz/encoding.md",
+      "target": "doc:docs/reference/buzz/csv.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -54241,6 +54972,14 @@
     },
     {
       "source": "target:docs:content-generate",
+      "target": "doc:docs/reference/buzz/hex.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
       "target": "doc:docs/reference/buzz/http.md",
       "relation": "produces",
       "confidence": "extracted",
@@ -54257,7 +54996,23 @@
     },
     {
       "source": "target:docs:content-generate",
+      "target": "doc:docs/reference/buzz/ini.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
       "target": "doc:docs/reference/buzz/json.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:docs/reference/buzz/log.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -54338,6 +55093,14 @@
     {
       "source": "target:docs:content-generate",
       "target": "doc:docs/reference/buzz/toml.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:docs/reference/buzz/url.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,

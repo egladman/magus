@@ -28,7 +28,7 @@
 import "std";
 import "os";
 import "proc";
-import "json";
+import "encoding/json";
 import "semver";
 import "time";
 

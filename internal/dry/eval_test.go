@@ -213,7 +213,7 @@ func hasEdge(edges []Edge, from, to string) bool {
 func TestEval_HostModules(t *testing.T) {
 	cases := map[string]string{
 		`import "strings"; return strings.camelCase("hello world");`: "helloWorld",
-		`import "encoding"; return encoding.base64Encode("hi");`:     "aGk=",
+		`import "encoding/base64"; return base64.encode("hi");`:      "aGk=",
 	}
 	for src, want := range cases {
 		r := Eval(context.Background(), src)

@@ -509,3 +509,170 @@ func TestArchiveResultPathsCarryTheirBase(t *testing.T) {
 	assert.NotEmpty(t, cm.Files[0].Base, "a compressed entry knows where it was read from")
 	assert.FileExists(t, cm.Files[0].Resolve().Value)
 }
+
+// archiveEntryNames projects a listing to its names, for comparing against a
+// literal without restating sizes on every assertion.
+func archiveEntryNames(entries []types.ArchiveEntry) []string {
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, e.Name)
+	}
+	return out
+}
+
+func TestArchiveList(t *testing.T) {
+	ctx := context.Background()
+	files := map[string]string{"a.txt": "alpha", "dir/b.txt": "bee"}
+
+	// Every container format reports the same entries, sorted the same way -
+	// that equivalence is the point of listing through one method.
+	for _, tc := range []struct {
+		name string
+		make func(*testing.T, map[string]string) string
+	}{
+		{"tar", makeTar},
+		{"tar.gz", makeTarGz},
+		{"zip", makeZip},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ArchiveList(ctx, tc.make(t, files), nil)
+			require.NoError(t, err)
+			assert.Equal(t, []string{"a.txt", "dir/b.txt"}, archiveEntryNames(got))
+
+			bySize := map[string]int{}
+			for _, e := range got {
+				bySize[e.Name] = e.Size
+			}
+			assert.Equal(t, 5, bySize["a.txt"], "uncompressed size")
+			assert.Equal(t, 3, bySize["dir/b.txt"])
+		})
+	}
+}
+
+func TestArchiveListSortsAcrossWriteOrder(t *testing.T) {
+	ctx := context.Background()
+	// Written out of order on purpose: tar preserves write order and zip
+	// preserves central-directory order, so an unsorted listing would leak the
+	// container's ordering to the caller.
+	path := filepath.Join(t.TempDir(), "test.tar")
+	f, err := os.Create(path)
+	require.NoError(t, err)
+	tw := tar.NewWriter(f)
+	for _, name := range []string{"z.txt", "m.txt", "a.txt"} {
+		require.NoError(t, tw.WriteHeader(&tar.Header{Typeflag: tar.TypeReg, Name: name, Size: 1, Mode: 0o644}))
+		_, _ = tw.Write([]byte("x"))
+	}
+	require.NoError(t, tw.Close())
+	require.NoError(t, f.Close())
+
+	got, err := ArchiveList(ctx, path, nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a.txt", "m.txt", "z.txt"}, archiveEntryNames(got))
+}
+
+func TestArchiveListMarksDirectories(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "test.tar")
+	f, err := os.Create(path)
+	require.NoError(t, err)
+	tw := tar.NewWriter(f)
+	require.NoError(t, tw.WriteHeader(&tar.Header{Typeflag: tar.TypeDir, Name: "dir/", Mode: 0o755}))
+	require.NoError(t, tw.WriteHeader(&tar.Header{Typeflag: tar.TypeReg, Name: "dir/f.txt", Size: 2, Mode: 0o644}))
+	_, _ = tw.Write([]byte("hi"))
+	// A symlink is skipped, matching what uncompress would actually write.
+	require.NoError(t, tw.WriteHeader(&tar.Header{Typeflag: tar.TypeSymlink, Name: "link", Linkname: "dir/f.txt", Mode: 0o777}))
+	require.NoError(t, tw.Close())
+	require.NoError(t, f.Close())
+
+	got, err := ArchiveList(ctx, path, nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"dir/", "dir/f.txt"}, archiveEntryNames(got))
+	assert.True(t, got[0].IsDir)
+	assert.False(t, got[1].IsDir)
+}
+
+func TestArchiveReadFile(t *testing.T) {
+	ctx := context.Background()
+	files := map[string]string{"a.txt": "alpha", "dir/b.txt": "bee"}
+
+	for _, tc := range []struct {
+		name string
+		make func(*testing.T, map[string]string) string
+	}{
+		{"tar", makeTar},
+		{"tar.gz", makeTarGz},
+		{"zip", makeZip},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := tc.make(t, files)
+
+			got, err := ArchiveReadFile(ctx, src, "dir/b.txt", nil)
+			require.NoError(t, err)
+			assert.Equal(t, "bee", got)
+
+			got, err = ArchiveReadFile(ctx, src, "a.txt", nil)
+			require.NoError(t, err)
+			assert.Equal(t, "alpha", got)
+
+			// A missing entry names the archive, so the error is actionable.
+			_, err = ArchiveReadFile(ctx, src, "nope.txt", nil)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "nope.txt")
+		})
+	}
+}
+
+func TestArchiveReadFileNothingExtracted(t *testing.T) {
+	ctx := context.Background()
+	src := makeTarGz(t, map[string]string{"a.txt": "alpha"})
+	dir := filepath.Dir(src)
+
+	before, err := os.ReadDir(dir)
+	require.NoError(t, err)
+
+	_, err = ArchiveReadFile(ctx, src, "a.txt", nil)
+	require.NoError(t, err)
+
+	// The whole point: reading one entry writes nothing to disk.
+	after, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	assert.Equal(t, len(before), len(after), "read_file must not extract anything")
+}
+
+func TestArchiveReadFileMaxSize(t *testing.T) {
+	ctx := context.Background()
+	src := makeTar(t, map[string]string{"big.txt": strings.Repeat("x", 100)})
+
+	// Over the cap raises rather than truncating: a silent prefix would look
+	// like a whole file to the caller.
+	_, err := ArchiveReadFile(ctx, src, "big.txt", map[string]any{"max_size": 10})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "max_size")
+
+	got, err := ArchiveReadFile(ctx, src, "big.txt", map[string]any{"max_size": 100})
+	require.NoError(t, err)
+	assert.Len(t, got, 100, "exactly at the cap is allowed")
+}
+
+func TestArchiveListUnrecognized(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "notanarchive.bin")
+	require.NoError(t, os.WriteFile(path, []byte("just some bytes"), 0o644))
+
+	_, err := ArchiveList(ctx, path, nil)
+	require.Error(t, err)
+
+	_, err = ArchiveList(ctx, filepath.Join(t.TempDir(), "missing.tar"), nil)
+	require.Error(t, err)
+}
+
+func TestArchiveListRespectsSandboxRead(t *testing.T) {
+	src := makeTar(t, map[string]string{"a.txt": "alpha"})
+	// A policy with no read rule for src: listing must be gated the same way
+	// uncompress is, or a read-only walk would be a way around the sandbox.
+	p := &sandbox.Policy{Workspace: t.TempDir()}
+	ctx := sandbox.WithPolicy(context.Background(), p)
+
+	_, err := ArchiveList(ctx, src, nil)
+	require.Error(t, err, "a denied read must not be listable")
+}

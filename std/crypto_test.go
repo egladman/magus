@@ -120,3 +120,55 @@ func TestCryptoSha512File(t *testing.T) {
 	const sha512ABC = "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
 	assert.Equal(t, sha512ABC, got)
 }
+
+func TestCryptoHmacSha256(t *testing.T) {
+	ctx := context.Background()
+
+	// RFC 4231 test case 1.
+	key := []byte{0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b,
+		0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b}
+	got, err := CryptoHmacSha256Hex(ctx, key, []byte("Hi There"))
+	require.NoError(t, err)
+	assert.Equal(t, "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7", got)
+}
+
+func TestCryptoHmacChainsAsAwsSigV4Does(t *testing.T) {
+	ctx := context.Background()
+
+	// The shape spells/aws/s3-cache builds: each raw digest keys the next call.
+	// This is why hmac_sha256 returns BYTES and not a str - a rune-oriented
+	// string would not survive an arbitrary digest.
+	kDate, err := CryptoHmacSha256(ctx, []byte("AWS4secret"), []byte("20260811"))
+	require.NoError(t, err)
+	kRegion, err := CryptoHmacSha256(ctx, kDate, []byte("us-east-1"))
+	require.NoError(t, err)
+	kService, err := CryptoHmacSha256(ctx, kRegion, []byte("s3"))
+	require.NoError(t, err)
+	kSigning, err := CryptoHmacSha256(ctx, kService, []byte("aws4_request"))
+	require.NoError(t, err)
+
+	sig, err := CryptoHmacSha256Hex(ctx, kSigning, []byte("string-to-sign"))
+	require.NoError(t, err)
+	assert.Len(t, sig, 64, "a hex SHA-256 signature is 64 characters")
+
+	// Deterministic: the same inputs must always yield the same signature.
+	again, err := CryptoHmacSha256Hex(ctx, kSigning, []byte("string-to-sign"))
+	require.NoError(t, err)
+	assert.Equal(t, sig, again)
+}
+
+func TestCryptoBase64BytesRoundTripsBinary(t *testing.T) {
+	ctx := context.Background()
+	// NUL and 0xFF: invalid UTF-8, so this fails if the payload ever passes
+	// through a rune-oriented str.
+	blob := []byte{0x00, 0x01, 0xff, 0xfe, 'h', 'i', 0x00, 0x80}
+
+	enc, err := CryptoBase64EncodeBytes(ctx, blob)
+	require.NoError(t, err)
+	back, err := CryptoBase64DecodeBytes(ctx, enc)
+	require.NoError(t, err)
+	assert.Equal(t, blob, back)
+
+	_, err = CryptoBase64DecodeBytes(ctx, "not!valid!base64")
+	require.Error(t, err)
+}

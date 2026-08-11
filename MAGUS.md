@@ -52,10 +52,10 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | tool | 10+ | `magus query kind:tool` | `sh`, `go`, `pnpm` |
 | charm | 10+ | `magus query kind:charm` | `rw`, `cd`, `stable` |
 | module | 20+ | `magus query kind:module` | `fs`, `charm`, `magus` |
-| method | 100+ | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
+| method | 200+ | `magus query kind:method` | `archive.compress`, `archive.list`, `archive.read_file` |
 | diagnostic | 60+ | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS1022` |
 | doc | 200+ | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
-| dir | 100+ | `magus query kind:dir` | `docs/reference/codes/magusfile`, `docs/concepts`, `std/examples/fs` |
+| dir | 100+ | `magus query kind:dir` | `docs/reference/buzz`, `docs/reference/codes/magusfile`, `docs/concepts` |
 | file | 100+ | `magus query kind:file` | `magusfile.buzz`, `docs/render.buzz`, `docs/magusfile.buzz` |
 | function | 700+ | `magus query kind:function` | `tail`, `sign`, `renderContentHTML` |
 | import | 80+ | `magus query kind:import` | `magus`, `fs`, `std` |

@@ -942,6 +942,19 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (Impor
 				// in env until after this point, which is why it has to be the module
 				// value in hand rather than a lookup by name.
 				declareEnumValues(v, src, s.embedded)
+				// An OBJECT the declarations export needs a runtime definition for the
+				// same reason an enum needs a runtime value: the checker knowing the
+				// type is not enough to CONSTRUCT one. Without this, `HttpRetry{...}`
+				// type-checks (the collect above saw the declaration) and then throws
+				// "unknown object type" at run time, because the VM resolves an object
+				// literal through env, which nothing ever populated.
+				//
+				// Executing the declarations is safe, and the header of every generated
+				// decls file says why: an `extern` emits no code, so running the source
+				// defines its objects and enums and redefines none of the native
+				// methods. The module value in hand is untouched - verified by calling
+				// a native method after this runs.
+				s.declareObjectTypes(src)
 			}
 		}
 		if len(imp.Only) > 0 {
@@ -1130,6 +1143,67 @@ func declareEnumValues(mod vmpackage.Value, src string, embedded bool) {
 			mod.MapSet(d.Name, vmpackage.EnumDefValue(d.Name, d.Cases, values))
 		}
 	}
+}
+
+// declareObjectTypes gives a native module's exported `object` declarations real
+// runtime definitions, so a caller can CONSTRUCT one and not merely annotate it.
+//
+// It is the object-shaped counterpart to declareEnumValues, and it exists for the
+// same asymmetry: a declaration module that carries no native value is EXECUTED
+// (see the branch below this one), which defines its objects as a side effect,
+// while a module that does carry one is only ever collected for its signatures.
+// That left the two kinds of module able to declare the same object with only one
+// of them able to build it - `magus/spell` spells write `Command{...}` freely,
+// while `http\HttpRetry{...}` threw.
+//
+// Nothing is emitted for a source with no exported object, which is most of them,
+// so the common import pays one parse and no execution.
+func (s *Session) declareObjectTypes(src string) {
+	prog, err := parseModed(src, !s.embedded)
+	if err != nil {
+		// A malformed declaration source is already reported by the collect step;
+		// failing here too would surface the same typo twice.
+		return
+	}
+	// Only a source that is PURELY declarations may run. An exported function with
+	// a body is real code, and executing it flat-merges the name into the importing
+	// scope - which for a magusfile means magus reads it as a TARGET. Buzz's own
+	// io.buzz is exactly this shape (an `export object File` beside a real
+	// `export fun runFile`), and running it made every magusfile fail to load with
+	// MGS1008: target "runFile" must receive a magus\Context.
+	//
+	// An `extern` is safe by construction: it emits no code, which is what the
+	// generated declaration files are made of.
+	hasObject := false
+	for _, stmt := range prog.Stmts {
+		switch d := stmt.(type) {
+		case *ast.ObjectDecl:
+			if d.IsExported {
+				hasObject = true
+			}
+		case *ast.FunDecl:
+			if d.IsExported && !d.IsExtern {
+				return
+			}
+		}
+	}
+	if !hasObject {
+		return
+	}
+	// A FAILURE HERE IS NOT AN ERROR, and that is deliberate rather than lax.
+	//
+	// Collecting a declaration source merges its types into the session-wide list,
+	// so a file may reference a type another bundle declares and still check
+	// cleanly - magus's own declarations do exactly that, naming DoctorCheckStatus
+	// from gen/types/doctorcheck.buzz. Executing has no such luxury: it needs the
+	// source to be self-contained, and a cross-bundle reference is undefined.
+	//
+	// So execution is an OPTIONAL upgrade. Where the source stands alone its
+	// objects become constructible; where it does not, the module is left exactly
+	// as it was before this existed - collected, checkable, and with its objects
+	// annotate-only. Returning the error instead would take a working import down
+	// over a capability it never had.
+	_, _ = s.execImport(s.ctx, src)
 }
 
 // bindNamespaceObject binds, under name, a map of the names a flat import just
