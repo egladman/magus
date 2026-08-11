@@ -22,7 +22,7 @@ rather than only the flattering one.
 
 | upstream suite          | files |      gopherbuzz | what it asks                                                     |
 | ----------------------- | ----: | --------------: | ---------------------------------------------------------------- |
-| `tests/behavior/`       |    83 |     **73 pass** | does correct source produce the right answer?                    |
+| `tests/behavior/`       |    83 |     **74 pass** | does correct source produce the right answer?                    |
 | `tests/compile_errors/` |    77 | **26 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
 | `tests/fuzzed/`         |   644 |    **0 panics** | can malformed input crash the front end?                         |
 | `tests/bench/`          |    11 |         not run | upstream's benchmarks (ours are in [`benchmarks/`](benchmarks/)) |
@@ -76,7 +76,8 @@ and not the reverse, and the clone family re-types across it), fibers with `reso
 interpolation, pattern literals, `zdef` FFI, closures, generics as erasure, ranges with their full method set, and
 the collection/loop core (multi-clause `for`, labeled loops), and block
 expressions (`from { ... out v; }`), free identifiers (`@"non-standard"`), and
-generic object declarations, inline ifs, and `catch void`. Three deliberate supersets: the contextual
+generic object declarations, inline ifs, `catch void`, and maps keyed by any
+value (an object, an int, a bool -- not only a `str`). Three deliberate supersets: the contextual
 `test` keyword (below), named-argument labels, and compiled-bytecode serialization
 (next).
 
@@ -115,14 +116,9 @@ exhaustiveness analysis, protocol conformance is unverified, and generics are er
 
 ### What does not
 
-One of the ten remaining failures is an open gap with a known cause:
-
-| Gap                                  |                     Blocks | Cause                                                                                                                                                                                                                                       |
-| ------------------------------------ | -------------------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Object-keyed maps                    |                `protocols` | `mapObj` is keyed by `string` throughout, and a map literal stores a bare identifier key as its literal name rather than evaluating it. Upstream allows any value as a key.                                                                 |
-
-The other nine cannot be accommodated here, which is a property of the embedding
-rather than a backlog:
+**No open gaps remain.** Every one of the nine still-failing files is blocked by a
+property of the EMBEDDING rather than by unwritten code, so this list is not a
+backlog:
 
 - **A compiled native library.** `ffi`, `extern-library`, `c-buzz-api` and
   `types-as-value` all `zdef` against `tests/utils/libforeign`, and `os` shells out
@@ -194,6 +190,12 @@ reproducible difference at the pinned ref.
 - Each boxed local allocates into a grow-only, never-freed global heap in the default
   NaN-boxed build, so a captured local declared inside a loop pins one entry per
   iteration: measured 2.7x RSS over 2M iterations.
+- A map keyed by anything other than `str` gets NO key->index hash at any size, so
+  its lookups are O(n) where a `str`-keyed map is O(1) above `smallMapThreshold`.
+  The hash is keyed by the key's display string, which stops being an identity the
+  moment `1` and `"1"` can both be present; giving it a synthetic per-key identity
+  would cost an allocation on every get of EVERY map to serve a shape neither this
+  embedding nor upstream's suite builds at size.
 
 A test is often blocked by more than one gap, so closing a single entry does not
 always flip a file green. The allowlist reports real progress; the table only

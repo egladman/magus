@@ -925,7 +925,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			for i := 0; i < n; i++ {
 				k := vm.stack[base+i*2]
 				v := vm.stack[base+i*2+1]
-				m.set(k.String(), v)
+				m.setVal(k, v)
 			}
 			vm.stack = vm.stack[:base]
 			vm.push(vm.allocMap(m))

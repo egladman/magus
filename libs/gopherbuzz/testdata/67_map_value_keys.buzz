@@ -1,0 +1,70 @@
+// @expect: joe:pet:int:one:missing:2:2:petair:abc:1/11/12/12:2/true/1
+// A map is keyed by VALUE, matching upstream's AutoArrayHashMap(Value, Value):
+// `{ bandit: true }` in upstream's protocols.buzz holds an OBJECT as its key.
+// This pins the pieces that made that work, since the upstream suite is skipped
+// without a checkout and would not otherwise catch a regression here.
+//
+//   - a bare identifier map key is an expression, not its own name as a string;
+//   - keys of different types never collide, so 1 and "1" are two entries;
+//   - a heap key is its own key by reference;
+//   - iteration, keys(), remove() and sort() all see the real key value.
+
+object Pet {
+    name: str,
+}
+
+final bandit = Pet{ name = "bandit" };
+final joe = Pet{ name = "joe" };
+
+// Object keys, and a bare identifier that must EVALUATE rather than become "joe".
+final owners = { bandit: "pet", joe: "joe" };
+final byRef = "{owners[joe]}:{owners[bandit]}";
+
+// A str and an int that stringify alike stay distinct entries, and a key of a
+// third type reads as absent rather than hitting either of them.
+final mixed = mut { 1: "int", "1": "one" };
+mixed[2] = "two";
+final asInt = "{mixed[1]}";
+final asStr = "{mixed["1"]}";
+final absent = "{mixed[true] ?? "missing"}";
+
+// remove() takes the key type and keeps Keys/keyVals/Vals index-parallel; a bad
+// remove used to leave them out of step and corrupt every later iteration.
+_ = mixed.remove(1);
+final left = "{mixed.keys().len()}";
+
+// keys() yields the key VALUES, so an object key survives the round trip, and
+// foreach hands the same value to the body.
+var found = "";
+foreach (k, v in owners) {
+    if (k == bandit) {
+        found = "{v}air";
+    }
+}
+final kept = "{owners.keys().len()}";
+
+// Sorting a map compares key values in place and leaves iteration in the new order.
+final nums = mut { 3: "c", 1: "a", 2: "b" };
+_ = nums.sort(fun (a: any, b: any) > bool => "{a}" < "{b}");
+var order = "";
+foreach (k, v in nums) {
+    order = "{order}{v}";
+}
+
+// A str-keyed map past smallMapThreshold has built its key->index hash. Taking a
+// non-str key must DROP that hash: it is keyed by the DISPLAY string, so it would
+// answer the entry "1" for the int key 1.
+final big = mut {
+    "a": 1, "b": 2, "c": 3, "d": 4, "e": 5,
+    "f": 6, "g": 7, "h": 8, "i": 9, "j": 10,
+};
+big[1] = 11;
+big["1"] = 12;
+final promoted = "{big["a"]}/{big[1]}/{big["1"]}/{big.keys().len()}";
+
+// Merge, filter and hasKey all key by value too.
+final merged = { bandit: "x" } + { joe: "y" };
+final onlyJoe = owners.filter(fun (k: any, v: str) > bool => k == joe);
+final derived = "{merged.keys().len()}/{merged.hasKey(bandit)}/{onlyJoe.keys().len()}";
+
+final __r = "{byRef}:{asInt}:{asStr}:{absent}:{left}:{kept}:{found}:{order}:{promoted}:{derived}";

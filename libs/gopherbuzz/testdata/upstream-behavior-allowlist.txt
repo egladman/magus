@@ -72,6 +72,7 @@ optionals.buzz
 pattern.buzz
 placeholder-cycle.buzz
 placeholder-nested-call.buzz
+protocols.buzz
 range-expression-scope.buzz
 range.buzz
 run-file.buzz

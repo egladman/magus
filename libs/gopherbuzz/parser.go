@@ -2971,13 +2971,17 @@ func (p *parser) parseMapLit() (*ast.MapExpr, error) {
 	return m, nil
 }
 
-// parseMapKey accepts a bare identifier (as a string key) or an expression key.
+// parseMapKey parses one map-literal key. It is a plain expression, matching
+// upstream's `map` parser (`const key = try self.expression(false)`).
+//
+// A bare identifier used to be lifted to a string literal here, so `{ a: 1 }`
+// meant `{ "a": 1 }`. That is not a superset but a silently different answer:
+// upstream EVALUATES `a`, which is what lets a map be keyed by an object
+// (`{ bandit: true }` in upstream's protocols.buzz). Nothing in this module or
+// in the magus embedding wrote the lifted form, so it is gone rather than
+// gated. `.{ a = 1 }` is the anonymous-object literal and still names fields
+// with identifiers; see parseAnonObjectLit.
 func (p *parser) parseMapKey() (ast.Node, error) {
-	t := p.peek()
-	if t.Kind == token.Ident && p.peekAt(1).Kind == token.Colon {
-		p.advance()
-		return &ast.StringLit{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Val: t.Val}, nil
-	}
 	return p.parseExpr()
 }
 

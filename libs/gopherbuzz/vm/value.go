@@ -183,26 +183,50 @@ type listObj struct {
 // insertion order; M is a lazily-built key→index hash that exists only once
 // the map outgrows smallMapThreshold.
 //
-// optimization: most maps and (especially) object field sets are tiny — a handful
+// optimization: most maps are tiny — a handful of keys — so the Go map's
 //
-//	of keys — so the Go map's construction alloc and per-access hash are pure
-//	overhead. Below smallMapThreshold, set/get linear-scan Keys (a few string
+//	construction alloc and per-access hash are pure overhead. Below
+//	smallMapThreshold, set/get linear-scan Keys (a few string
 //	compares over a contiguous slice, branch-predictor- and cache-friendly) and
-//	M stays nil, so constructing a small map/object allocates no map at all. M
+//	M stays nil, so constructing a small map allocates no map at all. M
 //	is built once on the set that crosses the threshold, after which all lookups
 //	go through it again in O(1).
 //	measured: see bench/smallmap.txt (BenchmarkFieldAccess, BenchmarkForeachMap).
+//	note: this comment used to say object FIELD SETS were the main beneficiary.
+//	  They are not, and have not been since named objects moved to objectInst's
+//	  flat declaration-order Fields slice — BenchmarkFieldAccess does not touch
+//	  mapObj at all. The stale claim made this struct look far hotter than it is
+//	  and inflated the estimated cost of the object-key work above.
 //	trade-off: a get/set on a near-threshold map is O(n) string compares instead
 //	  of O(1); n<=smallMapThreshold bounds it, and the scan beats hashing for
 //	  these sizes in practice.
 //	assumes: Keys/Vals/keyVals stay index-parallel (maintained by set); M, when
 //	  non-nil, maps every existing key to its slice index.
+//
+// keyVals is the AUTHORITATIVE key: upstream keys a map by any value
+// (`std.AutoArrayHashMapUnmanaged(Value, Value)`), so `{ bandit: true }` holds
+// an object. Keys is that key's display string and stays the identity only
+// while every key is a str — the shape that covers records, anonymous object
+// literals and every host-built map, and the one the hash and the linear scan
+// above are tuned for. objKeyed says the map has left that shape.
 type mapObj struct {
 	Keys    []string
 	Vals    []Value          // parallel to Keys; indexed value access (no map lookup for iteration)
-	keyVals []Value          // pre-built StrValue per key; zero-alloc map key iteration
+	keyVals []Value          // parallel to Keys; the real key value, and what foreach pushes
 	M       map[string]int32 // key → index in Keys/Vals/keyVals; nil until size > smallMapThreshold
 	Mut     bool             // mutable only for `mut {…}` literals (immutable by default)
+	// objKeyed reports that at least one key is not a str, so Keys is no longer a
+	// faithful identity ("1" the str and 1 the int share a display string) and
+	// every lookup has to scan keyVals with mapKeyEqual instead.
+	//
+	// trade-off: such a map gets NO hash at any size - M is dropped on the set
+	//   that promotes it and never rebuilt - so lookups are O(n) rather than the
+	//   O(1) a str-keyed map regains above smallMapThreshold. Keying M would need
+	//   a synthetic per-key identity string, which costs an allocation on every
+	//   get of every map to serve a shape neither this embedding nor upstream's
+	//   suite builds at size. Revisit if a large non-str-keyed map ever shows up
+	//   in a profile.
+	objKeyed bool
 }
 
 // smallMapThreshold is the key count at or below which a mapObj skips its Go map
@@ -653,7 +677,13 @@ func (v Value) stringPath(path []Value) string {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
-			sb.WriteString(strconv.Quote(k))
+			// Quoted for a str key, bare otherwise: `{1: "a"}` reads back as source,
+			// where `{"1": "a"}` would name a different map (see mapKeyEqual).
+			if m.keyVals[i].tag() == tagStr {
+				sb.WriteString(strconv.Quote(k))
+			} else {
+				sb.WriteString(k)
+			}
 			sb.WriteString(": ")
 			sb.WriteString(m.Vals[i].stringPath(path))
 		}
@@ -746,9 +776,21 @@ func (v Value) Bool() bool {
 // (see mapObj's optimization note) and the hash is built lazily on growth.
 func newMapObj() *mapObj { return &mapObj{} }
 
-// indexOf returns the slice index of key, or -1 if absent. It uses M when built
-// (large maps) and otherwise linear-scans Keys (small maps).
+// indexOf returns the slice index of the str key named by key, or -1 if absent.
+// It uses M when built (large maps) and otherwise linear-scans Keys (small maps).
+// indexOfVal is the general form; this one stays because a record field read
+// (getMember, setMember, MapGet) already has the name as a Go string.
 func (m *mapObj) indexOf(key string) int {
+	if m.objKeyed {
+		// Keys is only a display string here, so "1" would match the int key 1.
+		// Scan keyVals for a str of the same content instead.
+		for i, kv := range m.keyVals {
+			if kv.tag() == tagStr && kv.asStr().V == key {
+				return i
+			}
+		}
+		return -1
+	}
 	if m.M != nil {
 		if n, ok := m.M[key]; ok {
 			return int(n)
@@ -763,17 +805,99 @@ func (m *mapObj) indexOf(key string) int {
 	return -1
 }
 
+// mapKeyEqual reports whether two map keys are the same key.
+//
+// It is deliberately NOT valuesEqual. Upstream stores a map as
+// AutoArrayHashMapUnmanaged(Value, Value) keyed on the NaN-boxed WORD, so key
+// identity there is bit identity, not `eql`: `1 == 1.0` holds but `{1: x}[1.0]`
+// misses, and a heap object is its own key by reference. valuesEqual is `==`,
+// which coerces int to float, and a map key must not.
+//
+// Two kinds are matched to gopherbuzz's `==` rather than to upstream's bits.
+// A str compares by CONTENT because upstream interns strings and gopherbuzz does
+// not, so bit identity would make two equal literals different keys. The value
+// kinds valuesEqual already treats structurally (enum case, range, pattern, type)
+// keep that here: upstream's bits would separate two independently built `0..10`,
+// but nothing keys a map by one, and agreeing with `==` is the answer a reader
+// would predict.
+func mapKeyEqual(a, b Value) bool {
+	if a.tag() != b.tag() {
+		return false
+	}
+	switch a.tag() {
+	case tagStr:
+		ap, bp := a.asStr(), b.asStr()
+		return ap == bp || ap.V == bp.V
+	case tagNull:
+		return true
+	case tagBool, tagInt, tagFloat:
+		return a.num() == b.num()
+	default:
+		return valuesEqual(a, b) // enum case, range, pattern, type: structural; the rest by reference
+	}
+}
+
+// indexOfVal returns the slice index of key, or -1 if absent, keying by VALUE.
+// A str key on a map that has only ever held str keys takes the tuned string
+// path above; anything else scans keyVals.
+func (m *mapObj) indexOfVal(key Value) int {
+	if !m.objKeyed {
+		if key.tag() == tagStr {
+			return m.indexOf(key.asStr().V)
+		}
+		// A non-str key cannot be present in a str-keyed map.
+		return -1
+	}
+	for i, kv := range m.keyVals {
+		if mapKeyEqual(kv, key) {
+			return i
+		}
+	}
+	return -1
+}
+
 func (m *mapObj) set(key string, v Value) {
 	if i := m.indexOf(key); i >= 0 {
 		m.Vals[i] = v
 		return
 	}
+	m.appendEntry(key, StrValue(key), v)
+}
+
+// setVal stores key→v keying by value, the general form of set.
+func (m *mapObj) setVal(key, v Value) {
+	if i := m.indexOfVal(key); i >= 0 {
+		m.Vals[i] = v
+		return
+	}
+	if !m.objKeyed && key.tag() != tagStr {
+		// Promote: Keys stops being an identity, so the hash built over it has to go.
+		m.objKeyed = true
+		m.M = nil
+	}
+	m.appendEntry(key.String(), key, v)
+}
+
+// getVal returns the value at key and whether it was present, keying by value.
+func (m *mapObj) getVal(key Value) (Value, bool) {
+	if i := m.indexOfVal(key); i >= 0 {
+		return m.Vals[i], true
+	}
+	return Null, false
+}
+
+// appendEntry appends a new entry the caller has already established is absent,
+// keeping Keys/keyVals/Vals index-parallel and M (when it exists) in step.
+func (m *mapObj) appendEntry(display string, key, v Value) {
 	idx := int32(len(m.Keys))
-	m.Keys = append(m.Keys, key)
-	m.keyVals = append(m.keyVals, StrValue(key))
+	m.Keys = append(m.Keys, display)
+	m.keyVals = append(m.keyVals, key)
 	m.Vals = append(m.Vals, v)
+	if m.objKeyed {
+		return // no hash; see mapObj's objKeyed note
+	}
 	if m.M != nil {
-		m.M[key] = idx
+		m.M[display] = idx
 	} else if len(m.Keys) > smallMapThreshold {
 		// Crossed the threshold: build the hash once, then maintain it.
 		m.M = make(map[string]int32, len(m.Keys))
@@ -781,6 +905,22 @@ func (m *mapObj) set(key string, v Value) {
 			m.M[k] = int32(i)
 		}
 	}
+}
+
+// removeAt drops entry i, preserving insertion order and the index-parallel
+// invariant. M is rebuilt rather than patched: every index after i shifts.
+func (m *mapObj) removeAt(i int) Value {
+	removed := m.Vals[i]
+	m.Keys = append(m.Keys[:i], m.Keys[i+1:]...)
+	m.keyVals = append(m.keyVals[:i], m.keyVals[i+1:]...)
+	m.Vals = append(m.Vals[:i], m.Vals[i+1:]...)
+	if m.M != nil {
+		m.M = make(map[string]int32, len(m.Keys))
+		for j, k := range m.Keys {
+			m.M[k] = int32(j)
+		}
+	}
+	return removed
 }
 
 func (m *mapObj) get(key string) (Value, bool) {
@@ -910,6 +1050,11 @@ func (v Value) AsString() string { return v.asStr().V }
 func (v Value) ListItems() []Value { return v.asList().Items }
 
 // MapKeys returns the ordered key slice. Only valid when IsMap() is true.
+//
+// The keys are DISPLAY strings, which is exact for the str-keyed maps host code
+// builds and reads (records, host module namespaces, decoded JSON) and lossy for
+// a Buzz map keyed by anything else - `{1: x}` and `{"1": x}` both report "1",
+// and MapGet distinguishes them. Iterate a non-str-keyed map from Buzz instead.
 func (v Value) MapKeys() []string { return v.asMap().Keys }
 
 // EnumValue returns an enum case's backing value - what `Enum.case.value` yields -

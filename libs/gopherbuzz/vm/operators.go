@@ -44,11 +44,11 @@ func arith(vm *VM, op OpCode, left, right Value) (Value, error) {
 			leftMap, rightMap := left.asMap(), right.asMap()
 			out := NewMap()
 			merged := out.asMap()
-			for i, k := range leftMap.Keys {
-				merged.set(k, leftMap.Vals[i])
+			for i, k := range leftMap.keyVals {
+				merged.setVal(k, leftMap.Vals[i])
 			}
-			for i, k := range rightMap.Keys {
-				merged.set(k, rightMap.Vals[i])
+			for i, k := range rightMap.keyVals {
+				merged.setVal(k, rightMap.Vals[i])
 			}
 			return out, nil
 		}
@@ -259,8 +259,7 @@ func asInt(v Value) (int64, bool) {
 	}
 }
 
-// indexGet evaluates obj[idx] for lists (int) and maps (string key).
-// Note: map keys are always stringified, so m[1] and m["1"] collide.
+// indexGet evaluates obj[idx] for lists (int) and maps (any key; see mapKeyEqual).
 // indexGet evaluates obj[idx]. When optional is set (the checked subscript form
 // obj[?idx]), an out-of-bounds list/str index yields null instead of an error.
 func indexGet(vm *VM, obj, idx Value, optional bool) (Value, error) {
@@ -295,7 +294,7 @@ func indexGet(vm *VM, obj, idx Value, optional bool) (Value, error) {
 		return StrValue(string(runes[i])), nil
 	case tagMap:
 		m := vm.asMap(obj)
-		if v, ok := m.get(idx.String()); ok {
+		if v, ok := m.getVal(idx); ok {
 			return v, nil
 		}
 		return Null, nil
@@ -332,7 +331,7 @@ func setIndex(vm *VM, obj, idx, val Value) error {
 		if !m.Mut {
 			return errImmutable("map")
 		}
-		m.set(idx.String(), val)
+		m.setVal(idx, val)
 		return nil
 	default:
 		return fmt.Errorf("buzz: cannot index-assign %s", obj.buzzKind())
@@ -795,27 +794,21 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			return IntValue(int64(len(mp.Keys))), nil
 		})
 	case "remove":
+		// Upstream: "Removes `at` and returns its value, or null when the key is
+		// absent." `at` is typed K, so it takes whatever the map is keyed by.
 		return newDirect("map.remove", func(_ context.Context, args []Value) (Value, error) {
-			if len(args) < 1 || !args[0].IsStr() {
-				return Null, fmt.Errorf("map.remove: requires a str key argument")
+			if len(args) < 1 {
+				return Null, fmt.Errorf("map.remove: requires a key argument")
 			}
-			key := args[0].AsString()
-			for i, k := range mp.Keys {
-				if k == key {
-					removed := mp.Vals[i]
-					mp.Keys = append(mp.Keys[:i], mp.Keys[i+1:]...)
-					mp.Vals = append(mp.Vals[:i], mp.Vals[i+1:]...)
-					return removed, nil
-				}
+			if i := mp.indexOfVal(args[0]); i >= 0 {
+				return mp.removeAt(i), nil
 			}
 			return Null, nil
 		})
 	case "keys":
 		return newDirect("map.keys", func(_ context.Context, _ []Value) (Value, error) {
-			out := make([]Value, len(mp.Keys))
-			for i, k := range mp.Keys {
-				out[i] = StrValue(k)
-			}
+			out := make([]Value, len(mp.keyVals))
+			copy(out, mp.keyVals)
 			return ListValue(out), nil
 		})
 	case "values":
@@ -830,8 +823,8 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 				return Null, fmt.Errorf("map.forEach: requires a callback function")
 			}
 			cb := args[0]
-			for i, k := range mp.Keys {
-				if _, err := callValue(vm, ctx, cb, []Value{StrValue(k), mp.Vals[i]}); err != nil {
+			for i, k := range mp.keyVals {
+				if _, err := callValue(vm, ctx, cb, []Value{k, mp.Vals[i]}); err != nil {
 					return Null, err
 				}
 			}
@@ -849,8 +842,8 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			}
 			cb := args[0]
 			out := NewMap()
-			for i, k := range mp.Keys {
-				entry, err := callValue(vm, ctx, cb, []Value{StrValue(k), mp.Vals[i]})
+			for i, k := range mp.keyVals {
+				entry, err := callValue(vm, ctx, cb, []Value{k, mp.Vals[i]})
 				if err != nil {
 					return Null, err
 				}
@@ -862,7 +855,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 				if newKey.tag() == tagNull {
 					return Null, fmt.Errorf("map.map: the callback must return a record with a `key` member, got %s", entry.buzzKind())
 				}
-				out.MapSet(newKey.String(), newVal)
+				out.asMap().setVal(newKey, newVal)
 			}
 			return out, nil
 		})
@@ -873,13 +866,13 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			}
 			cb := args[0]
 			out := mapValue(mp.Mut)
-			for i, k := range mp.Keys {
-				v, err := callValue(vm, ctx, cb, []Value{StrValue(k), mp.Vals[i]})
+			for i, k := range mp.keyVals {
+				v, err := callValue(vm, ctx, cb, []Value{k, mp.Vals[i]})
 				if err != nil {
 					return Null, err
 				}
 				if v.Bool() {
-					out.MapSet(k, mp.Vals[i])
+					out.asMap().setVal(k, mp.Vals[i])
 				}
 			}
 			return out, nil
@@ -891,8 +884,8 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			}
 			cb := args[0]
 			acc := args[1]
-			for i, k := range mp.Keys {
-				v, err := callValue(vm, ctx, cb, []Value{StrValue(k), mp.Vals[i], acc})
+			for i, k := range mp.keyVals {
+				v, err := callValue(vm, ctx, cb, []Value{k, mp.Vals[i], acc})
 				if err != nil {
 					return Null, err
 				}
@@ -905,7 +898,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("map.hasKey: requires 1 argument")
 			}
-			_, ok := mp.get(args[0].String())
+			_, ok := mp.getVal(args[0])
 			return BoolValue(ok), nil
 		})
 	case "clone", "cloneMutable", "cloneImmutable", "copyMutable", "copyImmutable":
@@ -914,8 +907,8 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 		mut := name == "cloneMutable" || name == "copyMutable"
 		return newDirect("map."+name, func(_ context.Context, _ []Value) (Value, error) {
 			nm := mapValue(mut)
-			for i, k := range mp.Keys {
-				nm.MapSet(k, mp.Vals[i])
+			for i, k := range mp.keyVals {
+				nm.asMap().setVal(k, mp.Vals[i])
 			}
 			return nm, nil
 		})
@@ -926,9 +919,9 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			}
 			other := args[0]
 			out := mapValue(mp.Mut)
-			for i, k := range mp.Keys {
-				if _, ok := other.MapGet(k); !ok {
-					out.MapSet(k, mp.Vals[i])
+			for i, k := range mp.keyVals {
+				if _, ok := other.asMap().getVal(k); !ok {
+					out.asMap().setVal(k, mp.Vals[i])
 				}
 			}
 			return out, nil
@@ -940,9 +933,9 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			}
 			other := args[0]
 			out := mapValue(mp.Mut)
-			for i, k := range mp.Keys {
-				if _, ok := other.MapGet(k); ok {
-					out.MapSet(k, mp.Vals[i])
+			for i, k := range mp.keyVals {
+				if _, ok := other.asMap().getVal(k); ok {
+					out.asMap().setVal(k, mp.Vals[i])
 				}
 			}
 			return out, nil
@@ -958,19 +951,20 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			}
 			cb := args[0]
 			type pair struct {
-				k string
-				v Value
+				display string
+				k       Value
+				v       Value
 			}
 			pairs := make([]pair, len(mp.Keys))
-			for i, k := range mp.Keys {
-				pairs[i] = pair{k, mp.Vals[i]}
+			for i, k := range mp.keyVals {
+				pairs[i] = pair{mp.Keys[i], k, mp.Vals[i]}
 			}
 			var sortErr error
 			sort.SliceStable(pairs, func(i, j int) bool {
 				if sortErr != nil {
 					return false
 				}
-				v, err := callValue(vm, ctx, cb, []Value{StrValue(pairs[i].k), StrValue(pairs[j].k)})
+				v, err := callValue(vm, ctx, cb, []Value{pairs[i].k, pairs[j].k})
 				if err != nil {
 					sortErr = err
 					return false
@@ -985,10 +979,9 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			// the receiver in its original order. Keys/Vals/keyVals stay index-parallel and
 			// the key->index hash is rebuilt, which is mapObj's invariant.
 			for i, pr := range pairs {
-				mp.Keys[i], mp.Vals[i] = pr.k, pr.v
-				mp.keyVals[i] = StrValue(pr.k)
+				mp.Keys[i], mp.keyVals[i], mp.Vals[i] = pr.display, pr.k, pr.v
 				if mp.M != nil {
-					mp.M[pr.k] = int32(i)
+					mp.M[pr.display] = int32(i)
 				}
 			}
 			return m, nil
