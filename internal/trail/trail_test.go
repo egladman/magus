@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	json "github.com/egladman/magus/internal/json"
 	"github.com/stretchr/testify/require"
@@ -202,6 +203,14 @@ func TestReadBlob_RejectsUnsafeRefs(t *testing.T) {
 	}
 }
 
+// backdateBlob rewinds a stored blob's mtime by age, so a test can put it past
+// blobGraceWindow deterministically instead of sleeping.
+func backdateBlob(t *testing.T, base, ref string, age time.Duration) {
+	t.Helper()
+	old := time.Now().Add(-age)
+	require.NoError(t, os.Chtimes(filepath.Join(blobsPath(base), ref), old, old))
+}
+
 func TestRotate_CapsEventsAndGCsOrphanBlobs(t *testing.T) {
 	dir := t.TempDir()
 	refs := make([]string, 0, 5)
@@ -209,6 +218,9 @@ func TestRotate_CapsEventsAndGCsOrphanBlobs(t *testing.T) {
 		ref, _ := WriteBlob(dir, "mcp", []byte(string(rune('a'+i-1))+"-body"))
 		refs = append(refs, ref)
 		Append(dir, Event{Ts: int64(i), Kind: KindMCPToolCall, Action: string(rune('a' + i - 1)), ResponseRef: ref})
+		// Past blobGraceWindow, so this test exercises real orphan collection rather
+		// than the grace-window protection covered by TestGCBlobs_ProtectsPendingBlob.
+		backdateBlob(t, dir, ref, blobGraceWindow+time.Second)
 	}
 
 	rotate(dir, 2) // keep the last 2 events
@@ -232,6 +244,35 @@ func TestRotate_CapsEventsAndGCsOrphanBlobs(t *testing.T) {
 	gcBlobs(dir, nil) // nothing referenced: valid-ref blobs go, the temp file stays
 	if _, err := os.Stat(tmp); err != nil {
 		t.Errorf("gcBlobs deleted a non-ref temp file: %v", err)
+	}
+}
+
+// TestGCBlobs_ProtectsPendingBlob reproduces the T-1 window: WriteBlob finalizes a blob
+// before the producer's Append writes the event referencing it. A rotate landing in that
+// gap sees a fresh, unreferenced blob - exactly what gcBlobs must not collect. Bounded and
+// deterministic: no sleep, the blob's real age (just-created) is what protects it.
+func TestGCBlobs_ProtectsPendingBlob(t *testing.T) {
+	dir := t.TempDir()
+	ref, _ := WriteBlob(dir, "mcp", []byte("pending payload"))
+
+	gcBlobs(dir, nil) // simulate rotate's events snapshot: taken before Append landed
+
+	if _, err := ReadBlob(dir, ref); err != nil {
+		t.Fatalf("gcBlobs collected a blob still within its grace window: %v", err)
+	}
+}
+
+// TestGCBlobs_CollectsOrphanPastGraceWindow pins the other half of the T-1 fix: the grace
+// window only delays collection, it must not disable it, or gcBlobs stops doing its job.
+func TestGCBlobs_CollectsOrphanPastGraceWindow(t *testing.T) {
+	dir := t.TempDir()
+	ref, _ := WriteBlob(dir, "mcp", []byte("truly orphaned"))
+	backdateBlob(t, dir, ref, blobGraceWindow+time.Second)
+
+	gcBlobs(dir, nil)
+
+	if _, err := ReadBlob(dir, ref); err == nil {
+		t.Fatalf("gcBlobs kept an orphaned blob past its grace window")
 	}
 }
 
