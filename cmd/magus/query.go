@@ -183,26 +183,8 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	out := g.Query(input, budget)
-	if out.MatchCount == 0 {
-		// Most queries never seed the symbol shards - a bare term does not - so zero
-		// matches usually says nothing at all about whether a code symbol by that name
-		// exists. Saying which of those two happened is the point.
-		//
-		// CouldMatchSymbol, not seedsSymbols: a query that named a non-symbol kind ruled
-		// the layer out itself, and telling its reader that symbols went unsearched would
-		// point them somewhere the answer could never have been.
-		// When the symbol layer is irrelevant, a missing index is irrelevant too: naming
-		// it would attach a caveat to an answer it has no bearing on. Skipping the probe
-		// is also why an ordinary domain query pays nothing for the verdict.
-		var gaps []types.KnowledgeSymbolGap
-		symbolsRelevant := knowledge.CouldMatchSymbol(input)
-		if symbolsRelevant {
-			gaps = symbolGapsFor(ctx, root)
-		}
-		out.Answer = types.EmptyAnswer(seedsSymbols || !symbolsRelevant, gaps)
-	} else {
-		out.Answer = types.KnowledgeAnswer{Verdict: types.VerdictFound}
-	}
+	reason, gaps := symbolCoverage(ctx, root, input, seedsSymbols)
+	out.Answer = types.Answer(out.MatchCount > 0, reason, gaps)
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -220,7 +202,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		// query's exit status stays 0 whatever the verdict: an empty result set is a
 		// legitimate answer to a search, and every script that runs `magus query` would
 		// break if it became a failure. The verdict rides the output instead.
-		printSymbolAnswer(os.Stdout, out.Answer, clihint.Refs.With("<name>"))
+		printVerdict(os.Stdout, out.Answer, clihint.Refs.With("<name>"))
 		return nil
 	}
 	shown := out.Matches
@@ -710,11 +692,13 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 	if !ok {
 		// A bare name does not seed symbols, so explain resolved it against a graph that
 		// provably held no code symbols. Reporting that as "no node matches" is how a
-		// real symbol comes to look nonexistent.
-		ans := types.EmptyAnswer(seedsSymbols, symbolGapsFor(ctx, root))
+		// real symbol comes to look nonexistent - but only when the input could have
+		// named one, so a typo'd `kind:target` still gets the absent verdict it deserves.
+		reason, gaps := symbolCoverage(ctx, root, pos[0], seedsSymbols)
+		ans := types.Answer(false, reason, gaps)
 		fmt.Fprintf(os.Stderr, "magus explain: no node matches %q\n", pos[0])
-		printSymbolAnswer(os.Stderr, ans, clihint.Refs.With(pos[0]))
-		return answerExit(ans)
+		printVerdict(os.Stderr, ans, clihint.Refs.With(pos[0]))
+		return exitForVerdict(ans.Verdict)
 	}
 
 	switch opts.Format {

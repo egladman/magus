@@ -58,21 +58,27 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		// here would also be wrong for a different reason: an exact symbol ID routes to a
 		// subset of shards, so it answers about the subset, not the workspace. The
 		// declared-index probe is the authority.
-		ans := types.EmptyAnswer(true, symbolGapsFor(ctx, root))
+		gaps, probed := symbolGapsFor(ctx, root)
+		var reason types.KnowledgeUnknownReason
+		if !probed {
+			reason = types.ReasonCoverageUnknown
+		}
+		ans := types.Answer(false, reason, gaps)
 		fmt.Fprintf(os.Stderr, "magus refs: no node matches %q\n", pos[0])
-		printSymbolAnswer(os.Stderr, ans, "")
+		printVerdict(os.Stderr, ans, "")
 		if len(ans.Uncovered) > 0 {
 			fmt.Fprintf(os.Stderr, "  the daemon's auto-indexer also keeps indexes current while `%s` runs\n", clihint.ServerStart)
 		}
-		return answerExit(ans)
+		return exitForVerdict(ans.Verdict)
 	}
-	// A symbol that resolved but has no referencing files is the same question one level
-	// down: nothing uses it, or nothing magus can see uses it.
-	if len(out.Refs) == 0 {
-		out.Answer = types.EmptyAnswer(true, symbolGapsFor(ctx, root))
-	} else {
-		out.Answer = types.KnowledgeAnswer{Verdict: types.VerdictFound}
+	// A resolved symbol still carries the coverage verdict: an uncovered project could
+	// hold references this list does not show, whether or not it showed any.
+	gaps, probed := symbolGapsFor(ctx, root)
+	var reason types.KnowledgeUnknownReason
+	if !probed {
+		reason = types.ReasonCoverageUnknown
 	}
+	out.Answer = types.Answer(len(out.Refs) > 0, reason, gaps)
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -97,7 +103,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	}
 	if len(out.Refs) == 0 {
 		fmt.Println("no references found")
-		printSymbolAnswer(os.Stdout, out.Answer, "")
+		printVerdict(os.Stdout, out.Answer, "")
 		return nil
 	}
 	fmt.Printf("referenced in %d file(s), %d occurrence(s):\n", out.FileCount, out.RefCount)

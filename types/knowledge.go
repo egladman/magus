@@ -1,5 +1,7 @@
 package types
 
+import "strings"
+
 // Knowledge-graph schema: the deterministic, derived graph of the magus domain
 // (projects, targets, spells, ops, charms, modules, methods, diagnostics, and -
 // later - docs and buzz source nodes). Every node and edge is EXTRACTED or
@@ -225,27 +227,52 @@ const (
 	VerdictUnknown KnowledgeVerdict = "unknown" // nothing matched, but part of the workspace was not searchable
 )
 
-// KnowledgeUnknownReason says WHY an answer is unknown, because the two causes have
-// different fixes: one needs an index built, the other needs a different query.
+// KnowledgeUnknownReason says WHY an answer is unknown, because the causes have
+// different fixes: one needs an index built, one needs a different query, and one means
+// magus could not even establish what it had searched.
 type KnowledgeUnknownReason string
 
 const (
-	// ReasonSymbolIndexMissing: a project declares a SCIP index that magus could not read.
+	// ReasonSymbolIndexMissing: a project declares a SCIP index magus could not read.
 	// Fix: build it.
 	ReasonSymbolIndexMissing KnowledgeUnknownReason = "symbol-index-missing"
-	// ReasonSymbolsNotLoaded: this lookup never merged the symbol shards, so no code symbol
-	// could have matched whatever the index holds. Fix: ask a question that seeds symbols.
+	// ReasonSymbolsNotLoaded: this lookup never merged the symbol shards, so no code
+	// symbol could have matched whatever the index holds. Fix: ask a question that seeds
+	// symbols, or use the verb that always does.
 	ReasonSymbolsNotLoaded KnowledgeUnknownReason = "symbols-not-loaded"
+	// ReasonCoverageUnknown: the coverage probe itself failed, so magus cannot say what it
+	// searched. Reporting this as `absent` would assert exactly the fact it failed to
+	// establish, which is the one outcome this whole verdict exists to prevent.
+	ReasonCoverageUnknown KnowledgeUnknownReason = "coverage-unknown"
 )
 
 // KnowledgeSymbolGap is one project whose declared symbol index magus could not read.
 // State reuses SymbolIndexFreshness so reporting staleness later is additive rather than
-// a second enum; today only SymbolIndexNotBuilt is emitted, because the read verbs have
-// no cache handle to probe freshness with.
+// a second enum; today only SymbolIndexNotBuilt is emitted, because the read verbs
+// deliberately probe with a stat rather than opening the workspace's cache.
 type KnowledgeSymbolGap struct {
 	Project ProjectRef           `json:"project"          yaml:"project"`
 	State   SymbolIndexFreshness `json:"state"            yaml:"state"`
 	Detail  string               `json:"detail,omitempty" yaml:"detail,omitempty"`
+}
+
+// Describe renders one gap as "libs/api (not-indexed)". It lives here so the CLI, the
+// explain text, and the insight report cannot drift into three spellings of one fact.
+func (g KnowledgeSymbolGap) Describe() string {
+	detail := g.Detail
+	if detail == "" {
+		detail = string(g.State)
+	}
+	return g.Project.Display() + " (" + detail + ")"
+}
+
+// DescribeGaps renders a gap list as "libs/api (not-indexed), docs (not-indexed)".
+func DescribeGaps(gaps []KnowledgeSymbolGap) string {
+	parts := make([]string, len(gaps))
+	for i, g := range gaps {
+		parts[i] = g.Describe()
+	}
+	return strings.Join(parts, ", ")
 }
 
 // KnowledgeAnswer rides every graph lookup's structured output so a consumer can branch
@@ -258,19 +285,25 @@ type KnowledgeAnswer struct {
 	Uncovered []KnowledgeSymbolGap   `json:"uncovered,omitempty" yaml:"uncovered,omitempty"`
 }
 
-// EmptyAnswer classifies a lookup that returned nothing. Call it only on an empty
-// result; a non-empty one is VerdictFound by construction.
+// Answer classifies a lookup's result against what magus was actually able to search.
 //
-// symbolsLoaded reports whether this lookup merged the symbol shards at all. When it did
-// not, that is the reason returned even if indexes are also missing: it is the more
-// specific fact and the more actionable fix, and a caller told to go build an index would
-// find the rebuilt index just as invisible to the same query.
-func EmptyAnswer(symbolsLoaded bool, gaps []KnowledgeSymbolGap) KnowledgeAnswer {
+// matched reports whether the lookup returned anything. reason is empty when the symbol
+// layer was searched (or was irrelevant to the question); set it when the lookup could not
+// consult it, or when the coverage probe itself failed. gaps are the projects whose
+// declared index could not be read.
+//
+// A stated reason or any gap makes the answer unknown WHETHER OR NOT the lookup matched.
+// That is deliberate and it is the difference from a plain emptiness check: a populated
+// list drawn from a half-indexed workspace is as misleading as an empty one, because the
+// projects it omits are invisible either way.
+func Answer(matched bool, reason KnowledgeUnknownReason, gaps []KnowledgeSymbolGap) KnowledgeAnswer {
 	switch {
-	case !symbolsLoaded:
-		return KnowledgeAnswer{Verdict: VerdictUnknown, Reason: ReasonSymbolsNotLoaded, Uncovered: gaps}
+	case reason != "":
+		return KnowledgeAnswer{Verdict: VerdictUnknown, Reason: reason, Uncovered: gaps}
 	case len(gaps) > 0:
 		return KnowledgeAnswer{Verdict: VerdictUnknown, Reason: ReasonSymbolIndexMissing, Uncovered: gaps}
+	case matched:
+		return KnowledgeAnswer{Verdict: VerdictFound}
 	default:
 		return KnowledgeAnswer{Verdict: VerdictAbsent}
 	}

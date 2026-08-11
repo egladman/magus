@@ -154,21 +154,21 @@ func (m *Magus) Unreferenced(ctx context.Context) (types.UnreferencedOutput, err
 		return types.UnreferencedOutput{}, err
 	}
 	syms := g.Unreferenced()
-	out := types.UnreferencedOutput{Definition: types.UnreferencedDefinition, Symbols: syms}
-	// Gaps are worth probing whatever the list length: a long list from a half-indexed
-	// workspace is just as misleading as an empty one, since the projects it omits are
-	// invisible either way.
-	if gaps := m.SymbolGaps(ctx); len(gaps) > 0 {
-		out.Answer = types.EmptyAnswer(true, gaps)
-	} else if len(syms) > 0 {
-		out.Answer = types.KnowledgeAnswer{Verdict: types.VerdictFound}
-	} else {
-		out.Answer = types.EmptyAnswer(true, nil)
+	// Gaps matter whatever the list length: a long list from a half-indexed workspace is
+	// as misleading as an empty one, since the projects it omits are invisible either way.
+	gaps, probed := m.SymbolGaps(ctx)
+	var reason types.KnowledgeUnknownReason
+	if !probed {
+		reason = types.ReasonCoverageUnknown
 	}
-	return out, nil
+	return types.UnreferencedOutput{
+		Definition: types.UnreferencedDefinition,
+		Symbols:    syms,
+		Answer:     types.Answer(len(syms) > 0, reason, gaps),
+	}, nil
 }
 
-// Trend is the rising/cooling lens: each project's churn in the recent vs earlier
+// Trend is// Trend is the rising/cooling lens: each project's churn in the recent vs earlier
 // half of the window.
 func (m *Magus) Trend(ctx context.Context, opts types.InsightOptions) (types.TrendOutput, error) {
 	scan, err := m.insightScan(ctx, &opts)

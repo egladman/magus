@@ -415,14 +415,14 @@ func BenchmarkParseIndex(b *testing.B) {
 }
 
 func TestParseMonikerStripsVersion(t *testing.T) {
-	id1, label, _, ok := parseMoniker(monikerV1)
+	a, ok := parseMoniker(monikerV1)
 	require.True(t, ok)
-	id2, _, _, ok := parseMoniker(monikerV2)
+	b, ok := parseMoniker(monikerV2)
 	require.True(t, ok)
-	assert.Equal(t, id1, id2, "the two versions share one ID")
-	assert.Equal(t, "Bar", label)
+	assert.Equal(t, a.Key, b.Key, "the two versions share one ID")
+	assert.Equal(t, "Bar", a.Label)
 
-	_, _, _, ok = parseMoniker("local 5")
+	_, ok = parseMoniker("local 5")
 	assert.False(t, ok)
 }
 
@@ -473,9 +473,9 @@ func TestParseMonikerReportsCallableFromDescriptor(t *testing.T) {
 		{"parameter of a method", "scip-go gomod example.com/foo v1 Caller().(arg)", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, _, callable, ok := parseMoniker(tc.moniker)
+			info, ok := parseMoniker(tc.moniker)
 			require.True(t, ok, "moniker should parse")
-			assert.Equal(t, tc.callable, callable)
+			assert.Equal(t, tc.callable, info.Callable)
 		})
 	}
 }

@@ -65,7 +65,6 @@ type UnreferencedEntry struct {
 	Source   string `json:"source,omitempty"   yaml:"source,omitempty"`
 	Kind     string `json:"kind,omitempty"     yaml:"kind,omitempty"`
 	Language string `json:"language,omitempty" yaml:"language,omitempty"`
-	Project  string `json:"project,omitempty"  yaml:"project,omitempty"`
 }
 
 // HotspotOutput ranks where churn meets complexity — the canonical "fix this first"

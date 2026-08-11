@@ -377,7 +377,7 @@ func unreferencedText(out types.UnreferencedOutput) error {
 	// workspace is the failure mode this lens has to guard against, and the reader needs
 	// to see the caveat attached to the result they just read.
 	fmt.Println()
-	printSymbolAnswer(os.Stdout, out.Answer, "")
+	printVerdict(os.Stdout, out.Answer, "")
 	return nil
 }
 

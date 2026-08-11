@@ -24,15 +24,26 @@ type graphResolver interface {
 	KnowledgeGraphWithSymbols(ctx context.Context) (*knowledge.Graph, error)
 	KnowledgeGraphWithSymbolsForRef(ctx context.Context, symbol string) (*knowledge.Graph, error)
 	// SymbolGaps names the projects whose declared symbol index could not be read, so an
-	// empty result can say whether it is a fact or a blind spot.
-	SymbolGaps(ctx context.Context) []types.KnowledgeSymbolGap
+	// answer can say whether it is a fact or a blind spot. The second return is false when
+	// the probe itself failed, which must not be reported as verified coverage.
+	SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool)
 }
 
-// gapFn defers the coverage probe to the branch that needs it. The probe stats one file
-// per declared index, and only an EMPTY result has anything to explain, so the tools pass
-// a thunk rather than paying for it on every call. It also keeps pagedRefs/pagedQuery
-// testable against a hand-built graph with no workspace behind them.
-type gapFn func() []types.KnowledgeSymbolGap
+// gapProbe defers the coverage lookup to the branch that needs it. It stats one file per
+// declared index, and only an answer that reports nothing has anything to explain, so the
+// tools pass a thunk rather than paying for it on every call. It also keeps
+// pagedRefs/pagedQuery testable against a hand-built graph with no workspace behind them.
+type gapProbe func() ([]types.KnowledgeSymbolGap, bool)
+
+// answerFor builds a verdict from a probe, mapping a failed probe to its own reason
+// rather than to an empty gap list that would read as verified coverage.
+func answerFor(matched bool, reason types.KnowledgeUnknownReason, probe gapProbe) types.KnowledgeAnswer {
+	gaps, probed := probe()
+	if !probed {
+		return types.Answer(matched, types.ReasonCoverageUnknown, nil)
+	}
+	return types.Answer(matched, reason, gaps)
+}
 
 // knowledgeGraph resolves the DOMAIN knowledge graph for a tool invocation - the warm
 // graph, which excludes the lazily-loaded @symbols shards. explain/path/stats use it.
@@ -75,7 +86,7 @@ func (t *queryTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spell
 	if err != nil {
 		return spells.InvokeResponse{}, err
 	}
-	resp, err := pagedQuery(g, terms, budget, limit, cursor, seedsSymbols, func() []types.KnowledgeSymbolGap { return t.graph.SymbolGaps(ctx) })
+	resp, err := pagedQuery(g, terms, budget, limit, cursor, seedsSymbols, func() ([]types.KnowledgeSymbolGap, bool) { return t.graph.SymbolGaps(ctx) })
 	if err != nil {
 		return spells.InvokeResponse{}, err
 	}
@@ -103,7 +114,7 @@ func (t *refsTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 	if err != nil {
 		return spells.InvokeResponse{}, err
 	}
-	resp, err := pagedRefs(g, symbol, int(paramFloat(req.Params, "limit", 0)), paramString(req.Params, "cursor", ""), func() []types.KnowledgeSymbolGap { return t.graph.SymbolGaps(ctx) })
+	resp, err := pagedRefs(g, symbol, int(paramFloat(req.Params, "limit", 0)), paramString(req.Params, "cursor", ""), func() ([]types.KnowledgeSymbolGap, bool) { return t.graph.SymbolGaps(ctx) })
 	if err != nil {
 		return spells.InvokeResponse{}, err
 	}
@@ -115,12 +126,12 @@ func (t *refsTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 // cursor as pagedQuery windows it - offset plus a query hash and graph fingerprint so
 // a stale cursor fails loudly. Defs and the totals reflect the whole set; only Refs
 // is the page. Split from Invoke so it is testable with a hand-built graph.
-func pagedRefs(g *knowledge.Graph, symbol string, limit int, cursor string, gaps gapFn) (paginatedRefs, error) {
+func pagedRefs(g *knowledge.Graph, symbol string, limit int, cursor string, probe gapProbe) (paginatedRefs, error) {
 	out, ok := g.Refs(symbol)
 	if !ok {
 		// refs always resolves against a symbol-merged graph, so the question is never
 		// whether symbols were loaded, only whether every declared index was readable.
-		ans := types.EmptyAnswer(true, gaps())
+		ans := answerFor(false, "", probe)
 		// An unknown verdict is a RESULT, not an error: the tool succeeded at working out
 		// that it cannot answer, and that conclusion has to be machine-branchable. An
 		// error string is not - an agent would have to pattern-match prose to tell "this
@@ -136,11 +147,7 @@ func pagedRefs(g *knowledge.Graph, symbol string, limit int, cursor string, gaps
 		}
 		return paginatedRefs{}, errors.New("mcp: no symbol matches " + symbol)
 	}
-	if len(out.Refs) == 0 {
-		out.Answer = types.EmptyAnswer(true, gaps())
-	} else {
-		out.Answer = types.KnowledgeAnswer{Verdict: types.VerdictFound}
-	}
+	out.Answer = answerFor(len(out.Refs) > 0, "", probe)
 	if limit <= 0 && cursor == "" {
 		return paginatedRefs{KnowledgeRefsOutput: out}, nil
 	}
@@ -184,15 +191,15 @@ func pagedRefs(g *knowledge.Graph, symbol string, limit int, cursor string, gaps
 // matches remain. Split from Invoke so it is testable with a hand-built graph. The
 // unpaged result is wrapped too (with an empty, omitted NextCursor) so the return
 // type is always concrete.
-func pagedQuery(g *knowledge.Graph, terms string, budget, limit int, cursor string, seedsSymbols bool, gaps gapFn) (paginatedQuery, error) {
+func pagedQuery(g *knowledge.Graph, terms string, budget, limit int, cursor string, seedsSymbols bool, probe gapProbe) (paginatedQuery, error) {
 	// The verdict is computed from the UNPAGED match count and copied onto every page, so
 	// an agent reading page three sees the same coverage statement as page one.
 	answer := func(out types.KnowledgeQueryOutput) types.KnowledgeQueryOutput {
-		if out.MatchCount == 0 {
-			out.Answer = types.EmptyAnswer(seedsSymbols, gaps())
-		} else {
-			out.Answer = types.KnowledgeAnswer{Verdict: types.VerdictFound}
+		var reason types.KnowledgeUnknownReason
+		if !seedsSymbols {
+			reason = types.ReasonSymbolsNotLoaded
 		}
+		out.Answer = answerFor(out.MatchCount > 0, reason, probe)
 		return out
 	}
 	if limit <= 0 && cursor == "" {
@@ -242,9 +249,17 @@ func (t *explainTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spe
 		// scope here. Saying so as a RESULT keeps the agent from recording "no such node"
 		// as a fact about the workspace; the channel is text because that is this tool's
 		// channel for everything.
-		ans := types.EmptyAnswer(false, t.graph.SymbolGaps(ctx))
+		// explain runs against the symbol-free warm graph, so a code symbol was never in
+		// scope - but only say so when the query could have named one. `kind:author` with
+		// a typo has nothing to do with the symbol layer, and an absent verdict there is a
+		// fact worth asserting, which is why this is not hardcoded.
+		var reason types.KnowledgeUnknownReason
+		if knowledge.CouldMatchSymbol(node) {
+			reason = types.ReasonSymbolsNotLoaded
+		}
+		ans := answerFor(false, reason, func() ([]types.KnowledgeSymbolGap, bool) { return t.graph.SymbolGaps(ctx) })
 		if ans.Verdict == types.VerdictUnknown {
-			return spells.InvokeResponse{Text: render.AnswerText(node, ans)}, nil
+			return spells.InvokeResponse{Text: render.MissText(node, ans)}, nil
 		}
 		return spells.InvokeResponse{}, errors.New("mcp: no node matches " + node)
 	}

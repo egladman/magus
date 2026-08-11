@@ -394,33 +394,39 @@ func loadKnowledgeSymbols(ctx context.Context, in symbolIngestInputs) map[string
 }
 
 // SymbolGaps reports every project that declares a SCIP index magus could not read, so a
-// lookup that came back empty can say whether it searched everywhere it should have. It
-// keys off the same declarations loadKnowledgeSymbols ingests, which is deliberately NOT
-// the set magus status reports: declarations include knowledge.symbols overrides, and a
-// project indexed only through one of those is invisible to the status lens.
+// lookup can say whether it searched everywhere it should have. ok is false when the probe
+// itself could not run: a nil slice would otherwise be indistinguishable from "no gaps"
+// and would turn an internal failure into a confident claim of absence, which is the one
+// outcome the verdict exists to prevent.
 //
-// The caller should reach for this only on an empty result. It is one Stat per declared
-// index - cheap, but not free, and a lookup that found something has nothing to explain.
+// It keys off the same declarations loadKnowledgeSymbols ingests, which is deliberately
+// NOT the set magus status reports: declarations include knowledge.symbols overrides, and
+// a project indexed only through one of those is invisible to the status lens.
 //
-// Freshness is out of scope here: deciding whether an index is merely STALE needs a cache
-// handle, and the read verbs that call this deliberately inspect the workspace rather than
-// opening it (opening writes). A stale index still answers, just about older sources.
-func SymbolGaps(ctx context.Context, ws types.Inspector, root string, cfg config.Config, log *slog.Logger) []types.KnowledgeSymbolGap {
+// The probe is one Stat per declared index and nothing more. It deliberately does not
+// decode the index to check it parses: that is a full protobuf unmarshal plus symbol
+// accumulation per lookup, and a never-built index is the case that actually occurs. A
+// present-but-corrupt index therefore reads as covered here; the graph build logs it.
+//
+// Freshness is out of scope for the same reason: deciding whether an index is merely STALE
+// needs a cache handle, and the read verbs that call this inspect the workspace rather
+// than opening it (opening writes).
+func SymbolGaps(ctx context.Context, ws types.Inspector, root string, cfg config.Config, log *slog.Logger) (gaps []types.KnowledgeSymbolGap, ok bool) {
 	if log == nil {
 		log = slog.Default()
 	}
 	spells, err := ListSpells(ctx)
 	if err != nil {
-		return nil
+		return nil, false
 	}
 	projects, err := ws.ListProjects(ctx)
 	if err != nil {
-		return nil
+		return nil, false
 	}
 	return symbolGaps(ctx, symbolIngestInputs{
 		cfg: cfg, root: root, cacheDir: resolveCacheDir(root, cfg),
 		projects: projects, spells: spells, log: log,
-	})
+	}), true
 }
 
 // symbolGaps is the testable half of SymbolGaps: it takes the same resolved inputs
@@ -433,41 +439,28 @@ func symbolGaps(ctx context.Context, in symbolIngestInputs) []types.KnowledgeSym
 
 	var out []types.KnowledgeSymbolGap
 	for _, decl := range symbolIndexDeclarations(ctx, in) {
-		// Mirror loadKnowledgeSymbols's three outcomes: readable (no gap), absent (never
-		// built), unreadable (present but unusable). Detail carries the distinction so the
-		// remediation can differ without a second enum.
-		data, err := os.ReadFile(decl.path)
-		switch {
-		case err == nil:
-			// An index that exists but will not decode is as invisible as a missing one, and
-			// silently dropping it is what made an empty answer look verified.
-			if _, derr := symbols.ParseIndex(ctx, data, decl.project, decl.language); derr != nil {
-				out = append(out, types.KnowledgeSymbolGap{
-					Project: types.NewProjectRef(decl.project, dirByPath[decl.project]),
-					State:   types.SymbolIndexNotBuilt,
-					Detail:  "undecodable",
-				})
-			}
-		case errors.Is(err, fs.ErrNotExist):
-			out = append(out, types.KnowledgeSymbolGap{
-				Project: types.NewProjectRef(decl.project, dirByPath[decl.project]),
-				State:   types.SymbolIndexNotBuilt,
-			})
-		default:
-			out = append(out, types.KnowledgeSymbolGap{
-				Project: types.NewProjectRef(decl.project, dirByPath[decl.project]),
-				State:   types.SymbolIndexNotBuilt,
-				Detail:  "unreadable",
-			})
+		// Detail carries what Stat can actually distinguish: absent, or present but
+		// unreadable. State stays the machine-branchable field and is accurate for both,
+		// since neither yields a usable index.
+		var detail string
+		if _, err := os.Stat(decl.path); err == nil {
+			continue
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			detail = "unreadable"
 		}
+		out = append(out, types.KnowledgeSymbolGap{
+			Project: types.NewProjectRef(decl.project, dirByPath[decl.project]),
+			State:   types.SymbolIndexNotBuilt,
+			Detail:  detail,
+		})
 	}
 	return out
 }
 
 // SymbolGaps reports the projects whose declared symbol index this workspace could not
-// read. It is the method form of the package-level SymbolGaps, for callers that already
-// hold a Magus (the MCP handlers).
-func (m *Magus) SymbolGaps(ctx context.Context) []types.KnowledgeSymbolGap {
+// read, and whether the probe ran at all. Method form of the package-level SymbolGaps,
+// for callers that already hold a Magus (the MCP handlers).
+func (m *Magus) SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool) {
 	return SymbolGaps(ctx, m, m.Root(), m.cfg, slog.Default())
 }
 

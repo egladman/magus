@@ -589,7 +589,6 @@ func buzzValueMagusUnreferencedEntry(v types.UnreferencedEntry) vm.Value {
 	out.MapSet("source", vm.StrValue(v.Source))
 	out.MapSet("kind", vm.StrValue(v.Kind))
 	out.MapSet("language", vm.StrValue(v.Language))
-	out.MapSet("project", vm.StrValue(v.Project))
 	return out
 }
 

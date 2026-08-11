@@ -643,7 +643,6 @@ func (v UnreferencedEntry) BuzzObject() BuzzObject {
 		"source":   v.Source,
 		"kind":     v.Kind,
 		"language": v.Language,
-		"project":  v.Project,
 	}
 }
 

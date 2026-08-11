@@ -36,18 +36,42 @@ func TestUnreferencedFindsUnnamedSymbol(t *testing.T) {
 	assert.Equal(t, "pkg/a/a.go:1", got[0].Source)
 }
 
-// A caller makes it referenced. This is the clause the call edges bought: without them a
-// symbol used only inside its own file looks identical to one used nowhere.
-func TestUnreferencedExcludesCalledSymbol(t *testing.T) {
+// A call from ANOTHER file makes it referenced.
+func TestUnreferencedExcludesSymbolCalledFromAnotherFile(t *testing.T) {
+	caller := sym("x Caller().", "pkg/a/a.go")
+	caller.Calls = []types.KnowledgeSymbolCall{{Key: "x Callee().", Count: 1}}
+	g := unrefGraph(t, []types.KnowledgeSymbol{caller, sym("x Callee().", "pkg/a/b.go")})
+
+	assert.Equal(t, []string{"symbol:x Caller()."}, ids(g.Unreferenced()),
+		"the callee is reached from a different file, so it is used")
+}
+
+// A call from within the SAME file does not count, exactly as a same-file reference does
+// not. The two clauses have to agree here: treating a same-file call as use while
+// treating a same-file reference as non-use would hide every helper used once in its own
+// file and list every type sitting in precisely that position.
+func TestUnreferencedTreatsSameFileCallLikeSameFileReference(t *testing.T) {
 	caller := sym("x Caller().", "pkg/a/a.go")
 	caller.Calls = []types.KnowledgeSymbolCall{{Key: "x Callee().", Count: 1}}
 	g := unrefGraph(t, []types.KnowledgeSymbol{caller, sym("x Callee().", "pkg/a/a.go")})
 
-	assert.Equal(t, []string{"symbol:x Caller()."}, ids(g.Unreferenced()),
-		"the callee is called from its own file and must not be reported")
+	assert.Equal(t, []string{"symbol:x Callee().", "symbol:x Caller()."}, ids(g.Unreferenced()),
+		"both are confined to one file, so both are worth surfacing (sorted by ID)")
 }
 
-// A reference from another file counts, which is what covers the things a call edge
+// A package or namespace is never called or referenced in this model - its imports are
+// file-to-file edges - so listing them would report the workspace's shape, not its code.
+// The test is here because the exclusion reads the SCIP descriptor grammar off the node
+// ID rather than SymbolInformation.Kind, which scip-typescript never populates.
+func TestUnreferencedSkipsNamespaces(t *testing.T) {
+	pkg := types.KnowledgeSymbol{
+		Key: "x `example.com/x/pkg`/", Label: "pkg", Source: "pkg/a/a.go:1", Defs: []string{"pkg/a/a.go"},
+	}
+	g := unrefGraph(t, []types.KnowledgeSymbol{pkg, sym("x Lonely().", "pkg/a/a.go")})
+	assert.Equal(t, []string{"symbol:x Lonely()."}, ids(g.Unreferenced()))
+}
+
+// A reference from another file counts// A reference from another file counts, which is what covers the things a call edge
 // cannot be: structs, fields, constants.
 func TestUnreferencedExcludesCrossFileReference(t *testing.T) {
 	s := sym("x Kind#", "pkg/a/a.go")
@@ -95,7 +119,6 @@ func TestUnreferencedCarriesKindAndLanguage(t *testing.T) {
 	require.Len(t, got, 1)
 	assert.Equal(t, "Struct", got[0].Kind)
 	assert.Equal(t, "go", got[0].Language)
-	assert.Equal(t, "pkg", got[0].Project)
 }
 
 func unrefOne(t *testing.T, s types.KnowledgeSymbol) []types.UnreferencedEntry {

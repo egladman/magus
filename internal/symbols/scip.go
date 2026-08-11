@@ -107,11 +107,11 @@ func buildEnclosing(dst []enclosing, doc *scip.Document) []enclosing {
 		if occ.Symbol == "" || scip.IsLocalSymbol(occ.Symbol) {
 			continue
 		}
-		key, _, _, ok := parseMoniker(occ.Symbol)
+		info, ok := parseMoniker(occ.Symbol)
 		if !ok {
 			continue
 		}
-		dst = append(dst, enclosing{rng: r, key: key})
+		dst = append(dst, enclosing{rng: r, key: info.Key})
 	}
 	slices.SortFunc(dst, func(a, b enclosing) int {
 		if c := a.rng.Start.Compare(b.rng.Start); c != 0 {
@@ -168,8 +168,8 @@ func ParseIndex(ctx context.Context, data []byte, projectPath, declaredLanguage 
 	infoByKey := map[string]*scip.SymbolInformation{}
 	for _, doc := range idx.Documents {
 		for _, si := range doc.Symbols {
-			if key, _, _, ok := parseMoniker(si.Symbol); ok {
-				infoByKey[key] = si
+			if info, ok := parseMoniker(si.Symbol); ok {
+				infoByKey[info.Key] = si
 			}
 		}
 	}
@@ -212,14 +212,15 @@ func ParseIndex(ctx context.Context, data []byte, projectPath, declaredLanguage 
 			if moniker == "" || scip.IsLocalSymbol(moniker) {
 				continue
 			}
-			key, label, callable, ok := parseMoniker(moniker)
+			info, ok := parseMoniker(moniker)
 			if !ok {
 				continue
 			}
+			key := info.Key
 			a := byKey[key]
 			if a == nil {
 				a = &acc{
-					sym:  types.KnowledgeSymbol{Key: key, Moniker: moniker, Label: label, Language: docLanguage},
+					sym:  types.KnowledgeSymbol{Key: key, Moniker: moniker, Label: info.Label, Language: docLanguage},
 					defs: map[string]bool{},
 					refs: map[string]*types.KnowledgeSymbolRef{},
 				}
@@ -249,7 +250,7 @@ func ParseIndex(ctx context.Context, data []byte, projectPath, declaredLanguage 
 				if len(r.Lines) < MaxRefLines {
 					r.Lines = append(r.Lines, line)
 				}
-				attributeCall(calls, encl, occ, key, callable)
+				attributeCall(calls, encl, occ, key, info.Callable)
 			}
 		}
 	}
@@ -328,29 +329,42 @@ func workspaceRelative(p string) bool {
 	return !slices.Contains(strings.Split(p, "/"), "..")
 }
 
-// parseMoniker turns a SCIP moniker into a stable, version-free node key, a display
-// label, and whether the symbol is callable. The key is the package manager and name plus
-// the descriptor path, deliberately excluding the package VERSION so a dependency bump
-// does not rename every symbol - but including the manager so two ecosystems that share a
-// package name (npm foo vs gomod foo) do not collide. A local or unparsable moniker yields
-// ok=false (the caller skips it).
+// monikerInfo is what a parsed SCIP moniker yields: the stable node key, a display label,
+// and whether the symbol can be called.
 //
-// callable rides along rather than being asked for separately because this already holds
-// the parsed descriptors and the reference loop calls it for every occurrence; a second
-// ParseSymbol per occurrence would put a full moniker parse on the hot path.
-func parseMoniker(moniker string) (key, label string, callable, ok bool) {
+// A record rather than a widening return tuple. The parse outcome and the symbol's own
+// properties are different kinds of fact, and returning them as adjacent bools put
+// `callable` and `ok` side by side on a path that already reads `key, _, _, ok :=` -
+// where transposing them compiles, vets, and silently reclassifies every unparsable
+// moniker as merely uncallable.
+type monikerInfo struct {
+	Key      string
+	Label    string
+	Callable bool
+}
+
+// parseMoniker turns a SCIP moniker into a stable, version-free node key and a display
+// label. The key is the package manager and name plus the descriptor path, deliberately
+// excluding the package VERSION so a dependency bump does not rename every symbol - but
+// including the manager so two ecosystems that share a package name (npm foo vs gomod
+// foo) do not collide. A local or unparsable moniker yields ok=false (the caller skips it).
+//
+// Callability rides along rather than being asked for separately because this already
+// holds the parsed descriptors and the reference loop calls it for every occurrence; a
+// second ParseSymbol per occurrence would put a full moniker parse on the hot path.
+func parseMoniker(moniker string) (info monikerInfo, ok bool) {
 	sym, err := scip.ParseSymbol(moniker)
 	if err != nil || sym.Package == nil {
-		return "", "", false, false
+		return monikerInfo{}, false
 	}
 	desc := scip.DescriptorOnlyFormatter.FormatSymbol(sym)
 	pkg := strings.TrimSpace(sym.Package.Manager + " " + sym.Package.Name)
-	key = strings.TrimSpace(pkg + " " + desc)
+	info.Key = strings.TrimSpace(pkg + " " + desc)
 	if n := len(sym.Descriptors); n > 0 {
-		label = sym.Descriptors[n-1].Name
-		callable = callableSuffix(sym.Descriptors[n-1].Suffix)
+		info.Label = sym.Descriptors[n-1].Name
+		info.Callable = callableSuffix(sym.Descriptors[n-1].Suffix)
 	}
-	return key, label, callable, true
+	return info, true
 }
 
 // occurrenceLine returns the 1-based start line of an occurrence, or 0 when absent.

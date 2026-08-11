@@ -219,7 +219,6 @@ export object UnreferencedEntry {
     source: str = "",
     kind: str = "",
     language: str = "",
-    project: str = "",
 }
 
 export object ProjectRef {

@@ -365,17 +365,16 @@ func writeUnreferencedSection(b *md.Builder, u types.UnreferencedOutput) {
 
 // uncoveredPhrase names what put an answer outside coverage, for prose.
 func uncoveredPhrase(ans types.KnowledgeAnswer) string {
-	if ans.Reason == types.ReasonSymbolsNotLoaded {
+	switch ans.Reason {
+	case types.ReasonSymbolsNotLoaded:
 		return "no code symbols were loaded for this report"
+	case types.ReasonCoverageUnknown:
+		return "magus could not determine which projects it searched"
 	}
-	names := make([]string, 0, len(ans.Uncovered))
-	for _, g := range ans.Uncovered {
-		names = append(names, g.Project.Display())
-	}
-	if len(names) == 0 {
+	if len(ans.Uncovered) == 0 {
 		return "part of the workspace was outside coverage"
 	}
-	return "no symbol index for " + strings.Join(names, ", ")
+	return "no symbol index for " + types.DescribeGaps(ans.Uncovered)
 }
 
 func writeVolatilitySection(b *md.Builder, v types.VolatilityReport) {

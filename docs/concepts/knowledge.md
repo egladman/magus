@@ -439,6 +439,11 @@ declared SCIP index magus could not read, which `magus graph build` fixes.
 `symbols-not-loaded` means the lookup never consulted the symbol layer at all - a bare
 `magus query someFunc` searches domain entities, so it says nothing about whether a code
 symbol by that name exists, and `magus refs someFunc` is the verb that would know.
+`coverage-unknown` means the probe itself failed, so magus cannot say what it searched.
+
+A verdict is not only for empty results: a populated list drawn from a half-indexed
+workspace is as misleading as an empty one, because the projects it omits are invisible
+either way. So a gap makes the answer `unknown` whether or not the lookup matched.
 
 The verdict rides the structured output as an `answer` field, so an agent branches on
 `answer.verdict` rather than pattern-matching prose:
@@ -453,10 +458,12 @@ invocation was fine and a prerequisite artifact was missing. `magus query` alway
 an empty result set is a legitimate answer to a search, so its verdict rides the output
 only.
 
-A verdict is computed only when a result is empty, and the coverage probe behind it is
-skipped entirely when the symbol layer was irrelevant to the question - `kind:author`
-returning nothing has nothing to do with a missing symbol index, so nothing about one is
-reported.
+The coverage probe is one `stat` per declared index, and it is skipped entirely when the
+symbol layer was irrelevant to the question - `kind:author` returning nothing has nothing
+to do with a missing symbol index, so nothing about one is reported. The probe
+deliberately does not decode each index to check it parses: that is a full unmarshal per
+lookup to catch a case the graph build already logs, while a never-built index is the case
+that actually occurs.
 
 ## Git history (@vcs)
 

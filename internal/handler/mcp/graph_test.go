@@ -59,11 +59,13 @@ func (f fakeGraphResolver) KnowledgeGraphWithSymbols(context.Context) (*knowledg
 func (f fakeGraphResolver) KnowledgeGraphWithSymbolsForRef(context.Context, string) (*knowledge.Graph, error) {
 	return f.g, f.err
 }
-func (f fakeGraphResolver) SymbolGaps(context.Context) []types.KnowledgeSymbolGap { return f.gaps }
+func (f fakeGraphResolver) SymbolGaps(context.Context) ([]types.KnowledgeSymbolGap, bool) {
+	return f.gaps, true
+}
 
 // noGaps is the coverage probe for a workspace where every declared index is readable,
 // which is what the paging tests are about. The verdict tests supply their own.
-func noGaps() []types.KnowledgeSymbolGap { return nil }
+func noGaps() ([]types.KnowledgeSymbolGap, bool) { return nil, true }
 
 // TestQueryToolInvokeThroughFake drives queryTool.Invoke through the graphResolver
 // seam: a non-symbol query resolves the warm graph via the fake and returns the
@@ -238,8 +240,8 @@ func TestPagedRefsNoSuchSymbol(t *testing.T) {
 func TestPagedRefsNoIndexBuiltIsUnknownResult(t *testing.T) {
 	g := knowledge.NewGraph()
 	g.AddNode(types.KnowledgeNode{ID: "project:pkg/a", Kind: types.KindProject, Label: "pkg/a"})
-	gaps := func() []types.KnowledgeSymbolGap {
-		return []types.KnowledgeSymbolGap{{Project: types.NewProjectRef("pkg/a", ""), State: types.SymbolIndexNotBuilt}}
+	gaps := func() ([]types.KnowledgeSymbolGap, bool) {
+		return []types.KnowledgeSymbolGap{{Project: types.NewProjectRef("pkg/a", ""), State: types.SymbolIndexNotBuilt}}, true
 	}
 	resp, err := pagedRefs(g, "Foo", 0, "", gaps)
 	require.NoError(t, err, "not knowing is an answer, not a failure")
@@ -264,7 +266,7 @@ func TestPagedRefsCoverageGapIsUnknownResult(t *testing.T) {
 		Project: types.NewProjectRef("libs/api", ""),
 		State:   types.SymbolIndexNotBuilt,
 	}}
-	resp, err := pagedRefs(refsGraph(1), "symbol:nope Missing#", 0, "", func() []types.KnowledgeSymbolGap { return gaps })
+	resp, err := pagedRefs(refsGraph(1), "symbol:nope Missing#", 0, "", func() ([]types.KnowledgeSymbolGap, bool) { return gaps, true })
 	require.NoError(t, err)
 	assert.Equal(t, types.VerdictUnknown, resp.Answer.Verdict)
 	assert.Equal(t, types.ReasonSymbolIndexMissing, resp.Answer.Reason)
@@ -301,4 +303,15 @@ func TestPagedQueryVerdictOnZeroMatches(t *testing.T) {
 	resp, err = pagedQuery(pagedGraph(3), "kind:target nothingmatchesthis", 50, 0, "", true, noGaps)
 	require.NoError(t, err)
 	assert.Equal(t, types.VerdictAbsent, resp.Answer.Verdict)
+}
+
+// A probe that could not run must never render as verified coverage: the tool reports
+// unknown with its own reason rather than falling through to the "no symbol matches"
+// error, which would assert exactly the absence it failed to establish.
+func TestPagedRefsProbeFailureIsUnknown(t *testing.T) {
+	failed := func() ([]types.KnowledgeSymbolGap, bool) { return nil, false }
+	resp, err := pagedRefs(refsGraph(1), "symbol:nope Missing#", 0, "", failed)
+	require.NoError(t, err)
+	assert.Equal(t, types.VerdictUnknown, resp.Answer.Verdict)
+	assert.Equal(t, types.ReasonCoverageUnknown, resp.Answer.Reason)
 }
