@@ -1,0 +1,11 @@
+// @error: has no field or method "missing"
+// An arrow method's return type is inferred from its body, so a typo on the RESULT
+// is caught. The call site may precede the declaration, which is why the inference
+// is its own pass ahead of body checking.
+object Query { fun run(db: Database) > void { db.prepare().missing(); } }
+object Statement { fun go() > void {} }
+object Database {
+    fun prepare() => this.prepareRaw();
+    fun prepareRaw() > Statement { return Statement{}; }
+}
+final __r = 0;

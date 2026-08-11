@@ -23,13 +23,13 @@ rather than only the flattering one.
 | upstream suite          | files |      gopherbuzz | what it asks                                                     |
 | ----------------------- | ----: | --------------: | ---------------------------------------------------------------- |
 | `tests/behavior/`       |    83 |     **74 pass** | does correct source produce the right answer?                    |
-| `tests/compile_errors/` |    77 | **68 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
+| `tests/compile_errors/` |    77 | **69 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
 | `tests/fuzzed/`         |   644 |    **0 panics** | can malformed input crash the front end?                         |
 | `tests/bench/`          |    11 |         not run | upstream's benchmarks (ours are in [`benchmarks/`](benchmarks/)) |
 | `tests/manual/`         |     9 |         not run | interactive                                                      |
 | `tests/utils/`          |    10 |             n/a | helper modules the behavior tests import                         |
 
-**The compile-error row is the uncomfortable one and the most important.** 9 of those
+**The compile-error row is the uncomfortable one and the most important.** 8 of those
 77 programs compile CLEAN here that upstream refuses. That is not a missing feature, it
 is missing strictness: gopherbuzz will accept source upstream tells you is wrong. If
 you are evaluating this VM as a Buzz implementation, weigh that at least as heavily as
@@ -64,7 +64,7 @@ than a missing check. Each of these was implemented, measured, and reverted:
 | `unused-import` | make BZZ3001 an error | impossible as stated -- see the note in `session.go` |
 | `selective-import` | stop `assert` resolving unimported | blocked on `registerBuiltins`, which pre-defines the stdlib names on purpose |
 | `nullable-list-index`, `arrow-return-match-optional` | track OPTIONALITY in the type system | optionals are erased here -- `int?` and `int` are one type, so neither "index must be non-null" nor "returned `int?` where `int` declared" is expressible |
-| `error-message`, `placeholder-nested-call` | runtime error rendering; inferring an arrow method's return type | one-off, no shared machinery left to reuse |
+| `error-message` | rendering a thrown object's message | the test body never runs under `Exec`, so nothing can surface it here |
 
 Each is a call to make deliberately, with the migration budgeted -- not a gap to
 patch. The one structural item worth naming: **optionality is erased**, which is

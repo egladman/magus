@@ -114,6 +114,7 @@ func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.N
 	// Object/Enum cases; field cross-references resolve lazily via resolveType.
 	c.registerTypeDecls(imported)
 	c.collectTopLevel(prog)
+	c.inferUnannotatedReturns(prog)
 	for _, s := range prog.Stmts {
 		c.checkStmt(s)
 	}
@@ -2416,5 +2417,82 @@ func (c *checker) checkUnusedLocals() {
 	})
 	for _, e := range unused {
 		c.errorf(e.pos, "local %q is never used; remove it or rename it with a leading underscore", e.name)
+	}
+}
+
+// inferUnannotatedReturns fills in the return type of a function or method that
+// declares none but whose whole body is `return expr` - upstream's arrow sugar,
+// `fun prepare() => this.prepareRaw()`.
+//
+// It runs as its OWN pass, after every type is registered and before any body is
+// checked, because the call site may precede the declaration: upstream's
+// placeholder-nested-call.buzz has `Query.execute` calling `db.prepare().missing()`
+// with Database declared further down the file. Left unannotated the return was
+// Unknown, so member access on the result asserted nothing and the typo went
+// through.
+//
+// Errors are discarded here. This pass evaluates expressions out of order purely
+// to learn their types; anything genuinely wrong is reported when the body is
+// checked for real, and reporting it twice - or reporting a spurious ordering
+// error - is worse than staying quiet.
+func (c *checker) inferUnannotatedReturns(prog *ast.Program) {
+	saved := c.errors
+	defer func() { c.errors = saved }()
+	for _, stmt := range prog.Stmts {
+		switch d := stmt.(type) {
+		case *ast.FunDecl:
+			if ft, ok := c.lookupFuncType(d.Name); ok {
+				c.fillReturn(d, ft, nil)
+			}
+		case *ast.ObjectDecl:
+			ot, _ := c.types[d.Name].(*types.ObjectType)
+			if ot == nil {
+				continue
+			}
+			for _, m := range d.Methods {
+				if ft, ok := ot.Methods[m.Name]; ok {
+					c.fillReturn(m, ft, ot)
+				}
+			}
+		}
+	}
+}
+
+// lookupFuncType returns the recorded signature of a top-level function.
+func (c *checker) lookupFuncType(name string) (*types.FuncType, bool) {
+	e, ok := c.lookup(name)
+	if !ok {
+		return nil, false
+	}
+	ft, ok := e.typ.(*types.FuncType)
+	return ft, ok
+}
+
+// fillReturn infers fd's return type from a lone `return expr` body and writes it
+// onto ft in place, so every call site that already holds this signature sees it.
+// recv is the enclosing object for a method, nil for a free function.
+func (c *checker) fillReturn(fd *ast.FunDecl, ft *types.FuncType, recv types.Type) {
+	if fd.RetAnnot != "" || fd.IsExtern || fd.Body == nil || len(fd.Body.Stmts) != 1 {
+		return
+	}
+	ret, isReturn := fd.Body.Stmts[0].(*ast.ReturnStmt)
+	if !isReturn || ret.Value == nil {
+		return
+	}
+	c.pushScope()
+	if recv != nil {
+		c.define("this", recv, false)
+	}
+	for i, name := range fd.Params {
+		pt := types.Type(types.Unknown)
+		if i < len(ft.Params) {
+			pt = ft.Params[i]
+		}
+		c.define(name, pt, false)
+	}
+	got := c.infer(ret.Value)
+	c.scopes = c.scopes[:len(c.scopes)-1] // not popScope: this scope's diagnostics are discarded
+	if got != types.Unknown {
+		ft.Ret = got
 	}
 }
