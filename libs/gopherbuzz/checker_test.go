@@ -870,7 +870,7 @@ final total = sum; // 1+4+9+16 = 30
 // Two instances of the same fiber function keep independent local state.
 func TestConformance_FiberInstancesIndependent(t *testing.T) {
 	s := conf(t, `
-fun ticker() > int *> int? { var i = 0; while (true) { _ = yield i; i = i + 1; } return 0; }
+fun ticker() > int *> int? { var i = 0; while (true) { _ = yield i; i = i + 1; } }
 final a = &ticker();
 final b = &ticker();
 final a0 = resume a; final a1 = resume a; // 0, 1

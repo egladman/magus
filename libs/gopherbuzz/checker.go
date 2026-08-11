@@ -558,6 +558,7 @@ func (c *checker) checkBlock(b *ast.BlockStmt) {
 	for _, s := range b.Stmts {
 		c.checkStmt(s)
 	}
+	c.checkUnreachable(b)
 	c.popScope()
 }
 
@@ -635,6 +636,12 @@ func (c *checker) checkFunDecl(fd *ast.FunDecl) {
 	for _, s := range fd.Body.Stmts {
 		c.checkStmt(s)
 	}
+	// Not checkBlock: this function opened its own scope above so the parameters are
+	// visible, so the unreachable pass has to be invoked directly. Without this a
+	// dead statement was only ever reported inside a nested block - a `return`
+	// followed by more code at the TOP level of a function went unnoticed.
+	c.checkUnreachable(fd.Body)
+	c.checkFunReturns(fd)
 	c.popScope()
 	c.retTyp = savedRet
 	c.yieldTyp = savedYield
@@ -1830,4 +1837,191 @@ func (c *checker) checkMatchCondReachable(s matchCondShape, seen []matchCondShap
 		}
 		return // one report per condition
 	}
+}
+
+// --- terminal-flow analysis ---
+//
+// Upstream rejects a statement that can never run ("Code will never be reached"),
+// the second-largest cluster in tests/compile_errors. Everything here rests on one
+// question - does this statement transfer control away unconditionally? - so the
+// answer is computed once, in terminates, and both callers read it.
+
+// terminates reports whether n unconditionally transfers control away from the
+// enclosing block, so nothing after it in that block can run. This is the reading
+// checkUnreachable needs, and it is deliberately CONSERVATIVE: when in doubt it
+// answers false, because a false negative costs only an unreported error while a
+// false positive calls live code dead.
+func terminates(n ast.Node) bool { return terminatesWith(n, false) }
+
+// terminatesForReturn is the same question asked for checkFunReturns, which needs
+// the opposite bias: it errors when a function can FALL THROUGH, so under-claiming
+// termination is what invents a diagnostic on correct code.
+//
+// The two differ on exactly one construct, try/catch. Upstream will not call the
+// statement after a fully-returning try/catch dead (tests/behavior/try-catch.buzz
+// ends `returnFromCatch` with a `return 31` it considers reachable), yet it also
+// does not demand a further return from a function whose try and catches all
+// return. Both are satisfied only by asking the question twice.
+func terminatesForReturn(n ast.Node) bool { return terminatesWith(n, true) }
+
+func terminatesWith(n ast.Node, tryCounts bool) bool {
+	terminates := func(x ast.Node) bool { return terminatesWith(x, tryCounts) }
+	switch s := n.(type) {
+	case *ast.ReturnStmt, *ast.ThrowStmt, *ast.BreakStmt, *ast.ContinueStmt:
+		return true
+	case *ast.ExprStmt:
+		return terminates(s.Expr)
+	case *ast.BlockStmt:
+		for _, st := range s.Stmts {
+			if terminates(st) {
+				return true
+			}
+		}
+		return false
+	case *ast.IfStmt:
+		// Only an if/ELSE can terminate: with no else the false path falls through.
+		return s.Else != nil && terminates(s.Then) && terminates(s.Else)
+	case *ast.WhileStmt:
+		return isConstTrueCond(s.Cond) && !loopHasEscapingBreak(s.Body, s.Label)
+	case *ast.ForStmt:
+		// An absent condition is `for (;;)`, which never exits on its own.
+		return (s.Cond == nil || isConstTrueCond(s.Cond)) && !loopHasEscapingBreak(s.Body, s.Label)
+	case *ast.DoStmt:
+		// `do { ... } until (cond)` runs its body at least once, so a body that
+		// transfers control away means the loop never completes normally - which is
+		// what makes the statement after upstream's labeled `continue outer` dead.
+		return terminates(s.Body)
+	case *ast.MatchExpr:
+		return matchTerminatesWith(s, tryCounts)
+	case *ast.TryStmt:
+		// Only the missing-return reading counts this. See terminatesForReturn: the
+		// unreachable reading must answer false here or it calls upstream's own
+		// `return 31` after a fully-returning try/catch dead.
+		if !tryCounts {
+			return false
+		}
+		if !terminates(s.Body) {
+			return false
+		}
+		for _, cl := range s.Catches {
+			if !terminates(cl.Body) {
+				return false
+			}
+		}
+		return true
+	}
+	// ForEachStmt is deliberately absent: an empty iterable falls straight through,
+	// so a foreach never terminates no matter what its body does.
+	return false
+}
+
+// isConstTrueCond reports a literal `true` condition - the only infinite loop this
+// analysis claims to recognize. A condition that is merely always true in practice
+// (`1 == 1`, a constant final) is left alone rather than folded.
+func isConstTrueCond(n ast.Node) bool {
+	b, ok := n.(*ast.BoolLit)
+	return ok && b.Val
+}
+
+// matchTerminatesWith reports a match every arm of which transfers control away. It
+// requires an explicit else rather than reusing the exhaustiveness analysis: this
+// answer decides whether LATER code is dead, so it is the one place where being
+// wrong is expensive, and "has an else" is the reading that cannot be wrong.
+func matchTerminatesWith(m *ast.MatchExpr, tryCounts bool) bool {
+	hasElse := false
+	for _, br := range m.Branches {
+		if len(br.Conds) == 0 {
+			hasElse = true
+		}
+		if !terminatesWith(br.Body, tryCounts) {
+			return false
+		}
+	}
+	return hasElse
+}
+
+// loopHasEscapingBreak reports whether body contains a break that exits THIS loop.
+// A bare `break` binds to the innermost enclosing loop, so it only counts when it is
+// not nested inside another loop; a labeled one counts wherever it appears, which is
+// what lets `break outer` from an inner loop keep the outer one non-terminal.
+func loopHasEscapingBreak(body *ast.BlockStmt, label string) bool {
+	found := false
+	var walk func(n ast.Node, nested bool)
+	walk = func(n ast.Node, nested bool) {
+		if found || n == nil {
+			return
+		}
+		switch s := n.(type) {
+		case *ast.BreakStmt:
+			if s.Label == "" {
+				found = !nested
+				break
+			}
+			// A LABELED break unwinds through every loop between here and its target,
+			// so it exits this one whatever it names - matching it against this loop's
+			// own label would miss `break outer` from an inner loop. It also covers the
+			// label that resolves to no loop at all: that is a separate error, and
+			// backing off here lets that better diagnostic be the one reported.
+			found = true
+		case *ast.BlockStmt:
+			for _, st := range s.Stmts {
+				walk(st, nested)
+			}
+		case *ast.ExprStmt:
+			walk(s.Expr, nested)
+		case *ast.IfStmt:
+			walk(s.Then, nested)
+			walk(s.Else, nested)
+		case *ast.MatchExpr:
+			for _, br := range s.Branches {
+				walk(br.Body, nested)
+			}
+		case *ast.WhileStmt:
+			walk(s.Body, true)
+		case *ast.ForStmt:
+			walk(s.Body, true)
+		case *ast.ForEachStmt:
+			walk(s.Body, true)
+		case *ast.DoStmt:
+			walk(s.Body, true)
+		}
+	}
+	walk(body, false)
+	return found
+}
+
+// checkUnreachable reports the first statement in b that follows a terminal one.
+// Only the first: everything after it is dead for the same reason, and one
+// diagnostic per block is what upstream emits.
+func (c *checker) checkUnreachable(b *ast.BlockStmt) {
+	for i, s := range b.Stmts {
+		if i+1 < len(b.Stmts) && terminates(s) {
+			c.errorf(ast.NodePos(b.Stmts[i+1]), "code will never be reached")
+			return
+		}
+	}
+}
+
+// checkFunReturns reports a function that declares a value return but can fall off
+// the end of its body without producing one.
+//
+// This is the one check in this file that reads terminates in the UNSAFE direction:
+// an incomplete answer here invents an error on a correct function, rather than
+// merely missing one. It is therefore narrowed hard - only an explicit,
+// non-nullable, non-void annotation qualifies - so every case it fires on is a
+// function that plainly promised a value.
+func (c *checker) checkFunReturns(fd *ast.FunDecl) {
+	// No annotation is not a promise, and `void` promises nothing to return.
+	if fd.RetAnnot == "" || fd.RetAnnot == "void" {
+		return
+	}
+	// A nullable return (`> int?`) is satisfied by falling through, which yields
+	// null - upstream's own missing-return test annotates a non-optional `> int`.
+	if strings.HasSuffix(fd.RetAnnot, "?") {
+		return
+	}
+	if terminatesForReturn(fd.Body) {
+		return
+	}
+	c.errorf(fd.Pos, "missing return statement: %s declares %s but can fall through without returning", fd.Name, fd.RetAnnot)
 }

@@ -1,0 +1,6 @@
+// @error: missing return statement
+// Returns from only one branch, so the function can still fall through.
+fun f(flag: bool) > int {
+    if (flag) { return 1; }
+}
+final __r = 0;
