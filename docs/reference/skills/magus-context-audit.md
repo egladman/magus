@@ -2,8 +2,8 @@
 title: magus-context-audit
 description: "Audit the instructions an agent was given - the repo instruction file, installed skills, handoff-journal entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do."
 tags: [agents, skills, magus-context-audit]
-skill_full_bytes: 5525
-skill_simple_bytes: 4017
+skill_full_bytes: 5537
+skill_simple_bytes: 4029
 ---
 
 # magus-context-audit
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `26` |
+| `agent-skill-version` | `27` |
 | `knowledge-schema-version` | `8` |
-| `skill-content` | `fc67d0b22c77` |
+| `skill-content` | `922b5ca8a386` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -64,7 +64,7 @@ the one nobody remembers is loaded.
 | --- | --- |
 | the repo's agent instruction file (`CLAUDE.md`, `AGENTS.md`, ...) | always loaded, whole file, never scoped |
 | installed skills | whole directory; a stale one looks identical to a current one |
-| a local, workspace-owned skill (`magus-local`) | loads beside the shipped set, but nothing generates or verifies it |
+| a local, workspace-owned skill (`magus-local-development`) | loads beside the shipped set, but nothing generates or verifies it |
 | the handoff journal / memory entries | loaded at session start, and POINT-IN-TIME by definition |
 | a routing index (`MAGUS.md`) | invites being read, only true as of its last regeneration |
 | hook-injected text | fires on every matching tool call, and nothing displays it in one place |
@@ -182,7 +182,7 @@ the one nobody remembers is loaded.
 | --- | --- |
 | the repo's agent instruction file (`CLAUDE.md`, `AGENTS.md`, ...) | always loaded, whole file, never scoped |
 | installed skills | whole directory; a stale one looks identical to a current one |
-| a local, workspace-owned skill (`magus-local`) | loads beside the shipped set, but nothing generates or verifies it |
+| a local, workspace-owned skill (`magus-local-development`) | loads beside the shipped set, but nothing generates or verifies it |
 | the handoff journal / memory entries | loaded at session start, and POINT-IN-TIME by definition |
 | a routing index (`MAGUS.md`) | invites being read, only true as of its last regeneration |
 | hook-injected text | fires on every matching tool call, and nothing displays it in one place |

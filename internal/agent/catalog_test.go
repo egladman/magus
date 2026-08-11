@@ -18,7 +18,7 @@ import (
 // told it owns.
 //
 // The magus-adapt skill teaches workspaces to put their own rules in a skill
-// magus does not ship, and names magus-local as the convention. Shipping a
+// magus does not ship, and names magus-local-development as the convention. Shipping a
 // skill by that name later would not conflict loudly: install --force writes
 // the shipped body straight over the workspace's file, on every machine, at
 // once. Someone would have to reconstruct the rules from git history, if they

@@ -307,7 +307,7 @@ deliberately instead:
 - Before "fixing" behavior that looks wrong, look for the test that pins it.
   `TestCheckExecRequiresReadNotExec` exists to say exec-collapsing-into-read is
   deliberate and names the "fix" as a known mistake. Roughly one review finding in
-  ten is wrong this way. See the `magus-local` skill for the rest of this method.
+  ten is wrong this way. See the `magus-local-development` skill for the rest of this method.
 
 ## Working style
 

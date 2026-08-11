@@ -23,7 +23,7 @@ the one nobody remembers is loaded.
 | --- | --- |
 | the repo's agent instruction file (`CLAUDE.md`, `AGENTS.md`, ...) | always loaded, whole file, never scoped |
 | installed skills | whole directory; a stale one looks identical to a current one |
-| a local, workspace-owned skill (`magus-local`) | loads beside the shipped set, but nothing generates or verifies it |
+| a local, workspace-owned skill (`magus-local-development`) | loads beside the shipped set, but nothing generates or verifies it |
 | the handoff journal / memory entries | loaded at session start, and POINT-IN-TIME by definition |
 | a routing index (`MAGUS.md`) | invites being read, only true as of its last regeneration |
 | hook-injected text | fires on every matching tool call, and nothing displays it in one place |

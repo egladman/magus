@@ -347,13 +347,18 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   true only here had nowhere to live: editing an installed copy reads as drift to
   `magus graph verify` and is erased by the next `magus agent install --force`, and
   nothing said so at the moment of the edit. A local skill beside the installed set
-  (`magus-local` by convention) was already safe by construction - install writes only
-  the names it ships and verify grades only those - so this release makes the
-  convention discoverable rather than building a mechanism: a new `magus-adapt` skill
-  carrying the method and the per-rule stamp format (evidence, and the condition that
-  retires the rule), the name reserved against a future shipped skill, and a `magus
-  hook --path` advisory that fires when an agent is about to edit a stamped install.
-  Skill contract v24.
+  (`magus-local-development` by convention) was already safe by construction - install
+  writes only the names it ships and verify grades only those - so this release makes
+  the convention discoverable rather than building a mechanism: a new `magus-adapt`
+  skill carrying the method and the per-rule stamp format (evidence, and the condition
+  that retires the rule), the name reserved against a future shipped skill, and a
+  `magus hook --path` advisory that fires when an agent is about to edit a stamped
+  install. Skill contract v24.
+- **The reserved local-skill name is `magus-local-development`, not `magus-local`.**
+  The convention had not shipped in a release yet, so there was no compatibility
+  burden to carry: `LocalSkillName`, the `magus-adapt` skill body, the `.gitignore`
+  exception, and this workspace's own `.claude/skills/magus-local-development/` moved
+  together, outright, with no alias. Skill contract v27.
 - **Host parity is now a build gate rather than a table nobody re-reads.** Each guard
   template declares, per guard surface, how much of a verdict it can carry
   (`magus-guard-coverage`), and the guard's own vocabulary moved into an importable
