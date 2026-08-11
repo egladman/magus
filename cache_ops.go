@@ -115,8 +115,9 @@ func (m *Magus) SecretProvider() string { return m.resolver.ProviderName() }
 
 // MetricsSnapshot returns this workspace's current metrics as standard OTLP protobuf (an
 // ExportMetricsServiceRequest), or (nil, nil) when metrics collection was not enabled at Open
-// (the CLI default). The daemon opens workspaces with [WithMetricsCollection] and relays this
-// to the /dashboard. Reuses magus's existing OTel instruments; no bespoke metrics contract.
+// (the CLI default). A workspace opened with [WithMetricsCollection] can export this to any
+// OTLP-compatible collector. Reuses magus's existing OTel instruments; no bespoke metrics
+// contract. Its only caller today is the test suite.
 func (m *Magus) MetricsSnapshot(ctx context.Context) ([]byte, error) {
 	if m.tel == nil {
 		return nil, nil

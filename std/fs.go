@@ -457,6 +457,9 @@ func FsCopyDir(ctx context.Context, src, dst string) error {
 		}
 		target := filepath.Join(dst, rel)
 		if d.IsDir() {
+			if err := checkRead(ctx, path); err != nil {
+				return err
+			}
 			if err := checkWrite(ctx, target); err != nil {
 				return err
 			}

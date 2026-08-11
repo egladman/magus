@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
 	"os"
@@ -164,6 +165,27 @@ func TestSymbolGapsTreatsCorruptIndexAsPresent(t *testing.T) {
 
 	projects, spells := goWorkspace("pkg/a")
 	assert.Empty(t, symbolGaps(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells)))
+}
+
+// TestSymbolGapsLogsWhenTheProbeCannotRun pins that the package-level SymbolGaps
+// (the (nil, false) probe-failed path) no longer discards the underlying error
+// from ListSpells/ListProjects - it must at least be logged, since (nil, false) on
+// its own gives a caller no way to learn WHY the probe could not run.
+func TestSymbolGapsLogsWhenTheProbeCannotRun(t *testing.T) {
+	root := t.TempDir()
+	var buf bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&buf, nil))
+
+	// A cancelled context makes ListSpells fail on its first cancellation check
+	// (describe.go's describeCancelled), which is the same failure shape a real
+	// caller sees when its ctx times out mid-probe.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	gaps, ok := SymbolGaps(ctx, nil, root, config.Config{}, log)
+	assert.Nil(t, gaps)
+	assert.False(t, ok, "a probe that could not run must not read as \"no gaps\"")
+	assert.Contains(t, buf.String(), "cancelled", "the underlying error must be surfaced, not swallowed")
 }
 
 // A workspace with no symbol-capable project has no code-symbol layer to miss, so there

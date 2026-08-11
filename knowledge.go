@@ -417,10 +417,12 @@ func SymbolGaps(ctx context.Context, ws types.Inspector, root string, cfg config
 	}
 	spells, err := ListSpells(ctx)
 	if err != nil {
+		log.WarnContext(ctx, "knowledge: symbol gap probe cannot list spells", slog.String("error", err.Error()))
 		return nil, false
 	}
 	projects, err := ws.ListProjects(ctx)
 	if err != nil {
+		log.WarnContext(ctx, "knowledge: symbol gap probe cannot list projects", slog.String("error", err.Error()))
 		return nil, false
 	}
 	return symbolGaps(ctx, symbolIngestInputs{

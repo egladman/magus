@@ -32,10 +32,9 @@ func init() { Register(Crypto) }
 // in the middle. Two things about its shape:
 //
 // The ALGORITHM is a parameter rather than part of the method name, so a second
-// algorithm is a case in signAlgorithm rather than four more methods. It is a
-// validated string and not an enum only because the host-module descriptor has no
-// enum tag - Buzz's own stdlib does this properly with HashAlgorithm.Sha256, and
-// matching that would mean teaching the binding generator about enums first.
+// algorithm is a case in signAlgorithm rather than four more methods. The
+// sign/verify/public_key methods below declare alg's Arg.Enum as "SignAlgorithm";
+// checkAlg is the runtime half, rejecting anything but SignEd25519 by name.
 //
 // The KEY is named by environment variable rather than passed as a value: a key
 // that never becomes a Buzz string cannot be interpolated into a log line, an
@@ -202,8 +201,7 @@ func CryptoMd5File(ctx context.Context, path string) (string, error) {
 	return hashFile(ctx, "crypto.md5_file", md5.New, path)
 }
 
-// SignEd25519 is the only algorithm signing accepts today. It is a string rather
-// than a typed constant because the host-module descriptor has no enum tag.
+// SignEd25519 is the only algorithm signing accepts today.
 const SignEd25519 = "ed25519"
 
 // checkAlg rejects an unknown algorithm by NAME, listing what is accepted. A typo

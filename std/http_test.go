@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -435,4 +436,18 @@ func TestHTTPServeRejectsBadOpts(t *testing.T) {
 	_, err := HTTPServe(context.Background(), map[string]any{"mport": 8080})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `unknown option "mport"`)
+}
+
+// TestHTTPServeUnderTracingDoesNotBind checks a dry-run tracing context (as used
+// to discover a target's declarations without running it, like fs.watch and
+// doRequest already gate) makes HTTPServe return a benign result instead of
+// actually binding a socket and serving.
+func TestHTTPServeUnderTracingDoesNotBind(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	ctx := types.WithTrace(context.Background())
+	port, err := HTTPServe(ctx, map[string]any{"dir": dir})
+	require.NoError(t, err)
+	assert.Zero(t, port, "a dry run must not bind a real port")
 }

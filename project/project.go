@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sync"
 
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -30,7 +29,6 @@ func Discover(_ context.Context, root string) (*types.Workspace, error) {
 	}
 
 	ws := &types.Workspace{Root: abs, Projects: map[string]*types.Project{}}
-	var mu sync.Mutex
 	dirMtimes := make(map[string]int64)
 
 	walkErr := filepath.WalkDir(abs, func(path string, d fs.DirEntry, err error) error {
@@ -51,9 +49,7 @@ func Discover(_ context.Context, root string) (*types.Workspace, error) {
 		}
 		rel := projectPath(abs, path)
 		if hasDeclaration(path) {
-			mu.Lock()
 			ws.Projects[rel] = &types.Project{Path: rel, Dir: path, Origin: types.OriginMagusfile}
-			mu.Unlock()
 		}
 		return nil
 	})

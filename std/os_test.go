@@ -12,6 +12,8 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/internal/sandbox/filesystem"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -243,6 +245,37 @@ func TestFsCopyDir(t *testing.T) {
 		require.NoError(t, err, "read %s", rel)
 		assert.Equal(t, want, string(got), rel)
 	}
+}
+
+// TestFsCopyDirChecksReadOnDeniedSubtree pins that a source directory the sandbox
+// denies read on stops the copy - it must not be silently enumerated and have its
+// layout recreated in dest. The bug: the WalkDir callback only called checkRead
+// for FILE entries, never for a directory entry (nor the src root itself), so a
+// src tree with no files at all - just a denied subdirectory - copied "clean"
+// with no error and no read check ever firing.
+func TestFsCopyDirChecksReadOnDeniedSubtree(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	require.NoError(t, os.MkdirAll(filepath.Join(src, "secret"), 0o755))
+
+	// Grants write under dst but no read rule covers src at all - not even a
+	// directory-shaped one. Rule.Path must be pre-normalized the way policy-build
+	// time does (ResolveRulePath), or the write grant silently fails to match on a
+	// machine whose TMPDIR sits under a symlink (macOS: /var -> /private/var).
+	p := &sandbox.Policy{
+		Workspace: root,
+		FS: filesystem.Ruleset{Rules: []filesystem.Rule{
+			{Path: filesystem.ResolveRulePath(dst), Write: true},
+		}},
+	}
+	ctx := sandbox.WithPolicy(context.Background(), p)
+
+	err := FsCopyDir(ctx, src, dst)
+	require.Error(t, err, "a src tree with no read grant at all must not copy silently")
+
+	_, statErr := os.Stat(filepath.Join(dst, "secret"))
+	assert.True(t, os.IsNotExist(statErr), "dst/secret should never have been created for a read-denied source")
 }
 
 func TestJSONStringify(t *testing.T) {

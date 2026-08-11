@@ -137,6 +137,12 @@ func HTTPServe(ctx context.Context, opts map[string]any) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	// Under dry-run tracing a target body is evaluated to learn its declarations,
+	// not to run, and binding a real socket here would leak a listener out of a
+	// plan that was never meant to execute. Matches fs.watch and doRequest.
+	if types.Tracing(ctx) {
+		return 0, nil
+	}
 
 	var handler http.Handler
 	if mounts != nil {

@@ -92,7 +92,7 @@ var Os = Module{
 		},
 		{
 			Name: "with_env",
-			Doc:  "Set env vars for the duration of callback; restore after.",
+			Doc:  "Add env vars to subprocesses os.exec/os.exec_sh start inside callback. Never touches the process's own environment - a lookup like os.env inside callback does not see them.",
 			Args: []Arg{
 				{Name: "env", Type: TypeStringMap},
 				{Name: "callback", Type: TypeFunc},

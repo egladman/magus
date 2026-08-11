@@ -101,7 +101,7 @@ var Vcs = Module{
 		},
 		{
 			Name: "cmd",
-			Doc:  "Escape hatch: run the active VCS binary (git/hg/jj) with args, for something no method covers. Mirrors magus.cmd and os.exec - returns {stdout, stderr, code, ok} and raises on a non-zero exit unless opts.allow_failure. opts.dir runs it elsewhere (relative to the target's cwd); opts.quiet captures the output without echoing it to the console. This is VCS-AGNOSTIC only in that magus picks the binary; the args are the backend's own, so branch on vcs.name() when they differ. Raises when no VCS is resolved, rather than running nothing and reporting success.",
+			Doc:  "Escape hatch: run the active VCS binary (git/hg/jj) with args, for something no method covers. Same result and raise semantics as magus.cmd and os.exec - returns {stdout, stderr, code, ok} and raises on a non-zero exit unless opts.allow_failure. opts.dir runs it elsewhere (relative to the target's cwd, unlike os.exec's positional dir); opts.quiet captures the output without echoing it to the console. This is VCS-AGNOSTIC only in that magus picks the binary; the args are the backend's own, so branch on vcs.name() when they differ. Raises when no VCS is resolved, rather than running nothing and reporting success.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -149,8 +149,14 @@ func resolveVCS(ctx context.Context) (types.VCSDriver, string) {
 		return vcsCached, vcsBase
 	}
 	res, err := vcs.Resolve(ctx, wd, "", types.VCSOptions{})
+	if err != nil {
+		// A resolve failure (transient error, ctx cancellation) is not "no VCS" - do
+		// not poison the cache for this cwd with it, or every later call in the
+		// process would replay this one failure forever.
+		return nil, ""
+	}
 	vcsCwdKey = wd
-	if err != nil || res.VCS == nil {
+	if res.VCS == nil {
 		vcsCached, vcsBase = nil, ""
 		return nil, ""
 	}
