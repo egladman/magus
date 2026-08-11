@@ -12,14 +12,20 @@ import (
 
 // typeError is a type-checking diagnostic. Code is its BZZ diagnostic code, or empty for an error kind that
 // has not been given a specific code (which then renders as a plain message, no code, no docs link).
+// Severity's zero value is SeverityError, so every existing construction of typeError (the checker never
+// sets it) keeps meaning "error" unchanged; only the parser's unused-import warning sets SeverityWarning.
 type typeError struct {
 	Line, Col int
 	Code      diagnostics.Code
 	Msg       string
+	Severity  Severity
 }
 
 func (e typeError) Error() string {
 	msg := fmt.Sprintf("buzz: line %d:%d: %s", e.Line, e.Col, e.Msg)
+	if e.Severity == SeverityWarning {
+		msg = fmt.Sprintf("buzz: line %d:%d: warning: %s", e.Line, e.Col, e.Msg)
+	}
 	if e.Code == "" {
 		return msg
 	}

@@ -62,6 +62,29 @@ var x = demo.answer;
 	assert.Equal(t, int64(42), v.AsInt(), "x = %v, want 42", v)
 }
 
+// TestExecUnusedImportStillRuns is the whole point of warning rather than erroring on
+// an unused import (BZZ3001): Exec must still run the program and return no error.
+func TestExecUnusedImportStillRuns(t *testing.T) {
+	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	s.SetNativeModule("unused/mod", vm.NewMap())
+
+	err := s.Exec(context.Background(), `import "unused/mod";
+var x = 1;`)
+	require.NoError(t, err, "Exec must not fail on an unused import")
+	v, ok := s.Globals()["x"]
+	require.True(t, ok, "global 'x' not bound; the program did not actually run")
+	assert.Equal(t, int64(1), v.AsInt())
+}
+
+// TestCompileUnusedImportStillCompiles is Compile's sibling of the Exec test above.
+func TestCompileUnusedImportStillCompiles(t *testing.T) {
+	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	s.SetNativeModule("unused/mod", vm.NewMap())
+
+	_, err := s.Compile(`import "unused/mod";`)
+	require.NoError(t, err, "Compile must not fail on an unused import")
+}
+
 func TestSession_ModuleResolver(t *testing.T) {
 	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	mod := vm.NewMap()

@@ -2,6 +2,7 @@ package buzz
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -32,10 +33,66 @@ type parser struct {
 	// readType must leave out of the annotation text it reconstructs (a function
 	// type's `!>` error set and `*>` yield type). Append-only for the parse.
 	typeTextSkips [][2]int
+	// importUsage tracks, for unused-import detection (BZZ3001), whether each
+	// top-level import's namespace-binding name (alias or basename; see
+	// registerImportBinding) was referenced anywhere in this parse. Populated by
+	// parseImport, updated by markImportUsed. Tracking happens HERE, during
+	// parsing, rather than by walking the finished *ast.Program: a namespaced
+	// object-literal type (`ns\Type{...}`) lowers to ast.ObjectLit{TypeName:
+	// "Type"} and discards the "ns" identifier outright (see the LBrace case in
+	// parsePostfix), so by the time parsing finishes there is nothing left in the
+	// tree to walk for that usage. nil until the first import statement, so a
+	// program with no imports pays nothing.
+	importUsage map[string]*importBinding
 }
 
 func newParser(tokens []token.Token) *parser {
 	return &parser{tokens: tokens}
+}
+
+// importBinding is one top-level import's namespace-binding name, tracked for unused-
+// import detection. path/alias are carried for the diagnostic message (see
+// unusedImportDiag); referenced flips true the moment markImportUsed sees the binding
+// name consumed as an identifier reference (see parser.importUsage).
+type importBinding struct {
+	line, col   int
+	path, alias string
+	referenced  bool
+}
+
+// registerImportBinding records stmt's namespace-binding name, if it has one, for
+// unused-import detection. A flat import (`as _`) or a selective import (`import a, b
+// from "path"`) splats its members directly into scope with no single name to check -
+// tracking each flattened symbol individually would be a broader "unused local"
+// question, not "unused import", so those forms are left alone rather than risking a
+// noisy check. The binding-name computation mirrors checker.go's collectTopLevel.
+func (p *parser) registerImportBinding(stmt *ast.ImportStmt) {
+	if stmt.Alias == "_" || len(stmt.Only) > 0 {
+		return
+	}
+	name := stmt.Alias
+	if name == "" {
+		parts := strings.Split(strings.TrimPrefix(stmt.Path, "buzz:"), "/")
+		name = parts[len(parts)-1]
+	}
+	if _, exists := p.importUsage[name]; exists {
+		return // a re-import under the same binding name; keep its first position
+	}
+	if p.importUsage == nil {
+		p.importUsage = map[string]*importBinding{}
+	}
+	p.importUsage[name] = &importBinding{line: stmt.Line, col: stmt.Col, path: stmt.Path, alias: stmt.Alias}
+}
+
+// markImportUsed records that name was referenced as an identifier: a value, the base
+// of a `.`/`\` chain (parsePrimary), or the base of a type annotation (skipType). A
+// miss - name is not a tracked import binding, or none are tracked at all - is a
+// harmless no-op on a nil/empty map, so every identifier reference can call this
+// unconditionally without a guard.
+func (p *parser) markImportUsed(name string) {
+	if b, ok := p.importUsage[name]; ok {
+		b.referenced = true
+	}
 }
 
 // Parse tokenizes src and returns a Program using upstream Buzz's rules: the
@@ -71,6 +128,52 @@ func parseModed(src string, strict bool) (*ast.Program, error) {
 		return Parse(src)
 	}
 	return ParseEmbedded(src)
+}
+
+// unusedImportDiag is one unreferenced top-level import found while parsing (see
+// parser.importUsage); parseModedTracked's second return value. Path/Alias are the
+// import statement's own literal path and (if present) alias, for a message that
+// names exactly what the source says - not just the derived binding name.
+type unusedImportDiag struct {
+	Line, Col   int
+	Path, Alias string
+}
+
+// parseModedTracked parses src like parseModed, additionally returning a warning for
+// every top-level import whose namespace binding went unreferenced (BZZ3001). It does
+// its own tokenize+parse rather than reusing Parse/ParseEmbedded, because those two are
+// public API — changing their signature to expose parser.importUsage would ripple into
+// every caller outside this package. Used only by Session.checkShared, which already
+// treats parsing as the expensive, non-hot-path step (checkShared's own doc comment:
+// resolving imports executes code and reads files from disk).
+func parseModedTracked(src string, strict bool) (*ast.Program, []unusedImportDiag, error) {
+	toks, err := token.Tokenize(src)
+	if err != nil {
+		return nil, nil, err
+	}
+	p := newParser(toks)
+	p.strict = strict
+	prog, err := p.parseProgram()
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(p.importUsage) == 0 {
+		return prog, nil, nil
+	}
+	warnings := make([]unusedImportDiag, 0, len(p.importUsage))
+	for _, b := range p.importUsage {
+		if !b.referenced {
+			warnings = append(warnings, unusedImportDiag{Line: b.line, Col: b.col, Path: b.path, Alias: b.alias})
+		}
+	}
+	// Map iteration order is random; sort by position for deterministic output.
+	sort.Slice(warnings, func(i, j int) bool {
+		if warnings[i].Line != warnings[j].Line {
+			return warnings[i].Line < warnings[j].Line
+		}
+		return warnings[i].Col < warnings[j].Col
+	})
+	return prog, warnings, nil
 }
 
 func (p *parser) peek() token.Token {
@@ -415,7 +518,9 @@ func (p *parser) parseImport() (*ast.ImportStmt, error) {
 		}
 	}
 	p.optSemicolon()
-	return &ast.ImportStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Path: pathTok.Val, Alias: alias, Only: only}, nil
+	stmt := &ast.ImportStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Path: pathTok.Val, Alias: alias, Only: only}
+	p.registerImportBinding(stmt)
+	return stmt, nil
 }
 
 func (p *parser) parseNamespace() (*ast.NamespaceStmt, error) {
@@ -489,6 +594,10 @@ func (p *parser) skipType() error {
 			return p.skipBalancedBraces()
 		}
 		p.advance()
+		// A type annotation never routes through parsePrimary (skipType consumes
+		// tokens directly, building no IdentExpr), so a namespaced type
+		// (serialize\Boxed) needs its own unused-import mark here.
+		p.markImportUsed(t.Val)
 		// Namespace-qualified type: serialize\Boxed, foo\bar\Baz.
 		for p.check(token.Backslash) {
 			p.advance()
@@ -2335,6 +2444,14 @@ func (p *parser) parsePrimary() (ast.Node, error) {
 		return &ast.NullLit{Pos: ast.Pos{Line: t.Line, Col: t.Col}}, nil
 	case token.Ident:
 		p.advance()
+		// This is the single choke point where a bare identifier becomes a reference
+		// (as opposed to a binding name, which never routes through parsePrimary):
+		// the base of a `.`/`\` chain reaches here too, before the postfix loop
+		// decides what to build on top of it - which is what lets this also catch a
+		// module used only to construct a namespaced object literal (`ns\Type{...}`,
+		// see the LBrace case in parsePostfix), since the identifier is consumed
+		// here first and marked used before that later lowering discards it.
+		p.markImportUsed(t.Val)
 		return &ast.IdentExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: t.Val}, nil
 	case token.LParen:
 		p.depth++

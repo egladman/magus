@@ -31,6 +31,15 @@ type Session struct {
 	// harness — set it via WithEmbedded because top-level statements are their whole
 	// purpose. It is the explicit, named deviation from upstream.
 	embedded bool
+	// repl marks this session as an interactive REPL: one statement evaluated at a
+	// time, each parsed independently. It suppresses the BZZ3001 unused-import
+	// warning in Diagnostics (see checkShared) - matching upstream Buzz, which gates
+	// the same warning on `self.flavor != .Repl` (Parser.zig) - because a binding
+	// "unused so far" in one line may simply be used by a line not typed yet.
+	// Default false; set via WithREPL. Distinct from embedded: magus eval and
+	// magusfile loading are also embedded but are NOT a REPL (a whole file is known
+	// up front, so "unused" there is a real finding).
+	repl bool
 	// curVM is the VM currently executing a chunk in this session, or nil between
 	// runs. The debugger (debug.go) reads it for stack introspection, and the run
 	// helpers set/restore it (save-and-restore so a pry() eval doesn't clobber the
@@ -380,6 +389,13 @@ func WithEmbedded() Option {
 	return func(s *Session) { s.embedded = true }
 }
 
+// WithREPL marks this session as an interactive REPL, suppressing the BZZ3001
+// unused-import warning (see Session.repl). A REPL host should pass this alongside
+// WithEmbedded.
+func WithREPL() Option {
+	return func(s *Session) { s.repl = true }
+}
+
 // NewSession creates a Buzz execution context. Inject globals with SetGlobal
 // and register target callbacks via Targets. Close releases the context.
 //
@@ -573,7 +589,9 @@ func (s *Session) DoString(code string) error { return s.Exec(s.ctx, code) }
 // declarations are Env bindings (SharedGlobals), not per-Run slots. Predefined
 // globals are passed to the checker so they aren't flagged as undefined.
 func (s *Session) compileShared(ctx context.Context, code string) (*vmpackage.Chunk, error) {
-	prog, errs, parseErr := s.checkShared(ctx, code)
+	// warnings (e.g. BZZ3001 unused imports) are deliberately discarded here: a warning
+	// must never fail Exec/Compile, only errs does.
+	prog, errs, _, parseErr := s.checkShared(ctx, code)
 	if parseErr != nil {
 		return nil, parseErr
 	}
@@ -601,19 +619,45 @@ func (s *Session) compileShared(ctx context.Context, code string) (*vmpackage.Ch
 // compiles on success and reports only the first error, while Diagnostics returns
 // them all for the editor. A parse error comes back separately as parseErr, since
 // type-checking has no tree to run against when parsing fails.
-func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Program, typeErrs []typeError, parseErr error) {
+//
+// warnings holds diagnostics that must never fail a compile (currently just BZZ3001
+// unused-import) - compileShared discards them, Diagnostics surfaces them alongside
+// typeErrs. They start as candidates from parsing (see parseModedTracked) and are
+// filtered by importUsageIsReliable once loadFileImports resolves each import: a
+// namespace binding that was never referenced (qualified or not) is reliably
+// "unused" ONLY when its import cannot ALSO have flat-merged its members straight into
+// scope (gopherbuzz's own extension over upstream - see importUsageIsReliable). Warnings
+// are suppressed entirely for a REPL session (s.repl) - upstream Buzz does the same
+// (Parser.zig gates the same warning on `self.flavor != .Repl`), because a REPL
+// evaluates one statement at a time, so an import "unused so far" may simply be used by
+// a line not typed yet.
+func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Program, typeErrs []typeError, warnings []typeError, parseErr error) {
 	parseStart := time.Now()
-	prog, err := parseModed(code, !s.embedded)
+	prog, unused, err := parseModedTracked(code, !s.embedded)
 	if obs := s.compileObserver; obs != nil {
 		obs.Phase(PhaseParse, time.Since(parseStart), err)
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	// Resolve file-based imports before type-checking so the globals they
-	// introduce are visible to the checker.
-	if err := s.loadFileImports(ctx, prog); err != nil {
-		return nil, nil, err
+	// introduce are visible to the checker. Also tells us how each import actually
+	// resolved, which unused-import warnings need (see importUsageIsReliable below).
+	outcomes, err := s.loadFileImports(ctx, prog)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if !s.repl {
+		for _, u := range unused {
+			if !importUsageIsReliable(outcomes[ast.Pos{Line: u.Line, Col: u.Col}], u.Alias) {
+				continue
+			}
+			msg := fmt.Sprintf("import %q is never used", u.Path)
+			if u.Alias != "" {
+				msg = fmt.Sprintf("import %q as %s is never used", u.Path, u.Alias)
+			}
+			warnings = append(warnings, typeError{Line: u.Line, Col: u.Col, Code: UnusedImport, Severity: SeverityWarning, Msg: msg})
+		}
 	}
 	names := s.env.Names()
 	globals := make([]string, 0, len(names))
@@ -635,19 +679,22 @@ func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Progr
 		}
 		obs.Phase(PhaseCheck, time.Since(checkStart), firstErr)
 	}
-	return prog, errs, nil
+	return prog, errs, warnings, nil
 }
 
 // Diagnostic is a positioned diagnostic for editor tooling. Line and Col are
 // 1-based; a zero Line means no position was recoverable (Col is only meaningful
 // beside a nonzero Line). Msg has the "buzz: line L:C:" prefix stripped - the
 // position travels in the fields instead. Code is the BZZ diagnostic code (empty for
-// a parse error, which has no code). Msg/Line/Col/Code mirror the unexported checker
-// typeError; keep the two shapes in sync if either gains a field.
+// a parse error, which has no code). Severity's zero value is SeverityError, matching
+// every diagnostic before this field existed (a parse error has no Severity set either,
+// so it reads as an error, correctly). Msg/Line/Col/Code/Severity mirror the unexported
+// checker typeError; keep the two shapes in sync if either gains a field.
 type Diagnostic struct {
 	Line, Col int
 	Code      diagnostics.Code
 	Msg       string
+	Severity  Severity
 }
 
 // Diagnostics parses and type-checks code against the session's shared scope and
@@ -666,14 +713,17 @@ type Diagnostic struct {
 func (s *Session) Diagnostics(code string) []Diagnostic {
 	// Diagnostics takes no per-call ctx (see the doc comment above); it runs
 	// against the session's own lifetime like the rest of the no-ctx surface.
-	_, errs, parseErr := s.checkShared(s.ctx, code)
+	_, errs, warnings, parseErr := s.checkShared(s.ctx, code)
 	if parseErr != nil {
 		line, col, msg := splitBuzzPos(parseErr.Error())
 		return []Diagnostic{{Line: line, Col: col, Msg: msg}}
 	}
-	out := make([]Diagnostic, len(errs))
-	for i, e := range errs {
-		out[i] = Diagnostic{Line: e.Line, Col: e.Col, Code: e.Code, Msg: e.Msg}
+	out := make([]Diagnostic, 0, len(errs)+len(warnings))
+	for _, e := range errs {
+		out = append(out, Diagnostic{Line: e.Line, Col: e.Col, Code: e.Code, Msg: e.Msg, Severity: e.Severity})
+	}
+	for _, w := range warnings {
+		out = append(out, Diagnostic{Line: w.Line, Col: w.Col, Code: w.Code, Msg: w.Msg, Severity: w.Severity})
 	}
 	return out
 }
@@ -737,9 +787,13 @@ func (s *Session) importPrivateHint() map[string]bool {
 //   - no alias or alias "_": flat exec — file's globals merge into parent env.
 //   - alias "x": exec in a sub-session (inheriting host globals), collect new
 //     bindings, create a map value, bind it under "x" in the parent env.
-func (s *Session) loadFileImports(ctx context.Context, prog *ast.Program) error {
+//
+// The returned map records how each import statement (keyed by its own position)
+// actually resolved - see importUsageIsReliable, the only current reader.
+func (s *Session) loadFileImports(ctx context.Context, prog *ast.Program) (map[ast.Pos]ImportOutcome, error) {
 	// Note: don't early-return on empty includeDirs — host-provided synthetic
 	// modules (e.g. "magus/extra") resolve without any include path.
+	outcomes := map[ast.Pos]ImportOutcome{}
 	for _, stmt := range prog.Stmts {
 		imp, ok := stmt.(*ast.ImportStmt)
 		if !ok {
@@ -747,14 +801,45 @@ func (s *Session) loadFileImports(ctx context.Context, prog *ast.Program) error 
 		}
 		start := time.Now()
 		outcome, err := s.resolveImport(ctx, imp)
+		outcomes[imp.Pos] = outcome
 		if obs := s.compileObserver; obs != nil {
 			obs.Import(imp.Path, outcome, time.Since(start), err)
 		}
 		if err != nil {
-			return err
+			return outcomes, err
 		}
 	}
-	return nil
+	return outcomes, nil
+}
+
+// importUsageIsReliable reports whether an unreferenced namespace binding can be
+// trusted as genuinely UNUSED for outcome/alias. gopherbuzz extends upstream Buzz: a
+// plain (non-aliased) import whose source is a .buzz file or embedded declarations
+// (ImportFile, ImportDecls) ALSO flat-merges its exports straight into scope - see
+// loadFileImports's alias-semantics comment and resolveImport's ImportDecls branch,
+// which flattens unconditionally, alias or not. A module used only through one of
+// those flattened bare names (no `ns\member`/`ns.member` anywhere) is a real use this
+// package cannot see without cross-referencing the imported file's export list against
+// every identifier in the importer - so rather than risk that false positive, unused-
+// import detection only trusts outcomes that provably never flatten:
+//
+//   - ImportNative / ImportResolver: always namespace-only for a real (non-"_") alias
+//     or no alias - confirmed in resolveImport, neither branch flattens without an
+//     explicit "as _".
+//   - ImportFile WITH a real alias: resolveImport execs it in an isolated sub-session
+//     (loadImportAsAlias), so only the qualified form can possibly reach it.
+//
+// Everything else (ImportFile with no alias, ImportDecls always, ImportBound - whose
+// original resolution kind this call can't see) is left unreported.
+func importUsageIsReliable(outcome ImportOutcome, alias string) bool {
+	switch outcome {
+	case ImportNative, ImportResolver:
+		return true
+	case ImportFile:
+		return alias != "" && alias != "_"
+	default:
+		return false
+	}
 }
 
 // resolveImport resolves one import statement, binding whatever it names into the
