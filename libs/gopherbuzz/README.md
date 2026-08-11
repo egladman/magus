@@ -113,7 +113,7 @@ exhaustiveness analysis, protocol conformance is unverified, and generics are er
 
 ### What does not
 
-Seven of the sixteen remaining failures are open gaps, each with a known cause:
+Six of the fifteen remaining failures are open gaps, each with a known cause:
 
 | Gap                                  |                     Blocks | Cause                                                                                                                                                                                                                                       |
 | ------------------------------------ | -------------------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -122,7 +122,6 @@ Seven of the sixteen remaining failures are open gaps, each with a known cause:
 | Tuple types                          |                   `tuples` | `obj{ :str, :str }` (positional fields) and the matching `.{ a, b }` literal.                                                                                                                                                               |
 | `typeof` and mutability              | `clone-mutability-methods` | `cloneMutable()` has to retype to `<mut [int]>`; mutability is a property no runtime value carries.                                                                                                                                         |
 | Namespaces sharing a leading segment |         `common-namespace` | Two imports whose namespaces share a first part must both bind under it.                                                                                                                                                                    |
-| Namespaced imported object types     |            `import-export` | `testing\PrefixMe{}` does not resolve the type through the import.                                                                                                                                                                          |
 | Circular imports                     |            `mutual-import` | Two modules importing each other.                                                                                                                                                                                                           |
 
 The other nine cannot be accommodated here, which is a property of the embedding
