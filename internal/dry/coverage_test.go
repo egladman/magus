@@ -229,7 +229,6 @@ export fun work(ctx: magus\Context, args: [str]) > void !> any {
     magus.pry();
     magus.bustCache();
     magus.affectedImpact("main");
-    magus.targetGraph();
     magus.describeFile(["magusfile.buzz"]);
     magus.insightReport([]);
 }

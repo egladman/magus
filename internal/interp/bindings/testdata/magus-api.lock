@@ -31,7 +31,6 @@ run
 secret
 secret.provider
 secret.read
-targetGraph
 targets
 where
 workspace

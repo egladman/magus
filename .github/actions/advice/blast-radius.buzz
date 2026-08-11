@@ -115,7 +115,7 @@ fun main() > void !> any {
     }
 
     var total = 0;
-    foreach (p in magus\targetGraph().projects) { total = total + 1; }
+    foreach (p in magus\targets().projects) { total = total + 1; }
     if (!trips(reached.len(), total: total, share: share)) {
         advice\publish(repo, pr: pr, name: section, title: "How far this change reaches", body: "");
         std\print("blast-radius: {reached.len()} of {total} projects; below the threshold");

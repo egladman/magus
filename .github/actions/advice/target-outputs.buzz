@@ -92,7 +92,7 @@ fun main() > void !> any {
     // projects here declare `preflight`, and matching on the bare name reported the same
     // name eight times for one edited magusfile - a list that told a reader nothing.
     var bare = mut [];
-    foreach (project in magus\targetGraph().projects) {
+    foreach (project in magus\targets().projects) {
         foreach (t in project.nodes) {
             if (t.writesFiles.len() != 0) { continue; }
             foreach (n in names) {

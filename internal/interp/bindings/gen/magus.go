@@ -19,7 +19,7 @@ import (
 //
 // Three provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\cache.remote(<spell>)` selects a remote cache backend, `magus\ci.provider(<spell>)` a CI provider, and `magus\secret.provider(<spell>)` / `magus\secret.read(<ref>)` a secret backend and the credentials read through it. Each takes an imported spell handle. See [Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) and [CI integration](../../guides/integrations/ci.md).
 //
-// `import "magus"` resolves in a `magus buzz` script as well as in a magusfile. The members that declare into the workspace magus is loading (`magus\project`, the provider selections above) and the ones served in-process from a loaded workspace (`ls`, `targets`, `affected`, `graph`, `where`) raise [MGS1022](../codes/magusfile/MGS1022.md) in a script; the nested-command methods (`cmd`, `run`, `describe`, `insight`, `doctor`) work there and discover the workspace themselves.
+// `import "magus"` resolves in a `magus buzz` script as well as in a magusfile. The members that declare into the workspace magus is loading (`magus\project`, the provider selections above) and the ones served in-process from a loaded workspace (`ls`, `affected`, `projectGraph`, `where`) raise [MGS1022](../codes/magusfile/MGS1022.md) in a script; the nested-command methods (`cmd`, `run`, `describe`, `insight`, `doctor`) work there and discover the workspace themselves. `targets` works in both: it serves the workspace on the context when there is one and forks a nested magus when there is not.
 func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
@@ -42,7 +42,8 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return buzzValueMagusProjectsOutput(ret0), nil
 	}))
 	m.MapSet("targets", vm.DirectValue("magus.targets", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.MagusTargets(ctx)
+		opts := AnyMap(bzArgs, 0)
+		ret0, err := std.MagusTargets(ctx, opts)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
@@ -124,14 +125,6 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 			return vm.Null, HostError(err)
 		}
 		return buzzValueMagusImpactResult(ret0), nil
-	}))
-	m.MapSet("targetGraph", vm.DirectValue("magus.targetGraph", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		opts := AnyMap(bzArgs, 0)
-		ret0, err := std.MagusTargetGraph(ctx, opts)
-		if err != nil {
-			return vm.Null, HostError(err)
-		}
-		return buzzValueMagusTargetGraphOutput(ret0), nil
 	}))
 	m.MapSet("describeFile", vm.DirectValue("magus.describeFile", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		paths := StrSlice(bzArgs, 0)

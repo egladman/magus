@@ -44,10 +44,11 @@ var Magus = Module{
 		"and [CI integration](../../guides/integrations/ci.md).\n\n" +
 		"`import \"magus\"` resolves in a `magus buzz` script as well as in a magusfile. The " +
 		"members that declare into the workspace magus is loading (`magus\\project`, the provider " +
-		"selections above) and the ones served in-process from a loaded workspace (`ls`, `targets`, " +
-		"`affected`, `graph`, `where`) raise [MGS1022](../codes/magusfile/MGS1022.md) in a script; " +
-		"the nested-command methods (`cmd`, `run`, `describe`, `insight`, `doctor`) work there and " +
-		"discover the workspace themselves.",
+		"selections above) and the ones served in-process from a loaded workspace (`ls`, " +
+		"`affected`, `projectGraph`, `where`) raise [MGS1022](../codes/magusfile/MGS1022.md) in a " +
+		"script; the nested-command methods (`cmd`, `run`, `describe`, `insight`, `doctor`) work " +
+		"there and discover the workspace themselves. `targets` works in both: it serves the " +
+		"workspace on the context when there is one and forks a nested magus when there is not.",
 	Methods: []Method{
 		{
 			Name: "cmd",
@@ -70,9 +71,11 @@ var Magus = Module{
 			Impl:    MagusLs,
 		},
 		{
-			Name:    "targets",
-			Doc:     "The TARGET dependency graph of every project: {projects}, each project {path, name, engine, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs, outputs}. Annotate the result `> TargetGraph` (magus's own type, no import needed) for compile-checked field access. This is the per-project view magus.graph() does not carry: graph() is the project-level DAG, this is the targets inside each one. Read statically from the magusfile source, so it never runs a target body, and served in-process from the workspace on the context - no subprocess, no markdown to re-parse.",
-			Args:    nil,
+			Name: "targets",
+			Doc:  "The TARGET dependency graph of every project: {projects}, each project {path, name, engine, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs, outputs}. Annotate the result `> TargetGraph` (magus's own type, no import needed) for compile-checked field access. This is the per-project view magus.projectGraph() does not carry: that is the project-level DAG, this is the targets inside each one. Read statically from the magusfile source, so it never runs a target body. Served in-process from the workspace on the context when there is one, and through a nested magus when there is not - so the same call works from a magusfile and from a `magus buzz` script with no workspace.",
+			Args: []Arg{
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "TargetGraph"}},
 			Raises:  true,
 			Impl:    MagusTargets,
@@ -171,16 +174,6 @@ var Magus = Module{
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Impact"}},
 			Raises:  true,
 			Impl:    MagusAffectedImpact,
-		},
-		{
-			Name: "target_graph",
-			Doc:  "The TARGET dependency graph of every project as a typed value: {projects}, each with its nodes and each node's declared footprint (readsFiles / writesFiles / modifiesExistingFiles). Annotate the result `> TargetGraph`. This is what magus.targets() serves in-process, reached by a nested magus instead, so it works from a `magus buzz` script with no workspace on the context - the case that matters for CI advisories reasoning about a pull request.",
-			Args: []Arg{
-				{Name: "opts", Type: TypeAnyMap, Optional: true},
-			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "TargetGraph"}},
-			Raises:  true,
-			Impl:    MagusTargetGraph,
 		},
 		{
 			Name: "describe_file",
@@ -457,16 +450,22 @@ func MagusLs(ctx context.Context) (types.ProjectsOutput, error) {
 	return ws.ListProjects(ctx)
 }
 
-// MagusTargets returns every project's target graph in-process. It is the typed
-// counterpart to `magus describe graph`: a caller that wants the target inventory no
-// longer has to shell out and parse the markdown that command renders. TargetGraph
-// reads the magusfile statically, so this is side-effect free.
-func MagusTargets(ctx context.Context) (types.TargetGraphOutput, error) {
-	ws := types.WorkspaceFromContext(ctx)
-	if ws == nil {
-		return types.TargetGraphOutput{}, errNoWorkspace("targets")
+// MagusTargets returns every project's target graph. It is the typed counterpart to
+// `magus describe graph`: a caller that wants the target inventory no longer has to
+// shell out and parse the markdown that command renders. TargetGraph reads the
+// magusfile statically, so this is side-effect free.
+//
+// It serves the workspace on the context when there is one and forks a nested magus
+// when there is not, because the caller asking for the target graph is asking the same
+// question either way - which magusfile it came from is magus's problem, not a name the
+// caller should have to choose between. These were two methods once; the split leaked an
+// implementation detail into the surface, and calling the wrong one raised rather than
+// answering.
+func MagusTargets(ctx context.Context, opts map[string]any) (types.TargetGraphOutput, error) {
+	if ws := types.WorkspaceFromContext(ctx); ws != nil {
+		return ws.TargetGraph(ctx)
 	}
-	return ws.TargetGraph(ctx)
+	return runMagusJSON[types.TargetGraphOutput](ctx, "describe", []string{"graph"}, opts)
 }
 
 // MagusAffected computes the affected project set in-process. See MagusLs for why
@@ -651,12 +650,6 @@ func MagusAffectedImpact(ctx context.Context, base string, opts map[string]any) 
 		args = append(args, "--base", base)
 	}
 	return runMagusJSON[types.ImpactResult](ctx, "affected", args, opts)
-}
-
-// MagusTargetGraph returns every project's target graph through a nested magus, the
-// forking counterpart to MagusTargets. See runMagusJSON.
-func MagusTargetGraph(ctx context.Context, opts map[string]any) (types.TargetGraphOutput, error) {
-	return runMagusJSON[types.TargetGraphOutput](ctx, "describe", []string{"graph"}, opts)
 }
 
 // MagusInsightReport returns every insight lens as one typed report. `magus insight`

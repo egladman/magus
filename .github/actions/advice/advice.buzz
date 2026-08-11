@@ -76,7 +76,7 @@ final glossary_urls = {
 // rendered as literal text. Hoisting the definitions out to the top level did not help,
 // because it is the REFERENCE that goes unparsed, not the definition.
 //
-// Code spans are left alone: `magus\targetGraph()` is an identifier, not the concept, and
+// Code spans are left alone: `magus\targets()` is an identifier, not the concept, and
 // rewriting inside backticks would produce something that no longer runs. Splitting on the
 // backtick makes every ODD segment code, which is the whole guard.
 export fun linkTerms(text: str) > str {

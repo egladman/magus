@@ -197,7 +197,7 @@ fun main() > void !> any {
     if (configuredShare != "") { minShare = std\parseDouble(configuredShare) ?? 0.8; }
 
     var members = mut [];
-    foreach (p in magus\targetGraph().projects) {
+    foreach (p in magus\targets().projects) {
         foreach (n in p.nodes) {
             var ops = mut [];
             foreach (use in n.spells) {

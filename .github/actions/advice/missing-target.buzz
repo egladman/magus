@@ -180,7 +180,7 @@ fun main() > void !> any {
     if (configuredShare != "") { minShare = std\parseDouble(configuredShare) ?? 0.8; }
 
     var projects = mut [];
-    foreach (p in magus\targetGraph().projects) {
+    foreach (p in magus\targets().projects) {
         var spells = mut [];
         var targets = mut [];
         foreach (n in p.nodes) {

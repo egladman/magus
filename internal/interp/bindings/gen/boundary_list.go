@@ -52,6 +52,7 @@ var RuntimeBoundaryTypes = []any{
 	types.ProjectsOutput{},
 	types.SemverNext{},
 	types.SemverVersion{},
+	types.ShellCommand{},
 	types.StatusRecord{},
 	types.StatusRun{},
 	types.StatusTargetRun{},

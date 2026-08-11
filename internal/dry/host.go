@@ -244,7 +244,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		return res, nil
 	}))
 	// The reports magus returns as domain types (doctor, describeFile, insightReport,
-	// affectedImpact, targetGraph) fork a real magus in the live host. Same rule as
+	// affectedImpact) fork a real magus in the live host. Same rule as
 	// ls/affected: stub each with its result shape so `magus.doctor().summary.fail`
 	// and friends resolve. Field names track the Buzz mirrors in
 	// internal/spellruntime/gen/types.
@@ -288,11 +288,6 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("message", vm.StrValue(""))
 		res.MapSet("url", vm.StrValue(""))
 		res.MapSet("files", vm.ListValue(nil))
-		return res, nil
-	}))
-	m.MapSet("targetGraph", fn("magus.targetGraph", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		res := vm.NewMap()
-		res.MapSet("projects", vm.ListValue(nil))
 		return res, nil
 	}))
 	// insightReport nests a record per lens rather than a list, so each one is shaped
