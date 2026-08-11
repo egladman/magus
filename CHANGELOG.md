@@ -359,6 +359,18 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   burden to carry: `LocalSkillName`, the `magus-adapt` skill body, the `.gitignore`
   exception, and this workspace's own `.claude/skills/magus-local-development/` moved
   together, outright, with no alias. Skill contract v27.
+- **A `magus-buzz-review` skill**, three lenses over a magusfile, spell, or standalone
+  `.buzz` script - idiom/style, skeptic/correctness, and upstream-Buzz conformance -
+  fanned out in parallel and merged, the same shape go-review-ultra already uses for
+  Go. magus-buzz teaches how to write Buzz; nothing taught how to review it, so a
+  gopherbuzz-only behavior (namespace access accepting a dot as well as a backslash,
+  a bare `as` cast coercing instead of statically checking, a compound assignment
+  double-evaluating its target) had no home to be flagged from, and a strict-mode rule
+  applied to a magusfile - which is always parsed embedded, unconditionally - read as a
+  real finding when it was a false one. Every finding carries one of three authority
+  labels (UPSTREAM, GOPHERBUZZ, PORTABILITY) naming which of those three questions it
+  answers. It does not cover magusfile/target/spell contracts; magus-buzz still owns
+  those. Skill contract v28.
 - **Host parity is now a build gate rather than a table nobody re-reads.** Each guard
   template declares, per guard surface, how much of a verdict it can carry
   (`magus-guard-coverage`), and the guard's own vocabulary moved into an importable

@@ -2,8 +2,8 @@
 title: magus-buzz
 description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in."
 tags: [agents, skills, magus-buzz]
-skill_full_bytes: 7031
-skill_simple_bytes: 6024
+skill_full_bytes: 7114
+skill_simple_bytes: 6107
 ---
 
 # magus-buzz
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `27` |
+| `agent-skill-version` | `28` |
 | `knowledge-schema-version` | `8` |
-| `skill-content` | `922b5ca8a386` |
+| `skill-content` | `5a4d02575312` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -235,6 +235,8 @@ magus buzz -t script.buzz     # ok/fail per block, then a summary line
 
 Prefer a target over a script for anything that will be run more than once: a
 script re-runs from scratch every time, a target replays from cache.
+
+Reviewing existing Buzz code rather than writing new code: use magus-buzz-review.
 ````
 
 ## Short form (`--simple`)
@@ -430,6 +432,8 @@ magus buzz -t script.buzz     # ok/fail per block, then a summary line
 - **A tool adapter** - a spell, so every project of that type gets the ops.
 
 Prefer a target over a script for anything that will be run more than once.
+
+Reviewing existing Buzz code rather than writing new code: use magus-buzz-review.
 ````
 
 

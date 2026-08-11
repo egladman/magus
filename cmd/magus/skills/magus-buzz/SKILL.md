@@ -197,3 +197,5 @@ magus buzz -t script.buzz     # ok/fail per block, then a summary line
 
 Prefer a target over a script for anything that will be run more than once{{if .Full}}: a
 script re-runs from scratch every time, a target replays from cache{{end}}.
+
+Reviewing existing Buzz code rather than writing new code: use magus-buzz-review.
