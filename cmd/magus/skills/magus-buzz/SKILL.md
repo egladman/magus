@@ -140,9 +140,19 @@ template\render(tpl, data: {"name": "world"});
 | optional | `int?`, unwrap with `??`, `?.`, or `!` |
 | errors | `fun f() > int !> str` declares what it throws; `try`/`catch`, or `expr catch fallback` inline |
 
-Reserved words that cannot be used as names: `map`, `static`, `test`, `out`,
-`from`, `type`, `double`, `fib`, and the obvious keywords.{{if .Full}} A fixture that uses
-one fails with a confusing `null is not callable`.{{end}} Prefix or rename instead.
+Reserved words that cannot be used as binding names (var/fun/param/field/...):
+`out`, `from`, `match`, `pat`, `fib`, `rg`, `obj`, `ud`, `zdef`, `typeof`, `type`,
+`protocol`, `static`, `extern`, `double`, `any`, `Function`, `int`, `str`, `bool`,
+`void`{{if .Full}} - upstream Buzz's list, kept for parity{{end}}. `test` is NOT
+reserved{{if .Full}} - every magus target set defines `export fun test(...)`,
+the canonical test target, so reserving it would break the CLI's own
+model{{end}}. Prefix or rename only the words above.
+
+A separate hazard: naming a local after a module or a builtin (`map`, `len`, a
+module name) SHADOWS it{{if .Full}} rather than failing to parse, so a later
+call through that name hits a non-callable value and dies with a
+confusing{{else}} - watch for a confusing{{end}} `null is not callable`. Rename
+the local.
 
 A raw string is backticks, and it does NOT interpolate `{...}`{{if .Full}} - use it for
 Mustache templates, regexes, and JSON blobs{{end}}:

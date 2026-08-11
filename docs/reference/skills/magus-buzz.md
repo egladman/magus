@@ -2,8 +2,8 @@
 title: magus-buzz
 description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in."
 tags: [agents, skills, magus-buzz]
-skill_full_bytes: 7114
-skill_simple_bytes: 6107
+skill_full_bytes: 7631
+skill_simple_bytes: 6431
 ---
 
 # magus-buzz
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `28` |
+| `agent-skill-version` | `29` |
 | `knowledge-schema-version` | `8` |
-| `skill-content` | `5a4d02575312` |
+| `skill-content` | `949f44525014` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -178,9 +178,19 @@ template\render(tpl, data: {"name": "world"});
 | optional | `int?`, unwrap with `??`, `?.`, or `!` |
 | errors | `fun f() > int !> str` declares what it throws; `try`/`catch`, or `expr catch fallback` inline |
 
-Reserved words that cannot be used as names: `map`, `static`, `test`, `out`,
-`from`, `type`, `double`, `fib`, and the obvious keywords. A fixture that uses
-one fails with a confusing `null is not callable`. Prefix or rename instead.
+Reserved words that cannot be used as binding names (var/fun/param/field/...):
+`out`, `from`, `match`, `pat`, `fib`, `rg`, `obj`, `ud`, `zdef`, `typeof`, `type`,
+`protocol`, `static`, `extern`, `double`, `any`, `Function`, `int`, `str`, `bool`,
+`void` - upstream Buzz's list, kept for parity. `test` is NOT
+reserved - every magus target set defines `export fun test(...)`,
+the canonical test target, so reserving it would break the CLI's own
+model. Prefix or rename only the words above.
+
+A separate hazard: naming a local after a module or a builtin (`map`, `len`, a
+module name) SHADOWS it rather than failing to parse, so a later
+call through that name hits a non-callable value and dies with a
+confusing `null is not callable`. Rename
+the local.
 
 A raw string is backticks, and it does NOT interpolate `{...}` - use it for
 Mustache templates, regexes, and JSON blobs:
@@ -380,8 +390,15 @@ template\render(tpl, data: {"name": "world"});
 | optional | `int?`, unwrap with `??`, `?.`, or `!` |
 | errors | `fun f() > int !> str` declares what it throws; `try`/`catch`, or `expr catch fallback` inline |
 
-Reserved words that cannot be used as names: `map`, `static`, `test`, `out`,
-`from`, `type`, `double`, `fib`, and the obvious keywords. Prefix or rename instead.
+Reserved words that cannot be used as binding names (var/fun/param/field/...):
+`out`, `from`, `match`, `pat`, `fib`, `rg`, `obj`, `ud`, `zdef`, `typeof`, `type`,
+`protocol`, `static`, `extern`, `double`, `any`, `Function`, `int`, `str`, `bool`,
+`void`. `test` is NOT
+reserved. Prefix or rename only the words above.
+
+A separate hazard: naming a local after a module or a builtin (`map`, `len`, a
+module name) SHADOWS it - watch for a confusing `null is not callable`. Rename
+the local.
 
 A raw string is backticks, and it does NOT interpolate `{...}`:
 

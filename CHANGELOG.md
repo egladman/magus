@@ -371,6 +371,17 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   labels (UPSTREAM, GOPHERBUZZ, PORTABILITY) naming which of those three questions it
   answers. It does not cover magusfile/target/spell contracts; magus-buzz still owns
   those. Skill contract v28.
+- **`magus-buzz` no longer tells an agent that `test` is a reserved word.** The
+  shipped skill's "reserved words" table conflated parse-time reservation with
+  runtime shadowing, and was wrong on two entries: `test` is not in gopherbuzz's
+  `reservedIdents`, deliberately, because every magus target set defines
+  `export fun test(...)`, the canonical test target - the old text told an agent
+  that target was illegal. `map` was never reserved either; naming a local or a
+  field `map` shadows the builtin `.map()` method, which is a runtime hazard, not
+  a parse error, and is why it fails later with a confusing `null is not
+  callable`. The passage now states the real reserved list, states plainly that
+  `test` is usable, and moves the shadowing hazard to its own line. Skill
+  contract v29.
 - **Host parity is now a build gate rather than a table nobody re-reads.** Each guard
   template declares, per guard surface, how much of a verdict it can carry
   (`magus-guard-coverage`), and the guard's own vocabulary moved into an importable
