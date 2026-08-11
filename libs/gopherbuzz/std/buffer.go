@@ -3,7 +3,9 @@ package std
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
+	"math"
 	"strconv"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -84,8 +86,16 @@ func makeBufferValue(st *bufferState) vm.Value {
 	m := mod()
 
 	m.MapSet("write", fn("Buffer.write", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		// Upstream's write takes a STR; gopherbuzz's took a [int]. Both are accepted
+		// rather than one replaced: the string form is what upstream's behavior suite
+		// uses, and the byte-list form is what this package's own callers already
+		// pass. They are unambiguous at the value level, so nothing has to choose.
+		if len(args) >= 1 && args[0].IsStr() {
+			*buf = append(*buf, args[0].AsString()...)
+			return vm.Null, nil
+		}
 		if len(args) < 1 || !args[0].IsList() {
-			return vm.Null, fmt.Errorf("Buffer.write: requires a [int] bytes argument")
+			return vm.Null, fmt.Errorf("Buffer.write: requires a str or [int] bytes argument")
 		}
 		for _, item := range args[0].ListItems() {
 			if !item.IsInt() {
@@ -117,11 +127,94 @@ func makeBufferValue(st *bufferState) vm.Value {
 		}
 		chunk := (*buf)[:n]
 		*buf = (*buf)[n:]
-		items := make([]vm.Value, len(chunk))
-		for i, b := range chunk {
-			items[i] = vm.IntValue(int64(b))
+		// A STR, as upstream returns. readAll and toList still hand back byte lists
+		// for callers that want the numeric view.
+		return vm.StrValue(string(chunk)), nil
+	}))
+
+	// The binary API. Upstream's Buffer is how a Buzz program serialises values, and
+	// each of these has a fixed on-the-wire width that its reader mirrors.
+	//
+	// An INT is six bytes, little-endian, not eight: upstream's Integer is an i48.
+	// Writing eight would round-trip fine here and disagree with every other Buzz
+	// program reading the same bytes, which is the kind of divergence a byte format
+	// cannot afford.
+	const intWidth = 6
+
+	m.MapSet("writeInt", fn("Buffer.writeInt", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 1 || !args[0].IsInt() {
+			return vm.Null, fmt.Errorf("Buffer.writeInt: requires an int argument")
 		}
-		return vm.ListValue(items), nil
+		var b [8]byte
+		binary.LittleEndian.PutUint64(b[:], uint64(args[0].AsInt()))
+		*buf = append(*buf, b[:intWidth]...)
+		return vm.Null, nil
+	}))
+
+	m.MapSet("readInt", fn("Buffer.readInt", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		// NULL on a short buffer rather than an error: upstream's caller writes
+		// `buffer.readInt() ?? -1`, so the miss is a value the program handles.
+		if len(*buf) < intWidth {
+			return vm.Null, nil
+		}
+		var b [8]byte
+		copy(b[:intWidth], (*buf)[:intWidth])
+		u := binary.LittleEndian.Uint64(b[:])
+		// Sign-extend from 48 bits so a negative round-trips.
+		if u&(1<<47) != 0 {
+			u |= uint64(0xFFFF) << 48
+		}
+		*buf = (*buf)[intWidth:]
+		return vm.IntValue(int64(u)), nil
+	}))
+
+	m.MapSet("writeDouble", fn("Buffer.writeDouble", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 1 || !(args[0].IsFloat() || args[0].IsInt()) {
+			return vm.Null, fmt.Errorf("Buffer.writeDouble: requires a double argument")
+		}
+		d := args[0].AsFloat()
+		var b [8]byte
+		binary.LittleEndian.PutUint64(b[:], math.Float64bits(d))
+		*buf = append(*buf, b[:]...)
+		return vm.Null, nil
+	}))
+
+	m.MapSet("readDouble", fn("Buffer.readDouble", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		if len(*buf) < 8 {
+			return vm.Null, nil
+		}
+		u := binary.LittleEndian.Uint64((*buf)[:8])
+		*buf = (*buf)[8:]
+		return vm.FloatValue(math.Float64frombits(u)), nil
+	}))
+
+	m.MapSet("writeBoolean", fn("Buffer.writeBoolean", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 1 || !args[0].IsBool() {
+			return vm.Null, fmt.Errorf("Buffer.writeBoolean: requires a bool argument")
+		}
+		var v byte
+		if args[0].Bool() {
+			v = 1
+		}
+		*buf = append(*buf, v)
+		return vm.Null, nil
+	}))
+
+	m.MapSet("readBoolean", fn("Buffer.readBoolean", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		if len(*buf) < 1 {
+			return vm.Null, nil
+		}
+		v := (*buf)[0]
+		*buf = (*buf)[1:]
+		return vm.BoolValue(v != 0), nil
+	}))
+
+	// empty() CLEARS the buffer. Note it is not the negation of isEmpty(), which
+	// only reports - upstream names them that way and both are kept as upstream has
+	// them rather than renamed for symmetry.
+	m.MapSet("empty", fn("Buffer.empty", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		*buf = (*buf)[:0]
+		return vm.Null, nil
 	}))
 
 	m.MapSet("readAll", fn("Buffer.readAll", func(_ context.Context, _ []vm.Value) (vm.Value, error) {

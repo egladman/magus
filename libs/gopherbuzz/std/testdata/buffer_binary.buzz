@@ -1,0 +1,29 @@
+// @expect: true
+// Buffer's binary API, matching upstream's tests/behavior/buffer.buzz.
+//
+// An INT is six bytes little-endian, not eight: upstream's Integer is an i48, and a
+// buffer is a wire format, so a width that only round-trips within gopherbuzz would
+// disagree with every other Buzz program reading the same bytes.
+//
+// The one part of upstream's case NOT asserted here is its byte-wise walk of
+// toString(). That is blocked by a separate divergence: gopherbuzz strings iterate by
+// RUNE, so the non-UTF-8 bytes a double writes (158, 239, 167, ...) come back as
+// U+FFFD. The bytes written are correct - len() is 26 either way - and only reading
+// them back through string iteration is lossy.
+import "buffer";
+final b = buffer.Buffer.init();
+b.writeInt("hello world".len());
+b.write("hello world");
+b.writeDouble(1238.324);
+b.writeBoolean(true);
+
+final wrote26 = b.len() == 26;
+final n = b.readInt() ?? -1;
+final readLen = n == 11;
+final readStr = b.read(n) == "hello world";
+final readDbl = b.readDouble() == 1238.324;
+final readBool = b.readBoolean() == true;
+b.empty();
+final emptied = b.len() == 0;
+
+final __r = wrote26 and readLen and readStr and readDbl and readBool and emptied;
