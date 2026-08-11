@@ -173,11 +173,16 @@ export object Tester {
     }
 
     /// Soft-asserts a boolean condition (the primitive the matchers build on).
+    ///
+    /// `error` is optional and named to match upstream's
+    /// `fun assert(condition: bool, error: str?, message: str?)`. It was a REQUIRED
+    /// parameter called `detail`, which made upstream's own `t.assert(true)` fail to
+    /// check - the shape its behavior suite uses throughout.
     /// @param condition Must be true to pass
-    /// @param detail Detail printed on failure
+    /// @param error Detail printed on failure
     /// @param message The assertion label
-    mut fun assert(condition: bool, detail: str, message: str?) > void {
-        this.record(condition, detail: detail, message: message);
+    mut fun assert(condition: bool, error: str?, message: str?) > void {
+        this.record(condition, detail: error ?? "", message: message);
     }
 
     /// Soft-asserts actual == expected.
