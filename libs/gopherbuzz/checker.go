@@ -353,9 +353,9 @@ func (c *checker) resolveType(t types.Type) types.Type {
 		}
 		return v
 	case *types.ListType:
-		return &types.ListType{Elem: c.resolveType(v.Elem)}
+		return &types.ListType{Elem: c.resolveType(v.Elem), Mut: v.Mut}
 	case *types.MapType:
-		return &types.MapType{Key: c.resolveType(v.Key), Val: c.resolveType(v.Val)}
+		return &types.MapType{Key: c.resolveType(v.Key), Val: c.resolveType(v.Val), Mut: v.Mut}
 	case *types.FuncType:
 		params := make([]types.Type, len(v.Params))
 		for i, p := range v.Params {
@@ -1305,10 +1305,16 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 		if v.Name == "len" {
 			return types.Int
 		}
+		if mut, ok := collectionSelfMethodMut(listSelfMethods, t.Mut, v.Name); ok {
+			return selfReturning(&types.ListType{Elem: t.Elem, Mut: mut})
+		}
 		return types.Unknown
 	case *types.MapType:
 		if v.Name == "len" {
 			return types.Int
+		}
+		if mut, ok := collectionSelfMethodMut(mapSelfMethods, t.Mut, v.Name); ok {
+			return selfReturning(&types.MapType{Key: t.Key, Val: t.Val, Mut: mut})
 		}
 		return types.Unknown
 	case *types.EnumType:
@@ -1331,6 +1337,62 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 		return types.Unknown
 	}
 	return types.Unknown
+}
+
+// listSelfMethods and mapSelfMethods name the built-in collection methods whose
+// return type is the RECEIVER's own collection type, so their result carries the
+// receiver's mutability - upstream builds each one's signature from `obj_list` /
+// `obj_map` itself (src/obj.zig). The clone family is the exception that makes the
+// mutability visible: it re-types the copy, which is what `typeof
+// list.cloneMutable() == <mut [int]>` is asking about.
+//
+// Everything absent here stays Unknown, exactly as before: `map` and `reduce`
+// produce a collection of a type only the callback knows, and `keys`/`values`
+// return a fresh IMMUTABLE list upstream regardless of the receiver.
+var (
+	listSelfMethods = map[string]mutability{
+		"sub": sameMut, "fill": sameMut, "filter": sameMut, "sort": sameMut, "reverse": sameMut,
+		"clone": alwaysImmutable, "cloneImmutable": alwaysImmutable, "copyImmutable": alwaysImmutable,
+		"cloneMutable": alwaysMutable, "copyMutable": alwaysMutable,
+	}
+	mapSelfMethods = map[string]mutability{
+		"filter": sameMut, "sort": sameMut, "diff": sameMut, "intersect": sameMut,
+		"clone": alwaysImmutable, "cloneImmutable": alwaysImmutable, "copyImmutable": alwaysImmutable,
+		"cloneMutable": alwaysMutable, "copyMutable": alwaysMutable,
+	}
+)
+
+// mutability says how a self-returning collection method derives its result's
+// mutability from the receiver's.
+type mutability uint8
+
+const (
+	sameMut mutability = iota
+	alwaysMutable
+	alwaysImmutable
+)
+
+func collectionSelfMethodMut(table map[string]mutability, recvMut bool, name string) (mut, ok bool) {
+	m, ok := table[name]
+	if !ok {
+		return false, false
+	}
+	switch m {
+	case alwaysMutable:
+		return true, true
+	case alwaysImmutable:
+		return false, true
+	}
+	return recvMut, true
+}
+
+// selfReturning wraps a collection method's result in a signature that checks
+// nothing about its arguments. The parameter lists are deliberately absent: these
+// methods were untyped (Unknown) until now, so declaring arities here would turn a
+// type answer into new argument diagnostics on source that compiles today. Only
+// the return type is being claimed.
+func selfReturning(ret types.Type) types.Type {
+	return &types.FuncType{Ret: ret, Variadic: true}
 }
 
 func (c *checker) inferIndex(v *ast.IndexExpr) types.Type {
@@ -1422,7 +1484,7 @@ func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {
 			c.inferExpected(v.Keys[i], keyTyp)
 			c.inferExpected(v.Values[i], valTyp)
 		}
-		return &types.MapType{Key: keyTyp, Val: valTyp}
+		return &types.MapType{Key: keyTyp, Val: valTyp, Mut: v.Mut}
 	}
 	// An annotated map literal passes its declared element types down, so a
 	// nested `.{ ... }` value knows which object it is filling in.
@@ -1438,7 +1500,7 @@ func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {
 		// unannotated `{}` constrains neither half. Defaulting the key to str was
 		// invisible until `typeof {}` had to render it, and it would have rejected
 		// an int-keyed map assigned from an empty literal.
-		return &types.MapType{Key: types.Any, Val: types.Any}
+		return &types.MapType{Key: types.Any, Val: types.Any, Mut: v.Mut}
 	}
 	keyTyp := c.infer(v.Keys[0])
 	valTyp := c.infer(v.Values[0])
@@ -1448,7 +1510,7 @@ func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {
 	}
 	// Carry tuple-ness onto the type: it is what lets inferMember tell `.{ 1, 2 }.0`
 	// (legal) from `.{ @"0" = 1 }.0` (not), which are the same map otherwise.
-	return &types.MapType{Key: keyTyp, Val: valTyp, Tuple: v.Tuple}
+	return &types.MapType{Key: keyTyp, Val: valTyp, Mut: v.Mut, Tuple: v.Tuple}
 }
 
 func (c *checker) inferListExpr(v *ast.ListExpr) types.Type {
@@ -1461,16 +1523,16 @@ func (c *checker) inferListExpr(v *ast.ListExpr) types.Type {
 		for _, item := range v.Items {
 			c.inferExpected(item, elemTyp)
 		}
-		return &types.ListType{Elem: elemTyp}
+		return &types.ListType{Elem: elemTyp, Mut: v.Mut}
 	}
 	if len(v.Items) == 0 {
-		return &types.ListType{Elem: types.Any}
+		return &types.ListType{Elem: types.Any, Mut: v.Mut}
 	}
 	elemTyp := c.infer(v.Items[0])
 	for _, item := range v.Items[1:] {
 		c.infer(item)
 	}
-	return &types.ListType{Elem: elemTyp}
+	return &types.ListType{Elem: elemTyp, Mut: v.Mut}
 }
 
 func (c *checker) inferObjectLit(v *ast.ObjectLit) types.Type {
@@ -1515,9 +1577,9 @@ func (c *checker) inferObjectLit(v *ast.ObjectLit) types.Type {
 func canonicalTypeName(t types.Type) string {
 	switch v := t.(type) {
 	case *types.ListType:
-		return "[" + canonicalTypeName(v.Elem) + "]"
+		return mutSpelling(v.Mut) + "[" + canonicalTypeName(v.Elem) + "]"
 	case *types.MapType:
-		return "{" + canonicalTypeName(v.Key) + ": " + canonicalTypeName(v.Val) + "}"
+		return mutSpelling(v.Mut) + "{" + canonicalTypeName(v.Key) + ": " + canonicalTypeName(v.Val) + "}"
 	case nil:
 		return "any"
 	}
@@ -1528,4 +1590,16 @@ func canonicalTypeName(t types.Type) string {
 		return "any"
 	}
 	return t.TypeName()
+}
+
+// mutSpelling renders the `mut ` modifier for canonicalTypeName. It duplicates
+// types.mutPrefix rather than exporting it because the two renderers answer
+// different questions - canonicalTypeName follows upstream's spacing, TypeName
+// follows the compact annotation form - and a shared helper would tie them
+// together in the one place they are allowed to differ.
+func mutSpelling(mut bool) string {
+	if mut {
+		return "mut "
+	}
+	return ""
 }

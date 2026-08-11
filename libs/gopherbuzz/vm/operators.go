@@ -567,7 +567,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 				start = 0
 			}
 			if start > len(lo.Items) {
-				return ListValue(nil), nil
+				return listValue(nil, lo.Mut), nil
 			}
 			end := len(lo.Items)
 			if len(args) >= 2 && args[1].IsInt() {
@@ -581,7 +581,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 			}
 			cp := make([]Value, end-start)
 			copy(cp, lo.Items[start:end])
-			return ListValue(cp), nil
+			return listValue(cp, lo.Mut), nil
 		})
 	case "indexOf":
 		return newDirect("list.indexOf", func(_ context.Context, args []Value) (Value, error) {
@@ -653,7 +653,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 					out = append(out, it)
 				}
 			}
-			return ListValue(out), nil
+			return listValue(out, lo.Mut), nil
 		})
 	case "reduce":
 		return newDirect("list.reduce", func(ctx context.Context, args []Value) (Value, error) {
@@ -717,7 +717,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 			for i, v := range lo.Items {
 				cp[len(lo.Items)-1-i] = v
 			}
-			return ListValue(cp), nil
+			return listValue(cp, lo.Mut), nil
 		})
 	case "fill":
 		// fill(value, start: int?, len: int?) - upstream fills a RANGE, defaulting to
@@ -758,7 +758,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 		return newDirect("list."+name, func(_ context.Context, _ []Value) (Value, error) {
 			cp := make([]Value, len(lo.Items))
 			copy(cp, lo.Items)
-			return heapValue(tagList, &listObj{Items: cp, Mut: mut}), nil
+			return listValue(cp, mut), nil
 		})
 	}
 	return nil
@@ -872,7 +872,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 				return Null, fmt.Errorf("map.filter: requires a callback function")
 			}
 			cb := args[0]
-			out := NewMap()
+			out := mapValue(mp.Mut)
 			for i, k := range mp.Keys {
 				v, err := callValue(vm, ctx, cb, []Value{StrValue(k), mp.Vals[i]})
 				if err != nil {
@@ -913,12 +913,11 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 		// and copyImmutable are upstream's aliases for the two clone forms.
 		mut := name == "cloneMutable" || name == "copyMutable"
 		return newDirect("map."+name, func(_ context.Context, _ []Value) (Value, error) {
-			nm := newMapObj()
-			nm.Mut = mut
+			nm := mapValue(mut)
 			for i, k := range mp.Keys {
-				nm.set(k, mp.Vals[i])
+				nm.MapSet(k, mp.Vals[i])
 			}
-			return vm.allocMap(nm), nil
+			return nm, nil
 		})
 	case "diff":
 		return newDirect("map.diff", func(_ context.Context, args []Value) (Value, error) {
@@ -926,7 +925,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 				return Null, fmt.Errorf("map.diff: requires a map argument")
 			}
 			other := args[0]
-			out := NewMap()
+			out := mapValue(mp.Mut)
 			for i, k := range mp.Keys {
 				if _, ok := other.MapGet(k); !ok {
 					out.MapSet(k, mp.Vals[i])
@@ -940,7 +939,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 				return Null, fmt.Errorf("map.intersect: requires a map argument")
 			}
 			other := args[0]
-			out := NewMap()
+			out := mapValue(mp.Mut)
 			for i, k := range mp.Keys {
 				if _, ok := other.MapGet(k); ok {
 					out.MapSet(k, mp.Vals[i])

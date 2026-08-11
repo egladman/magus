@@ -16,13 +16,13 @@ answers differently from upstream, or accepts source upstream refuses.
 
 ## Upstream parity
 
-Measured against `UpstreamRef` (`0.5.0-251-ged42f47`) on 2026-07-30. Upstream ships
+Measured against `UpstreamRef` (`0.5.0-251-ged42f47`) on 2026-08-11. Upstream ships
 six test directories; three are measurable here, and all three numbers are below
 rather than only the flattering one.
 
 | upstream suite          | files |      gopherbuzz | what it asks                                                     |
 | ----------------------- | ----: | --------------: | ---------------------------------------------------------------- |
-| `tests/behavior/`       |    83 |     **72 pass** | does correct source produce the right answer?                    |
+| `tests/behavior/`       |    83 |     **73 pass** | does correct source produce the right answer?                    |
 | `tests/compile_errors/` |    77 | **26 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
 | `tests/fuzzed/`         |   644 |    **0 panics** | can malformed input crash the front end?                         |
 | `tests/bench/`          |    11 |         not run | upstream's benchmarks (ours are in [`benchmarks/`](benchmarks/)) |
@@ -70,7 +70,9 @@ unwrap `if (x -> y)`, field punning), enums (`enum<str>`/`enum<int>` backing
 types and explicit case values), namespaces and imports, optionals with `??`,
 `as?` and optional chaining `?.`/`?[`, nullable declarations that omit their
 initializer, default argument values, error sets on declarations plus
-`try` and multiple typed `catch` clauses, fibers with `resolve`, ranges, string
+`try` and multiple typed `catch` clauses, collection mutability as part of the TYPE
+(`mut [int]` is a distinct type that `typeof` renders, `mut T` is assignable to `T`
+and not the reverse, and the clone family re-types across it), fibers with `resolve`, ranges, string
 interpolation, pattern literals, `zdef` FFI, closures, generics as erasure, ranges with their full method set, and
 the collection/loop core (multi-clause `for`, labeled loops), and block
 expressions (`from { ... out v; }`), free identifiers (`@"non-standard"`), and
@@ -113,12 +115,11 @@ exhaustiveness analysis, protocol conformance is unverified, and generics are er
 
 ### What does not
 
-Two of the eleven remaining failures are open gaps, each with a known cause:
+One of the ten remaining failures is an open gap with a known cause:
 
 | Gap                                  |                     Blocks | Cause                                                                                                                                                                                                                                       |
 | ------------------------------------ | -------------------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Object-keyed maps                    |                `protocols` | `mapObj` is keyed by `string` throughout, and a map literal stores a bare identifier key as its literal name rather than evaluating it. Upstream allows any value as a key.                                                                 |
-| `typeof` and mutability              | `clone-mutability-methods` | `cloneMutable()` has to retype to `<mut [int]>`; mutability is a property no runtime value carries.                                                                                                                                         |
 
 The other nine cannot be accommodated here, which is a property of the embedding
 rather than a backlog:

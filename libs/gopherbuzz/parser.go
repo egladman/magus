@@ -834,6 +834,13 @@ func tokenText(t token.Token) string {
 		return "void"
 	case token.Fun:
 		return "fun"
+	case token.Mut:
+		// The trailing space is the modifier's canonical spelling (types.mutPrefix
+		// renders the same one), and it is also what separates it from a following
+		// name: joinTokens concatenates without separators, so `mut Foo` would
+		// otherwise come back as `mutFoo`. Dropping the token entirely is what used
+		// to make `<mut [int]>` indistinguishable from `<[int]>`.
+		return "mut "
 	case token.LParen:
 		return "("
 	case token.RParen:

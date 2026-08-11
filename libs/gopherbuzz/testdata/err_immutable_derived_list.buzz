@@ -1,0 +1,10 @@
+// @error: cannot mutate immutable list
+// The other direction of the mutability propagation in 67_typeof_mutability: a
+// self-returning built-in carries the receiver's mutability, which means an
+// IMMUTABLE receiver must hand back something still immutable. Propagating the flag
+// unconditionally (or defaulting the new list to mutable) would pass every positive
+// assertion there while quietly opening a hole here.
+final mutableList: mut [int] = mut [ 1, 2 ];
+final immutable = mutableList.cloneImmutable();
+final derived = immutable.sub(0);
+derived[0] = 3;

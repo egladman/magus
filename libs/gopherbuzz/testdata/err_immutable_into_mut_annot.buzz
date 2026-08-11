@@ -1,0 +1,5 @@
+// @error: cannot assign [int] to mut [int]
+// Mutability is directional in Compat: dropping it is safe, gaining it is not.
+// The permissive half is pinned by upstream's iterator.buzz (a `mut [int]` returned
+// from a `> [int]` function), which is why this cannot be an equality test.
+final xs: mut [int] = [ 1, 2 ];

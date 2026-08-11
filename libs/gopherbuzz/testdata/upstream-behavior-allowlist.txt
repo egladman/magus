@@ -20,6 +20,7 @@ break-continue.buzz
 buffer.buzz
 call-without-parentheses.buzz
 checked-subscript.buzz
+clone-mutability-methods.buzz
 common-namespace.buzz
 composite-assign.buzz
 control-flow.buzz

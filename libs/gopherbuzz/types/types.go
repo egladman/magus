@@ -42,24 +42,42 @@ type FibType struct{ Yield, Return Type }
 
 func (f *FibType) TypeName() string { return "fib" }
 
-// ListType is the type [T].
-type ListType struct{ Elem Type }
+// ListType is the type [T]. Mut marks the `mut [T]` spelling: collections are
+// immutable by default in Buzz, and mutability is part of the type rather than a
+// property of the value, which is what makes `typeof list.cloneMutable()` answer
+// `<mut [T]>` for the same runtime object shape.
+type ListType struct {
+	Elem Type
+	Mut  bool
+}
 
-func (l *ListType) TypeName() string { return "[" + l.Elem.TypeName() + "]" }
+func (l *ListType) TypeName() string { return mutPrefix(l.Mut) + "[" + l.Elem.TypeName() + "]" }
 
-// MapType is the type {K:V}.
+// MapType is the type {K:V}. Mut carries the `mut {K: V}` spelling; see ListType.
 //
 // Tuple marks the form upstream spells `.{ a, b }`: a tuple is a map at runtime,
 // keyed by each element's decimal index, but only a tuple accepts the `t.0` index
 // shorthand. An anonymous object that merely happens to have a field named `@"0"`
-// is not one, which is the distinction upstream's compile-error tests pin.
+// is not one, which is the distinction upstream's compile-error tests pin. Unlike
+// Mut it is deliberately absent from TypeName: a tuple's type IS `{str:V}`, and
+// rendering it differently would break annotation round-tripping through ParseAnnot.
 type MapType struct {
 	Key, Val Type
+	Mut      bool
 	Tuple    bool
 }
 
 func (m *MapType) TypeName() string {
-	return "{" + m.Key.TypeName() + ":" + m.Val.TypeName() + "}"
+	return mutPrefix(m.Mut) + "{" + m.Key.TypeName() + ":" + m.Val.TypeName() + "}"
+}
+
+// mutPrefix renders the `mut ` modifier, the single spelling every renderer uses
+// so an annotation round-trips through ParseAnnot unchanged.
+func mutPrefix(mut bool) string {
+	if mut {
+		return "mut "
+	}
+	return ""
 }
 
 // FuncType is a function type.
@@ -196,15 +214,22 @@ func Compat(got, want Type) bool {
 	// applies inside lists and maps too — `[any]` is compatible with `[double]`,
 	// just as `any` is with `double`. gopherbuzz uses Any as its dynamic-typing
 	// escape hatch, so an any-element list assigns to a typed-element one.
+	//
+	// Mutability is DIRECTIONAL, not an equality: `mut T` is assignable to `T`,
+	// and `T` is not assignable to `mut T`. Requiring the two to match rejected
+	// upstream's tests/behavior/iterator.buzz, which builds a `mut [int]` and
+	// returns it from a `> [int]` function - dropping the permission to mutate is
+	// always safe, while gaining it is what the annotation exists to prevent
+	// (upstream's tests/compile_errors/object-prop-immutable-value.buzz).
 	gl, glOK := got.(*ListType)
 	wl, wlOK := want.(*ListType)
 	if glOK && wlOK {
-		return Compat(gl.Elem, wl.Elem)
+		return (gl.Mut || !wl.Mut) && Compat(gl.Elem, wl.Elem)
 	}
 	gm, gmOK := got.(*MapType)
 	wm, wmOK := want.(*MapType)
 	if gmOK && wmOK {
-		return Compat(gm.Key, wm.Key) && Compat(gm.Val, wm.Val)
+		return (gm.Mut || !wm.Mut) && Compat(gm.Key, wm.Key) && Compat(gm.Val, wm.Val)
 	}
 	if got.TypeName() == want.TypeName() {
 		return true
@@ -275,7 +300,53 @@ func (p *annotParser) skipGeneric() {
 	}
 }
 
+// parse reads one type, honoring a leading `mut ` modifier. The modifier is only
+// meaningful on a collection - `mut Foo` names a mutable object INSTANCE, which
+// this checker models nominally and so cannot distinguish - so it is consumed and
+// then applied where it has a representation.
 func (p *annotParser) parse() Type {
+	mut := p.acceptMut()
+	t := p.parseUnmodified()
+	switch v := t.(type) {
+	case *ListType:
+		v.Mut = mut
+	case *MapType:
+		v.Mut = mut
+	}
+	return t
+}
+
+// acceptMut consumes a leading `mut` keyword and the whitespace after it,
+// reporting whether one was there. It restores the position when the identifier
+// merely STARTS with "mut" (a type named `mutant`), so the modifier can never
+// swallow a name.
+func (p *annotParser) acceptMut() bool {
+	// The leading skipSpace is unconditional (outside the restore) so a spelling
+	// that separates its parts - `{str: int}`, which is how canonicalTypeName
+	// renders a map - parses the same as the token-joined `{str:int}` a source
+	// annotation produces.
+	p.skipSpace()
+	save := p.pos
+	if p.readIdent() != "mut" {
+		p.pos = save
+		return false
+	}
+	// A bare `mut` with nothing after it is a type NAMED mut, not a modifier.
+	if p.pos >= len(p.s) {
+		p.pos = save
+		return false
+	}
+	p.skipSpace()
+	return true
+}
+
+func (p *annotParser) skipSpace() {
+	for p.pos < len(p.s) && (p.s[p.pos] == ' ' || p.s[p.pos] == '\t') {
+		p.pos++
+	}
+}
+
+func (p *annotParser) parseUnmodified() Type {
 	switch p.peek() {
 	case '[':
 		p.advance()
