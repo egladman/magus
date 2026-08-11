@@ -50,6 +50,20 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   produced an identifier inconsistent with `fs\readFile`, `fs\removeAll`, `fs\copyFile`,
   `fs\listDir`, and `fs\appendFile`. There is no alias: a magusfile calling
   `fs\mkdirall(...)` must be updated to `fs\mkdirAll(...)`.
+- **`os\exec`, `os\shell` and `os\which` moved to a new `proc` module.** Import `proc` and
+  call `proc\exec(...)`, `proc\shell(...)`, `proc\which(...)`; there is no alias in `os`.
+  The three were the only members of `os` that start a CHILD PROCESS, and everything left
+  behind (`env`, `platform`, `exit`, `sleep`, `hostname`, `executable`, `retry`) reads or
+  affects the CURRENT one. That is two different capabilities under one import, and the
+  split is what lets a reader see which magusfiles spawn anything at all.
+  `proc\shell` is also where the Windows branch belongs: it picks `cmd /c` over `sh -c`
+  per platform, which is a fact about running a shell, not about the operating system a
+  script is asking questions of.
+  A magusfile still calling the old spelling fails at LOAD, because host-module members
+  are typed to the checker - but note the error names the missing member rather than
+  pointing at `proc`, since nothing maps retired members to their new home outside the
+  `removed` table in `internal/interp/bindings/modules_test.go`. If a third such rename
+  lands, that table is the thing to promote into a real migration diagnostic.
 
 ### Added
 
