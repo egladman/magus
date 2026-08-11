@@ -1,18 +1,21 @@
-package std
+// Package url is the "encoding/url" host module. See std/encoding/register.go
+// for why this and its eight siblings each get their own leaf package instead
+// of living in std's flat root, and how this directory's Module reaches the
+// rest of magus without std importing back down to collect it.
+package url
 
 import (
 	"context"
 	"fmt"
 	"net/url"
 
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module url -lang buzz -out ../internal/interp/bindings/gen/url.go
+//go:generate go run ../../../cmd/magus-utils bindings -module url -lang buzz -out ../../../internal/interp/bindings/gen/url.go
 
-func init() { Register(URL) }
-
-// URL is the "encoding/url" host module: percent-encoding, plus parsing a URL
+// Module is the "encoding/url" host module: percent-encoding, plus parsing a URL
 // into its components and building one back out.
 //
 // Filed under encoding/ rather than Go's net/url because percent-encoding IS a
@@ -20,37 +23,37 @@ func init() { Register(URL) }
 // tree for a single module to justify. parse and build round-trip through the
 // same URL object, so a caller can take a URL apart, change one field, and put it
 // back without string surgery on a query string.
-var URL = Module{
+var Module = std.Module{
 	Name: "url",
 	Path: "encoding/url",
 	Doc:  "URL percent-encoding, parsing, and building.",
-	Methods: []Method{
+	Methods: []std.Method{
 		{
 			Name:    "encode",
 			Doc:     "Percent-encode s for use in a URL query component.",
-			Args:    []Arg{{Name: "s", Type: TypeString}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []std.Arg{{Name: "s", Type: std.TypeString}},
+			Returns: []std.Ret{{Type: std.TypeString}},
 			Impl:    URLEncode,
 		},
 		{
 			Name:    "decode",
 			Doc:     "Decode a percent-encoded URL query component; errors on malformed input.",
-			Args:    []Arg{{Name: "s", Type: TypeString}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []std.Arg{{Name: "s", Type: std.TypeString}},
+			Returns: []std.Ret{{Type: std.TypeString}},
 			Impl:    URLDecode,
 		},
 		{
 			Name:    "parse",
 			Doc:     "Parse a URL string into {scheme, host, port, path, query, fragment}; errors on malformed input.",
-			Args:    []Arg{{Name: "raw_url", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "URL"}},
+			Args:    []std.Arg{{Name: "raw_url", Type: std.TypeString}},
+			Returns: []std.Ret{{Type: std.TypeAnyMap, Object: "URL"}},
 			Impl:    URLParse,
 		},
 		{
 			Name:    "build",
 			Doc:     "Build a URL string from a URL object - the same shape parse returns, so the two round-trip. Missing fields are treated as empty.",
-			Args:    []Arg{{Name: "parts", Type: TypeAnyMap, Object: "URL"}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []std.Arg{{Name: "parts", Type: std.TypeAnyMap, Object: "URL"}},
+			Returns: []std.Ret{{Type: std.TypeString}},
 			Impl:    URLBuild,
 		},
 	},

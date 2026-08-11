@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/std"
 )
 
@@ -23,8 +24,10 @@ func TestModuleDocsUpToDate(t *testing.T) {
 
 	// BOTH kinds, matching main.go. Reading only std.All() here would call a
 	// Buzz-implemented module's committed doc an orphan and demand its deletion -
-	// the gate would enforce the opposite of what it is for.
-	modules := append(std.All(), std.SourceModulesAsModules()...)
+	// the gate would enforce the opposite of what it is for. hostmodules.All(),
+	// not std.All(): std/encoding's nine leaf modules do not self-register into
+	// std's own registry (see hostmodules's doc for why).
+	modules := append(hostmodules.All(), std.SourceModulesAsModules()...)
 	slices.SortFunc(modules, func(a, b std.Module) int { return strings.Compare(a.Name, b.Name) })
 
 	expected := map[string]bool{"index.md": true}

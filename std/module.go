@@ -239,6 +239,12 @@ var (
 // Register adds m to the global module registry. Called from each module's
 // init() so magus-utils bindings and the runtime registration paths can look up modules
 // by name without an import loop.
+//
+// std/encoding's nine leaf packages do NOT call this: std/encoding imports std
+// for the Module vocabulary, so std registering them back here would import
+// std/encoding in turn and cycle. They are collected explicitly instead (see
+// std/encoding/register.go) and unioned with this registry one layer above std,
+// in internal/hostmodules - the only place that imports both.
 func Register(m Module) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -249,6 +255,17 @@ func Register(m Module) {
 		panic(fmt.Sprintf("host: module %q: %s", m.Name, err))
 	}
 	modules[m.Name] = m
+}
+
+// ValidateModule checks m's Fields and Methods against their declared Impls,
+// the same check Register runs before storing a module. std/encoding's leaf
+// packages call it directly (see std/encoding/register.go) because they
+// cannot call Register itself without cycling back through std - see
+// Register's doc for why - but a malformed descriptor should still fail fast
+// at the same place in the program's life as every other module's, not
+// silently reach codegen as bad data.
+func ValidateModule(m Module) error {
+	return validateModule(m)
 }
 
 // Get returns the Module registered under name, or false if unknown.

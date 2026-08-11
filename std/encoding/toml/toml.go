@@ -1,36 +1,40 @@
-package std
+// Package toml is the "toml" host module. See std/encoding/register.go for
+// why this and its eight siblings each get their own leaf package instead of
+// living in std's flat root, and how this directory's Module reaches the rest
+// of magus without std importing back down to collect it.
+package toml
 
 import (
 	"context"
 	"fmt"
 
 	toml "github.com/pelletier/go-toml/v2"
+
+	"github.com/egladman/magus/std"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module toml -lang buzz -out ../internal/interp/bindings/gen/toml.go
+//go:generate go run ../../../cmd/magus-utils bindings -module toml -lang buzz -out ../../../internal/interp/bindings/gen/toml.go
 
-func init() { Register(TOML) }
-
-// TOML is the "toml" host module: TOML parse and stringify via pelletier/go-toml/v2.
+// Module is the "toml" host module: TOML parse and stringify via pelletier/go-toml/v2.
 // It mirrors the json and yaml modules so a magusfile can read a value out of a
 // pyproject.toml / Cargo.toml the same way it reads package.json.
-var TOML = Module{
+var Module = std.Module{
 	Name: "toml",
 	Path: "encoding/toml",
 	Doc:  "TOML parse and stringify (TOML 1.0 via pelletier/go-toml/v2).",
-	Methods: []Method{
+	Methods: []std.Method{
 		{
 			Name:    "parse",
 			Doc:     "Decode a TOML document into a value (tables become maps, arrays become lists, plus strings, numbers, bools, and datetimes); errors on invalid input.",
-			Args:    []Arg{{Name: "source", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAny}},
+			Args:    []std.Arg{{Name: "source", Type: std.TypeString}},
+			Returns: []std.Ret{{Type: std.TypeAny}},
 			Impl:    TOMLParse,
 		},
 		{
 			Name:    "stringify",
 			Doc:     "Encode a value to a TOML string; the top level must be a table/map, as TOML requires. Errors on unencodable input.",
-			Args:    []Arg{{Name: "value", Type: TypeAny}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []std.Arg{{Name: "value", Type: std.TypeAny}},
+			Returns: []std.Ret{{Type: std.TypeString}},
 			Impl:    TOMLStringify,
 		},
 	},

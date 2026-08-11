@@ -1,16 +1,25 @@
-package std
+// Package base64 is the "encoding/base64" host module: base64 lives under
+// std/encoding rather than in std's own flat root because it, like its eight
+// siblings, uses none of std's shared sandbox/exec helpers (resolvePath,
+// checkRead, checkWrite, optStringDefault, ...) - every helper a text codec
+// needs is local to its own file, so splitting it into its own package hides
+// nothing that std itself needs to reach back into. See std/encoding/register.go
+// for how this directory's Module reaches the rest of magus without std
+// importing back down to collect it (that would cycle: std/encoding imports
+// std for the Module vocabulary already).
+package base64
 
 import (
 	"context"
 	"encoding/base64"
 	"fmt"
+
+	"github.com/egladman/magus/std"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module base64 -lang buzz -out ../internal/interp/bindings/gen/base64.go
+//go:generate go run ../../../cmd/magus-utils bindings -module base64 -lang buzz -out ../../../internal/interp/bindings/gen/base64.go
 
-func init() { Register(Base64) }
-
-// Base64 is the "encoding/base64" host module. Buzz's own stdlib hashes
+// Module is the "encoding/base64" host module. Buzz's own stdlib hashes
 // (crypto.hash) and serializes JSON but has no general-purpose binary-to-text
 // codec, so a spell that signs a request or embeds a blob in a config would
 // otherwise have to reimplement base64 in script.
@@ -19,37 +28,37 @@ func init() { Register(Base64) }
 // (Buzz strings are byte-preserving for ASCII/UTF-8 payloads), the same shape
 // crypto.*_hex consumes. crypto.base64Encode is the byte-list form for genuinely
 // binary data.
-var Base64 = Module{
+var Module = std.Module{
 	Name: "base64",
 	Path: "encoding/base64",
 	Doc:  "Base64 text codec (standard and URL-safe, both padded).",
-	Methods: []Method{
+	Methods: []std.Method{
 		{
 			Name:    "encode",
 			Doc:     "Encode data as standard (padded) base64.",
-			Args:    []Arg{{Name: "data", Type: TypeString}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []std.Arg{{Name: "data", Type: std.TypeString}},
+			Returns: []std.Ret{{Type: std.TypeString}},
 			Impl:    Base64Encode,
 		},
 		{
 			Name:    "decode",
 			Doc:     "Decode a standard (padded) base64 string; errors on malformed input.",
-			Args:    []Arg{{Name: "s", Type: TypeString}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []std.Arg{{Name: "s", Type: std.TypeString}},
+			Returns: []std.Ret{{Type: std.TypeString}},
 			Impl:    Base64Decode,
 		},
 		{
 			Name:    "url_encode",
 			Doc:     "Encode data as URL-safe (padded) base64.",
-			Args:    []Arg{{Name: "data", Type: TypeString}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []std.Arg{{Name: "data", Type: std.TypeString}},
+			Returns: []std.Ret{{Type: std.TypeString}},
 			Impl:    Base64URLEncode,
 		},
 		{
 			Name:    "url_decode",
 			Doc:     "Decode a URL-safe (padded) base64 string; errors on malformed input.",
-			Args:    []Arg{{Name: "s", Type: TypeString}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []std.Arg{{Name: "s", Type: std.TypeString}},
+			Returns: []std.Ret{{Type: std.TypeString}},
 			Impl:    Base64URLDecode,
 		},
 	},

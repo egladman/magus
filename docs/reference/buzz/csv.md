@@ -17,7 +17,7 @@ Delimiter-separated tabular text (CSV, TSV) parsing and rendering.
 
 Parse delimiter-separated text into a list of rows, each a list of fields. Quoted fields, embedded delimiters, and embedded newlines are handled per RFC 4180. delimiter defaults to "," - pass "\t" for TSV. When comment is a single character, lines starting with it are skipped. Raises when a row has a different field count than the first, which is the corruption a hand-rolled split would silently pass through.
 
-**Signature:** `csv\parse(s, [delimiter], [comment]) → [][]string` · [source](https://github.com/egladman/magus/blob/main/std/csv.go#L74)
+**Signature:** `csv\parse(s, [delimiter], [comment]) → [][]string` · [source](https://github.com/egladman/magus/blob/main/std/encoding/csv/csv.go#L78)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -31,7 +31,7 @@ Parse delimiter-separated text into a list of rows, each a list of fields. Quote
 
 Render rows (a list of lists of fields) as delimiter-separated text, quoting any field that needs it. delimiter defaults to ",". The output ends with a newline, so it is ready to write.
 
-**Signature:** `csv\stringify(rows, [delimiter]) → string` · [source](https://github.com/egladman/magus/blob/main/std/csv.go#L99)
+**Signature:** `csv\stringify(rows, [delimiter]) → string` · [source](https://github.com/egladman/magus/blob/main/std/encoding/csv/csv.go#L103)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

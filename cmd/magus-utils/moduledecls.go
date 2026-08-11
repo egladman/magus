@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/generate/emit"
+	"github.com/egladman/magus/internal/hostmodules"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/std"
 )
@@ -36,7 +37,7 @@ func runModuleDecls(args []string) error {
 		return fmt.Errorf("usage: magus-utils moduledecls -outdir <dir>")
 	}
 
-	mods := std.All()
+	mods := hostmodules.All()
 	slices.SortFunc(mods, func(a, b std.Module) int { return strings.Compare(a.Name, b.Name) })
 	for _, mod := range mods {
 		src, err := renderModuleDecls(mod)

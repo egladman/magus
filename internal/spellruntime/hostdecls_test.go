@@ -3,6 +3,7 @@ package spellruntime_test
 import (
 	"testing"
 
+	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/spellruntime"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/std"
@@ -20,7 +21,7 @@ import (
 // `in:`, which the lexer reads as the foreach keyword, and the file sat committed and
 // unparseable because no import path registered the magus mirrors as declarations.
 func TestModuleDeclsParse(t *testing.T) {
-	for _, mod := range std.All() {
+	for _, mod := range hostmodules.All() {
 		src, ok := spellruntime.ModuleDecls(mod.Name)
 		require.Truef(t, ok, "no declarations generated for the %s module", mod.Name)
 		_, err := buzz.Parse(src)
@@ -33,7 +34,7 @@ func TestModuleDeclsParse(t *testing.T) {
 // Variadic methods are the deliberate exception - Buzz has no variadic parameter, so
 // fs\join("a", "b", "c") cannot be spelled with a fixed parameter list.
 func TestModuleDeclsDeclareEveryMethod(t *testing.T) {
-	for _, mod := range std.All() {
+	for _, mod := range hostmodules.All() {
 		src, _ := spellruntime.ModuleDecls(mod.Name)
 		for _, m := range mod.Methods {
 			name := std.CamelCase(m.Name)

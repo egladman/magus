@@ -7,7 +7,7 @@ import (
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
-	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/std/encoding/base64"
 )
 
 // RegisterBase64 builds the "base64" module map and returns it.
@@ -18,7 +18,7 @@ func RegisterBase64(ctx context.Context, sess *buzz.Session) vm.Value {
 	m := vm.NewMap()
 	m.MapSet("encode", vm.DirectValue("base64.encode", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		data := Str(bzArgs, 0)
-		ret0, err := std.Base64Encode(ctx, data)
+		ret0, err := base64.Base64Encode(ctx, data)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
@@ -26,7 +26,7 @@ func RegisterBase64(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("decode", vm.DirectValue("base64.decode", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		s := Str(bzArgs, 0)
-		ret0, err := std.Base64Decode(ctx, s)
+		ret0, err := base64.Base64Decode(ctx, s)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
@@ -34,7 +34,7 @@ func RegisterBase64(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("urlEncode", vm.DirectValue("base64.urlEncode", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		data := Str(bzArgs, 0)
-		ret0, err := std.Base64URLEncode(ctx, data)
+		ret0, err := base64.Base64URLEncode(ctx, data)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
@@ -42,7 +42,7 @@ func RegisterBase64(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("urlDecode", vm.DirectValue("base64.urlDecode", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		s := Str(bzArgs, 0)
-		ret0, err := std.Base64URLDecode(ctx, s)
+		ret0, err := base64.Base64URLDecode(ctx, s)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}

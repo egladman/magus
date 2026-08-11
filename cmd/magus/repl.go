@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/std"
 )
 
 // buzzRepl opens the REPL behind a bare `magus buzz`: the full magusfile surface
@@ -67,9 +67,9 @@ func workspaceReplCandidates(ctx context.Context, cwd string) func() []string {
 		// available - and they are what a workspace REPL is mostly for. Each
 		// module contributes its own name plus every `mod.method`, which is the
 		// difference between completing "fs" and completing "fs.writeFile".
-		for _, mod := range std.DescribeModules("") {
+		for _, mod := range hostmodules.Describe("") {
 			cached = append(cached, mod.Name)
-			for _, meth := range std.DescribeModules(mod.Name)[0].Methods {
+			for _, meth := range hostmodules.Describe(mod.Name)[0].Methods {
 				cached = append(cached, mod.Name+"."+meth.Name)
 			}
 		}

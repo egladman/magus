@@ -8,8 +8,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	// Importing std triggers every module's init registration.
-	"github.com/egladman/magus/std"
+	// hostmodules is the union of std's self-registered modules (import
+	// triggers their init registration) and std/encoding's explicitly
+	// aggregated ones - see its doc.
+	"github.com/egladman/magus/internal/hostmodules"
 )
 
 // buzzModules lists modules with generated Buzz host bindings.
@@ -24,8 +26,8 @@ func TestBuzzFilesUpToDate(t *testing.T) {
 
 	for _, name := range buzzModules {
 		t.Run(name, func(t *testing.T) {
-			m, ok := std.Get(name)
-			require.True(t, ok, "std.Get(%q): module not registered", name)
+			m, ok := hostmodules.Get(name)
+			require.True(t, ok, "hostmodules.Get(%q): module not registered", name)
 			want, err := emitBuzz(m)
 			require.NoError(t, err, "emitBuzz(%q)", name)
 			outPath := filepath.Join(genBuzzDir, name+".go")
@@ -40,5 +42,5 @@ func TestBuzzFilesUpToDate(t *testing.T) {
 // TestObjectReturnContracts prevents host metadata from advertising a Go struct
 // name when the checker receives a differently named generated Buzz object.
 func TestObjectReturnContracts(t *testing.T) {
-	require.NoError(t, checkObjectDecls(std.All()))
+	require.NoError(t, checkObjectDecls(hostmodules.All()))
 }

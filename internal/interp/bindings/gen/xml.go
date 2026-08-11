@@ -7,7 +7,7 @@ import (
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
-	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/std/encoding/xml"
 )
 
 // RegisterXml builds the "xml" module map and returns it.
@@ -18,7 +18,7 @@ func RegisterXml(ctx context.Context, sess *buzz.Session) vm.Value {
 	m := vm.NewMap()
 	m.MapSet("render", vm.DirectValue("xml.render", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		node := Any(bzArgs, 0)
-		ret0, err := std.XMLRender(ctx, node)
+		ret0, err := xml.XMLRender(ctx, node)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
@@ -28,7 +28,7 @@ func RegisterXml(ctx context.Context, sess *buzz.Session) vm.Value {
 		tag := Str(bzArgs, 0)
 		attrs := StrSlice(bzArgs, 1)
 		children := Any(bzArgs, 2)
-		ret0, err := std.XMLElement(ctx, tag, attrs, children)
+		ret0, err := xml.XMLElement(ctx, tag, attrs, children)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
@@ -36,7 +36,7 @@ func RegisterXml(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("parse", vm.DirectValue("xml.parse", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		s := Str(bzArgs, 0)
-		ret0, err := std.XMLParse(ctx, s)
+		ret0, err := xml.XMLParse(ctx, s)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}

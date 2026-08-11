@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/generate/emit"
+	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
@@ -50,7 +51,7 @@ func runBindings(args []string) error {
 		return fmt.Errorf("usage: magus-utils bindings -module <name> -lang buzz -out <path>")
 	}
 
-	m, ok := std.Get(*moduleName)
+	m, ok := hostmodules.Get(*moduleName)
 	if !ok {
 		return fmt.Errorf("unknown module %q", *moduleName)
 	}
@@ -62,7 +63,7 @@ func runBindings(args []string) error {
 	// Checked across EVERY module, not just the one being generated: the
 	// declarations are one table, and a per-module check would report a mismatch
 	// only when that module happened to be the regenerate target.
-	if err := checkObjectDecls(std.All()); err != nil {
+	if err := checkObjectDecls(hostmodules.All()); err != nil {
 		return err
 	}
 	out, err := emitBuzz(m)
@@ -121,9 +122,19 @@ func goLiteral(v any) string {
 // object returns get a concrete, generated encoder in this package: no reflection
 // and no map[string]any intermediary are linked into the magus runtime path.
 func emitBuzz(m std.Module) ([]byte, error) {
+	// Every Method's Impl (and Field's Resolver) has to live in the SAME Go
+	// package: one generated file makes one Register<Module> call, importing
+	// one Impl package under one qualifier. That was always true when every
+	// Impl lived in std; std/encoding's leaf packages don't change it, they
+	// just mean the qualifier is no longer always "std".
+	implPath, implPkg, err := implPackageOf(m)
+	if err != nil {
+		return nil, err
+	}
+
 	// Build the func body first, then derive the import set from what it uses:
-	// std (Impls/resolvers) appears only when the body references it, so an unused
-	// import can't sneak in.
+	// the Impl package (Impls/resolvers) appears only when the body references
+	// it, so an unused import can't sneak in.
 	var body bytes.Buffer
 
 	regFn := registerName(m.Name)
@@ -147,11 +158,11 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	fmt.Fprintln(&body, "\tm := vm.NewMap()")
 
 	for _, f := range m.Fields {
-		emitBuzzField(&body, f)
+		emitBuzzField(&body, f, implPkg)
 	}
 	objects := newBuzzValueEmitter(m.Name)
 	for _, meth := range m.Methods {
-		if err := emitBuzzMethod(&body, m, meth, objects); err != nil {
+		if err := emitBuzzMethod(&body, m, meth, objects, implPkg); err != nil {
 			return nil, err
 		}
 	}
@@ -178,8 +189,8 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, `	buzz "github.com/egladman/magus/libs/gopherbuzz"`)
 	fmt.Fprintln(&b, `	vm "github.com/egladman/magus/libs/gopherbuzz/vm"`)
-	if bytes.Contains(body.Bytes(), []byte("std.")) {
-		fmt.Fprintln(&b, `	"github.com/egladman/magus/std"`)
+	if implPath != "" {
+		fmt.Fprintf(&b, "\t%q\n", implPath)
 	}
 	if objects.usesSpells {
 		fmt.Fprintln(&b, `	"github.com/egladman/magus/spells"`)
@@ -203,14 +214,52 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	return out, nil
 }
 
+// implPackageOf returns the Go import path and local package identifier every
+// one of m's Method.Impl and Field.Resolver funcs share - "share" because one
+// generated file makes one Register<Module> call under one import, so a
+// module whose Impls span two packages cannot be emitted as written. Errors
+// if m declares no Impl/Resolver at all (nothing to import) or if they
+// disagree on package.
+func implPackageOf(m std.Module) (importPath, pkgIdent string, err error) {
+	check := func(path, pkg, where string) error {
+		if importPath == "" && pkgIdent == "" {
+			importPath, pkgIdent = path, pkg
+			return nil
+		}
+		if path != importPath {
+			return fmt.Errorf("%s: Impl/Resolver package %q disagrees with %q used elsewhere in this module - a generated file can only import one Impl package", where, path, importPath)
+		}
+		return nil
+	}
+	for _, f := range m.Fields {
+		path, pkg := std.FieldResolverPackage(f)
+		if path == "" {
+			return "", "", fmt.Errorf("field %q: Resolver is nil or not a function", f.Name)
+		}
+		if err := check(path, pkg, "field "+f.Name); err != nil {
+			return "", "", err
+		}
+	}
+	for _, meth := range m.Methods {
+		path, pkg := std.MethodImplPackage(meth)
+		if path == "" {
+			return "", "", fmt.Errorf("method %q: Impl is nil or not a function", meth.Name)
+		}
+		if err := check(path, pkg, "method "+meth.Name); err != nil {
+			return "", "", err
+		}
+	}
+	return importPath, pkgIdent, nil
+}
+
 // emitBuzzField resolves a static field once and stores it on the module map.
 // The key is camelCased (Buzz convention) though the std descriptor is snake_case.
-func emitBuzzField(w *bytes.Buffer, f std.Field) {
+func emitBuzzField(w *bytes.Buffer, f std.Field, implPkg string) {
 	callArgs := ""
 	if std.FieldResolverTakesCtx(f) {
 		callArgs = "ctx"
 	}
-	fmt.Fprintf(w, "\tif v, err := std.%s(%s); err == nil {\n", std.FieldFuncName(f), callArgs)
+	fmt.Fprintf(w, "\tif v, err := %s.%s(%s); err == nil {\n", implPkg, std.FieldFuncName(f), callArgs)
 	fmt.Fprintf(w, "\t\tm.MapSet(%q, %s)\n", std.CamelCase(f.Name), buzzValConv(f.Type, "v"))
 	fmt.Fprintln(w, "\t}")
 }
@@ -218,8 +267,11 @@ func emitBuzzField(w *bytes.Buffer, f std.Field) {
 // emitBuzzMethod emits one DirectValue trampoline for meth. The closure's arg
 // slice is named bzArgs to avoid colliding with host args named "args". The map
 // key is camelCased to match Buzz's convention (the snake_case descriptor name
-// stays the runtime label so errors still read e.g. "fs.readFile").
-func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buzzValueEmitter) error {
+// stays the runtime label so errors still read e.g. "fs.readFile"). implPkg is
+// the local identifier meth.Impl's package is imported under - "std" for a
+// module still living in std's flat root, or e.g. "json" for one implemented
+// in a std/encoding leaf package (see implPackageOf).
+func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buzzValueEmitter, implPkg string) error {
 	name := std.CamelCase(meth.Name)
 	if meth.BuzzName != "" {
 		name = meth.BuzzName
@@ -244,12 +296,12 @@ func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buz
 
 	switch len(meth.Returns) {
 	case 0:
-		fmt.Fprintf(w, "\t\tif err := std.%s(%s); err != nil {\n", std.MethodFuncName(meth), callStr)
+		fmt.Fprintf(w, "\t\tif err := %s.%s(%s); err != nil {\n", implPkg, std.MethodFuncName(meth), callStr)
 		fmt.Fprintln(w, "\t\t\treturn vm.Null, HostError(err)")
 		fmt.Fprintln(w, "\t\t}")
 		fmt.Fprintln(w, "\t\treturn vm.Null, nil")
 	case 1:
-		fmt.Fprintf(w, "\t\tret0, err := std.%s(%s)\n", std.MethodFuncName(meth), callStr)
+		fmt.Fprintf(w, "\t\tret0, err := %s.%s(%s)\n", implPkg, std.MethodFuncName(meth), callStr)
 		fmt.Fprintln(w, "\t\tif err != nil {")
 		fmt.Fprintln(w, "\t\t\treturn vm.Null, HostError(err)")
 		fmt.Fprintln(w, "\t\t}")
@@ -264,7 +316,7 @@ func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buz
 			lhsParts = append(lhsParts, fmt.Sprintf("ret%d", i))
 		}
 		lhsParts = append(lhsParts, "err")
-		fmt.Fprintf(w, "\t\t%s := std.%s(%s)\n", strings.Join(lhsParts, ", "), std.MethodFuncName(meth), callStr)
+		fmt.Fprintf(w, "\t\t%s := %s.%s(%s)\n", strings.Join(lhsParts, ", "), implPkg, std.MethodFuncName(meth), callStr)
 		fmt.Fprintln(w, "\t\tif err != nil {")
 		fmt.Fprintln(w, "\t\t\treturn vm.Null, HostError(err)")
 		fmt.Fprintln(w, "\t\t}")

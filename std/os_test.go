@@ -278,22 +278,6 @@ func TestFsCopyDirChecksReadOnDeniedSubtree(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "dst/secret should never have been created for a read-denied source")
 }
 
-func TestJSONStringify(t *testing.T) {
-	ctx := context.Background()
-	val := map[string]any{"a": 1.0}
-
-	// No indent: compact (single line).
-	compact, err := JSONStringify(ctx, val, "")
-	require.NoError(t, err)
-	assert.NotContains(t, compact, "\n", "no-indent output should be compact")
-
-	// A non-empty indent: pretty, multi-line with that indent.
-	tabbed, err := JSONStringify(ctx, val, "\t")
-	require.NoError(t, err)
-	assert.Contains(t, tabbed, "\n", "indented output should be multi-line")
-	assert.Contains(t, tabbed, "\t", "indented output should be tab-indented")
-}
-
 func TestEnvExpand(t *testing.T) {
 	t.Setenv("MAGUS_EXTRA_TEST", "world")
 	got, err := EnvExpand(context.Background(), "hello $MAGUS_EXTRA_TEST ${MAGUS_EXTRA_TEST}")

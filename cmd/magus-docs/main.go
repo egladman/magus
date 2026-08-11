@@ -17,6 +17,7 @@ import (
 
 	"github.com/egladman/magus/internal/docs"
 	"github.com/egladman/magus/internal/dry"
+	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/std"
 )
 
@@ -92,7 +93,9 @@ func main() {
 	// one from a Go-implemented one. std.SourceModulesAsModules derives the method
 	// list from the Buzz source, which is the same shape writeModule already
 	// renders - the alternative was a second template nobody would keep in step.
-	modules := append(std.All(), std.SourceModulesAsModules()...)
+	// hostmodules.All(), not std.All(): std/encoding's nine leaf modules do not
+	// self-register into std's own registry (see hostmodules's doc for why).
+	modules := append(hostmodules.All(), std.SourceModulesAsModules()...)
 	slices.SortFunc(modules, func(a, b std.Module) int {
 		return strings.Compare(a.Name, b.Name)
 	})

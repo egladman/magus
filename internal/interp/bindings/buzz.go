@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/interp"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spellruntime"
@@ -12,7 +13,6 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
-	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
 
@@ -157,16 +157,18 @@ func buildMagusNS(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserv
 	// `-o json` stdout. modules() lists every module {name, doc, fields, methods};
 	// module(name) returns one with fields + per-method Buzz signatures, and raises on
 	// an unknown name. Hand-written (not declarative) because the core uses host,
-	// which std can't import.
+	// which std can't import. hostmodules.Describe, not std.DescribeModules: std's
+	// own registry no longer covers std/encoding's nine modules by itself - see
+	// hostmodules's doc.
 	magus.MapSet("modules", directVal(obs, "magus.modules", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return bindinggen.MapsVal(std.DescribeModules("")), nil
+		return bindinggen.MapsVal(hostmodules.Describe("")), nil
 	}))
 	magus.MapSet("module", directVal(obs, "magus.module", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		name := ""
 		if len(args) > 0 && args[0].IsStr() {
 			name = args[0].AsString()
 		}
-		out := std.DescribeModules(name)
+		out := hostmodules.Describe(name)
 		if len(out) == 0 {
 			return vm.Null, fmt.Errorf("magus.module: unknown module %q", name)
 		}

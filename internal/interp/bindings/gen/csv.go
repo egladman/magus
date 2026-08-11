@@ -7,7 +7,7 @@ import (
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
-	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/std/encoding/csv"
 )
 
 // RegisterCsv builds the "csv" module map and returns it.
@@ -20,7 +20,7 @@ func RegisterCsv(ctx context.Context, sess *buzz.Session) vm.Value {
 		s := Str(bzArgs, 0)
 		delimiter := Str(bzArgs, 1)
 		comment := Str(bzArgs, 2)
-		ret0, err := std.CSVParse(ctx, s, delimiter, comment)
+		ret0, err := csv.CSVParse(ctx, s, delimiter, comment)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
@@ -29,7 +29,7 @@ func RegisterCsv(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("stringify", vm.DirectValue("csv.stringify", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		rows := StrSliceSlice(bzArgs, 0)
 		delimiter := Str(bzArgs, 1)
-		ret0, err := std.CSVStringify(ctx, rows, delimiter)
+		ret0, err := csv.CSVStringify(ctx, rows, delimiter)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}

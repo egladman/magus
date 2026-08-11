@@ -7,7 +7,7 @@ import (
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
-	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/std/encoding/url"
 	"github.com/egladman/magus/types"
 )
 
@@ -19,7 +19,7 @@ func RegisterUrl(ctx context.Context, sess *buzz.Session) vm.Value {
 	m := vm.NewMap()
 	m.MapSet("encode", vm.DirectValue("url.encode", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		s := Str(bzArgs, 0)
-		ret0, err := std.URLEncode(ctx, s)
+		ret0, err := url.URLEncode(ctx, s)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
@@ -27,7 +27,7 @@ func RegisterUrl(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("decode", vm.DirectValue("url.decode", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		s := Str(bzArgs, 0)
-		ret0, err := std.URLDecode(ctx, s)
+		ret0, err := url.URLDecode(ctx, s)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
@@ -35,7 +35,7 @@ func RegisterUrl(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("parse", vm.DirectValue("url.parse", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		raw_url := Str(bzArgs, 0)
-		ret0, err := std.URLParse(ctx, raw_url)
+		ret0, err := url.URLParse(ctx, raw_url)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
@@ -43,7 +43,7 @@ func RegisterUrl(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("build", vm.DirectValue("url.build", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		parts := AnyMap(bzArgs, 0)
-		ret0, err := std.URLBuild(ctx, parts)
+		ret0, err := url.URLBuild(ctx, parts)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}

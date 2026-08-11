@@ -7,7 +7,7 @@ import (
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
-	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/std/encoding/toml"
 )
 
 // RegisterToml builds the "toml" module map and returns it.
@@ -18,7 +18,7 @@ func RegisterToml(ctx context.Context, sess *buzz.Session) vm.Value {
 	m := vm.NewMap()
 	m.MapSet("parse", vm.DirectValue("toml.parse", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		source := Str(bzArgs, 0)
-		ret0, err := std.TOMLParse(ctx, source)
+		ret0, err := toml.TOMLParse(ctx, source)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
@@ -26,7 +26,7 @@ func RegisterToml(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("stringify", vm.DirectValue("toml.stringify", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		value := Any(bzArgs, 0)
-		ret0, err := std.TOMLStringify(ctx, value)
+		ret0, err := toml.TOMLStringify(ctx, value)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}

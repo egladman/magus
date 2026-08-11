@@ -1,4 +1,8 @@
-package std
+// Package xml is the "xml" host module. See std/encoding/register.go for why
+// this and its eight siblings each get their own leaf package instead of
+// living in std's flat root, and how this directory's Module reaches the rest
+// of magus without std importing back down to collect it.
+package xml
 
 import (
 	"context"
@@ -7,13 +11,13 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/egladman/magus/std"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module xml -lang buzz -out ../internal/interp/bindings/gen/xml.go
+//go:generate go run ../../../cmd/magus-utils bindings -module xml -lang buzz -out ../../../internal/interp/bindings/gen/xml.go
 
-func init() { Register(XML) }
-
-// XML is the "xml" host module: build and serialize an XML/SVG tree, and parse one
+// Module is the "xml" host module: build and serialize an XML/SVG tree, and parse one
 // back. It is the markup counterpart to the json module - render is to stringify what
 // parse is to json.parse.
 //
@@ -24,34 +28,34 @@ func init() { Register(XML) }
 // output must be byte-for-byte stable (e.g. a committed badge SVG). An element with no
 // children self-closes (<rect .../>); otherwise it wraps its children (<g ...>...</g>).
 // render emits no whitespace between tags, so the caller controls the exact bytes.
-var XML = Module{
+var Module = std.Module{
 	Name: "xml",
 	Path: "encoding/xml",
 	Doc:  "Build, serialize, and parse XML/SVG.",
-	Methods: []Method{
+	Methods: []std.Method{
 		{
 			Name:    "render",
 			Doc:     "Serialize an XML node to a string. A node is a string (text) or an element map {\"tag\": name, \"attrs\": [name, value, ...], \"children\": [node, ...]}. Empty-children elements self-close; no whitespace is emitted between tags.",
-			Args:    []Arg{{Name: "node", Type: TypeAny}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []std.Arg{{Name: "node", Type: std.TypeAny}},
+			Returns: []std.Ret{{Type: std.TypeString}},
 			Impl:    XMLRender,
 		},
 		{
 			Name: "element",
 			Doc:  "Build an element node from a tag, a flat [name, value, ...] attribute list, and a list of child nodes (elements or strings). Sugar for the {\"tag\", \"attrs\", \"children\"} map that render consumes.",
-			Args: []Arg{
-				{Name: "tag", Type: TypeString},
-				{Name: "attrs", Type: TypeStringSlice},
-				{Name: "children", Type: TypeAny},
+			Args: []std.Arg{
+				{Name: "tag", Type: std.TypeString},
+				{Name: "attrs", Type: std.TypeStringSlice},
+				{Name: "children", Type: std.TypeAny},
 			},
-			Returns: []Ret{{Type: TypeAny}},
+			Returns: []std.Ret{{Type: std.TypeAny}},
 			Impl:    XMLElement,
 		},
 		{
 			Name:    "parse",
 			Doc:     "Parse an XML string into a node tree: each element becomes {\"tag\": name, \"attrs\": [name, value, ...], \"children\": [node, ...]}, character data becomes a string. The inverse shape of render.",
-			Args:    []Arg{{Name: "s", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAny}},
+			Args:    []std.Arg{{Name: "s", Type: std.TypeString}},
+			Returns: []std.Ret{{Type: std.TypeAny}},
 			Impl:    XMLParse,
 		},
 	},

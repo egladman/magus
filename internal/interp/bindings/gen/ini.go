@@ -7,7 +7,7 @@ import (
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
-	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/std/encoding/ini"
 )
 
 // RegisterIni builds the "ini" module map and returns it.
@@ -18,7 +18,7 @@ func RegisterIni(ctx context.Context, sess *buzz.Session) vm.Value {
 	m := vm.NewMap()
 	m.MapSet("parse", vm.DirectValue("ini.parse", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		source := Str(bzArgs, 0)
-		ret0, err := std.INIParse(ctx, source)
+		ret0, err := ini.INIParse(ctx, source)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
@@ -26,7 +26,7 @@ func RegisterIni(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("stringify", vm.DirectValue("ini.stringify", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		sections := StrMapMap(bzArgs, 0)
-		ret0, err := std.INIStringify(ctx, sections)
+		ret0, err := ini.INIStringify(ctx, sections)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}

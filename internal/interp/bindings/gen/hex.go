@@ -7,7 +7,7 @@ import (
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
-	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/std/encoding/hex"
 )
 
 // RegisterHex builds the "hex" module map and returns it.
@@ -18,7 +18,7 @@ func RegisterHex(ctx context.Context, sess *buzz.Session) vm.Value {
 	m := vm.NewMap()
 	m.MapSet("encode", vm.DirectValue("hex.encode", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		data := Str(bzArgs, 0)
-		ret0, err := std.HexEncode(ctx, data)
+		ret0, err := hex.HexEncode(ctx, data)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
@@ -26,7 +26,7 @@ func RegisterHex(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("decode", vm.DirectValue("hex.decode", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		s := Str(bzArgs, 0)
-		ret0, err := std.HexDecode(ctx, s)
+		ret0, err := hex.HexDecode(ctx, s)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}

@@ -1,22 +1,26 @@
-package std
+// Package ini is the "encoding/ini" host module. See std/encoding/register.go
+// for why this and its eight siblings each get their own leaf package instead
+// of living in std's flat root, and how this directory's Module reaches the
+// rest of magus without std importing back down to collect it.
+package ini
 
 import (
 	"context"
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/egladman/magus/std"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module ini -lang buzz -out ../internal/interp/bindings/gen/ini.go
-
-func init() { Register(INI) }
+//go:generate go run ../../../cmd/magus-utils bindings -module ini -lang buzz -out ../../../internal/interp/bindings/gen/ini.go
 
 // iniGlobalSection is the key holding entries that appear before any [section]
 // header. The empty string cannot collide with a real section name, because a
 // literal `[]` header is not a name a config file writes.
 const iniGlobalSection = ""
 
-// INI is the "encoding/ini" host module: the key=value config format that has no
+// Module is the "encoding/ini" host module: the key=value config format that has no
 // standard and is everywhere anyway - .npmrc, .gitconfig, .editorconfig,
 // setup.cfg, .flake8, most systemd units.
 //
@@ -42,23 +46,23 @@ const iniGlobalSection = ""
 // literally `a "b"`), multi-line continuations, or type inference. Every value is
 // a string; a caller that wants a number parses it, which is the honest shape
 // when the format itself has no types.
-var INI = Module{
+var Module = std.Module{
 	Name: "ini",
 	Path: "encoding/ini",
 	Doc:  "INI/properties config parsing and rendering (.npmrc, .gitconfig, .editorconfig).",
-	Methods: []Method{
+	Methods: []std.Method{
 		{
 			Name:    "parse",
 			Doc:     "Parse INI text into {section: {key: value}}. Entries before the first [section] header are under the \"\" key, which is where a flat file like .npmrc puts everything. Values are always strings; a repeated key takes the last value.",
-			Args:    []Arg{{Name: "source", Type: TypeString}},
-			Returns: []Ret{{Type: TypeStringMapMap}},
+			Args:    []std.Arg{{Name: "source", Type: std.TypeString}},
+			Returns: []std.Ret{{Type: std.TypeStringMapMap}},
 			Impl:    INIParse,
 		},
 		{
 			Name:    "stringify",
 			Doc:     "Render {section: {key: value}} back to INI text. The \"\" section is written first with no header, then the rest sorted by name with their keys sorted, so the output is byte-stable and diffs cleanly.",
-			Args:    []Arg{{Name: "sections", Type: TypeStringMapMap}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []std.Arg{{Name: "sections", Type: std.TypeStringMapMap}},
+			Returns: []std.Ret{{Type: std.TypeString}},
 			Impl:    INIStringify,
 		},
 	},

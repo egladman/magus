@@ -17,7 +17,7 @@ Base64 text codec (standard and URL-safe, both padded).
 
 Encode data as standard (padded) base64.
 
-**Signature:** `base64\encode(data) → string` · [source](https://github.com/egladman/magus/blob/main/std/base64.go#L59)
+**Signature:** `base64\encode(data) → string` · [source](https://github.com/egladman/magus/blob/main/std/encoding/base64/base64.go#L68)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -29,7 +29,7 @@ Encode data as standard (padded) base64.
 
 Decode a standard (padded) base64 string; errors on malformed input.
 
-**Signature:** `base64\decode(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/base64.go#L64)
+**Signature:** `base64\decode(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/encoding/base64/base64.go#L73)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -41,7 +41,7 @@ Decode a standard (padded) base64 string; errors on malformed input.
 
 Encode data as URL-safe (padded) base64.
 
-**Signature:** `base64\urlEncode(data) → string` · [source](https://github.com/egladman/magus/blob/main/std/base64.go#L73)
+**Signature:** `base64\urlEncode(data) → string` · [source](https://github.com/egladman/magus/blob/main/std/encoding/base64/base64.go#L82)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -53,7 +53,7 @@ Encode data as URL-safe (padded) base64.
 
 Decode a URL-safe (padded) base64 string; errors on malformed input.
 
-**Signature:** `base64\urlDecode(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/base64.go#L78)
+**Signature:** `base64\urlDecode(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/encoding/base64/base64.go#L87)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

@@ -1,17 +1,21 @@
-package std
+// Package csv is the "encoding/csv" host module. See std/encoding/register.go
+// for why this and its eight siblings each get their own leaf package instead
+// of living in std's flat root, and how this directory's Module reaches the
+// rest of magus without std importing back down to collect it.
+package csv
 
 import (
 	"context"
 	"encoding/csv"
 	"fmt"
 	"strings"
+
+	"github.com/egladman/magus/std"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module csv -lang buzz -out ../internal/interp/bindings/gen/csv.go
+//go:generate go run ../../../cmd/magus-utils bindings -module csv -lang buzz -out ../../../internal/interp/bindings/gen/csv.go
 
-func init() { Register(CSV) }
-
-// CSV is the "encoding/csv" host module: delimiter-separated tabular text, in and
+// Module is the "encoding/csv" host module: delimiter-separated tabular text, in and
 // out. Nothing in Buzz or in magus could read a table before this - a magusfile
 // handed a coverage export, a dependency inventory, or any tool's --format=csv
 // output had to split on commas by hand, which is wrong the moment a field is
@@ -24,30 +28,30 @@ func init() { Register(CSV) }
 // The options are ORDINARY OPTIONAL ARGUMENTS, not an opts map. Most of the
 // stdlib's older methods take {str: any} bags, which means a misspelled key is
 // silent; a declared argument is checked. New surface should not add to that.
-var CSV = Module{
+var Module = std.Module{
 	Name: "csv",
 	Path: "encoding/csv",
 	Doc:  "Delimiter-separated tabular text (CSV, TSV) parsing and rendering.",
-	Methods: []Method{
+	Methods: []std.Method{
 		{
 			Name: "parse",
 			Doc:  "Parse delimiter-separated text into a list of rows, each a list of fields. Quoted fields, embedded delimiters, and embedded newlines are handled per RFC 4180. delimiter defaults to \",\" - pass \"\\t\" for TSV. When comment is a single character, lines starting with it are skipped. Raises when a row has a different field count than the first, which is the corruption a hand-rolled split would silently pass through.",
-			Args: []Arg{
-				{Name: "s", Type: TypeString},
-				{Name: "delimiter", Type: TypeString, Optional: true, Default: ","},
-				{Name: "comment", Type: TypeString, Optional: true},
+			Args: []std.Arg{
+				{Name: "s", Type: std.TypeString},
+				{Name: "delimiter", Type: std.TypeString, Optional: true, Default: ","},
+				{Name: "comment", Type: std.TypeString, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeStringSliceSlice}},
+			Returns: []std.Ret{{Type: std.TypeStringSliceSlice}},
 			Impl:    CSVParse,
 		},
 		{
 			Name: "stringify",
 			Doc:  "Render rows (a list of lists of fields) as delimiter-separated text, quoting any field that needs it. delimiter defaults to \",\". The output ends with a newline, so it is ready to write.",
-			Args: []Arg{
-				{Name: "rows", Type: TypeStringSliceSlice},
-				{Name: "delimiter", Type: TypeString, Optional: true, Default: ","},
+			Args: []std.Arg{
+				{Name: "rows", Type: std.TypeStringSliceSlice},
+				{Name: "delimiter", Type: std.TypeString, Optional: true, Default: ","},
 			},
-			Returns: []Ret{{Type: TypeString}},
+			Returns: []std.Ret{{Type: std.TypeString}},
 			Impl:    CSVStringify,
 		},
 	},

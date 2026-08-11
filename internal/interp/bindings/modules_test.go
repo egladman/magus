@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/interp"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spellruntime"
@@ -227,16 +228,16 @@ export fun noop(ctx: magus\Context, _a: [str]) > void {}
 // TestEveryHostModuleIsWired guards against a std host module being declared (and
 // documented) but never exposed to Buzz sessions - the gap that left template,
 // toml, and uuid unreachable after they were added to std/ with generated bindings
-// trampolines but omitted from magusModules. Every module std.All() reports, save
-// the hand-assembled "magus" namespace, must resolve as a native module with
-// its first declared method present.
+// trampolines but omitted from magusModules. Every module hostmodules.All()
+// reports, save the hand-assembled "magus" namespace, must resolve as a
+// native module with its first declared method present.
 func TestEveryHostModuleIsWired(t *testing.T) {
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
 	registerMagusModules(ctx, sess)
 
-	for _, m := range std.All() {
+	for _, m := range hostmodules.All() {
 		// "magus" is not a bare import; it is wired as the magus.* namespace in
 		// buzz.go, not through magusModules.
 		if m.Name == "magus" {
@@ -266,7 +267,7 @@ func TestEveryHostModuleIsWired(t *testing.T) {
 // the host method marshals are exactly that core (same names, docs, per-method Buzz
 // signatures) so the two surfaces can't drift.
 func TestMagusModulesSharesDescribeCore(t *testing.T) {
-	core := std.DescribeModules("") // what `magus describe modules` formats
+	core := hostmodules.Describe("") // what `magus describe modules` formats
 	require.NotEmpty(t, core)
 
 	// What a magusfile sees from magus.modules(): the same core, marshalled.
@@ -280,7 +281,7 @@ func TestMagusModulesSharesDescribeCore(t *testing.T) {
 	}
 
 	// Detail mode (magus.module) shares the same core, with typed methods + signatures.
-	fs := std.DescribeModules("fs")
+	fs := hostmodules.Describe("fs")
 	require.Len(t, fs, 1)
 	require.NotEmpty(t, fs[0].Methods)
 	assert.NotEmpty(t, fs[0].Methods[0].Buzz, "each method carries its Buzz signature")
@@ -1799,7 +1800,7 @@ test "a Buzz-implemented stdlib module behaves like a Go one" {
 
 	// 2. describe modules lists it in the catalogue, with its doc.
 	var summary *types.ModuleEntry
-	for _, m := range std.DescribeModules("") {
+	for _, m := range hostmodules.Describe("") {
 		if m.Name == "lcov" {
 			summary = &m
 			break
@@ -1810,7 +1811,7 @@ test "a Buzz-implemented stdlib module behaves like a Go one" {
 
 	// 3. Its methods and their docs are derived from the Buzz source, so the
 	//    detail view is populated exactly as a Go module's is.
-	detail := std.DescribeModules("lcov")
+	detail := hostmodules.Describe("lcov")
 	require.Len(t, detail, 1)
 	byName := map[string]types.ModuleMethodEntry{}
 	for _, meth := range detail[0].Methods {
