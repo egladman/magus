@@ -139,7 +139,7 @@ Read a .env file and return its name->value map (parse_dotenv over the file cont
 
 Read a .env file and set each variable in the process environment, without overwriting names already set (the dotenv convention) or names the sandbox strips. A no-op in a recording/dry-run.
 
-**Signature:** `env\loadDotenv(path)` · [source](https://github.com/egladman/magus/blob/main/std/env.go#L253)
+**Signature:** `env\loadDotenv(path)` · [source](https://github.com/egladman/magus/blob/main/std/env.go#L257)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

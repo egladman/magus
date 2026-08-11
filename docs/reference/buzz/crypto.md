@@ -89,7 +89,7 @@ Return the lowercase hex SHA-1 digest of the file at path. For interop with lega
 
 Sign data with the private key in the named environment variable and return the lowercase hex signature. alg is "ed25519". The key is NAMED, never passed: a value that never enters Buzz cannot be interpolated into a log.
 
-**Signature:** `crypto\sign(alg, data, key_env) → string` · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L249)
+**Signature:** `crypto\sign(alg, data, key_env) → string` · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L248)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -103,7 +103,7 @@ Sign data with the private key in the named environment variable and return the 
 
 Sign the file at path, write the detached signature to path + ".sig", and return the lowercase hex signature. alg is "ed25519".
 
-**Signature:** `crypto\signFile(alg, path, key_env) → string` · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L262)
+**Signature:** `crypto\signFile(alg, path, key_env) → string` · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L261)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -117,7 +117,7 @@ Sign the file at path, write the detached signature to path + ".sig", and return
 
 Report whether sig_hex is a valid signature over data for the hex public key pub_hex. alg is "ed25519".
 
-**Signature:** `crypto\verify(alg, data, sig_hex, pub_hex) → bool` · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L280)
+**Signature:** `crypto\verify(alg, data, sig_hex, pub_hex) → bool` · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L291)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -132,7 +132,7 @@ Report whether sig_hex is a valid signature over data for the hex public key pub
 
 Return the lowercase hex PUBLIC key for the private key in the named environment variable, so a publisher can print what its readers must pin. alg is "ed25519".
 
-**Signature:** `crypto\publicKey(alg, key_env) → string` · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L301)
+**Signature:** `crypto\publicKey(alg, key_env) → string` · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L312)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

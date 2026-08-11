@@ -8,7 +8,7 @@ tags: [stdlib, modules, magusfile, reference, fs, os, http, json]
 
 # Magusfile Module Reference
 
-These are the runtime utility modules. Import each under its bare name - `import "fs"`, then `fs.glob(...)` - with `camelCase` methods. magus layers these host methods onto Buzz's own stdlib, so a single `import "fs"` (or `os`, `crypto`) carries both surfaces, and the magus forms are sandbox-aware where Buzz's bare stdlib is not. Methods that are also in Buzz's own standard library are marked with an asterisk (`*`) and a footnote on their page; either form works.
+These are the runtime utility modules. Import each under its bare name (`import "fs"`, then `fs.glob(...)`) with `camelCase` methods. magus layers these host methods onto Buzz's own stdlib, so a single `import "fs"` (or `os`, `crypto`) carries both surfaces, and the magus forms are sandbox-aware where Buzz's bare stdlib is not. Methods that are also in Buzz's own standard library are marked with an asterisk (`*`) and a footnote on their page; either form works.
 
 ## Files and paths
 
@@ -22,7 +22,7 @@ These are the runtime utility modules. Import each under its bare name - `import
 
 | Module | Description |
 |--------|-------------|
-| [`os`](os.md) | Process execution. os.exec runs a command directly (no shell); os.exec_sh runs a line through the shell. Both stream output live and return a result {stdout, stderr, code, ok}. |
+| [`os`](os.md) | The machine and this process: platform triple, CPU count, hostname, the running magus binary, and the two members that shadow Buzz's own (exit, sleep). Running OTHER processes lives in the proc module. |
 | [`env`](env.md) | Process environment variable access. |
 | [`platform`](platform.md) | Normalize OS/architecture identifiers across naming conventions (aarch64↔arm64, Darwin↔darwin). |
 
@@ -82,6 +82,7 @@ Three provider namespaces are wired by the runtime rather than declared here, so
 
 | Module | Description |
 |--------|-------------|
+| [`proc`](proc.md) | Run other processes. proc.exec is the one verb that runs anything: it streams output live, captures it, honours the sandbox, and raises on failure instead of handing back a code to check. Needing a shell is not a second verb - proc.shell builds the {bin, args} to hand it, so which shell ran stays visible at the call site instead of hidden inside it. Distinct from Buzz's own os.execute, which returns an exit code and stays silent when you do not read it. |
 | [`template`](template.md) | Logic-less Mustache templating (Mustache spec, via github.com/cbroglie/mustache). |
 | [`toml`](toml.md) | TOML parse and stringify (TOML 1.0 via pelletier/go-toml/v2). |
 | [`uuid`](uuid.md) | Unique identifiers and random tokens (v4 random, v7 time-ordered, plus raw random hex/tokens). |

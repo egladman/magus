@@ -2,8 +2,11 @@ package magus
 
 import (
 	"bytes"
-	"encoding/json"
+	"errors"
+	"io"
 	"testing"
+
+	json "github.com/egladman/magus/internal/json"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,9 +36,13 @@ func recordOutputOverlapEvents(t *testing.T, steps []cache.Step) []recordedOutpu
 
 	var out []recordedOutputOverlap
 	dec := json.NewDecoder(&buf)
-	for dec.More() {
+	for {
 		var ev recordedOutputOverlap
-		require.NoError(t, dec.Decode(&ev))
+		err := dec.Decode(&ev)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
 		if ev.Type == report.TypeOutputOverlapDetected {
 			out = append(out, ev)
 		}
@@ -109,9 +116,13 @@ func TestCheckMissingDependencies_ReportsScopeLabelAsTarget(t *testing.T) {
 
 	var evs []recordedMissingDependency
 	dec := json.NewDecoder(&buf)
-	for dec.More() {
+	for {
 		var ev recordedMissingDependency
-		require.NoError(t, dec.Decode(&ev))
+		err := dec.Decode(&ev)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
 		if ev.Type == report.TypeMissingDependency {
 			evs = append(evs, ev)
 		}

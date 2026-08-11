@@ -17,7 +17,7 @@ Pure path-string math: abs, rel, clean, is_abs, expand_user.
 
 Return the absolute form of path, resolved against the current directory and lexically cleaned.
 
-**Signature:** `path\abs(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L64)
+**Signature:** `path\abs(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L67)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -29,7 +29,7 @@ Return the absolute form of path, resolved against the current directory and lex
 
 Return a relative path from base to target; errors if no relative path exists.
 
-**Signature:** `path\rel(base, target) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L73)
+**Signature:** `path\rel(base, target) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L76)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -42,7 +42,7 @@ Return a relative path from base to target; errors if no relative path exists.
 
 Return the shortest lexically-equivalent path (resolves . and .., collapses separators).
 
-**Signature:** `path\clean(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L82)
+**Signature:** `path\clean(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L85)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -54,7 +54,7 @@ Return the shortest lexically-equivalent path (resolves . and .., collapses sepa
 
 Report whether path is absolute.
 
-**Signature:** `path\isAbs(path) → bool` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L87)
+**Signature:** `path\isAbs(path) → bool` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L90)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -66,7 +66,7 @@ Report whether path is absolute.
 
 Expand a leading ~ (or ~/...) to the current user's home directory; other paths are returned unchanged.
 
-**Signature:** `path\expandUser(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L94)
+**Signature:** `path\expandUser(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L97)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

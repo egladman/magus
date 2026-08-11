@@ -48,23 +48,23 @@ stdout '"value": "api-v1"'
 concurrency: 2
 -- magusfile.buzz --
 import "magus";
-import "os";
+import "proc";
 import "spells/acme" as acme;
 import "project/api" as api;
 magus.project({ "spells": [acme] });
 export fun bundle(ctx: magus\Context, args: [str]) > str {
     ctx.writesFiles("dist/*.txt");
-    os\exec("sh", ["-c", "mkdir -p dist && echo root > dist/root.txt"]);
+    proc\exec("sh", ["-c", "mkdir -p dist && echo root > dist/root.txt"]);
     return "root-v1";
 }
 -- api/magusfile.buzz --
 import "magus";
-import "os";
+import "proc";
 import "spells/acme" as acme;
 magus.project({ "spells": [acme] });
 export fun bundle(ctx: magus\Context, args: [str]) > str {
     ctx.writesFiles("dist/*.txt");
-    os\exec("sh", ["-c", "mkdir -p dist && echo api > dist/api.txt"]);
+    proc\exec("sh", ["-c", "mkdir -p dist && echo api > dist/api.txt"]);
     return "api-v1";
 }
 -- spells/acme/spell.buzz --
