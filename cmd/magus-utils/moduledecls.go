@@ -108,7 +108,42 @@ func renderModuleDecls(mod std.Module) (string, error) {
 		}
 		b.WriteString(decl)
 	}
+	// A Namespace renders as an OBJECT whose members are static extern methods -
+	// `magus\cache.remote(...)` is member access on a value, not a nested namespace,
+	// which Buzz does not have. Declaring it this way is what makes an unknown member
+	// an error: an object reports one, where a bare value could not.
+	for _, ns := range mod.Namespaces {
+		if ns.Doc != "" {
+			fmt.Fprintf(&b, "// %s\n", ns.Doc)
+		}
+		fmt.Fprintf(&b, "export object %s {\n", ns.Name)
+		for _, m := range sortedNamespaceMethods(ns) {
+			decl, err := externDecl(m)
+			if err != nil {
+				return "", fmt.Errorf("namespace %s: %s: %w", ns.Name, m.Name, err)
+			}
+			for line := range strings.SplitSeq(strings.TrimRight(decl, "\n"), "\n") {
+				if strings.HasPrefix(line, "//") {
+					fmt.Fprintf(&b, "    %s\n", line)
+					continue
+				}
+				// externDecl renders a TOP-LEVEL declaration, which carries `export`.
+				// Inside an object there is no export modifier - membership is what makes
+				// it reachable - so drop it and mark the method static instead.
+				fmt.Fprintf(&b, "    static %s\n", strings.TrimPrefix(line, "export "))
+			}
+		}
+		b.WriteString("}\n\n")
+	}
 	return b.String(), nil
+}
+
+// sortedNamespaceMethods orders a namespace's methods by name, so the generated
+// declaration is byte-stable regardless of declaration order.
+func sortedNamespaceMethods(ns std.Namespace) []std.Method {
+	out := slices.Clone(ns.Methods)
+	slices.SortFunc(out, func(a, b std.Method) int { return strings.Compare(a.Name, b.Name) })
+	return out
 }
 
 // externDecl renders one method as `export extern fun name(params) > ret;`.
@@ -125,7 +160,13 @@ func externDecl(m std.Method) (string, error) {
 	}
 	for _, a := range m.Args {
 		if a.Variadic {
-			return fmt.Sprintf("// %s is variadic; Buzz has no variadic parameter, so it stays untyped.\n", name), nil
+			// Declared as a VALUE, not a fun. Buzz has no variadic parameter, so no
+			// `extern fun` can accept fs\join("a", "b", "c") - a list parameter would
+			// reject every existing call site. Declaring it `any` keeps the call
+			// untyped, which is what this always did, while still putting the NAME in
+			// the namespace: emitting only a comment left the member undeclared, and an
+			// undeclared member is indistinguishable from one that does not exist.
+			return fmt.Sprintf("// %s is variadic; Buzz has no variadic parameter, so it stays untyped.\nexport final %s: any = null;\n", name, name), nil
 		}
 	}
 

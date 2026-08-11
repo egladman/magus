@@ -81,7 +81,10 @@ var moduleCategories = []struct {
 }
 
 func main() {
-	outDir := flag.String("out", "docs/buzz/modules", "output directory for module docs")
+	// Default is where the docs ACTUALLY live, which is what docs/magusfile.buzz passes
+	// explicitly. It used to name docs/buzz/modules, a path nothing reads, so running
+	// the generator without flags wrote a second copy nobody regenerates or ships.
+	outDir := flag.String("out", "docs/reference/buzz", "output directory for module docs")
 	flag.Parse()
 
 	if err := os.MkdirAll(*outDir, 0o755); err != nil {

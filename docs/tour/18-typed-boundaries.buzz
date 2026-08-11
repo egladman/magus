@@ -116,7 +116,7 @@ export fun registries(ctx: magus\Context, args: [str]) > void {
 //
 // This tour uses `env` in place of a real `docker login` so it is safe to run - watch it
 // echo the argv it was given, with no secret in it.
-export fun login(ctx: magus\Context, args: [str]) > void {
+export fun login(ctx: magus\Context, args: [str]) > void !> any {
     var host = "";
     if (args.len() > 0) { host = args[0]; }
     final selected = select(publish_registries(ctx), host);

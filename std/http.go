@@ -119,6 +119,35 @@ var HTTP = Module{
 			Raises:  true,
 			Impl:    HTTPServe,
 		},
+
+		// Extern: declared here, bound by internal/interp/bindings/http_bytes.go. Both
+		// move BYTES rather than strings, which is why they are hand-bound - see that
+		// file for the encoding reason.
+		{
+			Name:    "byteSize",
+			Doc:     "Byte length of the file at path. The companion to uploadChunked: the size a Content-Range needs, which len() on a Buzz string cannot give for binary data.",
+			Args:    []Arg{{Name: "path", Type: TypeString}},
+			Returns: []Ret{{Type: TypeInt}},
+			Raises:  true,
+			Extern:  true,
+		},
+		{
+			Name: "upload_chunked",
+			// The runtime binds the snake_case name verbatim (http_bytes.go), so the
+			// declaration must not camelCase it.
+			BuzzName: "upload_chunked",
+			Doc:      "Send the file at src as the request body. chunk_size > 0 sends it in slices (capped at 32 MiB), each carrying a Content-Range header - the resumable-upload convention GitHub Actions Cache and RFC 7233 servers expect; chunk_size <= 0 sends it in one request. Returns the final [status, body].",
+			Args: []Arg{
+				{Name: "method", Type: TypeString},
+				{Name: "url", Type: TypeString},
+				{Name: "src", Type: TypeString},
+				{Name: "chunk_size", Type: TypeInt},
+				{Name: "headers", Type: TypeStringMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAny}},
+			Raises:  true,
+			Extern:  true,
+		},
 	},
 }
 

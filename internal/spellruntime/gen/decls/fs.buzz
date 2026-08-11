@@ -31,6 +31,7 @@ export extern fun glob(pattern: str) > [Path] !> any;
 export extern fun isDir(path: str) > bool !> any;
 export extern fun isFile(path: str) > bool !> any;
 // join is variadic; Buzz has no variadic parameter, so it stays untyped.
+export final join: any = null;
 export extern fun listDir(path: str) > [str] !> any;
 export extern fun mkdirAll(path: str, perm: int = 493) > void !> any;
 export extern fun readFile(path: str) > str !> any;

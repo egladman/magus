@@ -91,6 +91,14 @@ func TestBuzzBindingsMatchHostModules(t *testing.T) {
 		mod := reg(ctx, sess)
 		require.Truef(t, mod.IsMap(), "Register%s did not return a map", m.Name)
 		for _, meth := range m.Methods {
+			// An Extern method is declared in std but bound by internal/interp/bindings
+			// at run time, not by these generated trampolines. It is absent from this
+			// map BY CONSTRUCTION, so requiring it here would fail the gate for the one
+			// case it is meant to describe. TestMagusExternsAreBound covers the other
+			// direction: that something really does bind each one.
+			if meth.Extern {
+				continue
+			}
 			// extra is self-complete: every declared method must be on the Buzz
 			// surface, even ones Buzz's stdlib also covers (see std.BuzzStdlibEquiv).
 			key := camelCaseKey(meth.Name)

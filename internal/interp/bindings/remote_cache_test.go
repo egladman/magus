@@ -102,7 +102,7 @@ export fun get_artifact(target: any, cb: fun(any)) > bool !> any {
     final url = BASE + "/blob/" + io["hash"];
     return xhttp.download(url, "" + io["dest"], {}) == 200;
 }
-export fun put_artifact(target: any, cb: fun(any)) > bool {
+export fun put_artifact(target: any, cb: fun(any)) > bool !> any {
     var io = {};
     cb(io);
     final url = BASE + "/blob/" + io["hash"];

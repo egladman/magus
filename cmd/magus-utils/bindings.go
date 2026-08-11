@@ -162,6 +162,11 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	}
 	objects := newBuzzValueEmitter(m.Name)
 	for _, meth := range m.Methods {
+		// An Extern member has no Impl to wrap - internal/interp/bindings MapSets it
+		// onto the namespace at run time. It is declared, not trampolined.
+		if meth.Extern {
+			continue
+		}
 		if err := emitBuzzMethod(&body, m, meth, objects, implPkg); err != nil {
 			return nil, err
 		}
@@ -241,6 +246,9 @@ func implPackageOf(m std.Module) (importPath, pkgIdent string, err error) {
 		}
 	}
 	for _, meth := range m.Methods {
+		if meth.Extern {
+			continue // no Impl, so no package to import
+		}
 		path, pkg := std.MethodImplPackage(meth)
 		if path == "" {
 			return "", "", fmt.Errorf("method %q: Impl is nil or not a function", meth.Name)

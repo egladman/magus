@@ -235,6 +235,144 @@ var Magus = Module{
 			Returns: []Ret{{Type: TypeBool}},
 			Impl:    MagusHasCharm,
 		},
+
+		// Everything below is Extern: DECLARED here, BOUND by
+		// internal/interp/bindings/buzz.go via MapSet onto the magus namespace at run
+		// time. They are here so the checker knows they exist - without a declaration a
+		// namespace member is unknown, and an unknown member used to type-check as
+		// `any` rather than being reported. Keep this set in step with buildMagusNS;
+		// TestMagusExternsMatchBindings holds the two together.
+		{
+			Name: "project",
+			Doc:  "Declare this directory's project: its spell, sources, outputs, and options. A magusfile calls it once at top level. Raises MGS1022 in a `magus buzz` script, which has no workspace to declare into.",
+			// `any` rather than a shape: the binding accepts BOTH project(config) and
+			// project(path, config), which one Buzz signature cannot express, and the
+			// config map's keys are validated by the loader rather than the checker.
+			Args: []Arg{{Name: "config", Type: TypeAny}, {Name: "opts", Type: TypeAny, Optional: true}},
+			// NOT Raises, though the script-surface binding does fail: a magusfile calls
+			// this at TOP LEVEL, where there is no enclosing function to declare !> and
+			// nothing to catch with. Declaring it raising makes the one mandatory call in
+			// every magusfile unwritable.
+			Extern: true,
+		},
+		{
+			Name:    "normalize",
+			Doc:     "The canonical form of a magus entity name - a target, charm, or spell op. Returns the NAME, never a spell handle.",
+			Args:    []Arg{{Name: "name", Type: TypeString}},
+			Returns: []Ret{{Type: TypeString}},
+			// NOT Raises. The binding's only failure is a non-string argument, and the
+			// declared `str` parameter now rejects that statically - so the raise is
+			// unreachable for any call the checker admits. Declaring it would force a
+			// try/catch around a pure string transform, including in the `magus buzz -e`
+			// one-liners where there is no enclosing function to propagate from.
+			Extern: true,
+		},
+		{
+			Name:   "info",
+			Doc:    "Log at info level. The only way to log from a magusfile; there is no separate log module on this surface.",
+			Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}, {Name: "fields", Type: TypeStringMap, Optional: true}},
+			Extern: true,
+		},
+		{
+			Name:   "debug",
+			Doc:    "Log at debug level. See magus.info.",
+			Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}, {Name: "fields", Type: TypeStringMap, Optional: true}},
+			Extern: true,
+		},
+		{
+			Name:   "warn",
+			Doc:    "Log at warn level. See magus.info.",
+			Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}, {Name: "fields", Type: TypeStringMap, Optional: true}},
+			Extern: true,
+		},
+		{
+			Name:   "error",
+			Doc:    "Log at error level. See magus.info. Logging an error does not abort; magus.fatal does.",
+			Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}, {Name: "fields", Type: TypeStringMap, Optional: true}},
+			Extern: true,
+		},
+		{
+			Name:   "hint",
+			Doc:    "Emit an advisory nudge: non-fatal, deduped, and suppressed when hints are toggled off.",
+			Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}},
+			Extern: true,
+		},
+		{
+			Name: "fatal",
+			Doc:  "Log at error level, then abort the run with exit status 1.",
+			Args: []Arg{{Name: "msg", Type: TypeString, Optional: true}},
+			// NOT Raises: it aborts by design. Requiring every call to be caught would
+			// ask callers to handle the thing they invoked to be unhandleable.
+			Extern: true,
+		},
+		{
+			Name:   "pry",
+			Doc:    "Drop into an interactive REPL at this point, with the calling scope in hand. A no-op while the magusfile is only being parsed.",
+			Extern: true,
+		},
+	},
+	// The provider namespaces the runtime assembles. Each is reached THROUGH rather
+	// than called - `magus\cache.remote(<spell>)` - so it is declared as an object
+	// with static extern methods; see std.Namespace for why that, and not a nested
+	// module.
+	//
+	// None of the selection calls is Raises. Every one is made at the TOP LEVEL of a
+	// magusfile, where there is no enclosing function to declare !> and nothing to
+	// catch with, so declaring them raising would make them unwritable - the same
+	// reason magus\project is not Raises.
+	Namespaces: []Namespace{
+		{
+			Name: "cache",
+			Doc:  "Remote cache backend selection.",
+			Methods: []Method{{
+				Name:   "remote",
+				Doc:    "Select the remote cache backend, given an imported spell handle. Declared at the top level of the root magusfile.",
+				Args:   []Arg{{Name: "spell", Type: TypeAnyMap}},
+				Extern: true,
+			}},
+		},
+		{
+			Name: "ci",
+			Doc:  "CI provider selection.",
+			Methods: []Method{{
+				Name:   "provider",
+				Doc:    "Select the CI provider, given an imported spell handle.",
+				Args:   []Arg{{Name: "spell", Type: TypeAnyMap}},
+				Extern: true,
+			}},
+		},
+		{
+			Name: "secret",
+			Doc:  "Secret backend selection, and the credentials read through it.",
+			Methods: []Method{
+				{
+					Name:   "provider",
+					Doc:    "Select the secret backend, given an imported spell handle.",
+					Args:   []Arg{{Name: "spell", Type: TypeAnyMap}},
+					Extern: true,
+				},
+				{
+					Name: "read",
+					Doc:  "Read a credential by reference through the selected backend. Unlike the selections, this is called from inside a target, so its failure IS something a caller can handle.",
+					Args: []Arg{{Name: "ref", Type: TypeString}},
+					// A magus-resolved value rather than a bare str, which is what lets
+					// magus recognise it and keep it out of logs and cache keys.
+					Returns: []Ret{{Type: TypeString}},
+					Raises:  true,
+					Extern:  true,
+				},
+			},
+		},
+		{
+			Name: "workspace",
+			Doc:  "Workspace-level declarations made from the root magusfile.",
+			Methods: []Method{{
+				Name:   "provider",
+				Doc:    "Select the workspace provider, given an imported spell handle.",
+				Args:   []Arg{{Name: "spell", Type: TypeAnyMap}},
+				Extern: true,
+			}},
+		},
 	},
 }
 

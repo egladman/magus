@@ -146,6 +146,28 @@ type Ret struct {
 	Enum string
 }
 
+// Namespace is a group of related host functions a module exposes behind one of its
+// members: `magus\cache.remote(...)`, `magus\secret.read(...)`.
+//
+// It is NOT a nested module. Buzz has no nested namespace - ast.NamespaceStmt carries
+// a single name - and the call site says so: `magus\cache.remote(x)` is a backslash
+// (namespace access) followed by a DOT (member access on a value). So the group is an
+// OBJECT held by the module, and its functions are that object's static methods. This
+// is upstream's own shape, the one `io\File.open(...)` takes.
+//
+// Declaring it buys the checking a bare value cannot: an object reports an unknown
+// member, so a typo in `magus\cache.remote` is a load error instead of a null that
+// reaches the VM. The runtime binding does not change - internal/interp/bindings still
+// MapSets a map under this name, and a Buzz object IS a map at run time.
+type Namespace struct {
+	Name string
+	Doc  string
+	// Methods are all Extern by construction: the whole point of a Namespace is that
+	// the runtime assembles it, so there is no Impl to generate a trampoline from.
+	// Validation enforces it rather than trusting the author.
+	Methods []Method
+}
+
 // Method declares one host function bound into the VM.
 type Method struct {
 	// Name is the canonical snake_case identifier (e.g. "read_file"); the Buzz
@@ -174,8 +196,29 @@ type Method struct {
 	Raises bool
 	// Impl is the typed Go function bound by this Method. Codegen reflects
 	// over it to discover its package-qualified name and validates that its
-	// signature matches Args + Returns + (error).
+	// signature matches Args + Returns + (error). Nil only when Extern is set.
 	Impl any
+	// Extern marks a member DECLARED here but BOUND ELSEWHERE - today by
+	// internal/interp/bindings, which MapSets it onto the module's namespace value
+	// at run time. It carries no Impl and gets no generated trampoline; what it
+	// gets is a declaration.
+	//
+	// The name is upstream Buzz's: `export extern fun` is exactly this, a signature
+	// whose implementation the host binds. The generated decls are already extern
+	// declarations, so this only feeds entries into a mechanism that existed.
+	//
+	// It exists because a descriptor could previously only mean "declared AND
+	// implemented statically", so any member needing a dynamic binding - one that
+	// closes over per-Open state, or that binds differently per surface, like
+	// `magus\project` being the real thing in a magusfile and an MGS1022 guard in a
+	// script - had to be MapSet and was therefore invisible to the checker. That is
+	// how `crypto\hash`, a function the crypto module has never had, type-checked
+	// inside a spell's AWS SigV4 signing path.
+	//
+	// Set it only when something really does bind the member at run time. An Extern
+	// with nothing behind it declares a member that does not exist, which is the
+	// same defect pointed the other way.
+	Extern bool
 }
 
 // Field is a static, table-level value on a Module: resolved once at registration
@@ -228,6 +271,8 @@ type Module struct {
 	Doc     string
 	Fields  []Field
 	Methods []Method
+	// Namespaces are member groups the runtime assembles; see Namespace.
+	Namespaces []Namespace
 }
 
 // ImportPath returns the path a magusfile imports this module by: Path when it
