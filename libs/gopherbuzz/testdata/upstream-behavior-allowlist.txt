@@ -36,6 +36,7 @@ fs.buzz
 functional.buzz
 generics.buzz
 if-arrow.buzz
+import-export.buzz
 import-lib.buzz
 inferred-enum-case.buzz
 inferred-var-type.buzz

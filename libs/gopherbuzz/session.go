@@ -1058,6 +1058,15 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (Impor
 		// Aliased import: exec in an isolated sub-session so the file's
 		// globals don't leak into the parent env. Collect the new globals
 		// and expose them as a map bound under the alias.
+		//
+		// Collect its DECLARATIONS too, exactly as the flat path below does. Only the
+		// runtime values arrive through loadImportAsAlias; the exported object and
+		// enum types are compile-time facts that live nowhere else, and skipping this
+		// left an aliased file import unable to name them: `testing\PrefixMe{}`
+		// reported an undefined type in the checker, and where it did compile the
+		// literal was built with no field defaults because the compiler seeds those
+		// from the same collection (see CompileOptions.ImportedTypes).
+		s.collectImportedModule(imp.Alias, string(data))
 		if err := s.loadImportAsAlias(ctx, imp.Path, string(data), imp.Alias); err != nil {
 			return ImportFile, err
 		}
@@ -1372,7 +1381,25 @@ func (s *Session) loadImportAsAlias(ctx context.Context, importPath, src, alias 
 	m := vmpackage.NewMap()
 	for name, slot := range sub.env.Names() {
 		if _, wasHost := hostNames[name]; !wasHost {
-			m.MapSet(name, sub.env.Slots()[slot])
+			v := sub.env.Slots()[slot]
+			m.MapSet(name, v)
+			// An object TYPE also gets bound in the parent under its bare name.
+			//
+			// `ns\Name{...}` compiles to a construction of the BARE name - the parser
+			// resolves it that way on purpose, "to the same object def upstream reaches
+			// as ns\Name" - and the VM then looks the def up in the env. Leaving it only
+			// inside the alias map made `testing\PrefixMe{}` fail at RUN time with
+			// "unknown object type", after type-checking cleanly.
+			//
+			// Values are NOT bound this way: isolation is the point of an aliased
+			// import, and a type declaration is a compile-time fact rather than state.
+			// An existing binding wins, so a local type still shadows an imported one,
+			// matching how the compiler seeds its typeDecls.
+			if v.IsObjectDef() {
+				if _, exists := s.env.Get(name); !exists {
+					s.env.Define(name, v)
+				}
+			}
 		}
 	}
 	s.env.Define(alias, m)

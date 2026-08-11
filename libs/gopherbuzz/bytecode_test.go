@@ -2040,3 +2040,38 @@ func FuzzJITMatchesInterpreter(f *testing.F) {
 		}
 	})
 }
+
+// TestImport_AsAliasExportedObjectType covers constructing an object type that came
+// from an ALIASED file import: `import "m" as m;` then `m\Thing{}`.
+//
+// Two things had to be true and neither was. The aliased path exec'd the file in an
+// isolated sub-session and returned before collectImportedModule, so the type was
+// never registered - the checker reported an undefined type. And `ns\Name{...}`
+// compiles to a construction of the BARE name (the parser resolves it that way
+// deliberately), which the VM looks up in the env, where an aliased import had bound
+// only the alias map - so once the checker was satisfied it failed at RUN time with
+// "unknown object type".
+//
+// The defaults assertion is the point of the second half: an unknown type still
+// constructs, silently, with only the fields the literal set. `n` coming back 7
+// rather than 0 is what proves the declaration itself was found.
+func TestImport_AsAliasExportedObjectType(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "m.buzz"), []byte(
+		"object Thing {\n    n: int = 7,\n    label: str = \"hi\",\n}\nexport Thing;\n"), 0644))
+
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer sess.Close()
+	sess.SetIncludeDirs([]string{dir})
+
+	require.NoError(t, sess.Exec(ctx, `import "m" as m; final t = m\Thing{}; final n = t.n; final l = t.label;`), "exec")
+
+	globals := sess.Globals()
+	n, ok := globals["n"]
+	require.True(t, ok, "n not set")
+	assert.Equal(t, "7", n.String(), "field default must come from the imported declaration")
+	l, ok := globals["l"]
+	require.True(t, ok, "l not set")
+	assert.Equal(t, "hi", l.String(), "string default must come from the imported declaration")
+}

@@ -527,6 +527,11 @@ func (v Value) IsFun() bool { return v.tag() == tagFun || v.tag() == tagDirect }
 // IsDirect reports whether v is a direct Go callable (host function).
 func (v Value) IsDirect() bool { return v.tag() == tagDirect }
 
+// IsObjectDef reports whether v is an object TYPE (the thing `object Foo {}` binds),
+// as opposed to an instance of one. Exported for the session's aliased-import path,
+// which has to tell a module's type declarations apart from its ordinary values.
+func (v Value) IsObjectDef() bool { return v.tag() == tagObjectDef }
+
 // IsObject reports whether v is an object instance.
 func (v Value) IsObject() bool { return v.tag() == tagObject }
 
