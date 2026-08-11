@@ -126,6 +126,15 @@ type Session struct {
 	// sharing one namespace; gopherbuzz mirrors both (see bindNamespacePath),
 	// on top of its own basename/splat access conveniences.
 	declaredNamespaces map[string]string
+	// lastWarnings holds the non-fatal diagnostics (currently just BZZ3001 unused
+	// imports) compileShared computed for the most recent Exec/Compile call - last
+	// compile, not accumulated. A Session is reused across many compiles (a session
+	// pool, NewChild sub-sessions, the REPL evaluating one line at a time), so
+	// accumulating here would grow this slice unbounded across a long-lived
+	// session's life. Read it via Warnings() right after the Exec/Compile you care
+	// about. Unguarded like every other field: Session is documented single-
+	// goroutine-owner, not safe for concurrent use.
+	lastWarnings []typeError
 }
 
 // SetNativeModule registers v as the module imported by `import "<importPath>"`.
@@ -589,9 +598,12 @@ func (s *Session) DoString(code string) error { return s.Exec(s.ctx, code) }
 // declarations are Env bindings (SharedGlobals), not per-Run slots. Predefined
 // globals are passed to the checker so they aren't flagged as undefined.
 func (s *Session) compileShared(ctx context.Context, code string) (*vmpackage.Chunk, error) {
-	// warnings (e.g. BZZ3001 unused imports) are deliberately discarded here: a warning
-	// must never fail Exec/Compile, only errs does.
-	prog, errs, _, parseErr := s.checkShared(ctx, code)
+	// warnings (e.g. BZZ3001 unused imports) never fail Exec/Compile - only errs
+	// does - but they are retained on the session (see lastWarnings) so a caller can
+	// read them back afterward via Warnings() without re-resolving imports the way
+	// calling Diagnostics() after the fact would.
+	prog, errs, warnings, parseErr := s.checkShared(ctx, code)
+	s.lastWarnings = warnings
 	if parseErr != nil {
 		return nil, parseErr
 	}
@@ -695,6 +707,40 @@ type Diagnostic struct {
 	Code      diagnostics.Code
 	Msg       string
 	Severity  Severity
+}
+
+// String renders d the same shape typeError.Error() renders a hard error in -
+// "[CODE] buzz: line L:C: <severity: >msg", plus a "see: <url>" line when Code is
+// set - so a warning a caller prints reads consistently with the errors this
+// package already produces.
+func (d Diagnostic) String() string {
+	msg := fmt.Sprintf("buzz: line %d:%d: %s", d.Line, d.Col, d.Msg)
+	if d.Severity == SeverityWarning {
+		msg = fmt.Sprintf("buzz: line %d:%d: warning: %s", d.Line, d.Col, d.Msg)
+	}
+	if d.Code == "" {
+		return msg
+	}
+	return fmt.Sprintf("[%s] %s\n  see: %s", d.Code, msg, bzz.URL(d.Code))
+}
+
+// Warnings returns the non-fatal diagnostics (currently just BZZ3001 unused
+// imports) found by the most recent Exec or Compile call on this session - see
+// lastWarnings for why it is last-compile rather than accumulated. Nil before any
+// compile.
+//
+// Unlike Diagnostics, this is a plain read of state compileShared already computed
+// on the run path: it does not re-resolve imports or re-execute anything, so it is
+// safe to call right after Exec/Compile on a live session you intend to keep using.
+func (s *Session) Warnings() []Diagnostic {
+	if len(s.lastWarnings) == 0 {
+		return nil
+	}
+	out := make([]Diagnostic, len(s.lastWarnings))
+	for i, w := range s.lastWarnings {
+		out[i] = Diagnostic{Line: w.Line, Col: w.Col, Code: w.Code, Msg: w.Msg, Severity: w.Severity}
+	}
+	return out
 }
 
 // Diagnostics parses and type-checks code against the session's shared scope and

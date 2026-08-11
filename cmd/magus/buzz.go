@@ -105,6 +105,16 @@ func buzzCmd(ctx context.Context, args []string) error {
 	if err := sess.Exec(ctx, code); err != nil {
 		return fmt.Errorf("%s: %w", name, err)
 	}
+	// Warnings (e.g. BZZ3001 unused imports) never fail Exec, so they only reach
+	// the user if something prints them after the fact - print to stderr, matching
+	// how every other magus diagnostic (and the -t failure lines below) stays off
+	// stdout, which carries structured output only. -q/-s suppress them like any
+	// other non-error progress output.
+	if !global.quiet && !global.silent {
+		for _, w := range sess.Warnings() {
+			fmt.Fprintln(os.Stderr, w)
+		}
+	}
 	if test {
 		return runBuzzTests(ctx, sess, name)
 	}
