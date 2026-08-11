@@ -2,7 +2,6 @@ package std
 
 import (
 	"context"
-	"fmt"
 	goruntime "runtime"
 
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -30,8 +29,5 @@ func gcAllocated(_ context.Context, _ []vm.Value) (vm.Value, error) {
 func gcCollect(_ context.Context, _ []vm.Value) (vm.Value, error) {
 	goruntime.GC()
 	// Buzz's collect() can throw CollectError; Go's GC() never fails.
-	if false {
-		return vm.Null, fmt.Errorf("gc.collect: collection failed") // satisfy type checker
-	}
 	return vm.Null, nil
 }

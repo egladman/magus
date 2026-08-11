@@ -186,7 +186,10 @@ func mathPow(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if math.IsInf(result, 1) {
 		return vm.Null, fmt.Errorf("math.pow: overflow")
 	}
-	if result == 0 && (x != 0 || y >= 0) {
+	// x == 0 is never underflow: pow(0, y>0) is exactly 0 by definition,
+	// pow(0, 0) is 1 (result != 0, so this branch is not reached), and
+	// pow(0, y<0) is +Inf, already caught by the overflow check above.
+	if result == 0 && x != 0 {
 		return vm.Null, fmt.Errorf("math.pow: underflow")
 	}
 	return vm.FloatValue(result), nil

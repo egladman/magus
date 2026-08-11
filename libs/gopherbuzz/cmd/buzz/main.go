@@ -323,7 +323,7 @@ func libDirs(o opts) []string {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprint(w, `buzz — run Buzz scripts (gopherbuzz)
+	fmt.Fprint(w, `buzz - run Buzz scripts (gopherbuzz)
 
 Usage:
   buzz [options] [script] [-- script-args...]
@@ -341,6 +341,6 @@ Options:
   -v, --version              print the version and exit
   -h, --help                 print this help and exit
 
-The Buzz standard library is available (import "std", "math", "ffi", …).
+The Buzz standard library is available (import "std", "math", "ffi", ...).
 `)
 }
