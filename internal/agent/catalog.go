@@ -323,6 +323,13 @@ func (c *Catalog) WriteSkillTree(dir, dest string, force bool, v Variant) ([]str
 	if filepath.IsAbs(dest) || strings.HasPrefix(dest, "~") {
 		return nil, fmt.Errorf("agent install: destination %q is outside the working tree; pass --global or use --tar | tar -xf - -C <dir>", dest)
 	}
+	// filepath.IsAbs/~ catches an absolute escape but not "../../outside": Join
+	// with dir still resolves that to a path outside it. Clean the joined result
+	// and confirm it is still under dir before writing anything.
+	joined := filepath.Clean(filepath.Join(dir, dest))
+	if rel, err := filepath.Rel(dir, joined); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil, fmt.Errorf("agent install: destination %q escapes the working tree", dest)
+	}
 	skills, err := c.EmbeddedSkills(v)
 	if err != nil {
 		return nil, err

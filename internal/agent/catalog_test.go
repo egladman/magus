@@ -62,6 +62,25 @@ func TestCatalogInstallsAndVerifiesSkillTree(t *testing.T) {
 	assert.True(t, catalog.CheckStatuses(dir)[0].Stale)
 }
 
+// TestWriteSkillTreeRejectsPathEscape guards S-3: the guard rejected an
+// absolute dest or a leading "~" but not "..", so dest="../../outside" walked
+// filepath.Join right out of dir. The doc comment on WriteSkillTree claims
+// magus never silently writes outside the working tree; this is what makes
+// that claim true rather than aspirational.
+func TestWriteSkillTreeRejectsPathEscape(t *testing.T) {
+	catalog := testCatalog(t)
+	dir := t.TempDir()
+
+	_, err := catalog.WriteSkillTree(dir, "../../outside", false, VariantFull)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "escapes the working tree")
+
+	// An ordinary nested destination is unaffected.
+	written, err := catalog.WriteSkillTree(dir, "nested/skills", false, VariantFull)
+	require.NoError(t, err)
+	require.Len(t, written, len(skillSources))
+}
+
 // TestCatalogAgentsBlockIsSelfDelimitedAndStable pins what a developer pastes:
 // exactly one marker pair, a stamp CheckStatuses can grade, and the same bytes
 // on every call so re-running to refresh a stale block produces a clean diff.
