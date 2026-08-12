@@ -73,7 +73,7 @@ func (vm *VM) CollectUnreachable() (int, error) {
 
 	var kept []*objectInst
 	var collected int
-	for _, inst := range vm.collectables {
+	for i, inst := range vm.collectables {
 		if live[inst] {
 			kept = append(kept, inst)
 			continue
@@ -81,7 +81,13 @@ func (vm *VM) CollectUnreachable() (int, error) {
 		if err := vm.callCollector(inst); err != nil {
 			// Keep it tracked: a collector that failed has not run to completion, and
 			// silently dropping it would hide the failure on a later sweep.
-			vm.collectables = append(kept, inst)
+			//
+			// The TAIL has to survive too. kept holds only what this sweep has
+			// visited, so assigning it alone deregistered every instance after the
+			// failing one - none of their collect() methods would ever run, on this
+			// sweep or any later one. Only the failure itself is early; the rest of
+			// the registry is untouched work, not garbage.
+			vm.collectables = append(append(kept, inst), vm.collectables[i+1:]...)
 			return collected, err
 		}
 		collected++
