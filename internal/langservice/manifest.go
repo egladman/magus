@@ -9,6 +9,14 @@
 // symbol-facing features that need the module manifest instead of a live session.
 package langservice
 
+// The manifest is generated, so it regenerates with everything else rather than by
+// hand: `magus run generate` reaches it through the langservice-generate target, and
+// `go generate ./internal/langservice` runs it directly. -out is relative to this
+// package dir, which is where go:generate runs; the command's own default is the
+// path from the repo root, for the bare `go run ./cmd/langservice-manifest`.
+//
+//go:generate go run ../../cmd/langservice-manifest -out manifest_data.go
+
 // Method is one callable on a module: its Buzz-surface name, one-line doc, and
 // rendered call signature (e.g. "glob(pattern: str) > [str]").
 type Method struct {

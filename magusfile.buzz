@@ -819,6 +819,19 @@ export fun bindings_generate(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["generate", "./std/..."]);
 }
 
+// Regenerates the host-module snapshot the browser playground's completion and hover
+// read (internal/langservice/manifest_data.go), from the same std declarations
+// bindings_generate reads.
+//
+// It has a target at all because it did not: the file carried a "regenerate with `go
+// run`" header and nothing else, so a std descriptor edit left it stale with only its
+// own drift test to say so, one commit later. A generated file whose only regeneration
+// route is a hand-typed command is a file that rots.
+export fun langservice_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("internal/langservice/manifest_data.go");
+    proc\exec("go", ["generate", "./internal/langservice"]);
+}
+
 // Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen),
 // the Buzz value-type mirrors (internal/spellruntime/gen/types) and the per-module
 // host declarations (internal/spellruntime/gen/decls), all driven by the

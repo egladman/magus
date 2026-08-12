@@ -35,7 +35,14 @@ import "strings"
 // The relation and both node kinds already existed, so a v7 consumer parses a v8 graph
 // without changing - but it would read a symbol's edge set as complete when it is not,
 // and the shard fingerprints all differ, so the bump is what forces the rebuild.
-const KnowledgeSchemaVersion = 8
+// v9 adds `secret_refs` to a target node: the credential references the target names,
+// alongside the `reads_secrets` flag that already recorded that it names any. The field
+// is additive, so a v8 consumer parses a v9 graph unchanged - the bump is for the OTHER
+// direction, a v8 store on disk. Its target shards were extracted before the field
+// existed, and the magusfile they were extracted from has not changed, so nothing else
+// would invalidate them: the version mismatch is what forces the rebuild that puts the
+// references there.
+const KnowledgeSchemaVersion = 9
 
 // KnowledgeGraphDefinition is the human-readable description printed by
 // "magus graph export".

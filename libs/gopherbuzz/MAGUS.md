@@ -33,7 +33,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph (schema v8). Query it instead of grepping:
+This workspace has a knowledge graph (schema v9). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -63,7 +63,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 37 | `magus query project:.` | `generate`, `lint`, `image-build` |
+| . | 38 | `magus query project:.` | `generate`, `lint`, `image-build` |
 | console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 4 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
@@ -107,6 +107,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `man-generate` | Renders the roff man pages into manpage/ (repo root). |
 | `changelog-generate` | CHANGELOG.md is a root artifact. |
 | `types-generate` | Regenerates the runtime BuzzObject maps before anything imports a host binding. |
+| `langservice-generate` | Regenerates the host-module snapshot the browser playground's completion and hover read (internal/langservice/manifest_data.go), from the same std declarations bindings_generate reads. |
 | `skills-generate` | Reinstalls the agent skills from their embedded sources in cmd/magus/skills. |
 | `index-generate` | Renders MAGUS.md via `magus describe graph`. |
 | `graph-generate` | Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects. |
