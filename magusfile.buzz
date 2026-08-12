@@ -819,6 +819,26 @@ export fun bindings_generate(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["generate", "./std/..."]);
 }
 
+// Regenerates the magusfile API surface lock: every member a magusfile can call on the
+// magus namespace, one dotted name per line. Named for the magusfile surface rather
+// than "api" alone, because two other things in this repo are also an API surface -
+// internal/manpage/testdata/api.lock is the CLI's, and cmd/magus/surface.go drives
+// completions.
+//
+// The regeneration route is a TEST, not a generator, which is why this target exists:
+// the snapshot is written by TestMagusSurfaceLocked under UPDATE_MAGUS_API_LOCK, so
+// without a target naming it the lock was a drift-gated artifact no project claimed -
+// it keyed nothing, joined no affected set, and `magus describe file` called it
+// unclaimed. Its CLI sibling is claimed only because man_generate happens to list it.
+//
+// -count=1 is load-bearing: go caches a passing test, and a replayed pass writes no file.
+export fun magusfile_api_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(bindings_generate);
+    ctx.writesFiles("internal/interp/bindings/testdata/magus-api.lock");
+    go["go-test"](ctx.withEnv({"UPDATE_MAGUS_API_LOCK": "1", "GOEXPERIMENT": "jsonv2"}),
+        {"args": ["-count=1", "-run", "TestMagusSurfaceLocked", "./internal/interp/bindings/"]});
+}
+
 // Regenerates the host-module snapshot the browser playground's completion and hover
 // read (internal/langservice/manifest_data.go), from the same std declarations
 // bindings_generate reads.

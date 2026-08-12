@@ -226,6 +226,32 @@
           ]
         },
         {
+          "name": "magusfile-api-generate",
+          "declared": "magusfile_api_generate",
+          "doc": "Regenerates the magusfile API surface lock: every member a magusfile can call on the magus namespace, one dotted name per line.",
+          "dependencies": [
+            "bindings-generate"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-test"
+              ]
+            }
+          ],
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "internal/interp/bindings/testdata/magus-api.lock"
+            }
+          ],
+          "exec_overrides": [
+            "env:UPDATE_MAGUS_API_LOCK=1",
+            "env:GOEXPERIMENT=jsonv2"
+          ]
+        },
+        {
           "name": "langservice-generate",
           "declared": "langservice_generate",
           "doc": "Regenerates the host-module snapshot the browser playground's completion and hover read (internal/langservice/manifest_data.go), from the same std declarations bindings_generate reads.",
@@ -347,6 +373,7 @@
             "graph-generate",
             "index-generate",
             "langservice-generate",
+            "magusfile-api-generate",
             "man-generate",
             "mocks-generate",
             "skills-generate",
