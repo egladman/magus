@@ -2,8 +2,8 @@
 title: magus-buzz
 description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in."
 tags: [agents, skills, magus-buzz]
-skill_full_bytes: 7031
-skill_simple_bytes: 6024
+skill_full_bytes: 8161
+skill_simple_bytes: 6763
 ---
 
 # magus-buzz
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `26` |
+| `agent-skill-version` | `33` |
 | `knowledge-schema-version` | `8` |
-| `skill-content` | `fc67d0b22c77` |
+| `skill-content` | `26f270bc4a34` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -137,7 +137,7 @@ fun main() > void {
 main();
 ```
 
-WRONG: `os\exec("magus", args: [...], dir: ".", opts: {})` - magus warns on it.
+WRONG: `proc\exec("magus", args: [...], dir: ".", opts: {})` - magus warns on it.
 CORRECT: `magus\cmd`, or the typed `magus\run` / `describe` / `insight` / `doctor`.
 
 Members that need a magusfile raise MGS1022 naming the constraint: the ones
@@ -178,9 +178,19 @@ template\render(tpl, data: {"name": "world"});
 | optional | `int?`, unwrap with `??`, `?.`, or `!` |
 | errors | `fun f() > int !> str` declares what it throws; `try`/`catch`, or `expr catch fallback` inline |
 
-Reserved words that cannot be used as names: `map`, `static`, `test`, `out`,
-`from`, `type`, `double`, `fib`, and the obvious keywords. A fixture that uses
-one fails with a confusing `null is not callable`. Prefix or rename instead.
+Reserved words that cannot be used as binding names (var/fun/param/field/...):
+`out`, `from`, `match`, `pat`, `fib`, `rg`, `obj`, `ud`, `zdef`, `typeof`, `type`,
+`protocol`, `static`, `extern`, `double`, `any`, `Function`, `int`, `str`, `bool`,
+`void` - upstream Buzz's list, kept for parity. `test` is NOT
+reserved - every magus target set defines `export fun test(...)`,
+the canonical test target, so reserving it would break the CLI's own
+model. Prefix or rename only the words above.
+
+A separate hazard: naming a local after a module or a builtin (`map`, `len`, a
+module name) SHADOWS it rather than failing to parse, so a later
+call through that name hits a non-callable value and dies with a
+confusing `null is not callable`. Rename
+the local.
 
 A raw string is backticks, and it does NOT interpolate `{...}` - use it for
 Mustache templates, regexes, and JSON blobs:
@@ -223,6 +233,16 @@ test "slug hyphenates" {
 magus buzz -t script.buzz     # ok/fail per block, then a summary line
 ```
 
+Do not test `magusfile.buzz` itself. It is declarative configuration,
+so a test of it tests your configuration, not your logic. Wanting a test
+for a magusfile is the signal to move that logic into a spell or a sibling
+module and test it there instead.
+
+A module a magusfile imports is tested with the same runner, plus one flag:
+`magus buzz -t --embedded render.buzz` - a magusfile's own imports
+always parse embedded, not strict, so testing under the strict default would
+judge the module by a mode it never actually runs in.
+
 ## Where Buzz code belongs
 
 - **A one-off** - a standalone `.buzz` file run with `magus buzz`. Nothing is
@@ -235,6 +255,8 @@ magus buzz -t script.buzz     # ok/fail per block, then a summary line
 
 Prefer a target over a script for anything that will be run more than once: a
 script re-runs from scratch every time, a target replays from cache.
+
+Reviewing existing Buzz code rather than writing new code: use magus-buzz-review.
 ````
 
 ## Short form (`--simple`)
@@ -337,7 +359,7 @@ fun main() > void {
 main();
 ```
 
-WRONG: `os\exec("magus", args: [...], dir: ".", opts: {})` - magus warns on it.
+WRONG: `proc\exec("magus", args: [...], dir: ".", opts: {})` - magus warns on it.
 CORRECT: `magus\cmd`, or the typed `magus\run` / `describe` / `insight` / `doctor`.
 
 Members that need a magusfile raise MGS1022 naming the constraint: the ones
@@ -378,8 +400,15 @@ template\render(tpl, data: {"name": "world"});
 | optional | `int?`, unwrap with `??`, `?.`, or `!` |
 | errors | `fun f() > int !> str` declares what it throws; `try`/`catch`, or `expr catch fallback` inline |
 
-Reserved words that cannot be used as names: `map`, `static`, `test`, `out`,
-`from`, `type`, `double`, `fib`, and the obvious keywords. Prefix or rename instead.
+Reserved words that cannot be used as binding names (var/fun/param/field/...):
+`out`, `from`, `match`, `pat`, `fib`, `rg`, `obj`, `ud`, `zdef`, `typeof`, `type`,
+`protocol`, `static`, `extern`, `double`, `any`, `Function`, `int`, `str`, `bool`,
+`void`. `test` is NOT
+reserved. Prefix or rename only the words above.
+
+A separate hazard: naming a local after a module or a builtin (`map`, `len`, a
+module name) SHADOWS it - watch for a confusing `null is not callable`. Rename
+the local.
 
 A raw string is backticks, and it does NOT interpolate `{...}`:
 
@@ -421,6 +450,14 @@ test "slug hyphenates" {
 magus buzz -t script.buzz     # ok/fail per block, then a summary line
 ```
 
+Do not test `magusfile.buzz` itself. Wanting a test
+for a magusfile is the signal to move that logic into a spell or a sibling
+module and test it there instead.
+
+A module a magusfile imports is tested with the same runner, plus one flag:
+`magus buzz -t --embedded render.buzz` (a magusfile's
+imports parse embedded, not strict).
+
 ## Where Buzz code belongs
 
 - **A one-off** - a standalone `.buzz` file run with `magus buzz`.
@@ -430,6 +467,8 @@ magus buzz -t script.buzz     # ok/fail per block, then a summary line
 - **A tool adapter** - a spell, so every project of that type gets the ops.
 
 Prefer a target over a script for anything that will be run more than once.
+
+Reviewing existing Buzz code rather than writing new code: use magus-buzz-review.
 ````
 
 

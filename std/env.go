@@ -18,6 +18,7 @@ func init() { Register(Env) }
 // Env is the "env" host module: process environment-variable access, filtered by the sandbox policy.
 var Env = Module{
 	Name: "env",
+	WASM: true,
 	Doc:  "Process environment variable access.",
 	Methods: []Method{
 		{
@@ -39,6 +40,7 @@ var Env = Module{
 			Doc:     "Set name to value in the current process environment.",
 			Args:    []Arg{{Name: "name", Type: TypeString}, {Name: "value", Type: TypeString}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    EnvSet,
 		},
 		{
@@ -53,6 +55,7 @@ var Env = Module{
 			Doc:     "Remove name from the current process environment.",
 			Args:    []Arg{{Name: "name", Type: TypeString}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    EnvUnset,
 		},
 		{
@@ -67,6 +70,7 @@ var Env = Module{
 			Doc:     "Return the current user's home directory.",
 			Args:    nil,
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    EnvHome,
 		},
 		{
@@ -81,6 +85,7 @@ var Env = Module{
 			Doc:     "Return the value of name, or raise when it is unset or stripped by the sandbox. The fail-fast complement to get/lookup: a CI magusfile that needs GITHUB_TOKEN states the requirement once instead of threading a lookup-then-fatal check through every caller. A set-but-empty variable satisfies the requirement (its empty value is returned).",
 			Args:    []Arg{{Name: "name", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    EnvRequire,
 		},
 		{
@@ -95,6 +100,7 @@ var Env = Module{
 			Doc:     "Read a .env file and return its name->value map (parse_dotenv over the file contents). Errors if the file cannot be read.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeStringMap}},
+			Raises:  true,
 			Impl:    EnvReadDotenv,
 		},
 		{
@@ -102,6 +108,7 @@ var Env = Module{
 			Doc:     "Read a .env file and set each variable in the process environment, without overwriting names already set (the dotenv convention) or names the sandbox strips. A no-op in a recording/dry-run.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    EnvLoadDotenv,
 		},
 	},
@@ -139,7 +146,7 @@ func EnvSet(ctx context.Context, name, value string) error {
 	slog.DebugContext(ctx, "env.set", "name", name)
 	if p := sandbox.FromContext(ctx); p != nil && !p.AllowEnv(name) {
 		// Refuse to re-introduce a stripped name; otherwise a spell could set
-		// GITHUB_TOKEN back into magus's env so the next os.exec carries it.
+		// GITHUB_TOKEN back into magus's env so the next proc.exec carries it.
 		slog.WarnContext(ctx, "env.set blocked by the sandbox", "name", name)
 		return nil
 	}
@@ -238,8 +245,12 @@ func EnvParseDotenv(_ context.Context, content string) (map[string]string, error
 	return parseDotenv(content), nil
 }
 
-// EnvReadDotenv reads a .env file and parses it.
-func EnvReadDotenv(_ context.Context, path string) (map[string]string, error) {
+// EnvReadDotenv reads a .env file and parses it, subject to the sandbox read policy.
+func EnvReadDotenv(ctx context.Context, path string) (map[string]string, error) {
+	path = resolvePath(ctx, path)
+	if err := checkRead(ctx, path); err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("env.read_dotenv: %w", err)
@@ -251,6 +262,10 @@ func EnvReadDotenv(_ context.Context, path string) (map[string]string, error) {
 // environment. Existing names win (the dotenv convention), sandbox-stripped names
 // are skipped (matching EnvSet), and a recording/dry-run is a no-op.
 func EnvLoadDotenv(ctx context.Context, path string) error {
+	path = resolvePath(ctx, path)
+	if err := checkRead(ctx, path); err != nil {
+		return err
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("env.load_dotenv: %w", err)

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/generate/emit"
+	"github.com/egladman/magus/internal/hostmodules"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/std"
 )
@@ -36,7 +37,7 @@ func runModuleDecls(args []string) error {
 		return fmt.Errorf("usage: magus-utils moduledecls -outdir <dir>")
 	}
 
-	mods := std.All()
+	mods := hostmodules.All()
 	slices.SortFunc(mods, func(a, b std.Module) int { return strings.Compare(a.Name, b.Name) })
 	for _, mod := range mods {
 		src, err := renderModuleDecls(mod)
@@ -107,7 +108,42 @@ func renderModuleDecls(mod std.Module) (string, error) {
 		}
 		b.WriteString(decl)
 	}
+	// A Namespace renders as an OBJECT whose members are static extern methods -
+	// `magus\cache.remote(...)` is member access on a value, not a nested namespace,
+	// which Buzz does not have. Declaring it this way is what makes an unknown member
+	// an error: an object reports one, where a bare value could not.
+	for _, ns := range mod.Namespaces {
+		if ns.Doc != "" {
+			fmt.Fprintf(&b, "// %s\n", ns.Doc)
+		}
+		fmt.Fprintf(&b, "export object %s {\n", ns.Name)
+		for _, m := range sortedNamespaceMethods(ns) {
+			decl, err := externDecl(m)
+			if err != nil {
+				return "", fmt.Errorf("namespace %s: %s: %w", ns.Name, m.Name, err)
+			}
+			for line := range strings.SplitSeq(strings.TrimRight(decl, "\n"), "\n") {
+				if strings.HasPrefix(line, "//") {
+					fmt.Fprintf(&b, "    %s\n", line)
+					continue
+				}
+				// externDecl renders a TOP-LEVEL declaration, which carries `export`.
+				// Inside an object there is no export modifier - membership is what makes
+				// it reachable - so drop it and mark the method static instead.
+				fmt.Fprintf(&b, "    static %s\n", strings.TrimPrefix(line, "export "))
+			}
+		}
+		b.WriteString("}\n\n")
+	}
 	return b.String(), nil
+}
+
+// sortedNamespaceMethods orders a namespace's methods by name, so the generated
+// declaration is byte-stable regardless of declaration order.
+func sortedNamespaceMethods(ns std.Namespace) []std.Method {
+	out := slices.Clone(ns.Methods)
+	slices.SortFunc(out, func(a, b std.Method) int { return strings.Compare(a.Name, b.Name) })
+	return out
 }
 
 // externDecl renders one method as `export extern fun name(params) > ret;`.
@@ -124,7 +160,13 @@ func externDecl(m std.Method) (string, error) {
 	}
 	for _, a := range m.Args {
 		if a.Variadic {
-			return fmt.Sprintf("// %s is variadic; Buzz has no variadic parameter, so it stays untyped.\n", name), nil
+			// Declared as a VALUE, not a fun. Buzz has no variadic parameter, so no
+			// `extern fun` can accept fs\join("a", "b", "c") - a list parameter would
+			// reject every existing call site. Declaring it `any` keeps the call
+			// untyped, which is what this always did, while still putting the NAME in
+			// the namespace: emitting only a comment left the member undeclared, and an
+			// undeclared member is indistinguishable from one that does not exist.
+			return fmt.Sprintf("// %s is variadic; Buzz has no variadic parameter, so it stays untyped.\nexport final %s: any = null;\n", name, name), nil
 		}
 	}
 
@@ -158,7 +200,17 @@ func externDecl(m std.Method) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("export extern fun %s(%s) > %s;\n", name, strings.Join(params, ", "), ret), nil
+	// A raising Method emits `!> any`, not a specific error type: every host error
+	// crosses the VM boundary through gen.HostError, which wraps it in a map
+	// (StructuredError.BuzzError()) rather than a plain str - see
+	// internal/interp/bindings/gen/runtime.go. `any` is the honest declared shape,
+	// and it is also what an untyped `catch (e)` already binds to, so it costs
+	// existing call sites nothing.
+	raises := ""
+	if m.Raises {
+		raises = " !> any"
+	}
+	return fmt.Sprintf("export extern fun %s(%s) > %s%s;\n", name, strings.Join(params, ", "), ret, raises), nil
 }
 
 // buzzArgType maps a parameter's TypeTag to its Buzz annotation.
@@ -174,6 +226,14 @@ func buzzArgType(t std.TypeTag) (string, error) {
 		return "bool", nil
 	case std.TypeStringSlice:
 		return "[str]", nil
+	case std.TypeFloatSlice:
+		return "[double]", nil
+	case std.TypeByteSlice:
+		return "[int]", nil
+	case std.TypeStringSliceSlice:
+		return "[[str]]", nil
+	case std.TypeStringMapMap:
+		return "{str: {str: str}}", nil
 	case std.TypeStringMap:
 		return "{str: str}", nil
 	case std.TypeAnyMap:
@@ -191,7 +251,7 @@ func buzzArgType(t std.TypeTag) (string, error) {
 // omit it.
 //
 // Arg.Default is what the caller gets, NOT the type's zero, and the difference is not
-// cosmetic: fs.mkdirall's perm defaults to 0o755, so declaring the zero would have Buzz
+// cosmetic: fs.mkdirAll's perm defaults to 0o755, so declaring the zero would have Buzz
 // pass an explicit mode 0 and create a directory nothing can then write into. Before
 // these declarations existed the trampoline applied the default itself and the omission
 // never reached the host; now the declaration is what fills the gap, so it has to carry
@@ -265,6 +325,14 @@ func buzzZero(t std.TypeTag) (string, error) {
 		return "false", nil
 	case std.TypeStringSlice:
 		return "[<str>]", nil
+	case std.TypeFloatSlice:
+		return "[<double>]", nil
+	case std.TypeByteSlice:
+		return "[<int>]", nil
+	case std.TypeStringSliceSlice:
+		return "[<[str]>]", nil
+	case std.TypeStringMapMap:
+		return "{<str: {str: str}>}", nil
 	case std.TypeStringMap:
 		return "{<str: str>}", nil
 	case std.TypeAnyMap:
@@ -344,6 +412,17 @@ func mirrorsFor(mod std.Module) ([]string, error) {
 		return nil
 	}
 	for _, m := range sortedMethods(mod) {
+		// ARGUMENTS as well as returns. An Arg.Object names a type the declaration
+		// references just as a return does, and emitting only the return side left
+		// http\get's `retry: HttpRetry` pointing at a type the file never declared -
+		// which the checker rejects, taking the whole module's signatures down with
+		// it. encoding\buildUrl never caught this because its URL argument is also
+		// parseUrl's return, so the type came along by accident.
+		for _, a := range m.Args {
+			if err := visit(strings.Trim(a.Object, "[]")); err != nil {
+				return nil, fmt.Errorf("%s: %w", m.Name, err)
+			}
+		}
 		for _, r := range m.Returns {
 			if err := visit(strings.Trim(r.Object, "[]")); err != nil {
 				return nil, fmt.Errorf("%s: %w", m.Name, err)

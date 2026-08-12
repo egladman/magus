@@ -140,7 +140,7 @@ fun spaces(n: int) > str {
 // ten-minute one. Emits per-run pieces (not per char) so allocation stays O(tags), not O(N).
 fun maskLinkable(html: str, skipInlineCode: bool) > str {
     final total = html.len();
-    final pieces: [str] = mut [<str>];
+    final pieces: mut [str] = mut [<str>];
     var i = 0;
     while (i < total) {
         if (html.byte(i) == 60) {   // '<': mask this tag / comment / skip container
@@ -214,8 +214,8 @@ fun applyLinks(html: str, searchable: str, tokens: [str], opens: [str], keys: [s
     if (searchable.len() != html.len()) {
         return GlossaryLinkResult{ html = html, linked = mut [<str>] };
     }
-    final ins: [linkIns] = mut [<linkIns>];
-    final linked: [str] = mut [<str>];
+    final ins: mut [linkIns] = mut [<linkIns>];
+    final linked: mut [str] = mut [<str>];
     var t = 0;
     while (t < tokens.len()) {
         final needle = tokens[t];
@@ -242,7 +242,7 @@ fun applyLinks(html: str, searchable: str, tokens: [str], opens: [str], keys: [s
     // could not shift the positions of later ones; a cursor gives that for free, because
     // every position is read off the untouched `html`.
     final ordered = ins.sort(fun (a: linkIns, b: linkIns) > bool { return a.pos < b.pos; });
-    final parts: [str] = mut [<str>];
+    final parts: mut [str] = mut [<str>];
     var cursor = 0;
     foreach (x in ordered) {
         parts.append(html.sub(cursor, len: x.pos - cursor));
@@ -268,9 +268,9 @@ export fun linkGlossaryTerms(html: str, terms: [GlossaryTerm], relToGlossary: st
     }
     // The definition is baked into each link (data-def) so the client popover/reveal needs no
     // fetch; the href is the static glossary entry, which carries the "referenced on" backlinks.
-    final tokens: [str] = mut [<str>];
-    final opens: [str] = mut [<str>];
-    final keys: [str] = mut [<str>];
+    final tokens: mut [str] = mut [<str>];
+    final opens: mut [str] = mut [<str>];
+    final keys: mut [str] = mut [<str>];
     foreach (t in terms) {
         tokens.append(t.term.lower());
         opens.append("<a class=\"glossary-term\" href=\"" + relToGlossary + "#" + t.anchor
@@ -296,9 +296,9 @@ export object Entity {
 // sortEntitiesLongestFirst orders entities by descending match length, so linkCodeEntities
 // tries "magus affected ci" before "magus affected". Selection sort; the catalogs are small.
 export fun sortEntitiesLongestFirst(entities: [Entity]) > [Entity] {
-    var work: [Entity] = mut [<Entity>];
+    var work: mut [Entity] = mut [<Entity>];
     foreach (e in entities) { work.append(e); }
-    final res: [Entity] = mut [<Entity>];
+    final res: mut [Entity] = mut [<Entity>];
     while (work.len() > 0) {
         var best = 0;
         var b = 1;
@@ -307,7 +307,7 @@ export fun sortEntitiesLongestFirst(entities: [Entity]) > [Entity] {
             b = b + 1;
         }
         res.append(work[best]);
-        final nw: [Entity] = mut [<Entity>];
+        final nw: mut [Entity] = mut [<Entity>];
         var c = 0;
         while (c < work.len()) {
             if (c != best) { nw.append(work[c]); }
@@ -323,9 +323,9 @@ export fun sortEntitiesLongestFirst(entities: [Entity]) > [Entity] {
 // data-def and the kind into data-kind for the shared popover (glossary-terms.js). entities
 // MUST be longest-match-first; pageDir is the linking page's clean gen-root dir (for the href).
 export fun linkCodeEntities(html: str, entities: [Entity], pageDir: str) > str {
-    final tokens: [str] = mut [<str>];
-    final opens: [str] = mut [<str>];
-    final keys: [str] = mut [<str>];
+    final tokens: mut [str] = mut [<str>];
+    final opens: mut [str] = mut [<str>];
+    final keys: mut [str] = mut [<str>];
     foreach (e in entities) {
         var href = relativePath(pageDir, e.url);
         if (e.anchor != "") { href = href + "#" + e.anchor; }
@@ -359,7 +359,7 @@ fun cleanConfigCell(c: str) > str {
 // Returns ok=false for the header, the separator, and any non-dotted key.
 export fun parseConfigRow(line: str) > ConfigKey {
     if (line.startsWith("| ") == false) { return ConfigKey{}; }
-    final cells: [str] = mut [<str>];
+    final cells: mut [str] = mut [<str>];
     foreach (c in line.split("|")) { cells.append(cleanConfigCell(c)); }
     if (cells.len() < 5) { return ConfigKey{}; }
     final key = cells[1];
@@ -459,9 +459,9 @@ fun cleanDef(s: str) > str {
 // matches a multi-word term before any of its substring terms. Selection sort; the term
 // set is small (a few dozen).
 fun sortLongestFirst(terms: [GlossaryTerm]) > [GlossaryTerm] {
-    var work: [GlossaryTerm] = mut [<GlossaryTerm>];
+    var work: mut [GlossaryTerm] = mut [<GlossaryTerm>];
     foreach (t in terms) { work.append(t); }
-    final res: [GlossaryTerm] = mut [<GlossaryTerm>];
+    final res: mut [GlossaryTerm] = mut [<GlossaryTerm>];
     while (work.len() > 0) {
         var best = 0;
         var b = 1;
@@ -470,7 +470,7 @@ fun sortLongestFirst(terms: [GlossaryTerm]) > [GlossaryTerm] {
             b = b + 1;
         }
         res.append(work[best]);
-        final nw: [GlossaryTerm] = mut [<GlossaryTerm>];
+        final nw: mut [GlossaryTerm] = mut [<GlossaryTerm>];
         var c = 0;
         while (c < work.len()) {
             if (c != best) { nw.append(work[c]); }
@@ -486,7 +486,7 @@ fun sortLongestFirst(terms: [GlossaryTerm]) > [GlossaryTerm] {
 // the heading, cross-link and markup stripped). Returned longest-first for matching.
 export fun parseGlossary(md: str) > [GlossaryTerm] {
     final lines = md.split("\n");
-    final terms: [GlossaryTerm] = mut [<GlossaryTerm>];
+    final terms: mut [GlossaryTerm] = mut [<GlossaryTerm>];
     var i = 0;
     while (i < lines.len()) {
         if (lines[i].startsWith("### ")) {
@@ -526,7 +526,7 @@ test "parseGlossary reads H3 terms, anchors, and a cleaned definition" {
 }
 
 test "sortLongestFirst orders by descending term length" {
-    final ts: [GlossaryTerm] = mut [<GlossaryTerm>];
+    final ts: mut [GlossaryTerm] = mut [<GlossaryTerm>];
     ts.append(GlossaryTerm{ term = "pool", anchor = "pool" });
     ts.append(GlossaryTerm{ term = "remote cache", anchor = "remote-cache" });
     ts.append(GlossaryTerm{ term = "cache", anchor = "cache" });
@@ -536,7 +536,7 @@ test "sortLongestFirst orders by descending term length" {
 }
 
 test "linkCodeEntities links inside inline code but never in a fenced block" {
-    final ents: [Entity] = mut [<Entity>];
+    final ents: mut [Entity] = mut [<Entity>];
     ents.append(Entity{ token = "MGS1002", kind = "code", url = "reference/codes/graph/MGS1002/", summary = "duplicate spell" });
     final html = "<p>see <code>MGS1002</code> here</p><pre><code>MGS1002 again</code></pre>";
     assert\equal(linkCodeEntities(html, ents, "concepts/cache"),
@@ -545,7 +545,7 @@ test "linkCodeEntities links inside inline code but never in a fenced block" {
 }
 
 test "linkCodeEntities builds an anchored href for a method ref" {
-    final ents: [Entity] = mut [<Entity>];
+    final ents: mut [Entity] = mut [<Entity>];
     ents.append(Entity{ token = "fs\\glob", kind = "method", url = "reference/buzz/fs/", anchor = "glob", summary = "list files" });
     assert\equal(linkCodeEntities("<p><code>fs\\glob</code></p>", ents, "concepts/cache"),
         "<p><code><a class=\"code-xref\" href=\"../../reference/buzz/fs/#glob\" data-kind=\"method\" data-def=\"list files\">fs\\glob</a></code></p>",
@@ -553,7 +553,7 @@ test "linkCodeEntities builds an anchored href for a method ref" {
 }
 
 test "linkCodeEntities favors a full command over its bare alias" {
-    final ents: [Entity] = mut [<Entity>];
+    final ents: mut [Entity] = mut [<Entity>];
     ents.append(Entity{ token = "magus affected", kind = "command", url = "reference/manpage/magus-affected/", summary = "run a target for changed projects" });
     ents.append(Entity{ token = "affected", kind = "command", url = "reference/manpage/magus-affected/", summary = "magus affected" });
     final sorted = sortEntitiesLongestFirst(ents);
@@ -563,7 +563,7 @@ test "linkCodeEntities favors a full command over its bare alias" {
 }
 
 test "sortEntitiesLongestFirst orders by descending match length" {
-    final es: [Entity] = mut [<Entity>];
+    final es: mut [Entity] = mut [<Entity>];
     es.append(Entity{ token = "magus affected" });
     es.append(Entity{ token = "magus affected ci" });
     final sorted = sortEntitiesLongestFirst(es);
@@ -594,7 +594,7 @@ test "glossarySlug mirrors goldmark heading ids" {
 }
 
 test "linkGlossaryTerms links the first linkable occurrence and records it" {
-    final terms: [GlossaryTerm] = mut [<GlossaryTerm>];
+    final terms: mut [GlossaryTerm] = mut [<GlossaryTerm>];
     terms.append(GlossaryTerm{ term = "cache", anchor = "cache", def = "Content store." });
     final r = linkGlossaryTerms("<p>The cache is warm; the cache stays.</p>", terms, "../glossary/");
     assert\equal(r.html,
@@ -605,7 +605,7 @@ test "linkGlossaryTerms links the first linkable occurrence and records it" {
 }
 
 test "linkGlossaryTerms skips code, headings, and existing links" {
-    final terms: [GlossaryTerm] = mut [<GlossaryTerm>];
+    final terms: mut [GlossaryTerm] = mut [<GlossaryTerm>];
     terms.append(GlossaryTerm{ term = "cache", anchor = "cache" });
     final html = "<h2>cache</h2><pre>cache</pre><code>cache</code><a href=\"x\">cache</a>";
     final r = linkGlossaryTerms(html, terms, "g/");
@@ -614,14 +614,14 @@ test "linkGlossaryTerms skips code, headings, and existing links" {
 }
 
 test "linkGlossaryTerms does not match a substring (plural) as a whole word" {
-    final terms: [GlossaryTerm] = mut [<GlossaryTerm>];
+    final terms: mut [GlossaryTerm] = mut [<GlossaryTerm>];
     terms.append(GlossaryTerm{ term = "target", anchor = "target" });
     assert\equal(linkGlossaryTerms("<p>targets everywhere</p>", terms, "g/").html,
         "<p>targets everywhere</p>", "plural not linked");
 }
 
 test "linkGlossaryTerms prefers the longer term" {
-    final terms: [GlossaryTerm] = mut [<GlossaryTerm>];
+    final terms: mut [GlossaryTerm] = mut [<GlossaryTerm>];
     terms.append(GlossaryTerm{ term = "pool mode", anchor = "pool-mode" });
     terms.append(GlossaryTerm{ term = "pool", anchor = "pool" });
     assert\equal(linkGlossaryTerms("<p>pool mode here</p>", terms, "g/").html,
@@ -630,7 +630,7 @@ test "linkGlossaryTerms prefers the longer term" {
 }
 
 test "linkGlossaryTerms honors the noglossary opt-out" {
-    final terms: [GlossaryTerm] = mut [<GlossaryTerm>];
+    final terms: mut [GlossaryTerm] = mut [<GlossaryTerm>];
     terms.append(GlossaryTerm{ term = "cache", anchor = "cache" });
     final r = linkGlossaryTerms("<!-- magus-noglossary --><p>cache</p>", terms, "g/");
     assert\equal(r.html, "<p>cache</p>", "marker stripped, nothing linked");

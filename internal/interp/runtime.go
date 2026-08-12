@@ -613,7 +613,11 @@ func NewBuzzWorkerFunc(src *Source) buzz.WorkerFunc {
 // definitions are available at the prompt.
 // The returned engine.Session also satisfies the optional REPL/debug interfaces.
 func NewBuzzReplSession(ctx context.Context, autoloadDir string) (engine.Session, error) {
-	buzzSess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithSearchPaths(magusSearchPaths(ctx, autoloadDir)...))
+	// WithREPL suppresses the BZZ3001 unused-import warning, matching upstream Buzz
+	// (Parser.zig gates the same warning on `self.flavor != .Repl`): a REPL evaluates
+	// one statement at a time, so an import "unused so far" may just be used by a
+	// line not typed yet.
+	buzzSess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithREPL(), buzz.WithSearchPaths(magusSearchPaths(ctx, autoloadDir)...))
 	buzzSess.SetIncludeDirs(nil)
 	AttachSessionObservers(ctx, buzzSess, ModeRepl)
 	if buzzHostBindingsFn != nil {

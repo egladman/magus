@@ -26,6 +26,11 @@ import (
 func looksLikeZigDecls(src string) bool {
 	for _, decl := range strings.Split(src, ";") {
 		decl = strings.TrimSpace(decl)
+		// `pub` is visibility, not shape - stripped here for the same reason
+		// parseSingleZigDecl strips it. A block whose only declaration is a
+		// `pub const ... = extern struct` was not recognized as Zig at all, and fell
+		// through to the C prototype parser.
+		decl = strings.TrimPrefix(decl, "pub ")
 		if strings.HasPrefix(decl, "fn ") {
 			return true
 		}
@@ -112,11 +117,16 @@ func stripZigComments(src string) string {
 }
 
 func parseSingleZigDecl(src string, structs map[string][]string) (CFuncSig, error) {
+	// `pub` is Zig's export visibility and says nothing about the declaration's
+	// shape, so it is stripped before dispatch. Upstream's own ffi.buzz writes
+	// `pub const Flag = extern struct {...}`, which was rejected outright as "not a
+	// Zig declaration" until a struct became something worth parsing fully.
+	src = strings.TrimPrefix(src, "pub ")
 	if rest, ok := strings.CutPrefix(src, "fn "); ok {
 		return parseZigFn(rest, structs)
 	}
 	if rest, ok := strings.CutPrefix(src, "const "); ok {
-		if strings.Contains(rest, "extern struct") {
+		if strings.Contains(rest, "extern struct") || strings.Contains(rest, "extern union") {
 			return parseZigStruct(rest)
 		}
 		return parseZigVar(rest)
@@ -127,7 +137,9 @@ func parseSingleZigDecl(src string, structs map[string][]string) (CFuncSig, erro
 	return CFuncSig{}, fmt.Errorf("buzz: ffi: not a Zig declaration: %q (expected fn/var/const)", src)
 }
 
-// parseZigStruct parses `Name = extern struct { f1: T1, f2: T2 }`.
+// parseZigStruct parses `Name = extern struct { f1: T1, f2: T2 }`, and the union
+// spelling of the same shape. A union differs only in layout - every field starts at
+// offset 0 - so the field parsing is shared and IsUnion carries the distinction.
 func parseZigStruct(src string) (CFuncSig, error) {
 	name, rest, ok := strings.Cut(src, "=")
 	if !ok {
@@ -139,22 +151,32 @@ func parseZigStruct(src string) (CFuncSig, error) {
 	if name == "" || lb < 0 || rb < lb {
 		return CFuncSig{}, fmt.Errorf("buzz: ffi: malformed struct declaration: %q", src)
 	}
-	var fields []string
+	var fields, fieldNames []string
 	for _, f := range splitZigParams(rest[lb+1 : rb]) {
 		f = strings.TrimSpace(f)
 		if f == "" {
 			continue
 		}
-		_, ftype, ok := strings.Cut(f, ":")
+		fname, ftype, ok := strings.Cut(f, ":")
 		if !ok {
 			return CFuncSig{}, fmt.Errorf("buzz: ffi: struct field needs `name: type` in %s: %q", name, f)
 		}
 		fields = append(fields, strings.TrimSpace(ftype))
+		// Kept, not discarded as it used to be: the layout only needs the types, but
+		// a struct is a TYPE here now, and its fields have to be addressable by name
+		// (`Data{ id = 1 }`, `data.msg`).
+		fieldNames = append(fieldNames, strings.TrimSpace(fname))
 	}
 	if len(fields) == 0 {
 		return CFuncSig{}, fmt.Errorf("buzz: ffi: struct %s has no fields", name)
 	}
-	return CFuncSig{Name: name, IsStruct: true, FieldTypeNames: fields}, nil
+	return CFuncSig{
+		Name:           name,
+		IsStruct:       true,
+		IsUnion:        strings.Contains(rest[:lb], "union"),
+		FieldTypeNames: fields,
+		FieldNames:     fieldNames,
+	}, nil
 }
 
 // structReturnKind classifies a by-value struct return: two doubles ride the

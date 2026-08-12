@@ -22,7 +22,7 @@ import "fs";
 
 magus.project({})
 
-export fun generate(ctx: magus\Context, args: [str]) > void {
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("gen/**");
     fs\writeFile("gen/regenerated.txt", "the merge driver regenerated");
 }

@@ -20,20 +20,22 @@ func init() { Register(Time) }
 // to UTC, so results are deterministic and location-free.
 var Time = Module{
 	Name: "time",
+	WASM: true,
 	Doc:  "Timestamp formatting/parsing and duration parsing (Go time, UTC).",
 	Methods: []Method{
 		{
 			Name:    "format",
 			Doc:     "Render Unix-millis as a string using a Go reference layout (UTC).",
-			Args:    []Arg{{Name: "layout", Type: TypeString}, {Name: "unix_millis", Type: TypeFloat}},
+			Args:    []Arg{{Name: "layout", Type: TypeString, Enum: "TimeLayout"}, {Name: "unix_millis", Type: TypeFloat}},
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    TimeFormat,
 		},
 		{
 			Name:    "parse",
 			Doc:     "Parse a string with a Go reference layout into Unix-millis (UTC); errors on mismatch.",
-			Args:    []Arg{{Name: "layout", Type: TypeString}, {Name: "value", Type: TypeString}},
+			Args:    []Arg{{Name: "layout", Type: TypeString, Enum: "TimeLayout"}, {Name: "value", Type: TypeString}},
 			Returns: []Ret{{Type: TypeFloat}},
+			Raises:  true,
 			Impl:    TimeParse,
 		},
 		{
@@ -41,6 +43,7 @@ var Time = Module{
 			Doc:     "Parse a Go duration string (e.g. \"168h\", \"1h30m\") into milliseconds; errors on mismatch.",
 			Args:    []Arg{{Name: "duration", Type: TypeString}},
 			Returns: []Ret{{Type: TypeFloat}},
+			Raises:  true,
 			Impl:    TimeParseDuration,
 		},
 		{
@@ -55,6 +58,7 @@ var Time = Module{
 			Doc:     "Add a Go duration string (e.g. \"24h\", \"-1h30m\") to a Unix-millis timestamp; returns the new Unix-millis timestamp.",
 			Args:    []Arg{{Name: "unix_millis", Type: TypeFloat}, {Name: "duration", Type: TypeString}},
 			Returns: []Ret{{Type: TypeFloat}},
+			Raises:  true,
 			Impl:    TimeAdd,
 		},
 		{

@@ -18,7 +18,7 @@ import (
 // told it owns.
 //
 // The magus-adapt skill teaches workspaces to put their own rules in a skill
-// magus does not ship, and names magus-local as the convention. Shipping a
+// magus does not ship, and names magus-local-development as the convention. Shipping a
 // skill by that name later would not conflict loudly: install --force writes
 // the shipped body straight over the workspace's file, on every machine, at
 // once. Someone would have to reconstruct the rules from git history, if they
@@ -60,6 +60,25 @@ func TestCatalogInstallsAndVerifiesSkillTree(t *testing.T) {
 	stale := strings.Replace(string(body), "skill-content: "+catalog.contentDigest, "skill-content: 000000000000", 1)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".agents/skills", anchorSkillRel), []byte(stale), 0o644))
 	assert.True(t, catalog.CheckStatuses(dir)[0].Stale)
+}
+
+// TestWriteSkillTreeRejectsPathEscape guards S-3: the guard rejected an
+// absolute dest or a leading "~" but not "..", so dest="../../outside" walked
+// filepath.Join right out of dir. The doc comment on WriteSkillTree claims
+// magus never silently writes outside the working tree; this is what makes
+// that claim true rather than aspirational.
+func TestWriteSkillTreeRejectsPathEscape(t *testing.T) {
+	catalog := testCatalog(t)
+	dir := t.TempDir()
+
+	_, err := catalog.WriteSkillTree(dir, "../../outside", false, VariantFull)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "escapes the working tree")
+
+	// An ordinary nested destination is unaffected.
+	written, err := catalog.WriteSkillTree(dir, "nested/skills", false, VariantFull)
+	require.NoError(t, err)
+	require.Len(t, written, len(skillSources))
 }
 
 // TestCatalogAgentsBlockIsSelfDelimitedAndStable pins what a developer pastes:

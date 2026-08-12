@@ -93,7 +93,14 @@ omitted on purpose: the declared-output globs are what EnsureMergeDriver writes 
 never be tracked and so can never conflict. The relevant part is just that a read-only
 run does not leave a fresh binary behind.
 
-BOTH raw Go entry points are DENIED by the agent guard:
+BOTH raw Go entry points are meant to be DENIED by the agent guard - but do not
+count on the denial arriving. The guard is wired through `.claude/settings.json`,
+which is GITIGNORED on purpose (a stale `magus hook` binary fails every
+Bash/Edit/Write closed, which cost a whole session once), so a FRESH WORKTREE HAS
+NO GUARD AT ALL and these are convention-only there. Measured 2026-08-11: three
+separate agents ran `go build` in a guardless worktree and it succeeded; the rule
+held only because they chose to obey it and said so. Treat the list below as a
+rule you enforce yourself, not one the harness enforces for you:
 
 - `go build` at every output path, including the `-o /tmp/magus` form this file
   once recommended.
@@ -299,6 +306,15 @@ deliberately instead:
   a standing decision, not an oversight - the `compat(until:)` marker above is the
   one comment convention worth enforcing, and even it is served better by a
   structural check than by keyword matching.
+- Regenerate in the SAME commit as the source change that invalidated the output.
+  A one-word `Name:` edit in a `std/` descriptor left four generated files stale
+  and three tests red across three commits; `go generate` reaches
+  `cmd/magus-utils`, so it needs no magus binary. CI runs generate as a drift
+  gate, so a split commit is also a red CI you did not have to have.
+- Before "fixing" behavior that looks wrong, look for the test that pins it.
+  `TestCheckExecRequiresReadNotExec` exists to say exec-collapsing-into-read is
+  deliberate and names the "fix" as a known mistake. Roughly one review finding in
+  ten is wrong this way. See the `magus-local-development` skill for the rest of this method.
 
 ## Working style
 

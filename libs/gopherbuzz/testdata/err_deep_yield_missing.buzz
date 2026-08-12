@@ -1,0 +1,6 @@
+// @error: must be declared with *>
+// A yield suspends the whole call chain, so every frame between the yield and the
+// fiber has to declare it - exactly as a raise propagates through !>.
+fun leaf() > int *> int? { _ = yield 1; return 2; }
+fun middle() > int { return leaf(); }
+final __r = 0;

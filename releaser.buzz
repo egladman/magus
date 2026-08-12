@@ -92,7 +92,7 @@ export fun releasableModules(projects: [any]) > [{str: str}] {
 // Build metadata does NOT disqualify a tag. Item 10 says metadata is ignored when
 // determining precedence, so v1.0.0+ci42 IS v1.0.0; excluding it would re-offer a
 // version already released.
-export fun currentVersion(prefix: str) > str {
+export fun currentVersion(prefix: str) > str !> any {
     var best = "";
     var bestMajor = 0 - 1;
     var bestMinor = 0 - 1;
@@ -121,7 +121,7 @@ export fun currentVersion(prefix: str) > str {
 // An unreleased module is treated as sitting at 0.0.0, so its candidates fall out
 // of the same rule as everyone else's (0.0.1 | 0.1.0 | 1.0.0) rather than being a
 // special case someone has to remember.
-export fun nextFor(cur: str) > SemverNext {
+export fun nextFor(cur: str) > SemverNext !> any {
     if (cur == "") { return semver\next("0.0.0"); }
     return semver\next(cur);
 }
@@ -130,7 +130,7 @@ export fun nextFor(cur: str) > SemverNext {
 // comparing the RELEASE part only - so v0.4.0-rc1 and v0.4.0+ci both count as the
 // minor candidate. A prerelease of a legal next version is itself legal; that is
 // how you cut an rc without first inventing a version nobody agreed to.
-export fun isCandidate(v: str, cur: str) > bool {
+export fun isCandidate(v: str, cur: str) > bool !> any {
     final want = semver\parse(v);
     final n = nextFor(cur);
     foreach (c in [n.patch, n.minor, n.major]) {
@@ -153,7 +153,10 @@ export fun isCandidate(v: str, cur: str) > bool {
 // uninstallable. The tag alone cannot tell you that.
 export fun modulePath(gomod: str) > str {
     foreach (line in gomod.split("\n")) {
-        if (line.startsWith("module ")) { return line.sub(7); }
+        // .trim(), because go.mod permits any run of whitespace after the keyword and
+        // a bare sub() keeps it: `module  path` yielded a leading space here. Same
+        // parse as coverage.buzz's modulePath, which must agree with this one.
+        if (line.startsWith("module ")) { return line.sub("module ".len()).trim(); }
     }
     return "";
 }
@@ -183,6 +186,9 @@ test "reads the module path and ignores a require of a similar name" {
     final gomod = "module example.com/root\n\ngo 1.26\n\nrequire (\n\tmodule-ish/x v1.0.0\n)\n";
     std\assert(modulePath(gomod) == "example.com/root", message: "declared path");
     std\assert(modulePath("go 1.26\n") == "", message: "no module line");
+    // Same case coverage.buzz pins: a bare sub() kept the extra space here, so the two
+    // parsers disagreed on a legal go.mod.
+    std\assert(modulePath("module  example.com/root\n") == "example.com/root", message: "two spaces after the keyword");
 }
 
 export fun rewriteRequire(gomod: str, module: str, version: str) > str {

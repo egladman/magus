@@ -6,6 +6,6 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
-export extern fun element(tag: str, attrs: [str], children: any) > any;
-export extern fun parse(s: str) > any;
-export extern fun render(node: any) > str;
+export extern fun element(tag: str, attrs: [str], children: any) > any !> any;
+export extern fun parse(s: str) > any !> any;
+export extern fun render(node: any) > str !> any;

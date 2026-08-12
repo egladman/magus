@@ -35,6 +35,9 @@ var cryptoSource string
 //go:embed io.buzz
 var ioSource string
 
+//go:embed os.buzz
+var osSource string
+
 // The test surface — assertcore, assert, suite, and testing — installs through
 // std.Modules (each labeled buzz.LabelGopherbuzz), not a separate RegisterExtensions
 // entry point. assertcore is the native primitive layer; assert/suite/testing are
@@ -195,6 +198,23 @@ func compareValue(a, b vm.Value) (int, bool) {
 // objects compare by their field map, so an object equals a map with the same
 // fields. Recurses to any depth.
 func deepEqualValue(a, b vm.Value) bool {
+	return deepEqualValuePath(a, b, nil)
+}
+
+// valuePair identifies one (a, b) comparison by reference identity, not content
+// — Value.Equal on two collections/objects reduces to reference equality (see
+// its doc comment), which is exactly what pathHas below needs.
+type valuePair struct{ a, b vm.Value }
+
+// deepEqualValuePath is deepEqualValue's recursive workhorse. path is every
+// collection pair currently being compared on this call stack. Buzz lists and
+// maps are heap objects mutable in place (list.append et al.), so
+// `[any] l = mut []; l.append(l);` is a real reference cycle a naive recursion
+// would stack-overflow on — a FATAL error in Go, not a recoverable one. Revisiting
+// a pair already on the path means the structures agree at least as deep as the
+// cycle goes, so treating it as equal and stopping is sound (and matches how a
+// human would read "does this cyclic structure equal that one").
+func deepEqualValuePath(a, b vm.Value, path []valuePair) bool {
 	// Normalize object instances to their field map so structural comparison
 	// works uniformly (and an object can equal an equivalent map literal).
 	if a.IsObject() {
@@ -209,6 +229,10 @@ func deepEqualValue(a, b vm.Value) bool {
 	}
 	switch {
 	case a.IsMap() && b.IsMap():
+		if pathHas(path, a, b) {
+			return true
+		}
+		path = append(path, valuePair{a, b})
 		ak := a.MapKeys()
 		if len(ak) != len(b.MapKeys()) {
 			return false
@@ -216,18 +240,22 @@ func deepEqualValue(a, b vm.Value) bool {
 		for _, k := range ak {
 			av, _ := a.MapGet(k)
 			bv, ok := b.MapGet(k)
-			if !ok || !deepEqualValue(av, bv) {
+			if !ok || !deepEqualValuePath(av, bv, path) {
 				return false
 			}
 		}
 		return true
 	case a.IsList() && b.IsList():
+		if pathHas(path, a, b) {
+			return true
+		}
+		path = append(path, valuePair{a, b})
 		ai, bi := a.ListItems(), b.ListItems()
 		if len(ai) != len(bi) {
 			return false
 		}
 		for i := range ai {
-			if !deepEqualValue(ai[i], bi[i]) {
+			if !deepEqualValuePath(ai[i], bi[i], path) {
 				return false
 			}
 		}
@@ -238,6 +266,17 @@ func deepEqualValue(a, b vm.Value) bool {
 	default:
 		return scalarEqualValue(a, b)
 	}
+}
+
+// pathHas reports whether (a, b) is already being compared somewhere up the
+// call stack.
+func pathHas(path []valuePair, a, b vm.Value) bool {
+	for _, p := range path {
+		if p.a.Equal(a) && p.b.Equal(b) {
+			return true
+		}
+	}
+	return false
 }
 
 // scalarEqualValue compares two non-collection values by value: null==null,

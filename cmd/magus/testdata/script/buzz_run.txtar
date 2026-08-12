@@ -44,7 +44,7 @@ stderr '\[BZZ1001\] buzz: line 1:1: undefined: std'
 stderr 'see: https://.*BZZ1001'
 
 # `import "magus"` resolves, and a member that needs no magusfile runs
-exec magus buzz -e 'import "std"; import "magus"; std\print(magus\normalize("HTTPServer"));'
+exec magus buzz -e 'import "std"; import "magus"; std\print(magus\canonicalName("HTTPServer"));'
 stdout 'http-server'
 
 # a member that declares into the workspace magus is loading names the constraint,

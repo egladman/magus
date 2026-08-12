@@ -32,6 +32,7 @@ var Fs = Module{
 			Doc:     "Return paths matching pattern (doublestar-style).",
 			Args:    []Arg{{Name: "pattern", Type: TypeString}},
 			Returns: []Ret{{Type: TypeAny, Object: "[Path]"}},
+			Raises:  true,
 			Impl:    FsGlob,
 		},
 		{
@@ -53,6 +54,7 @@ var Fs = Module{
 			Doc:     "True iff path exists.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeBool}},
+			Raises:  true,
 			Impl:    FsExists,
 		},
 		{
@@ -60,6 +62,7 @@ var Fs = Module{
 			Doc:     "Return the contents of path as a string.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    FsReadFile,
 		},
 		{
@@ -67,16 +70,18 @@ var Fs = Module{
 			Doc:     "Write content to path (mode 0644).",
 			Args:    []Arg{{Name: "path", Type: TypeString}, {Name: "content", Type: TypeString}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsWriteFile,
 		},
 		{
-			Name: "mkdirall",
+			Name: "mkdir_all",
 			Doc:  "Create path and parents (default mode 0755).",
 			Args: []Arg{
 				{Name: "path", Type: TypeString},
 				{Name: "perm", Type: TypeInt, Optional: true, Default: int(0o755)},
 			},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsMkdirAll,
 		},
 		{
@@ -91,13 +96,60 @@ var Fs = Module{
 			Doc:     "Recursively remove path (no error if missing).",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsRemoveAll,
+		},
+		{
+			Name:    "remove",
+			Doc:     "Remove a single file or empty directory (no error if missing). Unlike remove_all it refuses a non-empty directory, so a wrong path costs one error rather than a recursive delete.",
+			Args:    []Arg{{Name: "path", Type: TypeString}},
+			Returns: nil,
+			Raises:  true,
+			Impl:    FsRemove,
+		},
+		{
+			Name:    "rename",
+			Doc:     "Move or rename src to dst, creating dst's parent directory if needed. Within one filesystem this is atomic, which is what makes it the last step of a write-to-temp-then-swap. Across filesystems the underlying rename fails rather than silently copying; copy_file plus remove is the explicit form for that.",
+			Args:    []Arg{{Name: "src", Type: TypeString}, {Name: "dst", Type: TypeString}},
+			Returns: nil,
+			Raises:  true,
+			Impl:    FsRename,
+		},
+		{
+			Name:    "size",
+			Doc:     "Return path's size in bytes. Raises when path does not exist; stat returns the whole FileInfo when more than the size is wanted.",
+			Args:    []Arg{{Name: "path", Type: TypeString}},
+			Returns: []Ret{{Type: TypeInt}},
+			Raises:  true,
+			Impl:    FsSize,
+		},
+		{
+			Name: "temp_file",
+			Doc:  "Create a new empty temporary file (in os.TempDir()) with an optional name prefix and return its path. The file is left in place for the caller to write and remove; temp_dir is the form for a whole tree.",
+			Args: []Arg{
+				{Name: "prefix", Type: TypeString, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
+			Impl:    FsTempFile,
+		},
+		{
+			Name: "write_file_atomic",
+			Doc:  "Write content to path so a reader sees either the old bytes or the new ones, never a partial file: the content goes to a temporary file in the same directory, is flushed to disk, then renamed over path. Use it for anything another process may read while a target runs - a generated file, a lockfile, a cache index. write_file is the cheaper form when nothing else is looking.",
+			Args: []Arg{
+				{Name: "path", Type: TypeString},
+				{Name: "content", Type: TypeString},
+			},
+			Returns: nil,
+			Raises:  true,
+			Impl:    FsWriteFileAtomic,
 		},
 		{
 			Name:    "list_dir",
 			Doc:     "Return directory entries; empty if path does not exist.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeStringSlice}},
+			Raises:  true,
 			Impl:    FsListDir,
 		},
 		{
@@ -109,16 +161,18 @@ var Fs = Module{
 		},
 		{
 			Name:    "is_dir",
-			Doc:     "True iff path exists and is a directory (a sandbox-denied path reads as false).",
+			Doc:     "True iff path exists and is a directory. A sandbox-denied path raises rather than reading as false.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeBool}},
+			Raises:  true,
 			Impl:    FsIsDir,
 		},
 		{
 			Name:    "is_file",
-			Doc:     "True iff path exists and is a regular file (a sandbox-denied path reads as false).",
+			Doc:     "True iff path exists and is a regular file. A sandbox-denied path raises rather than reading as false.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeBool}},
+			Raises:  true,
 			Impl:    FsIsFile,
 		},
 		{
@@ -126,6 +180,7 @@ var Fs = Module{
 			Doc:     "Return metadata for path as {size, mtime, mode, is_dir}: size in bytes, mtime as Unix millis, mode as the integer permission bits. Errors if path is missing.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "FileInfo"}},
+			Raises:  true,
 			Impl:    FsStat,
 		},
 		{
@@ -133,6 +188,7 @@ var Fs = Module{
 			Doc:     "Copy the file at src to dst (overwriting), preserving its permission bits.",
 			Args:    []Arg{{Name: "src", Type: TypeString}, {Name: "dst", Type: TypeString}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsCopyFile,
 		},
 		{
@@ -140,6 +196,7 @@ var Fs = Module{
 			Doc:     "Recursively copy the directory tree at src to dst, preserving permission bits.",
 			Args:    []Arg{{Name: "src", Type: TypeString}, {Name: "dst", Type: TypeString}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsCopyDir,
 		},
 		{
@@ -150,6 +207,7 @@ var Fs = Module{
 				{Name: "callback", Type: TypeFunc},
 			},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsWatch,
 		},
 		{
@@ -160,6 +218,7 @@ var Fs = Module{
 				{Name: "callback", Type: TypeFunc},
 			},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsWalk,
 		},
 		{
@@ -167,6 +226,7 @@ var Fs = Module{
 			Doc:     "Append content to path (creating if absent, mode 0644).",
 			Args:    []Arg{{Name: "path", Type: TypeString}, {Name: "content", Type: TypeString}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsAppendFile,
 		},
 		{
@@ -174,6 +234,7 @@ var Fs = Module{
 			Doc:     "Change the permission bits of path to mode (octal integer, e.g. 0755).",
 			Args:    []Arg{{Name: "path", Type: TypeString}, {Name: "mode", Type: TypeInt}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsChmod,
 		},
 		{
@@ -181,6 +242,7 @@ var Fs = Module{
 			Doc:     "Create a symbolic link at link pointing to target.",
 			Args:    []Arg{{Name: "target", Type: TypeString}, {Name: "link", Type: TypeString}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsSymlink,
 		},
 		{
@@ -188,6 +250,7 @@ var Fs = Module{
 			Doc:     "Return the target of the symbolic link at path.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    FsReadlink,
 		},
 		{
@@ -197,6 +260,7 @@ var Fs = Module{
 				{Name: "prefix", Type: TypeString, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    FsTempDir,
 		},
 		{
@@ -204,6 +268,7 @@ var Fs = Module{
 			Doc:     "Read path and return its lines as a list, with the line terminators stripped. A single trailing newline yields no extra empty element; an empty file yields an empty list.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeStringSlice}},
+			Raises:  true,
 			Impl:    FsReadLines,
 		},
 		{
@@ -211,6 +276,7 @@ var Fs = Module{
 			Doc:     "Write lines to path (mode 0644), each followed by a newline. The companion to read_lines: write_lines(p, read_lines(p)) round-trips a newline-terminated file.",
 			Args:    []Arg{{Name: "path", Type: TypeString}, {Name: "lines", Type: TypeStringSlice}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    FsWriteLines,
 		},
 	},
@@ -269,7 +335,8 @@ func FsBasename(_ context.Context, path string) (string, error) {
 	return filepath.Base(path), nil
 }
 
-// FsExists reports whether path exists; a sandbox-denied path is reported as absent.
+// FsExists reports whether path exists. A sandbox-denied path RAISES rather than
+// being reported as absent (see the inline comment below for why).
 func FsExists(ctx context.Context, path string) (bool, error) {
 	path = resolvePath(ctx, path)
 	if err := checkRead(ctx, path); err != nil {
@@ -327,7 +394,7 @@ func FsMkdirAll(ctx context.Context, path string, perm int) error {
 		return err
 	}
 	if err := os.MkdirAll(path, os.FileMode(perm)); err != nil {
-		return fmt.Errorf("fs.mkdirall %q: %w", path, err)
+		return fmt.Errorf("fs.mkdirAll %q: %w", path, err)
 	}
 	return nil
 }
@@ -348,6 +415,134 @@ func FsRemoveAll(ctx context.Context, path string) error {
 	}
 	if err := os.RemoveAll(path); err != nil {
 		return fmt.Errorf("fs.remove_all %q: %w", path, err)
+	}
+	return nil
+}
+
+// FsRemove removes a single file or empty directory, subject to the sandbox write
+// policy. A missing path is not an error, matching remove_all.
+func FsRemove(ctx context.Context, path string) error {
+	if types.Tracing(ctx) {
+		return nil
+	}
+	path = resolvePath(ctx, path)
+	if err := checkWrite(ctx, path); err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("fs.remove %q: %w", path, err)
+	}
+	return nil
+}
+
+// FsRename moves src to dst, subject to the sandbox write policy on both ends.
+// dst's parent is created first so the common "rename into a fresh output dir"
+// does not need a separate mkdirall.
+func FsRename(ctx context.Context, src, dst string) error {
+	if types.Tracing(ctx) {
+		return nil
+	}
+	src = resolvePath(ctx, src)
+	dst = resolvePath(ctx, dst)
+	// Both ends are writes: src loses its contents, dst gains them. Checking only
+	// one would let a sandboxed target move a file out of, or into, a path its
+	// policy denies.
+	if err := checkWrite(ctx, src); err != nil {
+		return err
+	}
+	if err := checkWrite(ctx, dst); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return fmt.Errorf("fs.rename %q -> %q: %w", src, dst, err)
+	}
+	if err := os.Rename(src, dst); err != nil {
+		return fmt.Errorf("fs.rename %q -> %q: %w", src, dst, err)
+	}
+	return nil
+}
+
+// FsSize returns path's size in bytes, subject to the sandbox read policy.
+func FsSize(ctx context.Context, path string) (int, error) {
+	path = resolvePath(ctx, path)
+	if err := checkRead(ctx, path); err != nil {
+		return 0, err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0, fmt.Errorf("fs.size %q: %w", path, err)
+	}
+	return int(info.Size()), nil
+}
+
+// FsTempFile creates an empty temporary file and returns its path.
+func FsTempFile(ctx context.Context, prefix string) (string, error) {
+	if types.Tracing(ctx) {
+		// Dry run: name a plausible path without creating it, matching temp_dir.
+		// Writes to it are themselves recorded as skipped, so it never needs to exist.
+		return filepath.Join(os.TempDir(), prefix+"magus-dry-run"), nil
+	}
+	f, err := os.CreateTemp("", prefix)
+	if err != nil {
+		return "", fmt.Errorf("fs.temp_file: %w", err)
+	}
+	name := f.Name()
+	if err := f.Close(); err != nil {
+		return "", fmt.Errorf("fs.temp_file %q: %w", name, err)
+	}
+	return name, nil
+}
+
+// FsWriteFileAtomic writes content to path via a same-directory temporary file
+// renamed into place, subject to the sandbox write policy.
+func FsWriteFileAtomic(ctx context.Context, path string, content string) error {
+	if types.Tracing(ctx) {
+		return nil
+	}
+	path = resolvePath(ctx, path)
+	if err := checkWrite(ctx, path); err != nil {
+		return err
+	}
+	// The temporary file has to live in the SAME directory as the destination:
+	// rename is only atomic within one filesystem, and os.TempDir is routinely a
+	// different mount (tmpfs on Linux, a separate volume on macOS). Staging there
+	// would turn the final step into a cross-device copy - the exact partial-write
+	// window this method exists to close.
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("fs.write_file_atomic %q: %w", path, err)
+	}
+	f, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp")
+	if err != nil {
+		return fmt.Errorf("fs.write_file_atomic %q: %w", path, err)
+	}
+	tmp := f.Name()
+	// Any failure past this point leaves the temp file behind; remove it so a
+	// failed write does not litter the output directory with dotfiles that later
+	// glob into a target's sources.
+	defer func() { _ = os.Remove(tmp) }()
+
+	if _, err := f.WriteString(content); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("fs.write_file_atomic %q: %w", path, err)
+	}
+	// Flush to disk before the rename. Without it the rename can land while the
+	// contents are still only in the page cache, so a crash yields an empty file
+	// where the point was to never see one.
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("fs.write_file_atomic %q: sync: %w", path, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("fs.write_file_atomic %q: %w", path, err)
+	}
+	// CreateTemp makes the file 0600; match write_file's 0644 so an atomically
+	// written file is not readable by a narrower set of users than a plain one.
+	if err := os.Chmod(tmp, 0o644); err != nil {
+		return fmt.Errorf("fs.write_file_atomic %q: chmod: %w", path, err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("fs.write_file_atomic %q: %w", path, err)
 	}
 	return nil
 }
@@ -456,6 +651,9 @@ func FsCopyDir(ctx context.Context, src, dst string) error {
 		}
 		target := filepath.Join(dst, rel)
 		if d.IsDir() {
+			if err := checkRead(ctx, path); err != nil {
+				return err
+			}
 			if err := checkWrite(ctx, target); err != nil {
 				return err
 			}

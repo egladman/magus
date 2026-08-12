@@ -81,4 +81,10 @@ func TestGlobBaseDirs(t *testing.T) {
 	t.Run("leading doublestar", func(t *testing.T) { check(t, "**/*.gen.go", ".") })
 	t.Run("explicit file", func(t *testing.T) { check(t, "types/gen.go", "types") })
 	t.Run("deep dir", func(t *testing.T) { check(t, "a/b/c/**/*.go", "a/b/c") })
+	// A mid-segment wildcard: the wildcard lands inside the LAST path segment,
+	// not right after a "/". The base dir must trim back to the last "/" before
+	// the wildcard ("gen"), not stop at the wildcard itself ("gen/index" - a
+	// nonexistent directory, since "index*.html" is a filename pattern, not a
+	// path component).
+	t.Run("mid-segment wildcard", func(t *testing.T) { check(t, "gen/index*.html", "gen") })
 }

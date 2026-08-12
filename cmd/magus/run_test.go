@@ -243,7 +243,7 @@ func TestCrossProjectOutputReplaysFromCache(t *testing.T) {
 import "fs";
 import "project/../site" as site;
 
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(site.file("generated.txt"));
     fs\writeFile("../site/body-ran.marker", "1");
     fs\writeFile("../site/generated.txt", "hello");
@@ -301,7 +301,7 @@ func TestCrossProjectOutputMustBeProduced(t *testing.T) {
 import "fs";
 import "project/../site" as site;
 
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("own.txt", site.file("generated.txt"));
     fs\writeFile("own.txt", "mine");
     fs\writeFile("../site/generated.text", "typo");
@@ -329,4 +329,7 @@ func TestWithoutDetachFlagStripsEverySpelling(t *testing.T) {
 
 	assert.Equal(t, []string{"ci", "."}, withoutDetachFlag([]string{"ci", "."}),
 		"an argv without the flag is unchanged")
+
+	assert.Equal(t, []string{"ci", "--", "--detach"}, withoutDetachFlag([]string{"ci", "--", "--detach"}),
+		"a --detach past the -- separator belongs to the forwarded tool and must survive verbatim")
 }

@@ -297,6 +297,23 @@ func TestAdapt(t *testing.T) {
 	})
 }
 
+// TestUnregisteredDrivers reproduces the T-2 gap: registerTools's loop only checked
+// Registry -> driver, so a driver wired into allMCPTools but never given a Registry
+// entry mounted nowhere and nothing reported it. Pre-fix this function did not exist;
+// post-fix it is what registerTools panics on.
+func TestUnregisteredDrivers(t *testing.T) {
+	t.Parallel()
+
+	// fakeDriver.Name() is "fake": no Registry entry named "fake" exists here, so it
+	// must be reported.
+	got := unregisteredDrivers([]spells.Driver{fakeDriver{}}, []ToolDescriptor{{Name: "other"}})
+	assert.Equal(t, []string{"fake"}, got)
+
+	// A driver with a matching Registry entry is not reported.
+	got = unregisteredDrivers([]spells.Driver{fakeDriver{}}, []ToolDescriptor{{Name: "fake"}})
+	assert.Empty(t, got)
+}
+
 func TestBuildMCPTool(t *testing.T) {
 	t.Parallel()
 

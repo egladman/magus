@@ -13,13 +13,15 @@ import (
 
 // newZstdWriter returns a streaming zstd compressor that writes to w.
 // level is the user-specified compression level (-1 = default, 1-19).
-// threads controls encoder concurrency (0 = single-threaded).
+// threads controls encoder concurrency: klauspost/compress treats 0 as
+// GOMAXPROCS, not single-threaded (verified against v1.19.1).
 func newZstdWriter(w io.Writer, level, threads int) (io.WriteCloser, error) {
 	return zstd.NewWriter(w, zstdPureGoLevel(level), zstd.WithEncoderConcurrency(threads))
 }
 
 // newZstdReader returns a streaming zstd decompressor reading from r.
-// threads controls decoder concurrency (0 = single-threaded).
+// threads controls decoder concurrency: klauspost/compress treats 0 as
+// GOMAXPROCS, not single-threaded (verified against v1.19.1).
 func newZstdReader(r io.Reader, threads int) (io.ReadCloser, error) {
 	dec, err := zstd.NewReader(r, zstd.WithDecoderConcurrency(threads))
 	if err != nil {

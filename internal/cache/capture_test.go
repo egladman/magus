@@ -3,6 +3,9 @@ package cache
 import (
 	"context"
 	"io"
+	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -11,6 +14,32 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestCaptureRunFailsLoudlyWhenLogDirUnwritable verifies captureRun surfaces an
+// error (and never calls fn) when the log directory cannot be created. Before
+// the fix, this returned nil, fn(ctx): fn ran with no capture writers, no
+// journal step tagging, and no failure-dump machinery, and the MkdirAll error
+// itself was discarded.
+func TestCaptureRunFailsLoudlyWhenLogDirUnwritable(t *testing.T) {
+	c := &Cache{dir: t.TempDir(), log: slog.Default(), logLevel: slog.LevelInfo}
+
+	// Put a plain FILE where the log directory needs to be created, so
+	// MkdirAll(filepath.Dir(logPath)) fails with "not a directory".
+	blockedDir := filepath.Join(c.dir, "logs", "svc-api")
+	require.NoError(t, os.MkdirAll(filepath.Dir(blockedDir), 0o755))
+	require.NoError(t, os.WriteFile(blockedDir, []byte("not a directory"), 0o644))
+
+	lp := filepath.Join(blockedDir, "deadbeef.log")
+
+	fnCalled := false
+	_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(context.Context) error {
+		fnCalled = true
+		return nil
+	})
+
+	require.Error(t, err, "captureRun must report the MkdirAll failure instead of swallowing it")
+	assert.False(t, fnCalled, "fn must not run without capture writers, journal tagging, or failure-dump machinery")
+}
 
 // TestLineTapIsSafeForConcurrentWriters is the regression for a panic that took the
 // whole process down mid-run:

@@ -47,14 +47,20 @@ func (r *FSRemoteBackend) GetArtifact(_ context.Context, projectPath, hash strin
 // PutArtifact writes the artifact to the filesystem atomically.
 func (r *FSRemoteBackend) PutArtifact(_ context.Context, projectPath, hash string, data io.Reader) error {
 	path := r.artifactPath(projectPath, hash)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	f, err := os.Create(tmp)
+	// A unique-per-call temp name, not a fixed one: two processes pushing the
+	// same (project, hash) concurrently would otherwise both os.Create the SAME
+	// path - which reuses one inode rather than making two - so one push's
+	// writes land on a file the other is simultaneously rewriting, and whichever
+	// renames last can carry a torn tarball into the shared store.
+	f, err := os.CreateTemp(dir, filepath.Base(path)+".tmp.*")
 	if err != nil {
 		return err
 	}
+	tmp := f.Name()
 	if _, err := io.Copy(f, data); err != nil {
 		_ = f.Close()
 		_ = os.Remove(tmp)

@@ -1,0 +1,8 @@
+// @error: may be null
+// Inside a function: at top level the VM's own runtime check fires first, which is
+// a different (later) diagnostic for the same mistake.
+fun f() > int {
+    final idx: int? = null;
+    return [1, 2, 3][idx];
+}
+final __r = 0;

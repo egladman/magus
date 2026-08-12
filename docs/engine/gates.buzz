@@ -29,7 +29,7 @@ import "lib/conventions" as _;
 // canonical line, not a fabricated branch), rename-proof (survives a default-branch
 // rename), and identical on every branch so a feature-branch render never drifts -
 // the reason the old hardcoded "main" existed, now solved without the lie.
-export fun loadMeta(site: Site) > void {
+export fun loadMeta(site: Site) > void !> any {
     if (site.metaLoaded) { return; }
     site.metaPrefix = capture("git -C " + site.root + " rev-parse --show-prefix");
     site.metaBranch = "HEAD";
@@ -48,8 +48,8 @@ export fun loadMeta(site: Site) > void {
 // that fails the build the moment someone adds a page - before they have tagged it - trains
 // people to reach for an escape hatch. Print the shortfall, let it be burned down, and promote
 // it to a throw once the number is at zero and staying there.
-export fun axisReport(site: Site) > void {
-    var thin: [str] = mut [<str>];
+export fun axisReport(site: Site) > void !> any {
+    var thin: mut [str] = mut [<str>];
     foreach (p in site.docPages) {
         final n = site.pageAxes[p.url];
         if (n == null) { continue; }
@@ -69,8 +69,8 @@ export fun axisReport(site: Site) > void {
 
 // assetIntegrityCheck throws on any dangling href/src in the written output, so a
 // renamed bundle or forgotten alias fails the build instead of shipping a 404.
-export fun assetIntegrityCheck(site: Site) > void {
-    var files: [str] = mut [<str>];
+export fun assetIntegrityCheck(site: Site) > void !> any {
+    final files: mut [str] = mut [<str>];
     walkGen("", files, site);
     foreach (f in files) {
         if (f.endsWith(".html") == false and f.endsWith(".xml") == false and f.endsWith(".txt") == false) {
@@ -93,19 +93,19 @@ export fun assetIntegrityCheck(site: Site) > void {
 
 // orphanCheck proves every docs page is reachable by BFS from the nav roots, so a
 // page with no inbound link fails the build instead of shipping unreachable.
-export fun orphanCheck(site: Site) > void {
+export fun orphanCheck(site: Site) > void !> any {
     // Every written page, keyed the way pageKey() yields, so BFS can tell a page
     // link from an asset link.
-    var files: [str] = mut [<str>];
+    final files: mut [str] = mut [<str>];
     walkGen("", files, site);
-    var isPage: {str: bool} = mut {};
+    var isPage: mut {str: bool} = mut {};
     foreach (f in files) {
         if (f == "index.html") { isPage[""] = true; }
         else { if (f.endsWith("/index.html")) { isPage[f.sub(0, f.len() - 11)] = true; } }
     }
 
-    var visited: {str: bool} = mut {};
-    var queue: [str] = mut [<str>];
+    var visited: mut {str: bool} = mut {};
+    var queue: mut [str] = mut [<str>];
     foreach (r in ["", "documentation", "blog", "download", "tour", "playground", "search", "public", "development"]) {
         if (isPage[r] != null and visited[r] == null) { visited[r] = true; queue.append(r); }
     }
@@ -127,7 +127,7 @@ export fun orphanCheck(site: Site) > void {
         }
     }
 
-    var orphans: [str] = mut [<str>];
+    var orphans: mut [str] = mut [<str>];
     foreach (p in site.docPages) {
         var dk = p.url;
         if (dk.endsWith("/")) { dk = dk.sub(0, dk.len() - 1); }
@@ -139,17 +139,17 @@ export fun orphanCheck(site: Site) > void {
 }
 
 
-export fun capture(cmd: str) > str {
+export fun capture(cmd: str) > str !> any {
     final tmp = os\tmpFilename("sitegen");
     final code = os\execute(["sh", "-c", cmd + " > " + tmp + " 2>/dev/null"]);
     if (code != 0) {
-        fs\delete(tmp);
+        fs\removeAll(tmp);
         return "";
     }
     final f = io\File.open(tmp, io\FileMode.read);
     final result = f.readAll();
     f.close();
-    fs\delete(tmp);
+    fs\removeAll(tmp);
     return result.trim();
 }
 
@@ -170,8 +170,8 @@ final HISTORY_MAX = 8;
 //     first; drives the collapsed history panel.
 // The log prints "SUBJ:<subject>" after each ">>>" header so both fields ride together
 // without a second git spawn.
-export fun buildCommits(site: Site) > {str: str} {
-    var m: {str: str} = mut {};
+export fun buildCommits(site: Site) > {str: str} !> any {
+    var m: mut {str: str} = mut {};
     site.metaHistory = mut {};
     final log = capture("TZ=UTC git -C " + site.root + " log --first-parent --diff-merges=first-parent --name-only "
         + "--date=format-local:'%Y-%m-%dT%H:%M:%SZ' "
@@ -208,17 +208,17 @@ export fun buildCommits(site: Site) > {str: str} {
 // of fork+exec pairs is what put the render's kernel time at more than twice its user
 // time - the gate that proves the site has no dangling link cost more than rendering the
 // site did.
-export fun checkPathExists(target: str, site: Site) > bool {
+export fun checkPathExists(target: str, site: Site) > bool !> any {
     // Empty target = gen/'s root, always the index.html landing. This shows up
     // when a page links to "../" (Parent Directory in an autoindex root) and the
     // resolver pops back to the root.
     if (target == "") { return fs\isFile(site.outDir + "/index.html"); }
-    if (fs\isFile(site.outDir + "/" + target)) { return true; }
-    if (fs\isDir(site.outDir + "/" + target)) {
-        return fs\isFile(site.outDir + "/" + target + "/index.html");
+    if (fs\isFile(fs\join(site.outDir, target))) { return true; }
+    if (fs\isDir(fs\join(site.outDir, target))) {
+        return fs\isFile(fs\join(site.outDir, target, "index.html"));
     }
     if (target.endsWith("/")) {
-        return fs\isFile(site.outDir + "/" + target + "index.html");
+        return fs\isFile(fs\join(site.outDir, target + "index.html"));
     }
     return false;
 }
@@ -227,8 +227,8 @@ export fun checkPathExists(target: str, site: Site) > bool {
 // external URLs, mailto:, javascript:, data:, and pure fragments. Each reference
 // is returned as a gen-root-relative path (resolved against pageDir).
 export fun scanReferencesInHTML(html: str, pageDir: str) > [str] {
-    var refs: [str] = mut [<str>];
-    var seen: {str: bool} = mut {};
+    var refs: mut [str] = mut [<str>];
+    var seen: mut {str: bool} = mut {};
     var rest = html;
     while (true) {
         final iHref = rest.indexOf("href=\"");
@@ -273,18 +273,19 @@ export fun scanReferencesInHTML(html: str, pageDir: str) > [str] {
             refs.append(resolved);
         }
     }
-    return refs;
+    // No trailing return: the loop is `while (true)` with no break, so every exit
+    // is one of the returns above and anything here is unreachable.
 }
 
 // walkGen recursively enumerates every written file under gen/ so the integrity check
 // reads each once.
-export fun walkGen(rel: str, acc: [str], site: Site) > void {
+export fun walkGen(rel: str, acc: mut [str], site: Site) > void !> any {
     var dir = site.outDir;
     if (rel != "") { dir = site.outDir + "/" + rel; }
-    foreach (name in fs\list(dir)) {
+    foreach (name in fs\listDir(dir)) {
         var childRel = name;
         if (rel != "") { childRel = rel + "/" + name; }
-        if (fs\isDir(site.outDir + "/" + childRel)) {
+        if (fs\isDir(fs\join(site.outDir, childRel))) {
             walkGen(childRel, acc, site);
         } else {
             acc.append(childRel);
@@ -298,12 +299,12 @@ export fun walkGen(rel: str, acc: [str], site: Site) > void {
 // every "<dir>/index.html" not in writtenPaths and not in alwaysKeep, delete the whole
 // directory (sibling index.md and all). Runs before assetIntegrityCheck/orphanCheck so
 // neither trips on a stale page's dangling reference to content removed with it.
-export fun pruneStaleOutputs(site: Site) > void {
+export fun pruneStaleOutputs(site: Site) > void !> any {
     // Outputs never eligible for pruning: paths a normal render always rewrites regardless
     // of docs/blog content, plus the playground's committed WASM/editor bundle, which this
     // render never touches (build-playground / build-playground-editor refresh it out of
     // band).
-    final alwaysKeep: {str: bool} = mut {
+    final alwaysKeep: mut {str: bool} = mut {
         "index.html": true, "index.md": true, "404.html": true,
         // The tracked files that live inside the output tree. gen/install is the POSIX
         // sh installer; public/release/index.json and its Ed25519 signature are the
@@ -322,9 +323,9 @@ export fun pruneStaleOutputs(site: Site) > void {
         // docs render only emits a redirect stub there via the reference/console alias, which
         // writeAliases already registers in writtenPaths - so no alwaysKeep entry needed.
     };
-    final acc: [str] = mut [<str>];
+    final acc: mut [str] = mut [<str>];
     walkGen("", acc, site);
-    final staleDirs: {str: bool} = mut {};
+    final staleDirs: mut {str: bool} = mut {};
     foreach (path in acc) {
         if (alwaysKeep[path] != null) { continue; }
         if (path.startsWith("assets/")) { continue; }   // scoped delete+recopy above already keeps this clean
@@ -342,7 +343,7 @@ export fun pruneStaleOutputs(site: Site) > void {
         }
         if (produced) { continue; }
         std\print("  pruning stale " + dir + "/ (no longer produced)");
-        fs\delete(site.outDir + "/" + dir);
+        fs\removeAll(fs\join(site.outDir, dir));
     }
 }
 
@@ -352,8 +353,8 @@ export fun pruneStaleOutputs(site: Site) > void {
 // site_render(), because generateJsBundles() writes gen/assets/mermaid.js and hljs.js
 // (served assets) only after site_render() returns - computing the manifest earlier would
 // omit them. Excludes its own output path (a file cannot hash itself).
-export fun writeSiteManifest(site: Site) > void {
-    final acc: [str] = mut [<str>];
+export fun writeSiteManifest(site: Site) > void !> any {
+    final acc: mut [str] = mut [<str>];
     walkGen("", acc, site);
     final sorted = acc.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
     var body = "";
@@ -385,8 +386,8 @@ final RETIRED_URLS = "retired.urls.lock";
 
 // readURLSet reads a newline-delimited URL file into a set, skipping blanks and
 // "#" comments. Missing file -> empty set (the bootstrap case for URL_LOCK).
-export fun readURLSet(path: str) > {str: bool} {
-    var set: {str: bool} = mut {};
+export fun readURLSet(path: str) > {str: bool} !> any {
+    var set: mut {str: bool} = mut {};
     if (fs\isFile(path) == false) { return set; }
     final f = io\File.open(path, io\FileMode.read);
     final content = f.readAll();
@@ -404,10 +405,10 @@ export fun readURLSet(path: str) > {str: bool} {
 // purpose, either add a redirect (frontmatter `aliases:`, whose stub keeps the old
 // URL resolving) or list it in retired.urls.lock. Runs every render; the lock only
 // grows (updateUrlLock, under the rw charm).
-export fun abandonedLinkCheck(site: Site) > void {
+export fun abandonedLinkCheck(site: Site) > void !> any {
     final locked = readURLSet(URL_LOCK);
     final retired = readURLSet(RETIRED_URLS);
-    var abandoned: [str] = mut [<str>];
+    var abandoned: mut [str] = mut [<str>];
     foreach (url in locked.keys()) {
         if (retired[url] == null and checkPathExists(url, site) == false) {
             abandoned.append(url);
@@ -423,10 +424,10 @@ export fun abandonedLinkCheck(site: Site) > void {
 // only adds - a URL that drops out of the build stays in the ledger so the gate
 // keeps demanding a redirect or an explicit retirement for it. Called under the rw
 // charm so a plain (checking) render never mutates the tree.
-export fun updateUrlLock(site: Site) > void {
+export fun updateUrlLock(site: Site) > void !> any {
     var set = readURLSet(URL_LOCK);
     foreach (u in site.pageUrls.keys()) { set[u] = true; }
-    var lines: [str] = mut [<str>];
+    var lines: mut [str] = mut [<str>];
     foreach (u in set.keys()) { lines.append(u); }
     final sorted = lines.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
     var body = "";
@@ -448,10 +449,10 @@ fun lintSkipDir(name: str) > bool {
 
 // collectMarkdown appends every .md file under dir (recursively) to acc, as a path relative
 // to the walk root.
-fun collectMarkdown(base: str, rel: str, acc: [str]) > void {
+fun collectMarkdown(base: str, rel: str, acc: mut [str]) > void !> any {
     var dir = base;
     if (rel != "") { dir = base + "/" + rel; }
-    foreach (name in fs\list(dir)) {
+    foreach (name in fs\listDir(dir)) {
         var childRel = name;
         if (rel != "") { childRel = rel + "/" + name; }
         if (isDirectory(dir + "/" + name)) {
@@ -464,7 +465,7 @@ fun collectMarkdown(base: str, rel: str, acc: [str]) > void {
 }
 
 // pathExists is the one filesystem question the conventions lint asks.
-fun pathExists(p: str) > bool {
+fun pathExists(p: str) > bool !> any {
     return fs\exists(p);
 }
 
@@ -486,13 +487,13 @@ fun pathExists(p: str) > bool {
 //
 // Every violation is collected before either happens. Failing on the first would turn a
 // three-minute fix into three round trips.
-export fun conventionsCheck(root: str, docs: str) > void {
-    var files: [str] = mut [<str>];
+export fun conventionsCheck(root: str, docs: str) > void !> any {
+    var files: mut [str] = mut [<str>];
     collectMarkdown(root + "/" + docs, "", files);
     final sorted = files.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
 
-    var broken: [str] = mut [<str>];
-    var violations: [str] = mut [<str>];
+    final broken: mut [str] = mut [<str>];
+    final violations: mut [str] = mut [<str>];
     var checked = 0;
 
     // The docs corpus, addressed as docs/<rel> so a finding names a path you can open.
@@ -527,7 +528,7 @@ export fun conventionsCheck(root: str, docs: str) > void {
 
 // collectFindings runs both halves over one file and sorts what they report into the tier
 // that throws and the tier that prints.
-fun collectFindings(root: str, file: str, abs: str, violations: [str], broken: [str]) > void {
+fun collectFindings(root: str, file: str, abs: str, violations: mut [str], broken: mut [str]) > void !> any {
     final md = fs\readFile(abs);
     foreach (f in lintMarkdown(file, md)) {
         violations.append(f.file + ":" + "{f.line}" + ": [" + f.rule + "] " + f.message);

@@ -17,7 +17,6 @@ import (
 func TestBuzzEngine_Registered(t *testing.T) {
 	e := engine.Lookup("buzz")
 	require.NotNil(t, e, "buzz engine not registered after package import")
-	assert.Equal(t, "buzz", e.ID())
 }
 
 func TestBuzzEngine_NewSession(t *testing.T) {

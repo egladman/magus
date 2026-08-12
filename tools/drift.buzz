@@ -16,8 +16,8 @@ import "crypto";
 // a gate can name a generated TREE the way its outputs are declared and not have to know
 // which entries are directories. A path that does not exist yet is dropped; changedSince
 // notices it when the generator creates it.
-export fun expand(paths: [str]) > [str] {
-    var files: [str] = mut [<str>];
+export fun expand(paths: [str]) > [str] !> any {
+    var files: mut [str] = mut [<str>];
     foreach (p in paths) {
         if (!fs\exists(p)) { continue; }
         if (!fs\isDir(p)) { files.append(p); continue; }
@@ -29,8 +29,8 @@ export fun expand(paths: [str]) > [str] {
 }
 
 // hashes digests every file under paths, taking the "before" side of a gate.
-export fun hashes(paths: [str]) > {str: str} {
-    var digests: {str: str} = mut {<str: str>};
+export fun hashes(paths: [str]) > {str: str} !> any {
+    var digests: mut {str: str} = mut {<str: str>};
     foreach (p in expand(paths)) { digests[p] = crypto\sha256File(p); }
     return digests;
 }
@@ -38,9 +38,9 @@ export fun hashes(paths: [str]) > {str: str} {
 // changedSince returns the files whose bytes moved since `before` was taken: created,
 // modified, or deleted. A file that was already dirty and stayed byte-identical is NOT
 // drift - it is uncommitted work the generators did not touch, which is the whole point.
-export fun changedSince(before: {str: str}, paths: [str]) > [str] {
-    var moved: [str] = mut [<str>];
-    var seen: {str: bool} = mut {<str: bool>};
+export fun changedSince(before: {str: str}, paths: [str]) > [str] !> any {
+    var moved: mut [str] = mut [<str>];
+    var seen: mut {str: bool} = mut {<str: bool>};
     foreach (p in expand(paths)) {
         seen[p] = true;
         if (before[p] == null) { moved.append(p); }

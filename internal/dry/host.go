@@ -173,10 +173,14 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	// has_charm(name) reports whether name is in the active charm set (tr.charms), so
 	// a `run t:charm` dry-run takes charm-gated branches. The same closure backs
 	// ctx.has_charm (see buildCtx).
-	m.MapSet("has_charm", fn("magus.has_charm", traceHasCharm(tr)))
+	m.MapSet("hasCharm", fn("magus.hasCharm", traceHasCharm(tr)))
 
-	for _, level := range []string{"info", "warn", "error", "debug"} {
-		m.MapSet(level, fn("magus."+level, func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	// magus.log.* - the emitting members, grouped as they are in the real bindings.
+	// hint rides along here rather than with the runtime-only stubs below because it
+	// emits, and a dry run should show it in target order like any other message.
+	logNS := vm.NewMap()
+	for _, level := range []string{"info", "warn", "error", "debug", "hint"} {
+		logNS.MapSet(level, fn("magus.log."+level, func(_ context.Context, args []vm.Value) (vm.Value, error) {
 			// Traced as a per-target op (attributed to tr.cur) so a dry-run shows
 			// each target's logs in order; writing to the shared output buffer would
 			// mix every probed target's logs together.
@@ -184,6 +188,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 			return vm.Null, nil
 		}))
 	}
+	m.MapSet("log", logNS)
 
 	// magus.raise(code, message, cause?, url?) fails with a coded diagnostic. A dry run
 	// must not actually fail, so it traces the code and message and returns - the point
@@ -239,7 +244,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		return res, nil
 	}))
 	// The reports magus returns as domain types (doctor, describeFile, insightReport,
-	// affectedImpact, targetGraph) fork a real magus in the live host. Same rule as
+	// affectedImpact) fork a real magus in the live host. Same rule as
 	// ls/affected: stub each with its result shape so `magus.doctor().summary.fail`
 	// and friends resolve. Field names track the Buzz mirrors in
 	// internal/spellruntime/gen/types.
@@ -283,11 +288,6 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("message", vm.StrValue(""))
 		res.MapSet("url", vm.StrValue(""))
 		res.MapSet("files", vm.ListValue(nil))
-		return res, nil
-	}))
-	m.MapSet("targetGraph", fn("magus.targetGraph", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		res := vm.NewMap()
-		res.MapSet("projects", vm.ListValue(nil))
 		return res, nil
 	}))
 	// insightReport nests a record per lens rather than a list, so each one is shaped
@@ -345,7 +345,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	m.MapSet("where", fn("magus.where", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.StrValue(""), nil
 	}))
-	m.MapSet("graph", fn("magus.graph", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("projectGraph", fn("magus.projectGraph", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("nodes", vm.ListValue(nil))
 		res.MapSet("dependsOn", vm.NewMap())
@@ -359,22 +359,17 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	// which the sandbox doesn't wire (pulling host/std in would bloat the playground).
 	// Stub them as empty-but-shaped so a reference and field access (e.g.
 	// magus.module(x).methods) resolve in a dry run.
-	m.MapSet("modules", fn("magus.modules", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("describeModule", fn("magus.describeModule", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		// An empty-but-shaped LIST: the real member returns a collection whether or
+		// not a name selects one, so a dry run must too or `describeModule(x)[0].name`
+		// stops resolving.
 		return vm.ListValue(nil), nil
-	}))
-	m.MapSet("module", fn("magus.module", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		res := vm.NewMap()
-		res.MapSet("name", vm.StrValue(""))
-		res.MapSet("doc", vm.StrValue(""))
-		res.MapSet("fields", vm.ListValue(nil))
-		res.MapSet("methods", vm.ListValue(nil))
-		return res, nil
 	}))
 
 	// Runtime-only members (a debugger, hints, fatal-abort, cache busting) have no
 	// dry-run effect; stub them as no-ops so a reference resolves. They're here to
 	// satisfy the surface parity guard, not because the dry run acts on them.
-	for _, name := range []string{"hint", "fatal", "pry", "bustCache"} {
+	for _, name := range []string{"fatal", "pry", "bustCache"} {
 		m.MapSet(name, fn("magus."+name, retNull))
 	}
 
@@ -476,7 +471,7 @@ func buildCtx(tr *Tracer) vm.Value {
 	c := vm.NewMap()
 	c.MapSet("needs", fn("ctx.needs", traceNeeds(tr)))
 	c.MapSet("glob", fn("ctx.glob", traceGlob(tr)))
-	c.MapSet("has_charm", fn("ctx.has_charm", traceHasCharm(tr)))
+	c.MapSet("hasCharm", fn("ctx.hasCharm", traceHasCharm(tr)))
 	c.MapSet("readsFiles", fn("ctx.readsFiles", retNull))
 	c.MapSet("writesFiles", fn("ctx.writesFiles", retNull))
 	c.MapSet("modifiesExistingFiles", fn("ctx.modifiesExistingFiles", retNull))
@@ -797,9 +792,9 @@ func normalizeTarget(name string) string {
 // rather than a share of the whole module.
 func addPureMagus(m vm.Value) {
 	// The one canonicalizer for every entity name: target, charm, spell op.
-	m.MapSet("normalize", fn("magus.normalize", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	m.MapSet("canonicalName", fn("magus.canonicalName", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) == 0 || !args[0].IsStr() {
-			return vm.Null, fmt.Errorf("magus.normalize: expected a name string")
+			return vm.Null, fmt.Errorf("magus.canonicalName: expected a name string")
 		}
 		return vm.StrValue(types.Normalize(args[0].AsString())), nil
 	}))

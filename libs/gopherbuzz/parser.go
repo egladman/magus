@@ -2,6 +2,7 @@ package buzz
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -15,9 +16,12 @@ const maxParseDepth = 200
 
 // parser produces a Program AST from a token stream.
 type parser struct {
-	tokens []token.Token
-	pos    int
-	depth  int
+	// pendingExports holds names from standalone  statements, resolved
+	// against the file's declarations once parsing finishes. See applyPendingExports.
+	pendingExports []string
+	tokens         []token.Token
+	pos            int
+	depth          int
 	// strict enables the script-conformance rules upstream Buzz enforces: no
 	// control-flow statements at the program top level, and labeled call
 	// arguments. On by default via Parse (upstream parity); ParseEmbedded clears
@@ -32,10 +36,66 @@ type parser struct {
 	// readType must leave out of the annotation text it reconstructs (a function
 	// type's `!>` error set and `*>` yield type). Append-only for the parse.
 	typeTextSkips [][2]int
+	// importUsage tracks, for unused-import detection (BZZ3001), whether each
+	// top-level import's namespace-binding name (alias or basename; see
+	// registerImportBinding) was referenced anywhere in this parse. Populated by
+	// parseImport, updated by markImportUsed. Tracking happens HERE, during
+	// parsing, rather than by walking the finished *ast.Program: a namespaced
+	// object-literal type (`ns\Type{...}`) lowers to ast.ObjectLit{TypeName:
+	// "Type"} and discards the "ns" identifier outright (see the LBrace case in
+	// parsePostfix), so by the time parsing finishes there is nothing left in the
+	// tree to walk for that usage. nil until the first import statement, so a
+	// program with no imports pays nothing.
+	importUsage map[string]*importBinding
 }
 
 func newParser(tokens []token.Token) *parser {
 	return &parser{tokens: tokens}
+}
+
+// importBinding is one top-level import's namespace-binding name, tracked for unused-
+// import detection. path/alias are carried for the diagnostic message (see
+// unusedImportDiag); referenced flips true the moment markImportUsed sees the binding
+// name consumed as an identifier reference (see parser.importUsage).
+type importBinding struct {
+	line, col   int
+	path, alias string
+	referenced  bool
+}
+
+// registerImportBinding records stmt's namespace-binding name, if it has one, for
+// unused-import detection. A flat import (`as _`) or a selective import (`import a, b
+// from "path"`) splats its members directly into scope with no single name to check -
+// tracking each flattened symbol individually would be a broader "unused local"
+// question, not "unused import", so those forms are left alone rather than risking a
+// noisy check. The binding-name computation mirrors checker.go's collectTopLevel.
+func (p *parser) registerImportBinding(stmt *ast.ImportStmt) {
+	if stmt.Alias == "_" || len(stmt.Only) > 0 {
+		return
+	}
+	name := stmt.Alias
+	if name == "" {
+		parts := strings.Split(strings.TrimPrefix(stmt.Path, "buzz:"), "/")
+		name = parts[len(parts)-1]
+	}
+	if _, exists := p.importUsage[name]; exists {
+		return // a re-import under the same binding name; keep its first position
+	}
+	if p.importUsage == nil {
+		p.importUsage = map[string]*importBinding{}
+	}
+	p.importUsage[name] = &importBinding{line: stmt.Line, col: stmt.Col, path: stmt.Path, alias: stmt.Alias}
+}
+
+// markImportUsed records that name was referenced as an identifier: a value, the base
+// of a `.`/`\` chain (parsePrimary), or the base of a type annotation (skipType). A
+// miss - name is not a tracked import binding, or none are tracked at all - is a
+// harmless no-op on a nil/empty map, so every identifier reference can call this
+// unconditionally without a guard.
+func (p *parser) markImportUsed(name string) {
+	if b, ok := p.importUsage[name]; ok {
+		b.referenced = true
+	}
 }
 
 // Parse tokenizes src and returns a Program using upstream Buzz's rules: the
@@ -71,6 +131,52 @@ func parseModed(src string, strict bool) (*ast.Program, error) {
 		return Parse(src)
 	}
 	return ParseEmbedded(src)
+}
+
+// unusedImportDiag is one unreferenced top-level import found while parsing (see
+// parser.importUsage); parseModedTracked's second return value. Path/Alias are the
+// import statement's own literal path and (if present) alias, for a message that
+// names exactly what the source says - not just the derived binding name.
+type unusedImportDiag struct {
+	Line, Col   int
+	Path, Alias string
+}
+
+// parseModedTracked parses src like parseModed, additionally returning a warning for
+// every top-level import whose namespace binding went unreferenced (BZZ3001). It does
+// its own tokenize+parse rather than reusing Parse/ParseEmbedded, because those two are
+// public API — changing their signature to expose parser.importUsage would ripple into
+// every caller outside this package. Used only by Session.checkShared, which already
+// treats parsing as the expensive, non-hot-path step (checkShared's own doc comment:
+// resolving imports executes code and reads files from disk).
+func parseModedTracked(src string, strict bool) (*ast.Program, []unusedImportDiag, error) {
+	toks, err := token.Tokenize(src)
+	if err != nil {
+		return nil, nil, err
+	}
+	p := newParser(toks)
+	p.strict = strict
+	prog, err := p.parseProgram()
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(p.importUsage) == 0 {
+		return prog, nil, nil
+	}
+	warnings := make([]unusedImportDiag, 0, len(p.importUsage))
+	for _, b := range p.importUsage {
+		if !b.referenced {
+			warnings = append(warnings, unusedImportDiag{Line: b.line, Col: b.col, Path: b.path, Alias: b.alias})
+		}
+	}
+	// Map iteration order is random; sort by position for deterministic output.
+	sort.Slice(warnings, func(i, j int) bool {
+		if warnings[i].Line != warnings[j].Line {
+			return warnings[i].Line < warnings[j].Line
+		}
+		return warnings[i].Col < warnings[j].Col
+	})
+	return prog, warnings, nil
 }
 
 func (p *parser) peek() token.Token {
@@ -180,7 +286,44 @@ func (p *parser) parseProgram() (*ast.Program, error) {
 			prog.Stmts = append(prog.Stmts, s)
 		}
 	}
+	if err := p.applyPendingExports(prog); err != nil {
+		return nil, err
+	}
 	return prog, nil
+}
+
+// applyPendingExports marks each declaration named by a standalone `export name;`
+// statement as exported. Deferred to here because the statement may precede or follow
+// the declaration it names, and only now is the whole file known.
+func (p *parser) applyPendingExports(prog *ast.Program) error {
+	for _, name := range p.pendingExports {
+		found := false
+		for _, st := range prog.Stmts {
+			switch d := st.(type) {
+			case *ast.FunDecl:
+				if d.Name == name {
+					d.IsExported, found = true, true
+				}
+			case *ast.ObjectDecl:
+				if d.Name == name {
+					d.IsExported, found = true, true
+				}
+			case *ast.EnumDecl:
+				if d.Name == name {
+					d.IsExported, found = true, true
+				}
+			case *ast.DeclStmt:
+				if d.Name == name {
+					d.IsExported, found = true, true
+				}
+			}
+		}
+		if !found {
+			return fmt.Errorf("export %s: no declaration named %s in this file", name, name)
+		}
+	}
+	p.pendingExports = nil
+	return nil
 }
 
 // checkTopLevelStmt enforces the strict-mode rule that a program's top level
@@ -320,6 +463,40 @@ func (p *parser) parseStmt() (ast.Node, error) {
 			n.IsExported = true
 		case *ast.EnumDecl:
 			n.IsExported = true
+		default:
+			// `export name;` - upstream's standalone form, where the declaration is
+			// written plainly and exported by a later statement (see its
+			// tests/utils/testing.buzz). It parses as an expression statement, so the
+			// cases above do not match it, and it used to fall through here and be
+			// DISCARDED: the export vanished with no diagnostic, and the name stayed
+			// invisible to importers.
+			//
+			// Recorded by name and resolved once the whole program is parsed, because
+			// the declaration may come either before or after this statement.
+			es, ok := node.(*ast.ExprStmt)
+			if !ok {
+				return nil, fmt.Errorf("buzz: line %d:%d: export must name a declaration", t.Line, t.Col)
+			}
+			// `export X as Y;` re-exports a value under a new name. `as` is Buzz's cast
+			// operator, so it parses as an AsExpr whose "type" is really the alias -
+			// and the meaning is exactly `export final Y = X`, so it DESUGARS into
+			// one. That reuses the declaration export path whole; a re-export needs no
+			// runtime machinery of its own.
+			if as, ok := es.Expr.(*ast.AsExpr); ok && !as.Optional {
+				return &ast.DeclStmt{
+					Pos:        ast.Pos{Line: t.Line, Col: t.Col},
+					IsExported: true,
+					IsConst:    true,
+					Name:       as.TypeName,
+					Value:      as.Expr,
+				}, nil
+			}
+			id, ok := es.Expr.(*ast.IdentExpr)
+			if !ok {
+				return nil, fmt.Errorf("buzz: line %d:%d: export must name a declaration or re-export a value with `as`", t.Line, t.Col)
+			}
+			p.pendingExports = append(p.pendingExports, id.Name)
+			return nil, nil
 		}
 		return node, nil
 	case token.Final, token.Var:
@@ -415,7 +592,9 @@ func (p *parser) parseImport() (*ast.ImportStmt, error) {
 		}
 	}
 	p.optSemicolon()
-	return &ast.ImportStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Path: pathTok.Val, Alias: alias, Only: only}, nil
+	stmt := &ast.ImportStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Path: pathTok.Val, Alias: alias, Only: only}
+	p.registerImportBinding(stmt)
+	return stmt, nil
 }
 
 func (p *parser) parseNamespace() (*ast.NamespaceStmt, error) {
@@ -489,6 +668,10 @@ func (p *parser) skipType() error {
 			return p.skipBalancedBraces()
 		}
 		p.advance()
+		// A type annotation never routes through parsePrimary (skipType consumes
+		// tokens directly, building no IdentExpr), so a namespaced type
+		// (serialize\Boxed) needs its own unused-import mark here.
+		p.markImportUsed(t.Val)
 		// Namespace-qualified type: serialize\Boxed, foo\bar\Baz.
 		for p.check(token.Backslash) {
 			p.advance()
@@ -651,6 +834,13 @@ func tokenText(t token.Token) string {
 		return "void"
 	case token.Fun:
 		return "fun"
+	case token.Mut:
+		// The trailing space is the modifier's canonical spelling (types.mutPrefix
+		// renders the same one), and it is also what separates it from a following
+		// name: joinTokens concatenates without separators, so `mut Foo` would
+		// otherwise come back as `mutFoo`. Dropping the token entirely is what used
+		// to make `<mut [int]>` indistinguishable from `<[int]>`.
+		return "mut "
 	case token.LParen:
 		return "("
 	case token.RParen:
@@ -1307,7 +1497,7 @@ func (p *parser) parseFunDecl() (*ast.FunDecl, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ast.FunDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, YieldAnnot: fr.yieldAnnot, Body: fr.body, Doc: t.Doc}, nil
+	return &ast.FunDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, ErrAnnot: fr.errAnnot, YieldAnnot: fr.yieldAnnot, Body: fr.body, Doc: t.Doc}, nil
 }
 
 // parseExternFunDecl parses `extern fun name(params) > T;` - the signature of a
@@ -1332,7 +1522,7 @@ func (p *parser) parseExternFunDecl() (*ast.FunDecl, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ast.FunDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, IsExtern: true, Name: nameTok.Val, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, YieldAnnot: fr.yieldAnnot, Doc: t.Doc}, nil
+	return &ast.FunDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, IsExtern: true, Name: nameTok.Val, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, ErrAnnot: fr.errAnnot, YieldAnnot: fr.yieldAnnot, Doc: t.Doc}, nil
 }
 
 // parseTestDecl parses `test "name" { body }`. The name is a string literal, as
@@ -1461,7 +1651,7 @@ func (p *parser) parseProtocolDecl() (*ast.ObjectDecl, error) {
 		decl.Methods = append(decl.Methods, &ast.FunDecl{
 			Pos: ast.Pos{Line: ft.Line, Col: ft.Col}, Name: mName.Val,
 			Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults,
-			RetAnnot: fr.retAnnot, YieldAnnot: fr.yieldAnnot,
+			RetAnnot: fr.retAnnot, ErrAnnot: fr.errAnnot, YieldAnnot: fr.yieldAnnot,
 		})
 		p.optSemicolon()
 	}
@@ -1526,6 +1716,22 @@ func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 		// writes), so the modifier is consumed here and the method parsed normally.
 		if p.check(token.Mut) && p.peekAt(1).Kind == token.Fun {
 			p.advance()
+		}
+		// `extern fun` inside an object declares a method the HOST binds, with a
+		// semicolon where a body would be - the same form and meaning top-level
+		// `extern fun` already has. It is what lets a namespace the runtime assembles
+		// (`magus\\cache.remote(...)`) be DECLARED: Buzz has no nested namespace, so
+		// such a group is an object reached through the module, and without this its
+		// methods could only be declared by giving them a fake body that never runs.
+		if p.check(token.Ident) && p.peek().Val == "extern" && p.peekAt(1).Kind == token.Fun {
+			method, err := p.parseExternFunDecl()
+			if err != nil {
+				return nil, err
+			}
+			method.IsStatic = isStatic
+			decl.Methods = append(decl.Methods, method)
+			p.optSemicolon()
+			continue
 		}
 		if p.check(token.Fun) {
 			method, err := p.parseFunDecl()
@@ -2075,11 +2281,29 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 				continue
 			}
 			t := p.advance()
-			nameTok, err := p.eatIdent()
-			if err != nil {
-				return nil, err
+			// Tuple element access: `t.0`. A tuple is an anonymous object whose
+			// fields are named by their decimal index (see parseAnonObjectLit), so
+			// the numeric member IS the field name - `t.0` and `t.@"0"` are the same
+			// lookup. The lexer emits Dot then Int here rather than a leading-dot
+			// float, which is what makes the shape unambiguous.
+			nameTok, tupleIndex := p.peek(), false
+			if nameTok.Kind == token.Int {
+				// Only the plain decimal digits 0..3 are an index, and the check is on
+				// the RAW spelling: upstream rejects `t.0b10`, `t.0x10` and `t.0_0`
+				// even where they denote an in-range index. Token.Val keeps the source
+				// text, so comparing it is what makes that distinction possible.
+				if !validTupleIndex(nameTok.Val) {
+					return nil, fmt.Errorf("buzz: line %d:%d: tuple index shorthand accepts only 0, 1, 2 or 3, got %q", nameTok.Line, nameTok.Col, nameTok.Val)
+				}
+				p.advance()
+				tupleIndex = true
+			} else {
+				var err error
+				if nameTok, err = p.eatIdent(); err != nil {
+					return nil, err
+				}
 			}
-			node = &ast.MemberExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Object: node, Name: nameTok.Val, OptionalRecv: optionalRecv}
+			node = &ast.MemberExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Object: node, Name: nameTok.Val, OptionalRecv: optionalRecv, TupleIndex: tupleIndex}
 			optionalRecv = false
 		case token.Backslash:
 			// Namespace access: std\print. Resolves a member of an imported module,
@@ -2335,6 +2559,14 @@ func (p *parser) parsePrimary() (ast.Node, error) {
 		return &ast.NullLit{Pos: ast.Pos{Line: t.Line, Col: t.Col}}, nil
 	case token.Ident:
 		p.advance()
+		// This is the single choke point where a bare identifier becomes a reference
+		// (as opposed to a binding name, which never routes through parsePrimary):
+		// the base of a `.`/`\` chain reaches here too, before the postfix loop
+		// decides what to build on top of it - which is what lets this also catch a
+		// module used only to construct a namespaced object literal (`ns\Type{...}`,
+		// see the LBrace case in parsePostfix), since the identifier is consumed
+		// here first and marked used before that later lowering discards it.
+		p.markImportUsed(t.Val)
 		return &ast.IdentExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: t.Val}, nil
 	case token.LParen:
 		p.depth++
@@ -2418,7 +2650,7 @@ func (p *parser) parseFunExpr() (*ast.FunExpr, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ast.FunExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, YieldAnnot: fr.yieldAnnot, Body: fr.body}, nil
+	return &ast.FunExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, ErrAnnot: fr.errAnnot, YieldAnnot: fr.yieldAnnot, Body: fr.body}, nil
 }
 
 // funRest is the shared tail of a function: (params) rettype *> yieldtype { body }.
@@ -2429,6 +2661,7 @@ type funRest struct {
 	// declares no `= expr` default.
 	paramDefaults []ast.Node
 	retAnnot      string
+	errAnnot      string
 	yieldAnnot    string
 	body          *ast.BlockStmt
 }
@@ -2501,13 +2734,23 @@ func (p *parser) parseFunRest(extern bool) (funRest, error) {
 		rt := p.peek()
 		return funRest{}, fmt.Errorf("buzz: line %d:%d: return type must be preceded by '>' (write `> %s ...`)", rt.Line, rt.Col, rt.Val)
 	}
-	// Consume optional !> error-set annotation: fun f() > T !> ErrType { }
+	// !> error-set annotation: fun f() > T !> ErrType { }. Stored (not discarded)
+	// so the checker can enforce propagate-or-catch: a function with a non-empty
+	// errAnnot has declared it may raise, and a call to a raising function is
+	// legal in its body without a surrounding try/catch. A bare `!>` with no
+	// following type (permitted by the grammar below) still counts as a
+	// declared raise, of an unnamed error set - recorded as "any" to match the
+	// checker's existing convention for an untyped catch clause.
 	if p.check(token.ErrArrow) {
 		p.advance()
 		if p.isTypeStart() {
-			if err := p.skipType(); err != nil {
+			ea, err := p.readType()
+			if err != nil {
 				return funRest{}, err
 			}
+			out.errAnnot = ea
+		} else {
+			out.errAnnot = "any"
 		}
 	}
 	// Consume optional *> yield-type annotation: fun f() > R *> Y { }
@@ -2581,8 +2824,25 @@ func (p *parser) parseFunRest(extern bool) (funRest, error) {
 }
 
 // parseMapLit parses {"key": val, ...}; an empty {} is an empty map.
+// maxTupleLen is upstream's cap on a tuple literal: `.{ 1, 2, 3, 4, 5 }` is a compile
+// error there, and the `t.N` shorthand is defined only for N in 0..maxTupleLen-1.
+const maxTupleLen = 4
+
+// validTupleIndex reports whether raw is the source spelling of a tuple index: one of
+// the plain decimal digits 0..3. It compares the RAW text rather than a parsed value
+// because upstream rejects `0b10`, `0x10` and `0_0` as indexes even though each denotes
+// an in-range number.
+func validTupleIndex(raw string) bool {
+	return len(raw) == 1 && raw[0] >= '0' && raw[0] < '0'+maxTupleLen
+}
+
 // parseAnonObjectLit parses `{ name = expr, ... }` (the brace of a `.{...}` literal)
 // into a map keyed by the field names.
+//
+// It also parses upstream's TUPLE form, `.{ a, b }`, whose elements are positional.
+// A tuple is not a distinct runtime type here: it is an anonymous object whose fields
+// are named by their decimal index, which is the same thing upstream's `t.0` and
+// `t.@"0"` accessors read. So both spellings land on the same map.
 func (p *parser) parseAnonObjectLit() (*ast.MapExpr, error) {
 	t, err := p.eat(token.LBrace)
 	if err != nil {
@@ -2590,16 +2850,49 @@ func (p *parser) parseAnonObjectLit() (*ast.MapExpr, error) {
 	}
 	m := &ast.MapExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Anon: true}
 	for !p.check(token.RBrace) && !p.check(token.EOF) {
-		nameTok, err := p.eatIdent()
-		if err != nil {
-			return nil, err
+		// A named field is `ident = expr`, or the `{ ident }` shorthand for
+		// `ident = ident` that parseFieldValue handles. Anything else is a positional
+		// element. That is exactly why upstream's own test parenthesizes a bare
+		// identifier to "force" a tuple: `.{ name }` is the shorthand, `.{ (name) }`
+		// is a one-element tuple.
+		named := false
+		if p.check(token.Ident) {
+			next := p.peekAt(1).Kind
+			named = next == token.Assign || next == token.Comma || next == token.RBrace
 		}
-		val, err := p.parseFieldValue(nameTok)
-		if err != nil {
-			return nil, err
+		if named {
+			nameTok, err := p.eatIdent()
+			if err != nil {
+				return nil, err
+			}
+			val, err := p.parseFieldValue(nameTok)
+			if err != nil {
+				return nil, err
+			}
+			if m.Tuple {
+				return nil, fmt.Errorf("buzz: line %d:%d: cannot mix tuple elements and named fields in one anonymous object", nameTok.Line, nameTok.Col)
+			}
+			m.Keys = append(m.Keys, &ast.StringLit{Pos: ast.Pos{Line: nameTok.Line, Col: nameTok.Col}, Val: nameTok.Val})
+			m.Values = append(m.Values, val)
+		} else {
+			elem := p.peek()
+			val, err := p.parseExpr()
+			if err != nil {
+				return nil, err
+			}
+			if len(m.Keys) > 0 && !m.Tuple {
+				return nil, fmt.Errorf("buzz: line %d:%d: cannot mix tuple elements and named fields in one anonymous object", elem.Line, elem.Col)
+			}
+			if len(m.Keys) == maxTupleLen {
+				return nil, fmt.Errorf("buzz: line %d:%d: a tuple cannot have more than %d elements", elem.Line, elem.Col, maxTupleLen)
+			}
+			m.Tuple = true
+			m.Keys = append(m.Keys, &ast.StringLit{
+				Pos: ast.Pos{Line: elem.Line, Col: elem.Col},
+				Val: strconv.Itoa(len(m.Keys)),
+			})
+			m.Values = append(m.Values, val)
 		}
-		m.Keys = append(m.Keys, &ast.StringLit{Pos: ast.Pos{Line: nameTok.Line, Col: nameTok.Col}, Val: nameTok.Val})
-		m.Values = append(m.Values, val)
 		if !p.check(token.Comma) {
 			break
 		}
@@ -2678,13 +2971,17 @@ func (p *parser) parseMapLit() (*ast.MapExpr, error) {
 	return m, nil
 }
 
-// parseMapKey accepts a bare identifier (as a string key) or an expression key.
+// parseMapKey parses one map-literal key. It is a plain expression, matching
+// upstream's `map` parser (`const key = try self.expression(false)`).
+//
+// A bare identifier used to be lifted to a string literal here, so `{ a: 1 }`
+// meant `{ "a": 1 }`. That is not a superset but a silently different answer:
+// upstream EVALUATES `a`, which is what lets a map be keyed by an object
+// (`{ bandit: true }` in upstream's protocols.buzz). Nothing in this module or
+// in the magus embedding wrote the lifted form, so it is gone rather than
+// gated. `.{ a = 1 }` is the anonymous-object literal and still names fields
+// with identifiers; see parseAnonObjectLit.
 func (p *parser) parseMapKey() (ast.Node, error) {
-	t := p.peek()
-	if t.Kind == token.Ident && p.peekAt(1).Kind == token.Colon {
-		p.advance()
-		return &ast.StringLit{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Val: t.Val}, nil
-	}
 	return p.parseExpr()
 }
 

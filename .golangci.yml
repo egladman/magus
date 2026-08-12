@@ -27,6 +27,14 @@ linters:
     # --- Type safety ---
     - forcetypeassert # forbid unchecked type assertions (x.(T) without ok guard)
     - musttag         # every field of a marshaled struct must carry a json tag
+    # json.Marshal panics on nothing but silently drops or errors on an unsupported
+    # field (chan, func, complex, a cyclic map) - so a call site that proved the
+    # error unreachable and started ignoring it (body, _ := json.Marshal(v)) has
+    # that proof go stale the moment someone adds one of those fields back to v.
+    # musttag above catches a missing json tag on the way in; this catches the
+    # marshal call itself losing the error-safety invariant its blank identifier
+    # depends on. Zero findings when adopted: it is a ratchet, not a cleanup.
+    - errchkjson
     - unconvert       # remove redundant type conversions
     - durationcheck   # catch time.Duration multiplication bugs
 
@@ -34,6 +42,13 @@ linters:
     - gocritic        # broad set: performance, style, diagnostic checks
     - unparam         # report unused function parameters
     - prealloc        # suggest slice pre-allocations
+    # prealloc above tells you to preallocate a slice's capacity; it says nothing
+    # about length. make([]T, n) followed by append(...) keeps that half of the
+    # mistake legal - the slice grows past its n zero-valued elements instead of
+    # filling them, so the result carries n silent zeros ahead of every real
+    # value. makezero is the length half of what prealloc only checks the
+    # capacity half of. Zero findings when adopted: it is a ratchet, not a cleanup.
+    - makezero
     - gosec           # security: subprocess safety, path traversal, etc.
 
     # --- Secret safety ---
@@ -213,12 +228,32 @@ linters:
     # Restore the default exclusion set golangci-lint v1 applied automatically
     # (v2 ships it off by default). Without this the codebase drowns in the
     # standard fmt.Print/os.Setenv errcheck and gosec false positives.
+    #
+    # The `legacy` preset is deliberately NOT here, and the gosec rule below is
+    # what replaces it. legacy's only effect on this tree was 91 gosec findings
+    # (G301/G302/G104, restored verbatim below) plus one thing nobody wanted:
+    # EXC0005 silences staticcheck's SA4011 unconditionally, on the reasoning
+    # that "developers tend to write in C-style with an explicit break in a
+    # switch, so it's ok to ignore".
+    #
+    # That is not ok here. SA4011 catches a `break` inside a `switch` inside a
+    # `for` that exits only the switch - and this tree shipped exactly that in
+    # project/insight.go's Complexity(), where it silently counted every interior
+    # space as indentation and corrupted every FileHotspots score. staticcheck
+    # found it; the preset threw the finding away. Measured after the fix: zero
+    # SA4011 findings tree-wide, so re-enabling it is a ratchet, not a cleanup.
     presets:
       - comments
       - common-false-positives
-      - legacy
       - std-error-handling
     rules:
+      # The gosec half of the `legacy` preset, kept verbatim so dropping legacy
+      # changes nothing but SA4011. G301/G302 want 0750-or-tighter directory and
+      # chmod modes, which this tree deliberately does not use for ordinary
+      # output dirs; G104 is the unhandled-error check errcheck already owns.
+      - linters:
+          - gosec
+        text: "(G301|G302|G104)"
       # Test files: relax naming/comment/wrapping rules, plus security/perf/style
       # checks (gosec, gocritic, prealloc, bodyclose, misspell) that are noise in
       # test fixtures (synthetic responses, deliberate typo fixtures).

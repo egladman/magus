@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/egladman/magus/internal/config"
+)
 
 // TestResolveProfileRunAffectedUsageSkipsForward pins the fix for the silent
 // `run -h` / `affected -h` / bare `affected` bug: a usage-only invocation of an
@@ -75,4 +79,100 @@ func TestIsUsageOnlyInvocation(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestPreScanExtractorsStopAtSeparator pins the "--" guard on every pre-scan
+// extractor that peeks argv before the main flag parse. Without it, a token meant
+// verbatim for a forwarded tool (e.g. `go::go-test . -- -v`, where -v is the test
+// binary's own flag) is misread as magus's own flag. The correct pattern already
+// existed in this file (hasDetachFlag, bindGlobalsAfterSubcommand); these four had
+// no test at all before this fix.
+func TestPreScanExtractorsStopAtSeparator(t *testing.T) {
+	t.Run("extractRootFlag", func(t *testing.T) {
+		if got := extractRootFlag([]string{"run", "build", "--", "-root", "x"}); got != "" {
+			t.Fatalf("extractRootFlag = %q, want empty", got)
+		}
+		if got := extractRootFlag([]string{"-root", "ws", "run", "build"}); got != "ws" {
+			t.Fatalf("extractRootFlag = %q, want %q", got, "ws")
+		}
+	})
+
+	t.Run("extractQuietFlag", func(t *testing.T) {
+		if got := extractQuietFlag([]string{"run", "build", "--", "-q"}); got {
+			t.Fatalf("extractQuietFlag = %v, want false", got)
+		}
+		if got := extractQuietFlag([]string{"-q", "run", "build"}); !got {
+			t.Fatalf("extractQuietFlag = %v, want true", got)
+		}
+	})
+
+	t.Run("extractSilentFlag", func(t *testing.T) {
+		if got := extractSilentFlag([]string{"run", "build", "--", "-s"}); got {
+			t.Fatalf("extractSilentFlag = %v, want false", got)
+		}
+		if got := extractSilentFlag([]string{"-s", "run", "build"}); !got {
+			t.Fatalf("extractSilentFlag = %v, want true", got)
+		}
+	})
+
+	t.Run("extractDaemonEnabledFlag", func(t *testing.T) {
+		if val, set := extractDaemonEnabledFlag([]string{"run", "build", "--", "-daemon-enabled"}); val || set {
+			t.Fatalf("extractDaemonEnabledFlag = (%v, %v), want (false, false)", val, set)
+		}
+		if val, set := extractDaemonEnabledFlag([]string{"-daemon-enabled", "run", "build"}); !val || !set {
+			t.Fatalf("extractDaemonEnabledFlag = (%v, %v), want (true, true)", val, set)
+		}
+	})
+
+	t.Run("extractVerbosityCount", func(t *testing.T) {
+		if got := extractVerbosityCount([]string{"run", "build", "--", "-v", "-v"}); got != 0 {
+			t.Fatalf("extractVerbosityCount = %d, want 0", got)
+		}
+		if got := extractVerbosityCount([]string{"-vv", "run", "build"}); got != 2 {
+			t.Fatalf("extractVerbosityCount = %d, want 2", got)
+		}
+	})
+}
+
+// TestSnapshotGlobalsRestoresDryRun pins the fix for the daemon flag-bleed bug:
+// dispatchAdopted defers snapshotGlobals()() so one adopted client's flags (e.g.
+// --dry-run) cannot survive into the next dispatch on the same process. gen.BindFlags
+// binds each generated flag with the CURRENT struct field as its default, so an unset
+// flag on a later dispatch otherwise keeps whatever the previous one left in globalCfg.
+//
+// dispatchAdopted itself is not called directly here: its "run"/"affected" branches
+// load a real workspace through loadMagus/inspectWorkspace, both memoized behind a
+// process-wide sync.Once that panics if invoked twice with a different root - not
+// something a unit test can safely drive. Instead this exercises the exact mechanism
+// dispatchAdopted's callees use to set the field (cmdParse -> gen.BindFlags) and proves
+// snapshotGlobals's restore undoes it, which is the narrowest reachable seam for the fix.
+func TestSnapshotGlobalsRestoresDryRun(t *testing.T) {
+	savedCfg, savedGlobal := globalCfg, global
+	t.Cleanup(func() { globalCfg, global = savedCfg, savedGlobal })
+	globalCfg, global = config.Config{}, globalFlags{}
+
+	// First adopted dispatch: a client passes --dry-run.
+	restore := snapshotGlobals()
+	if _, err := cmdParse("run", []string{"--dry-run"}, nil); err != nil {
+		t.Fatalf("cmdParse: %v", err)
+	}
+	if !globalCfg.DryRun {
+		t.Fatalf("globalCfg.DryRun = false mid-dispatch, want true (cmdParse should have set it)")
+	}
+	restore()
+	if globalCfg.DryRun {
+		t.Fatalf("globalCfg.DryRun = true after restore, want false")
+	}
+
+	// Second adopted dispatch: a different client, no --dry-run. Before the fix,
+	// gen.BindFlags binds the flag's default to the CURRENT (bled) field value, so
+	// an unset flag here would silently inherit true from the first dispatch.
+	restore = snapshotGlobals()
+	if _, err := cmdParse("run", nil, nil); err != nil {
+		t.Fatalf("cmdParse: %v", err)
+	}
+	if globalCfg.DryRun {
+		t.Fatalf("globalCfg.DryRun = true on a dispatch that never asked for it: the bug this test pins")
+	}
+	restore()
 }

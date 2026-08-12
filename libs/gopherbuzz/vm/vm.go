@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -93,14 +94,19 @@ type mcacheEntry struct {
 // vm executes compiled Buzz chunks. It is package-internal; embedders run code
 // through Session (Exec/ExecChunk/CallValue), never by constructing a vm.
 type VM struct {
-	ctx         context.Context
-	stack       []Value
-	frames      []frame // value slice: no pointer per frame
-	catchStack  []catchEntry
-	cancelN     int            // per-VM back-edge counter; avoids false sharing of a global
-	ncache      []envNameEntry // inline name cache; indexed by chunk const-pool index
-	ncacheChunk *Chunk         // chunk for which ncache entries are valid
-	ncacheEnv   *Env           // resolving env those entries were resolved against
+	ctx context.Context
+	// collectables are instances whose type declares a `collect()` method, tracked
+	// so CollectUnreachable can call it when the program can no longer reach them.
+	// See gc_collect.go for why reachability is computed over the VM's own roots
+	// rather than left to Go's GC.
+	collectables []*objectInst
+	stack        []Value
+	frames       []frame // value slice: no pointer per frame
+	catchStack   []catchEntry
+	cancelN      int            // per-VM back-edge counter; avoids false sharing of a global
+	ncache       []envNameEntry // inline name cache; indexed by chunk const-pool index
+	ncacheChunk  *Chunk         // chunk for which ncache entries are valid
+	ncacheEnv    *Env           // resolving env those entries were resolved against
 	// mcache is a per-instruction inline cache for OpGetMember/OpSetMember on
 	// object receivers. Each entry stores the chunk it was learned in, the
 	// objectDef pointer, and the field index for the last object type seen at that
@@ -170,12 +176,17 @@ type iterSlot struct {
 }
 
 func NewVM(ctx context.Context) *VM {
-	return &VM{
+	vm := &VM{
 		ctx:         ctx,
 		stack:       make([]Value, 0, 64),
 		frames:      make([]frame, 0, 16),
 		heapLastLen: heapLen(),
 	}
+	// The VM is reachable from the context every host callable receives, which is
+	// what lets `gc\collect()` ask the interpreter about its own reachability. It is
+	// the only operation that needs this; everything else works from its arguments.
+	vm.ctx = context.WithValue(ctx, vmCtxKey{}, vm)
+	return vm
 }
 
 // newFiberVM creates a VM that runs as a fiber (OpYield suspends instead of dismissing).
@@ -925,7 +936,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			for i := 0; i < n; i++ {
 				k := vm.stack[base+i*2]
 				v := vm.stack[base+i*2+1]
-				m.set(k.String(), v)
+				m.setVal(k, v)
 			}
 			vm.stack = vm.stack[:base]
 			vm.push(vm.allocMap(m))
@@ -1279,7 +1290,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			case tagList:
 				st.list = vm.asList(iter)
 			case tagStr:
-				st.strRunes = []rune(vm.asStr(iter).V)
+				st.strBytes = []byte(vm.asStr(iter).V)
 			case tagEnumDef:
 				st.enumDef = vm.asEnumDef(iter)
 			case tagMap:
@@ -1323,14 +1334,16 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				} else {
 					done = true
 				}
-			} else if state.strRunes != nil {
-				// Yields one-character strings, not codepoints: upstream's foreach.buzz
-				// interpolates each element back together and compares to the original.
-				if state.idx < len(state.strRunes) {
+			} else if state.strBytes != nil {
+				// Yields one-BYTE strings, not codepoints: upstream's foreach.buzz
+				// interpolates each element back together and compares to the original,
+				// which bytes satisfy as well as runes did - and unlike runes they
+				// survive arbitrary binary rather than decoding it to U+FFFD.
+				if state.idx < len(state.strBytes) {
 					if wantKey {
 						vm.push(IntValue(int64(state.idx)))
 					}
-					vm.push(StrValue(string(state.strRunes[state.idx])))
+					vm.push(StrValue(string(state.strBytes[state.idx : state.idx+1])))
 					state.idx++
 				} else {
 					done = true
@@ -2048,14 +2061,53 @@ func caughtValue(err error) Value {
 	if len(fields) == 0 {
 		return StrValue(err.Error())
 	}
+	if _, ok := fields["message"]; !ok {
+		fields = withMessage(fields, err.Error())
+	}
+	// A TypedError presents as a real object so a typed catch can select it; anything
+	// else stays a map, which is all `catch (e)` ever needed.
+	var te TypedError
+	if errors.As(err, &te) && te.BuzzErrorType() != "" {
+		return errorObjectValue(te.BuzzErrorType(), fields)
+	}
 	m := NewMap()
 	for k, v := range fields {
 		m.MapSet(k, StrValue(v))
 	}
-	if _, ok := m.MapGet("message"); !ok {
-		m.MapSet("message", StrValue(err.Error()))
-	}
 	return m
+}
+
+// withMessage returns fields plus a "message" entry, without mutating the map the
+// embedder handed back.
+func withMessage(fields map[string]string, msg string) map[string]string {
+	out := make(map[string]string, len(fields)+1)
+	for k, v := range fields {
+		out[k] = v
+	}
+	out["message"] = msg
+	return out
+}
+
+// errorObjectValue builds a one-off object instance of typeName carrying fields, so
+// `is typeName` holds for it. The definition is synthesized here rather than looked
+// up: a host error's type exists to be CAUGHT, and requiring the embedder to also
+// declare it in Buzz source would make a typed raise a two-place change.
+//
+// Field order is sorted so the instance is deterministic across runs (a Go map has
+// none), which keeps a debug rendering and a bytecode round-trip stable.
+func errorObjectValue(typeName string, fields map[string]string) Value {
+	names := make([]string, 0, len(fields))
+	for k := range fields {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	def := &objectDefObj{Name: typeName}
+	vals := make([]Value, len(names))
+	for i, n := range names {
+		def.Fields = append(def.Fields, ast.ObjField{Name: n})
+		vals[i] = StrValue(fields[n])
+	}
+	return heapValue(tagObject, &objectInst{Def: def, Fields: vals})
 }
 
 //go:noinline
@@ -2277,7 +2329,9 @@ func (vm *VM) buildObjectVal(typeName string, fieldCount int, env *Env, mut bool
 			flatFields[j] = p.val
 		}
 	}
-	vm.push(vm.allocObject(&objectInst{Def: def, Fields: flatFields, Mut: mut}))
+	inst := &objectInst{Def: def, Fields: flatFields, Mut: mut}
+	vm.trackCollectable(inst)
+	vm.push(vm.allocObject(inst))
 	return nil
 }
 
@@ -2351,6 +2405,11 @@ func (vm *VM) buzzIsType(v Value, typeName string) bool {
 		return v.tag() == tagRange
 	case "pat":
 		return v.tag() == tagPat
+	case "ud":
+		// Absent for as long as `ud` existed, because nothing could construct one
+		// outside FFI and so nothing ever tested for one. std\toUd can now, and
+		// upstream's std.buzz asserts `std\toUd(23) is ud`.
+		return v.tag() == tagUD
 	}
 	// `obj{a,b}` is an anonymous STRUCTURAL type, reduced to its field names by
 	// isTypeShape. It holds when the value carries every one of them -- for a map (what

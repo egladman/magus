@@ -10,15 +10,19 @@ export enum<str> SignAlgorithm {
     Ed25519 = "ed25519",
 }
 
-export extern fun md5File(path: str) > str;
+export extern fun base64DecodeBytes(s: str) > [int] !> any;
+export extern fun base64EncodeBytes(data: [int]) > str;
+export extern fun hmacSha256(key: [int], data: [int]) > [int];
+export extern fun hmacSha256Hex(key: [int], data: [int]) > str;
+export extern fun md5File(path: str) > str !> any;
 export extern fun md5Hex(data: str) > str;
-export extern fun publicKey(alg: SignAlgorithm, key_env: str) > str;
-export extern fun sha1File(path: str) > str;
+export extern fun publicKey(alg: SignAlgorithm, key_env: str) > str !> any;
+export extern fun sha1File(path: str) > str !> any;
 export extern fun sha1Hex(data: str) > str;
-export extern fun sha256File(path: str) > str;
+export extern fun sha256File(path: str) > str !> any;
 export extern fun sha256Hex(data: str) > str;
-export extern fun sha512File(path: str) > str;
+export extern fun sha512File(path: str) > str !> any;
 export extern fun sha512Hex(data: str) > str;
-export extern fun sign(alg: SignAlgorithm, data: str, key_env: str) > str;
-export extern fun signFile(alg: SignAlgorithm, path: str, key_env: str) > str;
-export extern fun verify(alg: SignAlgorithm, data: str, sig_hex: str, pub_hex: str) > bool;
+export extern fun sign(alg: SignAlgorithm, data: str, key_env: str) > str !> any;
+export extern fun signFile(alg: SignAlgorithm, path: str, key_env: str) > str !> any;
+export extern fun verify(alg: SignAlgorithm, data: str, sig_hex: str, pub_hex: str) > bool !> any;

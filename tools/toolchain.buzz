@@ -35,6 +35,7 @@
 
 import "std";
 import "os";
+import "proc";
 import "semver";
 
 // remotes maps a probed binary to the upstream repository that tags its releases, and to
@@ -60,16 +61,16 @@ final remotes = {
 // Prerelease and historical tags are dropped. Go's repo still carries `weekly.2012-03-04`
 // and `release.r60`, and both projects tag `beta`/`rc`. A tag that is not a plain release
 // is not something to report as "you are behind".
-fun tagsOf(bin: str) > [str] {
+fun tagsOf(bin: str) > [str] !> any {
     final remote = remotes[bin];
     if (remote == null) {
         return [<str>];
     }
     var versions = mut [<str>];
-    os\withEnv({"GIT_TERMINAL_PROMPT": "0"}, callback: fun () > void {
+    os\withEnv({"GIT_TERMINAL_PROMPT": "0"}, callback: fun () > void !> any {
         // quiet: this is a 954-line listing being consumed, not a build step being
         // watched. Capture is unaffected.
-        final res = os\exec("git", args: ["ls-remote", "--tags", "--refs", remote["url"]],
+        final res = proc\exec("git", args: ["ls-remote", "--tags", "--refs", remote["url"]],
             dir: ".", opts: {"allow_failure": true, "quiet": true});
         if (res.code != 0) {
             return; // unreachable remote: reported as unknown, never as up to date
@@ -114,11 +115,15 @@ fun extract(output: str) > str {
 // tool is absent or says nothing version-shaped. Absent is not a finding: a tool this
 // repo does not install is not out of date.
 fun probe(bin: str, args: [str]) > str {
-    final res = os\exec(bin, args: args, dir: ".", opts: {"allow_failure": true, "quiet": true});
-    if (res.code != 0) {
-        return "";
+    try {
+        final res = proc\exec(bin, args: args, dir: ".", opts: {"allow_failure": true, "quiet": true});
+        if (res.code != 0) {
+            return "";
+        }
+        return extract(res.stdout);
+    } catch (e) {
+        return ""; // absent is not a finding: see the function comment above
     }
-    return extract(res.stdout);
 }
 
 // eolFor is the end-of-life resolver, DELIBERATELY UNIMPLEMENTED. It always answers
@@ -161,53 +166,60 @@ fun observe(name: str, bin: str, args: [str]) > void {
         std\print("toolchain " + name + ": not installed, or its version is unreadable");
         return;
     }
-    final tags = tagsOf(bin);
+    final tags = tagsOf(bin) catch [<str>];
     if (tags.len() == 0) {
         std\print("toolchain " + name + " " + current + ": upstream unreachable, currency unknown");
         return;
     }
 
-    final line = semver\majorMinor(current);
-    var listed = false;
-    var ahead = 0;
-    var otherLines: {str: bool} = mut {};
+    // semver comparisons over tags/current that tagsOf and probe already validated with
+    // isValid; wrapped rather than propagated to keep this function's "never throws"
+    // contract (see the comment above) even if one somehow slips through unparsable.
+    try {
+        final line = semver\majorMinor(current);
+        var listed = false;
+        var ahead = 0;
+        var otherLines: mut {str: bool} = mut {};
 
-    foreach (v in tags) {
-        if (semver\compare(v, b: current) == 0) {
-            listed = true;
-            continue;
-        }
-        if (semver\majorMinor(v) != line) {
-            if (semver\compare(v, b: current) > 0) {
-                otherLines[semver\majorMinor(v)] = true;
+        foreach (v in tags) {
+            if (semver\compare(v, b: current) == 0) {
+                listed = true;
+                continue;
             }
-            continue;
+            if (semver\majorMinor(v) != line) {
+                if (semver\compare(v, b: current) > 0) {
+                    otherLines[semver\majorMinor(v)] = true;
+                }
+                continue;
+            }
+            if (semver\compare(v, b: current) > 0) {
+                ahead = ahead + 1;
+            }
         }
-        if (semver\compare(v, b: current) > 0) {
-            ahead = ahead + 1;
-        }
-    }
 
-    var note = "";
-    if (!listed) {
-        // Worth saying and deliberately not called "unsupported": it is equally the shape
-        // of a retagged release, a distro build, or a version cut from a branch upstream
-        // does not tag. The observation is that upstream does not carry it.
-        note = "; upstream has no tag for this version";
-    }
-
-    if (ahead == 0) {
-        std\print("toolchain " + name + " " + current + ": nothing newer on " + line + note);
-    } else {
-        std\print("toolchain " + name + " " + current + ": " + "{ahead}" + " newer on " + line + note);
-    }
-    if (otherLines.len() > 0) {
-        var names = mut [<str>];
-        foreach (l, _ in otherLines) {
-            names.append(l);
+        var note = "";
+        if (!listed) {
+            // Worth saying and deliberately not called "unsupported": it is equally the shape
+            // of a retagged release, a distro build, or a version cut from a branch upstream
+            // does not tag. The observation is that upstream does not carry it.
+            note = "; upstream has no tag for this version";
         }
-        std\print("toolchain " + name + " " + current + ": newer lines exist upstream ("
-            + names.join(", ") + "); whether to move is not this check's call");
+
+        if (ahead == 0) {
+            std\print("toolchain " + name + " " + current + ": nothing newer on " + line + note);
+        } else {
+            std\print("toolchain " + name + " " + current + ": " + "{ahead}" + " newer on " + line + note);
+        }
+        if (otherLines.len() > 0) {
+            var names = mut [<str>];
+            foreach (l, _ in otherLines) {
+                names.append(l);
+            }
+            std\print("toolchain " + name + " " + current + ": newer lines exist upstream ("
+                + names.join(", ") + "); whether to move is not this check's call");
+        }
+    } catch (e) {
+        std\print("toolchain " + name + " " + current + ": could not compare against upstream tags");
     }
     std\print("toolchain " + name + " " + current + ": end of life " + eolFor(bin, version: current));
 }

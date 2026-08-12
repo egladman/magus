@@ -17,7 +17,7 @@ func checkSrc(src string) []typeError {
 	if err != nil {
 		return []typeError{{Line: 0, Col: 0, Msg: err.Error()}}
 	}
-	return checkWithGlobals(prog, nil, nil, nil, nil, nil)
+	return checkWithGlobals(prog, nil, nil, nil, nil, nil, nil)
 }
 
 // checkOK asserts that Check reports no errors for src.
@@ -98,7 +98,7 @@ fun op(p: {str: str}) > bool { return true; }
 fun list() > {str: fun({str: str}) bool} { return {"op": op}; }
 `)
 	// Arrowless '{' is still the body (void return), not a map type.
-	checkOK(t, `fun g() { final x = 1; }`)
+	checkOK(t, `fun g() { final _x = 1; }`)
 }
 
 func TestCheck_FunctionArity(t *testing.T) {
@@ -176,6 +176,99 @@ func TestCheck_WhileConditionInvalid(t *testing.T) {
 	checkErr(t, `while ("yes") { }`, "while condition must be bool")
 }
 
+// TestCheck_UnhandledRaise covers BZZ1006's propagate-or-catch rule: a call to
+// a !> function must be either propagated (the caller also declares !>) or
+// caught (try/catch, or the inline `catch` form). Each shape below is checked
+// both as an error and as its fixed-up, passing counterpart, so the test also
+// pins that the fix actually works rather than just that the bare case fails.
+func TestCheck_UnhandledRaise(t *testing.T) {
+	checkErr(t, `
+fun risky() > int !> str { return 1; }
+fun caller() > int {
+    return risky();
+}
+`, "call may raise but is neither declared with !> nor caught")
+
+	checkOK(t, `
+fun risky() > int !> str { return 1; }
+fun caller() > int !> str {
+    return risky();
+}
+`)
+
+	checkOK(t, `
+fun risky() > int !> str { return 1; }
+fun caller() > int {
+    try {
+        return risky();
+    } catch (e: str) {
+        return 0;
+    }
+}
+`)
+
+	checkOK(t, `
+fun risky() > int !> str { return 1; }
+fun caller() > int {
+    return risky() catch 0;
+}
+`)
+
+	// A call inside a catch clause's OWN body is not shielded by the try it sits
+	// beside - it needs its own handling.
+	checkErr(t, `
+fun risky() > int !> str { return 1; }
+fun caller() > int {
+    try {
+        return 1;
+    } catch (e: str) {
+        return risky();
+    }
+}
+`, "call may raise but is neither declared with !> nor caught")
+
+	// Top-level code has no enclosing function to propagate through, so it must
+	// catch.
+	checkErr(t, `
+fun risky() > int !> str { return 1; }
+final x = risky();
+`, "call may raise but is neither declared with !> nor caught")
+
+	checkOK(t, `
+fun risky() > int !> str { return 1; }
+var x = 0;
+try {
+    x = risky();
+} catch (e: str) {
+    x = 0;
+}
+`)
+}
+
+// TestCheck_UnhandledRaise_ObjectMethod pins that an object METHOD threads
+// raiseDeclared the same way a free function does - checkObjectDecl has its own
+// inline body-checking loop (it does not call checkFunDecl), which is exactly
+// the kind of second code path that silently misses a state save/restore.
+func TestCheck_UnhandledRaise_ObjectMethod(t *testing.T) {
+	checkErr(t, `
+fun risky() > int !> str { return 1; }
+object Foo {
+    fun bar() > int {
+        return risky();
+    }
+}
+`, "call may raise but is neither declared with !> nor caught")
+
+	checkOK(t, `
+fun risky() > int !> str { return 1; }
+object Foo {
+    fun bar() > int !> str {
+        return risky();
+    }
+}
+`)
+}
+
 func TestCheck_ObjectDecl(t *testing.T) {
 	checkOK(t, `
 object Point {
@@ -249,7 +342,7 @@ func TestCheck_InjectedGlobalMemberCall(t *testing.T) {
 	// registers none, so exercise checkWithGlobals with a neutral injected name.
 	prog, err := ParseEmbedded(`host.project.register(".");`)
 	require.NoError(t, err, "parse")
-	errs := checkWithGlobals(prog, []string{"host"}, nil, nil, nil, nil)
+	errs := checkWithGlobals(prog, []string{"host"}, nil, nil, nil, nil, nil)
 	assert.Emptyf(t, errs, "expected no errors, got:\n%s", fmtErrors(errs))
 }
 
@@ -267,7 +360,7 @@ func TestCheck_ForEachMap(t *testing.T) {
 	checkOK(t, `
 final m = {"a": 1, "b": 2};
 foreach (k, v in m) {
-    final combined = k + v;
+    final _combined = k + v;
 }
 `)
 }
@@ -363,7 +456,7 @@ func TestCheckTypeSoundness(t *testing.T) {
 	// The reassignment must now assert the type and error instead.
 	t.Run("laundered str into int errors", func(t *testing.T) {
 		sess := newSession(ctx)
-		err := sess.Exec(ctx, `fun f() > int { var i = 0; var a = "hello"; var b: any = a; i = b; return i + 1; }
+		err := sess.Exec(ctx, `fun f() > int { var i = 0; final a = "hello"; final b: any = a; i = b; return i + 1; }
 final __r = f();`)
 		require.Errorf(t, err, "expected a type error, got none (__r=%q)", sess.GetGlobal("__r").String())
 		assert.Containsf(t, err.Error(), "expected int, got str", "error = %q, want it to mention expected int, got str", err.Error())
@@ -373,7 +466,7 @@ final __r = f();`)
 	// the assertion and the program runs normally.
 	t.Run("matching any into int passes", func(t *testing.T) {
 		sess := newSession(ctx)
-		require.NoError(t, sess.Exec(ctx, `fun f() > int { var i = 0; var a = 41; var b: any = a; i = b; return i + 1; }
+		require.NoError(t, sess.Exec(ctx, `fun f() > int { var i = 0; final a = 41; final b: any = a; i = b; return i + 1; }
 final __r = f();`))
 		assert.Equal(t, int64(42), sess.GetGlobal("__r").AsInt(), "__r")
 	})
@@ -777,7 +870,7 @@ final total = sum; // 1+4+9+16 = 30
 // Two instances of the same fiber function keep independent local state.
 func TestConformance_FiberInstancesIndependent(t *testing.T) {
 	s := conf(t, `
-fun ticker() > int *> int? { var i = 0; while (true) { _ = yield i; i = i + 1; } return 0; }
+fun ticker() > int *> int? { var i = 0; while (true) { _ = yield i; i = i + 1; } }
 final a = &ticker();
 final b = &ticker();
 final a0 = resume a; final a1 = resume a; // 0, 1
@@ -953,4 +1046,73 @@ func TestConformance_GAP_ArrowLambda(t *testing.T) {
 	t.Skip("known gap: gopherbuzz lacks `=>` expression-body lambdas; use a block body")
 	s := conf(t, `final double = fun (n: int) > int => n * 2; final r = double(21);`)
 	assert.Equal(t, int64(42), s.GetGlobal("r").AsInt())
+}
+
+// TestExternObjectMethod covers `extern fun` inside an object: a method the HOST
+// binds, declared with a semicolon where a body would be.
+//
+// It exists because Buzz has no nested namespace - `NamespaceStmt` carries a single
+// name - so a group of related host functions reached as `magus\cache.remote(...)`
+// is not a sub-module. It is an OBJECT held by the module, exactly as upstream's
+// `io\File.open(...)` is, and its members are static methods. Without extern here
+// the only way to declare one was to give it a body that never runs, which states
+// something false in a file whose entire purpose is to state signatures.
+//
+// The payoff is the last case: an object reports an unknown member, where a
+// namespace could not. A typo in `magus\cache.remote` used to type-check and reach
+// the VM as null.
+func TestExternObjectMethod(t *testing.T) {
+	const decl = `export object cache {
+    static extern fun remote(spell: any) > void;
+}
+`
+	checkOK(t, decl+`fun main() > void { cache.remote(null); }`)
+	checkErr(t, decl+`fun main() > void { cache.nosuch(null); }`, `has no field or method "nosuch"`)
+
+	// The signature is real, not a formality: arity is enforced like any other call.
+	checkErr(t, decl+`fun main() > void { cache.remote(); }`, "argument")
+
+	// An extern INSTANCE method (no `static`) is accepted too - the modifier is
+	// orthogonal to where the implementation comes from.
+	checkOK(t, `export object handle {
+    extern fun close() > void;
+}
+`)
+}
+
+// TestSetModuleDeclsMerges covers a module declared by more than one owner.
+//
+// `crypto` is the real case: half of it is Buzz's own stdlib (hash, HashAlgorithm,
+// declared in std/crypto.buzz) and half is the embedding host's (sha256Hex and
+// friends, generated from magus's descriptors). The two register independently, so
+// SetModuleDecls is called twice for the same path.
+//
+// It used to ASSIGN, which made that last-writer-wins and dropped one half silently.
+// The symptom was not a missing declaration but a member with no signature: a call to
+// `crypto\hash` type-checked as untyped, so neither its arity nor its argument types
+// were enforced, and a member that had genuinely been removed looked identical to one
+// declared by the other owner.
+func TestSetModuleDeclsMerges(t *testing.T) {
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer sess.Close()
+
+	sess.SetModuleDecls("twoowners", `export extern fun fromFirst(a: str) > str;`)
+	sess.SetModuleDecls("twoowners", `export extern fun fromSecond(b: int) > int;`)
+
+	_, err := sess.Eval(ctx, `
+import "twoowners";
+fun main() > void {
+    final _ = twoowners\fromFirst("x");
+    final _ = twoowners\fromSecond(1);
+}
+`)
+	// Both halves resolve. Either would fail with "no member" if the other had won.
+	assert.NoError(t, err, "both owners' declarations must survive")
+
+	// NOT asserted here: that a wrong argument type is rejected. Measured while
+	// writing this - an extern's parameter types are not enforced at the call site
+	// today, merged or not - so asserting it would be testing a wish. That gap is
+	// real and separate; this test's subject is only that neither owner's
+	// declarations are lost.
 }

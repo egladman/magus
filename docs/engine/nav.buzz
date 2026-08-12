@@ -39,7 +39,7 @@ import "lib/date" as _;
 // Neither hit means the page is genuinely new (nothing has committed it yet), and the
 // honest answer there is to say nothing: attributing it to HEAD claims the page
 // changed in a commit that never touched it, which is both false and the drift bug.
-export fun renderCommitFooter(path: str, site: Site) > str {
+export fun renderCommitFooter(path: str, site: Site) > str !> any {
     var rec = site.metaCommits[site.metaPrefix + path];
     if (rec == null) {
         rec = site.metaCommits[site.metaPrefix + site.outDir + "/" + path];
@@ -60,19 +60,19 @@ export fun renderCommitFooter(path: str, site: Site) > str {
     final histKey = site.metaPrefix + path;
     final hist = site.metaHistory[histKey];
     if (hist != null and hist.len() > 0) {
-        var earlier: [{str: any}] = mut [<{str: any}>];
+        var earlier: mut [{str: any}] = mut [<{str: any}>];
         foreach (row in hist) {
-            final parts = row.split("|");
-            if (parts.len() >= 3 and parts[0] != cFull) {
-                final rec = mut {<str: any>};
-                rec["full"] = parts[0];
-                rec["short"] = parts[1];
-                rec["stampAttr"] = parts[2];
-                rec["stampDisplay"] = formatISOShort(parts[2]);
+            final histParts = row.split("|");
+            if (histParts.len() >= 3 and histParts[0] != cFull) {
+                final histRec = mut {<str: any>};
+                histRec["full"] = histParts[0];
+                histRec["short"] = histParts[1];
+                histRec["stampAttr"] = histParts[2];
+                histRec["stampDisplay"] = formatISOShort(histParts[2]);
                 var rowSubj = "";
-                if (parts.len() >= 4) { rowSubj = parts[3]; }
-                rec["subj"] = rowSubj;
-                earlier.append(rec);
+                if (histParts.len() >= 4) { rowSubj = histParts[3]; }
+                histRec["subj"] = rowSubj;
+                earlier.append(histRec);
             }
         }
         if (earlier.len() > 0) {
@@ -87,7 +87,7 @@ export fun renderCommitFooter(path: str, site: Site) > str {
 // puts each on its own line with a slug id); h3s nest under their h2. Returns "" below
 // three headings - too little for a sidebar. Returns just the title + list; renderPage()
 // wraps it in the .toc <aside>, and toc.js adds scroll-spy + the collapse toggle.
-export fun renderTocList(content: str) > str {
+export fun renderTocList(content: str) > str !> any {
     final lines = content.split("\n");
     var nHead = 0;
     foreach (line in lines) {
@@ -148,7 +148,7 @@ export fun renderTocList(content: str) > str {
 // read; docs, playground, 404, and offline get the theme row alone. console-settings.js
 // opens/closes the panel and persists poll/host; theme.js drives #theme-cycle (it owns the
 // pre-paint theme set()). Both scripts no-op when their controls are absent.
-export fun renderSettingsPanel(showConsole: bool) > str {
+export fun renderSettingsPanel(showConsole: bool) > str !> any {
     var rows = "";
     if (showConsole) {
         rows = `          <label class="settings-row"><span>Refresh rate</span><select id="settings-poll"><option value="5000">5s</option><option value="10000">10s</option><option value="20000">20s</option><option value="60000">60s</option></select></label>
@@ -174,7 +174,7 @@ export fun renderSettingsPanel(showConsole: bool) > str {
 // the Reference drawer trigger only where the page ships #ref-drawer + ref-drawer.js and
 // loads console.css (which sizes the icon button): the docs and playground. The 404 and
 // offline pages have no reference content, so they pass false to omit the button.
-export fun renderSiteNav(root: str, active: str, withRef: bool, cfg: Config) > str {
+export fun renderSiteNav(root: str, active: str, withRef: bool, cfg: Config) > str !> any {
     // On mobile the section links collapse behind a menu button - a plain Pico .outline
     // <button>, NOT a <details> (whose accordion styling fights us), so nav.js toggles the
     // dropdown and it inherits the button look. Brand + theme toggle stay outside, always
@@ -294,7 +294,7 @@ export fun keepConventionSections(html: str, keep: {str: bool}) > str {
 // keeps the two from drifting: whatever the hints link to is exactly what the drawer
 // carries, by construction, so adding a fourth hint kind needs no change here.
 export fun conventionAnchorsIn(html: str) > {str: bool} {
-    var found: {str: bool} = mut {};
+    var found: mut {str: bool} = mut {};
     final marker = "class=\"convention-hint\" href=\"";
     var rest = html;
     var idx = rest.indexOf(marker);
@@ -321,12 +321,12 @@ export fun conventionAnchorsIn(html: str) > {str: bool} {
 // so the first page rendered gets the same treatment as the last. A page with no terms
 // falls back to the full glossary rather than an empty drawer - "nothing here" reads as
 // broken, and on a page with no shared vocabulary the whole glossary is the honest answer.
-export fun renderReferenceDrawer(root: str, canonUrl: str, content: str, site: Site) > str {
+export fun renderReferenceDrawer(root: str, canonUrl: str, content: str, site: Site) > str !> any {
     loadReferenceContent(site);
     var glossary = _refGlossary;
     final joined = site.pageTerms[canonUrl];
     if (joined != null and joined! != "") {
-        var keep: {str: bool} = mut {};
+        var keep: mut {str: bool} = mut {};
         foreach (a in joined!.split("||")) { keep[a] = true; }
         final scoped = keepGlossarySections(_refGlossary, keep);
         if (scoped != "") { glossary = scoped; }
@@ -378,7 +378,7 @@ export fun renderReferenceDrawer(root: str, canonUrl: str, content: str, site: S
 // (Search, /public/ files) reachable from every page, then absolute GitHub/Buzz links. The
 // License link points at the pinned site.metaBranch. root is the prefix back to gen/'s root,
 // so the site links resolve at any depth.
-export fun renderSiteFooter(root: str, site: Site) > str {
+export fun renderSiteFooter(root: str, site: Site) > str !> any {
     // Clusters spread across the footer's width: this site's surfaces, the browser apps, and
     // the project/external links. The app entry is the Console (single entry point, matching
     // the header); dashboard/graph/logs/activity are its tabs. Backtick raw string holds the
@@ -397,7 +397,7 @@ export fun renderSiteFooter(root: str, site: Site) > str {
 // or "" when none has shipped. The version comes from loadReleases (releases/*.yaml), so it
 // is drift-stable; announcement.js hides it once the reader dismisses that version and
 // re-shows it on the next release.
-export fun renderAnnouncementBar(site: Site) > str {
+export fun renderAnnouncementBar(site: Site) > str !> any {
     if (site.releases.len() == 0) { return ""; }
     final ver = site.releases[0].version;
     // data-released lets the client expire the bar; the decision cannot be made here.
@@ -433,7 +433,7 @@ test "keepConventionSections keeps the named H2 sections and drops the rest" {
         + "<h2 id=\"placeholders\">Placeholders</h2>\n<p>a</p>\n"
         + "<h2 id=\"diffs\">Diffs</h2>\n<p>b</p>\n"
         + "<h2 id=\"admonitions\">Admonitions</h2>\n<p>c</p>\n";
-    var keep: {str: bool} = mut {};
+    var keep: mut {str: bool} = mut {};
     keep["admonitions"] = true;
     final got = keepConventionSections(doc, keep);
     assert\equal(got.indexOf("Admonitions") != null, true, "the wanted section survives");

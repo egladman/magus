@@ -1,0 +1,4 @@
+// @error: expected `collect` method to be
+// collect is the finalizer hook: the runtime calls it with a fixed shape.
+object Collectable { fun collect(_: str) > void {} }
+final __r = 0;

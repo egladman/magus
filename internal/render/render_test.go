@@ -129,6 +129,23 @@ func TestWriteGraphMermaid_IDCollision(t *testing.T) {
 	assert.Contains(t, got, `"foo_bar"`, "expected both node labels")
 }
 
+func TestMermaidIDs_ThreeWayCollision(t *testing.T) {
+	t.Parallel()
+	// "foo-bar", "foo/bar", and "foo_bar" all sanitize to the same base id
+	// "foo_bar". Sorted order is "foo-bar" < "foo/bar" < "foo_bar" (by byte
+	// value), so the base keeps its bare id and the other two must each get a
+	// distinct numeric suffix - not the two colliding on "foo_bar_1".
+	ids := mermaidIDs([]string{"foo/bar", "foo_bar", "foo-bar"})
+	assert.Len(t, ids, 3, "one id per input path")
+	seen := make(map[string]string, 3)
+	for path, id := range ids {
+		if other, ok := seen[id]; ok {
+			t.Fatalf("paths %q and %q both got mermaid id %q", other, path, id)
+		}
+		seen[id] = path
+	}
+}
+
 func TestWriteGraphMermaid_Subgraphs(t *testing.T) {
 	t.Parallel()
 	out := types.GraphOutput{

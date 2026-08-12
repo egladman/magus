@@ -2,7 +2,7 @@
 // approximate - a fixed width per glyph, no font metrics - so a badge renders a touch wide,
 // which is fine.
 
-import "xml";
+import "encoding/xml";
 import "std";
 import "assert";
 
@@ -58,14 +58,14 @@ fun severity_color(figure: str) > str !> str {
 // coverage is the only public entry: a label, a percentage figure ("56.8", trailing "%"
 // optional), and a corner radius (3 = rounded, 0 = square). The color is derived from the
 // figure, never passed. Throws on a non-numeric figure.
-export fun coverage(label: str, percent: str, radius: int) > str !> str {
+export fun coverage(label: str, percent: str, radius: int) > str !> any {
     final figure = normalize_percent(percent);
     return flat_badge(label, value: "{figure}%", color: severity_color(figure), radius: radius);
 }
 
 // flat_badge builds the SVG: a grey label cell, a colored value cell, centered text. Private
 // - the color arrives already derived.
-fun flat_badge(label: str, value: str, color: str, radius: int) > str {
+fun flat_badge(label: str, value: str, color: str, radius: int) > str !> any {
     final label_width = text_width(label);
     final value_width = text_width(value);
     final total_width = label_width + value_width;

@@ -35,7 +35,7 @@ The REPL accepts Buzz expressions and evaluates them against the magusfile runti
 abc1234
 > go.name
 go
-> os\exec("go", ["build", "./..."])
+> proc\exec("go", ["build", "./..."])
 ```
 
 The REPL treats lines starting with `//` as comments and skips them. Type `.help` for the meta-command list, `.exit` (or Ctrl-D) to quit.
@@ -59,9 +59,9 @@ Call `magus\pry()` anywhere in a magusfile target to suspend execution and drop 
 ```buzz
 export fun build(ctx: magus\Context, args: [str]) > void {
     const outputs = ["bin/foo", "bin/bar"];
-    os\exec("go", ["generate", "./..."]);
+    proc\exec("go", ["generate", "./..."]);
     magus\pry();   // execution pauses here; inspect or modify state
-    os\exec("go", ["build", "./..."]);
+    proc\exec("go", ["build", "./..."]);
 }
 ```
 

@@ -5,7 +5,7 @@ import "std";
 import "ffi";
 var __r = "not caught";
 try {
-    final lib = zdef("/definitely/not/here/libnope", "int f(void);");
+    final _lib = zdef("/definitely/not/here/libnope", "int f(void);");
 } catch (e) {
     __r = "caught";
 }

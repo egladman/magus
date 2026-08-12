@@ -36,8 +36,8 @@ fun version() > str { return "1.4.0-rc.2"; }
 // Two charms that answer one question are a mistake worth REPORTING, not resolving. WS is
 // this workspace's own code prefix - magus refuses the MGS prefix, which is its closed
 // catalog, so a workspace diagnostic can never render as though magus documented it.
-fun exclusiveCharms(ctx: magus\Context, a: str, b: str, code: str, question: str) > void {
-    if (ctx.has_charm(a) and ctx.has_charm(b)) {
+fun exclusiveCharms(ctx: magus\Context, a: str, b: str, code: str, question: str) > void !> any {
+    if (ctx.hasCharm(a) and ctx.hasCharm(b)) {
         magus\raise(code, message: "the `" + a + "` and `" + b + "` charms both answer "
             + question + " - name one");
     }
@@ -49,12 +49,12 @@ fun exclusiveCharms(ctx: magus\Context, a: str, b: str, code: str, question: str
 // field. That is why naming both needs no special case beyond the guard above - a version
 // either carries a prerelease component or it does not, so one of the two assertions would
 // fail on its own anyway.
-fun channel(ctx: magus\Context) > str {
+fun channel(ctx: magus\Context) > str !> any {
     exclusiveCharms(ctx, a: "stable", b: "unstable", code: "WS1002",
         question: "which channel to publish to");
 
-    final wantStable = ctx.has_charm("stable");
-    final wantUnstable = ctx.has_charm("unstable");
+    final wantStable = ctx.hasCharm("stable");
+    final wantUnstable = ctx.hasCharm("unstable");
     if (!wantStable and !wantUnstable) { return "commit"; }
 
     final pre = semver\parse(version()).prerelease;
@@ -78,21 +78,21 @@ fun channel(ctx: magus\Context) > str {
 // The default among delivering modes is the harmless one, for the same reason a bare run
 // pushes nothing: the commit channel adds an immutable tag and moves nothing, while a
 // release moves a tag every consumer follows.
-export fun publish(ctx: magus\Context, args: [str]) > void {
-    if (!ctx.has_charm("cd")) {
-        magus\info("publish: built " + version() + ", pushed nothing (add the cd charm to deliver)");
+export fun publish(ctx: magus\Context, args: [str]) > void !> any {
+    if (!ctx.hasCharm("cd")) {
+        magus\log.info("publish: built " + version() + ", pushed nothing (add the cd charm to deliver)");
         return;
     }
     final ch = channel(ctx);
     if (ch == "commit") {
-        magus\info("publish: " + version() + " -> commit channel, tagged by hash, one registry");
+        magus\log.info("publish: " + version() + " -> commit channel, tagged by hash, one registry");
         return;
     }
     if (ch == "unstable") {
-        magus\info("publish: " + version() + " -> unstable channel, version tag only");
+        magus\log.info("publish: " + version() + " -> unstable channel, version tag only");
         return;
     }
-    magus\info("publish: " + version() + " -> stable channel, version tag and the moving tag");
+    magus\log.info("publish: " + version() + " -> stable channel, version tag and the moving tag");
 }
 
 test "a version with a prerelease belongs to the unstable channel" {

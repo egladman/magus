@@ -8,7 +8,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// RequiredVersion checks the running build against the workspace's declared floor
+// CheckRequiredVersion checks the running build against the workspace's declared floor
 // (magus.yaml required_version) and returns MGS1021 when the build is too old.
 //
 // This is the only ward an OLD binary can enforce, and that asymmetry is the whole
@@ -54,7 +54,7 @@ import (
 // A malformed constraint is an error rather than a silent pass. A floor nobody can
 // parse protects nobody, and failing loudly on it is what keeps a typo from
 // reading as "no floor declared".
-func RequiredVersion(constraint, running string) *types.DiagnosticError {
+func CheckRequiredVersion(constraint, running string) *types.DiagnosticError {
 	if constraint == "" || running == "" || types.IsDevMagusVersion(running) {
 		return nil
 	}

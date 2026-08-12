@@ -3,9 +3,12 @@ package proc
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"time"
 
 	"github.com/egladman/magus/internal/json"
 )
@@ -77,4 +80,39 @@ func readFrame(r io.Reader) (typeName string, line []byte, err error) {
 		return "", nil, fmt.Errorf("proc: frame missing \"type\" field")
 	}
 	return head.Type, line, nil
+}
+
+// readFrameCtx reads one frame from conn like readFrame, but returns as soon as ctx
+// is cancelled even though the read underneath has no deadline of its own and
+// readFrame takes a plain io.Reader with no way to observe ctx.
+//
+// It deliberately imposes no wall-clock timeout beyond what ctx itself carries: an
+// adopted run can hold this connection open for as long as the daemon-side build
+// takes (documented elsewhere as "many minutes"), so a fixed deadline here would
+// kill a healthy long-running call. Only ctx cancellation - the caller's own
+// context.WithTimeout, or a parent giving up - ends the read early; a wedged daemon
+// that never replies is exactly the case this unblocks (see readFrame's callers in
+// client.go, none of which previously had any way to observe ctx once past Dial).
+func readFrameCtx(ctx context.Context, conn net.Conn) (typeName string, line []byte, err error) {
+	type result struct {
+		typeName string
+		line     []byte
+		err      error
+	}
+	done := make(chan result, 1)
+	go func() {
+		typeName, line, err := readFrame(conn)
+		done <- result{typeName, line, err}
+	}()
+
+	select {
+	case r := <-done:
+		return r.typeName, r.line, r.err
+	case <-ctx.Done():
+		// Force the blocked Read to return immediately. The goroutine above still
+		// sends on done (buffered, capacity 1) once it unblocks, so it can never
+		// leak even though nothing receives from it after we return here.
+		_ = conn.SetReadDeadline(time.Now())
+		return "", nil, ctx.Err()
+	}
 }

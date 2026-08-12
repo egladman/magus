@@ -1,0 +1,6 @@
+// @expect: y:l
+// A finite case set needs no else: both bool arms, or every enum case.
+enum Side { left, right }
+final b = match (true) { true -> "y", false -> "n" };
+final e = match (Side.left) { Side.left -> "l", Side.right -> "r" };
+final __r = "{b}:{e}";

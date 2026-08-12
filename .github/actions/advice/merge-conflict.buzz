@@ -8,6 +8,7 @@
 // Reads REPO, PR_NUMBER, PR_BASE, and PR_HEAD_SHA from the environment, and writes its
 // section of the pull request's one magus comment through advice\publish.
 import "os";
+import "proc";
 import "advice";
 import "magus";
 import "std";
@@ -26,9 +27,9 @@ final section = "merge-conflicts";
 // head is passed explicitly rather than read as HEAD because actions/checkout resolves a
 // pull_request event to the ephemeral merge commit, which is base already merged with
 // head - comparing that against base would find nothing.
-fun conflicted(base: str, head: str) > [str] {
-    os\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
-    final res = os\exec("git", args: ["merge-tree", "--write-tree", "--name-only",
+fun conflicted(base: str, head: str) > [str] !> any {
+    proc\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
+    final res = proc\exec("git", args: ["merge-tree", "--write-tree", "--name-only",
         "--no-messages", "origin/" + base, head], dir: ".", opts: {"allow_failure": true});
     if (res.code == 0) { return mut []; }
     // 1 is "merged with conflicts"; anything else is git failing to answer at all, which
@@ -57,7 +58,7 @@ fun conflictPaths(text: str) > [str] {
 // checked when this file compiles. The earlier form asked for `-o json` and walked the
 // result with q("files").listValue() / q("role").stringValue(), where a mistyped key is
 // a null at run time on a CI job nobody is watching.
-fun generated(paths: [str]) > [str] {
+fun generated(paths: [str]) > [str] !> any {
     var found = mut [];
     if (paths.len() == 0) { return found; }
     foreach (f in magus\describeFile(paths).files) {
@@ -77,7 +78,7 @@ export fun conflictBody(base: str, files: [str]) > str {
         + "once. Conflicts in hand-written files are still yours.\n";
 }
 
-fun main() > void {
+fun main() > void !> any {
     final repo = advice\env("REPO");
     final pr = advice\env("PR_NUMBER");
     final base = advice\env("PR_BASE");
@@ -114,7 +115,6 @@ fun main() > void {
     std\print("advised on PR " + pr + ": " + files.join(", "));
 }
 
-main();
 
 test "conflictPaths drops the merged tree's oid and keeps the rest" {
     final paths = conflictPaths("38d2ff24\nMAGUS.md\ngen/target-graph.json\n");

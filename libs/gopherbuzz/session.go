@@ -19,18 +19,34 @@ import (
 // Session is a single Buzz execution context.
 // Not safe for concurrent use; ensure one goroutine owns it at a time.
 type Session struct {
-	ctx           context.Context
-	cancel        context.CancelFunc
-	env           *vmpackage.Env
-	targets       map[string]vmpackage.Callable
-	tests         []TestEntry
+	ctx     context.Context
+	cancel  context.CancelFunc
+	env     *vmpackage.Env
+	targets map[string]vmpackage.Callable
+	tests   []TestEntry
+	// exportedNames is every name any chunk exported, imports included. It answers
+	// VISIBILITY: a name a flat import made private stays visible if another module
+	// exported it.
 	exportedNames map[string]bool
+	// rootExportedNames is the subset from chunks run outside an import. Exports()
+	// answers with this, because its callers ask what a file OWNS - conflated, an
+	// `import "lcov"` turned lcov's exports into the importer's targets (MGS1008).
+	rootExportedNames map[string]bool
 	// embedded relaxes the script-conformance rules upstream Buzz enforces (no
 	// top-level control flow, labeled args). Default false (strict, like upstream);
 	// the embedding hosts — REPL, magus eval, magusfile loading, the eval test
 	// harness — set it via WithEmbedded because top-level statements are their whole
 	// purpose. It is the explicit, named deviation from upstream.
 	embedded bool
+	// repl marks this session as an interactive REPL: one statement evaluated at a
+	// time, each parsed independently. It suppresses the BZZ3001 unused-import
+	// warning in Diagnostics (see checkShared) - matching upstream Buzz, which gates
+	// the same warning on `self.flavor != .Repl` (Parser.zig) - because a binding
+	// "unused so far" in one line may simply be used by a line not typed yet.
+	// Default false; set via WithREPL. Distinct from embedded: magus eval and
+	// magusfile loading are also embedded but are NOT a REPL (a whole file is known
+	// up front, so "unused" there is a real finding).
+	repl bool
 	// curVM is the VM currently executing a chunk in this session, or nil between
 	// runs. The debugger (debug.go) reads it for stack introspection, and the run
 	// helpers set/restore it (save-and-restore so a pry() eval doesn't clobber the
@@ -57,6 +73,9 @@ type Session struct {
 	// after searchPaths, for the `-L` CLI flag and BUZZ_INCLUDE_PATH. NewSession
 	// populates it from BUZZ_INCLUDE_PATH; the host may override via SetIncludeDirs.
 	includeDirs []string
+	// importingDirs is the stack of directories of the files currently being
+	// imported, innermost last. See findIncludeFile.
+	importingDirs []string
 	// loadedPaths tracks absolute paths already loaded to prevent re-execution
 	// and break import cycles.
 	loadedPaths map[string]bool
@@ -88,6 +107,9 @@ type Session struct {
 	// types, registered under their bare names); this keeps the per-module grouping a
 	// namespace object needs, so `io\File` resolves as well as a bare `File`.
 	importedModuleTypes map[string][]ast.Node
+	// importedModuleVars maps the same bound name to the module's exported
+	// `final`/`var` declarations. See collectImportedModule.
+	importedModuleVars map[string][]*ast.DeclStmt
 	// moduleDecls maps an import path to embedded .buzz source. Unlike a
 	// native module (a host Value carrying functions), a declaration module is
 	// real Buzz source, so its exported object/enum *types* are visible to the
@@ -117,6 +139,18 @@ type Session struct {
 	// sharing one namespace; gopherbuzz mirrors both (see bindNamespacePath),
 	// on top of its own basename/splat access conveniences.
 	declaredNamespaces map[string]string
+	// ownNamespace is the ENTRY program's declared namespace, split on the
+	// separator. Imports bind relative to it; see bindNamespaceRelative.
+	ownNamespace []string
+	// lastWarnings holds the non-fatal diagnostics (currently just BZZ3001 unused
+	// imports) compileShared computed for the most recent Exec/Compile call - last
+	// compile, not accumulated. A Session is reused across many compiles (a session
+	// pool, NewChild sub-sessions, the REPL evaluating one line at a time), so
+	// accumulating here would grow this slice unbounded across a long-lived
+	// session's life. Read it via Warnings() right after the Exec/Compile you care
+	// about. Unguarded like every other field: Session is documented single-
+	// goroutine-owner, not safe for concurrent use.
+	lastWarnings []typeError
 }
 
 // SetNativeModule registers v as the module imported by `import "<importPath>"`.
@@ -148,6 +182,16 @@ func (s *Session) NativeModule(importPath string) (vmpackage.Value, bool) {
 func (s *Session) SetModuleDecls(importPath, src string) {
 	if s.moduleDecls == nil {
 		s.moduleDecls = map[string]string{}
+	}
+	// APPEND rather than replace. A module can be declared by more than one owner:
+	// `crypto` is half Buzz's own stdlib (hash, HashAlgorithm, in std/crypto.buzz) and
+	// half the host's (sha256Hex, hmacSha256, from magus's descriptors), and the two
+	// register independently. Assigning here meant last-writer-wins, so one half's
+	// declarations were silently dropped and its members read as untyped - which is
+	// how `crypto\hash` had no signature despite being declared in this very package.
+	if prev := s.moduleDecls[importPath]; prev != "" {
+		s.moduleDecls[importPath] = prev + "\n" + src
+		return
 	}
 	s.moduleDecls[importPath] = src
 }
@@ -194,6 +238,7 @@ func newSession(ctx context.Context) *Session {
 		embedded:           true,
 		targets:            make(map[string]vmpackage.Callable),
 		exportedNames:      make(map[string]bool),
+		rootExportedNames:  make(map[string]bool),
 		loadedPaths:        make(map[string]bool),
 		declaredNamespaces: make(map[string]string),
 	}
@@ -380,6 +425,13 @@ func WithEmbedded() Option {
 	return func(s *Session) { s.embedded = true }
 }
 
+// WithREPL marks this session as an interactive REPL, suppressing the BZZ3001
+// unused-import warning (see Session.repl). A REPL host should pass this alongside
+// WithEmbedded.
+func WithREPL() Option {
+	return func(s *Session) { s.repl = true }
+}
+
 // NewSession creates a Buzz execution context. Inject globals with SetGlobal
 // and register target callbacks via Targets. Close releases the context.
 //
@@ -439,6 +491,12 @@ func (s *Session) Targets() map[string]vmpackage.Callable { return s.targets }
 // Exec parses, type-checks, compiles, and executes Buzz source code in the session's environment.
 // Type errors are returned as hard errors (Buzz is statically typed).
 func (s *Session) Exec(ctx context.Context, code string) error {
+	// The ENTRY program's namespace, recorded before anything it imports is
+	// resolved. An import binds relative to it: a file in `commom\part\here`
+	// imported from `commom\part` binds as `here`, not under its full path. Set
+	// here rather than in exec, which imported files also go through - they must
+	// not overwrite the importer's.
+	s.ownNamespace = s.declaredNamespace(code)
 	_, err := s.exec(ctx, code)
 	return err
 }
@@ -449,7 +507,7 @@ func (s *Session) Exec(ctx context.Context, code string) error {
 // tell that a module re-exported a name another module already exported, which
 // would silently drop the later module's export from its namespace object.
 func (s *Session) exec(ctx context.Context, code string) ([]string, error) {
-	chunk, err := s.compileShared(code)
+	chunk, err := s.compileShared(ctx, code)
 	if err != nil {
 		return nil, err
 	}
@@ -460,6 +518,10 @@ func (s *Session) exec(ctx context.Context, code string) ([]string, error) {
 	}
 	for _, name := range chunk.Exports {
 		s.exportedNames[name] = true
+		// collectImportPrivate is on for exactly the duration of an import.
+		if !s.collectImportPrivate {
+			s.rootExportedNames[name] = true
+		}
 	}
 	if s.collectImportPrivate {
 		if s.importPrivate == nil {
@@ -514,7 +576,7 @@ func (s *Session) SetFaultHook(cb func(vmpackage.FaultKind)) { s.faultHook = cb 
 // program's result value (the value of a trailing `return <expr>`, else Null).
 // The REPL uses it to print bare expressions.
 func (s *Session) Eval(ctx context.Context, code string) (vmpackage.Value, error) {
-	chunk, err := s.compileShared(code)
+	chunk, err := s.compileShared(ctx, code)
 	if err != nil {
 		return vmpackage.Null, err
 	}
@@ -548,12 +610,12 @@ func (s *Session) Globals() map[string]vmpackage.Value {
 // export in a file executed via Exec or ExecChunk. The map is a fresh snapshot;
 // mutations don't affect the session.
 func (s *Session) Exports() map[string]vmpackage.Value {
-	if len(s.exportedNames) == 0 {
+	if len(s.rootExportedNames) == 0 {
 		return nil
 	}
 	all := s.Globals()
-	out := make(map[string]vmpackage.Value, len(s.exportedNames))
-	for name := range s.exportedNames {
+	out := make(map[string]vmpackage.Value, len(s.rootExportedNames))
+	for name := range s.rootExportedNames {
 		if v, ok := all[name]; ok {
 			out[name] = v
 		}
@@ -572,8 +634,13 @@ func (s *Session) DoString(code string) error { return s.Exec(s.ctx, code) }
 // (injected globals, prior definitions, target callbacks), so top-level
 // declarations are Env bindings (SharedGlobals), not per-Run slots. Predefined
 // globals are passed to the checker so they aren't flagged as undefined.
-func (s *Session) compileShared(code string) (*vmpackage.Chunk, error) {
-	prog, errs, parseErr := s.checkShared(code)
+func (s *Session) compileShared(ctx context.Context, code string) (*vmpackage.Chunk, error) {
+	// warnings (e.g. BZZ3001 unused imports) never fail Exec/Compile - only errs
+	// does - but they are retained on the session (see lastWarnings) so a caller can
+	// read them back afterward via Warnings() without re-resolving imports the way
+	// calling Diagnostics() after the fact would.
+	prog, errs, warnings, parseErr := s.checkShared(ctx, code)
+	s.lastWarnings = warnings
 	if parseErr != nil {
 		return nil, parseErr
 	}
@@ -601,19 +668,63 @@ func (s *Session) compileShared(code string) (*vmpackage.Chunk, error) {
 // compiles on success and reports only the first error, while Diagnostics returns
 // them all for the editor. A parse error comes back separately as parseErr, since
 // type-checking has no tree to run against when parsing fails.
-func (s *Session) checkShared(code string) (prog *ast.Program, typeErrs []typeError, parseErr error) {
+//
+// warnings holds diagnostics that must never fail a compile (currently just BZZ3001
+// unused-import) - compileShared discards them, Diagnostics surfaces them alongside
+// typeErrs. They start as candidates from parsing (see parseModedTracked) and are
+// filtered by importUsageIsReliable once loadFileImports resolves each import: a
+// namespace binding that was never referenced (qualified or not) is reliably
+// "unused" ONLY when its import cannot ALSO have flat-merged its members straight into
+// scope (gopherbuzz's own extension over upstream - see importUsageIsReliable). Warnings
+// are suppressed entirely for a REPL session (s.repl) - upstream Buzz does the same
+// (Parser.zig gates the same warning on `self.flavor != .Repl`), because a REPL
+// evaluates one statement at a time, so an import "unused so far" may simply be used by
+// a line not typed yet.
+func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Program, typeErrs []typeError, warnings []typeError, parseErr error) {
 	parseStart := time.Now()
-	prog, err := parseModed(code, !s.embedded)
+	prog, unused, err := parseModedTracked(code, !s.embedded)
 	if obs := s.compileObserver; obs != nil {
 		obs.Phase(PhaseParse, time.Since(parseStart), err)
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	// Resolve file-based imports before type-checking so the globals they
-	// introduce are visible to the checker.
-	if err := s.loadFileImports(prog); err != nil {
-		return nil, nil, err
+	// introduce are visible to the checker. Also tells us how each import actually
+	// resolved, which unused-import warnings need (see importUsageIsReliable below).
+	outcomes, err := s.loadFileImports(ctx, prog)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if !s.repl {
+		for _, u := range unused {
+			if !importUsageIsReliable(outcomes[ast.Pos{Line: u.Line, Col: u.Col}], u.Alias) {
+				continue
+			}
+			msg := fmt.Sprintf("import %q is never used", u.Path)
+			if u.Alias != "" {
+				msg = fmt.Sprintf("import %q as %s is never used", u.Path, u.Alias)
+			}
+			// A WARNING, deliberately, though upstream makes this a compile ERROR
+			// (tests/compile_errors/unused-import.buzz). Measured 2026-08-11, twice:
+			//
+			//  1. The check has FALSE POSITIVES it cannot fix at this layer.
+			//     `referenced` flips when the BINDING NAME is seen, so
+			//     `import "buzz:std"; print("x");` reads as unused even though the
+			//     flat call is a real use - knowing that would need each module's
+			//     export table, which lives past resolution, not in the parser.
+			//  2. Upstream's own suite CONTRADICTS itself here.
+			//     tests/behavior/namespace.buzz and
+			//     tests/compile_errors/unused-import.buzz are semantically identical
+			//     - both import an unused `buzz:math` beside a used `buzz:std` - and
+			//     are expected to compile and to fail respectively. They differ only
+			//     in import order. No consistent rule satisfies both, so promoting
+			//     this to an error trades one suite's file for the other's.
+			//
+			// Fix (1) before revisiting: an accurate check is the precondition, and
+			// it is worth doing on its own merits even while this stays a warning.
+			warnings = append(warnings, typeError{Line: u.Line, Col: u.Col, Code: UnusedImport, Severity: SeverityWarning, Msg: msg})
+		}
 	}
 	names := s.env.Names()
 	globals := make([]string, 0, len(names))
@@ -627,7 +738,7 @@ func (s *Session) checkShared(code string) (prog *ast.Program, typeErrs []typeEr
 		globals = append(globals, name)
 	}
 	checkStart := time.Now()
-	errs := checkWithGlobals(prog, globals, s.importedTypes, s.importedModuleFuncs, s.importedModuleTypes, s.importPrivateHint())
+	errs := checkWithGlobals(prog, globals, s.importedTypes, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars, s.importPrivateHint())
 	if obs := s.compileObserver; obs != nil {
 		var firstErr error
 		if len(errs) > 0 {
@@ -635,19 +746,56 @@ func (s *Session) checkShared(code string) (prog *ast.Program, typeErrs []typeEr
 		}
 		obs.Phase(PhaseCheck, time.Since(checkStart), firstErr)
 	}
-	return prog, errs, nil
+	return prog, errs, warnings, nil
 }
 
 // Diagnostic is a positioned diagnostic for editor tooling. Line and Col are
 // 1-based; a zero Line means no position was recoverable (Col is only meaningful
 // beside a nonzero Line). Msg has the "buzz: line L:C:" prefix stripped - the
 // position travels in the fields instead. Code is the BZZ diagnostic code (empty for
-// a parse error, which has no code). Msg/Line/Col/Code mirror the unexported checker
-// typeError; keep the two shapes in sync if either gains a field.
+// a parse error, which has no code). Severity's zero value is SeverityError, matching
+// every diagnostic before this field existed (a parse error has no Severity set either,
+// so it reads as an error, correctly). Msg/Line/Col/Code/Severity mirror the unexported
+// checker typeError; keep the two shapes in sync if either gains a field.
 type Diagnostic struct {
 	Line, Col int
 	Code      diagnostics.Code
 	Msg       string
+	Severity  Severity
+}
+
+// String renders d the same shape typeError.Error() renders a hard error in -
+// "[CODE] buzz: line L:C: <severity: >msg", plus a "see: <url>" line when Code is
+// set - so a warning a caller prints reads consistently with the errors this
+// package already produces.
+func (d Diagnostic) String() string {
+	msg := fmt.Sprintf("buzz: line %d:%d: %s", d.Line, d.Col, d.Msg)
+	if d.Severity == SeverityWarning {
+		msg = fmt.Sprintf("buzz: line %d:%d: warning: %s", d.Line, d.Col, d.Msg)
+	}
+	if d.Code == "" {
+		return msg
+	}
+	return fmt.Sprintf("[%s] %s\n  see: %s", d.Code, msg, bzz.URL(d.Code))
+}
+
+// Warnings returns the non-fatal diagnostics (currently just BZZ3001 unused
+// imports) found by the most recent Exec or Compile call on this session - see
+// lastWarnings for why it is last-compile rather than accumulated. Nil before any
+// compile.
+//
+// Unlike Diagnostics, this is a plain read of state compileShared already computed
+// on the run path: it does not re-resolve imports or re-execute anything, so it is
+// safe to call right after Exec/Compile on a live session you intend to keep using.
+func (s *Session) Warnings() []Diagnostic {
+	if len(s.lastWarnings) == 0 {
+		return nil
+	}
+	out := make([]Diagnostic, len(s.lastWarnings))
+	for i, w := range s.lastWarnings {
+		out[i] = Diagnostic{Line: w.Line, Col: w.Col, Code: w.Code, Msg: w.Msg, Severity: w.Severity}
+	}
+	return out
 }
 
 // Diagnostics parses and type-checks code against the session's shared scope and
@@ -664,14 +812,19 @@ type Diagnostic struct {
 // never on a live session you still intend to Exec, or a later real import will be
 // skipped as already-loaded.
 func (s *Session) Diagnostics(code string) []Diagnostic {
-	_, errs, parseErr := s.checkShared(code)
+	// Diagnostics takes no per-call ctx (see the doc comment above); it runs
+	// against the session's own lifetime like the rest of the no-ctx surface.
+	_, errs, warnings, parseErr := s.checkShared(s.ctx, code)
 	if parseErr != nil {
 		line, col, msg := splitBuzzPos(parseErr.Error())
 		return []Diagnostic{{Line: line, Col: col, Msg: msg}}
 	}
-	out := make([]Diagnostic, len(errs))
-	for i, e := range errs {
-		out[i] = Diagnostic{Line: e.Line, Col: e.Col, Code: e.Code, Msg: e.Msg}
+	out := make([]Diagnostic, 0, len(errs)+len(warnings))
+	for _, e := range errs {
+		out = append(out, Diagnostic{Line: e.Line, Col: e.Col, Code: e.Code, Msg: e.Msg, Severity: e.Severity})
+	}
+	for _, w := range warnings {
+		out = append(out, Diagnostic{Line: w.Line, Col: w.Col, Code: w.Code, Msg: w.Msg, Severity: w.Severity})
 	}
 	return out
 }
@@ -735,24 +888,59 @@ func (s *Session) importPrivateHint() map[string]bool {
 //   - no alias or alias "_": flat exec — file's globals merge into parent env.
 //   - alias "x": exec in a sub-session (inheriting host globals), collect new
 //     bindings, create a map value, bind it under "x" in the parent env.
-func (s *Session) loadFileImports(prog *ast.Program) error {
+//
+// The returned map records how each import statement (keyed by its own position)
+// actually resolved - see importUsageIsReliable, the only current reader.
+func (s *Session) loadFileImports(ctx context.Context, prog *ast.Program) (map[ast.Pos]ImportOutcome, error) {
 	// Note: don't early-return on empty includeDirs — host-provided synthetic
 	// modules (e.g. "magus/extra") resolve without any include path.
+	outcomes := map[ast.Pos]ImportOutcome{}
 	for _, stmt := range prog.Stmts {
 		imp, ok := stmt.(*ast.ImportStmt)
 		if !ok {
 			continue
 		}
 		start := time.Now()
-		outcome, err := s.resolveImport(imp)
+		outcome, err := s.resolveImport(ctx, imp)
+		outcomes[imp.Pos] = outcome
 		if obs := s.compileObserver; obs != nil {
 			obs.Import(imp.Path, outcome, time.Since(start), err)
 		}
 		if err != nil {
-			return err
+			return outcomes, err
 		}
 	}
-	return nil
+	return outcomes, nil
+}
+
+// importUsageIsReliable reports whether an unreferenced namespace binding can be
+// trusted as genuinely UNUSED for outcome/alias. gopherbuzz extends upstream Buzz: a
+// plain (non-aliased) import whose source is a .buzz file or embedded declarations
+// (ImportFile, ImportDecls) ALSO flat-merges its exports straight into scope - see
+// loadFileImports's alias-semantics comment and resolveImport's ImportDecls branch,
+// which flattens unconditionally, alias or not. A module used only through one of
+// those flattened bare names (no `ns\member`/`ns.member` anywhere) is a real use this
+// package cannot see without cross-referencing the imported file's export list against
+// every identifier in the importer - so rather than risk that false positive, unused-
+// import detection only trusts outcomes that provably never flatten:
+//
+//   - ImportNative / ImportResolver: always namespace-only for a real (non-"_") alias
+//     or no alias - confirmed in resolveImport, neither branch flattens without an
+//     explicit "as _".
+//   - ImportFile WITH a real alias: resolveImport execs it in an isolated sub-session
+//     (loadImportAsAlias), so only the qualified form can possibly reach it.
+//
+// Everything else (ImportFile with no alias, ImportDecls always, ImportBound - whose
+// original resolution kind this call can't see) is left unreported.
+func importUsageIsReliable(outcome ImportOutcome, alias string) bool {
+	switch outcome {
+	case ImportNative, ImportResolver:
+		return true
+	case ImportFile:
+		return alias != "" && alias != "_"
+	default:
+		return false
+	}
 }
 
 // resolveImport resolves one import statement, binding whatever it names into the
@@ -762,7 +950,7 @@ func (s *Session) loadFileImports(prog *ast.Program) error {
 // resolver, and finally a .buzz file on the search path. Every `continue` in the
 // old loop is a `return <outcome>, nil` here; every error return carries the
 // outcome it failed under.
-func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
+func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (ImportOutcome, error) {
 	// `buzz:<name>` is upstream Buzz's package-manager scheme for a built-in
 	// stdlib module (`import "buzz:os"`), disambiguating it from a package or
 	// file import. gopherbuzz registers the stdlib under bare names, so strip
@@ -809,6 +997,19 @@ func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
 				// in env until after this point, which is why it has to be the module
 				// value in hand rather than a lookup by name.
 				declareEnumValues(v, src, s.embedded)
+				// An OBJECT the declarations export needs a runtime definition for the
+				// same reason an enum needs a runtime value: the checker knowing the
+				// type is not enough to CONSTRUCT one. Without this, `HttpRetry{...}`
+				// type-checks (the collect above saw the declaration) and then throws
+				// "unknown object type" at run time, because the VM resolves an object
+				// literal through env, which nothing ever populated.
+				//
+				// Executing the declarations is safe, and the header of every generated
+				// decls file says why: an `extern` emits no code, so running the source
+				// defines its objects and enums and redefines none of the native
+				// methods. The module value in hand is untouched - verified by calling
+				// a native method after this runs.
+				s.declareObjectTypes(src)
 			}
 		}
 		if len(imp.Only) > 0 {
@@ -853,7 +1054,7 @@ func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
 		}
 		s.loadedPaths[key] = true
 		s.collectImportedModule(boundName, src)
-		exports, err := s.execImport(s.ctx, src)
+		exports, err := s.execImport(ctx, src)
 		if err != nil {
 			return ImportDecls, bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", imp.Path, err)
 		}
@@ -897,12 +1098,25 @@ func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
 	if err != nil {
 		return ImportFile, bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", imp.Path, err)
 	}
+	// Everything this file imports resolves relative to IT, not to whoever imported
+	// it. Popped on the way out so a sibling import of the parent is unaffected.
+	s.importingDirs = append(s.importingDirs, filepath.Dir(abs))
+	defer func() { s.importingDirs = s.importingDirs[:len(s.importingDirs)-1] }()
 
 	if imp.Alias != "" && imp.Alias != "_" {
 		// Aliased import: exec in an isolated sub-session so the file's
 		// globals don't leak into the parent env. Collect the new globals
 		// and expose them as a map bound under the alias.
-		if err := s.loadImportAsAlias(imp.Path, string(data), imp.Alias); err != nil {
+		//
+		// Collect its DECLARATIONS too, exactly as the flat path below does. Only the
+		// runtime values arrive through loadImportAsAlias; the exported object and
+		// enum types are compile-time facts that live nowhere else, and skipping this
+		// left an aliased file import unable to name them: `testing\PrefixMe{}`
+		// reported an undefined type in the checker, and where it did compile the
+		// literal was built with no field defaults because the compiler seeds those
+		// from the same collection (see CompileOptions.ImportedTypes).
+		s.collectImportedModule(imp.Alias, string(data))
+		if err := s.loadImportAsAlias(ctx, imp.Path, string(data), imp.Alias); err != nil {
 			return ImportFile, err
 		}
 		return ImportFile, nil
@@ -911,7 +1125,7 @@ func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
 	// collect its exported types and functions so the importer can name
 	// them (Exec only merges runtime values, not type declarations).
 	s.collectImportedModule(boundName, string(data))
-	exports, err := s.execImport(s.ctx, string(data))
+	exports, err := s.execImport(ctx, string(data))
 	if err != nil {
 		return ImportFile, bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", imp.Path, err)
 	}
@@ -926,6 +1140,7 @@ func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
 		if err := s.bindNamespacePath(ns, exports, imp.Path); err != nil {
 			return ImportFile, err
 		}
+		s.bindNamespaceRelative(ns, exports)
 	}
 	return ImportFile, nil
 }
@@ -959,6 +1174,17 @@ func (s *Session) collectImportedModule(boundName, src string) {
 					s.importedModuleFuncs = map[string][]*ast.FunDecl{}
 				}
 				s.importedModuleFuncs[boundName] = append(s.importedModuleFuncs[boundName], d)
+			}
+		case *ast.DeclStmt:
+			// An exported `final`/`var` is a namespace member exactly as a fun is.
+			// Collected for COMPLETENESS rather than for its type: without it a
+			// namespace has untracked members, so a MISS cannot be told from a member
+			// that does not exist - which is what BZZ1007 needs to be able to say.
+			if d.IsExported {
+				if s.importedModuleVars == nil {
+					s.importedModuleVars = map[string][]*ast.DeclStmt{}
+				}
+				s.importedModuleVars[boundName] = append(s.importedModuleVars[boundName], d)
 			}
 		}
 	}
@@ -997,6 +1223,67 @@ func declareEnumValues(mod vmpackage.Value, src string, embedded bool) {
 			mod.MapSet(d.Name, vmpackage.EnumDefValue(d.Name, d.Cases, values))
 		}
 	}
+}
+
+// declareObjectTypes gives a native module's exported `object` declarations real
+// runtime definitions, so a caller can CONSTRUCT one and not merely annotate it.
+//
+// It is the object-shaped counterpart to declareEnumValues, and it exists for the
+// same asymmetry: a declaration module that carries no native value is EXECUTED
+// (see the branch below this one), which defines its objects as a side effect,
+// while a module that does carry one is only ever collected for its signatures.
+// That left the two kinds of module able to declare the same object with only one
+// of them able to build it - `magus/spell` spells write `Command{...}` freely,
+// while `http\HttpRetry{...}` threw.
+//
+// Nothing is emitted for a source with no exported object, which is most of them,
+// so the common import pays one parse and no execution.
+func (s *Session) declareObjectTypes(src string) {
+	prog, err := parseModed(src, !s.embedded)
+	if err != nil {
+		// A malformed declaration source is already reported by the collect step;
+		// failing here too would surface the same typo twice.
+		return
+	}
+	// Only a source that is PURELY declarations may run. An exported function with
+	// a body is real code, and executing it flat-merges the name into the importing
+	// scope - which for a magusfile means magus reads it as a TARGET. Buzz's own
+	// io.buzz is exactly this shape (an `export object File` beside a real
+	// `export fun runFile`), and running it made every magusfile fail to load with
+	// MGS1008: target "runFile" must receive a magus\Context.
+	//
+	// An `extern` is safe by construction: it emits no code, which is what the
+	// generated declaration files are made of.
+	hasObject := false
+	for _, stmt := range prog.Stmts {
+		switch d := stmt.(type) {
+		case *ast.ObjectDecl:
+			if d.IsExported {
+				hasObject = true
+			}
+		case *ast.FunDecl:
+			if d.IsExported && !d.IsExtern {
+				return
+			}
+		}
+	}
+	if !hasObject {
+		return
+	}
+	// A FAILURE HERE IS NOT AN ERROR, and that is deliberate rather than lax.
+	//
+	// Collecting a declaration source merges its types into the session-wide list,
+	// so a file may reference a type another bundle declares and still check
+	// cleanly - magus's own declarations do exactly that, naming DoctorCheckStatus
+	// from gen/types/doctorcheck.buzz. Executing has no such luxury: it needs the
+	// source to be self-contained, and a cross-bundle reference is undefined.
+	//
+	// So execution is an OPTIONAL upgrade. Where the source stands alone its
+	// objects become constructible; where it does not, the module is left exactly
+	// as it was before this existed - collected, checkable, and with its objects
+	// annotate-only. Returning the error instead would take a working import down
+	// over a capability it never had.
+	_, _ = s.execImport(s.ctx, src)
 }
 
 // bindNamespaceObject binds, under name, a map of the names a flat import just
@@ -1057,6 +1344,49 @@ func (s *Session) declaredNamespace(src string) []string {
 // (e.g. the module's basename equals its namespace) is left as-is: the basename
 // object already resolves it. Returns an error on a duplicate namespace or a
 // segment that collides with a non-map binding.
+// bindNamespaceRelative binds an imported module's exports under the part of its
+// namespace that is NOT shared with the importing file's own.
+//
+// Upstream resolves a namespace relative to where you are: a file declaring
+// `namespace commom\part` that imports `commom\part\here` reaches it as
+// `here\message`, and a sibling at `commom\sibling` as `sibling\siblingMessage`.
+// Only the full path was bound before, so both of those were undefined.
+//
+// The shared prefix is computed segment-wise, so the sibling case (sharing only
+// `commom`) and the child case (sharing `commom\part`) fall out of one rule. With no
+// namespace on either side there is no prefix to strip and this does nothing.
+func (s *Session) bindNamespaceRelative(ns []string, exports []string) {
+	shared := 0
+	for shared < len(ns) && shared < len(s.ownNamespace) && ns[shared] == s.ownNamespace[shared] {
+		shared++
+	}
+	rest := ns[shared:]
+	// Nothing shared, or the paths are identical: the full-path binding already
+	// covers it and there is no shorter name to add.
+	if shared == 0 || len(rest) == 0 {
+		return
+	}
+
+	leaf := vmpackage.NewMap()
+	for _, n := range exports {
+		if v, ok := s.env.Get(n); ok {
+			leaf.MapSet(n, v)
+		}
+	}
+	// Walk the remainder from the leaf outward, so a multi-segment remainder nests
+	// the same way the full path does.
+	cur := leaf
+	for i := len(rest) - 1; i > 0; i-- {
+		parent := vmpackage.NewMap()
+		parent.MapSet(rest[i], cur)
+		cur = parent
+	}
+	// An existing binding wins: a local name must never be shadowed by an import.
+	if _, exists := s.env.Get(rest[0]); !exists {
+		s.env.Define(rest[0], cur)
+	}
+}
+
 func (s *Session) bindNamespacePath(segments []string, exports []string, importPath string) error {
 	if len(segments) == 0 {
 		return nil
@@ -1064,6 +1394,13 @@ func (s *Session) bindNamespacePath(segments []string, exports []string, importP
 	full := strings.Join(segments, `\`)
 	if prev, dup := s.declaredNamespaces[full]; dup {
 		return fmt.Errorf("buzz: import %q: the namespace %q already exists (also declared by import %q)", importPath, full, prev)
+	}
+	// The ENTRY program's own namespace counts as taken too. Only imports were
+	// compared against each other, so a module declaring the same namespace as the
+	// file importing it bound straight over it - the importer's own exports became
+	// unreachable under their own name.
+	if strings.Join(s.ownNamespace, `\`) == full {
+		return fmt.Errorf("buzz: import %q: the namespace %q already exists (it is this program's own namespace)", importPath, full)
 	}
 
 	leaf := vmpackage.NewMap()
@@ -1110,7 +1447,7 @@ func (s *Session) bindNamespacePath(segments []string, exports []string, importP
 
 // loadImportAsAlias executes src in a sub-session that inherits the parent's
 // host globals, then binds the sub-session's new globals as a map under alias.
-func (s *Session) loadImportAsAlias(importPath, src, alias string) error {
+func (s *Session) loadImportAsAlias(ctx context.Context, importPath, src, alias string) error {
 	sub := newSession(s.ctx)
 	sub.embedded = s.embedded // inherit the parent session's parse mode
 	sub.searchPaths = s.searchPaths
@@ -1147,7 +1484,7 @@ func (s *Session) loadImportAsAlias(importPath, src, alias string) error {
 	}
 
 	// Execute the imported file.
-	if err := sub.Exec(s.ctx, src); err != nil {
+	if err := sub.Exec(ctx, src); err != nil {
 		return bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", importPath, err)
 	}
 
@@ -1155,7 +1492,25 @@ func (s *Session) loadImportAsAlias(importPath, src, alias string) error {
 	m := vmpackage.NewMap()
 	for name, slot := range sub.env.Names() {
 		if _, wasHost := hostNames[name]; !wasHost {
-			m.MapSet(name, sub.env.Slots()[slot])
+			v := sub.env.Slots()[slot]
+			m.MapSet(name, v)
+			// An object TYPE also gets bound in the parent under its bare name.
+			//
+			// `ns\Name{...}` compiles to a construction of the BARE name - the parser
+			// resolves it that way on purpose, "to the same object def upstream reaches
+			// as ns\Name" - and the VM then looks the def up in the env. Leaving it only
+			// inside the alias map made `testing\PrefixMe{}` fail at RUN time with
+			// "unknown object type", after type-checking cleanly.
+			//
+			// Values are NOT bound this way: isolation is the point of an aliased
+			// import, and a type declaration is a compile-time fact rather than state.
+			// An existing binding wins, so a local type still shadows an imported one,
+			// matching how the compiler seeds its typeDecls.
+			if v.IsObjectDef() {
+				if _, exists := s.env.Get(name); !exists {
+					s.env.Define(name, v)
+				}
+			}
 		}
 	}
 	s.env.Define(alias, m)
@@ -1168,6 +1523,19 @@ func (s *Session) loadImportAsAlias(importPath, src, alias string) error {
 // name), then falls back to the plain includeDirs (-L / BUZZ_INCLUDE_PATH),
 // searching importPath.buzz (flat). This matches upstream resolution exactly.
 func (s *Session) findIncludeFile(importPath string) string {
+	// The directory of the file whose import this is, tried FIRST. Upstream resolves
+	// an import relative to the importing file, and only the entry file's directory
+	// was ever searched: a module in tests/utils importing a bare sibling name
+	// resolved against tests/behavior and was reported missing, which read as a
+	// circular-import failure but was plain path resolution.
+	//
+	// Innermost first, so a deep chain resolves against whichever file is actually
+	// doing the importing rather than the one that started the chain.
+	for i := len(s.importingDirs) - 1; i >= 0; i-- {
+		if p := filepath.Join(s.importingDirs[i], importPath+".buzz"); bzzExists(p) {
+			return p
+		}
+	}
 	for _, tmpl := range s.searchPaths {
 		p := expandSearchPath(tmpl, importPath)
 		if p == "" {
@@ -1211,7 +1579,9 @@ func bzzExists(path string) bool { _, err := os.Stat(path); return err == nil }
 // session's shared-globals scope. Pass the result to ExecChunk to run it,
 // optionally multiple times without re-parsing.
 func (s *Session) Compile(code string) (*vmpackage.Chunk, error) {
-	return s.compileShared(code)
+	// Compile takes no per-call ctx (public signature, unchanged); it runs
+	// against the session's own lifetime like the rest of the no-ctx surface.
+	return s.compileShared(s.ctx, code)
 }
 
 // ExecChunk runs a previously compiled Chunk in the session's environment.
@@ -1222,6 +1592,9 @@ func (s *Session) ExecChunk(ctx context.Context, chunk *vmpackage.Chunk) error {
 	if err == nil {
 		for _, name := range chunk.Exports {
 			s.exportedNames[name] = true
+			if !s.collectImportPrivate {
+				s.rootExportedNames[name] = true
+			}
 		}
 	}
 	return err

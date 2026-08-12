@@ -52,14 +52,14 @@ dynamically linked one that needs a loader and system libzstd/liblzma.
 // Wrong: `static` names the default, so the bare target is left meaning the
 // exception - and the exception is the build most likely to fail on a stranger's
 // machine.
-if (ctx.has_charm("static")) {
+if (ctx.hasCharm("static")) {
     build_release_variant(ctx, goos, goarch, false, "");
 } else {
     build_release_variant(ctx, goos, goarch, true, "_dynamic");
 }
 
 // Right: the default is the unconditional branch; the charm names the departure.
-if (ctx.has_charm("dynamic")) {
+if (ctx.hasCharm("dynamic")) {
     build_release_variant(ctx, goos, goarch, true, "_dynamic");
 } else {
     build_release_variant(ctx, goos, goarch, false, "");
@@ -100,8 +100,8 @@ engine does not have, and the loser is discarded silently:
 
 ```buzz
 // Wrong: :amd64,arm64 returns amd64 and drops the arm64 the caller asked for.
-if (ctx.has_charm("amd64")) { return "linux/amd64"; }
-if (ctx.has_charm("arm64")) { return "linux/arm64"; }
+if (ctx.hasCharm("amd64")) { return "linux/amd64"; }
+if (ctx.hasCharm("arm64")) { return "linux/arm64"; }
 ```
 
 Two charms that answer one question are a mistake worth reporting, not resolving.

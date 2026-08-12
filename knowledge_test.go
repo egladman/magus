@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
 	"os"
@@ -166,6 +167,27 @@ func TestSymbolGapsTreatsCorruptIndexAsPresent(t *testing.T) {
 	assert.Empty(t, symbolGaps(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells)))
 }
 
+// TestSymbolGapsLogsWhenTheProbeCannotRun pins that the package-level SymbolGaps
+// (the (nil, false) probe-failed path) no longer discards the underlying error
+// from ListSpells/ListProjects - it must at least be logged, since (nil, false) on
+// its own gives a caller no way to learn WHY the probe could not run.
+func TestSymbolGapsLogsWhenTheProbeCannotRun(t *testing.T) {
+	root := t.TempDir()
+	var buf bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&buf, nil))
+
+	// A cancelled context makes ListSpells fail on its first cancellation check
+	// (describe.go's describeCancelled), which is the same failure shape a real
+	// caller sees when its ctx times out mid-probe.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	gaps, ok := SymbolGaps(ctx, nil, root, config.Config{}, log)
+	assert.Nil(t, gaps)
+	assert.False(t, ok, "a probe that could not run must not read as \"no gaps\"")
+	assert.Contains(t, buf.String(), "cancelled", "the underlying error must be surfaced, not swallowed")
+}
+
 // A workspace with no symbol-capable project has no code-symbol layer to miss, so there
 // is nothing outside coverage and an unmatched name is a verified absence.
 func TestSymbolGapsNoneCapable(t *testing.T) {
@@ -299,7 +321,7 @@ func TestLoadKnowledgeVCSHistory(t *testing.T) {
 	writeCommit(t, root, "a.buzz", "two\n")  // a: commit 2 (most recent for a)
 	writeCommit(t, root, "café.buzz", "u\n") // non-ASCII path
 
-	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.VCSConfig{Enabled: true}}}
+	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
 	entries := loadKnowledgeVCS(context.Background(), cfg, root, slog.Default())
 	require.NotEmpty(t, entries)
 
@@ -329,7 +351,7 @@ func TestLoadKnowledgeVCSDisabledAndNonGit(t *testing.T) {
 	assert.Nil(t, loadKnowledgeVCS(context.Background(), config.Config{}, root, slog.Default()))
 
 	// Enabled but not a git repo: best-effort nil, no error.
-	enabled := config.Config{Knowledge: config.Knowledge{VCS: config.VCSConfig{Enabled: true}}}
+	enabled := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
 	assert.Nil(t, loadKnowledgeVCS(context.Background(), enabled, t.TempDir(), slog.Default()))
 }
 
@@ -340,7 +362,7 @@ func TestVCSInputFingerprint(t *testing.T) {
 	root := t.TempDir()
 	gitRun(t, root, "init", "-q")
 	writeCommit(t, root, "a.buzz", "x\n")
-	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.VCSConfig{Enabled: true}}}
+	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
 	ctx := context.Background()
 
 	fp1 := vcsInputFingerprint(ctx, cfg, root)
@@ -353,7 +375,7 @@ func TestVCSInputFingerprint(t *testing.T) {
 
 	// The window is part of the key, so changing max_commits changes the fingerprint even
 	// when the result would be identical (conservative: re-scan on a widened window).
-	widened := config.Config{Knowledge: config.Knowledge{VCS: config.VCSConfig{Enabled: true, MaxCommits: 5}}}
+	widened := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true, MaxCommits: 5}}}
 	assert.NotEqual(t, vcsInputFingerprint(ctx, cfg, root), vcsInputFingerprint(ctx, widened, root), "a changed max_commits changes the fingerprint")
 
 	// A working-tree change with no commit (delete a tracked file) moves the dirty set, so
@@ -379,7 +401,7 @@ func TestLoadKnowledgeVCSNestedWorkspace(t *testing.T) {
 	require.NoError(t, os.MkdirAll(sub, 0o755))
 	writeCommit(t, repo, "sub/proj/app.buzz", "nested\n")
 
-	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.VCSConfig{Enabled: true}}}
+	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
 	entries := loadKnowledgeVCS(context.Background(), cfg, sub, slog.Default())
 	require.NotEmpty(t, entries)
 

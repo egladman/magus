@@ -24,6 +24,7 @@ import "../../tools/drift" as drift;
 import "fs";
 import "os";
 
+import "proc";
 // magusfile binds this file's exported targets (generate, lint, test, ci); ts adds the
 // TypeScript spell so the shared src/ is symbol-capable - its `scip` op indexes it (via
 // tsconfig.json) for the knowledge graph. ts is opaque (pnpm owns the dependency graph;
@@ -34,6 +35,7 @@ import "magus/spell/typescript";
 import "../../badge" as badge;
 import "../../tools/toolchain-policy" as policy;
 import "../../coverage" as cov;
+import "lcov";
 
 // The badge is written into the ROOT project's assets/, not this project's own tree,
 // because the docs SSG copies exactly one directory into the site (docs/render.buzz
@@ -55,7 +57,7 @@ magus\project({
     // pnpm-lock.yaml, where the dev-gate deps are pinned), and the tsconfig/biome configs
     // that drive the gates. pnpm is the package manager - NOT npm; .npmrc's
     // minimum-release-age gate is the reason.
-    "sources": ["magusfile.buzz", "src/**/*.ts", "package.json", "pnpm-lock.yaml",
+    "sources": ["src/**/*.ts", "package.json", "pnpm-lock.yaml",
                 "tsconfig.json", "biome.json"],
     // Generated target catalog; the only output this pure-source library declares. It is
     // also what the cacheable lint/test targets snapshot: the ts spell contributes a
@@ -77,7 +79,7 @@ magus\project({
     },
 });
 
-export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
+export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install(); }
 
 // pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason.
 // Always let pnpm validate the install. An interrupted install leaves a node_modules
@@ -85,19 +87,19 @@ export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
 // handing the missing packages straight to tsc/esbuild. Reached once per invocation
 // through preflight, which every target below already needs, so the unconditional
 // --frozen-lockfile costs about a second on a warm tree and never races itself.
-fun install() > void {
-    os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
+fun install() > void !> any {
+    proc\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
 }
 
 // Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result. Drift is
 // measured by hashing MAGUS.md before and after (tools/drift.buzz), not by asking whether
 // it was clean, so the gate still fires when you already have it uncommitted. A
 // locally-regenerated MAGUS.md passes either way: its bytes do not move.
-export fun generate(ctx: magus\Context, args: [str]) > void {
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     final before = drift.hashes(["MAGUS.md"]);
     ctx.needs(index_generate);
-    if (ctx.has_charm("rw")) { return; }
+    if (ctx.hasCharm("rw")) { return; }
 
     if (drift.changedSince(before, ["MAGUS.md"]).len() > 0) {
         throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/textsearch` and commit" + drift.secondCause;
@@ -105,18 +107,18 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 }
 
 // Renders MAGUS.md (target catalog plus graph) from this magusfile.
-export fun index_generate(ctx: magus\Context, args: [str]) > void {
+export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs\writeFile("MAGUS.md", doc + "\n");
 }
 
 // lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit)
 // plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json).
-// os.exec raises on a non-zero exit, so either gate fails lint.
-export fun lint(ctx: magus\Context, args: [str]) > void {
+// proc.exec raises on a non-zero exit, so either gate fails lint.
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
-    os\exec("pnpm", ["run", "typecheck"], ".", {});
-    os\exec("pnpm", ["run", "biome"], ".", {});
+    proc\exec("pnpm", ["run", "typecheck"], ".", {});
+    proc\exec("pnpm", ["run", "biome"], ".", {});
 }
 
 // test runs the node:test suite over the bundled *.test.ts and renders a line-
@@ -128,7 +130,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 // esbuild is the compiler and tsc is only the type gate. Coverage therefore has to
 // travel back through a sourcemap - hence --sourcemap here - or every record would
 // name a .testcache bundle instead of the src/*.ts someone wrote.
-export fun test(ctx: magus\Context, args: [str]) > void {
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     ctx.writesFiles(workspace.file("assets/textsearch-coverage.svg"));
     final badge_path = fs\join("..", "..", "assets", "textsearch-coverage.svg");
@@ -141,7 +143,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     bundle.append("--bundle"); bundle.append("--platform=node");
     bundle.append("--format=esm"); bundle.append("--sourcemap");
     bundle.append("--outdir=.testcache");
-    os\exec("pnpm", bundle, ".", {});
+    proc\exec("pnpm", bundle, ".", {});
 
     // --enable-source-maps is what makes the coverage report name src/*.ts. Without
     // it Node reads the sourcemap for stack traces only, and every lcov record
@@ -151,11 +153,11 @@ export fun test(ctx: magus\Context, args: [str]) > void {
         "--test-reporter=lcov", "--test-reporter-destination=coverage.lcov",
         "--test"];
     foreach (b in fs\glob(".testcache/**/*.test.js")) { run.append(b.value); }
-    os\exec("node", run, ".", {});
+    proc\exec("node", run, ".", {});
 
-    final pct = cov\lcovPercent(fs\readFile("coverage.lcov"), keep: "src/");
+    final pct = lcov\percent(fs\readFile("coverage.lcov"), keep: "src/");
     fs\writeFile(badge_path, badge\coverage("textsearch coverage", percent: pct, radius: 3));
-    if (ctx.has_charm("rw")) { return; }
+    if (ctx.hasCharm("rw")) { return; }
     if (drift.changedSince(before, [badge_path]).len() > 0) {
         throw "test: assets/textsearch-coverage.svg is stale; re-run `magus run test:rw libs/textsearch` and commit the badge";
     }

@@ -1,0 +1,3 @@
+// @error: duplicate match condition
+// Conditions are constant-folded before comparison, so 1 + 1 duplicates 2.
+final __r = match (2) { 1 + 1 -> "folded", 2 -> "literal", else -> "other" };

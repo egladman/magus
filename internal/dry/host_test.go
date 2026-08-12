@@ -55,11 +55,11 @@ func TestPlaygroundChecksHostCallTypes(t *testing.T) {
 		return Run(context.Background(), src, "work", nil)
 	}
 
-	bad := run(`fun probe() > int { return magus\where("x"); }`)
+	bad := run(`fun probe() > int !> any { return magus\where("x"); }`)
 	require.False(t, bad.OK, "a host call returning str must not satisfy a fun declared > int")
 	require.NotNil(t, bad.Diag)
 	assert.Contains(t, bad.Diag.Msg, "return type mismatch")
 
-	good := run(`fun probe() > str { return magus\where("x"); }`)
+	good := run(`fun probe() > str !> any { return magus\where("x"); }`)
 	assert.True(t, good.OK, "the correctly typed call must still compile: %+v", good.Diag)
 }

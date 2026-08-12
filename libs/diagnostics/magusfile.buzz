@@ -45,12 +45,12 @@ magus\project({
 export fun preflight(ctx: magus\Context, args: [str]) > void {}
 
 // Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
-export fun generate(ctx: magus\Context, args: [str]) > void {
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     gomod\replaceWorkspaceModules(ctx, go, "libs/diagnostics");
     final before = drift.hashes(["MAGUS.md"]);
     ctx.needs(index_generate);
-    if (ctx.has_charm("rw")) { return; }
+    if (ctx.hasCharm("rw")) { return; }
 
     if (drift.changedSince(before, ["MAGUS.md"]).len() > 0) {
         throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/diagnostics` and commit" + drift.secondCause;
@@ -58,7 +58,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 }
 
 // Renders MAGUS.md (target catalog plus graph) from this magusfile.
-export fun index_generate(ctx: magus\Context, args: [str]) > void {
+export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs\writeFile("MAGUS.md", doc + "\n");
 }

@@ -22,8 +22,11 @@ type Session struct {
 	daemonAcquire func(ctx context.Context, key string, svc spells.Service) error
 	daemonRelease func(key string)
 
-	mu         sync.Mutex
-	daemonKeys map[string]struct{} // acquired from the daemon, to release at run end
+	mu sync.Mutex
+	// daemonKeys counts acquires per key, not just membership: the daemon-side
+	// Registry ref-counts per Acquire, so two acquires of the same key in one run
+	// need two releases in ReleaseAll or the ref never returns to zero.
+	daemonKeys map[string]int
 }
 
 // NewSession returns a Session backed by reg. daemonAcquire/daemonRelease may be nil
@@ -33,7 +36,7 @@ func NewSession(reg *Registry, daemonAcquire func(context.Context, string, spell
 		reg:           reg,
 		daemonAcquire: daemonAcquire,
 		daemonRelease: daemonRelease,
-		daemonKeys:    map[string]struct{}{},
+		daemonKeys:    map[string]int{},
 	}
 }
 
@@ -51,7 +54,7 @@ func (s *Session) acquire(ctx context.Context, key string, svc spells.Service) e
 			return ierr
 		}
 		s.mu.Lock()
-		s.daemonKeys[key] = struct{}{}
+		s.daemonKeys[key]++
 		s.mu.Unlock()
 		return nil
 	}
@@ -61,18 +64,20 @@ func (s *Session) acquire(ctx context.Context, key string, svc spells.Service) e
 
 // ReleaseAll releases everything the session acquired: daemon-hosted services are
 // released back to the daemon (which keeps them warm and reaps them later), and the
-// in-process ones are stopped. Call once at run end.
-func (s *Session) ReleaseAll() {
+// in-process ones are stopped. Call once at run end. ctx bounds the in-process
+// Shutdown; pass a ctx that can still make progress even if the run's own ctx is
+// already cancelled (see [Registry.Shutdown]), since a cancelled run still has to
+// release what it acquired.
+func (s *Session) ReleaseAll(ctx context.Context) {
 	s.mu.Lock()
-	keys := make([]string, 0, len(s.daemonKeys))
-	for k := range s.daemonKeys {
-		keys = append(keys, k)
-	}
-	s.daemonKeys = map[string]struct{}{}
+	keys := s.daemonKeys
+	s.daemonKeys = map[string]int{}
 	s.mu.Unlock()
 
-	for _, k := range keys {
-		s.daemonRelease(k)
+	for k, n := range keys {
+		for range n {
+			s.daemonRelease(k)
+		}
 	}
-	s.reg.Shutdown()
+	s.reg.Shutdown(ctx)
 }

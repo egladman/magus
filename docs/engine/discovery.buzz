@@ -14,9 +14,9 @@ import "lib/feed" as _;
 // byte-stable), each an absolute baseURL loc - "index.html" maps to the bare site root.
 // Aliases are omitted (only canonical pages belong in a sitemap). Gated on baseURL so the
 // site can ship dark until the host is confirmed. robots points crawlers at the sitemap.
-export fun writeSEOFiles(site: Site) > void {
+export fun writeSEOFiles(site: Site) > void !> any {
     if (site.config.baseURL == "") { return; }
-    var urls: [str] = mut [<str>];
+    var urls: mut [str] = mut [<str>];
     foreach (u in site.pageUrls.keys()) { urls.append(u); }
     final sorted = urls.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
     var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
@@ -37,7 +37,7 @@ export fun writeSEOFiles(site: Site) > void {
 // byte-stable artifact. base is the link prefix (baseURL, else "/"). Links point at each
 // page's <url>index.md Markdown sibling, so an agent fetches clean content. Pure so a unit
 // test can pin the output.
-fun llmsIndexBody(pages: [DocPage], base: str, title: str) > str {
+fun llmsIndexBody(pages: mut [DocPage], base: str, title: str) > str {
     final sorted = pages.sort(fun (a: DocPage, b: DocPage) > bool {
         return strLess(a.url, b.url);
     });
@@ -59,7 +59,7 @@ fun llmsIndexBody(pages: [DocPage], base: str, title: str) > str {
 
 // writeLLMsIndex writes gen/llms.txt from the collected docs corpus. Links are absolute
 // under baseURL when set (so an external agent can follow them), else root-relative.
-export fun writeLLMsIndex(site: Site) > void {
+export fun writeLLMsIndex(site: Site) > void !> any {
     var base = "/";
     if (site.config.baseURL != "") {
         base = site.config.baseURL;

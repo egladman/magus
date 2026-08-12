@@ -27,7 +27,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 // canonical targets use, then does its own extra work.
 export fun release(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ci);
-    magus\info("tagging and publishing the release");
+    magus\log.info("tagging and publishing the release");
 }
 
 // Another target in the same project is always an edge, never a nested run. A run
@@ -37,5 +37,5 @@ export fun release(ctx: magus\Context, args: [str]) > void {
 // which the caller does not hold.
 export fun deploy(ctx: magus\Context, args: [str]) > void {
     ctx.needs(release);
-    magus\info("rolling out to production");
+    magus\log.info("rolling out to production");
 }

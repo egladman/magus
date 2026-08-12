@@ -35,4 +35,3 @@ fun main() > void {
     ffi\free(xs);
 }
 
-main();

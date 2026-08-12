@@ -61,6 +61,25 @@ type CompressResult struct {
 	BytesOut int `buzz:"bytes_out"`
 }
 
+// ArchiveEntry mirrors one element of archive.list's result: an entry's name as
+// the archive itself records it, its uncompressed size, and whether it is a
+// directory.
+//
+// Name is a plain str, not a Path, and that is deliberate: it is a name INSIDE an
+// archive, which resolves against nothing on disk until something extracts it. A
+// Path would invite fs.read_file on a file that is not there. UncompressResult
+// hands back Paths precisely because by then the entries do exist.
+//
+// Size is the UNCOMPRESSED size, which is what a caller checking "will this fit"
+// needs; a zip's compressed size is an implementation detail of the container and
+// tar has no equivalent field at all, so reporting one would be inconsistent
+// across the formats this module treats alike.
+type ArchiveEntry struct {
+	Name  string
+	Size  int
+	IsDir bool `buzz:"is_dir"`
+}
+
 // HTTPResponse mirrors http.get/post/request's {status, body, headers} object.
 // headers maps each response header name to its first value.
 type HTTPResponse struct {

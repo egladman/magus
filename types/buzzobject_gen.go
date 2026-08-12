@@ -13,6 +13,13 @@ func (v ExecResult) BuzzObject() BuzzObject {
 	}
 }
 
+func (v ShellCommand) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"bin":  v.Bin,
+		"args": v.Args,
+	}
+}
+
 func (v CommitAuthor) BuzzObject() BuzzObject {
 	return BuzzObject{
 		"name":  v.Name,
@@ -81,6 +88,14 @@ func (v UncompressResult) BuzzObject() BuzzObject {
 	}
 }
 
+func (v ArchiveEntry) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"name":   v.Name,
+		"size":   v.Size,
+		"is_dir": v.IsDir,
+	}
+}
+
 func (v CompressResult) BuzzObject() BuzzObject {
 	itemsFiles := make([]any, len(v.Files))
 	for indexFiles := range v.Files {
@@ -98,6 +113,13 @@ func (v HTTPResponse) BuzzObject() BuzzObject {
 		"status":  v.Status,
 		"body":    v.Body,
 		"headers": v.Headers,
+	}
+}
+
+func (v TermSize) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"width":  v.Width,
+		"height": v.Height,
 	}
 }
 

@@ -1,5 +1,3 @@
-//go:build !wasm
-
 package std
 
 import (
@@ -21,6 +19,23 @@ func validateModule(m Module) error {
 	for _, meth := range m.Methods {
 		if err := validateMethod(meth); err != nil {
 			return fmt.Errorf("method %q: %w", meth.Name, err)
+		}
+	}
+	for _, ns := range m.Namespaces {
+		if len(ns.Methods) == 0 {
+			return fmt.Errorf("namespace %q declares no methods; it would render as an empty object", ns.Name)
+		}
+		for _, meth := range ns.Methods {
+			// A namespace exists precisely because the RUNTIME assembles it, so there is
+			// no Impl to reflect over or generate a trampoline from. Requiring Extern
+			// here keeps that from being an accident: a namespace method carrying an
+			// Impl would generate nothing and silently never be bound.
+			if !meth.Extern {
+				return fmt.Errorf("namespace %q method %q must be Extern; the runtime binds it", ns.Name, meth.Name)
+			}
+			if err := validateMethod(meth); err != nil {
+				return fmt.Errorf("namespace %q method %q: %w", ns.Name, meth.Name, err)
+			}
 		}
 	}
 	return nil
@@ -54,8 +69,18 @@ func validateField(f Field) error {
 }
 
 func validateMethod(meth Method) error {
+	if meth.Extern {
+		// Declared here, bound at run time elsewhere: there is no Impl to reflect over,
+		// and everything below this point reflects. Args/Returns still matter - they are
+		// what the generated declaration is built from - but nothing here can check them
+		// against a Go signature that does not exist.
+		if meth.Impl != nil {
+			return fmt.Errorf("method is Extern but carries an Impl; it is one or the other")
+		}
+		return nil
+	}
 	if meth.Impl == nil {
-		return fmt.Errorf("method Impl must not be nil")
+		return fmt.Errorf("method Impl must not be nil (set Extern if it is bound at run time)")
 	}
 	rv := reflect.ValueOf(meth.Impl)
 	rt := rv.Type()

@@ -182,8 +182,9 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, origin
 	if opts.Magus != nil {
 		tel = opts.Magus.Telemetry()
 	}
-	byName := make(map[string]spells.Driver, len(Registry))
-	for _, t := range allMCPTools(opts) {
+	tools := allMCPTools(opts)
+	byName := make(map[string]spells.Driver, len(tools))
+	for _, t := range tools {
 		byName[t.Name()] = t
 	}
 	// rotateCount is shared across every tool's wrap closure so a rotate fires once
@@ -196,6 +197,28 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, origin
 		}
 		srv.AddTool(buildMCPTool(d), wrap(log, originFn, trailDir, tel, rotateCount, adapt(t)))
 	}
+	// The loop above only checks Registry -> driver; a driver built into allMCPTools but
+	// missing its own Registry entry would otherwise mount nowhere, silently, with no
+	// error anywhere. Check the other direction too.
+	if missing := unregisteredDrivers(tools, Registry); len(missing) > 0 {
+		panic(fmt.Sprintf("mcp: drivers %v have no Registry entry and were never mounted", missing))
+	}
+}
+
+// unregisteredDrivers returns the Name() of every driver in tools absent from reg,
+// in tools' order. Empty (nil) when every driver has a matching Registry entry.
+func unregisteredDrivers(tools []spells.Driver, reg []ToolDescriptor) []string {
+	described := make(map[string]bool, len(reg))
+	for _, d := range reg {
+		described[d.Name] = true
+	}
+	var missing []string
+	for _, t := range tools {
+		if !described[t.Name()] {
+			missing = append(missing, t.Name())
+		}
+	}
+	return missing
 }
 
 // wrap injects origin markers and emits banner log lines around every tool

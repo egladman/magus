@@ -1,0 +1,4 @@
+// @error: has no field "extra"
+object Target { data: str }
+final _t: Target = .{ data = "hello", extra = 42 };
+final __r = 0;

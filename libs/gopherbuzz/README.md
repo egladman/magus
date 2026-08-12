@@ -16,27 +16,58 @@ answers differently from upstream, or accepts source upstream refuses.
 
 ## Upstream parity
 
-Measured against `UpstreamRef` (`0.5.0-251-ged42f47`) on 2026-07-30. Upstream ships
+Measured against `UpstreamRef` (`0.5.0-251-ged42f47`) on 2026-08-11. Upstream ships
 six test directories; three are measurable here, and all three numbers are below
 rather than only the flattering one.
 
 | upstream suite          | files |      gopherbuzz | what it asks                                                     |
 | ----------------------- | ----: | --------------: | ---------------------------------------------------------------- |
-| `tests/behavior/`       |    83 |     **67 pass** | does correct source produce the right answer?                    |
-| `tests/compile_errors/` |    77 | **26 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
+| `tests/behavior/`       |    83 |     **81 pass** | does correct source produce the right answer?                    |
+| `tests/compile_errors/` |    77 | **71 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
 | `tests/fuzzed/`         |   644 |    **0 panics** | can malformed input crash the front end?                         |
 | `tests/bench/`          |    11 |         not run | upstream's benchmarks (ours are in [`benchmarks/`](benchmarks/)) |
 | `tests/manual/`         |     9 |         not run | interactive                                                      |
 | `tests/utils/`          |    10 |             n/a | helper modules the behavior tests import                         |
 
-**The compile-error row is the uncomfortable one and the most important.** 51 of those
+**The compile-error row is the uncomfortable one and the most important.** 6 of those
 77 programs compile CLEAN here that upstream refuses. That is not a missing feature, it
 is missing strictness: gopherbuzz will accept source upstream tells you is wrong. If
 you are evaluating this VM as a Buzz implementation, weigh that at least as heavily as
 the behavior row -- a permissive checker is the failure mode a subset does not warn you
-about. The largest cluster is `match`, which has no exhaustiveness, duplicate-condition
-or overlapping-range analysis at all (8 files); the rest is spread across type-mismatch,
-mutability, shadowing and terminal-flow checks.
+about.
+
+The three largest clusters are closed: `match` analysis (11 files -- exhaustiveness,
+duplicate conditions, overlapping ranges), terminal flow (8 -- unreachable code after
+a statement that transfers control away, plus the missing return), and yield
+propagation with the reserved-method signatures (6). What remains has no cluster
+bigger than a handful: `out` and block expressions, mutability, unused locals and
+shadowing, and assorted type checks.
+
+Three things to know before adding a rule here.
+
+Upstream's own suite is not internally consistent everywhere, so check a proposed rule
+against `tests/behavior/` before writing it. `unused-import` is the worked example: the
+note in `session.go` records why that one cannot be promoted at all.
+
+A strictness check has a DIRECTION. Reporting unreachable code over-claims (a wrong
+answer calls live code dead); reporting a missing return under-claims (a wrong answer
+invents an error on a correct function). `terminates` and `terminatesForReturn` exist
+because those two biases disagree about try/catch.
+
+Most of what is left is a DIALECT DECISION or a disproportionate migration rather
+than a missing check. Each of these was implemented, measured, and reverted:
+
+| File(s)                                      | What it needs                                                     | Measured cost                                                                                                                 |
+| -------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `yield-location`, `yield-without-annotation` | require `*>` on any function that yields                          | reverses a recorded choice (`ast.YieldExpr`, `TestYieldOutsideFiberDismissed`); ~18 fixtures here plus magus's s3-cache spell |
+| `fiber-error-location`                       | hold a direct `throw` to propagate-or-catch, as a CALL already is | breaks seven of magus's suites: its spells, tour files and scripts throw without `!>`                                         |
+| `unused-import`                              | make BZZ3001 an error                                             | impossible as stated -- see the note in `session.go`                                                                          |
+| `selective-import`                           | stop `assert` resolving unimported                                | blocked on `registerBuiltins`, which pre-defines the stdlib names on purpose                                                  |
+| `error-message`                              | rendering a thrown object's message                               | the test body never runs under `Exec`, so nothing can surface it here                                                         |
+
+Each is a call to make deliberately, with the migration budgeted -- not a gap to
+patch. The one structural item worth naming: **optionality is erased**, which is
+what blocks two of them and would be the next real piece of type-system work.
 
 The fuzz corpus is upstream's checked-in AFL output, not hand-written tests: the
 filenames are AFL's (`id_000123,sig_06,src_000051,op_flip1,pos_1`), where `sig_06` is
@@ -70,11 +101,14 @@ unwrap `if (x -> y)`, field punning), enums (`enum<str>`/`enum<int>` backing
 types and explicit case values), namespaces and imports, optionals with `??`,
 `as?` and optional chaining `?.`/`?[`, nullable declarations that omit their
 initializer, default argument values, error sets on declarations plus
-`try` and multiple typed `catch` clauses, fibers with `resolve`, ranges, string
+`try` and multiple typed `catch` clauses, collection mutability as part of the TYPE
+(`mut [int]` is a distinct type that `typeof` renders, `mut T` is assignable to `T`
+and not the reverse, and the clone family re-types across it), fibers with `resolve`, ranges, string
 interpolation, pattern literals, `zdef` FFI, closures, generics as erasure, ranges with their full method set, and
 the collection/loop core (multi-clause `for`, labeled loops), and block
 expressions (`from { ... out v; }`), free identifiers (`@"non-standard"`), and
-generic object declarations, inline ifs, and `catch void`. Three deliberate supersets: the contextual
+generic object declarations, inline ifs, `catch void`, and maps keyed by any
+value (an object, an int, a bool -- not only a `str`). Three deliberate supersets: the contextual
 `test` keyword (below), named-argument labels, and compiled-bytecode serialization
 (next).
 
@@ -108,41 +142,24 @@ program using `typeof` from ever being a built-in spell. [Bytecode version](#byt
 VM must reject a newer blob.
 
 Read that list as "the shape parses and runs", not as "matches upstream in every
-detail". Several entries carry a caveat recorded under [Where the skeletons are](#where-the-skeletons-are) -- `as` coerces rather than asserts, `match` does no
-exhaustiveness analysis, protocol conformance is unverified, and generics are erased.
+detail". Several entries carry a caveat recorded under [Where the skeletons are](#where-the-skeletons-are) -- `as` coerces rather than asserts, a compound assign
+evaluates its target twice, and generics are erased.
 
 ### What does not
 
-Seven of the sixteen remaining failures are open gaps, each with a known cause:
+**No open gaps remain.** Every one of the nine still-failing files is blocked by a
+property of the EMBEDDING rather than by unwritten code, so this list is not a
+backlog:
 
-| Gap                                  |                     Blocks | Cause                                                                                                                                                                                                                                       |
-| ------------------------------------ | -------------------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Buffer's binary API                  |                   `buffer` | Missing `writeInt`/`readInt` (upstream's `Integer` is an **i48**, so six bytes), `writeDouble`/`readDouble`, `writeBoolean`/`readBoolean`, and `empty`; `write`/`read` also take and return a `str` upstream where gopherbuzz uses `[int]`. |
-| Object-keyed maps                    |                `protocols` | `mapObj` is keyed by `string` throughout, and a map literal stores a bare identifier key as its literal name rather than evaluating it. Upstream allows any value as a key.                                                                 |
-| Tuple types                          |                   `tuples` | `obj{ :str, :str }` (positional fields) and the matching `.{ a, b }` literal.                                                                                                                                                               |
-| `typeof` and mutability              | `clone-mutability-methods` | `cloneMutable()` has to retype to `<mut [int]>`; mutability is a property no runtime value carries.                                                                                                                                         |
-| Namespaces sharing a leading segment |         `common-namespace` | Two imports whose namespaces share a first part must both bind under it.                                                                                                                                                                    |
-| Namespaced imported object types     |            `import-export` | `testing\PrefixMe{}` does not resolve the type through the import.                                                                                                                                                                          |
-| Circular imports                     |            `mutual-import` | Two modules importing each other.                                                                                                                                                                                                           |
-
-The other nine cannot be accommodated here, which is a property of the embedding
-rather than a backlog:
-
-- **A compiled native library.** `ffi`, `extern-library`, `c-buzz-api` and
-  `types-as-value` all `zdef` against `tests/utils/libforeign`, and `os` shells out
-  to upstream's own `./zig-out/bin/buzz`. All five need upstream built with Zig.
-- **Reified generics.** `testing` calls `assertOfType::<int>` and
-  `assertThrows::<str>`; gopherbuzz erases type parameters, so a type argument is
-  not a runtime value. gopherbuzz's own `testing` module takes a type NAME instead.
-- **`math\deg` will not be matched.** Upstream's result implies a degrees-per-radian
-  constant of 57.295779513082195; the correctly-rounded f64 value is
-  57.29577951308232, which is what gopherbuzz returns. Matching upstream here would
-  mean shipping a less accurate constant to satisfy a test.
-- **GC collector callbacks** depend on Buzz's own collector running at points a Go
-  program does not control. Upstream's test asserts a collector ran after dropping a
-  reference; Go's GC gives no such guarantee.
-- **`std\toUd`** returns Zig-specific userdata, which this embedding has no
-  representation for.
+- **buzz's own native-extension ABI.** `extern-library` and `c-buzz-api` are a
+  different problem, and the failure mode hides it: `extern-library` looks like it
+  only wants a shared library, and "null is not callable" is just its unbound
+  `extern fun sayHello()`. But `tests/utils/hello.zig` takes a `*api.NativeCtx`,
+  imports `buzz_api.zig` and LINKS AGAINST LIBBUZZ, exposing a `hello(symbol)`
+  resolver keyed by name. Loading it would mean gopherbuzz reproducing upstream's
+  NativeCtx layout and buzz_api entry points so a library compiled against buzz's VM
+  can pull arguments from gopherbuzz's. `c-buzz-api` (`buzz_c_api.c`) is the same
+  requirement stated openly. Building these with Zig would not help.
 
 ### Where the skeletons are
 
@@ -153,9 +170,6 @@ reproducible difference at the pinned ref.
 
 **Silently different answers.** The dangerous class -- these do not error.
 
-- **`str.len()` counts RUNES; upstream documents byte length** ("Returns the byte
-  length of the string"). Any non-ASCII or binary string measures short here: a 16-byte
-  MD5 digest reports 15. Every rune-indexed string method inherits the question.
 - **A bare `as` COERCES instead of asserting.** `3.9 as int` is 3 here; upstream's `as`
   is a statically checked cast, not a conversion. Only `as?` was fixed to be a real type
   test. gopherbuzz's own testdata depends on the coercion, which is why it still stands.
@@ -177,10 +191,11 @@ reproducible difference at the pinned ref.
 - **`obj{...}` annotations are erased in the checker**, so an annotated discard
   (`_: obj{ nope: str } = ...`) asserts nothing statically. The RUNTIME test
   (`x is obj{...}`) does check field presence, so the two disagree.
-- **Protocol conformance is declared, never verified.** `object<Drawable> Foo {}`
-  type-checks with none of `Drawable`'s methods. `Compat` consults the declaration only.
-- **`match` has no exhaustiveness, duplicate-condition or overlapping-range analysis** --
-  the 8-file cluster in the compile-error row above.
+- **`match` analysis is narrower than the runtime.** Exhaustiveness, duplicate
+  conditions and overlapping ranges are all checked now, but only over conditions that
+  fold to a CONSTANT: `1 + 1` duplicates `2`, while two conditions naming the same
+  `final` do not. That is deliberately one-sided -- an unfoldable condition is recorded
+  and never reported, because a false positive here rejects a correct program.
 - **Generics are erased.** There is no reified type argument, so `assertOfType::<int>`
   cannot inspect anything; gopherbuzz's own `testing` module takes a type NAME string
   instead. This is the one "cannot accommodate" above that is really a design choice.
@@ -201,6 +216,12 @@ reproducible difference at the pinned ref.
 - Each boxed local allocates into a grow-only, never-freed global heap in the default
   NaN-boxed build, so a captured local declared inside a loop pins one entry per
   iteration: measured 2.7x RSS over 2M iterations.
+- A map keyed by anything other than `str` gets NO key->index hash at any size, so
+  its lookups are O(n) where a `str`-keyed map is O(1) above `smallMapThreshold`.
+  The hash is keyed by the key's display string, which stops being an identity the
+  moment `1` and `"1"` can both be present; giving it a synthetic per-key identity
+  would cost an allocation on every get of EVERY map to serve a shape neither this
+  embedding nor upstream's suite builds at size.
 
 A test is often blocked by more than one gap, so closing a single entry does not
 always flip a file green. The allowlist reports real progress; the table only

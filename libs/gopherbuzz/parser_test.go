@@ -75,3 +75,73 @@ func TestNumericLiteralEval(t *testing.T) {
 		}
 	}
 }
+
+// TestStandaloneExport covers upstream's `export name;` form, where a declaration is
+// written plainly and exported by a separate statement - the shape upstream's own
+// tests/utils/testing.buzz uses.
+//
+// It used to parse and then VANISH. `export` parses the statement that follows and
+// sets IsExported on it, but a bare name parses as an expression statement, matched
+// none of the declaration cases, and fell through with the export silently dropped:
+// the name stayed invisible to importers and nothing said why. That is the failure
+// this pins - a silently-ignored export is worse than an unsupported one.
+func TestStandaloneExport(t *testing.T) {
+	// The declaration may come BEFORE the export statement...
+	prog, err := buzz.ParseEmbedded("object Foo { n: int = 1 }\nexport Foo;\n")
+	require.NoError(t, err)
+	requireExported(t, prog, "Foo")
+
+	// ...or after it, which is why resolution waits until the file is fully parsed.
+	prog, err = buzz.ParseEmbedded("export Bar;\nfun Bar() > int { return 1; }\n")
+	require.NoError(t, err)
+	requireExported(t, prog, "Bar")
+
+	// Naming something that does not exist is an error, not a no-op.
+	_, err = buzz.ParseEmbedded("export Missing;\n")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no declaration named Missing")
+
+	// `export X as Y;` re-exports a value under a new name. It DESUGARS to
+	// `export final Y = X`, so the declaration export path carries it and no runtime
+	// machinery is needed. Upstream's tests/utils/testing.buzz uses this form, and
+	// tests/behavior/run-file.buzz carries one too.
+	prog, err = buzz.ParseEmbedded("import \"std\";\nexport std\\assert as assert;\n")
+	require.NoError(t, err)
+	requireExportedDecl(t, prog, "assert")
+
+	// The modifier form is untouched.
+	prog, err = buzz.ParseEmbedded("export fun Baz() > int { return 1; }\n")
+	require.NoError(t, err)
+	requireExported(t, prog, "Baz")
+}
+
+func requireExported(t *testing.T, prog *ast.Program, name string) {
+	t.Helper()
+	for _, st := range prog.Stmts {
+		switch d := st.(type) {
+		case *ast.FunDecl:
+			if d.Name == name {
+				assert.True(t, d.IsExported, "fun %s must be exported", name)
+				return
+			}
+		case *ast.ObjectDecl:
+			if d.Name == name {
+				assert.True(t, d.IsExported, "object %s must be exported", name)
+				return
+			}
+		}
+	}
+	t.Fatalf("no declaration named %s in the parsed program", name)
+}
+
+// requireExportedDecl asserts a `final`/`var` declaration of the given name is exported.
+func requireExportedDecl(t *testing.T, prog *ast.Program, name string) {
+	t.Helper()
+	for _, st := range prog.Stmts {
+		if d, ok := st.(*ast.DeclStmt); ok && d.Name == name {
+			assert.True(t, d.IsExported, "decl %s must be exported", name)
+			return
+		}
+	}
+	t.Fatalf("no declaration named %s in the parsed program", name)
+}

@@ -524,7 +524,12 @@ func (h *PrettyHandler) printFailure(colorize bool, label, project, target strin
 		h.printf("%s %s (ran, %s)\n", h.glyph(colorize, "fail", colRed), heading, fmtDur(dur))
 	}
 	if cause != "" {
-		h.printf("  cause: %s\n", failureCauseExcerpt(cause))
+		causes := failureCauses(cause)
+		h.printf("  cause: %s\n", causes[0])
+		// One line per independent failure; flattened, two read as one sentence.
+		for _, c := range causes[1:] {
+			h.printf("       %s\n", c)
+		}
 	}
 	if ref != "" {
 		h.printf("  output: %s\n", ref)
@@ -565,6 +570,66 @@ func failureCauseExcerpt(cause string) string {
 		return cause
 	}
 	return string([]rune(cause)[:maxRunes-1]) + "…"
+}
+
+// hopChain rewrites a cause's dependency hops as a path and drops the plumbing
+// that marked them:
+//
+//	ctx.needs: build: ctx.needs: go-build: ctx.needs: ctx.needs: format: dprint exited 20
+//	build -> go-build -> format: dprint exited 20
+//
+// The hops are not guessed. Every ctx.needs hop wraps the message again, so each
+// marker names exactly the segment that follows it - which is why this reads the
+// markers before removing them. Guessing from shape instead cannot work: `exec`,
+// `config.json` and `./main.go:5:2` all look like target names, and reading
+// `exec: "dprint": executable file not found` as a hop invents a target.
+//
+// The leading segment joins the path when any marker follows it, since it is the
+// target the chain hangs from. Everything else is the message, colons and all.
+func hopChain(cause string) string {
+	const marker = "ctx.needs"
+	segs := strings.Split(cause, ": ")
+	var hops, rest []string
+	pending := false // the previous segment was a marker, so this one is a hop
+	for i, seg := range segs {
+		switch {
+		case seg == marker && len(rest) == 0:
+			pending = true
+			if i == 0 {
+				continue
+			}
+		case pending || (i == 0 && len(segs) > 1 && segs[1] == marker):
+			hops = append(hops, seg)
+			pending = false
+		default:
+			rest = segs[i:]
+		}
+		if len(rest) > 0 {
+			break
+		}
+	}
+	if len(hops) < 2 || len(rest) == 0 {
+		return strings.ReplaceAll(cause, marker+": ", "")
+	}
+	return strings.Join(hops, " -> ") + ": " + strings.Join(rest, ": ")
+}
+
+// failureCauses splits a joined failure into one line per independent cause and
+// renders its dependency hops as a path. Splitting first also gives each cause its own
+// excerpt budget, so a long first failure cannot truncate the rest away.
+func failureCauses(cause string) []string {
+	var out []string
+	for _, part := range strings.Split(cause, "\n") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		out = append(out, failureCauseExcerpt(hopChain(part)))
+	}
+	if len(out) == 0 {
+		return []string{failureCauseExcerpt(cause)}
+	}
+	return out
 }
 
 // printRef prints a successful target's output reference id on its own line.

@@ -259,6 +259,44 @@ func TestRetryMaxElapsedStops(t *testing.T) {
 	assert.GreaterOrEqual(t, st.n, 2, "expected at least one retry before the budget ran out")
 }
 
+// retryAfterTransport always returns status with a Retry-After header set to
+// retryAfterSecs, and records the wall-clock gap before each retry attempt.
+type retryAfterTransport struct {
+	status        int
+	retryAfterSec string
+	n             int
+	attemptAt     []time.Time
+}
+
+func (rt *retryAfterTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
+	rt.n++
+	rt.attemptAt = append(rt.attemptAt, time.Now())
+	h := http.Header{}
+	h.Set("Retry-After", rt.retryAfterSec)
+	return &http.Response{StatusCode: rt.status, Header: h, Body: io.NopCloser(strings.NewReader("body"))}, nil
+}
+
+// TestRetryAfterCappedAtMaxDelay guards S-4: a server-supplied Retry-After
+// header was honoured verbatim, with cfg.maxDelay bounding only the computed
+// exponential backoff, never the header value. A malicious or misconfigured
+// server naming an enormous Retry-After could stall the loop far past the
+// caller's own backoff ceiling.
+func TestRetryAfterCappedAtMaxDelay(t *testing.T) {
+	t.Parallel()
+	rt := &retryAfterTransport{status: 500, retryAfterSec: "3600"} // 1 hour
+	client := NewHTTPClient(&http.Client{Transport: rt},
+		WithAttempts(2), WithDelay(time.Millisecond), WithMaxDelay(20*time.Millisecond))
+
+	start := time.Now()
+	resp, err := client.Transport.RoundTrip(mustGet(t))
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+
+	require.Equal(t, 2, rt.n, "expected exactly one retry")
+	elapsed := rt.attemptAt[1].Sub(start)
+	assert.Lessf(t, elapsed, time.Second, "Retry-After of 1h must be capped at maxDelay (20ms), got %v gap", elapsed)
+}
+
 func mustGet(t *testing.T) *http.Request {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodGet, "http://example.test/x", nil)

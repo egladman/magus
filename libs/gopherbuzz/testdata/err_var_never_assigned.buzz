@@ -1,0 +1,6 @@
+// @error: is declared `var` but is never assigned
+fun f() > void {
+    var m = [1];
+    _ = m;
+}
+final __r = 0;

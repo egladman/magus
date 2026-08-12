@@ -7,9 +7,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -80,8 +82,8 @@ func TestMagusGraphReturnTypesMatchMirrors(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 export fun preflight(ctx: magus\Context, args: [str]) > void {
-    final targets: TargetGraph = null;
-    final graph: Graph = null;
+    final _targets: TargetGraph = null;
+    final _graph: Graph = null;
 }`)
 
 	_, err := interp.RunDir(context.Background(), dir, "preflight", nil)
@@ -183,7 +185,7 @@ magus.project(".", {"spells": [noops]});`)
 // TestBuzzSpellMethodForwardsOpts verifies a Buzz spell handle's per-target method
 // (widget.capture(ctx, opts)): opts.args are appended to the target's base argv and the
 // command runs in opts.cwd — what lets a magusfile drive a flag-carrying tool (e.g.
-// docker.build({cwd: "..", args: [...]})) through the spell instead of os.exec. It
+// docker.build({cwd: "..", args: [...]})) through the spell instead of proc.exec. It
 // also checks listTargets() still exposes the op names for introspection.
 func TestBuzzSpellMethodForwardsOpts(t *testing.T) {
 	dir := t.TempDir()
@@ -246,7 +248,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 
 // TestBuzzSpellCaptureReturnsObject verifies a capture=true target returns the
 // {stdout, stderr, code, ok} object, accessed with dot syntax the way a
-// magusfile reads os.exec(...).stdout.
+// magusfile reads proc.exec(...).stdout.
 func TestBuzzSpellCaptureReturnsObject(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
@@ -319,7 +321,7 @@ func TestVcsCommitFacadeBuzz(t *testing.T) {
 
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "vcs";
-export fun check(ctx: magus\Context, args: [str]) > void {
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
     final c = vcs.commit();
     if (c.subject != "hello") { error("subject: " + c.subject); }
     if (c.author.name != "A") { error("author: " + c.author.name); }
@@ -680,7 +682,7 @@ func TestDispatchOpInjectsDeclaredSecrets(t *testing.T) {
 		}},
 	}
 
-	_, err := dispatchOp(ctx, ops, nil, spells.InvokeRequest{Target: "publish", Dir: dir})
+	_, err := dispatchOp(ctx, ops, nil, nil, spells.InvokeRequest{Target: "publish", Dir: dir})
 	require.NoError(t, err)
 
 	got, err := os.ReadFile(filepath.Join(dir, "out.txt"))
@@ -698,7 +700,7 @@ func TestDispatchOpSecretsRequireAResolver(t *testing.T) {
 			Secrets: map[string]string{"NPM_TOKEN": "NPM_TOKEN"},
 		}},
 	}
-	_, err := dispatchOp(context.Background(), ops, nil, spells.InvokeRequest{Target: "publish", Dir: t.TempDir()})
+	_, err := dispatchOp(context.Background(), ops, nil, nil, spells.InvokeRequest{Target: "publish", Dir: t.TempDir()})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `"publish"`)
 	assert.Contains(t, err.Error(), "no secret resolver is on this run")
@@ -717,7 +719,7 @@ func TestDispatchOpSecretsPropagateResolverError(t *testing.T) {
 			Secrets: map[string]string{"TOKEN": "NOT_SET_ANYWHERE"},
 		}},
 	}
-	_, err := dispatchOp(ctx, ops, nil, spells.InvokeRequest{Target: "publish", Dir: t.TempDir()})
+	_, err := dispatchOp(ctx, ops, nil, nil, spells.InvokeRequest{Target: "publish", Dir: t.TempDir()})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `"publish"`)
 	assert.Contains(t, err.Error(), `"TOKEN"`)
@@ -753,4 +755,38 @@ func TestResolveSecretEnvCollisionErrors(t *testing.T) {
 	assert.Contains(t, err.Error(), `"scip"`)
 	assert.Contains(t, err.Error(), "MAGUS_SYMBOL_INDEX")
 	assert.Contains(t, err.Error(), "collides")
+}
+
+// TestDispatchOpResolvesSymbolIndexRefInArgs proves the mechanism that replaced
+// `sh -c 'scip-go --output "$MAGUS_SYMBOL_INDEX"'` in the built-in scip spells: a
+// bare $MAGUS_SYMBOL_INDEX token in an op's Args is resolved by the runner (via
+// opts.refs, wired in dispatchOp) to the real cache destination BEFORE the process
+// forks - not left for a shell to expand. The op here writes its raw argv[1] (not
+// an env var) to a file, so a script that merely referenced $MAGUS_SYMBOL_INDEX as
+// an environment variable - which the child also receives, for a workspace-local
+// scip spell that still shells out - would not make this test pass; only genuine
+// engine-side substitution of the arg token does.
+func TestDispatchOpResolvesSymbolIndexRefInArgs(t *testing.T) {
+	ctx := context.Background()
+	c, err := cache.Open(ctx, t.TempDir(), cache.WithMutable(true))
+	require.NoError(t, err)
+	ctx = cache.NewContext(ctx, c)
+
+	projDir := t.TempDir()
+	argvFile := filepath.Join(projDir, "argv.txt")
+	ops := map[string]spells.Op{
+		"scip": {Command: spells.Command{
+			Bin:  "sh",
+			Args: []string{"-c", `printf '%s' "$1" > "$2"`, "sh", "$MAGUS_SYMBOL_INDEX", argvFile},
+		}},
+	}
+
+	_, err = dispatchOp(ctx, ops, nil, nil, spells.InvokeRequest{Target: symbols.IndexOp, Dir: projDir})
+	require.NoError(t, err)
+
+	got, err := os.ReadFile(argvFile)
+	require.NoError(t, err)
+	want := symbols.IndexPath(c.Dir(), projDir)
+	assert.Equal(t, want, string(got), "the resolved arg must be the real index path")
+	assert.NotContains(t, string(got), "$MAGUS_SYMBOL_INDEX", "the literal reference token must never reach the child's argv")
 }

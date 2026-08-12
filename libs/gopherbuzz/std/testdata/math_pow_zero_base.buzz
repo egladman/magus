@@ -1,0 +1,7 @@
+// @expect: [0, 0, 1]
+import "math";
+final __r = [
+    math.pow(0.0, 2.0),
+    math.pow(0.0, 3.0),
+    math.pow(2.0, 0.0),
+];

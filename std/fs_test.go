@@ -225,3 +225,161 @@ func TestRecordModeSkipsFilesystemWrites(t *testing.T) {
 		assert.True(t, os.IsNotExist(statErr), "record mode must not create the temp dir")
 	})
 }
+
+func TestFsRemove(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	f := filepath.Join(dir, "f.txt")
+	require.NoError(t, os.WriteFile(f, []byte("x"), 0o644))
+	require.NoError(t, FsRemove(ctx, f))
+	_, err := os.Stat(f)
+	assert.True(t, os.IsNotExist(err))
+
+	// Missing is not an error, matching remove_all.
+	require.NoError(t, FsRemove(ctx, filepath.Join(dir, "gone.txt")))
+
+	// An empty directory goes; a populated one does not. That refusal is the
+	// whole reason remove exists beside remove_all.
+	empty := filepath.Join(dir, "empty")
+	require.NoError(t, os.Mkdir(empty, 0o755))
+	require.NoError(t, FsRemove(ctx, empty))
+
+	full := filepath.Join(dir, "full")
+	require.NoError(t, os.Mkdir(full, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(full, "child"), []byte("x"), 0o644))
+	require.Error(t, FsRemove(ctx, full), "a non-empty directory must not be removed")
+	_, err = os.Stat(filepath.Join(full, "child"))
+	require.NoError(t, err, "the child must survive the refused remove")
+}
+
+func TestFsRename(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	src := filepath.Join(dir, "src.txt")
+	require.NoError(t, os.WriteFile(src, []byte("payload"), 0o644))
+
+	// The destination's parent does not exist yet: rename creates it rather than
+	// making every caller pair this with mkdirall.
+	dst := filepath.Join(dir, "nested", "dst.txt")
+	require.NoError(t, FsRename(ctx, src, dst))
+
+	got, err := os.ReadFile(dst)
+	require.NoError(t, err)
+	assert.Equal(t, "payload", string(got))
+	_, err = os.Stat(src)
+	assert.True(t, os.IsNotExist(err), "the source must be gone")
+
+	require.Error(t, FsRename(ctx, filepath.Join(dir, "missing.txt"), dst))
+}
+
+func TestFsSize(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	p := filepath.Join(dir, "f.bin")
+	require.NoError(t, os.WriteFile(p, []byte("12345"), 0o644))
+
+	n, err := FsSize(ctx, p)
+	require.NoError(t, err)
+	assert.Equal(t, 5, n)
+
+	empty := filepath.Join(dir, "empty.bin")
+	require.NoError(t, os.WriteFile(empty, nil, 0o644))
+	n, err = FsSize(ctx, empty)
+	require.NoError(t, err)
+	assert.Equal(t, 0, n)
+
+	_, err = FsSize(ctx, filepath.Join(dir, "gone"))
+	require.Error(t, err, "a missing path raises rather than reporting 0")
+}
+
+func TestFsTempFile(t *testing.T) {
+	ctx := context.Background()
+
+	p, err := FsTempFile(ctx, "magus-test-")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Remove(p) })
+
+	// It exists and is empty: the caller writes it, unlike temp_dir which hands
+	// back a directory to fill.
+	info, err := os.Stat(p)
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), info.Size())
+	assert.Contains(t, filepath.Base(p), "magus-test-")
+
+	// Two calls never collide.
+	q, err := FsTempFile(ctx, "magus-test-")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Remove(q) })
+	assert.NotEqual(t, p, q)
+}
+
+func TestFsWriteFileAtomic(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	p := filepath.Join(dir, "out.txt")
+
+	require.NoError(t, FsWriteFileAtomic(ctx, p, "first"))
+	got, err := os.ReadFile(p)
+	require.NoError(t, err)
+	assert.Equal(t, "first", string(got))
+
+	// Overwrites in place.
+	require.NoError(t, FsWriteFileAtomic(ctx, p, "second"))
+	got, err = os.ReadFile(p)
+	require.NoError(t, err)
+	assert.Equal(t, "second", string(got))
+
+	// Permissions match write_file's 0644, not CreateTemp's 0600.
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(p)
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o644), info.Mode().Perm())
+	}
+
+	// No temporary file is left behind to glob into a later target's sources.
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	assert.Equal(t, []string{"out.txt"}, names)
+
+	// A missing parent directory is created rather than raising.
+	nested := filepath.Join(dir, "a", "b", "deep.txt")
+	require.NoError(t, FsWriteFileAtomic(ctx, nested, "deep"))
+	got, err = os.ReadFile(nested)
+	require.NoError(t, err)
+	assert.Equal(t, "deep", string(got))
+}
+
+func TestRecordModeSkipsNewFilesystemWrites(t *testing.T) {
+	dir := t.TempDir()
+	rec := types.WithTrace(context.Background())
+
+	t.Run("write_file_atomic", func(t *testing.T) {
+		p := filepath.Join(dir, "atomic.txt")
+		require.NoError(t, FsWriteFileAtomic(rec, p, "data"))
+		_, err := os.Stat(p)
+		assert.True(t, os.IsNotExist(err), "record mode must not write the file")
+	})
+
+	t.Run("rename", func(t *testing.T) {
+		src := filepath.Join(dir, "src.txt")
+		require.NoError(t, os.WriteFile(src, []byte("x"), 0o644))
+		require.NoError(t, FsRename(rec, src, filepath.Join(dir, "moved.txt")))
+		_, err := os.Stat(src)
+		assert.NoError(t, err, "record mode must leave the source in place")
+	})
+
+	t.Run("remove", func(t *testing.T) {
+		p := filepath.Join(dir, "keep.txt")
+		require.NoError(t, os.WriteFile(p, []byte("x"), 0o644))
+		require.NoError(t, FsRemove(rec, p))
+		_, err := os.Stat(p)
+		assert.NoError(t, err, "record mode must not delete the file")
+	})
+}

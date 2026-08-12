@@ -1,0 +1,5 @@
+// @error: is never used
+fun f() > void {
+    final forgotten = 42;
+}
+final __r = 0;

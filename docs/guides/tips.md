@@ -132,7 +132,7 @@ A target returns `void`. Its result to the outside world is an exit code plus te
 ```buzz
 // Typed where it matters. The list never leaves Buzz, so nothing has to parse it.
 fun publish_registries(ctx: magus\Context) > [Registry] {
-    if (ctx.has_charm("cd")) { return REGISTRIES; }
+    if (ctx.hasCharm("cd")) { return REGISTRIES; }
     return [];
 }
 ```
@@ -166,7 +166,7 @@ export fun image_registries(ctx: magus\Context, args: [str]) > void { ... }
 // Act: log in to exactly those.
 export fun image_login(ctx: magus\Context, args: [str]) > void {
     foreach (reg in publish_registries(ctx)) {
-        os\exec("docker", args: ["login", reg.host, "-u", magus\secret.read(reg.user_ref),
+        proc\exec("docker", args: ["login", reg.host, "-u", magus\secret.read(reg.user_ref),
             "--password-stdin"], dir: ".", opts: {"stdin": magus\secret.read(reg.token_ref)});
     }
 }
@@ -235,7 +235,7 @@ fun harbor_token_ref(reference: str) > str {
 // ECR issues a short-lived password instead of storing one. `docker login` still
 // takes it on stdin, so nothing downstream changes.
 fun ecr_password(region: str) > str {
-    return os\exec("aws", args: ["ecr", "get-login-password", "--region", region],
+    return proc\exec("aws", args: ["ecr", "get-login-password", "--region", region],
         dir: ".", opts: {}).stdout;
 }
 ```
@@ -266,9 +266,9 @@ Two entry points into an interactive Buzz REPL, sharing one evaluator:
 
 ```buzz
 export fun build(ctx: magus\Context, args: [str]) > void {
-    os\exec("go", ["generate", "./..."]);
+    proc\exec("go", ["generate", "./..."]);
     magus\pry();   // execution pauses here; inspect or modify state
-    os\exec("go", ["build", "./..."]);
+    proc\exec("go", ["build", "./..."]);
 }
 ```
 

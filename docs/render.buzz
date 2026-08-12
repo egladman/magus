@@ -7,17 +7,17 @@
 namespace render;
 
 import "markdown";
+import "proc";
 import "fs";
 import "io";
 import "os";
 import "std";
 import "serialize";
-import "encoding";
 import "time";
 import "template";
 import "crypto";
 import "assert";
-import "yaml";
+import "encoding/yaml";
 // Text/path/URL helpers. Flat import (`as _`) merges a module's exports into this scope,
 // so callers name them unqualified (escapeAttr, relativePath, ...); same for the imports
 // below.
@@ -85,23 +85,23 @@ import "site/config" as _;
 
 // esbuild runs the pinned esbuild binary with an exact argv.
 //
-// os\exec, not os\execute(["sh", "-c", ...]): the shell form spawned a second process per
+// proc\exec, not os\execute(["sh", "-c", ...]): the shell form spawned a second process per
 // call purely to parse a string this code had just finished building, and every path went
 // through it as an interpolated command-line token rather than an argument. It also
 // swallowed failures - os\execute RETURNS the exit code, and none of these calls read it,
 // so a broken bundle wrote nothing and the render carried on to fail later somewhere else.
-// os\exec raises on a non-zero exit, so a bundle that cannot build stops the render where
+// proc\exec raises on a non-zero exit, so a bundle that cannot build stops the render where
 // it broke.
-fun esbuild(args: [str]) > void {
-    os\exec("esbuild", args, ".", {});
+fun esbuild(args: [str]) > void !> any {
+    proc\exec("esbuild", args, ".", {});
 }
 
 // walkBlog visits every blog/*.md post (skipping index.md and _underscored fixtures) in
 // fs.list's sorted order, so the walk is deterministic. Posts are flat: no nested subdirs
 // under blog/.
-fun walkBlog(site: Site) > void {
+fun walkBlog(site: Site) > void !> any {
     if (isDirectory(site.root + "/" + site.blog) == false) { return; }
-    foreach (name in fs\list(site.root + "/" + site.blog)) {
+    foreach (name in fs\listDir(fs\join(site.root, site.blog))) {
         if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
             renderBlogPost(name, site);
         }
@@ -111,11 +111,11 @@ fun walkBlog(site: Site) > void {
 
 // Recursively walk docs/ (the render reads its co-located markdown; the SSG's own
 // root children - gen/, src/, tour/, node_modules/, MAGUS.md - are skipped at the root).
-fun walk(rel: str, site: Site) > void {
-    var dir = site.root + "/" + site.docs;
+fun walk(rel: str, site: Site) > void !> any {
+    var dir = fs\join(site.root, site.docs);
     if (rel != "") { dir = site.root + "/" + site.docs + "/" + rel; }
 
-    foreach (name in fs\list(dir)) {
+    foreach (name in fs\listDir(dir)) {
         var childRel = name;
         if (rel != "") { childRel = rel + "/" + name; }
 
@@ -139,14 +139,29 @@ fun walk(rel: str, site: Site) > void {
 
 // site_render rebuilds gen/ from ../docs and the root README. Pure function of git
 // history (footers) and the source tree - reproducible and gate-stable.
-export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: TargetGraph, graph: Graph) > Site {
+export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: TargetGraph, graph: Graph) > Site !> any {
     // Generator state for one render pass, threaded explicitly into every renderer as a
     // `site` arg - no module-global singleton, so parallel renders never share state.
     // (outDir, not out: `out` is a reserved word in buzz.)
     // Before anything else: a build too old to honor str.indexOf(from:) would not fail
     // here, it would HANG in the glossary linker. Probe once and say so instead.
     requireIndexOfFrom();
-    var site: Site = mut Site{};
+    var site: Site = mut Site{
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        glossaryRefs = mut {},
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
     site.config = magusConfig();
     site.targets = targets;
     site.graph = graph;
@@ -168,7 +183,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     site.blogPosts = mut [<BlogPost>];
     site.hasBlogPosts = false;
     if (isDirectory(site.root + "/" + site.blog)) {
-        foreach (name in fs\list(site.root + "/" + site.blog)) {
+        foreach (name in fs\listDir(fs\join(site.root, site.blog))) {
             if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
                 site.hasBlogPosts = true;
             }
@@ -184,7 +199,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // post, a dropped alias, a release out of CHANGELOG.md. Committed-but-not-rendered
     // artifacts (the playground WASM/editor bundle) persist untouched, since nothing here
     // writes or deletes them.
-    fs\makeDirectory(site.outDir);
+    fs\mkdirAll(site.outDir);
     std\print("generating site from " + site.root + "/" + site.docs + "/ -> " + site.outDir + "/");
 
     // Copy static assets the root README references (images, badges). Scoped delete-
@@ -199,7 +214,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // command line, so a path with a space in it was a latent bug rather than a caught
     // one. The typed calls are also the readable form - the intent is "keep these two
     // files, drop the rest", which the find invocation stated as a double negative.
-    fs\mkdirall(site.outDir + "/assets");
+    fs\mkdirAll(site.outDir + "/assets");
     foreach (name in fs\listDir(site.outDir + "/assets")) {
         if (name != "mermaid.js" and name != "hljs.js") {
             fs\removeAll(site.outDir + "/assets/" + name);
@@ -224,7 +239,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     fs\removeAll(site.outDir + "/libs");
     foreach (svg in fs\glob(site.root + "/libs/*/coverage.svg")) {
         final project = fs\basename(fs\dirname(svg.value));
-        fs\mkdirall(site.outDir + "/libs/" + project);
+        fs\mkdirAll(site.outDir + "/libs/" + project);
         fs\copyFile(svg.value, site.outDir + "/libs/" + project + "/coverage.svg");
     }
 
@@ -256,7 +271,9 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // way down - the copy is reproducible, the wasm is not. editor.js is esbuild output
     // (build-playground-editor) and lands in gen/playground/ on its own, so it is not here.
     // renderPlayground (below) adds index.html alongside both.
-    os\execute(["sh", "-c", "mkdir -p " + site.outDir + "/playground && cp -r " + site.root + "/" + site.docs + "/vendor/playground/. " + site.outDir + "/playground/"]);
+    // The playground wasm and its glue are BUILT into gen/playground by the
+    // build-playground target, not copied from a committed vendor/ tree - see that
+    // target for why they stopped being committed inputs. Nothing to copy here.
     // Gather every docs page's relatedness metadata BEFORE any page renders, so each page's
     // "Related" cards resolve titles/URLs against the full corpus. collectDocPages reads only
     // frontmatter, so it is free of the render state below.
@@ -375,7 +392,14 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
 // site_publish is the cacheable publication unit used by docs:site-generate. Keep every
 // output that belongs to the completed site in this one phase: the page tree, pnpm-backed
 // vendor bundles, the integrity manifest, and (only for rw) the URL ledger.
-export fun site_publish(root: str, docs: str, blog: str, outDir: str, targets: TargetGraph, graph: Graph, updateUrls: bool) > void {
+// site_conventions re-exports the gates check for the magusfile. engine/gates is
+// flat-imported here, and a flat import does not RE-export, so the magusfile cannot
+// reach conventionsCheck through this module without a wrapper.
+export fun site_conventions(root: str, docs: str) > void !> any {
+    conventionsCheck(root, docs);
+}
+
+export fun site_publish(root: str, docs: str, blog: str, outDir: str, targets: TargetGraph, graph: Graph, updateUrls: bool) > void !> any {
     final site = site_render(root, docs, blog, outDir, targets, graph);
     generateJsBundles();
     writeSiteManifest(site);
@@ -387,7 +411,7 @@ export fun site_publish(root: str, docs: str, blog: str, outDir: str, targets: T
 // rather than behind an isDir check: an interrupted install leaves a node_modules that
 // exists but is incomplete, and the guard read that as ready and fed esbuild a half
 // tree. See the install() note in magusfile.buzz.
-fun generateJsBundles() > void {
-    os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
-    os\exec("pnpm", ["run", "build"], ".", {});
+fun generateJsBundles() > void !> any {
+    proc\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
+    proc\exec("pnpm", ["run", "build"], ".", {});
 }

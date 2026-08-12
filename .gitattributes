@@ -20,7 +20,9 @@ docs/concepts/spells/*.md merge=magus linguist-generated
 docs/gen/** merge=magus linguist-generated
 docs/gen/assets/hljs.js merge=magus linguist-generated
 docs/gen/assets/mermaid.js merge=magus linguist-generated
+docs/gen/playground/buzz.wasm merge=magus linguist-generated
 docs/gen/playground/editor.js merge=magus linguist-generated
+docs/gen/playground/wasm_exec.js merge=magus linguist-generated
 docs/reference/api/*.md merge=magus linguist-generated
 docs/reference/buzz/*.md merge=magus linguist-generated
 docs/reference/config.md merge=magus linguist-generated
@@ -42,5 +44,7 @@ libs/textsearch/MAGUS.md merge=magus linguist-generated
 manpage/*.1 merge=magus linguist-generated
 proto/gen/** merge=magus linguist-generated
 schema/gen/*.go merge=magus linguist-generated
+spells/enum_gen.go merge=magus linguist-generated
 types/buzzobject_gen.go merge=magus linguist-generated
+types/enum_gen.go merge=magus linguist-generated
 # END magus-generated

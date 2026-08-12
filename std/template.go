@@ -17,6 +17,7 @@ func init() { Register(Template) }
 // being logic-less it keeps generated config files predictable.
 var Template = Module{
 	Name: "template",
+	WASM: true,
 	Doc:  "Logic-less Mustache templating (Mustache spec, via github.com/cbroglie/mustache).",
 	Methods: []Method{
 		{
@@ -24,6 +25,7 @@ var Template = Module{
 			Doc:     "Render a Mustache template against a context value (usually a name->value map; lists drive sections, absent/false keys hide them). Returns the filled string; errors on a malformed template.",
 			Args:    []Arg{{Name: "template", Type: TypeString}, {Name: "data", Type: TypeAny}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    TemplateRender,
 		},
 		{
@@ -31,6 +33,7 @@ var Template = Module{
 			Doc:     "Render a Mustache template that includes partials via {{>name}}, resolving each name against the partials map (name->template string). Partials may reference other partials. Same context and escaping rules as render; errors on a malformed template.",
 			Args:    []Arg{{Name: "template", Type: TypeString}, {Name: "data", Type: TypeAny}, {Name: "partials", Type: TypeStringMap}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    TemplateRenderPartials,
 		},
 	},

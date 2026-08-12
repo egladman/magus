@@ -93,6 +93,44 @@ func TestHashFileWithMtimeRehashesOnChange(t *testing.T) {
 	assert.NotEqual(t, h1, h2, "size change must invalidate the fast-path and re-hash")
 }
 
+// TestHashFileWithMtimeSkipsStaleFingerprintOnConcurrentChange verifies the
+// re-stat guard: if the file changes (new mtime AND new size) while
+// hashFileWithMtime is reading it, the pre-read fingerprint must not be
+// stored - it would pair the OLD (mtime,size) with a hash that reflects
+// content read partway through a concurrent change, exactly the "stale
+// fingerprint" the io_uring tier already guards against.
+//
+// The file is large so the read is not a single instantaneous syscall, giving
+// the concurrent overwrite in the goroutine below a real window to land
+// mid-read rather than strictly before or after it.
+func TestHashFileWithMtimeSkipsStaleFingerprintOnConcurrentChange(t *testing.T) {
+	c := newBareCache(t)
+	c.mtimes.load(context.Background())
+	p := filepath.Join(t.TempDir(), "big.bin")
+
+	original := make([]byte, 512<<20) // 512 MiB
+	for i := range original {
+		original[i] = 'A'
+	}
+	require.NoError(t, os.WriteFile(p, original, 0o644))
+	info, err := os.Stat(p)
+	require.NoError(t, err)
+	staleMtime, staleSize := info.ModTime().UnixNano(), info.Size()
+
+	go func() {
+		// No synchronization on purpose: the write is tiny (near-instant) against
+		// the 512 MiB read, so starting it immediately reliably lands somewhere
+		// inside the read's multi-ten-millisecond window rather than before it.
+		_ = os.WriteFile(p, []byte("changed, much shorter"), 0o644)
+	}()
+
+	_, err = c.hashFileWithMtime(p)
+	require.NoError(t, err)
+
+	_, found := c.mtimes.get(p, staleMtime, staleSize)
+	assert.False(t, found, "a fingerprint captured before a concurrent change must not be stored")
+}
+
 // TestHashFileWithMtimeMissing verifies the os.Stat error path.
 func TestHashFileWithMtimeMissing(t *testing.T) {
 	c := newBareCache(t)
@@ -189,6 +227,24 @@ func TestExpandSourcesEmptyGlobs(t *testing.T) {
 	out, err := expandSources(nil, t.TempDir(), nil, nil)
 	require.NoError(t, err)
 	assert.Nil(t, out)
+}
+
+// TestExpandSourcesExported pins the exported wrapper a caller outside this
+// package uses (a spell op's Sources placeholder - see spells.Command.Sources):
+// it must return root-relative paths, sorted, and honor ignoreDirs exactly like
+// the unexported walk it wraps, since the whole point is reusing that walk
+// rather than a second one.
+func TestExpandSourcesExported(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "node_modules"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "b.sh"), []byte("b"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "a.sh"), []byte("a"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "node_modules", "skip.sh"), []byte("s"), 0o644))
+
+	out, err := ExpandSources([]string{"**/*.sh"}, root, nil, []string{"node_modules"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a.sh", "b.sh"}, out,
+		"sorted, root-relative, and the declared ignore dir pruned")
 }
 
 // TestHashFilesEmpty verifies the len(files) == 0 fast path returns nils.

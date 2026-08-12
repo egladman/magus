@@ -1,0 +1,49 @@
+// @expect: true
+// Mutability is part of a collection's TYPE, not just a runtime permission bit, so
+// `typeof` has to render it: upstream's clone-mutability-methods.buzz asserts
+// `typeof list.cloneMutable() == <mut [int]>`. Three things had to line up for that,
+// and each is pinned below, because the upstream suite only runs with a checkout.
+//
+//  1. `<mut [int]>` has to survive the parse. The annotation is reconstructed by
+//     joining the type's tokens, and the `mut` token rendered as the empty string,
+//     so a mutable type literal was byte-identical to its immutable twin.
+//  2. types.ListType/MapType have to carry the flag at all, and the annot parser has
+//     to read it back off `mut [int]`.
+//  3. The self-returning built-ins have to propagate it, statically AND at run time -
+//     upstream types `sub`/`filter` from the receiver's own type def.
+
+// The clone family is where the retyping is observable: same runtime object shape,
+// different type.
+final immutableList: [int] = [ 1, 2 ];
+final fromImmutable = immutableList.cloneMutable();
+final backToImmutable = fromImmutable.cloneImmutable();
+
+// A method returning "a list of my own type" carries the receiver's mutability
+// across, so a mutable clone stays mutable through sub().
+final mutableSub = fromImmutable.sub(0);
+mutableSub[0] = 3;
+
+final mutableMap = { "one": 1 }.cloneMutable();
+final mutableFiltered = mutableMap.filter(fun (key: str, value: int) > bool {
+    return key.len() > 0 or value > 0;
+});
+mutableFiltered["two"] = 2;
+
+// A `mut` literal and a `mut` annotation agree, and neither equals the immutable
+// spelling - the equality is over the canonical rendering, so this is also what
+// pins the `mut ` prefix (one space, before the bracket).
+final declared: mut [int] = mut [ 1 ];
+final inferred = mut { "k": 1 };
+
+final __r = typeof fromImmutable == <mut [int]>
+    and typeof mutableSub == <mut [int]>
+    and typeof backToImmutable == <[int]>
+    and typeof immutableList.sub(0) == <[int]>
+    and typeof mutableMap == <mut {str: int}>
+    and typeof mutableFiltered == <mut {str: int}>
+    and typeof mutableMap.cloneImmutable() == <{str: int}>
+    and typeof declared == <mut [int]>
+    and typeof inferred == <mut {str: int}>
+    and (typeof declared == <[int]>) == false
+    and mutableSub[0] == 3
+    and mutableFiltered["two"] == 2;

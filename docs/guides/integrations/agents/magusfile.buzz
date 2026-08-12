@@ -23,6 +23,7 @@ import "magus";
 // os shells out to pnpm for the install and the two gates.
 import "os";
 
+import "proc";
 // magusfile binds this file's exported targets; bash adds shellcheck for the sh
 // templates; ts adds the TypeScript spell so the plugin is
 // symbol-capable (its `scip` op indexes it for the knowledge graph). ts is opaque - pnpm owns
@@ -34,13 +35,13 @@ magus\project({
     "spells": [bash, typescript],
     // Affected tracking is glob-based, not import-graph-based, so every input must be named to
     // be watched: the templates themselves, and the config files that drive the gates.
-    "sources": ["magusfile.buzz", "*.ts", "*.sh", "codex-hooks.json",
+    "sources": ["*.ts", "*.sh", "codex-hooks.json",
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json"],
     "targets": {
     },
 });
 
-export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
+export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install(); }
 
 // pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason.
 // Always let pnpm validate the install. An interrupted install leaves a node_modules
@@ -48,22 +49,22 @@ export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
 // handing the missing packages straight to tsc/esbuild. Reached once per invocation
 // through preflight, which every target below already needs, so the unconditional
 // --frozen-lockfile costs about a second on a warm tree and never races itself.
-fun install() > void {
-    os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
+fun install() > void !> any {
+    proc\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
 }
 
 // lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus
 // Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors
 // libs/textsearch's rules so the whole workspace writes TypeScript the same way).
-// os.exec raises on a non-zero exit, so either gate fails lint.
-export fun lint(ctx: magus\Context, args: [str]) > void {
+// proc.exec raises on a non-zero exit, so either gate fails lint.
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
-    os\exec("pnpm", ["run", "typecheck"], ".", {});
-    os\exec("pnpm", ["run", "biome"], ".", {});
+    proc\exec("pnpm", ["run", "typecheck"], ".", {});
+    proc\exec("pnpm", ["run", "biome"], ".", {});
     // The shell templates are POSIX sh that users copy into their own hook config, so
     // they get the same scrutiny as the TypeScript: shellcheck in sh mode catches the
     // bashisms that would break on a host whose /bin/sh is dash.
-    os\exec("shellcheck", ["--shell=sh", "--severity=style",
+    proc\exec("shellcheck", ["--shell=sh", "--severity=style",
                           "magus-guard-command.sh", "magus-guard-path.sh", "cursor-guard.sh"], ".", {});
 }
 
@@ -78,9 +79,9 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 // The sh templates are covered elsewhere, by cmd/magus/testdata/script/guard_templates.txtar:
 // testscript already gives them a real magus on PATH, which is exactly what a shell template
 // needs and what this project cannot offer.
-export fun test(ctx: magus\Context, args: [str]) > void {
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
-    os\exec("pnpm", ["run", "test"], ".", {});
+    proc\exec("pnpm", ["run", "test"], ".", {});
 }
 
 // 'ci' is the anchor `magus affected ci` keys off. There is nothing to build here, so the gate is

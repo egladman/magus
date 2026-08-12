@@ -692,11 +692,28 @@ func TestCompare_DetectsIndexDowngradeAgainstRunning(t *testing.T) {
 
 func TestPrintUpdateStatus(t *testing.T) {
 	t.Parallel()
-	// PrintUpdateStatus writes to stdout; verify it does not panic for all three branches.
+	// PrintUpdateStatus writes to stdout; verify it does not panic for all four branches.
 	// Capture is intentionally omitted - the test only asserts no panic.
-	PrintUpdateStatus("v2.0.0", "v1.0.0") // newer available
-	PrintUpdateStatus("v1.0.0", "v1.0.0") // up to date
-	PrintUpdateStatus("v0.9.0", "v1.0.0") // running newer
+	PrintUpdateStatus("v2.0.0", "v1.0.0")    // newer available
+	PrintUpdateStatus("v1.0.0", "v1.0.0")    // up to date
+	PrintUpdateStatus("v0.9.0", "v1.0.0")    // running newer
+	PrintUpdateStatus("v1.0.0", "dev-build") // unparseable: must not report "up to date"
+}
+
+func TestCompareParsed_unparseableIsNotEqual(t *testing.T) {
+	t.Parallel()
+	// Compare collapses "genuinely equal" and "could not parse" into the same 0,
+	// which is why PrintUpdateStatus needs compareParsed's ok bit: a dev build
+	// whose version is not semver must not be reported as "already up to date".
+	cmp, ok := compareParsed("v1.0.0", "v1.0.0")
+	assert.Equal(t, 0, cmp)
+	assert.True(t, ok)
+
+	_, ok = compareParsed("v1.0.0", "dev-build")
+	assert.False(t, ok)
+
+	_, ok = compareParsed("dev-build", "v1.0.0")
+	assert.False(t, ok)
 }
 
 func TestDefaultUserBinDir(t *testing.T) {

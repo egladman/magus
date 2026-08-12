@@ -39,6 +39,25 @@ func RegisterArchive(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return buzzValueArchiveCompressResult(ret0), nil
 	}))
+	m.MapSet("list", vm.DirectValue("archive.list", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		src := Str(bzArgs, 0)
+		opts := AnyMap(bzArgs, 1)
+		ret0, err := std.ArchiveList(ctx, src, opts)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return buzzValueArchiveArchiveEntrySlice(ret0), nil
+	}))
+	m.MapSet("readFile", vm.DirectValue("archive.readFile", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		src := Str(bzArgs, 0)
+		name := Str(bzArgs, 1)
+		opts := AnyMap(bzArgs, 2)
+		ret0, err := std.ArchiveReadFile(ctx, src, name, opts)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrVal(ret0), nil
+	}))
 	return m
 }
 func buzzValueArchivePath(v types.Path) vm.Value {
@@ -70,4 +89,20 @@ func buzzValueArchiveCompressResult(v types.CompressResult) vm.Value {
 	out.MapSet("bytes_in", vm.IntValue(int64(v.BytesIn)))
 	out.MapSet("bytes_out", vm.IntValue(int64(v.BytesOut)))
 	return out
+}
+
+func buzzValueArchiveArchiveEntry(v types.ArchiveEntry) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("size", vm.IntValue(int64(v.Size)))
+	out.MapSet("is_dir", vm.BoolValue(v.IsDir))
+	return out
+}
+
+func buzzValueArchiveArchiveEntrySlice(values []types.ArchiveEntry) vm.Value {
+	items := make([]vm.Value, len(values))
+	for i, value := range values {
+		items[i] = buzzValueArchiveArchiveEntry(value)
+	}
+	return vm.ListValue(items)
 }

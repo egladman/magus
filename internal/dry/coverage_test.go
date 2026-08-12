@@ -214,22 +214,21 @@ export fun generate(ctx: magus\Context, args: [str]) > void { ctx.needs(ctx.glob
 func TestRun_stubbedHostMembers(t *testing.T) {
 	const src = `
 import "magus";
-export fun work(ctx: magus\Context, args: [str]) > void {
-    magus.info("i");
-    magus.warn("w");
-    magus.error("e");
-    magus.debug("d");
+export fun work(ctx: magus\Context, args: [str]) > void !> any {
+    magus.log.info("i");
+    magus.log.warn("w");
+    magus.log.error("e");
+    magus.log.debug("d");
     magus.cmd("ls", []);
     magus.describe(["x"]);
     magus.insight(["y"]);
     magus.doctor(["z"]);
-    magus.modules();
-    magus.module("go");
-    magus.hint("h");
+    magus.describeModule();
+    magus.describeModule("go");
+    magus.log.hint("h");
     magus.pry();
     magus.bustCache();
     magus.affectedImpact("main");
-    magus.targetGraph();
     magus.describeFile(["magusfile.buzz"]);
     magus.insightReport([]);
 }
@@ -247,12 +246,12 @@ export fun work(ctx: magus\Context, args: [str]) > void {
 	}
 }
 
-// TestRun_logMissingArg drives strArg's fallback: magus.info() with no argument
+// TestRun_logMissingArg drives strArg's fallback: magus.log.info() with no argument
 // traces an empty-detail log op rather than panicking.
 func TestRun_logMissingArg(t *testing.T) {
 	const src = `
 import "magus";
-export fun work(ctx: magus\Context, args: [str]) > void { magus.info(); }
+export fun work(ctx: magus\Context, args: [str]) > void { magus.log.info(); }
 `
 	r := Run(context.Background(), src, "work", nil)
 	require.True(t, r.OK, "dry-run failed: %+v", r.Diag)
@@ -264,7 +263,7 @@ export fun work(ctx: magus\Context, args: [str]) > void { magus.info(); }
 // TestLoadMagusfile_topLevelLogNoAttribution: a log call at the top level (no
 // current target) has nowhere to attribute, so addOp drops it without erroring.
 func TestLoadMagusfile_topLevelLog(t *testing.T) {
-	const src = `import "magus"; magus.info("top-level");`
+	const src = `import "magus"; magus.log.info("top-level");`
 	g := LoadMagusfile(context.Background(), src)
 	require.True(t, g.OK, "a top-level log must not fail the load: %+v", g.Diag)
 }
@@ -274,7 +273,7 @@ func TestLoadMagusfile_topLevelLog(t *testing.T) {
 func TestRun_magusRunEmptyArgv(t *testing.T) {
 	const src = `
 import "magus";
-export fun release(ctx: magus\Context, args: [str]) > void { magus.run([]); }
+export fun release(ctx: magus\Context, args: [str]) > void !> any { magus.run([]); }
 `
 	r := Run(context.Background(), src, "release", nil)
 	require.True(t, r.OK, "dry-run failed: %+v", r.Diag)
@@ -287,7 +286,7 @@ func TestRun_magusRunWithCharmSuffix(t *testing.T) {
 	const src = `
 import "magus";
 export fun image_build(ctx: magus\Context, args: [str]) > void {}
-export fun release(ctx: magus\Context, args: [str]) > void { magus.run(["image-build:cd,fast"]); }
+export fun release(ctx: magus\Context, args: [str]) > void !> any { magus.run(["image-build:cd,fast"]); }
 `
 	r := Run(context.Background(), src, "release", nil)
 	require.True(t, r.OK, "dry-run failed: %+v", r.Diag)
@@ -426,7 +425,7 @@ export fun mgs_listTargets() > any { return {"svc": svc}; }
 	assert.Equal(t, "service", r.Trace[0].Kind, "a command-shaped-but-not-map field still reads as a service")
 }
 
-// TestRun_charmBranchElseViaCtx re-confirms the ctx.has_charm path branches on the
+// TestRun_charmBranchElseViaCtx re-confirms the ctx.hasCharm path branches on the
 // active charm set - exercising traceHasCharm's true and false returns through the
 // ctx form rather than the global.
 func TestRun_charmBranchViaCtx(t *testing.T) {
@@ -435,7 +434,7 @@ import "magus";
 import "magus/spell/docker";
 magus.project({"spells": [docker]});
 export fun image_build(ctx: magus\Context, args: [str]) > void {
-    if (ctx.has_charm("cd")) { docker["docker-build"]({"args": ["--push"]}); }
+    if (ctx.hasCharm("cd")) { docker["docker-build"]({"args": ["--push"]}); }
     else { docker["docker-build"]({"args": ["--load"]}); }
 }
 `
@@ -459,9 +458,9 @@ func TestRun_insightReportLensesAreShaped(t *testing.T) {
 		t.Run(lens, func(t *testing.T) {
 			src := `
 import "magus";
-export fun work(ctx: magus\Context, args: [str]) > void {
-    magus.info("{magus.insightReport([]).` + lens + `.len()}");
-    magus.info("reached-the-end");
+export fun work(ctx: magus\Context, args: [str]) > void !> any {
+    magus.log.info("{magus.insightReport([]).` + lens + `.len()}");
+    magus.log.info("reached-the-end");
 }
 `
 			r := Run(context.Background(), src, "work", nil)

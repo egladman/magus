@@ -26,8 +26,8 @@ import (
 // system - it invokes contract functions by name and reads what comes back.
 //
 // NAMING: "provider" in this file always means a workspace provider. The unrelated
-// WithProvider in workspace.go takes an observability.Provider; nothing here has
-// anything to do with telemetry.
+// WithTelemetryProvider in workspace.go takes an observability.Provider; nothing
+// here has anything to do with telemetry.
 //
 // The runner lives behind a hook for the reason the remote-cache opener does: only
 // the bindings layer can run a Buzz spell, and the magus library must not link the

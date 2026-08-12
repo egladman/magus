@@ -104,3 +104,75 @@ func TestMemBoundsAndFreeErrors(t *testing.T) {
 	_, err = AllocFFI(0)
 	assert.Error(t, err, "alloc(0): want error")
 }
+
+// marshalStructArg / unmarshalStructArg had no test of any kind, which is how a
+// bool field silently never reaching C survived. They are reachable in normal use
+// only through a real zdef'd call into a C library, so they are exercised directly
+// here: the registries they read are plain package-level maps.
+func withDeclaredStruct(t *testing.T, name string, fields []string) {
+	t.Helper()
+	declaredFieldTypes[name] = fields
+	t.Cleanup(func() {
+		delete(declaredFieldTypes, name)
+		delete(declaredAggregates, name)
+	})
+}
+
+// TestMarshalStructArgRoundTripsBool pins both directions of the bool defect. The
+// marshal switch handled only tagInt and tagFloat, so a bool field was never
+// written and every bool reached C as the zero AllocFFI left - false, however the
+// script set it. The read-back then wrote IntValue over the field, so a round trip
+// also changed the field's TYPE from bool to int.
+func TestMarshalStructArgRoundTripsBool(t *testing.T) {
+	withDeclaredStruct(t, "Flags", []string{"bool", "i32", "bool"})
+
+	def := &objectDefObj{Name: "Flags"}
+	inst := &objectInst{
+		Def:    def,
+		Fields: []Value{BoolValue(true), IntValue(7), BoolValue(false)},
+	}
+
+	sa, err := marshalStructArg(inst)
+	require.NoError(t, err, "marshalStructArg")
+	t.Cleanup(func() { _ = FreeFFI(sa.addr) })
+
+	// Read the block back exactly as a C callee would see it: a true bool must be
+	// 1 in the field's own width, not the zero the allocation started at.
+	got, _, _, err := ReadScalar(sa.addr, sa.offsets[0], "bool")
+	require.NoError(t, err, "ReadScalar field 0")
+	assert.Equal(t, int64(1), got, "a true bool must reach C as 1, not the zero AllocFFI left")
+
+	got2, _, _, err := ReadScalar(sa.addr, sa.offsets[2], "bool")
+	require.NoError(t, err, "ReadScalar field 2")
+	assert.Equal(t, int64(0), got2, "a false bool is 0")
+
+	require.NoError(t, unmarshalStructArg(sa), "unmarshalStructArg")
+	assert.True(t, inst.Fields[0].IsBool(), "a bool field must come back a bool, not an int")
+	assert.True(t, inst.Fields[0].AsBool(), "and must keep its value")
+	assert.True(t, inst.Fields[2].IsBool(), "including a false one")
+	assert.False(t, inst.Fields[2].AsBool(), "which stays false")
+	assert.Equal(t, int64(7), inst.Fields[1].AsInt(), "the int field is unaffected")
+}
+
+// TestMarshalStructArgUsesUnionLayout pins that a union argument is laid out as a
+// union. declaredAggregates recorded only {Size, Align}, so marshalStructArg had
+// nothing to distinguish one and always called StructLayoutWith - giving a union
+// struct offsets and a struct size, disagreeing with the layout the declaration
+// had already published and with what the callee reads.
+func TestMarshalStructArgUsesUnionLayout(t *testing.T) {
+	withDeclaredStruct(t, "U", []string{"i64", "i32"})
+	declaredAggregates["U"] = NamedLayout{Size: 8, Align: 8, IsUnion: true}
+
+	inst := &objectInst{
+		Def:    &objectDefObj{Name: "U"},
+		Fields: []Value{IntValue(1), IntValue(2)},
+	}
+	sa, err := marshalStructArg(inst)
+	require.NoError(t, err, "marshalStructArg")
+	t.Cleanup(func() { _ = FreeFFI(sa.addr) })
+
+	// Every union field starts at 0; a struct layout would put the second at 8.
+	for i, off := range sa.offsets {
+		assert.Equal(t, 0, off, "union field %d must lie at offset 0", i)
+	}
+}

@@ -93,7 +93,7 @@ consequences worth stating plainly:
 
 The static extractor (`internal/describe/extract.go`) that powers `magus
 describe`/`magus graph` sees **both arms** of a charm-conditional `magus\needs`
-call (an `if ctx.has_charm("cd") { ctx.needs(...) } else { ctx.needs(...) }`
+call (an `if ctx.hasCharm("cd") { ctx.needs(...) } else { ctx.needs(...) }`
 shows both edges in the graph). A dry run (`magus run --dry-run`) evaluates
 the magusfile for real and sees only the **taken** branch, under whichever
 charms are active. Both are correct for what they represent: the static graph

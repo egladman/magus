@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -87,6 +88,29 @@ func TestDeepEqualValue(t *testing.T) {
 			assert.Equal(t, tc.want, deepEqualValue(tc.a, tc.b))
 			assert.Equal(t, tc.want, deepEqualValue(tc.b, tc.a), "symmetric")
 		})
+	}
+}
+
+// TestDeepEqualCircular is the regression for deepEqualValue recursing into a
+// genuine reference cycle: Buzz lists are heap objects mutable in place
+// (list.append), so `[any] l = mut []; l.append(l);` makes l[0] == l. Naive
+// recursion would stack-overflow, a FATAL Go error unsafe to reproduce via
+// recover, so this drives deepEqualValue on a goroutine and bounds it with
+// select + time.After (the repo's hang/crash-test idiom; see pool_test.go
+// TestDispatchRejectsCycleWithMemo) rather than calling it inline.
+func TestDeepEqualCircular(t *testing.T) {
+	items := make([]vm.Value, 1)
+	l := vm.ListValue(items)
+	items[0] = l // l[0] == l: the same cycle list.append(l) would create
+
+	done := make(chan bool, 1)
+	go func() { done <- deepEqualValue(l, l) }()
+
+	select {
+	case eq := <-done:
+		assert.True(t, eq, "a cyclic list must equal itself instead of stack-overflowing")
+	case <-time.After(5 * time.Second):
+		t.Fatal("deepEqualValue did not return within bound on a cyclic list")
 	}
 }
 

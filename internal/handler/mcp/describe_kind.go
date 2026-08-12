@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/spells"
-	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
 
@@ -82,7 +82,7 @@ func (t *describeKindTool) Invoke(ctx context.Context, req spells.InvokeRequest)
 		}
 		return spells.InvokeResponse{Data: out}, nil
 	case "modules":
-		mods := std.DescribeModules(name) // name empty = the whole catalog, matching the CLI
+		mods := hostmodules.Describe(name) // name empty = the whole catalog, matching the CLI
 		if name != "" && len(mods) == 0 {
 			return spells.InvokeResponse{}, fmt.Errorf("mcp: no module named %q", name)
 		}

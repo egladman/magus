@@ -34,7 +34,7 @@ import "std";
 import "fs";
 import "os";
 import "http";
-import "yaml";
+import "encoding/yaml";
 import "serialize";
 import "crypto";
 
@@ -51,8 +51,8 @@ final KEY_ENV = "MAGUS_REGISTRY_KEY";
 //
 // Kept apart from the transform so a network failure stops here rather than being
 // folded into a build that would then publish a half-refreshed snapshot.
-fun fetchAll(dir: str) > int {
-    fs\makeDirectory(dir);
+fun fetchAll(dir: str) > int !> any {
+    fs\mkdirAll(dir);
     final listBody = http\get(UPSTREAM + "/", opts: {"fail": true}).body;
     final list = serialize\jsonDecode(listBody);
     var count = 0;
@@ -60,7 +60,7 @@ fun fetchAll(dir: str) > int {
         final slug = entry.q("name").stringValue();
         if (slug == "") { continue; }
         final body = http\get(UPSTREAM + "/" + slug, opts: {"fail": true}).body;
-        fs\writeFile(dir + "/" + slug + ".json", content: body);
+        fs\writeFile(fs\join(dir, slug + ".json"), content: body);
         count = count + 1;
     }
     return count;
@@ -69,8 +69,8 @@ fun fetchAll(dir: str) > int {
 // productSlugs lists the cached responses, sorted, so the output does not depend on
 // what order the filesystem hands them back.
 fun productSlugs(dir: str) > [str] {
-    var names: [str] = mut [<str>];
-    foreach (name in fs\list(dir)) {
+    var names: mut [str] = mut [<str>];
+    foreach (name in fs\listDir(dir)) {
         if (name.endsWith(".json")) { names.append(name); }
     }
     return names.sort(fun (a: str, b: str) > bool { return a < b; });
@@ -78,9 +78,9 @@ fun productSlugs(dir: str) > [str] {
 
 // buildDoc is the pure transform: files in, one document out. It reads no clock and
 // sends no request, so two runs over the same inputs produce identical bytes.
-fun buildDoc(upstreamDir: str, releasesDir: str, expiresAt: str) > {str: any} {
-    var eol: {str: any} = mut {};
-    var inputs: [{str: any}] = mut [<{str: any}>];
+fun buildDoc(upstreamDir: str, releasesDir: str, expiresAt: str) > {str: any} !> any {
+    var eol: mut {str: any} = mut {};
+    var inputs: mut [{str: any}] = mut [<{str: any}>];
     var newest = "";
 
     foreach (name in productSlugs(upstreamDir)) {
@@ -91,7 +91,7 @@ fun buildDoc(upstreamDir: str, releasesDir: str, expiresAt: str) > {str: any} {
         var slug = result.q("name").stringValue();
         if (slug == "") { slug = name.replace(".json", with: ""); }
 
-        var cycles: [{str: any}] = mut [<{str: any}>];
+        var cycles: mut [{str: any}] = mut [<{str: any}>];
         final releases = result.q("releases").list();
         if (releases != null) {
             foreach (r in releases) {
@@ -120,7 +120,7 @@ fun buildDoc(upstreamDir: str, releasesDir: str, expiresAt: str) > {str: any} {
     // generated_at is DERIVED from the newest input, never read from the clock:
     // rebuilding an old snapshot has to reproduce the old file exactly, and now()
     // would make that impossible.
-    var doc: {str: any} = mut {
+    var doc: mut {str: any} = mut {
         "schema_version": SCHEMA_VERSION,
         "generated_at": newest,
         "expires_at": expiresAt,
@@ -135,20 +135,20 @@ fun buildDoc(upstreamDir: str, releasesDir: str, expiresAt: str) > {str: any} {
 // loadReleases projects releases/*.yaml into the registry, newest first. The same
 // list public/release/index.json serves, carried here so a new binary needs one
 // file rather than two half-synced ones.
-fun loadReleases(dir: str) > [{str: any}] {
-    var names: [str] = mut [<str>];
-    foreach (name in fs\list(dir)) {
+fun loadReleases(dir: str) > [{str: any}] !> any {
+    var names: mut [str] = mut [<str>];
+    foreach (name in fs\listDir(dir)) {
         if (name.endsWith(".yaml")) { names.append(name); }
     }
     // Newest first, which for v0.N.M filenames is a reverse sort.
     final ordered = names.sort(fun (a: str, b: str) > bool { return a > b; });
 
-    var entries: [{str: any}] = mut [<{str: any}>];
+    var entries: mut [{str: any}] = mut [<{str: any}>];
     foreach (name in ordered) {
-        final doc = serialize\Boxed.init(yaml\parse(fs\readFile(dir + "/" + name)));
+        final doc = serialize\Boxed.init(yaml\parse(fs\readFile(fs\join(dir, name))));
         final version = doc.q("version").stringValue();
         if (version == "") { continue; }
-        var artifacts: [{str: any}] = mut [<{str: any}>];
+        var artifacts: mut [{str: any}] = mut [<{str: any}>];
         final list = doc.q("artifacts").list();
         if (list != null) {
             foreach (a in list) {
@@ -160,7 +160,7 @@ fun loadReleases(dir: str) > [{str: any}] {
                 });
             }
         }
-        var entry: {str: any} = mut {"version": version, "artifacts": artifacts};
+        var entry: mut {str: any} = mut {"version": version, "artifacts": artifacts};
         if (doc.q("yanked").booleanValue()) { entry["yanked"] = true; }
         entries.append(entry);
     }
@@ -173,7 +173,7 @@ fun encode(doc: {str: any}) > str {
     return serialize\jsonEncode(serialize\Boxed.init(doc)) + "\n";
 }
 
-export fun main() > void {
+export fun main() > void !> any {
     final mode = os\env("REGISTRY_MODE") ?? "build";
     final upstreamDir = os\env("REGISTRY_UPSTREAM") ?? "upstream";
     final releasesDir = os\env("REGISTRY_RELEASES") ?? "releases";
@@ -200,7 +200,7 @@ export fun main() > void {
         throw "registry: {outDir}/index.json does NOT reproduce from the recorded inputs";
     }
 
-    fs\makeDirectory(outDir);
+    fs\mkdirAll(outDir);
     final path = outDir + "/index.json";
     fs\writeFile(path, content: body);
     std\print("wrote {path} ({body.len()} bytes)");
@@ -213,4 +213,3 @@ export fun main() > void {
     std\print("signed {path} (readers pin: {crypto\publicKey(.Ed25519, key_env: KEY_ENV)})");
 }
 
-main();

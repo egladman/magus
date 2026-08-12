@@ -37,6 +37,7 @@ var Vcs = Module{
 			Name:    "root",
 			Doc:     "Absolute path of the repository root.",
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    VcsRoot,
 		},
 		{
@@ -46,12 +47,14 @@ var Vcs = Module{
 				{Name: "base", Type: TypeString, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "[Path]"}},
+			Raises:  true,
 			Impl:    VcsChangedFiles,
 		},
 		{
 			Name:    "ref",
 			Doc:     "The movable name pointing at the current revision, or \"\" when there is none. Backend-specific by nature: a git branch, a Mercurial named branch, a Jujutsu bookmark. jj's working copy is usually an anonymous change, so \"\" is an ordinary answer there, not a failure. Raises when no VCS is resolved or its metadata cannot be read - use vcs.name() to test for a VCS first.",
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    VcsRef,
 		},
 		{
@@ -61,6 +64,7 @@ var Vcs = Module{
 				{Name: "paths", Type: TypeStringSlice, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "Status"}},
+			Raises:  true,
 			Impl:    VcsStatus,
 		},
 		{
@@ -70,6 +74,7 @@ var Vcs = Module{
 				{Name: "paths", Type: TypeStringSlice, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeBool}},
+			Raises:  true,
 			Impl:    VcsIsDirty,
 		},
 		{
@@ -88,6 +93,7 @@ var Vcs = Module{
 				{Name: "rev", Type: TypeString, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "Commit"}},
+			Raises:  true,
 			Impl:    VcsCommit,
 		},
 		{
@@ -97,16 +103,18 @@ var Vcs = Module{
 				{Name: "limit", Type: TypeInt, Optional: true, Default: 10},
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "[Commit]"}},
+			Raises:  true,
 			Impl:    VcsHistory,
 		},
 		{
 			Name: "cmd",
-			Doc:  "Escape hatch: run the active VCS binary (git/hg/jj) with args, for something no method covers. Mirrors magus.cmd and os.exec - returns {stdout, stderr, code, ok} and raises on a non-zero exit unless opts.allow_failure. opts.dir runs it elsewhere (relative to the target's cwd); opts.quiet captures the output without echoing it to the console. This is VCS-AGNOSTIC only in that magus picks the binary; the args are the backend's own, so branch on vcs.name() when they differ. Raises when no VCS is resolved, rather than running nothing and reporting success.",
+			Doc:  "Escape hatch: run the active VCS binary (git/hg/jj) with args, for something no method covers. Same result and raise semantics as magus.cmd and proc.exec - returns {stdout, stderr, code, ok} and raises on a non-zero exit unless opts.allow_failure. opts.dir runs it elsewhere (relative to the target's cwd, unlike proc.exec's positional dir); opts.quiet captures the output without echoing it to the console. This is VCS-AGNOSTIC only in that magus picks the binary; the args are the backend's own, so branch on vcs.name() when they differ. Raises when no VCS is resolved, rather than running nothing and reporting success.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
+			Raises:  true,
 			Impl:    VcsCmd,
 		},
 		{
@@ -116,12 +124,14 @@ var Vcs = Module{
 				{Name: "pattern", Type: TypeString, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "[Tag]"}},
+			Raises:  true,
 			Impl:    VcsTags,
 		},
 		{
 			Name:    "describe",
 			Doc:     "Human-readable version string from the nearest tag (git's `describe --tags --always --dirty`: tag, else short hash, with a -dirty suffix for a modified tree). \"\" when no VCS is resolved, or for a backend without a tag-describe concept (jj) - so a magusfile stamps a version without shelling out to git. Pair with vcs.commit().short as a fallback.",
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    VcsDescribe,
 		},
 	},
@@ -149,8 +159,14 @@ func resolveVCS(ctx context.Context) (types.VCSDriver, string) {
 		return vcsCached, vcsBase
 	}
 	res, err := vcs.Resolve(ctx, wd, "", types.VCSOptions{})
+	if err != nil {
+		// A resolve failure (transient error, ctx cancellation) is not "no VCS" - do
+		// not poison the cache for this cwd with it, or every later call in the
+		// process would replay this one failure forever.
+		return nil, ""
+	}
 	vcsCwdKey = wd
-	if err != nil || res.VCS == nil {
+	if res.VCS == nil {
 		vcsCached, vcsBase = nil, ""
 		return nil, ""
 	}
@@ -371,10 +387,10 @@ func VcsDirtyDiff(ctx context.Context, paths []string) (string, error) {
 	return diff, nil
 }
 
-// VcsCommit resolves rev (empty = current revision) to its commit object. When
-// no VCS is resolved or the revision can't be looked up it returns the zero
-// types.Commit - an all-empty object (id/date/… are ""), so a caller tests a
-// field (e.g. c.date == "") rather than a null.
+// VcsCommit resolves rev (empty = current revision) to its commit object. It
+// RAISES when no VCS is resolved and RAISES when the revision can't be looked
+// up - a caller uses vcs.name() to test for a VCS first, and try/catch for a
+// revision that may not exist.
 func VcsCommit(ctx context.Context, rev string) (types.Commit, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
@@ -392,7 +408,8 @@ func VcsCommit(ctx context.Context, rev string) (types.Commit, error) {
 }
 
 // VcsHistory returns up to limit recent commits (newest first) as objects, or an
-// empty list when no VCS is resolved or the query fails.
+// empty list when no VCS is resolved. It RAISES when the query fails - an empty
+// list there would read as "no history" for "could not read history".
 func VcsHistory(ctx context.Context, limit int) ([]types.Commit, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
@@ -407,8 +424,8 @@ func VcsHistory(ctx context.Context, limit int) ([]types.Commit, error) {
 
 // VcsDescribe returns a human-readable version string from the nearest tag (see
 // the driver Describe methods), or "" when no VCS is resolved or the backend has
-// no describe concept. A query failure is reported as "" rather than raising,
-// matching the metadata accessors - callers treat "" as "no describe" and fall back.
+// no describe concept. It RAISES when the query fails - "" is reserved for the
+// two no-op cases above, not for a probe that could not run.
 func VcsDescribe(ctx context.Context) (string, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
@@ -440,7 +457,7 @@ func VcsTags(ctx context.Context, pattern string) ([]types.VCSTag, error) {
 
 // vcsExe returns the absolute path of the active VCS executable, or "" when
 // unresolved or not on PATH. Internal: the Buzz surface exposes vcs.cmd, which runs the
-// binary, rather than a path for the caller to hand to os.exec themselves.
+// binary, rather than a path for the caller to hand to proc.exec themselves.
 func vcsExe(ctx context.Context) (string, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
@@ -456,9 +473,9 @@ func vcsExe(ctx context.Context) (string, error) {
 // VcsCmd runs the active VCS binary with args.
 //
 // This replaced vcs.exe, which handed back a PATH and left every caller to write
-// os.exec(<the vcs binary>, [...]) - two calls, and a silent no-op when the path came back
+// proc.exec(<the vcs binary>, [...]) - two calls, and a silent no-op when the path came back
 // empty because no VCS was resolved. Returning an ExecResult also puts the escape hatch
-// on the same typed footing as magus.cmd and os.exec instead of a bare string. "exe" was
+// on the same typed footing as magus.cmd and proc.exec instead of a bare string. "exe" was
 // the wrong word besides: it reads as a Windows file extension, and the value is a
 // binary on every platform magus runs.
 func VcsCmd(ctx context.Context, args []string, opts map[string]any) (types.ExecResult, error) {

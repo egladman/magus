@@ -22,7 +22,7 @@ Every op is invoked as `rust["<op>"](ctx, opts?)`. The first argument is the tar
 | `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L173) |
 
 
-Working directory and environment are NOT options: they ride the context, as `rust["<op>"](ctx.withCwd("sub"))` and `rust["<op>"](ctx.withEnv({"CGO_ENABLED": "0"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise - passing either as an option is an error.
+Working directory and environment are NOT options: they ride the context, as `rust["<op>"](ctx.withCwd("sub"))` and `rust["<op>"](ctx.withEnv({"CGO_ENABLED": "0"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise; passing either as an option is an error.
 
 Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).
 
@@ -145,7 +145,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 
 ## scip
 
-scip is the reserved op that runs the Rust SCIP indexer for the knowledge graph. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; rust-analyzer's scip subcommand writes there via --output. Run through sh so the env var expands.
+scip is the reserved op that runs the Rust SCIP indexer for the knowledge graph. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; rust-analyzer's scip subcommand writes there via --output. The runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.
 
-**Command:** `sh -c rust-analyzer scip . --output "$MAGUS_SYMBOL_INDEX"`
+**Command:** `rust-analyzer scip . --output $MAGUS_SYMBOL_INDEX`
 

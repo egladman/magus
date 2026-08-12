@@ -38,7 +38,7 @@ func TestExecRunnerReadyThenStop(t *testing.T) {
 	default:
 	}
 
-	ExecRunner{}.Stop(h)
+	ExecRunner{}.Stop(context.Background(), h)
 	select {
 	case <-eh.done:
 	case <-time.After(2 * time.Second):
@@ -62,6 +62,51 @@ func TestExecRunnerReadinessFailureCleansUp(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// TestExecRunnerWaitReadyProbeHangTimesOut is the regression test for a readiness
+// probe that never exits: waitReady must not block inside the probe's Run() past
+// ReadyTimeout. The 2s select is a hard bound so a regression here fails the test
+// instead of wedging the suite.
+func TestExecRunnerWaitReadyProbeHangTimesOut(t *testing.T) {
+	if !hasBin("sleep") {
+		t.Skip("needs sleep")
+	}
+	r := ExecRunner{ReadyTimeout: 150 * time.Millisecond, ReadyInterval: 20 * time.Millisecond}
+	done := make(chan error, 1)
+	go func() {
+		done <- r.waitReady(context.Background(), spells.Command{Bin: "sleep", Args: []string{"60"}})
+	}()
+	select {
+	case err := <-done:
+		assert.ErrorContains(t, err, "did not pass within")
+	case <-time.After(2 * time.Second):
+		t.Fatal("waitReady did not return within the hard test bound; a hung probe blocked past ReadyTimeout")
+	}
+}
+
+// TestExecRunnerWaitReadyRespectsCtxCancel covers the other half of D4: a cancelled
+// ctx must interrupt a probe attempt in flight, not just be checked between attempts.
+func TestExecRunnerWaitReadyRespectsCtxCancel(t *testing.T) {
+	if !hasBin("sleep") {
+		t.Skip("needs sleep")
+	}
+	r := ExecRunner{ReadyTimeout: 10 * time.Second, ReadyInterval: 20 * time.Millisecond}
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+	done := make(chan error, 1)
+	go func() {
+		done <- r.waitReady(ctx, spells.Command{Bin: "sleep", Args: []string{"60"}})
+	}()
+	select {
+	case err := <-done:
+		assert.ErrorIs(t, err, context.Canceled)
+	case <-time.After(2 * time.Second):
+		t.Fatal("waitReady did not return within the hard test bound after ctx cancel; a hung probe outlived cancellation")
+	}
+}
+
 func TestExecRunnerUsesStopCommand(t *testing.T) {
 	if !hasBin("sleep") {
 		t.Skip("needs sleep")
@@ -73,7 +118,7 @@ func TestExecRunnerUsesStopCommand(t *testing.T) {
 	})
 	require.NoError(t, err)
 	done := make(chan struct{})
-	go func() { runner.Stop(h); close(done) }()
+	go func() { runner.Stop(context.Background(), h); close(done) }()
 	select {
 	case <-done:
 	case <-time.After(10 * time.Second):

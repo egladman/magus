@@ -24,10 +24,10 @@ import "engine/path" as _;
 // writeTagPage renders one synthesized page and records it everywhere the site tracks output.
 // srcRel carries the "/_index.md" synthesized-page marker so renderPage knows there is no
 // source to view or edit, and so rootPrefix climbs the right number of levels.
-fun writeTagPage(url: str, srcRel: str, title: str, desc: str, body: str, searchText: str, site: Site) > void {
+fun writeTagPage(url: str, srcRel: str, title: str, desc: str, body: str, searchText: str, site: Site) > void !> any {
     final doc = renderPage(title, desc, body, srcRel, "", url, "", mut [], site);
-    final dir = site.outDir + "/" + url.sub(0, url.len() - 1);
-    fs\makeDirectory(dir);
+    final dir = fs\join(site.outDir, url.sub(0, url.len() - 1));
+    fs\mkdirAll(dir);
     fs\writeFile(dir + "/index.html", doc);
     site.addRecord(url, title, desc, searchText);
     site.pageUrls[url] = true;
@@ -38,7 +38,7 @@ fun writeTagPage(url: str, srcRel: str, title: str, desc: str, body: str, search
 // knows whether its destination exists. Runs pre-walk, over docPages only - blog posts are not
 // collected until the walk, so a blog-only tag simply keeps its search chip.
 export fun collectTagIndex(site: Site) > void {
-    var count: {str: int} = mut {<str: int>};
+    var count: mut {str: int} = mut {<str: int>};
     foreach (p in site.docPages) {
         foreach (t in p.tags.split("||")) {
             if (t == "") { continue; }
@@ -53,11 +53,11 @@ export fun collectTagIndex(site: Site) > void {
     }
 }
 
-export fun renderTagPages(site: Site) > void {
+export fun renderTagPages(site: Site) > void !> any {
     // slug -> the display spelling. Last writer wins, which is fine: two tags that kebab to the
     // same slug ARE the same topic, and either spelling names it. Restricted to the slugs
     // collectTagIndex already promised a page for, so chips and pages cannot disagree.
-    var label: {str: str} = mut {<str: str>};
+    var label: mut {str: str} = mut {<str: str>};
     foreach (p in site.docPages) {
         foreach (t in p.tags.split("||")) {
             if (t == "") { continue; }
@@ -67,17 +67,17 @@ export fun renderTagPages(site: Site) > void {
     }
     if (label.size() == 0) { return; }
 
-    var slugs: [str] = mut [<str>];
+    var slugs: mut [str] = mut [<str>];
     foreach (s in label.keys()) { slugs.append(s); }
     final orderedSlugs = slugs.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
 
-    var hubRows: [{str: any}] = mut [<{str: any}>];
+    var hubRows: mut [{str: any}] = mut [<{str: any}>];
 
     foreach (slug in orderedSlugs) {
         final name = label[slug]!;
         // Second pass over docPages per tag rather than a slug->pages map built up front: the
         // corpus is a couple of hundred pages, and this keeps the grouping in one obvious place.
-        var cards: [{str: any}] = mut [<{str: any}>];
+        var cards: mut [{str: any}] = mut [<{str: any}>];
         foreach (p in site.docPages) {
             var carries = false;
             foreach (t in p.tags.split("||")) {

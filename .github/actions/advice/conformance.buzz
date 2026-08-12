@@ -170,7 +170,7 @@ fun body(items: [{str: str}]) > str {
         + "`magus:silence:" + section + "` label and it will stay quiet.\n";
 }
 
-fun main() > void {
+fun main() > void !> any {
     final repo = advice\env("REPO");
     final pr = advice\env("PR_NUMBER");
     final base = advice\env("PR_BASE");
@@ -197,7 +197,7 @@ fun main() > void {
     if (configuredShare != "") { minShare = std\parseDouble(configuredShare) ?? 0.8; }
 
     var members = mut [];
-    foreach (p in magus\targetGraph().projects) {
+    foreach (p in magus\targets().projects) {
         foreach (n in p.nodes) {
             var ops = mut [];
             foreach (use in n.spells) {
@@ -227,7 +227,6 @@ fun main() > void {
     std\print("conformance: advised on {items.len()} target(s)");
 }
 
-main();
 
 test "signature is order-independent so two targets match however they were written" {
     std\assert(signature(["go:go-test", "go:go-vet"]) == signature(["go:go-vet", "go:go-test"]),

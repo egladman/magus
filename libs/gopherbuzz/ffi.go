@@ -65,6 +65,14 @@ var (
 	StructLayout = vmpackage.StructLayout
 	// AllocFFI pins n zeroed bytes at a fixed address and returns it.
 	AllocFFI = vmpackage.AllocFFI
+	// AllocCString copies a string into a NUL-terminated C block.
+	AllocCString = vmpackage.AllocCString
+	// ReadCString reads a NUL-terminated C string, terminator included.
+	ReadCString = vmpackage.ReadCString
+	// ForeignStructTypes returns a zdef struct's C field types by name.
+	ForeignStructTypes = vmpackage.ForeignStructTypes
+	// WriteFFIBytes copies bytes into a block returned by AllocFFI.
+	WriteFFIBytes = vmpackage.WriteFFIBytes
 	// FreeFFI releases a block previously returned by AllocFFI.
 	FreeFFI = vmpackage.FreeFFI
 	// ReadScalar reads a C scalar from an alloc block at addr+offset.

@@ -10,7 +10,7 @@ Bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)
 
 ## Synopsis
 
-****
+**magus** init [flags]
 
 ## Description
 

@@ -236,7 +236,7 @@ type outputRefOpts struct {
 // status/timing); the output is the payload, never parsed - so structure lives in the record,
 // not in an interpretation of the bytes.
 type outputRefRecord struct {
-	cache.OutputDescriptor
+	magus.OutputDescriptor
 	Output string `json:"output"`
 }
 
@@ -278,8 +278,11 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 		if err != nil {
 			return reportRefLookupError(ctx, m, ref, err)
 		}
-		events := console.StitchDisplayEvents(data, desc)
-		var inv journal.Invocation
+		events := console.StitchDisplayEvents(data, cache.OutputDescriptor{
+			Ref: desc.Ref, Project: desc.Project, Target: desc.Target, Inv: desc.Inv,
+			Failed: desc.Failed, ErrMsg: desc.ErrMsg, TimestampMs: desc.TimestampMs, DurationMs: desc.DurationMs,
+		})
+		var inv magus.Invocation
 		if desc.Inv != "" {
 			inv, _ = m.InvocationByID(desc.Inv) // best-effort lineage; omitted if the run log aged out
 		}
@@ -357,9 +360,9 @@ func listOutputAttempts(ctx context.Context, m *magus.Magus, ref string, out Out
 // an audit cares about. The events are already redacted - journal.Emit scrubs Text on the way
 // in - and a secret event carries only the reference and the provider by construction.
 type invocationRecord struct {
-	journal.Invocation
-	Secrets []journal.Event `json:"secrets,omitempty"`
-	Events  []journal.Event `json:"events,omitempty"`
+	magus.Invocation
+	Secrets []magus.Event `json:"secrets,omitempty"`
+	Events  []magus.Event `json:"events,omitempty"`
 }
 
 // queryInvocation reads one run's journal back. `--secrets` narrows it to the credential
@@ -385,7 +388,7 @@ func queryInvocation(ctx context.Context, root, inv string, secretsOnly bool, ou
 		return fmt.Errorf("magus query invocation: read run log for %s: %w", inv, err)
 	}
 
-	var secrets []journal.Event
+	var secrets []magus.Event
 	for _, e := range events {
 		if e.Kind == journal.KindSecret {
 			secrets = append(secrets, e)
@@ -460,8 +463,8 @@ func queryInvocation(ctx context.Context, root, inv string, secretsOnly bool, ou
 }
 
 type outputMetaRecord struct {
-	cache.OutputDescriptor
-	Invocation   *journal.Invocation `json:"invocation,omitempty"`
+	magus.OutputDescriptor
+	Invocation   *magus.Invocation   `json:"invocation,omitempty"`
 	ClassDigests []cache.ClassDigest `json:"class_digests,omitempty"`
 }
 
@@ -485,7 +488,7 @@ func showOutputMeta(ctx context.Context, m *magus.Magus, ref string, out OutputO
 		// real read failure and must not masquerade as one.
 		return fmt.Errorf("magus query output: read stored key inputs for %s: %w", ref, lerr)
 	}
-	var inv *journal.Invocation
+	var inv *magus.Invocation
 	if desc.Inv != "" {
 		if got, ierr := m.InvocationByID(desc.Inv); ierr == nil {
 			inv = &got
@@ -630,8 +633,16 @@ func printIdentifyRefSuggestion(ctx context.Context, m *magus.Magus, ref string)
 
 // openOutputInViewer builds the viewer URL and opens a browser; --print emits the
 // URL instead. It warns when the link nears browser URL-length limits.
-func openOutputInViewer(desc cache.OutputDescriptor, events []journal.Event, inv journal.Invocation, keyDigests string, o outputRefOpts) error {
-	openURL, err := console.LogViewerURL(o.viewerBase, desc.Ref, events, inv, keyDigests)
+func openOutputInViewer(desc magus.OutputDescriptor, events []journal.Event, inv magus.Invocation, keyDigests string, o outputRefOpts) error {
+	rawInv := journal.Invocation{
+		ID:           inv.ID,
+		Command:      journal.Command{Arguments: inv.Command.Arguments, Cwd: inv.Command.Cwd, Trigger: inv.Command.Trigger},
+		StartedMs:    inv.StartedMs,
+		FinishedMs:   inv.FinishedMs,
+		Status:       inv.Status,
+		MagusVersion: inv.MagusVersion,
+	}
+	openURL, err := console.LogViewerURL(o.viewerBase, desc.Ref, events, rawInv, keyDigests)
 	if err != nil {
 		return err
 	}

@@ -12,11 +12,13 @@ namespace testing;
 // stdlib is likewise a clean-room implementation of the language).
 //
 // Two surfaces differ from upstream, forced by gopherbuzz's current semantics:
-//   - assertOfType takes the expected type as a NAME string -- assertOfType(v,
-//     "int", ...) -- rather than upstream's generic assertOfType::<int>(v):
-//     gopherbuzz erases generics, so a type parameter is not a runtime value.
-//     assertThrows / assertDoesNotThrow, for the same reason, do not inspect the
-//     raised error's type (an erased `::<T>` argument on the call is ignored).
+//   - assertOfType takes the expected type as a NAME string. Upstream's
+//     `assertOfType::<int>(v)` DOES work: gopherbuzz erases type arguments, but the
+//     spelling is known statically, and a call binds it to a `typeName: str`
+//     parameter it left empty (see checker.go's bindTypeArgToName). Passing the
+//     name outright still works and wins over the type argument.
+//     assertThrows / assertDoesNotThrow do not inspect the raised error's type,
+//     since neither declares a typeName to receive it.
 //   - Terminal color is produced with std\char(27) rather than a "\027[" literal,
 //     since gopherbuzz string literals do not decode numeric escapes.
 
@@ -173,11 +175,16 @@ export object Tester {
     }
 
     /// Soft-asserts a boolean condition (the primitive the matchers build on).
+    ///
+    /// `error` is optional and named to match upstream's
+    /// `fun assert(condition: bool, error: str?, message: str?)`. It was a REQUIRED
+    /// parameter called `detail`, which made upstream's own `t.assert(true)` fail to
+    /// check - the shape its behavior suite uses throughout.
     /// @param condition Must be true to pass
-    /// @param detail Detail printed on failure
+    /// @param error Detail printed on failure
     /// @param message The assertion label
-    mut fun assert(condition: bool, detail: str, message: str?) > void {
-        this.record(condition, detail: detail, message: message);
+    mut fun assert(condition: bool, error: str?, message: str?) > void {
+        this.record(condition, detail: error ?? "", message: message);
     }
 
     /// Soft-asserts actual == expected.

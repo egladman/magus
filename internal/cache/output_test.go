@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -13,6 +14,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -48,6 +51,65 @@ func TestOutputStorePersistLookupRoundTrip(t *testing.T) {
 		Schema: descriptorSchema, Key: "deadbeefcafef00d", KeyVersion: KeyVersion,
 		Attempt: desc.Attempt,
 	}, desc)
+}
+
+// TestOutputStorePersistNeverExposesPartialBlob verifies a reader racing Persist never
+// observes a half-written .out blob. newestAttemptBlob falls back to modtime for a
+// descriptor-less (orphan) blob - exactly the state a fresh Persist is in while its
+// write is in flight - so a concurrent reader that resolves through it and reads the
+// file must see either nothing yet or the full content, never a short read. Before the
+// fix, Persist wrote the blob in place with plain os.WriteFile: the file existed (named,
+// zero or partial length) as soon as it was created, well before the write completed.
+func TestOutputStorePersistNeverExposesPartialBlob(t *testing.T) {
+	dir := t.TempDir()
+	s := NewOutputStore(dir)
+	const cacheKey = "deadbeefpartial1"
+
+	// Large enough that the write is not a single instantaneous syscall, so a tight
+	// polling reader has a real chance of observing an in-progress file.
+	payload := bytes.Repeat([]byte("x"), 256<<20) // 256 MiB
+
+	blobDir := filepath.Join(s.outputsDir(), cacheKey)
+
+	var wg sync.WaitGroup
+	done := make(chan struct{})
+	var shortReads atomic.Int64
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-done:
+				return
+			default:
+			}
+			p := newestAttemptBlob(blobDir)
+			if p == "" {
+				continue
+			}
+			// Stat, not a full read: a plain-write blob is visible under its final
+			// name (and reported by newestAttemptBlob) well before its content is
+			// complete, so an incomplete size alone already proves a concurrent
+			// reader could open it and get back less than the full blob. Checking
+			// size instead of slurping the whole 256 MiB keeps the poll loop tight
+			// enough to actually land inside the write's in-flight window.
+			info, err := os.Stat(p)
+			if err != nil {
+				continue
+			}
+			if info.Size() != int64(len(payload)) {
+				shortReads.Add(1)
+			}
+		}
+	}()
+
+	_, err := s.Persist(context.Background(), cacheKey, payload, OutputDescriptor{Project: "svc/api", Target: "test"})
+	require.NoError(t, err)
+	close(done)
+	wg.Wait()
+
+	assert.Zero(t, shortReads.Load(), "a concurrent reader must never see a partially-written .out blob")
 }
 
 // TestOutputStorePersistRevisionRoundTrip pins schema v3: Revision and Dirty persist and

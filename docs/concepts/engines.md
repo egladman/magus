@@ -85,7 +85,7 @@ built-ins.
 
 magus layers its host methods onto Buzz's own stdlib modules under the **same bare
 names**: `import "os"` carries both Buzz's `os.*` (sleep, env, execute) and magus's
-additions (`os\exec`, `os\which`, ...); `import "fs"` carries Buzz's `fs` plus
+additions (`proc\exec`, `proc\which`, ...); `import "fs"` carries Buzz's `fs` plus
 `fs\glob`/`readFile`; and magus adds whole modules Buzz lacks (`vcs`, `archive`,
 `http`, `charm`, ...). One import per domain covers the union, with no separate
 `extra` namespace to remember which side a call lives on.

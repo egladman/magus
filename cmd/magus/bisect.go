@@ -67,7 +67,7 @@ func affectedBisect(ctx context.Context, root string, args []string) error {
 	rt := volatility.NewRuntime(&h, "", cfg, nil, false) // reads history only; never retries
 	if !rt.IsRegression(projectPath, *target) {
 		stats := rt.Stats(projectPath, *target)
-		fmt.Fprintf(os.Stderr, "bisect: need ≥%d outcomes, volatility score < %.0f%%, and two consecutive affected failures\n",
+		fmt.Fprintf(os.Stderr, "bisect: need >=%d outcomes, volatility score < %.0f%%, and two consecutive affected failures\n",
 			cfg.MinSamples, cfg.Threshold*100)
 		fmt.Fprintf(os.Stderr, "bisect: outcomes recorded: %d, volatility score: %.1f%%\n",
 			len(stats.RecentOutcomes), rt.Score(projectPath, *target)*100)

@@ -444,8 +444,20 @@ func rotate(base string, max int) {
 	gcBlobs(base, kept)
 }
 
-// gcBlobs removes blob files that none of the kept event lines reference. Temp files (from an
-// in-flight WriteBlob) fail validRef and are left alone.
+// blobGraceWindow holds back GC on a blob younger than this, even when no kept event
+// references it yet. WriteBlob finalizes (renames) a blob before its producer's Append
+// writes the event that references it; a rotate landing in that gap would otherwise see
+// the blob as unreferenced by the snapshot it just read and delete it out from under the
+// still-pending event - the event survives, the payload is gone. Every producer in this
+// tree calls WriteBlob immediately followed by Append on the same goroutine (wrap() in
+// internal/handler/mcp, AppendAgentCommand above), so the real gap is microseconds; this
+// window is deliberately generous to also absorb scheduler preemption, without adding a
+// lock that would serialize Append behind rotation.
+const blobGraceWindow = 30 * time.Second
+
+// gcBlobs removes blob files that none of the kept event lines reference AND that are
+// older than blobGraceWindow. Temp files (from an in-flight WriteBlob) fail validRef and
+// are left alone regardless of age.
 func gcBlobs(base string, keptLines []string) {
 	referenced := make(map[string]struct{})
 	for _, l := range keptLines {
@@ -464,14 +476,20 @@ func gcBlobs(base string, keptLines []string) {
 	if err != nil {
 		return
 	}
+	cutoff := time.Now().Add(-blobGraceWindow)
 	for _, ent := range entries {
 		name := ent.Name()
 		if ent.IsDir() || !validRef(name) {
 			continue
 		}
-		if _, ok := referenced[name]; !ok {
-			_ = os.Remove(filepath.Join(blobsPath(base), name))
+		if _, ok := referenced[name]; ok {
+			continue
 		}
+		info, err := ent.Info()
+		if err != nil || info.ModTime().After(cutoff) {
+			continue // too young: its event may not have landed yet
+		}
+		_ = os.Remove(filepath.Join(blobsPath(base), name))
 	}
 }
 

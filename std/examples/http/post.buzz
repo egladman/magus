@@ -1,10 +1,12 @@
 import "http";
 
-// Post JSON with a curl-style opts map for retry behavior.
+// Post JSON. opts carries the curl-style settings; retrying is a separate,
+// typed HttpRetry argument, and without one the request runs exactly once.
 // Escape { and } as \{ \} so Buzz does not try to interpolate them.
 final r = http\post(
     "https://httpbin.org/post",
     "\{\"target\":\"build\"\}",
     {"Content-Type": "application/json"},
-    {"retry": 3, "timeout": 10},
+    {"timeout": 10},
+    http\HttpRetry{ attempts = 3, delay_ms = 500.0 },
 );

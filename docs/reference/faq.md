@@ -56,7 +56,7 @@ it with `MAGUS_DAEMON_ENABLED=false`. See [daemon.md](../guides/daemon.md).
 
 ## How do I add support for a tool magus does not know?
 
-Write a spell. For a one-off, a magusfile function target calling `os\exec` is
+Write a spell. For a one-off, a magusfile function target calling `proc\exec` is
 enough; for shared vocabulary, author a spell whose handler returns a `Command` (or
 a `Service` for a long-running process). `magus init spell` scaffolds one. See
 [spells.md](../concepts/spells.md) and the [authoring editor setup](../guides/editor.md).

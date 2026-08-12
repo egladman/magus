@@ -10,15 +10,16 @@
 //
 // Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA.
 import "os";
+import "proc";
 import "advice";
 import "magus";
 import "std";
 
 final section = "unclaimed";
 
-fun changed(base: str, head: str) > [str] {
-    os\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
-    final res = os\exec("git", args: ["diff", "--name-only", "origin/" + base + "..." + head],
+fun changed(base: str, head: str) > [str] !> any {
+    proc\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
+    final res = proc\exec("git", args: ["diff", "--name-only", "origin/" + base + "..." + head],
         dir: ".", opts: {"allow_failure": true});
     var paths = mut [];
     foreach (line in res.stdout.split("\n")) {
@@ -41,7 +42,7 @@ fun body(files: [str], total: int) > str {
         + "`magus describe file <path>` explains any one of them.\n";
 }
 
-fun main() > void {
+fun main() > void !> any {
     final repo = advice\env("REPO");
     final pr = advice\env("PR_NUMBER");
     final base = advice\env("PR_BASE");
@@ -80,7 +81,6 @@ fun main() > void {
     std\print("unclaimed: advised on " + found.join(", "));
 }
 
-main();
 
 test "body says the checks did not verify the unclaimed files" {
     final text = body([".editorconfig"], total: 4);

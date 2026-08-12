@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"testing"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -20,7 +21,7 @@ import (
 // *magus.Magus.
 type fakeOutputReader struct {
 	data []byte
-	desc cache.OutputDescriptor
+	desc magus.OutputDescriptor
 	err  error
 
 	identifyMatches []types.RefMatch
@@ -32,7 +33,7 @@ type fakeOutputReader struct {
 	refMatchCommand func(types.RefMatch) string
 }
 
-func (f fakeOutputReader) OutputByRef(string) ([]byte, cache.OutputDescriptor, error) {
+func (f fakeOutputReader) OutputByRef(string) ([]byte, magus.OutputDescriptor, error) {
 	return f.data, f.desc, f.err
 }
 
@@ -66,7 +67,7 @@ func TestOutputToolRejectsMalformedRef(t *testing.T) {
 func TestOutputToolInvokeHappy(t *testing.T) {
 	reader := fakeOutputReader{
 		data: []byte("hello stdout"),
-		desc: cache.OutputDescriptor{
+		desc: magus.OutputDescriptor{
 			Ref:        "out1a2b3c",
 			Project:    "pkg/a",
 			Target:     "build",

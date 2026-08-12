@@ -13,7 +13,7 @@ import "std";
 // outcome renders the summary for one CI result. Pure, so the wording and the branch for
 // every result GitHub can report are testable - which a shell `case` in a workflow is not.
 export fun outcome(result: str, shards: str) > str {
-    var text = "## CI outcome\n\n";
+    final text = "## CI outcome\n\n";
     if (result == "success") {
         return text + "Passed across " + shards + " affected shard(s).\n";
     }
@@ -56,7 +56,7 @@ fun env(name: str) > str {
 // rather than git, so it is about the thing the reader is looking at, and it answers the
 // one question a red or green run raises - is this result trustworthy, or does this target
 // flap? Silent when nothing is flagged, matching every advisor in ../advice.
-fun volatilitySection() > str {
+fun volatilitySection() > str !> any {
     final flagged = magus\insight(["volatility", "-o", "name"], opts: {"quiet": true, "allow_failure": true});
     if (!flagged.ok or flagged.stdout.trim() == "") { return ""; }
     final detail = magus\insight(["volatility", "-o", "text"], opts: {"quiet": true, "allow_failure": true});
@@ -67,7 +67,7 @@ fun volatilitySection() > str {
         + "```\n" + detail.stdout.trim() + "\n```\n";
 }
 
-fun main() > void {
+fun main() > void !> any {
     final path = env("GITHUB_STEP_SUMMARY");
     if (path == "") {
         std\print("ci-outcome: not running under GitHub Actions; nothing to summarize");
@@ -79,7 +79,6 @@ fun main() > void {
     std\print("ci-outcome: summarized " + env("CI_RESULT"));
 }
 
-main();
 
 test "outcome reports a pass with the shard count" {
     final got = outcome("success", shards: "3");

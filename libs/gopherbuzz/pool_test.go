@@ -207,6 +207,79 @@ func TestDispatchSiblingFailureLetsPeersFinish(t *testing.T) {
 	}
 }
 
+// TestTargetMemoWaiterUnblocksOnCtxCancel is the regression for waitFn having no
+// ctx escape: before, it was a bare `<-e.done`, so cancelling a run could never
+// unblock a caller subscribed to a target that will now never complete (e.g. its
+// runner crashed or was itself cancelled without reaching Complete). waitFn must
+// return promptly on ctx cancellation instead of blocking forever.
+func TestTargetMemoWaiterUnblocksOnCtxCancel(t *testing.T) {
+	m := NewTargetMemo()
+	isNew, _ := m.TryRun("", "slow")
+	require.True(t, isNew, "first TryRun for a name must be new")
+	// Deliberately never call m.Complete("slow", ...): the entry stays in-flight
+	// forever, standing in for a runner that never finishes.
+
+	_, waitFn := m.TryRun("", "slow")
+	require.NotNil(t, waitFn, "second TryRun for an in-flight name must return a waitFn")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() { done <- waitFn(ctx) }()
+
+	select {
+	case err := <-done:
+		require.Error(t, err, "want the ctx deadline to unblock the waiter")
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+	case <-time.After(2 * time.Second):
+		t.Fatal("waitFn did not return within bound: ctx cancellation did not unblock it")
+	}
+}
+
+// TestDispatchDetectsSiblingWaitCycle is the regression for the deadlock the
+// static ancestor check cannot see: two in-flight SIBLINGS that depend on each
+// other. A dispatches [b, c]; b then needs c (ancestors [a, b], c not among
+// them — the ancestor check passes) and c needs b (ancestors [a, c], symmetric).
+// Before TargetMemo tracked the dynamic wait-for graph, both TryRun calls
+// returned a waitFn subscribing to the other's still-running memoEntry, and
+// neither entry could ever complete — a permanent hang. Both dispatches must
+// now report a cycle within the bound instead.
+func TestDispatchDetectsSiblingWaitCycle(t *testing.T) {
+	var entered sync.WaitGroup
+	entered.Add(2)
+
+	var p *Pool
+	p = newPool(func(ctx context.Context) (*WorkerSession, error) {
+		targets := map[string]vmpackage.Callable{
+			"b": func(ctx context.Context, _ []vmpackage.Value) (vmpackage.Value, error) {
+				entered.Done()
+				entered.Wait() // widen the window: both siblings are genuinely in-flight
+				return vmpackage.Null, p.Dispatch(ctx, []string{"c"}, AncestorsFromContext(ctx))
+			},
+			"c": func(ctx context.Context, _ []vmpackage.Value) (vmpackage.Value, error) {
+				entered.Done()
+				entered.Wait()
+				return vmpackage.Null, p.Dispatch(ctx, []string{"b"}, AncestorsFromContext(ctx))
+			},
+		}
+		return &WorkerSession{Session: NewSession(ctx), Targets: targets}, nil
+	}, nil, 2)
+	defer func() { _ = p.Close() }()
+
+	ctx := WithTargetMemo(context.Background(), NewTargetMemo())
+	done := make(chan error, 1)
+	go func() { done <- p.Dispatch(ctx, []string{"b", "c"}, []string{"a"}) }()
+
+	select {
+	case err := <-done:
+		require.Error(t, err, "want cycle error")
+		assert.Contains(t, err.Error(), "cycle detected", "want cycle error")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Dispatch deadlocked on a sibling wait-for cycle instead of erroring")
+	}
+}
+
 // TestDispatchCancelledContextRunsNothing verifies a cancelled run stops at the pool
 // boundary: no session is warmed and no target body runs, and every name reports the
 // cancellation rather than a nil error that would read as success.

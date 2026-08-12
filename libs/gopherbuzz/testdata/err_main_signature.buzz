@@ -1,0 +1,3 @@
+// @error: expected `main` signature to be
+fun main(args: int) > void {}
+final __r = 0;

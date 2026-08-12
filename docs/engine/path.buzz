@@ -13,7 +13,7 @@ import "fs";
 // walk, the doc-page collection, the glossary pass, the code-entity pass. A stat syscall
 // is roughly a thousand times cheaper than a fork+exec, and the render was spending more
 // time in the kernel than in the interpreter because of it.
-export fun isDirectory(path: str) > bool {
+export fun isDirectory(path: str) > bool !> any {
     return fs\isDir(path);
 }
 
@@ -37,13 +37,13 @@ export fun isDirectory(path: str) > bool {
 // what identifies the thing being written (a source path, or an alias) and url is its
 // gen-root-relative clean URL, so the error can be acted on without grepping for which
 // page renders where.
-export fun makeOutputDir(dir: str, what: str, url: str) > void {
+export fun makeOutputDir(dir: str, what: str, url: str) > void !> any {
     if (fs\isFile(dir)) {
         throw "output path collision: " + what + " renders to /" + url
             + ", but " + dir + " is an existing file. A page cannot share a URL with a "
             + "static asset shipped in gen/ - give the page a different URL, or move the asset.";
     }
-    fs\makeDirectory(dir);
+    fs\mkdirAll(dir);
 }
 
 // isGeneratorDir reports whether a docs-ROOT child directory is the SSG's own rather than

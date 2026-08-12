@@ -170,6 +170,21 @@ func TestVerifyReportsMalformedAndStaleEntries(t *testing.T) {
 	assert.Contains(t, err.Error(), "magus memory verify")
 }
 
+// TestListReturnsRecordsWithOnlyWarnings proves a warning-only issue (e.g. a normal,
+// documented "stale" status) does not make List discard every valid record. Before the
+// fix, List short-circuited on len(issues) != 0 regardless of severity, so this returned
+// (nil, nil) instead of the one well-formed record.
+func TestListReturnsRecordsWithOnlyWarnings(t *testing.T) {
+	root := testRoot(t)
+	_, err := Put(root, Record{Name: "old-plan", Type: TypePlan, Status: "stale", Refs: []Ref{{Kind: RefKindCommand, Target: "magus affected ci"}}, Body: "Replace this."})
+	require.NoError(t, err)
+
+	got, err := List(root)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "old-plan", got[0].Name)
+}
+
 func TestVerifyReportsBrokenEntryReference(t *testing.T) {
 	root := testRoot(t)
 	_, err := Put(root, Record{Name: "release-plan", Type: TypePlan, Refs: []Ref{{Kind: RefKindCommand, Target: "magus affected ci"}}, References: []string{"missing-decision"}, Body: "Ship after CI."})

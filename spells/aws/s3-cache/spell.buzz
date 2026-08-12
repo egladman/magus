@@ -164,7 +164,7 @@ fun sign(method: str, path: str, query: str, payloadHash: str) > any {
     final stringToSign = "AWS4-HMAC-SHA256\n"
         + amzdate + "\n"
         + scope + "\n"
-        + crypto\hash(crypto\HashAlgorithm.Sha256, canonicalRequest);
+        + crypto\sha256Hex(canonicalRequest);
 
     // Signing-key chain: each HMAC's byte-list output keys the next (crypto.hmacSha256
     // keeps it as raw bytes, never a string), and the final HMAC is hex-encoded.
@@ -195,9 +195,9 @@ export fun enabled(target: Target, cb: fun(any)) > bool {
 
 // get_artifact downloads the object for io.hash into io.dest. true on a hit (200),
 // false on a miss (404) or when not configured.
-export fun get_artifact(target: Target, cb: fun(any)) > bool {
+export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
     if (access() == "" or bucket() == "") { return false; }
-    var io = {};
+    final io = {};
     cb(io);
     final path = "/" + bucket() + "/" + cache_key("" + io["hash"]);
     final headers = sign("GET", path, "", EMPTY_SHA256);
@@ -207,9 +207,9 @@ export fun get_artifact(target: Target, cb: fun(any)) > bool {
 // put_artifact uploads the file at io.src as the object for io.hash. true on a 200
 // store, false otherwise. The payload hash is the file's SHA-256 (S3 verifies it
 // against x-amz-content-sha256).
-export fun put_artifact(target: Target, cb: fun(any)) > bool {
+export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
     if (access() == "" or bucket() == "") { return false; }
-    var io = {};
+    final io = {};
     cb(io);
     final src = "" + io["src"];
     final path = "/" + bucket() + "/" + cache_key("" + io["hash"]);
@@ -224,7 +224,7 @@ export fun put_artifact(target: Target, cb: fun(any)) > bool {
 // marker needs percent-encoding, and the canonical query string (keys sorted:
 // marker before prefix) is byte-identical to the one on the URL. Returns the raw
 // XML body, or "" on a non-200.
-fun listPage(marker: str) > str {
+fun listPage(marker: str) > str !> any {
     var query = "prefix=magus-";
     if (marker != "") { query = "marker=" + marker + "&prefix=magus-"; }
     final path = "/" + bucket();
@@ -240,7 +240,7 @@ fun listPage(marker: str) > str {
 // coroutine. It returns null when the listing is exhausted; since a real artifact is
 // never null, the consumer drains it with a resume-until-null loop. The bucket's
 // LastModified is the S3-side mtime, so no per-object HEAD is needed.
-fun listing() > any {
+fun listing() > any !> any {
     var marker = "";
     while (true) {
         final body = listPage(marker);
@@ -262,12 +262,13 @@ fun listing() > any {
         if (last == "") { return null; } // defensive: truncated but nothing parsed
         marker = last;
     }
-    return null;
+    // No trailing return: the loop is `while (true)` with no break, so every exit
+    // is one of the returns above and anything here is unreachable.
 }
 
 // deleteObject removes one object by key (S3 DeleteObject, path-style). DeleteObject
 // is idempotent, returning 204 No Content whether or not the key existed.
-fun deleteObject(key: str) > bool {
+fun deleteObject(key: str) > bool !> any {
     final path = "/" + bucket() + "/" + key;
     final headers = sign("DELETE", path, "", EMPTY_SHA256);
     final res = http\request("DELETE", endpoint() + path, "", headers);
@@ -283,9 +284,9 @@ fun deleteObject(key: str) > bool {
 // doomed set is keyed by object key so the overlap never double-deletes. Returns
 // true once the sweep completes; counts are reported to stdout (the host bridge
 // only learns completion).
-export fun prune(target: Target, cb: fun(any)) > bool {
+export fun prune(target: Target, cb: fun(any)) > bool !> any {
     if (access() == "" or bucket() == "") { return false; }
-    var io = {};
+    final io = {};
     cb(io);
     final olderSecs = std\toInt(io["older_than_secs"]);
     final keepLast = std\toInt(io["keep_last"]);
@@ -303,7 +304,7 @@ export fun prune(target: Target, cb: fun(any)) > bool {
     }
 
     // Select objects to evict, de-duplicated by key across the two bounds.
-    var doomed = mut {};
+    final doomed = mut {};
     if (olderSecs > 0) {
         final cutoffMs = os\time() - olderSecs * 1000;
         foreach (it in artifacts) {

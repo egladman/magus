@@ -42,9 +42,9 @@ magus\project({
 export fun report(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles("data/**");
     ctx.writesFiles("gen/report.txt");
-    fs\makeDirectory("gen");
+    fs\mkdirAll("gen");
     fs\writeFile("gen/report.txt", "report");
-    magus\info("wrote gen/report.txt");
+    magus\log.info("wrote gen/report.txt");
 }
 
 // THE CONTRADICTION. This target claims the same output as `report`. Nothing stops both
@@ -56,7 +56,7 @@ export fun report(ctx: magus\Context, args: [str]) > void {
 // and a third target combines them.
 export fun stamp(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/report.txt");
-    fs\makeDirectory("gen");
+    fs\mkdirAll("gen");
     fs\writeFile("gen/report.txt", "stamp");
 }
 
@@ -66,5 +66,5 @@ export fun stamp(ctx: magus\Context, args: [str]) > void {
 export fun inject(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles("data/**");
     ctx.modifiesExistingFiles("README.md");
-    magus\info("would rewrite the generated block in README.md, leaving the rest alone");
+    magus\log.info("would rewrite the generated block in README.md, leaving the rest alone");
 }

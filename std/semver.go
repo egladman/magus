@@ -15,6 +15,7 @@ func init() { Register(Semver) }
 // Semver is the "semver" host module: semantic version parsing and comparison.
 var Semver = Module{
 	Name: "semver",
+	WASM: true,
 	Doc:  "Semantic version parsing and comparison (SemVer 2.0.0).",
 	Methods: []Method{
 		{
@@ -25,6 +26,7 @@ var Semver = Module{
 				{Name: "b", Type: TypeString},
 			},
 			Returns: []Ret{{Type: TypeInt}},
+			Raises:  true,
 			Impl:    SemverCompare,
 		},
 		{
@@ -39,6 +41,7 @@ var Semver = Module{
 			Doc:     `Canonical "vX.Y.Z" form of v, filling in missing components and discarding build metadata; errors on invalid input.`,
 			Args:    []Arg{{Name: "v", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    SemverCanonical,
 		},
 		{
@@ -46,6 +49,7 @@ var Semver = Module{
 			Doc:     `The major prefix of v as a string: major("1.2.3") is "v1". This is the cache token a spell's VersionKey{upTo = "major"} produces; parse().major is the same number as an int.`,
 			Args:    []Arg{{Name: "v", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    SemverMajor,
 		},
 		{
@@ -53,6 +57,7 @@ var Semver = Module{
 			Doc:     `The major.minor prefix of v as a string: majorMinor("1.2.3") is "v1.2". This is the cache token a spell's VersionKey{upTo = "minor"} produces.`,
 			Args:    []Arg{{Name: "v", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    SemverMajorMinor,
 		},
 		{
@@ -63,6 +68,7 @@ var Semver = Module{
 				{Name: "constraint", Type: TypeString},
 			},
 			Returns: []Ret{{Type: TypeBool}},
+			Raises:  true,
 			Impl:    SemverSatisfies,
 		},
 		{
@@ -70,6 +76,7 @@ var Semver = Module{
 			Doc:     "Parse a semver string into {major, minor, patch, prerelease, metadata, original}; errors on invalid input.",
 			Args:    []Arg{{Name: "v", Type: TypeString}},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "SemverVersion"}},
+			Raises:  true,
 			Impl:    SemverParse,
 		},
 		{
@@ -77,6 +84,7 @@ var Semver = Module{
 			Doc:     `Candidate next versions after v: {major, minor, patch}, each "vX.Y.Z" - the result of bumping the major, minor, or patch component. Errors on invalid input.`,
 			Args:    []Arg{{Name: "v", Type: TypeString}},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "SemverNext"}},
+			Raises:  true,
 			Impl:    SemverNext,
 		},
 	},

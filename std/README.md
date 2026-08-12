@@ -14,7 +14,7 @@ Buzz. `magus/std` is everything magus adds on top:
 ```text
 import "os"  in a magusfile
   ├── os.sleep / os.time / os.env / os.execute / …   ← gopherbuzz/std (the language)
-  └── os.exec / os.which / os.retry / os.with_env / …← magus/std (this package)
+  └── proc.exec / proc.which / os.retry / os.with_env / …← magus/std (this package)
 ```
 
 - **Layered onto the same bare names.** magus registers `gopherbuzz/std` first,

@@ -193,15 +193,17 @@ func ParseRefs(s string) ([]Ref, error) {
 	return refs, nil
 }
 
-// List returns every record in name order. An invalid on-disk entry is an error rather
-// than a silently skipped record; run Verify for every problem and its repair hint.
+// List returns every record in name order. An error-severity issue (e.g. an unparsable
+// file or a broken reference) fails the call rather than silently skipping the record;
+// run Verify for every problem and its repair hint. A warning-only issue (e.g. a record
+// marked stale, a normal lifecycle state) does not withhold any record.
 func List(root string) ([]Record, error) {
 	recs, issues, err := Inspect(root)
 	if err != nil {
 		return nil, err
 	}
-	if len(issues) != 0 {
-		return nil, issuesError(issues)
+	if err := issuesError(issues); err != nil {
+		return nil, err
 	}
 	return recs, nil
 }

@@ -1,0 +1,179 @@
+//go:build !wasm
+
+package std
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+
+	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/types"
+)
+
+//go:generate go run ../cmd/magus-utils bindings -module term -lang buzz -out ../internal/interp/bindings/gen/term.go
+
+func init() { Register(Term) }
+
+// Term is the "term" host module: the terminal surface magus already renders its
+// own output with, exposed so a magusfile can use it too.
+//
+// None of this is new machinery. internal/interactive/tty carries the picker, the
+// ANSI sequences and the terminal probe that `magus status --watch` and the
+// project picker are built from; until now a magusfile could reach exactly one
+// piece of it, os\stdinIsTerminal.
+//
+// THE RULE THAT SHAPES THIS MODULE: magus does not ask. Its own doctrine is that
+// the CLI reads context rather than prompting, because a prompt in a
+// non-interactive run does not degrade - it HANGS, and a hung CI job reports as a
+// timeout half an hour later with nothing to read. tty.Pick's own doc says the
+// caller is expected to have already checked that stdin and stderr are terminals.
+// "Expected to" is not a guarantee, so this module does not rely on it: pick
+// verifies, and RAISES when it cannot prompt.
+//
+// That makes the non-interactive path something an author has to answer for,
+// which is the point. The shape is:
+//
+//	if (term\isInteractive()) { ... term\pick(...) ... } else { ... a declared default ... }
+//
+// EVERYTHING RENDERS TO STDERR, matching the rest of magus: stdout carries the
+// structured answer (-o json|yaml|template) alone, so a magusfile that paints a
+// picker still pipes cleanly.
+var Term = Module{
+	Name: "term",
+	Doc:  "Terminal interaction: capability probes, an interactive picker, and styled output. Renders to stderr; pick raises rather than hanging when there is no terminal.",
+	Methods: []Method{
+		{
+			Name:    "is_interactive",
+			Doc:     "Report whether this run can prompt at all: both standard input and standard error are terminals. Branch on it before calling pick - in CI, behind a pipe, or under a daemon this is false, and pick would raise. It is the one call that makes an interactive step safe to add to a target that also runs unattended.",
+			Returns: []Ret{{Type: TypeBool}},
+			Impl:    TermIsInteractive,
+		},
+		{
+			Name:    "wants_color",
+			Doc:     "Report whether styled output should be emitted: standard error is a terminal and the environment does not ask for plain text (NO_COLOR, TERM=dumb). colorize already consults this, so a caller needs it only to make a wider rendering choice - a box-drawing table versus a plain one.",
+			Returns: []Ret{{Type: TypeBool}},
+			Impl:    TermWantsColor,
+		},
+		{
+			Name:    "size",
+			Doc:     "Return the terminal's {width, height} in character cells. Both are 0 when there is no terminal to measure - piped output, no controlling terminal - so check width rather than expecting a raise. Use it to wrap or truncate output to the reader's actual window instead of assuming 80 columns.",
+			Returns: []Ret{{Type: TypeAnyMap, Object: "TermSize"}},
+			Impl:    TermSizeOf,
+		},
+		{
+			Name: "colorize",
+			Doc:  "Wrap s in the given style and close it again. Returns s UNCHANGED when the output is not a terminal or the environment asked for plain text, so a magusfile never has to guard the call and escape codes cannot leak into a CI log. A style of none is also pass-through, which lets a conditionally-computed style be passed without branching.",
+			Args: []Arg{
+				{Name: "s", Type: TypeString},
+				{Name: "style", Type: TypeString, Enum: "TermStyle"},
+			},
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    TermColorize,
+		},
+		{
+			Name: "pick",
+			Doc:  "Prompt the reader to choose one of items and return its index. Type to filter (matching every whitespace-separated token), arrow keys or Ctrl-N/Ctrl-P to move, Enter to choose. RAISES when there is no terminal to prompt on - guard with is_interactive - and raises when the reader aborts with ESC, Ctrl-C or Ctrl-D, so a cancel ends the run rather than quietly returning a choice nobody made. Renders to stderr.",
+			Args: []Arg{
+				{Name: "items", Type: TypeStringSlice},
+				{Name: "prompt", Type: TypeString, Optional: true},
+				{Name: "initial_filter", Type: TypeString, Optional: true},
+				{Name: "initial", Type: TypeInt, Optional: true},
+				{Name: "max_rows", Type: TypeInt, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeIndex}},
+			Raises:  true,
+			Impl:    TermPick,
+		},
+		{
+			Name:    "clear_screen",
+			Doc:     "Erase the screen and move the cursor home, the repaint a full-screen refresh loop issues before redrawing. Scrollback is preserved, so a reader who scrolls up after the loop ends still sees what came before. A no-op when there is no terminal, so a watch loop needs no guard.",
+			Returns: nil,
+			Raises:  true,
+			Impl:    TermClearScreen,
+		},
+	},
+}
+
+// TermIsInteractive reports whether both stdin and stderr are terminals.
+//
+// BOTH, not either: the picker reads keys from stdin and paints to stderr, so one
+// without the other is a half-usable prompt. `magus run x < /dev/null` on a
+// terminal is the case that makes this concrete - stderr is a TTY, stdin is not,
+// and a prompt would block forever on a read that can never arrive.
+func TermIsInteractive(_ context.Context) (bool, error) {
+	return tty.StdinIsTerminal() && tty.IsTerminalWriter(os.Stderr, tty.SystemProbe), nil
+}
+
+// TermWantsColor reports whether styled output should be emitted to stderr.
+func TermWantsColor(_ context.Context) (bool, error) {
+	return tty.WantsColor(os.Stderr, tty.SystemProbe), nil
+}
+
+// TermSizeOf returns the terminal's dimensions, or zeroes when unmeasurable.
+func TermSizeOf(_ context.Context) (types.TermSize, error) {
+	fd, ok := tty.Fd(os.Stderr)
+	if !ok {
+		return types.TermSize{}, nil
+	}
+	w, h, err := tty.SystemProbe.Size(fd)
+	if err != nil {
+		// Not a raise: "there is no size" is an ordinary answer for a pipe, and a
+		// caller that has to try/catch to lay out a line will simply not measure.
+		return types.TermSize{}, nil //nolint:nilerr // documented above: an unmeasurable size is zero, not a raise; matches the size doc's "check width rather than expecting a raise"
+	}
+	return types.TermSize{Width: w, Height: h}, nil
+}
+
+// TermColorize wraps s in style, honouring the terminal's colour capability.
+func TermColorize(_ context.Context, s, style string) (string, error) {
+	if !tty.WantsColor(os.Stderr, tty.SystemProbe) {
+		return s, nil
+	}
+	return tty.Colorize(s, style), nil
+}
+
+// TermPick prompts for a choice among items and returns the chosen index.
+func TermPick(ctx context.Context, items []string, prompt, initialFilter string, initial, maxRows int) (int, error) {
+	if types.Tracing(ctx) {
+		// Dry run: report the first item without painting anything. A record pass
+		// must never block on a human, and every other host effect is skipped the
+		// same way.
+		return 0, nil
+	}
+	if len(items) == 0 {
+		return -1, errors.New("term.pick: no items to choose from")
+	}
+	interactive, _ := TermIsInteractive(ctx)
+	if !interactive {
+		// The message names the guard rather than just the condition: an author
+		// hitting this in CI needs to know what to write, not only what went wrong.
+		return -1, fmt.Errorf("term.pick: nothing to prompt on (standard input and standard error are not both terminals). " +
+			"Guard the call with term.isInteractive() and choose a default for unattended runs")
+	}
+	idx, err := tty.Pick(items, tty.Options{
+		Prompt:        prompt,
+		InitialFilter: initialFilter,
+		Initial:       initial,
+		MaxRows:       maxRows,
+	})
+	if err != nil {
+		if errors.Is(err, tty.ErrAborted) {
+			// An abort RAISES rather than returning -1. Ctrl-C means stop, and a
+			// sentinel return would let a magusfile that forgot to check it carry on
+			// with a choice the reader explicitly declined to make.
+			return -1, errors.New("term.pick: cancelled")
+		}
+		return -1, fmt.Errorf("term.pick: %w", err)
+	}
+	return idx, nil
+}
+
+// TermClearScreen erases the screen, or does nothing when stderr is not a terminal.
+func TermClearScreen(_ context.Context) error {
+	if !tty.IsTerminalWriter(os.Stderr, tty.SystemProbe) {
+		return nil
+	}
+	return tty.ClearScreen(os.Stderr)
+}

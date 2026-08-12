@@ -199,3 +199,15 @@ reference/manpage/magus-tail/
 # HAS an owner and narrows its name. Now at development/libs-testsprawl/. Not aliased -
 # the module was never published and the page was a day old.
 development/libs-orphanator/
+
+# The encoding module split into encoding/base64, encoding/hex, encoding/json,
+# encoding/url, encoding/xml and encoding/yaml, so the single combined page and its
+# generated Buzz reference no longer exist. Not aliased: there is no one successor
+# page to send a reader to, and each codec now has its own.
+modules/encoding/
+reference/buzz/encoding/
+
+# Tag pages are generated from the tags a doc declares. These two lost their last
+# declaring page when the platform notes were folded into setup.
+tags/macos/
+tags/windows/

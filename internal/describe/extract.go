@@ -542,12 +542,6 @@ func crossFileArg(arg ast.Node, aliases map[string]string) (types.InputRef, bool
 	return types.InputRef{Project: proj, Glob: lit.Val}, true
 }
 
-// charmCall returns the literal charm name a has_charm("name") read names, and ok=true.
-// It matches both receivers a target can read a charm through - the magus.has_charm
-// global query and the ctx.has_charm form on the received context - so either makes the
-// charm visible to the static charm inventory (the charm/target-collision and
-// has_charm-typo doctor checks). Unlike needs/inputs/outputs, has_charm keeps its global
-// form, so both spellings must be scanned.
 // secretReadCall reports whether e is `magus\secret.read(...)`. Matched structurally rather
 // than by rendered text so an aliased import or stray whitespace cannot hide it.
 //
@@ -569,9 +563,15 @@ func secretReadCall(e *ast.CallExpr) bool {
 	return ok && id.Name == "magus"
 }
 
+// charmCall returns the literal charm name a has_charm("name") read names, and ok=true.
+// It matches both receivers a target can read a charm through - the magus.has_charm
+// global query and the ctx.has_charm form on the received context - so either makes the
+// charm visible to the static charm inventory (the charm/target-collision and
+// has_charm-typo doctor checks). Unlike needs/inputs/outputs, has_charm keeps its global
+// form, so both spellings must be scanned.
 func charmCall(e *ast.CallExpr) (string, bool) {
 	me, ok := e.Callee.(*ast.MemberExpr)
-	if !ok || me.Name != "has_charm" {
+	if !ok || me.Name != "hasCharm" {
 		return "", false
 	}
 	id, ok := me.Object.(*ast.IdentExpr)

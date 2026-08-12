@@ -121,12 +121,17 @@ coverage.hand.out
 # version control and every merge conflicted on output nobody edits. Regenerate them instead:
 #   magus agent install .claude/skills --force
 #
-# magus-skill-authoring is the exception and stays tracked: it is hand-authored, never embedded
-# in the binary, and nothing regenerates it. Hand-authored stays, generated goes.
+# magus-skill-authoring and magus-local-development are the exceptions and stay tracked: both
+# are hand-authored, never embedded in the binary, and nothing regenerates them. Hand-authored
+# stays, generated goes. magus-local-development is additionally the name magus RESERVES for a
+# workspace's own rules (internal/agent.LocalSkillName, held by TestLocalSkillNameIsReserved),
+# so install and verify leave it alone by construction - but only if it is committed does it
+# survive a fresh clone or a new worktree.
 .agents/skills/
 .opencode/skills/
 .claude/skills/*
 !.claude/skills/magus-skill-authoring/
+!.claude/skills/magus-local-development/
 
 # Harness wiring, not repo configuration. settings.json hard-wires the PreToolUse guard to a
 # `magus hook` binary that a fresh clone may not have built - when it resolves something stale,

@@ -28,6 +28,12 @@ var applyErr error
 // warnedUnsupported gates the MGS2005 warning to at most one log line per process.
 var warnedUnsupported sync.Once
 
+// globalsMu guards policyFingerprint and appliedExternally: both are read from Apply
+// on arbitrary goroutines and written from MarkAppliedExternally on arbitrary
+// goroutines, so - unlike applyErr, which only ever changes inside the applyOnce.Do
+// callback - they need their own lock rather than riding on sync.Once's happens-before.
+var globalsMu sync.Mutex
+
 // policyFingerprint is the fingerprint of the applied landlock policy.
 // Subsequent Apply calls with a different fingerprint are rejected (MGS2010) because the ruleset is immutable.
 var policyFingerprint string
@@ -40,8 +46,10 @@ var appliedExternally bool
 // Subsequent per-workspace Apply calls become attach-only; the MGS2010 fingerprint check is skipped.
 func MarkAppliedExternally(fp string) {
 	applyOnce.Do(func() {})
+	globalsMu.Lock()
 	policyFingerprint = fp
 	appliedExternally = true
+	globalsMu.Unlock()
 }
 
 // FromConfig assembles a sandbox Policy for root using the sandbox fields of cfg.
@@ -88,14 +96,19 @@ func Apply(ctx context.Context, policy *sandbox.Policy, root string) (context.Co
 		ctx = sandbox.WithMetrics(ctx, prov)
 	}
 
-	if appliedExternally { // daemon applied union policy; attach-only
+	globalsMu.Lock()
+	externally := appliedExternally
+	globalsMu.Unlock()
+	if externally { // daemon applied union policy; attach-only
 		return sandbox.WithPolicy(ctx, policy), nil
 	}
 
 	fp := policy.Fingerprint()
 
 	applyOnce.Do(func() {
+		globalsMu.Lock()
 		policyFingerprint = fp
+		globalsMu.Unlock()
 		start := time.Now()
 		applyErr = sandbox.Apply(policy)
 		secs := time.Since(start).Seconds()
@@ -120,11 +133,14 @@ func Apply(ctx context.Context, policy *sandbox.Policy, root string) (context.Co
 		return ctx, fmt.Errorf("sandbox: kernel sandbox failed: %w", applyErr)
 	}
 
-	if fp != policyFingerprint { // mismatch: kernel-level and binding-level policies would disagree
+	globalsMu.Lock()
+	current := policyFingerprint
+	globalsMu.Unlock()
+	if fp != current { // mismatch: kernel-level and binding-level policies would disagree
 		RecordApply(ctx, 0, "mismatch", "workspace", nil) // no ruleset installed; count the outcome, not rules
 		return ctx, fmt.Errorf("%w: sandbox policy for workspace %q differs from the policy already applied to this daemon process (fingerprint %s vs %s); restart the daemon to pick up new sandbox configuration",
 			types.DiagnosticErrorf(types.SandboxPolicyMismatch, "sandbox policy mismatch"),
-			root, fp, policyFingerprint)
+			root, fp, current)
 	}
 
 	return sandbox.WithPolicy(ctx, policy), nil

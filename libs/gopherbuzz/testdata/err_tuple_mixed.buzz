@@ -1,0 +1,2 @@
+// @error: cannot mix tuple elements and named fields
+final t = .{ name = "Joe", 42 };

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/interp"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spellruntime"
@@ -12,7 +13,6 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
-	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
 
@@ -62,7 +62,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 
 	// The host utilities are reached under the same bare names as Buzz's own stdlib:
 	// `import "os"`, `import "fs"`, `import "http"`, `import "vcs"`, ... A magusfile
-	// selects methods off each module directly (os.exec, fs.glob, vcs.status).
+	// selects methods off each module directly (proc.exec, fs.glob, vcs.status).
 	// registerMagusModules layers the magus host methods onto Buzz's stdlib modules (a
 	// superset surface) and is shared with spell-loading, so a magusfile and a handler
 	// op spell see the same modules.
@@ -157,20 +157,23 @@ func buildMagusNS(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserv
 	// `-o json` stdout. modules() lists every module {name, doc, fields, methods};
 	// module(name) returns one with fields + per-method Buzz signatures, and raises on
 	// an unknown name. Hand-written (not declarative) because the core uses host,
-	// which std can't import.
-	magus.MapSet("modules", directVal(obs, "magus.modules", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return bindinggen.MapsVal(std.DescribeModules("")), nil
-	}))
-	magus.MapSet("module", directVal(obs, "magus.module", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	// which std can't import. hostmodules.Describe, not std.DescribeModules: std's
+	// own registry no longer covers std/encoding's nine modules by itself - see
+	// hostmodules's doc.
+	// magus.describeModule([name]): the host module surface, as `magus describe
+	// module [<name>]` prints it. One member rather than a modules()/module(name)
+	// pair - the CLI noun takes an optional name and returns a collection either
+	// way, and hostmodules.Describe already has that shape.
+	magus.MapSet("describeModule", directVal(obs, "magus.describeModule", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		name := ""
 		if len(args) > 0 && args[0].IsStr() {
 			name = args[0].AsString()
 		}
-		out := std.DescribeModules(name)
-		if len(out) == 0 {
-			return vm.Null, fmt.Errorf("magus.module: unknown module %q", name)
+		out := hostmodules.Describe(name)
+		if name != "" && len(out) == 0 {
+			return vm.Null, fmt.Errorf("magus.describeModule: unknown module %q", name)
 		}
-		return bindinggen.AnyMapVal(out[0].BuzzObject()), nil
+		return bindinggen.MapsVal(out), nil
 	}))
 
 	// magus.normalize(name): the canonical form of any magus entity name - a target, a
@@ -182,29 +185,35 @@ func buildMagusNS(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserv
 	// a literal `import`, because internal/describe reads spell imports statically to
 	// build the target graph - anything resolved dynamically would drop the target-uses-spell
 	// edge and silently under-report the graph.
-	magus.MapSet("normalize", directVal(obs, "magus.normalize", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	magus.MapSet("canonicalName", directVal(obs, "magus.canonicalName", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) == 0 || !args[0].IsStr() {
-			return vm.Null, fmt.Errorf("magus.normalize: expected a name string")
+			return vm.Null, fmt.Errorf("magus.canonicalName: expected a name string")
 		}
 		return bindinggen.StrVal(types.Normalize(args[0].AsString())), nil
 	}))
 
-	// Logging on the magus namespace itself (magus.info/debug/warn/error): the one
-	// way to log from a magusfile - there is no separate std log module. Each level
-	// writes into the process slog logger via emitMagusLog.
-	magus.MapSet("info", directVal(obs, "magus.info", buzzLogFn(slog.LevelInfo)))
-	magus.MapSet("debug", directVal(obs, "magus.debug", buzzLogFn(slog.LevelDebug)))
-	magus.MapSet("warn", directVal(obs, "magus.warn", buzzLogFn(slog.LevelWarn)))
-	magus.MapSet("error", directVal(obs, "magus.error", buzzLogFn(slog.LevelError)))
-
-	// magus.hint(msg): advisory nudge (see emitMagusHint) - non-fatal, deduped,
-	// honors the hints toggle.
-	magus.MapSet("hint", directVal(obs, "magus.hint", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	// magus.log.*: the one way to emit a message from a magusfile - there is no
+	// separate std log module on this surface. Each level writes into the process
+	// slog logger via emitMagusLog.
+	//
+	// Grouped, and grouped by BEHAVIOUR: everything here emits and returns. fatal and
+	// raise stay on magus itself because they end the run, and a namespace that mixed
+	// the two would let `magus\log.fatal(...)` read like one more level.
+	logNS := vm.NewMap()
+	logNS.MapSet("info", directVal(obs, "magus.log.info", buzzLogFn(slog.LevelInfo)))
+	logNS.MapSet("debug", directVal(obs, "magus.log.debug", buzzLogFn(slog.LevelDebug)))
+	logNS.MapSet("warn", directVal(obs, "magus.log.warn", buzzLogFn(slog.LevelWarn)))
+	logNS.MapSet("error", directVal(obs, "magus.log.error", buzzLogFn(slog.LevelError)))
+	// hint(msg): advisory nudge (see emitMagusHint) - non-fatal, deduped, honors the
+	// hints toggle. Not a level, but it emits and returns, which is the line this
+	// namespace is drawn on.
+	logNS.MapSet("hint", directVal(obs, "magus.log.hint", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) > 0 && args[0].IsStr() {
 			emitMagusHint(args[0].AsString())
 		}
 		return vm.Null, nil
 	}))
+	magus.MapSet("log", logNS)
 	// magus.fatal(msg): log at error level, then abort with exit 1 via a typed
 	// ExitError (the CLI/daemon map it to the exit status).
 	magus.MapSet("fatal", directVal(obs, "magus.fatal", func(ctx context.Context, args []vm.Value) (vm.Value, error) {

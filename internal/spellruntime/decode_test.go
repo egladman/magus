@@ -427,6 +427,38 @@ func TestDecodeToolsCarriesProbeKeyAndReady(t *testing.T) {
 	assert.Empty(t, h.Ready.Bin, "linting a Dockerfile must not wait on the docker daemon")
 }
 
+// A malformed probe or ready command must be a load error, not a silently dropped
+// declaration: decodeTools used to swallow decodeCommand's error with `err == nil`,
+// which left a typo'd tool command decoding as "no command at all" with nothing to
+// tell the author why the tool never gets probed.
+func TestDecodeToolsPropagatesMalformedProbeError(t *testing.T) {
+	_, err := Decode(mapObj{
+		"name": "docker",
+		"tools": map[string]any{
+			"docker": map[string]any{
+				"probe": map[string]any{"bin": "docker", "args": []string{"--version"}, "secrets": "not-a-map"},
+			},
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `spell "docker"`)
+	assert.Contains(t, err.Error(), `tools["docker"].probe`)
+}
+
+func TestDecodeToolsPropagatesMalformedReadyError(t *testing.T) {
+	_, err := Decode(mapObj{
+		"name": "docker",
+		"tools": map[string]any{
+			"docker": map[string]any{
+				"ready": map[string]any{"bin": "docker", "args": []string{"info"}, "secrets": "not-a-map"},
+			},
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `spell "docker"`)
+	assert.Contains(t, err.Error(), `tools["docker"].ready`)
+}
+
 // A constant stands in for a tool that cannot report a version, and needs no probe.
 func TestDecodeToolsConstNeedsNoProbe(t *testing.T) {
 	m, err := Decode(mapObj{
@@ -518,5 +550,30 @@ func TestDecodeCommandHints(t *testing.T) {
 		_, err := decodeCommand("s", "o", mapObj{"hints": []any{map[string]any{"contains": "denied"}}})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "both contains and advise are required")
+	})
+}
+
+// TestDecodeCommandSources pins that Sources/SourcesEach decode from the Buzz
+// field names buzzgen derives for them (a plain lower-cased "sources" and the
+// camelCase "sourcesEach" for the two-word field - see FieldName in
+// libs/gopherbuzz/buzzgen/mirror.go), and that an ordinary Command with neither
+// key decodes to the unset default (nil, false): no behavior change for a
+// Command that does not declare Sources.
+func TestDecodeCommandSources(t *testing.T) {
+	t.Run("sources and sourcesEach decode", func(t *testing.T) {
+		cmd, err := decodeCommand("bash", "shellcheck", mapObj{
+			"bin":         "shellcheck",
+			"sources":     []string{"**/*.sh", "**/*.bash"},
+			"sourcesEach": true,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"**/*.sh", "**/*.bash"}, cmd.Sources)
+		assert.True(t, cmd.SourcesEach)
+	})
+	t.Run("neither key decodes to the unset default", func(t *testing.T) {
+		cmd, err := decodeCommand("bash", "shellcheck", mapObj{"bin": "shellcheck"})
+		require.NoError(t, err)
+		assert.Nil(t, cmd.Sources)
+		assert.False(t, cmd.SourcesEach)
 	})
 }

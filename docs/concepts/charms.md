@@ -89,15 +89,17 @@ The project is a **positional** argument, not part of the token. See the full gr
 
 `relock` is the other built-in write grant, and it is deliberately **not** part of `rw`. Both let a run write, but they differ in what kind of write, and that difference is the whole reason there are two:
 
-|                     | `rw`                                                                    | `relock`                                             |
-| ------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------- |
-| what it writes      | derived output, from sources already in this tree                       | dependency state: a lockfile, or `go.mod`/`go.sum`   |
-| where the input is  | the tree                                                                | the tree **and** a remote registry                   |
-| deterministic?      | yes: same sources, same bytes                                           | no: same sources, different bytes on a different day |
-| discard the result? | re-run reproduces it exactly                                            | re-running gives you whatever upstream serves now    |
-| typical ops         | `go-fmt`, `prettier`, `biome-format`, `golangci-lint --fix`, `generate` | `go-mod-tidy`, `go-mod-edit`                         |
+|                     | `rw`                                                                                   | `relock`                                             |
+| ------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| what it writes      | derived output, from sources already in this tree                                      | dependency state: a lockfile, or `go.mod`/`go.sum`   |
+| where the input is  | the tree                                                                               | the tree **and** a remote registry                   |
+| deterministic?      | yes: same sources, same bytes                                                          | no: same sources, different bytes on a different day |
+| discard the result? | re-run reproduces it exactly                                                           | re-running gives you whatever upstream serves now    |
+| typical ops         | `go-fmt`, `prettier`, `biome-format`, `golangci-lint --fix`, `generate`, `go-mod-edit` | `go-mod-tidy`                                        |
 
 That last row is the practical test. **If re-running the target from a clean checkout would reproduce the same bytes, it is `rw`. If the answer depends on what a registry serves today, it is `relock`.**
+
+The two `go mod` ops are the sharpest illustration, and they land on opposite sides despite the shared prefix. `go mod edit` "reads only go.mod; it does not look up information about the modules involved", so the same tree always yields the same bytes and its write charm is `rw`. `go mod tidy` resolves against the module proxy, and an import `go.mod` does not require yet arrives at whatever upstream serves today, so its write charm is `relock`.
 
 The split exists because `default_charms` makes the distinction expensive. A workspace with `default_charms: [rw]` has granted every local run permission to write, which is fine for formatters: an unwanted `gofmt` is reproducible and reviewable. Granting the same run permission to re-resolve dependencies is not fine, because an unrelated build then rewrites your lockfile, widening both the review diff and the affected set for work that never asked to touch dependencies.
 
@@ -257,15 +259,15 @@ When the argv needs to be computed, branch in code. A magusfile function target 
 export fun lint(ctx: magus\Context, args: [str]) > void {
     var fix = false;
     for (a in args) { if (a == "--write") { fix = true; } }
-    os\exec("golangci-lint", if (fix) ["run", "--fix"] else ["run"]);
+    proc\exec("golangci-lint", if (fix) ["run", "--fix"] else ["run"]);
 }
 ```
 
-A function target reads the active charm set directly with **`ctx.has_charm(name)`**, including the built-in read→write toggle, `has_charm("rw")`. This is how a function target _selects which command to run_, the one thing a charm itself cannot do (see [the boundary](#charm-vs-target-the-command-boundary)). For example, a `build` target can compile the host binary by default and switch to the container image under a `container` charm:
+A function target reads the active charm set directly with **`ctx.hasCharm(name)`**, including the built-in read→write toggle, `has_charm("rw")`. This is how a function target _selects which command to run_, the one thing a charm itself cannot do (see [the boundary](#charm-vs-target-the-command-boundary)). For example, a `build` target can compile the host binary by default and switch to the container image under a `container` charm:
 
 ```buzz
 export fun build(ctx: magus\Context, args: [str]) > void {
-    if (ctx.has_charm("container")) { ctx.needs(image_build); }
+    if (ctx.hasCharm("container")) { ctx.needs(image_build); }
     else { ctx.needs(go_build); }
 }
 ```
@@ -389,7 +391,7 @@ Conditional or per-invocation logic belongs in a **function target**, not a char
 
 ### When you've left the charm layer
 
-**Function target** (most common): write an exported function and call the tool via `os\exec`:
+**Function target** (most common): write an exported function and call the tool via `proc\exec`:
 
 ```buzz
 // magusfile.buzz
@@ -397,7 +399,7 @@ import "os";
 export fun lint(ctx: magus\Context, args: [str]) > void {
     var fix = false;
     for (a in args) { if (a == "--write") { fix = true; } }
-    os\exec("golangci-lint", if (fix) ["run", "--fix", "./..."] else ["run", "./..."]);
+    proc\exec("golangci-lint", if (fix) ["run", "--fix", "./..."] else ["run", "./..."]);
 }
 ```
 

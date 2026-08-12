@@ -1,0 +1,4 @@
+// @error: cannot have a default value
+// A default is evaluated once and shared, so a mutable one is aliased state.
+fun hey(data: mut [int] = mut []) > void {}
+final __r = 0;

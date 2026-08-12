@@ -22,15 +22,15 @@ Every op is invoked as `bash["<op>"](ctx, opts?)`. The first argument is the tar
 | `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L173) |
 
 
-Working directory and environment are NOT options: they ride the context, as `bash["<op>"](ctx.withCwd("sub"))` and `bash["<op>"](ctx.withEnv({"CGO_ENABLED": "0"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise - passing either as an option is an error.
+Working directory and environment are NOT options: they ride the context, as `bash["<op>"](ctx.withCwd("sub"))` and `bash["<op>"](ctx.withEnv({"CGO_ENABLED": "0"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise; passing either as an option is an error.
 
 Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).
 
 ## shellcheck
 
-One shellcheck invocation over every shell source: find feeds xargs with NUL separators, and -r skips running shellcheck on an empty set. node_modules and .claude/worktrees are pruned inside the find too, not just declared above: a declared ignore dir shapes what magus treats as sources, but this op's find is its own walk. Without the prunes, third-party shell files or stale agent worktrees make the current project fail lint for code it does not own. TODO: this prune is a stopgap and duplicates knowledge the engine already has. An op handler is called ONCE with a null Target and reduced to static {cmd, args} (see recordOp in internal/spellruntime/resolve.go), so it cannot expand a file list itself - the `sh -c find` is what defers the walk to execution time in the project dir. The fix is engine-side: let an op declare a sources placeholder that the runner expands per project from expandSources(..., IgnoreDirs), the same walk that builds cache keys. Then every spell inherits the declared ignore dirs instead of hardcoding names here.
+One shellcheck invocation over every shell source. `sources` is the engine-side replacement for the `sh -c "find ... | xargs ..."` this op used to run: the runner expands the globs into a file list per project - the same walk that builds the cache key - honoring mgs_listIgnoreDirs above and the workspace's own ignore dirs, and appends the matches to argv. Batched (the default, sourcesEach unset) puts every match across as few `shellcheck` invocations as fit under the runner's ARG_MAX-safe limit; a glob set that matches nothing runs shellcheck zero times rather than failing (mirrors `xargs -r`).
 
-**Command:** `sh -c find . \( -name node_modules -o -path './.claude/worktrees' \) -prune -o \( -name '*.sh' -o -name '*.bash' \) -print0 | xargs -0 -r shellcheck`
+**Command:** `shellcheck`
 
 ### Example
 

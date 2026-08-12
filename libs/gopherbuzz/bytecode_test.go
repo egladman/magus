@@ -292,8 +292,8 @@ func TestEval_NameCacheCrossInstance(t *testing.T) {
 	src := `
 object Box { n: int = 0, fun get() > int { return this.n; } }
 fun run(a: int, b: int) > int {
-    var x = a.get();
-    var y = b.get();
+    final x = a.get();
+    final y = b.get();
     return x * 10 + y;
 }
 final a = Box{ n = 1 };
@@ -1807,20 +1807,23 @@ func TestJITDeoptsOnRuntimeError(t *testing.T) {
 }
 
 // TestJITBackendPresence pins the build-tag algebra: exactly the architectures with
-// a backend file must report a backend, on every OS. Without it the tag expressions
-// are only ever checked by whether the package compiles, and a stub silently
-// selected on an arch that has real codegen looks identical to a pass - every JIT
-// test would skip and the suite would go green having run nothing. It matters most on
-// a platform nobody runs the suite on by habit: Windows selects a different
-// executable-memory half (jit_mem_windows.go), so a tag mistake there would go
-// unnoticed until a user hit it.
+// a backend file must report a backend, on every OS, in every Value representation.
+// Without it the tag expressions are only ever checked by whether the package
+// compiles, and a stub silently selected on an arch that has real codegen looks
+// identical to a pass - every JIT test would skip and the suite would go green having
+// run nothing. It matters most on a platform nobody runs the suite on by habit:
+// Windows selects a different executable-memory half (jit_mem_windows.go), so a tag
+// mistake there would go unnoticed until a user hit it.
 func TestJITBackendPresence(t *testing.T) {
-	// Keep in sync with the //go:build lines on vm/jit_{amd64,arm64}.go.
+	// Keep in sync with the //go:build lines on vm/jit_{amd64,arm64}.go: an arch
+	// clause AND both alternate-representation tags being absent. jitTagged carries
+	// the latter half, so this tracks the tag expression instead of hardcoding an
+	// answer that only holds in the default build.
 	backends := map[string]bool{"amd64": true, "arm64": true}
-	want := backends[runtime.GOARCH]
+	want := backends[runtime.GOARCH] && !jitTagged
 	require.Equalf(t, want, vmpackage.JITAvailable(),
-		"GOOS=%s GOARCH=%s: JITAvailable()=%v but a backend is %spresent for this arch",
-		runtime.GOOS, runtime.GOARCH, vmpackage.JITAvailable(),
+		"GOOS=%s GOARCH=%s buzz_safe/buzz_unsafe=%v: JITAvailable()=%v but a backend is %spresent for this configuration",
+		runtime.GOOS, runtime.GOARCH, jitTagged, vmpackage.JITAvailable(),
 		map[bool]string{true: "", false: "not "}[want])
 }
 
@@ -2039,4 +2042,123 @@ func FuzzJITMatchesInterpreter(f *testing.F) {
 			t.Fatalf("differing results %s vs %s for:\n%s", wantV.String(), gotV.String(), src)
 		}
 	})
+}
+
+// TestImport_AsAliasExportedObjectType covers constructing an object type that came
+// from an ALIASED file import: `import "m" as m;` then `m\Thing{}`.
+//
+// Two things had to be true and neither was. The aliased path exec'd the file in an
+// isolated sub-session and returned before collectImportedModule, so the type was
+// never registered - the checker reported an undefined type. And `ns\Name{...}`
+// compiles to a construction of the BARE name (the parser resolves it that way
+// deliberately), which the VM looks up in the env, where an aliased import had bound
+// only the alias map - so once the checker was satisfied it failed at RUN time with
+// "unknown object type".
+//
+// The defaults assertion is the point of the second half: an unknown type still
+// constructs, silently, with only the fields the literal set. `n` coming back 7
+// rather than 0 is what proves the declaration itself was found.
+func TestImport_AsAliasExportedObjectType(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "m.buzz"), []byte(
+		"object Thing {\n    n: int = 7,\n    label: str = \"hi\",\n}\nexport Thing;\n"), 0644))
+
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer sess.Close()
+	sess.SetIncludeDirs([]string{dir})
+
+	require.NoError(t, sess.Exec(ctx, `import "m" as m; final t = m\Thing{}; final n = t.n; final l = t.label;`), "exec")
+
+	globals := sess.Globals()
+	n, ok := globals["n"]
+	require.True(t, ok, "n not set")
+	assert.Equal(t, "7", n.String(), "field default must come from the imported declaration")
+	l, ok := globals["l"]
+	require.True(t, ok, "l not set")
+	assert.Equal(t, "hi", l.String(), "string default must come from the imported declaration")
+}
+
+// TestImport_NamespaceRelativeToImporter covers resolving an import relative to the
+// importing file's OWN namespace, upstream's tests/behavior/common-namespace.buzz.
+//
+// A file declaring `namespace a\b` that imports `a\b\here` reaches it as `here\...`,
+// and a sibling at `a\other` as `other\...`. Only the FULL path was bound before, so
+// both spellings were undefined even though the modules loaded fine.
+//
+// Both shapes come from one importer because they exercise the same rule at different
+// depths: the child shares two segments, the sibling only one, and what binds is
+// whatever remains after the shared prefix.
+//
+// Asserted on the BINDINGS rather than on a variable the program computes: a namespaced
+// program stores its own globals under NUL-delimited module-scoped keys, and reaching
+// through that encoding would pin an internal detail this test does not care about.
+func TestImport_NamespaceRelativeToImporter(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "child.buzz"),
+		[]byte("namespace a\\b\\here;\nexport final message = \"from child\";\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "sib.buzz"),
+		[]byte("namespace a\\other;\nexport final note = \"from sibling\";\n"), 0644))
+
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer sess.Close()
+	sess.SetIncludeDirs([]string{dir})
+
+	// The program READS both spellings, so it would fail to compile if either were
+	// unbound - which is the regression this guards.
+	require.NoError(t, sess.Exec(ctx, "namespace a\\b;\nimport \"child\";\nimport \"sib\";\n"+
+		"final m = here\\message;\nfinal n = other\\note;"), "exec")
+
+	globals := sess.Globals()
+	here, ok := globals["here"]
+	require.True(t, ok, "child shares a\\b, so it must bind as `here`")
+	msg, ok := here.MapGet("message")
+	require.True(t, ok, "`here` must carry the child's exports")
+	assert.Equal(t, "from child", msg.String())
+
+	other, ok := globals["other"]
+	require.True(t, ok, "sibling shares only `a`, so it must bind as `other`")
+	note, ok := other.MapGet("note")
+	require.True(t, ok, "`other` must carry the sibling's exports")
+	assert.Equal(t, "from sibling", note.String())
+}
+
+// TestImport_ResolvesRelativeToImportingFile covers a nested import resolving against
+// the directory of the file that WRITES it, not the entry program's.
+//
+// Upstream's tests/behavior/mutual-import.buzz is the case: the entry file is in
+// tests/behavior and imports ../utils/import-b, which imports a bare `import-a` that
+// sits beside IT in tests/utils. Only the entry file's directory was searched, so the
+// inner import resolved against tests/behavior and was reported missing - which reads
+// as a circular-import failure and is plain path resolution.
+//
+// The cycle itself was never the problem: loadedPaths already guards that, and
+// TestCyclicImportTerminates covers it.
+func TestImport_ResolvesRelativeToImportingFile(t *testing.T) {
+	root := t.TempDir()
+	entry := filepath.Join(root, "entry")
+	nested := filepath.Join(root, "nested")
+	require.NoError(t, os.MkdirAll(entry, 0o755))
+	require.NoError(t, os.MkdirAll(nested, 0o755))
+
+	// leaf sits beside mid, and mid imports it by BARE name - resolvable only from
+	// mid's own directory.
+	require.NoError(t, os.WriteFile(filepath.Join(nested, "leaf.buzz"),
+		[]byte("export final leafValue = 5;\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(nested, "mid.buzz"),
+		[]byte("import \"leaf\";\nexport final midValue = leafValue + 1;\n"), 0644))
+
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer sess.Close()
+	// Only the ENTRY directory is on the include path, exactly as the upstream
+	// harness configures it.
+	sess.SetIncludeDirs([]string{entry, root})
+
+	require.NoError(t, sess.Exec(ctx, `import "nested/mid"; final got = midValue;`), "exec")
+
+	got, ok := sess.Globals()["got"]
+	require.True(t, ok, "got not set")
+	assert.Equal(t, "6", got.String(), "the nested bare import must resolve beside mid.buzz")
 }

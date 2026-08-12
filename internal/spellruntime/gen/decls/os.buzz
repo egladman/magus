@@ -6,23 +6,11 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
-export object ExecResult {
-    stdout: str = "",
-    stderr: str = "",
-    code: int = 0,
-    ok: bool = false,
-}
-
-export extern fun exec(cmd: str, args: [str] = [<str>], dir: str = "", opts: {str: any} = {<str: any>}) > ExecResult;
-export extern fun execSh(line: str, dir: str = "", opts: {str: any} = {<str: any>}) > ExecResult;
-export extern fun executable() > str;
-export extern fun exit(code: int) > void;
-export extern fun hostname() > str;
+export extern fun executable() > str !> any;
+export extern fun exit(code: int) > void !> any;
+export extern fun hostname() > str !> any;
 export extern fun numCpu() > int;
 export extern fun platform() > [str];
-export extern fun retry(max: int, fn: Function, opts: {str: any} = {<str: any>}) > any;
-export extern fun sleep(ms: double) > void;
-export extern fun stdinIsTerminal() > bool;
-export extern fun which(cmd: str) > str;
-export extern fun withEnv(env: {str: str}, callback: Function) > void;
-export extern fun withSlots(n: int, callback: Function) > void;
+export extern fun retry(max: int, fn: Function, opts: {str: any} = {<str: any>}) > any !> any;
+export extern fun sleep(ms: double) > void !> any;
+export extern fun withEnv(env: {str: str}, callback: Function) > void !> any;

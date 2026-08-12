@@ -1,4 +1,5 @@
 import "magus";
+import "proc";
 // The shared advisory gate. See tools/audit.buzz for why an exit code is the wrong
 // question and what this asks instead.
 import "../tools/audit" as audit;
@@ -19,6 +20,7 @@ import "project/.." as root;
 // badge renders the coverage SVG; cov merges the per-process lcov reports into one figure.
 import "../badge" as badge;
 import "../coverage" as cov;
+import "lcov";
 
 // magusfile binds this file's own exported targets (build, typecheck, test, ci); ts adds the
 // TypeScript spell so the app's src/ is symbol-capable - its `scip` op indexes it (via tsconfig.json)
@@ -41,7 +43,7 @@ magus\project({
     // scaffold fragments the surfaces fetch; the hand-authored shell (index.html/manifest/sw) and the
     // build manifests (package.json + pnpm-lock.yaml, where the esbuild deps are pinned) round it out.
     // pnpm is the package manager - NOT npm; .npmrc's minimum-release-age gate is the reason.
-    "sources": ["magusfile.buzz", "*.buzz",
+    "sources": ["*.buzz",
                 "../badge.buzz", "../coverage.buzz",
                 "src/**/*.ts", "src/**/*.css", "src/**/*.html",
                 "index.html", "manifest.webmanifest", "sw.js", "scripts/**/*.mjs",
@@ -64,7 +66,7 @@ magus\project({
     },
 });
 
-export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
+export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install(); }
 
 // pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason.
 // Always let pnpm validate the install. An interrupted install leaves a node_modules
@@ -72,8 +74,8 @@ export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
 // handing the missing packages straight to tsc/esbuild. Reached once per invocation
 // through preflight, which every target below already needs, so the unconditional
 // --frozen-lockfile costs about a second on a warm tree and never races itself.
-fun install() > void {
-    os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
+fun install() > void !> any {
+    proc\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
 }
 
 // test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests)
@@ -84,7 +86,7 @@ fun install() > void {
 // the DOM setup globally (one --import for everything) breaks them. Unifying the runs was tried and
 // reverted.
 //
-// Which is why the figure needs cov.lcovMergePercent rather than lcovPercent: three processes means
+// Which is why the figure needs lcov.mergePercent rather than lcov.percent: three processes means
 // three reports, and each one lists the whole line table of every shared module it imported. Summing
 // their LF/LH would count those files once per process and report a number that is not about
 // anything. The merge unions DA: records instead, so a line is found once and hit if any run hit it.
@@ -117,18 +119,18 @@ fun install() > void {
 // (MGS8003/CrossOutputCycle) - correctly, since the root would then have to run both before and after
 // the console. Putting it on the site would mean widening render.buzz's asset copy, which is a
 // separate call about the site rather than about this gate.
-export fun test(ctx: magus\Context, args: [str]) > void {
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     ctx.writesFiles("coverage.svg");
     final before = drift.hashes(["coverage.svg"]);
     install();
-    os\exec("pnpm", ["run", "test"], ".", {});
+    proc\exec("pnpm", ["run", "test"], ".", {});
 
-    final pct = cov\lcovMergePercent(
+    final pct = lcov\mergePercent(
         [fs\readFile("coverage.plain.lcov"), fs\readFile("coverage.dom.lcov")],
         keep: "src/");
     fs\writeFile("coverage.svg", badge\coverage("console coverage", percent: pct, radius: 3));
-    if (ctx.has_charm("rw")) { return; }
+    if (ctx.hasCharm("rw")) { return; }
     if (drift.changedSince(before, ["coverage.svg"]).len() > 0) {
         // Names the figure this run measured. Node's line coverage differs by a fraction
         // of a point between platforms, so a badge committed from a developer machine can
@@ -141,7 +143,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 // assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes
 // dirty when a source edit was not rebuilt and committed. The `rw` charm (`build:rw`) keeps the result
 // instead of gating. esbuild is pinned (mise), so the output is byte-stable and the gate holds.
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     ctx.needs(root\graph_generate);
     // NOT drift.hashes: console/gen is gitignored, so there is nothing committed to drift
@@ -149,8 +151,8 @@ export fun build(ctx: magus\Context, args: [str]) > void {
     // clean, which is why this gate has never fired. It is inert, and the comment above
     // claiming gen/ is committed is wrong - left as-is here rather than changed blind.
     final clean_before = vcs\isDirty(["gen"]) == false;
-    os\exec("pnpm", ["run", "build"], ".", {});
-    if (ctx.has_charm("rw")) {
+    proc\exec("pnpm", ["run", "build"], ".", {});
+    if (ctx.hasCharm("rw")) {
         return;
     }
     if (clean_before and vcs\isDirty(["gen"])) {
@@ -159,14 +161,14 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 }
 
 // lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.
-export fun lint(ctx: magus\Context, args: [str]) > void {
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     // The Reference drawer imports the search grammar from the shared libs/textsearch
     // source, so gate its type-check + biome here: a lib edit fails console lint too.
     ctx.needs(textsearch\lint);
-    os\exec("pnpm", ["run", "typecheck"], ".", {});
-    os\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
-    os\exec("pnpm", ["run", "stylelint"], ".", {});
+    proc\exec("pnpm", ["run", "typecheck"], ".", {});
+    proc\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
+    proc\exec("pnpm", ["run", "stylelint"], ".", {});
 }
 
 // security audits the dependency tree against the npm advisory database.
@@ -183,7 +185,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 // The cooling period in .npmrc is the other half and the stronger one: this catches a
 // KNOWN advisory, minimum-release-age keeps an unknown compromise out of the build for ten
 // days in the first place.
-export fun security(ctx: magus\Context, args: [str]) > void {
+export fun security(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     audit.audit();
 }

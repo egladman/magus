@@ -497,7 +497,7 @@ func targetUsage() error {
 	fmt.Fprintln(os.Stderr, "Conventional lifecycle names (you compose these in your magusfile from a")
 	fmt.Fprintln(os.Stderr, "spell's tool-native ops, e.g. global function build(_a) go.build() end):")
 	fmt.Fprintln(os.Stderr, "  build / test / lint / format / clean / generate / ci")
-	fmt.Fprintln(os.Stderr, "  (fmt → format and gen → generate are accepted as aliases)")
+	fmt.Fprintln(os.Stderr, "  (fmt -> format and gen -> generate are accepted as aliases)")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Spell-qualified targets run only the named spell's op:")
 	fmt.Fprintln(os.Stderr, "  magus run typescript::eslint api   # eslint op of the typescript spell on api")
@@ -623,7 +623,14 @@ const detachFlagName = "detach"
 // daemon detach again - handing the work to itself, forever.
 func withoutDetachFlag(args []string) []string {
 	out := make([]string, 0, len(args))
-	for _, a := range args {
+	for i, a := range args {
+		if a == "--" {
+			// Past the separator the tokens belong to the forwarded tool, not to
+			// magus; the argv is re-submitted verbatim, so copy the rest through
+			// unchanged instead of scanning it for --detach.
+			out = append(out, args[i:]...)
+			break
+		}
 		trimmed := strings.TrimLeft(a, "-")
 		if key, _, _ := strings.Cut(trimmed, "="); key == detachFlagName && strings.HasPrefix(a, "-") {
 			continue

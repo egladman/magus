@@ -26,6 +26,7 @@ func init() { Register(Markdown) }
 // HTML. It backs the docs-site generator, which renders each docs/*.md page.
 var Markdown = Module{
 	Name: "markdown",
+	WASM: true,
 	Doc:  "GitHub-Flavored Markdown to semantic HTML.",
 	Methods: []Method{
 		{
@@ -40,6 +41,7 @@ var Markdown = Module{
 			Doc:     "Parse the leading YAML frontmatter block (a \"---\" fenced header at the top of the document) and return it as a JSON object string; decode with serialize.jsonDecode. Returns \"{}\" when no frontmatter is present.",
 			Args:    []Arg{{Name: "source", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    MarkdownFrontmatter,
 		},
 		{

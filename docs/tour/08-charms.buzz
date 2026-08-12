@@ -18,7 +18,7 @@ magus\project({ "spells": [go] });
 // this flip internally, so you usually get rw for free; here it is spelled out so
 // the plan shows the difference.)
 export fun format(ctx: magus\Context, args: [str]) > void {
-    if (ctx.has_charm("rw")) {
+    if (ctx.hasCharm("rw")) {
         go["go-fmt"](ctx, {"args": ["-w"]});   // rewrite files in place
     } else {
         go["go-fmt"](ctx, {"args": ["-l"]});   // just list what would change

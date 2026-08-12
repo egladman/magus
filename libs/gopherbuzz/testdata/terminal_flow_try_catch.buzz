@@ -1,0 +1,26 @@
+// @expect: 12:ok
+// The try/catch asymmetry, pinned in one file because it is the subtle part.
+//
+// A statement after a fully-returning try/catch is NOT dead - an error matching no
+// clause rethrows past it, and upstream's own try-catch.buzz relies on that. Yet a
+// function whose try and every catch return needs no further return. The two
+// questions get opposite answers on purpose (see terminatesForReturn).
+fun returnFromCatch() > int {
+    try {
+        return 12;
+    } catch (_: str) {
+        return 21;
+    }
+
+    return 31;
+}
+
+fun noTrailingReturnNeeded() > str {
+    try {
+        return "ok";
+    } catch (_: str) {
+        return "caught";
+    }
+}
+
+final __r = "{returnFromCatch()}:{noTrailingReturnNeeded()}";

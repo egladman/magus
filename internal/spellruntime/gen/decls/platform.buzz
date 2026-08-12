@@ -6,7 +6,13 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
-export extern fun arch(name: str, style: str = "") > str;
+export enum<str> PlatformStyle {
+    none = "",
+    go = "go",
+    uname = "uname",
+}
+
+export extern fun arch(name: str, style: PlatformStyle = "") > str !> any;
 export extern fun cpus() > int;
 export extern fun memoryBytes() > int;
-export extern fun os(name: str, style: str = "") > str;
+export extern fun os(name: str, style: PlatformStyle = "") > str !> any;

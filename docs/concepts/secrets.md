@@ -65,7 +65,7 @@ long before and long after the moment they were needed.
 ## Reading a credential
 
 A magusfile can already read a credential. `os\env("DOCKERHUB_TOKEN")` works, and so
-does shelling out to `op read` with [`os\exec`](../reference/buzz/os.md). What neither
+does shelling out to `op read` with [`proc\exec`](../reference/buzz/os.md). What neither
 can do is tell magus that the value is sensitive.
 
 That distinction is the whole feature. A value resolved through a secret provider is one
@@ -74,7 +74,7 @@ magus recognizes on the way out, so it never reaches a run log, a terminal, or t
 
 ```buzz
 final token = magus\secret.read("DOCKERHUB_TOKEN");
-os\exec("docker", args: ["login", "docker.io", "-u", user, "--password-stdin"],
+proc\exec("docker", args: ["login", "docker.io", "-u", user, "--password-stdin"],
     dir: ".", opts: {"stdin": token});
 ```
 
@@ -176,7 +176,7 @@ export fun mgs_getName() > str { return "onepassword"; }
 export fun resolve_secret(target: Target, cb: fun(any)) > str {
     var io = {};
     cb(io);
-    return os\exec("op", args: ["read", "op://" + ("" + io["ref"])]).stdout;
+    return proc\exec("op", args: ["read", "op://" + ("" + io["ref"])]).stdout;
 }
 ```
 
@@ -325,7 +325,7 @@ export fun resolve_secret(target: Target, cb: fun(any)) > str {
     var io = {};
     cb(io);
     final ref = "" + io["ref"];               // "dockerhub-token"
-    return os\exec("op", args: ["read", "op://Engineering/" + ref + "/credential"],
+    return proc\exec("op", args: ["read", "op://Engineering/" + ref + "/credential"],
         dir: ".", opts: {}).stdout;
 }
 ```
@@ -599,7 +599,7 @@ the way out.
 
 - **Redacts it from captured output.** Four paths carry a subprocess's bytes and all
   four are covered: the live stream (terminal), the raw run log, the buffered result a
-  magusfile reads back from `os\exec`, and the command line recorded in the invocation
+  magusfile reads back from `proc\exec`, and the command line recorded in the invocation
   journal. They are genuinely separate - the buffered result bypasses the live tap
   entirely, and a quiet capture has no live tap at all - so each is redacted at its own
   point rather than at one shared choke point. The mask is a fixed `***`, so it does

@@ -1,0 +1,5 @@
+// @error: is not callable
+// Only a plain NAME is checked: a built-in method is not modelled as a function
+// type, so `xs.len()` must not be mistaken for calling an int.
+final yo = 12;
+final __r = yo("mo");

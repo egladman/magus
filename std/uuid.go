@@ -21,18 +21,21 @@ func init() { Register(UUID) }
 // nondeterminism never leaks into the "planned, not run" dry-run surface.
 var UUID = Module{
 	Name: "uuid",
+	WASM: true,
 	Doc:  "Unique identifiers and random tokens (v4 random, v7 time-ordered, plus raw random hex/tokens).",
 	Methods: []Method{
 		{
 			Name:    "v4",
 			Doc:     "A random (version 4) UUID string, e.g. \"9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d\".",
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    UUIDv4,
 		},
 		{
 			Name:    "v7",
 			Doc:     "A time-ordered (version 7) UUID string; lexically sorts by creation time, which makes it a good ordered run/build id.",
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    UUIDv7,
 		},
 		{
@@ -40,6 +43,7 @@ var UUID = Module{
 			Doc:     "A cryptographically random lowercase hex string of n bytes (2*n characters); errors when n is not positive.",
 			Args:    []Arg{{Name: "n", Type: TypeInt}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    UUIDRandomHex,
 		},
 		{
@@ -47,6 +51,7 @@ var UUID = Module{
 			Doc:     "A cryptographically random URL-safe base64 token from n bytes of entropy (no padding); errors when n is not positive.",
 			Args:    []Arg{{Name: "n", Type: TypeInt}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    UUIDRandomToken,
 		},
 	},

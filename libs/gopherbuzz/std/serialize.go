@@ -3,11 +3,36 @@ package std
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 
 	json "github.com/egladman/magus/libs/gopherbuzz/internal/codec"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
+
+// errCircularReference is returned by serializeSerialize, encodeJSON, and
+// buzzToGo when they revisit a list or map already on their current recursion
+// path — a genuine reference cycle, since Buzz lists and maps are heap objects
+// mutable in place (`[any] l = mut []; l.append(l);`). Naive recursion here
+// would stack-overflow, which in Go is a FATAL, unrecoverable error, so the
+// path is tracked and the cycle is reported as an ordinary error instead.
+// Named for upstream's declared CircularReference error (see boxedInit's doc
+// comment above): gopherbuzz's serialize surface never actually raised it
+// until now.
+var errCircularReference = errors.New("serialize: circular reference")
+
+// identityPathHas reports whether v (a list or map) is already on path, by
+// heap identity rather than content — Value.Equal on two collections reduces
+// to reference equality (see its doc comment), which is exactly what a cycle
+// check needs.
+func identityPathHas(path []vm.Value, v vm.Value) bool {
+	for _, p := range path {
+		if p.Equal(v) {
+			return true
+		}
+	}
+	return false
+}
 
 // serializeModule builds the "serialize" module matching Buzz's serialize reference:
 // https://buzz-lang.dev/0.5.0/reference/std/serialize.html
@@ -180,7 +205,40 @@ func serializeSerialize(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 1 {
 		return vm.Null, fmt.Errorf("serialize.serialize: requires 1 argument")
 	}
-	return args[0], nil // primitives are already serializable
+	if err := checkCircular(args[0], nil); err != nil {
+		return vm.Null, fmt.Errorf("serialize.serialize: %w", err)
+	}
+	return args[0], nil // primitives (and now-verified-acyclic collections) are already serializable
+}
+
+// checkCircular walks v, recursing into lists and maps, and reports
+// errCircularReference on the first reference cycle found (nil if v is
+// acyclic). See errCircularReference for why this exists.
+func checkCircular(v vm.Value, path []vm.Value) error {
+	switch {
+	case v.IsList():
+		if identityPathHas(path, v) {
+			return errCircularReference
+		}
+		path = append(path, v)
+		for _, it := range v.ListItems() {
+			if err := checkCircular(it, path); err != nil {
+				return err
+			}
+		}
+	case v.IsMap():
+		if identityPathHas(path, v) {
+			return errCircularReference
+		}
+		path = append(path, v)
+		for _, k := range v.MapKeys() {
+			kv, _ := v.MapGet(k)
+			if err := checkCircular(kv, path); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // serializeJSONEncode encodes a Boxed value to a JSON string.
@@ -195,13 +253,14 @@ func serializeJSONEncode(_ context.Context, args []vm.Value) (vm.Value, error) {
 		src = raw
 	}
 	var buf bytes.Buffer
-	if err := encodeJSON(src, &buf); err != nil {
+	if err := encodeJSON(src, &buf, nil); err != nil {
 		return vm.Null, fmt.Errorf("serialize.jsonEncode: %w", err)
 	}
 	return vm.StrValue(buf.String()), nil
 }
 
-// encodeJSON writes v as JSON with map keys in INSERTION order.
+// encodeJSON writes v as JSON with map keys in INSERTION order. path is every
+// list/map already being written on this call stack (see errCircularReference).
 //
 // It exists because json.Marshal sorts the keys of a Go map, and a Buzz map is
 // ordered - mapObj carries a Keys slice, and foreach already iterates it in that
@@ -211,21 +270,29 @@ func serializeJSONEncode(_ context.Context, args []vm.Value) (vm.Value, error) {
 //
 // Scalars still go through json.Marshal, so string escaping and number formatting
 // stay exactly as the standard library does them; only container ordering is ours.
-func encodeJSON(v vm.Value, buf *bytes.Buffer) error {
+func encodeJSON(v vm.Value, buf *bytes.Buffer, path []vm.Value) error {
 	switch {
 	case v.IsList():
+		if identityPathHas(path, v) {
+			return errCircularReference
+		}
+		path = append(path, v)
 		buf.WriteByte('[')
 		for i, it := range v.ListItems() {
 			if i > 0 {
 				buf.WriteByte(',')
 			}
-			if err := encodeJSON(it, buf); err != nil {
+			if err := encodeJSON(it, buf, path); err != nil {
 				return err
 			}
 		}
 		buf.WriteByte(']')
 		return nil
 	case v.IsMap():
+		if identityPathHas(path, v) {
+			return errCircularReference
+		}
+		path = append(path, v)
 		buf.WriteByte('{')
 		for i, k := range v.MapKeys() {
 			if i > 0 {
@@ -238,14 +305,14 @@ func encodeJSON(v vm.Value, buf *bytes.Buffer) error {
 			buf.Write(key)
 			buf.WriteByte(':')
 			kv, _ := v.MapGet(k)
-			if err := encodeJSON(kv, buf); err != nil {
+			if err := encodeJSON(kv, buf, path); err != nil {
 				return err
 			}
 		}
 		buf.WriteByte('}')
 		return nil
 	}
-	goVal, err := buzzToGo(v)
+	goVal, err := buzzToGo(v, path)
 	if err != nil {
 		return err
 	}
@@ -269,8 +336,10 @@ func serializeJSONDecode(_ context.Context, args []vm.Value) (vm.Value, error) {
 	return makeBoxed(goToBoxedBuzz(raw)), nil
 }
 
-// buzzToGo converts a Buzz value to a Go-native value suitable for JSON marshaling.
-func buzzToGo(v vm.Value) (any, error) {
+// buzzToGo converts a Buzz value to a Go-native value suitable for JSON
+// marshaling. path is every list/map already being converted on this call
+// stack (see errCircularReference).
+func buzzToGo(v vm.Value, path []vm.Value) (any, error) {
 	switch {
 	case v.IsNull():
 		return nil, nil
@@ -283,10 +352,14 @@ func buzzToGo(v vm.Value) (any, error) {
 	case v.IsStr():
 		return v.AsString(), nil
 	case v.IsList():
+		if identityPathHas(path, v) {
+			return nil, errCircularReference
+		}
+		path = append(path, v)
 		items := v.ListItems()
 		out := make([]any, len(items))
 		for i, it := range items {
-			gv, err := buzzToGo(it)
+			gv, err := buzzToGo(it, path)
 			if err != nil {
 				return nil, err
 			}
@@ -294,10 +367,14 @@ func buzzToGo(v vm.Value) (any, error) {
 		}
 		return out, nil
 	case v.IsMap():
+		if identityPathHas(path, v) {
+			return nil, errCircularReference
+		}
+		path = append(path, v)
 		out := make(map[string]any)
 		for _, k := range v.MapKeys() {
 			kv, _ := v.MapGet(k)
-			gv, err := buzzToGo(kv)
+			gv, err := buzzToGo(kv, path)
 			if err != nil {
 				return nil, err
 			}

@@ -6,13 +6,26 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+export object HttpRetry {
+    attempts: int = 0,
+    delay_ms: double = 0.0,
+    max_delay_ms: double = 0.0,
+    max_elapsed_ms: double = 0.0,
+    fixed: bool = false,
+    all_errors: bool = false,
+    conn_refused: bool = false,
+}
+
 export object HttpResponse {
     status: int = 0,
     body: str = "",
     headers: {str: str} = {},
 }
 
-export extern fun get(url: str, headers: {str: str} = {<str: str>}, opts: {str: any} = {<str: any>}) > HttpResponse;
-export extern fun post(url: str, body: str, headers: {str: str} = {<str: str>}, opts: {str: any} = {<str: any>}) > HttpResponse;
-export extern fun request(method: str, url: str, body: str = "", headers: {str: str} = {<str: str>}, opts: {str: any} = {<str: any>}) > HttpResponse;
-export extern fun server(opts: {str: any}) > int;
+export extern fun byteSize(path: str) > int !> any;
+export extern fun download(url: str, dest: str, headers: {str: str} = {<str: str>}, opts: {str: any} = {<str: any>}, retry: HttpRetry = {<str: any>}) > int !> any;
+export extern fun get(url: str, headers: {str: str} = {<str: str>}, opts: {str: any} = {<str: any>}, retry: HttpRetry = {<str: any>}) > HttpResponse !> any;
+export extern fun post(url: str, body: str, headers: {str: str} = {<str: str>}, opts: {str: any} = {<str: any>}, retry: HttpRetry = {<str: any>}) > HttpResponse !> any;
+export extern fun request(method: str, url: str, body: str = "", headers: {str: str} = {<str: str>}, opts: {str: any} = {<str: any>}, retry: HttpRetry = {<str: any>}) > HttpResponse !> any;
+export extern fun server(opts: {str: any}) > int !> any;
+export extern fun upload_chunked(method: str, url: str, src: str, chunk_size: int, headers: {str: str} = {<str: str>}) > any !> any;

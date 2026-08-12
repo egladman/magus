@@ -15,13 +15,14 @@ import "io"
 
 // NewZstdWriter returns a streaming zstd compressor writing to w. level is the
 // compression level (-1 = default, 1-19); threads sets encoder concurrency
-// (0 = single-threaded).
+// (0 = single-threaded on the cgo build; GOMAXPROCS on the pure-Go fallback).
 func NewZstdWriter(w io.Writer, level, threads int) (io.WriteCloser, error) {
 	return newZstdWriter(w, level, threads)
 }
 
 // NewZstdReader returns a streaming zstd decompressor reading from r. threads
-// sets decoder concurrency (0 = single-threaded).
+// sets decoder concurrency (0 = single-threaded on the cgo build; GOMAXPROCS
+// on the pure-Go fallback).
 func NewZstdReader(r io.Reader, threads int) (io.ReadCloser, error) {
 	return newZstdReader(r, threads)
 }

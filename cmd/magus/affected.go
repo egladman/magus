@@ -388,7 +388,7 @@ func affectedUsage() {
 	fmt.Fprintln(os.Stderr, "Targets (same as 'run' but project set comes from VCS diff):")
 	fmt.Fprintln(os.Stderr, "  list      print affected projects (no execution)")
 	fmt.Fprintln(os.Stderr, "  ci        full pipeline for affected projects")
-	fmt.Fprintln(os.Stderr, "  <target>    any target supported by the project's tool (build, test, lint, …)")
+	fmt.Fprintln(os.Stderr, "  <target>    any target supported by the project's tool (build, test, lint, ...)")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Forensic modes (reason about the affected set instead of executing):")
 	fmt.Fprintln(os.Stderr, "  --explain <project>  show why a project is in the affected set")
@@ -909,7 +909,7 @@ func affectedExplain(ctx context.Context, root, target, base string) error {
 		if len(ap.Chain) == 1 {
 			fmt.Printf("  changed files:\n")
 		} else {
-			fmt.Printf("  via %s:\n", strings.Join(ap.Chain, " → "))
+			fmt.Printf("  via %s:\n", strings.Join(ap.Chain, " -> "))
 		}
 		for _, f := range ap.Files {
 			fmt.Printf("    %s\n", f)

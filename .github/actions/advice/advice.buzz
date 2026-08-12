@@ -10,6 +10,7 @@
 // comment trustworthy across pushes: fix the conflicts and the conflict section
 // disappears on the next run, rather than lingering as a stale scold.
 import "os";
+import "proc";
 import "fs";
 import "time";
 import "serialize";
@@ -75,7 +76,7 @@ final glossary_urls = {
 // rendered as literal text. Hoisting the definitions out to the top level did not help,
 // because it is the REFERENCE that goes unparsed, not the definition.
 //
-// Code spans are left alone: `magus\targetGraph()` is an identifier, not the concept, and
+// Code spans are left alone: `magus\targets()` is an identifier, not the concept, and
 // rewriting inside backticks would produce something that no longer runs. Splitting on the
 // backtick makes every ODD segment code, which is the whole guard.
 export fun linkTerms(text: str) > str {
@@ -150,7 +151,8 @@ export fun linkCodes(text: str) > str {
         }
         rest = rest.sub(at + 7);
     }
-    return joined;
+    // No trailing return: the loop is `while (true)` with no break, so every exit
+    // is one of the returns above and anything here is unreachable.
 }
 
 // The way out, kept where an unsubscribe link belongs: last, small, and never in the way
@@ -243,8 +245,8 @@ export fun silences(labels: [str], name: str) > bool {
 }
 
 // silenced asks GitHub for this pull request's labels and applies the rule above.
-export fun silenced(repo: str, pr: str, name: str) > bool {
-    final res = os\exec("gh", args: ["api", "repos/" + repo + "/issues/" + pr + "/labels"],
+export fun silenced(repo: str, pr: str, name: str) > bool !> any {
+    final res = proc\exec("gh", args: ["api", "repos/" + repo + "/issues/" + pr + "/labels"],
         dir: ".", opts: {"quiet": true, "allow_failure": true});
     if (!res.ok) { return false; }
     var labels = mut [];
@@ -258,8 +260,8 @@ export fun silenced(repo: str, pr: str, name: str) > bool {
 // Read through `gh api` and decoded here rather than filtered with a jq expression: the
 // marker is an HTML comment, and quoting it through a jq -r filter inside YAML inside
 // bash is three layers of escaping to get wrong.
-fun find(repo: str, pr: str) > str {
-    final listed = os\exec("gh", args: ["api", "--paginate",
+fun find(repo: str, pr: str) > str !> any {
+    final listed = proc\exec("gh", args: ["api", "--paginate",
         "repos/" + repo + "/issues/" + pr + "/comments"], dir: ".", opts: {"quiet": true});
     foreach (c in serialize\jsonDecode(listed.stdout).listValue()) {
         if (c.q("body").stringValue().indexOf(comment_marker) != null) {
@@ -272,11 +274,11 @@ fun find(repo: str, pr: str) > str {
 // publish upserts one advisor's section into the PR's magus comment. An empty body
 // retracts the section, and a comment left with no sections at all is emptied to the
 // bare marker rather than deleted - deleting would lose the thread's history.
-export fun publish(repo: str, pr: str, name: str, title: str, body: str) > void {
+export fun publish(repo: str, pr: str, name: str, title: str, body: str) > void !> any {
     final id = find(repo, pr: pr);
     var current = "";
     if (id != "") {
-        final got = os\exec("gh", args: ["api", "repos/" + repo + "/issues/comments/" + id],
+        final got = proc\exec("gh", args: ["api", "repos/" + repo + "/issues/comments/" + id],
             dir: ".", opts: {"quiet": true});
         current = serialize\jsonDecode(got.stdout).q("body").stringValue();
     }
@@ -288,11 +290,11 @@ export fun publish(repo: str, pr: str, name: str, title: str, body: str) > void 
     final payload = "/tmp/magus-advice-payload.json";
     fs\writeFile(payload, content: serialize\jsonEncode({"body": composed}));
     if (id == "") {
-        os\exec("gh", args: ["api", "--method", "POST",
+        proc\exec("gh", args: ["api", "--method", "POST",
             "repos/" + repo + "/issues/" + pr + "/comments", "--input", payload], dir: ".", opts: {});
         return;
     }
-    os\exec("gh", args: ["api", "--method", "PATCH",
+    proc\exec("gh", args: ["api", "--method", "PATCH",
         "repos/" + repo + "/issues/comments/" + id, "--input", payload], dir: ".", opts: {});
 }
 

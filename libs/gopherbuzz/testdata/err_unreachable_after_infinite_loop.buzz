@@ -1,0 +1,7 @@
+// @error: code will never be reached
+// `while (true)` with no break that exits it never falls through.
+fun f() > int {
+    while (true) {}
+    return 1;
+}
+final __r = 0;

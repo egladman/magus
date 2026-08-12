@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
@@ -59,6 +60,29 @@ var x = demo.answer;
 	require.True(t, ok, "global 'x' not bound; native import did not resolve")
 	require.True(t, v.IsInt(), "x = %v, want 42", v)
 	assert.Equal(t, int64(42), v.AsInt(), "x = %v, want 42", v)
+}
+
+// TestExecUnusedImportStillRuns is the whole point of warning rather than erroring on
+// an unused import (BZZ3001): Exec must still run the program and return no error.
+func TestExecUnusedImportStillRuns(t *testing.T) {
+	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	s.SetNativeModule("unused/mod", vm.NewMap())
+
+	err := s.Exec(context.Background(), `import "unused/mod";
+var x = 1;`)
+	require.NoError(t, err, "Exec must not fail on an unused import")
+	v, ok := s.Globals()["x"]
+	require.True(t, ok, "global 'x' not bound; the program did not actually run")
+	assert.Equal(t, int64(1), v.AsInt())
+}
+
+// TestCompileUnusedImportStillCompiles is Compile's sibling of the Exec test above.
+func TestCompileUnusedImportStillCompiles(t *testing.T) {
+	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	s.SetNativeModule("unused/mod", vm.NewMap())
+
+	_, err := s.Compile(`import "unused/mod";`)
+	require.NoError(t, err, "Compile must not fail on an unused import")
 }
 
 func TestSession_ModuleResolver(t *testing.T) {
@@ -677,4 +701,42 @@ final bad = sign\pick(.Sha256);
 `)
 	require.Error(t, err, "an unknown case must not reach the host")
 	assert.Contains(t, err.Error(), `has no case "Sha256"`)
+}
+
+// busyLoopModuleSrc's top-level body loops long enough that, if the caller's
+// ctx deadline never reaches it, Exec keeps running well past the bound below.
+const busyLoopModuleSrc = `
+var i = 0;
+while (i < 50000000) { i = i + 1; }
+`
+
+// TestExecCtxBoundsImportExecution is the regression for imports resolving AND
+// EXECUTING under the session's own stored ctx instead of the caller's per-call
+// Exec ctx (session.go: compileShared -> checkShared -> loadFileImports ->
+// resolveImport -> execImport). NewSession is given context.Background() (never
+// expires); Exec is given a ctx with a short deadline. Before the fix,
+// resolveImport's moduleDecls branch ran the imported module's busy loop under
+// s.ctx (never expires), so the deadline on Exec's own ctx had no effect on the
+// import and the call ran the loop to completion instead of aborting. Run via
+// `select` + `time.After` per the repo's hang-test idiom (pool_test.go
+// TestDispatchRejectsCycleWithMemo) so a regression fails rather than wedging
+// the suite.
+func TestExecCtxBoundsImportExecution(t *testing.T) {
+	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	s.SetModuleDecls("busymod", busyLoopModuleSrc)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- s.Exec(ctx, `import "busymod";`)
+	}()
+
+	select {
+	case err := <-done:
+		require.Error(t, err, "want the import's execution to abort on the caller's ctx deadline")
+	case <-time.After(2 * time.Second):
+		t.Fatal("Exec did not return within bound: the import's ctx deadline was not honored")
+	}
 }

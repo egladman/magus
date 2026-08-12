@@ -20,9 +20,9 @@ import (
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/internal/symbols"
-	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 	"golang.org/x/mod/modfile"
@@ -143,10 +143,10 @@ func CatalogFingerprint() string {
 // allModuleEntries returns every stdlib module with its methods populated. The
 // summary view (empty name) carries only names, so each is re-queried for detail.
 func allModuleEntries() []types.ModuleEntry {
-	summary := std.DescribeModules("")
+	summary := hostmodules.Describe("")
 	out := make([]types.ModuleEntry, 0, len(summary))
 	for _, m := range summary {
-		out = append(out, std.DescribeModules(m.Name)...)
+		out = append(out, hostmodules.Describe(m.Name)...)
 	}
 	return out
 }
@@ -417,10 +417,12 @@ func SymbolGaps(ctx context.Context, ws types.Inspector, root string, cfg config
 	}
 	spells, err := ListSpells(ctx)
 	if err != nil {
+		log.WarnContext(ctx, "knowledge: symbol gap probe cannot list spells", slog.String("error", err.Error()))
 		return nil, false
 	}
 	projects, err := ws.ListProjects(ctx)
 	if err != nil {
+		log.WarnContext(ctx, "knowledge: symbol gap probe cannot list projects", slog.String("error", err.Error()))
 		return nil, false
 	}
 	return symbolGaps(ctx, symbolIngestInputs{

@@ -7,7 +7,7 @@ import (
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
-	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/std/encoding/json"
 )
 
 // RegisterJson builds the "json" module map and returns it.
@@ -18,7 +18,7 @@ func RegisterJson(ctx context.Context, sess *buzz.Session) vm.Value {
 	m := vm.NewMap()
 	m.MapSet("parse", vm.DirectValue("json.parse", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		s := Str(bzArgs, 0)
-		ret0, err := std.JSONParse(ctx, s)
+		ret0, err := json.JSONParse(ctx, s)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
@@ -27,7 +27,7 @@ func RegisterJson(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("stringify", vm.DirectValue("json.stringify", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		value := Any(bzArgs, 0)
 		indent := Str(bzArgs, 1)
-		ret0, err := std.JSONStringify(ctx, value, indent)
+		ret0, err := json.JSONStringify(ctx, value, indent)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}

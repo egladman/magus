@@ -147,8 +147,15 @@ type FunDecl struct {
 	// declares no `= expr` default. A call may omit any parameter that has one.
 	ParamDefaults []Node
 	RetAnnot      string // return type annotation; "" = unannotated
-	YieldAnnot    string // yield type annotation after *>; "" = non-fiber function
-	Body          *BlockStmt
+	// ErrAnnot is the error-set annotation after !> (fun f() > T !> ErrType {}).
+	// "" means the function declares no raise: a call to a raising function from
+	// its body must be try/catch-caught, never propagated. Non-"" is the
+	// authored error type name (or union); the checker does not currently type
+	// -check it against the throw sites, only its presence, which is what makes
+	// propagate-or-catch enforceable.
+	ErrAnnot   string
+	YieldAnnot string // yield type annotation after *>; "" = non-fiber function
+	Body       *BlockStmt
 	// Doc is the documentation comment block immediately preceding the
 	// declaration (see token.Token.Doc); "" when undocumented. Carried onto the
 	// compiled chunk so host code (spell resolution, magus describe/doctor) can
@@ -227,8 +234,10 @@ type IfExpr struct {
 	Else Node
 }
 
-// BlockExpr: from { stmts } — a block used as an expression. Its value is the
-// one an `out` statement inside it produces, or null if none runs.
+// BlockExpr: from { stmts } — a block used as an expression. Its value is the one
+// an `out` statement inside it produces. Every path must reach one: the checker
+// rejects a body that can fall off the end, because the value is consumed at the use
+// site and silently substituting null there is the divergence upstream refuses.
 type BlockExpr struct {
 	Pos
 	Body *BlockStmt
@@ -329,6 +338,10 @@ type MemberExpr struct {
 	// a static reader cannot: os\withEnv and someCtx.withEnv are otherwise the same
 	// node, and conflating them makes a host-module call look like a ctx declaration.
 	Namespaced bool
+	// TupleIndex marks the bare numeric form `t.0`, as opposed to the equivalent
+	// free-identifier spelling `t.@"0"`. Both resolve the field named "0", but only
+	// the bare form is restricted to tuples, so the two cannot be collapsed here.
+	TupleIndex bool
 }
 
 // IndexExpr: object[index]. Optional is set for the checked subscript form
@@ -365,8 +378,10 @@ type FunExpr struct {
 	// declares no `= expr` default. A call may omit any parameter that has one.
 	ParamDefaults []Node
 	RetAnnot      string // return type annotation; "" = unannotated
-	YieldAnnot    string // yield type annotation after *>; "" = non-fiber function
-	Body          *BlockStmt
+	// ErrAnnot is the error-set annotation after !>; see FunDecl.ErrAnnot.
+	ErrAnnot   string
+	YieldAnnot string // yield type annotation after *>; "" = non-fiber function
+	Body       *BlockStmt
 }
 
 // MapExpr: {"key": val, ...}. Mut is set for the `mut {…}` form (a mutable map);
@@ -391,6 +406,10 @@ type MapExpr struct {
 	// instance - with the object's methods and field defaults - instead of a map.
 	// Empty when the literal has no object to fill, which stays a map.
 	ObjectName string
+	// Tuple marks the positional form `.{ a, b }`, whose keys are the elements'
+	// decimal indexes rather than written field names. Upstream caps a tuple at
+	// four elements and forbids mixing the two forms in one literal.
+	Tuple bool
 }
 
 // ListExpr: [val, ...]. Mut is set for the `mut [...]` form (a mutable list); a

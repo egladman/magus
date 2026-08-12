@@ -85,6 +85,12 @@ type CFuncSig struct {
 	// it by reference — upstream's struct semantics ("always by reference").
 	IsStruct       bool
 	FieldTypeNames []string
+	// FieldNames is parallel to FieldTypeNames. A layout needs only the types, but
+	// a zdef struct is a constructible TYPE, so its fields must be nameable.
+	FieldNames []string
+	// IsUnion narrows IsStruct to the union spelling: same fields, but every one
+	// starts at offset 0 and the whole occupies the widest.
+	IsUnion bool
 }
 
 // FFIProvider binds parsed C function signatures from a shared library into
@@ -424,6 +430,33 @@ func FFIDeclNames(cdecl string) []string {
 		names = append(names, s.Name)
 	}
 	return names
+}
+
+// FFIStructDecls returns the `extern struct` declarations in a zdef cdecl string,
+// each carrying its field names and C type spellings. The compiler and checker use
+// it to synthesize a real object type per struct (see zdef_decl.go), which is what
+// makes `Data{ id = 1 }` construct and `typeof Data` name something.
+//
+// Returns nil on a parse error, like FFIDeclNames: the runtime zdef() call is where
+// that diagnostic belongs.
+func FFIStructDecls(cdecl string) []CFuncSig {
+	var sigs []CFuncSig
+	var err error
+	if looksLikeZigDecls(cdecl) {
+		sigs, err = ParseZigDecls(cdecl)
+	} else {
+		sigs, err = ParseCDecls(cdecl)
+	}
+	if err != nil {
+		return nil
+	}
+	var out []CFuncSig
+	for _, s := range sigs {
+		if s.IsStruct {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // builtinZdef is the Buzz `zdef(libname, cdecl)` built-in. It parses the C

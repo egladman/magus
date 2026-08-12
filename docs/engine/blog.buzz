@@ -21,7 +21,7 @@ import "engine/page" as _;
 // basename (e.g. "2026-07-01-hello-blog.md"); the URL is date-scoped blog/YYYY/MM/DD/slug/
 // (via blogURLPath), so permalinks sort by date and never collide across years. Post
 // metadata is captured into site.blogPosts for the index page.
-export fun renderBlogPost(base: str, site: Site) > void {
+export fun renderBlogPost(base: str, site: Site) > void !> any {
     final rel = site.blog + "/" + base;
     final f = io\File.open(site.root + "/" + rel, io\FileMode.read);
     final md = f.readAll();
@@ -88,7 +88,7 @@ export fun renderBlogPost(base: str, site: Site) > void {
     final of = io\File.open(site.outDir + "/" + site.blog + "/" + urlPath + "/index.html", io\FileMode.write);
     of.write(doc);
     of.close();
-    fs\writeFile(site.outDir + "/" + site.blog + "/" + urlPath + "/index.md", md);
+    fs\writeFile(fs\join(site.outDir, site.blog, urlPath, "index.md"), md);
 
     site.addRecord(url, title, desc, md);
     foreach (a in fm.q("aliases").listValue()) { site.collectAlias(a.stringValue(), url); }
@@ -105,11 +105,11 @@ export fun renderBlogPost(base: str, site: Site) > void {
 // renderBlogPager renders the prev/next links between posts, ordered by date newest-first
 // so "prev" is newer and "next" is older (timeline intuition). Falls back to filename order
 // when a post lacks a date.
-fun renderBlogPager(base: str, site: Site) > str {
+fun renderBlogPager(base: str, site: Site) > str !> any {
     // Rebuild the ordering deterministically from disk (site.blogPosts may be partial
     // during the walk). Newest first.
-    var posts: [BlogPost] = mut [<BlogPost>];
-    foreach (name in fs\list(site.root + "/" + site.blog)) {
+    var posts: mut [BlogPost] = mut [<BlogPost>];
+    foreach (name in fs\listDir(fs\join(site.root, site.blog))) {
         if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
             final f = io\File.open(site.root + "/" + site.blog + "/" + name, io\FileMode.read);
             final md = f.readAll();
@@ -164,7 +164,7 @@ fun renderBlogPager(base: str, site: Site) > str {
 // renderBlogIndex writes gen/blog/index.html, a reverse-chronological list of the collected
 // posts. Runs AFTER renderBlogPost has populated site.blogPosts. A plain <ul> under
 // renderPage(), so it inherits nav/breadcrumb/footer.
-export fun renderBlogIndex(site: Site) > void {
+export fun renderBlogIndex(site: Site) > void !> any {
     // Newest first, tiebreak by base for determinism.
     final sorted = site.blogPosts.sort(fun (a: BlogPost, b: BlogPost) > bool {
         if (a.date != b.date) { return strLess(b.date, a.date); }
@@ -172,7 +172,7 @@ export fun renderBlogIndex(site: Site) > void {
     });
 
     // View-model per post; date/description are optional (gated by hasDate/hasDesc).
-    var posts: [{str: any}] = mut [<{str: any}>];
+    var posts: mut [{str: any}] = mut [<{str: any}>];
     foreach (p in sorted) {
         final rec = mut {<str: any>};
         rec["urlPath"] = p.urlPath;
@@ -211,7 +211,7 @@ export fun renderBlogIndex(site: Site) > void {
         if (rec != null) { site.metaCommits[site.metaPrefix + site.blog + "/index.md"] = rec; }
     }
     final doc = renderPage(title, desc, body, site.blog + "/index.md", "", url, "", mut [], site);
-    fs\makeDirectory(site.outDir + "/" + site.blog);
+    fs\mkdirAll(fs\join(site.outDir, site.blog));
     final of = io\File.open(site.outDir + "/" + site.blog + "/index.html", io\FileMode.write);
     of.write(doc);
     of.close();

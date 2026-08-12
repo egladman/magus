@@ -144,12 +144,12 @@ export object Site {
     // file-imported renderer module. null is only this pre-injection placeholder.
     targets: TargetGraph = null,
 
-    // The PROJECT dependency DAG, injected the same way from magus.graph(). targets
+    // The PROJECT dependency DAG, injected the same way from magus.projectGraph(). targets
     // above carries the targets inside each project; this carries how the projects
     // themselves relate - nodes in topological order, each node's direct dependencies,
     // and its blast radius. /development/ needs both: one answers "what can I run in
     // this project", the other "what does changing it reach".
-    // Graph is the generated Buzz return type of magus.graph().
+    // Graph is the generated Buzz return type of magus.projectGraph().
     graph: Graph = null,
 
     // The site-specific config, injected once by site_render() from site/config.buzz.
@@ -166,28 +166,28 @@ export object Site {
     metaFull: str = "",
     metaShort: str = "",
     metaStamp: str = "",
-    metaCommits: {str: str} = mut {},
-    metaHistory: {str: [str]} = mut {},
+    metaCommits: mut {str: str},
+    metaHistory: mut {str: mut [str]},
     metaLoaded: bool = false,
 
     // One JSON-encoded search record per rendered page, joined into
     // gen/search-index.json at the end of a render, in the sorted walk order so the
     // index is deterministic and the drift gate stays stable.
-    searchRecords: [str] = mut [<str>],
+    searchRecords: mut [str],
 
     // URL-alias bookkeeping. aliasTarget maps a declared old path (frontmatter
     // aliases:) to the clean URL of the page that owns it; pageUrls is the set of
     // real written page URLs. Both feed the alias pass after the walk, which writes a
     // redirect stub per alias and throws on a collision.
-    aliasTarget: {str: str} = mut {},
-    pageUrls: {str: bool} = mut {},
+    aliasTarget: mut {str: str},
+    pageUrls: mut {str: bool},
 
     // Tag slugs that earned a /tags/<slug>/ page - carried by two or more pages. Populated
     // BEFORE the walk (collectTagIndex) because a tag chip renders during the walk and has to
     // know whether its destination will exist. A one-page tag gets no page: it would be a
     // redirect with extra steps, and 66% of this corpus's tags are one-page. Those chips keep
     // pointing at the search query, which is what a single-hit topic actually wants.
-    tagPages: {str: bool} = mut {},
+    tagPages: mut {str: bool},
 
     // url -> how many distinct KINDS of route reach this page: tree (a section index or an
     // overview ancestor), sequence (the pager), topic (a tag page). Counted per page during the
@@ -201,31 +201,31 @@ export object Site {
     // Related cards are deliberately excluded: they are computed from similarity rather than
     // authored, so counting them would let a page clear the floor with no editorial decision
     // behind it.
-    pageAxes: {str: int} = mut {},
+    pageAxes: mut {str: int},
 
     // Every gen-root-relative file this render actually wrote, populated at the choke points
     // that own a write (addRecord, writeAliases, renderAutoindex; a few one-off index.md
     // siblings track themselves). pruneStaleOutputs() diffs this against disk and deletes
     // leftovers from a previous run whose source is gone - so a rename or deletion cleans up
     // its old output without nuking and rebuilding the whole tree.
-    writtenPaths: {str: bool} = mut {},
+    writtenPaths: mut {str: bool},
 
     // Blog posts (consumed by the blog index, Atom feed, and pager). hasBlogPosts is
     // precomputed before the walk so an early page (README) can decide whether to
     // advertise the blog Atom feed in <head>.
-    blogPosts: [BlogPost] = mut [<BlogPost>],
+    blogPosts: mut [BlogPost],
     hasBlogPosts: bool = false,
 
     // Docs relatedness corpus, built pre-walk by collectDocPages so each page can
     // pick its Related neighbors.
-    docPages: [DocPage] = mut [<DocPage>],
+    docPages: mut [DocPage],
 
     // Glossary vocabulary, parsed pre-walk from glossary.md (longest term first). Each
     // rendered docs page auto-links the first occurrence of each term; glossaryRefs
     // accumulates which page URLs linked each anchor, emitted as glossary-index.json for
     // the term popover ("referenced on ...").
     glossaryTerms: [GlossaryTerm] = mut [<GlossaryTerm>],
-    glossaryRefs: {str: [str]} = mut {},
+    glossaryRefs: mut {str: mut [str]},
 
     // Documentation conventions, parsed pre-walk from conventions.md. Each rendered page gets
     // a subtle "?" hint next to a convention marker (an admonition title, a code caption)
@@ -239,7 +239,7 @@ export object Site {
     // fills DURING the walk and is only complete afterward, so it cannot drive an in-walk
     // Related block; this forward-built map can. Joined with "||" (never in an anchor slug)
     // so sharedTagCount counts the overlap without a second helper.
-    pageTerms: {str: str} = mut {},
+    pageTerms: mut {str: str},
 
     // Code-entity catalog (diagnostic codes, and later commands/methods/config), parsed
     // pre-walk. Each page auto-links the first inline-code occurrence of each entity to its
@@ -248,12 +248,12 @@ export object Site {
 
     // Concept docSlug -> the tour step that demonstrates it, built pre-walk (tour.collectDemos)
     // so a concept page can inject a "see the demo" callout linking to its tour card.
-    demoBySlug: {str: DemoLink} = mut {},
+    demoBySlug: mut {str: DemoLink},
 
     // Releases loaded from releases/*.yaml, for the Atom feed, announcement bar,
     // and /public/release/ artifact listing. Ordered newest-first (by file sort,
     // which matches semver descending for vX.Y.Z names).
-    releases: [Release] = mut [<Release>],
+    releases: mut [Release],
 
     // The default CSP meta content, computed once by computeCSP() at the top of
     // site_render() and threaded verbatim into every page's head EXCEPT home (non-home
@@ -273,7 +273,7 @@ export object Site {
     // alias pass catches a redirect shadowing a real page). Also records the index.html in
     // writtenPaths (root's url is bare "index.html", every other ends in "/") so
     // pruneStaleOutputs knows the page is current.
-    fun addRecord(url: str, title: str, desc: str, md: str) > void {
+    fun addRecord(url: str, title: str, desc: str, md: str) > void !> any {
         this.pageUrls[url] = true;
         var filePath = url;
         if (filePath.endsWith("/")) { filePath = filePath + "index.html"; }
@@ -305,7 +305,7 @@ export object Site {
     // writeAliases writes one redirect stub per collected alias (after the walk, so
     // every real page URL is known for the collision guard). It throws if an alias
     // would shadow a real generated page.
-    fun writeAliases() > void {
+    fun writeAliases() > void !> any {
         foreach (a in this.aliasTarget.keys()) {
             if (this.pageUrls[a + "/"] != null or this.pageUrls[a] != null) {
                 throw "alias \"" + a + "\" collides with a real page at the same path";
@@ -313,14 +313,14 @@ export object Site {
             makeOutputDir(this.outDir + "/" + a, "alias \"" + a + "\"", a + "/");
             final rel = relativePath(a, this.aliasTarget[a]);
             final csp = cspForRedirectStub(redirectScript(rel));
-            fs\writeFile(this.outDir + "/" + a + "/index.html", aliasStub(rel, csp));
+            fs\writeFile(fs\join(this.outDir, a, "index.html"), aliasStub(rel, csp));
             this.writtenPaths[a + "/index.html"] = true;
         }
     }
 
     // collectDocPage reads one docs page's frontmatter into a DocPage on docPages
     // (the relatedness/breadcrumb corpus). rel is the path under docs/.
-    fun collectDocPage(rel: str) > void {
+    fun collectDocPage(rel: str) > void !> any {
         final f = io\File.open(this.root + "/" + this.docs + "/" + rel, io\FileMode.read);
         final md = f.readAll();
         f.close();
@@ -350,10 +350,10 @@ export object Site {
 
     // collectDocPages walks the docs/ subtree (same order as walk()) filling docPages
     // before any page renders, so renderRelated() sees the whole corpus.
-    fun collectDocPages(rel: str) > void {
+    fun collectDocPages(rel: str) > void !> any {
         var dir = this.root + "/" + this.docs;
         if (rel != "") { dir = this.root + "/" + this.docs + "/" + rel; }
-        foreach (name in fs\list(dir)) {
+        foreach (name in fs\listDir(dir)) {
             var childRel = name;
             if (rel != "") { childRel = rel + "/" + name; }
             if (isDirectory(this.root + "/" + this.docs + "/" + childRel)) {
@@ -372,7 +372,7 @@ export object Site {
     // /public/, and /development/ get their own flat trails; docs pages hang off the
     // documentation index, each intermediate crumb showing the linked page's real
     // title (looked up in docPages via lookupTitle).
-    fun renderBreadcrumb(srcRel: str, title: str, root: str) > str {
+    fun renderBreadcrumb(srcRel: str, title: str, root: str) > str !> any {
         if (srcRel == "README.md") { return ""; }
         // Each branch below builds its own crumb <li>s; this template wraps whichever list.
         // li injects raw - it is assembled markup, not a value to escape.
@@ -454,7 +454,7 @@ export object Site {
         while (i < dirCount) {
             final seg = segs[i];
             if (acc == "") { acc = seg; } else { acc = acc + "/" + seg; }
-            var label = capitalizeFirst(seg);
+            final label = capitalizeFirst(seg);
             final t = this.lookupTitle(acc + "/");
             if (t != "") {
                 li = li + "<li><a href=\"" + root + acc + "/\">" + t + "</a></li>";
@@ -477,7 +477,7 @@ export object Site {
     // documentation index +1) as the tiebreaker. It leads with the nearest-ancestor
     // overview. Up to four cards; ties (same term overlap AND same tag signal) broken by
     // URL for stability.
-    fun renderRelated(srcRel: str, root: str) > str {
+    fun renderRelated(srcRel: str, root: str) > str !> any {
         var curTags = "";
         var curSection = "";
         var curUrl = "";
@@ -498,8 +498,8 @@ export object Site {
 
         // picks is the final ordered card list; used dedups by URL (a page never links
         // to itself or lists the same neighbor twice).
-        var picks: [{str: any}] = mut [<{str: any}>];
-        var used: {str: bool} = mut {};
+        var picks: mut [{str: any}] = mut [<{str: any}>];
+        var used: mut {str: bool} = mut {};
         used[curUrl] = true;
 
         // Stage 1: lead with the nearest-ancestor overview - the overview page whose
@@ -529,7 +529,7 @@ export object Site {
         // the shared-term overlap in the high digits and the tag/section signal in the low
         // digits, so a lexical compare ranks by shared vocabulary first and falls back to
         // the tag signal, then to URL. A page qualifies when either signal is positive.
-        var scored: [{str: str}] = mut [<{str: str}>];
+        var scored: mut [{str: str}] = mut [<{str: str}>];
         foreach (p in this.docPages) {
             if (used[p.url] == null) {
                 var tagSignal = 3 * sharedTagCount(curTags, p.tags);
@@ -579,7 +579,7 @@ export object Site {
     // page, it falls back to listing its OWN direct children (a non-overview parent like
     // concepts/targets/ still gets a down-axis). "" when the page is a leaf with no children.
     // curUrl is the page's clean URL; root is its gen-root-relative prefix.
-    fun renderSectionNav(srcRel: str, curUrl: str, root: str) > str {
+    fun renderSectionNav(srcRel: str, curUrl: str, root: str) > str !> any {
         if (curUrl == "") { return ""; }
         // The section root: this page if it is itself an overview, else the longest
         // overview-URL prefix of this page's URL (the nearest-ancestor overview).
@@ -605,7 +605,7 @@ export object Site {
 
         // Direct children: pages whose clean URL is exactly one path segment deeper than
         // the section root (so a grandchild does not surface in a parent's list).
-        var kids: [{str: str}] = mut [<{str: str}>];
+        var kids: mut [{str: str}] = mut [<{str: str}>];
         foreach (p in this.docPages) {
             if (p.url != rootUrl and p.url.startsWith(rootUrl)) {
                 final rest = p.url.sub(rootUrl.len());
@@ -619,7 +619,7 @@ export object Site {
 
         // Render through Mustache so {{title}} is HTML-escaped in both the link text and the
         // title attribute.
-        var picks: [{str: any}] = mut [<{str: any}>];
+        var picks: mut [{str: any}] = mut [<{str: any}>];
         foreach (k in ordered) {
             picks.append(mut {"url": k["url"], "title": k["title"], "current": k["url"] == curUrl});
         }
@@ -644,11 +644,11 @@ export object Site {
     //
     // Depth is carried as an indent class rather than nested <ul>s, so the markup
     // stays one flat list a screen reader reads in order.
-    fun renderSubtree(curUrl: str, root: str) > str {
+    fun renderSubtree(curUrl: str, root: str) > str !> any {
         if (curUrl == "") { return ""; }
 
         // Every descendant, with its depth relative to this page.
-        var rows: [{str: any}] = mut [<{str: any}>];
+        var rows: mut [{str: any}] = mut [<{str: any}>];
         var deepest = 0;
         foreach (p in this.docPages) {
             if (p.url == curUrl or p.url.startsWith(curUrl) == false) { continue; }
@@ -667,7 +667,7 @@ export object Site {
         final ordered = rows.sort(fun (a: {str: any}, b: {str: any}) > bool {
             return strLess("" + a["url"], "" + b["url"]);
         });
-        var picks: [{str: any}] = mut [<{str: any}>];
+        var picks: mut [{str: any}] = mut [<{str: any}>];
         foreach (r in ordered) {
             picks.append(mut {"url": r["url"], "title": r["title"], "depth": "" + r["depth"]});
         }
@@ -716,7 +716,7 @@ export object Site {
             // Which glossary terms this page MENTIONS - a native indexOf sweep over the raw
             // markdown (no second markdown render), so it stays fast over the whole corpus.
             // Any mention counts; this feeds relatedness ranking, not the on-page links.
-            final hits: [str] = mut [<str>];
+            final hits: mut [str] = mut [<str>];
             foreach (t in this.glossaryTerms) {
                 if (md.indexOf(t.term.lower()) != null) { hits.append(t.anchor); }
             }
@@ -732,7 +732,7 @@ export object Site {
 
     // fileDescription reads a doc file's frontmatter `description` (the entity popover
     // summary), or "" if absent.
-    fun fileDescription(path: str) > str {
+    fun fileDescription(path: str) > str !> any {
         final f = io\File.open(path, io\FileMode.read);
         final md = f.readAll();
         f.close();
@@ -744,15 +744,15 @@ export object Site {
     // commands (reference/manpage/magus-<sub>.md -> "magus <sub>"). token = the string matched
     // in inline code, url = its clean page, summary = its frontmatter description. Sorted
     // longest-match-first so "magus affected ci" wins over "magus affected".
-    fun collectEntities() > void {
-        final ents: [Entity] = mut [<Entity>];
+    fun collectEntities() > void !> any {
+        final ents: mut [Entity] = mut [<Entity>];
 
         final codesBase = this.root + "/" + this.docs + "/reference/codes";
         if (isDirectory(codesBase)) {
-            foreach (group in fs\list(codesBase)) {
+            foreach (group in fs\listDir(codesBase)) {
                 final gdir = codesBase + "/" + group;
                 if (isDirectory(gdir) == false) { continue; }
-                foreach (name in fs\list(gdir)) {
+                foreach (name in fs\listDir(gdir)) {
                     if (name.endsWith(".md") == false or name == "index.md" or name == "README.md") { continue; }
                     final code = name.sub(0, len: name.len() - 3);
                     ents.append(Entity{
@@ -767,7 +767,7 @@ export object Site {
 
         final manBase = this.root + "/" + this.docs + "/reference/manpage";
         if (isDirectory(manBase)) {
-            foreach (name in fs\list(manBase)) {
+            foreach (name in fs\listDir(manBase)) {
                 if (name.startsWith("magus-") == false or name.endsWith(".md") == false) { continue; }
                 final base = name.sub(0, len: name.len() - 3);   // "magus-run"
                 final sub = base.sub(6);                          // "run"
@@ -802,7 +802,7 @@ export object Site {
         // (backslash-namespaced, so it never collides with prose), anchor = its goldmark slug.
         final buzzBase = this.root + "/" + this.docs + "/reference/buzz";
         if (isDirectory(buzzBase)) {
-            foreach (name in fs\list(buzzBase)) {
+            foreach (name in fs\listDir(buzzBase)) {
                 if (name.endsWith(".md") == false or name == "index.md" or name == "README.md") { continue; }
                 final mod = name.sub(0, len: name.len() - 3);
                 final f = io\File.open(buzzBase + "/" + name, io\FileMode.read);
@@ -884,8 +884,8 @@ export object Site {
             // an anchor with no text, unclickable and silent to a screen reader.
             // Dropping the untitled spelling both fixes that and de-duplicates the
             // home page, which would otherwise be listed twice under one term.
-            var seen: {str: bool} = mut {};
-            final bySection = mut {<str: [{str: str}]>};
+            var seen: mut {str: bool} = mut {};
+            final bySection = mut {<str: mut [{str: str}]>};
             var count = 0;
             foreach (u in urls!) {
                 final title = this.lookupTitle(u);
@@ -946,14 +946,44 @@ export object Site {
 // flat imports, or standalone (`magus buzz -t --embedded engine/types.buzz`). Buzz's == is
 // identity for maps, so assert.equal does the value comparison.
 test "Site.collectAlias trims slashes and records every alias" {
-    final s = mut Site{};
+    final s = mut Site{
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        glossaryRefs = mut {},
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
     s.collectAlias("/old-path/", "new-path/");
     s.collectAlias("same", "same/");
     assert\equal(s.aliasTarget, {"old-path": "new-path/", "same": "same/"}, "both aliases recorded with slashes trimmed");
 }
 
 test "Site.addRecord marks the URL written and appends one search record" {
-    final s = mut Site{};
+    final s = mut Site{
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        glossaryRefs = mut {},
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
     s.addRecord("guide/", "Guide", "", "---\ntitle: Guide\n---\nBody text.");
     assert\equal(s.pageUrls, {"guide/": true}, "url marked written");
     assert\len(s.searchRecords, 1, "one search record appended");
@@ -964,7 +994,22 @@ test "Site.addRecord marks the URL written and appends one search record" {
 
 
 test "renderSectionNav lists an overview's direct children and marks the current page" {
-    final s = mut Site{};
+    final s = mut Site{
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        glossaryRefs = mut {},
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
     s.docPages.append(DocPage{ url = "spells/", title = "Spells", srcRel = "docs/spells.md", overview = true, section = "spells" });
     s.docPages.append(DocPage{ url = "spells/go/", title = "go", srcRel = "docs/spells/go.md", section = "spells" });
     s.docPages.append(DocPage{ url = "spells/bash/", title = "bash", srcRel = "docs/spells/bash.md", section = "spells" });
@@ -980,14 +1025,44 @@ test "renderSectionNav lists an overview's direct children and marks the current
 }
 
 test "renderSectionNav returns empty for a childless page with no overview ancestor" {
-    final s = mut Site{};
+    final s = mut Site{
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        glossaryRefs = mut {},
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
     s.docPages.append(DocPage{ url = "targets/", title = "Targets", srcRel = "docs/targets.md", section = "targets" });
     s.docPages.append(DocPage{ url = "cache/", title = "Cache", srcRel = "docs/cache.md", section = "cache" });
     assert\equal(s.renderSectionNav("docs/targets.md", "targets/", "../"), "", "no section nav for a leaf with no children");
 }
 
 test "renderSectionNav lists a non-overview parent's own direct children" {
-    final s = mut Site{};
+    final s = mut Site{
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        glossaryRefs = mut {},
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
     // targets/ is NOT an overview and has no overview ancestor, but it is a parent.
     s.docPages.append(DocPage{ url = "targets/", title = "Targets", srcRel = "docs/targets.md", section = "targets" });
     s.docPages.append(DocPage{ url = "targets/ci/", title = "CI", srcRel = "docs/targets/ci.md", section = "targets" });
@@ -999,7 +1074,22 @@ test "renderSectionNav lists a non-overview parent's own direct children" {
 }
 
 test "renderRelated ranks neighbors by shared glossary terms over shared tags" {
-    final s = mut Site{};
+    final s = mut Site{
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        glossaryRefs = mut {},
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
     s.docs = "docs";
     s.docPages.append(DocPage{ url = "concepts/cache/", title = "Cache", srcRel = "docs/concepts/cache.md", section = "concepts", tags = "a||b" });
     // Shares 2 glossary terms with cache, no tags.
@@ -1019,7 +1109,22 @@ test "renderRelated ranks neighbors by shared glossary terms over shared tags" {
 }
 
 test "renderSubtree lists the whole branch, nested by depth" {
-    final s = mut Site{};
+    final s = mut Site{
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        glossaryRefs = mut {},
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
     s.docPages.append(DocPage{ url = "concepts/", title = "Concepts", srcRel = "docs/concepts.md", overview = true, section = "concepts" });
     s.docPages.append(DocPage{ url = "concepts/targets/", title = "Targets", srcRel = "docs/concepts/targets.md", section = "concepts" });
     s.docPages.append(DocPage{ url = "concepts/targets/ci/", title = "CI", srcRel = "docs/concepts/targets/ci.md", section = "concepts" });
@@ -1034,7 +1139,22 @@ test "renderSubtree lists the whole branch, nested by depth" {
 }
 
 test "renderSubtree stays quiet when it would repeat the section list" {
-    final s = mut Site{};
+    final s = mut Site{
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        glossaryRefs = mut {},
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
     // Only direct children: renderSectionNav already shows exactly this.
     s.docPages.append(DocPage{ url = "guides/", title = "Guides", srcRel = "docs/guides.md", overview = true, section = "guides" });
     s.docPages.append(DocPage{ url = "guides/mcp/", title = "MCP", srcRel = "docs/guides/mcp.md", section = "guides" });
@@ -1043,7 +1163,22 @@ test "renderSubtree stays quiet when it would repeat the section list" {
 }
 
 test "renderSubtree refuses to become a wall of links" {
-    final s = mut Site{};
+    final s = mut Site{
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        glossaryRefs = mut {},
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
     s.docPages.append(DocPage{ url = "all/", title = "All", srcRel = "docs/all.md", overview = true, section = "all" });
     // One deep child so the depth guard passes, then enough rows to trip the cap.
     s.docPages.append(DocPage{ url = "all/deep/child/", title = "Deep", srcRel = "docs/all/deep/child.md", section = "all" });

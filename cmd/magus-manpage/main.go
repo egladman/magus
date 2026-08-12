@@ -224,7 +224,7 @@ func writeEnvSectionMD(m *mdBuf) {
 func writeFilesSectionMD(m *mdBuf) {
 	m.h2("Files")
 	m.def(mdB("magus.yaml")+", "+mdB(".magus.yaml"), mdEsc(filesConfig))
-	m.def(mdB(".magus-cache/"), mdEsc(filesCache))
+	m.def(mdB(".magus/"), mdEsc(filesCache))
 }
 
 func writeSeeAlsoMD(m *mdBuf, currentName string) {

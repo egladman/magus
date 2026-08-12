@@ -49,7 +49,7 @@ magus uses this package as the base layer and then exposes a **superset**:
 ```text
 import "os"  in a magusfile
   ├── os.sleep / os.time / os.env / os.execute / …   ← gopherbuzz/std (this package)
-  └── os.exec / os.which / os.retry / os.with_env / …← magus/std (host methods)
+  └── proc.exec / proc.which / os.retry / os.with_env / …← magus/std (host methods)
 ```
 
 magus registers this package first, then layers its host methods onto the same

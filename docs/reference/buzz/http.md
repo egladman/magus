@@ -1,13 +1,13 @@
 ---
 title: http module
 aliases: [modules/http]
-description: HTTP client with automatic retry on transient errors.
+description: HTTP client.
 tags: [http, module, stdlib, magusfile]
 ---
 
 # http
 
-HTTP client with automatic retry on transient errors.
+HTTP client. Requests run ONCE unless given a retry policy.
 
 > **Naming convention:** import the module under its bare name (`import "http"`), reach members with a backslash, and call methods in `camelCase`: `http\someMethod`.
 
@@ -20,15 +20,16 @@ HTTP client with automatic retry on transient errors.
 
 ### get
 
-Send a GET request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).
+Send a GET request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry argument; without one the request runs exactly once.
 
-**Signature:** `http\get(url, [headers], [opts]) → HttpResponse` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L111)
+**Signature:** `http\get(url, [headers], [opts], [retry]) → HttpResponse` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L169)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
 | `url` | `string` |  | |
 | `headers` | `map[string]string` | yes | |
 | `opts` | `map[string]any` | yes | |
+| `retry` | `map[string]any` | yes | |
 
 **Returns:** map[string]any
 
@@ -43,11 +44,27 @@ std\print(r.status);
 std\print(r.body.sub(0, 80) + "...");
 ```
 
+### download
+
+GET url and stream the response body straight to dest, returning the HTTP status. The body never becomes a Buzz string, so arbitrary binary (a release tarball, an image layer) survives intact and a large file costs no proportional memory. A non-2xx status writes nothing. Pair it with crypto.sha256_file to verify what you fetched before using it. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry argument; without one the request runs exactly once.
+
+**Signature:** `http\download(url, dest, [headers], [opts], [retry]) → int` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L183)
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `url` | `string` |  | |
+| `dest` | `string` |  | |
+| `headers` | `map[string]string` | yes | |
+| `opts` | `map[string]any` | yes | |
+| `retry` | `map[string]any` | yes | |
+
+**Returns:** int
+
 ### post
 
-Send a POST request with body; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).
+Send a POST request with body; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry argument; without one the request runs exactly once.
 
-**Signature:** `http\post(url, body, [headers], [opts]) → HttpResponse` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L117)
+**Signature:** `http\post(url, body, [headers], [opts], [retry]) → HttpResponse` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L244)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -55,6 +72,7 @@ Send a POST request with body; returns {status, body, headers}. opts (curl-style
 | `body` | `string` |  | |
 | `headers` | `map[string]string` | yes | |
 | `opts` | `map[string]any` | yes | |
+| `retry` | `map[string]any` | yes | |
 
 **Returns:** map[string]any
 
@@ -63,21 +81,23 @@ Send a POST request with body; returns {status, body, headers}. opts (curl-style
 ```buzz
 import "http";
 
-// Post JSON with a curl-style opts map for retry behavior.
+// Post JSON. opts carries the curl-style settings; retrying is a separate,
+// typed HttpRetry argument, and without one the request runs exactly once.
 // Escape { and } as \{ \} so Buzz does not try to interpolate them.
 final r = http\post(
     "https://httpbin.org/post",
     "\{\"target\":\"build\"\}",
     {"Content-Type": "application/json"},
-    {"retry": 3, "timeout": 10},
+    {"timeout": 10},
+    http\HttpRetry{ attempts = 3, delay_ms = 500.0 },
 );
 ```
 
 ### request
 
-Send an HTTP request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).
+Send an HTTP request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry argument; without one the request runs exactly once.
 
-**Signature:** `http\request(method, url, [body], [headers], [opts]) → HttpResponse` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L123)
+**Signature:** `http\request(method, url, [body], [headers], [opts], [retry]) → HttpResponse` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L250)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -86,6 +106,7 @@ Send an HTTP request; returns {status, body, headers}. opts (curl-style): fail, 
 | `body` | `string` | yes | |
 | `headers` | `map[string]string` | yes | |
 | `opts` | `map[string]any` | yes | |
+| `retry` | `map[string]any` | yes | |
 
 **Returns:** map[string]any
 
@@ -108,7 +129,7 @@ final r = http\request(
 
 Start a static file server in the background from an options map and return the bound port. opts keys: dir (string) serves a single directory; OR mounts (a map of URL-prefix -> dir, e.g. {"/": "docs/gen", "/console/": "console/gen"}) serves multiple roots where a request routes to the LONGEST matching prefix, so "/console/" wins over "/" for a /console/ path and the matched prefix is stripped before the file lookup. Exactly one of dir or mounts is required. port (int, optional) binds that port; 0 (the default) scans upward from 8080 and binds the first available one. Unknown keys are rejected. Serves localhost only and runs until the process exits, so pair it with a blocking call like fs.watch.
 
-**Signature:** `http\server(opts) → int` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L135)
+**Signature:** `http\server(opts) → int` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L262)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -125,4 +146,32 @@ import "http";
 // Blocks until the process exits.
 http\server({"dir": "dist/", "port": 8080});
 ```
+
+### byteSize
+
+Byte length of the file at path. The companion to uploadChunked: the size a Content-Range needs, which len() on a Buzz string cannot give for binary data.
+
+**Signature:** `http\byteSize(path) → int`
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `path` | `string` |  | |
+
+**Returns:** int
+
+### upload_chunked
+
+Send the file at src as the request body. chunk_size > 0 sends it in slices (capped at 32 MiB), each carrying a Content-Range header - the resumable-upload convention GitHub Actions Cache and RFC 7233 servers expect; chunk_size <= 0 sends it in one request. Returns the final [status, body].
+
+**Signature:** `http\upload_chunked(method, url, src, chunk_size, [headers]) → any`
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `method` | `string` |  | |
+| `url` | `string` |  | |
+| `src` | `string` |  | |
+| `chunk_size` | `int` |  | |
+| `headers` | `map[string]string` | yes | |
+
+**Returns:** any
 

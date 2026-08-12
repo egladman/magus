@@ -47,13 +47,13 @@ func TestStringMethodSemantics(t *testing.T) {
 		src  string
 		want string
 	}{
-		{"len counts runes not bytes", `return "héllo".len();`, "5"},
+		{"len counts BYTES, as upstream does", `return "héllo".len();`, "6"},
 		{"upper", `return "hé11o".upper();`, "HÉ11O"},
 		{"lower", `return "HÉLLO".lower();`, "héllo"},
 		{"trim strips unicode space", "return \"\\t hi \\n\".trim();", "hi"},
 		{"byte returns rune at index", `return "abc".byte(1);`, "98"},
 		{"byte defaults to index 0", `return "abc".byte();`, "97"},
-		{"indexOf found returns rune index", `return "héllo".indexOf("llo");`, "2"},
+		{"indexOf returns a BYTE index", `return "héllo".indexOf("llo");`, "3"},
 		{"indexOf missing returns null", `return "abc".indexOf("zzz");`, "null"},
 		{"startsWith true", `return "hello".startsWith("he");`, "true"},
 		{"startsWith false", `return "hello".startsWith("lo");`, "false"},
@@ -80,7 +80,7 @@ func TestStringMethodSemantics(t *testing.T) {
 		{"sub start past end is empty", `return "hi".sub(10);`, ""},
 		{"sub len past end clamps", `return "hi".sub(1, 99);`, "i"},
 		{"sub negative len is empty", `return "hello".sub(1, 0 - 1);`, ""},
-		{"sub on non-ascii uses rune indexes", `return "héllo".sub(1, 2);`, "él"},
+		{"sub takes BYTE offsets", `return "héllo".sub(1, 2);`, "é"},
 		{"repeat", `return "ab".repeat(3);`, "ababab"},
 		{"repeat zero is empty", `return "ab".repeat(0);`, ""},
 		{"repeat negative clamps to empty", `return "ab".repeat(0 - 1);`, ""},

@@ -44,11 +44,11 @@ func arith(vm *VM, op OpCode, left, right Value) (Value, error) {
 			leftMap, rightMap := left.asMap(), right.asMap()
 			out := NewMap()
 			merged := out.asMap()
-			for i, k := range leftMap.Keys {
-				merged.set(k, leftMap.Vals[i])
+			for i, k := range leftMap.keyVals {
+				merged.setVal(k, leftMap.Vals[i])
 			}
-			for i, k := range rightMap.Keys {
-				merged.set(k, rightMap.Vals[i])
+			for i, k := range rightMap.keyVals {
+				merged.setVal(k, rightMap.Vals[i])
 			}
 			return out, nil
 		}
@@ -259,8 +259,7 @@ func asInt(v Value) (int64, bool) {
 	}
 }
 
-// indexGet evaluates obj[idx] for lists (int) and maps (string key).
-// Note: map keys are always stringified, so m[1] and m["1"] collide.
+// indexGet evaluates obj[idx] for lists (int) and maps (any key; see mapKeyEqual).
 // indexGet evaluates obj[idx]. When optional is set (the checked subscript form
 // obj[?idx]), an out-of-bounds list/str index yields null instead of an error.
 func indexGet(vm *VM, obj, idx Value, optional bool) (Value, error) {
@@ -295,7 +294,7 @@ func indexGet(vm *VM, obj, idx Value, optional bool) (Value, error) {
 		return StrValue(string(runes[i])), nil
 	case tagMap:
 		m := vm.asMap(obj)
-		if v, ok := m.get(idx.String()); ok {
+		if v, ok := m.getVal(idx); ok {
 			return v, nil
 		}
 		return Null, nil
@@ -332,7 +331,7 @@ func setIndex(vm *VM, obj, idx, val Value) error {
 		if !m.Mut {
 			return errImmutable("map")
 		}
-		m.set(idx.String(), val)
+		m.setVal(idx, val)
 		return nil
 	default:
 		return fmt.Errorf("buzz: cannot index-assign %s", obj.buzzKind())
@@ -567,7 +566,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 				start = 0
 			}
 			if start > len(lo.Items) {
-				return ListValue(nil), nil
+				return listValue(nil, lo.Mut), nil
 			}
 			end := len(lo.Items)
 			if len(args) >= 2 && args[1].IsInt() {
@@ -581,7 +580,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 			}
 			cp := make([]Value, end-start)
 			copy(cp, lo.Items[start:end])
-			return ListValue(cp), nil
+			return listValue(cp, lo.Mut), nil
 		})
 	case "indexOf":
 		return newDirect("list.indexOf", func(_ context.Context, args []Value) (Value, error) {
@@ -653,7 +652,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 					out = append(out, it)
 				}
 			}
-			return ListValue(out), nil
+			return listValue(out, lo.Mut), nil
 		})
 	case "reduce":
 		return newDirect("list.reduce", func(ctx context.Context, args []Value) (Value, error) {
@@ -717,7 +716,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 			for i, v := range lo.Items {
 				cp[len(lo.Items)-1-i] = v
 			}
-			return ListValue(cp), nil
+			return listValue(cp, lo.Mut), nil
 		})
 	case "fill":
 		// fill(value, start: int?, len: int?) - upstream fills a RANGE, defaulting to
@@ -758,7 +757,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 		return newDirect("list."+name, func(_ context.Context, _ []Value) (Value, error) {
 			cp := make([]Value, len(lo.Items))
 			copy(cp, lo.Items)
-			return heapValue(tagList, &listObj{Items: cp, Mut: mut}), nil
+			return listValue(cp, mut), nil
 		})
 	}
 	return nil
@@ -795,27 +794,21 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			return IntValue(int64(len(mp.Keys))), nil
 		})
 	case "remove":
+		// Upstream: "Removes `at` and returns its value, or null when the key is
+		// absent." `at` is typed K, so it takes whatever the map is keyed by.
 		return newDirect("map.remove", func(_ context.Context, args []Value) (Value, error) {
-			if len(args) < 1 || !args[0].IsStr() {
-				return Null, fmt.Errorf("map.remove: requires a str key argument")
+			if len(args) < 1 {
+				return Null, fmt.Errorf("map.remove: requires a key argument")
 			}
-			key := args[0].AsString()
-			for i, k := range mp.Keys {
-				if k == key {
-					removed := mp.Vals[i]
-					mp.Keys = append(mp.Keys[:i], mp.Keys[i+1:]...)
-					mp.Vals = append(mp.Vals[:i], mp.Vals[i+1:]...)
-					return removed, nil
-				}
+			if i := mp.indexOfVal(args[0]); i >= 0 {
+				return mp.removeAt(i), nil
 			}
 			return Null, nil
 		})
 	case "keys":
 		return newDirect("map.keys", func(_ context.Context, _ []Value) (Value, error) {
-			out := make([]Value, len(mp.Keys))
-			for i, k := range mp.Keys {
-				out[i] = StrValue(k)
-			}
+			out := make([]Value, len(mp.keyVals))
+			copy(out, mp.keyVals)
 			return ListValue(out), nil
 		})
 	case "values":
@@ -830,8 +823,8 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 				return Null, fmt.Errorf("map.forEach: requires a callback function")
 			}
 			cb := args[0]
-			for i, k := range mp.Keys {
-				if _, err := callValue(vm, ctx, cb, []Value{StrValue(k), mp.Vals[i]}); err != nil {
+			for i, k := range mp.keyVals {
+				if _, err := callValue(vm, ctx, cb, []Value{k, mp.Vals[i]}); err != nil {
 					return Null, err
 				}
 			}
@@ -849,8 +842,8 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			}
 			cb := args[0]
 			out := NewMap()
-			for i, k := range mp.Keys {
-				entry, err := callValue(vm, ctx, cb, []Value{StrValue(k), mp.Vals[i]})
+			for i, k := range mp.keyVals {
+				entry, err := callValue(vm, ctx, cb, []Value{k, mp.Vals[i]})
 				if err != nil {
 					return Null, err
 				}
@@ -862,7 +855,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 				if newKey.tag() == tagNull {
 					return Null, fmt.Errorf("map.map: the callback must return a record with a `key` member, got %s", entry.buzzKind())
 				}
-				out.MapSet(newKey.String(), newVal)
+				out.asMap().setVal(newKey, newVal)
 			}
 			return out, nil
 		})
@@ -872,14 +865,14 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 				return Null, fmt.Errorf("map.filter: requires a callback function")
 			}
 			cb := args[0]
-			out := NewMap()
-			for i, k := range mp.Keys {
-				v, err := callValue(vm, ctx, cb, []Value{StrValue(k), mp.Vals[i]})
+			out := mapValue(mp.Mut)
+			for i, k := range mp.keyVals {
+				v, err := callValue(vm, ctx, cb, []Value{k, mp.Vals[i]})
 				if err != nil {
 					return Null, err
 				}
 				if v.Bool() {
-					out.MapSet(k, mp.Vals[i])
+					out.asMap().setVal(k, mp.Vals[i])
 				}
 			}
 			return out, nil
@@ -891,8 +884,8 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			}
 			cb := args[0]
 			acc := args[1]
-			for i, k := range mp.Keys {
-				v, err := callValue(vm, ctx, cb, []Value{StrValue(k), mp.Vals[i], acc})
+			for i, k := range mp.keyVals {
+				v, err := callValue(vm, ctx, cb, []Value{k, mp.Vals[i], acc})
 				if err != nil {
 					return Null, err
 				}
@@ -905,7 +898,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("map.hasKey: requires 1 argument")
 			}
-			_, ok := mp.get(args[0].String())
+			_, ok := mp.getVal(args[0])
 			return BoolValue(ok), nil
 		})
 	case "clone", "cloneMutable", "cloneImmutable", "copyMutable", "copyImmutable":
@@ -913,12 +906,11 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 		// and copyImmutable are upstream's aliases for the two clone forms.
 		mut := name == "cloneMutable" || name == "copyMutable"
 		return newDirect("map."+name, func(_ context.Context, _ []Value) (Value, error) {
-			nm := newMapObj()
-			nm.Mut = mut
-			for i, k := range mp.Keys {
-				nm.set(k, mp.Vals[i])
+			nm := mapValue(mut)
+			for i, k := range mp.keyVals {
+				nm.asMap().setVal(k, mp.Vals[i])
 			}
-			return vm.allocMap(nm), nil
+			return nm, nil
 		})
 	case "diff":
 		return newDirect("map.diff", func(_ context.Context, args []Value) (Value, error) {
@@ -926,10 +918,10 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 				return Null, fmt.Errorf("map.diff: requires a map argument")
 			}
 			other := args[0]
-			out := NewMap()
-			for i, k := range mp.Keys {
-				if _, ok := other.MapGet(k); !ok {
-					out.MapSet(k, mp.Vals[i])
+			out := mapValue(mp.Mut)
+			for i, k := range mp.keyVals {
+				if _, ok := other.asMap().getVal(k); !ok {
+					out.asMap().setVal(k, mp.Vals[i])
 				}
 			}
 			return out, nil
@@ -940,10 +932,10 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 				return Null, fmt.Errorf("map.intersect: requires a map argument")
 			}
 			other := args[0]
-			out := NewMap()
-			for i, k := range mp.Keys {
-				if _, ok := other.MapGet(k); ok {
-					out.MapSet(k, mp.Vals[i])
+			out := mapValue(mp.Mut)
+			for i, k := range mp.keyVals {
+				if _, ok := other.asMap().getVal(k); ok {
+					out.asMap().setVal(k, mp.Vals[i])
 				}
 			}
 			return out, nil
@@ -959,19 +951,20 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			}
 			cb := args[0]
 			type pair struct {
-				k string
-				v Value
+				display string
+				k       Value
+				v       Value
 			}
 			pairs := make([]pair, len(mp.Keys))
-			for i, k := range mp.Keys {
-				pairs[i] = pair{k, mp.Vals[i]}
+			for i, k := range mp.keyVals {
+				pairs[i] = pair{mp.Keys[i], k, mp.Vals[i]}
 			}
 			var sortErr error
 			sort.SliceStable(pairs, func(i, j int) bool {
 				if sortErr != nil {
 					return false
 				}
-				v, err := callValue(vm, ctx, cb, []Value{StrValue(pairs[i].k), StrValue(pairs[j].k)})
+				v, err := callValue(vm, ctx, cb, []Value{pairs[i].k, pairs[j].k})
 				if err != nil {
 					sortErr = err
 					return false
@@ -986,10 +979,9 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			// the receiver in its original order. Keys/Vals/keyVals stay index-parallel and
 			// the key->index hash is rebuilt, which is mapObj's invariant.
 			for i, pr := range pairs {
-				mp.Keys[i], mp.Vals[i] = pr.k, pr.v
-				mp.keyVals[i] = StrValue(pr.k)
+				mp.Keys[i], mp.keyVals[i], mp.Vals[i] = pr.display, pr.k, pr.v
 				if mp.M != nil {
-					mp.M[pr.k] = int32(i)
+					mp.M[pr.display] = int32(i)
 				}
 			}
 			return m, nil
@@ -1005,8 +997,12 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 	str := sobj.V
 	switch name {
 	case "len":
+		// BYTES, matching upstream (src/builtin/str.zig: `@intCast(str.string.len)`).
+		// This counted runes, which measured every non-ASCII or binary string short -
+		// a 16-byte MD5 digest reported 15 - and did so silently. utf8Len is the
+		// codepoint count, and upstream has both for exactly this reason.
 		return newDirect("str.len", func(_ context.Context, _ []Value) (Value, error) {
-			return IntValue(int64(utf8.RuneCountInString(str))), nil
+			return IntValue(int64(len(str))), nil
 		})
 	case "upper":
 		return newDirect("str.upper", func(_ context.Context, _ []Value) (Value, error) {
@@ -1026,27 +1022,15 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 			if len(args) >= 1 && args[0].IsInt() {
 				at = int(args[0].AsInt())
 			}
-			// Fast path, same cached-isASCII test str.sub uses: for pure ASCII a rune
-			// index is a byte index, so this is a direct index instead of a []rune copy
-			// of the whole string. That copy made `.byte(i)` O(len) PER CALL, which turns
-			// any character-at-a-time scan into a quadratic one - and scanning a string
-			// byte by byte is precisely what this method exists for. The docs site's
-			// glossary linker walks every rendered page this way.
-			if sobj.isASCII() {
-				if at < 0 || at >= len(str) {
-					return Null, fmt.Errorf("str.byte: index %d out of range", at)
-				}
-				return IntValue(int64(str[at])), nil
-			}
-			// Multibyte: walk from the memoized cursor instead of converting the whole
-			// string. The ASCII test above is all-or-nothing, so a single accented
-			// character anywhere in a document put every one of its lookups on this path -
-			// which is how the docs site spent 14% of its render here.
-			r, _, ok := sobj.scanRune(at)
-			if !ok {
+			// A BYTE index, as upstream has it (`self.string[index]`). It walked runes
+			// before, so a method named `byte` handed back a CODE POINT on any string
+			// holding one: "héllo".byte(2) was 233 rather than the second byte of the
+			// e-acute. That also made it O(len) per call on such a string, which is
+			// quadratic for the byte-at-a-time scans this method exists for.
+			if at < 0 || at >= len(str) {
 				return Null, fmt.Errorf("str.byte: index %d out of range", at)
 			}
-			return IntValue(int64(r)), nil
+			return IntValue(int64(str[at])), nil
 		})
 	case "indexOf":
 		return newDirect("str.indexOf", func(_ context.Context, args []Value) (Value, error) {
@@ -1075,42 +1059,17 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 			// index IS a byte offset, so neither the start conversion nor the result
 			// conversion below has to walk the string. A found needle near the end of a
 			// large string used to pay for the entire prefix on every call.
-			if sobj.isASCII() {
-				if from >= len(str) {
-					return Null, nil
-				}
-				idx := strings.Index(str[from:], args[0].AsString())
-				if idx < 0 {
-					return Null, nil
-				}
-				return IntValue(int64(from + idx)), nil
+			// BYTE offsets in and out, matching upstream (`std.mem.indexOf(u8, ...)`).
+			// The multibyte path used to convert a rune start in and a rune index out,
+			// walking the string twice and disagreeing with len() and sub().
+			if from >= len(str) {
+				return Null, nil
 			}
-
-			// Multibyte: convert the rune start to a byte offset, search from there,
-			// and convert the hit back. Still one pass per call rather than a copy.
-			byteStart := 0
-			if from > 0 {
-				byteStart = -1
-				runes := 0
-				// range over a string yields the byte index of each rune's first byte,
-				// so runes counts positions while i tracks where that position starts.
-				for i := range str {
-					if runes == from {
-						byteStart = i
-						break
-					}
-					runes++
-				}
-				if byteStart < 0 {
-					return Null, nil // start is past the end
-				}
-			}
-			idx := strings.Index(str[byteStart:], args[0].AsString())
+			idx := strings.Index(str[from:], args[0].AsString())
 			if idx < 0 {
 				return Null, nil
 			}
-			// Return byte offset converted to rune index.
-			return IntValue(int64(utf8.RuneCountInString(str[:byteStart+idx]))), nil
+			return IntValue(int64(from + idx)), nil
 		})
 	case "startsWith":
 		return newDirect("str.startsWith", func(_ context.Context, args []Value) (Value, error) {
@@ -1171,30 +1130,15 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 			if start < 0 {
 				start = 0
 			}
-			// Fast path: for a pure-ASCII string a rune index equals a byte index,
-			// so the substring is a direct byte slice - no []rune copy of the whole
-			// string per call. The result is identical to the rune path below.
-			if sobj.isASCII() {
-				if start >= len(str) {
-					return StrValue(""), nil
-				}
-				end := len(str)
-				if len(args) >= 2 && args[1].IsInt() {
-					length := int(args[1].AsInt())
-					if length < 0 {
-						length = 0
-					}
-					if start+length < end {
-						end = start + length
-					}
-				}
-				return StrValue(str[start:end]), nil
-			}
-			runes := []rune(str)
-			if start >= len(runes) {
+			// BYTE offsets, matching upstream (`self.string[start..limit]`). This used
+			// to slice runes for a multibyte string, which disagreed with len() and
+			// made `s.sub(s.len())` incoherent the moment a string held one non-ASCII
+			// character. Dropping that branch also removes a whole-string []rune copy
+			// per call.
+			if start >= len(str) {
 				return StrValue(""), nil
 			}
-			end := len(runes)
+			end := len(str)
 			if len(args) >= 2 && args[1].IsInt() {
 				length := int(args[1].AsInt())
 				if length < 0 {
@@ -1204,7 +1148,7 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 					end = start + length
 				}
 			}
-			return StrValue(string(runes[start:end])), nil
+			return StrValue(str[start:end]), nil
 		})
 	case "repeat":
 		return newDirect("str.repeat", func(_ context.Context, args []Value) (Value, error) {

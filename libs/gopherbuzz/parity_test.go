@@ -422,6 +422,21 @@ fun probe() > int {
 	assert.Contains(t, err.Error(), "elsewhere")
 }
 
+func TestParity_BlockExpressionWithoutOutIsRejected(t *testing.T) {
+	// This case used to live in TestParity_BlockExpression asserting the opposite:
+	// that `from { final unused = 1; }` evaluates to null. Upstream rejects it
+	// (tests/compile_errors/block-expression-partial-out.buzz, "All block expression
+	// paths must end with `out`"), and a block expression that silently produces null
+	// is the dangerous kind of divergence - the value is consumed somewhere. Nothing
+	// in this repo or in magus used the form, so the rule was adopted.
+	ctx := context.Background()
+	s := buzz.NewSession(ctx)
+	t.Cleanup(func() { _ = s.Close() })
+	err := s.Exec(ctx, `fun probe() > any { return from { final unused = 1; }; }`)
+	require.Error(t, err, "a block expression with no out must be rejected")
+	assert.Contains(t, err.Error(), "must end with `out`")
+}
+
 func TestParity_BlockExpression(t *testing.T) {
 	cases := []struct {
 		name string
@@ -455,7 +470,6 @@ func TestParity_BlockExpression(t *testing.T) {
     };`,
 			want: "early",
 		},
-		{name: "no out yields null", body: `return from { final unused = 1; };`, want: nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1172,7 +1186,7 @@ fun probe() > str {
     final bandit = mut Pet{ name = "bandit" };
     // A protocol-typed binding accepts a declared conformer, and dispatch on it is
     // ordinary dynamic dispatch on the object actually there.
-    var named: Nameable = bandit;
+    final named: Nameable = bandit;
     named.rename("Chili");
     final sized: [Sized] = [ bandit ];
     return "{bandit.name}:{sized[0].size()}";
@@ -1269,13 +1283,43 @@ fun probe() > str {
 	assert.Equal(t, "dtrue", v.AsString(), "both positions resolve without naming the enum")
 }
 
-func TestParity_MatchYieldsNullWhenNoArmMatches(t *testing.T) {
-	v := evalParity(t, `
+func TestParity_MatchWithoutElseIsRejected(t *testing.T) {
+	// This test used to assert the opposite of what it now does. It ran
+	// `match (99) { 1 -> "one", 2 -> "two" }` and pinned that falling off the last
+	// arm yields null - correct as a description of the VM, but NOT parity, which
+	// is what the name claimed. Upstream rejects that source outright
+	// (tests/compile_errors/match-non-exhaustive.buzz, "Non-exhaustive `match`,
+	// `else` branch required"), so upstream never lets the null be observed. The
+	// checker now rejects it too, and the guarantee worth pinning is the rejection.
+	//
+	// The VM's fall-through-yields-null behaviour is deliberately UNCHANGED: a `.bo`
+	// blob compiled before this check exists still runs, and the compiler still
+	// emits the trailing push.
+	ctx := context.Background()
+	s := buzz.NewSession(ctx)
+	t.Cleanup(func() { _ = s.Close() })
+	err := s.Exec(ctx, `
 fun probe() > bool {
     final r = match (99) { 1 -> "one", 2 -> "two" };
     return r == null;
 }`)
-	assert.True(t, v.AsBool(), "falling off the last arm with no else yields null")
+	require.Error(t, err, "a non-enum, non-bool match with no else must be rejected")
+	assert.Contains(t, err.Error(), "non-exhaustive match")
+}
+
+func TestParity_MatchExhaustiveWithoutElse(t *testing.T) {
+	// The flip side: a subject with a finite case set needs no else. Upstream's
+	// match.buzz asserts this for bool in so many words ("boolean match can be
+	// exhaustive without else"), and the same reasoning covers a fully-named enum.
+	v := evalParity(t, `
+enum Side { left, right }
+
+fun probe() > bool {
+    final b = match (true) { true -> "y", false -> "n" };
+    final e = match (Side.left) { Side.left -> "l", Side.right -> "r" };
+    return b == "y" and e == "l";
+}`)
+	assert.True(t, v.AsBool(), "bool and fully-covered enum matches need no else")
 }
 
 func TestParity_MatchEvaluatesSubjectOnce(t *testing.T) {
@@ -1546,18 +1590,26 @@ fun probe() > str {
 }
 
 func TestParity_ImmutableCollectionsRejectSorting(t *testing.T) {
-	v := evalParity(t, `
+	// This used to run the program and assert that `sort` refused at RUNTIME via
+	// `catch null`. The checker now rejects an in-place mutator on a receiver it can
+	// see is immutable, so the source no longer compiles - a strictly earlier failure
+	// for the same rule, and what upstream does (compile_errors/immutable-list.buzz).
+	//
+	// The VM's own guard is unchanged and still load-bearing: it catches a receiver
+	// whose mutability the checker cannot determine, which is why errImmutable is not
+	// dead code.
+	ctx := context.Background()
+	s := buzz.NewSession(ctx)
+	t.Cleanup(func() { _ = s.Close() })
+	err := s.Exec(ctx, `
 fun probe() > bool {
     final l = [ 2, 1 ];
-    final m = { "b": 2, "a": 1 };
-    // sort returns the receiver on success, so a null here means it refused.
-    final listRefused = (l.sort(fun (a: int, b: int) => a < b) catch null) == null;
-    final mapRefused = (m.sort(fun (x: str, y: str) => x < y) catch null) == null;
-    return listRefused and mapRefused and l[0] == 2 and m.keys()[0] == "b";
+    _ = l.sort(fun (a: int, b: int) => a < b);
+    return true;
 }`)
-	assert.True(t, v.AsBool(), "an in-place reorder needs a mut receiver, for maps as well as lists")
+	require.Error(t, err, "sorting an immutable list must be rejected")
+	assert.Contains(t, err.Error(), "requires a mutable list")
 }
-
 func TestParity_StoredMapKeyWinsOverBuiltinMethod(t *testing.T) {
 	// An anonymous object literal is represented as a map, so a field whose name
 	// collides with a map builtin must still read as the field.
@@ -1591,6 +1643,191 @@ fun probe() > str {
     return crypto\hash(crypto\HashAlgorithm.`+tc.algo+`, data: "abc").hex();
 }`)
 			assert.Equal(t, tc.want, v.AsString(), "the digest matches the published vector")
+		})
+	}
+}
+
+// ── Checker false positives, each measured against upstream ──────────────────
+//
+// Every case below is a program `~/Repos/buzz/zig-out/bin/buzz` compiles clean and
+// gopherbuzz rejected. They are grouped because they share a failure MODE that the
+// allowlists cannot catch: a strictness check that over-claims rejects correct
+// source, and neither upstream suite contains the shape, so both stayed green while
+// magus's own corpus failed to load.
+
+// TestParity_WriteThroughANameJustifiesItsVar covers the var-not-assigned check's
+// blind spot. It fired only for an *ast.IdentExpr target, so `digests[p] = h` and
+// `point.x = 2` both read as "never assigned" and the declaration was rejected -
+// which is what stopped tools/drift.buzz from loading. Upstream accepts both; where
+// it comments at all (W102 on an index-assigned `var`) it warns rather than errors.
+func TestParity_WriteThroughANameJustifiesItsVar(t *testing.T) {
+	cases := []struct{ name, body string }{
+		{"index assignment", `
+    var digests: mut {str: str} = mut {<str: str>};
+    digests["k"] = "v";
+    return digests["k"] ?? "";`},
+		{"field assignment", `
+    var p = mut Point{ x = 1 };
+    p.x = 2;
+    return "{p.x}";`},
+		{"nested target marks the root", `
+    var box = mut Box{ inner = mut Point{ x = 1 } };
+    box.inner.x = 9;
+    return "{box.inner.x}";`},
+	}
+	const decls = `
+object Point { x: int }
+object Box { inner: mut Point }
+`
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v := evalParity(t, decls+"\nfun probe() > str {"+tc.body+"\n}")
+			assert.NotEmpty(t, v.AsString(), "the program compiles and runs")
+		})
+	}
+}
+
+// TestParity_BreakOutOfADoUntilLeavesLiveCode pins the DoStmt terminal-flow guard.
+// `do { ... } until (cond)` runs its body once, so a body that transfers control
+// away does end the loop - but a break that exits the DO lands on the statement
+// after it, exactly as for while and for. Without the guard everything following a
+// `do { break; } until (...)` was reported unreachable.
+func TestParity_BreakOutOfADoUntilLeavesLiveCode(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > int {
+    var i = 0;
+    do {
+        i = i + 1;
+        break;
+    } until (i > 10)
+    // Dead by the old analysis; upstream compiles this clean and reaches it.
+    i = i + 100;
+    return i;
+}`)
+	assert.Equal(t, int64(101), v.AsInt(), "the break exits the do and the next statement runs")
+}
+
+// TestParity_ClosureMayReuseAnEnclosingFunctionsLocalName pins the shadowing rule's
+// scope. It walked every enclosing local scope, so a nested closure could not reuse
+// an outer name; upstream scopes the rule to the CURRENT function's locals, so a new
+// frame starts the name space over.
+func TestParity_ClosureMayReuseAnEnclosingFunctionsLocalName(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > int {
+    final name = 1;
+    final f = fun () > int {
+        // A different frame, so this is a fresh name rather than a shadow.
+        final name = 2;
+        return name;
+    };
+    return name + f();
+}`)
+	assert.Equal(t, int64(3), v.AsInt(), "a closure's local is its own, and the outer one is untouched")
+}
+
+// TestParity_ShadowingWithinOneFunctionIsStillRejected is the other side of that
+// boundary: narrowing the walk must not switch the check off. A nested BLOCK in the
+// same function is still the same frame.
+func TestParity_ShadowingWithinOneFunctionIsStillRejected(t *testing.T) {
+	s := buzz.NewSession(context.Background())
+	t.Cleanup(func() { _ = s.Close() })
+	err := s.Exec(context.Background(), `
+fun probe() > int {
+    final name = 1;
+    if (true) {
+        final name = 2;
+        return name;
+    }
+    return name;
+}`)
+	require.Error(t, err, "a block in the same function still shadows")
+	assert.Contains(t, err.Error(), "already exists in an enclosing scope")
+}
+
+// TestParity_MutatorThroughAnImmutableAnnotationIsRejected pins the rule that forced
+// magus's own 126-site migration, because the corpus was what was wrong. Upstream
+// rejects this source in the same words ("Method `append` requires mutable list"):
+// the ANNOTATION narrows the type, so appending through it is a type error however
+// the value was built. Recorded as a test so nobody relaxes the rule to spare a
+// corpus again.
+func TestParity_MutatorThroughAnImmutableAnnotationIsRejected(t *testing.T) {
+	s := buzz.NewSession(context.Background())
+	t.Cleanup(func() { _ = s.Close() })
+	err := s.Exec(context.Background(), `
+fun probe() > int {
+    final files: [str] = mut [<str>];
+    files.append("x");
+    return files.len();
+}`)
+	require.Error(t, err, "a mut value does not widen an immutable annotation")
+	assert.Contains(t, err.Error(), "requires a mutable list")
+}
+
+// TestParity_MutAnnotationAcceptsTheMutator is the migration's target shape, and the
+// reason the migration is safe: `mut [str]` takes the mut value AND permits the
+// mutator, and stays assignable where a plain `[str]` is wanted.
+func TestParity_MutAnnotationAcceptsTheMutator(t *testing.T) {
+	v := evalParity(t, `
+fun consume(xs: [str]) > int => xs.len();
+
+fun probe() > int {
+    final files: mut [str] = mut [<str>];
+    files.append("x");
+    // mut T is assignable to T, never the reverse, so widening the declaration
+    // cannot break a call that wanted the immutable one.
+    return consume(files);
+}`)
+	assert.Equal(t, int64(1), v.AsInt(), "the mut annotation permits the write and still satisfies [str]")
+}
+
+// TestParity_CollectorKeepsReachableObjects covers the reachability sweep in
+// vm/gc_collect.go, which had NO test at all - which is how both holes below
+// survived. The dangerous direction of this check is a false COLLECT: calling a
+// live object's collect() is unrecoverable, where missing a dead one merely
+// delays it.
+func TestParity_CollectorKeepsReachableObjects(t *testing.T) {
+	cases := []struct{ name, body string }{
+		{
+			// The list literal is reachable ONLY through the iterator state: it is
+			// bound to no local and sits on no frame's env. markReachable had no
+			// tagIterState case, so collecting mid-loop reclaimed the elements the
+			// loop had not reached yet.
+			name: "the collection under a foreach",
+			body: `
+    foreach (t in [ Tracked{ id = 1 }, Tracked{ id = 2 }, Tracked{ id = 3 } ]) {
+        gc\collect();
+        _ = t.id;
+    }
+    return collected;`,
+		},
+		{
+			// markReachable walked mo.Vals but not mo.keyVals, so an object used as
+			// a KEY was invisible to the mark while the map still keyed on it.
+			name: "an object used as a map key",
+			body: `
+    final m = mut {};
+    m[Tracked{ id = 1 }] = "v";
+    gc\collect();
+    return collected;`,
+		},
+	}
+	const decls = `
+import "gc";
+
+var collected = 0;
+
+object Tracked {
+    id: int,
+
+    fun collect() > void {
+        collected = collected + 1;
+    }
+}
+`
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v := evalWithStd(t, decls+"\nfun probe() > int {"+tc.body+"\n}")
+			assert.Equal(t, int64(0), v.AsInt(), "a reachable object must not be collected")
 		})
 	}
 }

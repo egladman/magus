@@ -9,6 +9,8 @@ export object Command {
     bin: str = "",
     args: [str] = [],
     charms: {str: Charm} = {},
+    sources: [str] = [],
+    sourcesEach: bool = false,
     capture: bool = false,
     secrets: {str: str} = {},
     hints: [Hint] = [],

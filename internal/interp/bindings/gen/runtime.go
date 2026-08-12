@@ -187,6 +187,154 @@ func IntVal(i int) vm.Value       { return vm.IntValue(int64(i)) }
 func BoolVal(b bool) vm.Value     { return vm.BoolValue(b) }
 func FloatVal(f float64) vm.Value { return vm.FloatValue(f) }
 
+// ByteSlice converts argument n to raw bytes, accepting either a str (taken as
+// its bytes) or a list of ints.
+//
+// BOTH forms, because the two are how bytes reach a host method from either
+// direction: a literal payload is written as a str, while anything a previous
+// host call produced (an HMAC digest, a base64 decode) is a byte list, and an
+// AWS SigV4 signing chain feeds one straight back as the key of the next.
+func ByteSlice(args []vm.Value, n int) []byte {
+	if n >= len(args) {
+		return nil
+	}
+	v := args[n]
+	if v.IsStr() {
+		return []byte(v.AsString())
+	}
+	if !v.IsList() {
+		return nil
+	}
+	items := v.ListItems()
+	out := make([]byte, 0, len(items))
+	for _, it := range items {
+		if it.IsInt() {
+			out = append(out, byte(it.AsInt()))
+		}
+	}
+	return out
+}
+
+// ByteSliceVal converts raw bytes to a Buzz list of ints.
+//
+// A list rather than a str: a Buzz string is rune-oriented, so a NUL or a 0xFF
+// does not survive a round trip through one, and a digest that lost a byte would
+// be wrong rather than obviously broken.
+func ByteSliceVal(b []byte) vm.Value {
+	items := make([]vm.Value, len(b))
+	for i, x := range b {
+		items[i] = vm.IntValue(int64(x))
+	}
+	return vm.ListValue(items)
+}
+
+// StrSliceSlice converts argument n to [][]string, skipping non-list rows.
+func StrSliceSlice(args []vm.Value, n int) [][]string {
+	if n >= len(args) {
+		return nil
+	}
+	v := args[n]
+	if !v.IsList() {
+		return nil
+	}
+	rows := v.ListItems()
+	out := make([][]string, 0, len(rows))
+	for _, row := range rows {
+		if !row.IsList() {
+			continue
+		}
+		out = append(out, strSliceFromValue(row))
+	}
+	return out
+}
+
+// StrSliceSliceVal converts [][]string to a Buzz list of lists.
+func StrSliceSliceVal(rows [][]string) vm.Value {
+	items := make([]vm.Value, len(rows))
+	for i, row := range rows {
+		items[i] = StrSliceVal(row)
+	}
+	return vm.ListValue(items)
+}
+
+// StrMapMap converts argument n to map[string]map[string]string, skipping
+// entries whose value is not itself a map.
+func StrMapMap(args []vm.Value, n int) map[string]map[string]string {
+	if n >= len(args) {
+		return nil
+	}
+	v := args[n]
+	if !v.IsMap() {
+		return nil
+	}
+	out := map[string]map[string]string{}
+	for _, k := range v.MapKeys() {
+		inner, ok := v.MapGet(k)
+		if !ok || !inner.IsMap() {
+			continue
+		}
+		section := map[string]string{}
+		for _, ik := range inner.MapKeys() {
+			iv, ok := inner.MapGet(ik)
+			if !ok {
+				continue
+			}
+			if iv.IsStr() {
+				section[ik] = iv.AsString()
+			} else {
+				section[ik] = iv.String()
+			}
+		}
+		out[k] = section
+	}
+	return out
+}
+
+// StrMapMapVal converts map[string]map[string]string to a Buzz map of maps.
+func StrMapMapVal(m map[string]map[string]string) vm.Value {
+	out := vm.NewMap()
+	for k, inner := range m {
+		out.MapSet(k, StrMapVal(inner))
+	}
+	return out
+}
+
+// FloatSlice converts argument n to []float64, skipping non-numeric items.
+//
+// Buzz has ONE numeric list: an int list and a double list are the same value
+// here, so both cross as float64 and a caller meaning integers rounds on the way
+// out. A non-numeric item is skipped rather than becoming 0, because a silent
+// zero would shift a mean or a median without anything reporting it.
+func FloatSlice(args []vm.Value, n int) []float64 {
+	if n >= len(args) {
+		return nil
+	}
+	v := args[n]
+	if !v.IsList() {
+		return nil
+	}
+	items := v.ListItems()
+	out := make([]float64, 0, len(items))
+	for _, it := range items {
+		switch {
+		case it.IsInt():
+			out = append(out, float64(it.AsInt()))
+		case it.IsFloat():
+			out = append(out, it.AsFloat())
+		}
+	}
+	return out
+}
+
+// FloatSliceVal converts []float64 to a Buzz list.
+func FloatSliceVal(f []float64) vm.Value {
+	items := make([]vm.Value, len(f))
+	for i, v := range f {
+		items[i] = vm.FloatValue(v)
+	}
+	return vm.ListValue(items)
+}
+
 // StrSliceVal converts []string to a Buzz list.
 func StrSliceVal(s []string) vm.Value {
 	items := make([]vm.Value, len(s))

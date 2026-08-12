@@ -1,0 +1,3 @@
+// @error: missing case(s): two, three
+enum Sides { one, two, three }
+final __r = match (Sides.one) { Sides.one -> "one" };

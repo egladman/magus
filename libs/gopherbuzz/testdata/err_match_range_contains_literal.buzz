@@ -1,0 +1,2 @@
+// @error: overlapping match condition
+final __r = match (3) { 1..5 -> "range", 3 -> "literal", else -> "other" };

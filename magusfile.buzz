@@ -6,6 +6,7 @@ import "./tools/drift" as drift;
 
 // Host modules: magus layers its methods onto Buzz's stdlib (camelCase).
 import "os";
+import "proc";
 import "fs";
 import "http";
 import "vcs";
@@ -122,10 +123,14 @@ magus\project({
     },
 });
 
-fun version() > str {
-    final v = vcs\describe();
-    if (v == "") { return "unknown"; }
-    return v;
+fun version() > str !> any {
+    try {
+        final v = vcs\describe();
+        if (v == "") { return "unknown"; }
+        return v;
+    } catch (e) {
+        return "unknown";
+    }
 }
 
 // try/catch, not a sentinel check. These accessors RAISE when there is no VCS or its
@@ -134,7 +139,7 @@ fun version() > str {
 // from "the answer is empty". A build outside a checkout is a real case (a release tarball,
 // a container build context), so it is caught here and named, once, instead of every caller
 // remembering a check the type system never asked for.
-fun commit() > str {
+fun commit() > str !> any {
     try {
         return vcs\commit().short;
     } catch (e) {
@@ -143,7 +148,7 @@ fun commit() > str {
 }
 
 // Commit record date (RFC3339) for reproducible builds.
-fun build_date() > str {
+fun build_date() > str !> any {
     try {
         final c: Commit = vcs\commit();
         return c.date;
@@ -155,13 +160,13 @@ fun build_date() > str {
 // built_by is the CI workflow that produced the binary, empty for a local build so
 // nothing claims a pedigree it does not have. It should match the job_workflow_ref a
 // keyless signature carries, which is what lets the claim be checked against proof.
-fun built_by() > str {
+fun built_by() > str !> any {
     final ref = os\env("GITHUB_WORKFLOW_REF");
     if (ref == null) { return ""; }
     return "" + ref;
 }
 
-fun ld_flags() > str {
+fun ld_flags() > str !> any {
     return "-w -s"
         + " -X main.version=" + version()
         + " -X main.commit=" + commit()
@@ -170,7 +175,7 @@ fun ld_flags() > str {
 }
 
 // Compiles the version-stamped magus binary.
-export fun go_build(ctx: magus\Context, args: [str]) > void {
+export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(gopherbuzz\build);
     // The compiled built-in spells are go:embed'd into this binary, so the link has to
     // happen AFTER they are regenerated. The cache key cannot express that on its own:
@@ -207,7 +212,7 @@ export fun go_build(ctx: magus\Context, args: [str]) > void {
 // No ctx.writesFiles here, matching go_build: the declared-output globs are what
 // EnsureMergeDriver writes into .gitattributes, and declaring a gitignored binary there
 // marks a path that can never be tracked and so can never conflict.
-export fun dogfood(ctx: magus\Context, args: [str]) > void {
+export fun dogfood(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(gopherbuzz\build);
     go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
         "args": ["-trimpath",
@@ -285,10 +290,10 @@ final DOCKERHUB = Registry{
 // build, not a cache that survives between two.
 final REGISTRIES = [GHCR, DOCKERHUB];
 
-fun image_tag() > str { return "magus:" + commit(); }
+fun image_tag() > str !> any { return "magus:" + commit(); }
 
 // The build-args every variant stamps into the binary through the Dockerfiles' ldflags.
-fun image_stamps() > [str] {
+fun image_stamps() > [str] !> any {
     return ["--build-arg", "VERSION=" + version(),
         "--build-arg", "COMMIT=" + commit(),
         "--build-arg", "DATE=" + build_date()];
@@ -311,7 +316,7 @@ fun image_stamps() > [str] {
 // content-addressed and shared, but a signature is a separate object stored in the
 // repository beside the image it covers, so GHCR's copy does not vouch for Docker
 // Hub's - the digest being signed is the same one both times.
-fun publish_variant(ctx: magus\Context, dockerfile: str, platforms: str, registries: [Registry], tags: [str], meta: str) > [str] {
+fun publish_variant(ctx: magus\Context, dockerfile: str, platforms: str, registries: [Registry], tags: [str], meta: str) > [str] !> any {
     var args = mut ["-f", dockerfile];
     foreach (a in image_stamps()) { args.append(a); }
     foreach (reg in registries) {
@@ -345,7 +350,7 @@ fun publish_variant(ctx: magus\Context, dockerfile: str, platforms: str, registr
 // Self-gating on $GITHUB_STEP_SUMMARY rather than a charm, matching the second half
 // of ci_shard below: outside Actions the variable is unset and this is a no-op, so a
 // local `magus run image-build:cd` needs no extra flag to stay quiet.
-fun write_image_summary(refs: [str]) > void {
+fun write_image_summary(refs: [str]) > void !> any {
     final summaryPath = os\env("GITHUB_STEP_SUMMARY");
     if (summaryPath == null or ("" + summaryPath) == "") { return; }
     if (refs.len() == 0) { return; }
@@ -379,10 +384,10 @@ fun write_image_summary(refs: [str]) > void {
 // The `amd64` / `arm64` charms override it, for reproducing a failure that only
 // happens on the other architecture. That path goes through QEMU emulation, so expect
 // it to be slow; it is a debugging tool, not a second default.
-fun load_platform(ctx: magus\Context) > str {
+fun load_platform(ctx: magus\Context) > str !> any {
     exclusive_charms(ctx, "amd64", "arm64", "WS1001", "which platform to build for");
-    if (ctx.has_charm("amd64")) { return "linux/amd64"; }
-    if (ctx.has_charm("arm64")) { return "linux/arm64"; }
+    if (ctx.hasCharm("amd64")) { return "linux/amd64"; }
+    if (ctx.hasCharm("arm64")) { return "linux/arm64"; }
     return "linux/" + os\platform()[1];
 }
 
@@ -393,8 +398,8 @@ fun load_platform(ctx: magus\Context) > str {
 // WS is this WORKSPACE's code prefix, documented in docs/recommendations.md. magus.raise
 // refuses the MGS prefix outright, which is what stops a workspace diagnostic from
 // rendering as though magus documented it.
-fun exclusive_charms(ctx: magus\Context, a: str, b: str, code: str, question: str) > void {
-    if (ctx.has_charm(a) and ctx.has_charm(b)) {
+fun exclusive_charms(ctx: magus\Context, a: str, b: str, code: str, question: str) > void !> any {
+    if (ctx.hasCharm(a) and ctx.hasCharm(b)) {
         magus\raise(code, message: "the `" + a + "` and `" + b
             + "` charms both answer " + question + " - name one",
             opts: {"url": "https://eli.gladman.cc/magus/recommendations/#one-charm-answers-one-question"});
@@ -404,7 +409,7 @@ fun exclusive_charms(ctx: magus\Context, a: str, b: str, code: str, question: st
 // Builds one variant single-arch into the local daemon under image_tag(): no
 // registry, no signature. What `magus run image-build` does outside CI, and what
 // image_scan hands to trivy.
-fun load_variant(ctx: magus\Context, dockerfile: str) > void {
+fun load_variant(ctx: magus\Context, dockerfile: str) > void !> any {
     var args = mut ["-f", dockerfile];
     foreach (a in image_stamps()) { args.append(a); }
     args.append("-t"); args.append(image_tag());
@@ -433,10 +438,10 @@ fun load_variant(ctx: magus\Context, dockerfile: str) > void {
 //
 // A local build is single-architecture - see load_platform(). Stack `:amd64` or `:arm64`
 // to cross-build through emulation (`magus run image-build:arm64`).
-export fun image_build(ctx: magus\Context, args: [str]) > void {
+export fun image_build(ctx: magus\Context, args: [str]) > void !> any {
     final registries = publish_registries(ctx);
     var pushed = mut [<str>];
-    if (ctx.has_charm("cd")) {
+    if (ctx.hasCharm("cd")) {
         final ch = channel(ctx);
         if (ch == "commit") {
             foreach (r in publish_variant(ctx, "Dockerfile.static", "linux/amd64,linux/arm64",
@@ -456,7 +461,7 @@ export fun image_build(ctx: magus\Context, args: [str]) > void {
                 registries, dynamicTags, "dynamic-meta.json")) { pushed.append(r); }
         }
         write_image_summary(pushed);
-    } else if (ctx.has_charm("dynamic")) {
+    } else if (ctx.hasCharm("dynamic")) {
         load_variant(ctx, "Dockerfile");
     } else {
         // Static is the DEFAULT, so it gets no charm - a charm names a departure from
@@ -474,8 +479,8 @@ export fun image_build(ctx: magus\Context, args: [str]) > void {
 //
 // Going through channel() also means the workflow's `image-registries:cd,stable,verify`
 // preflight rejects a bad version before QEMU, buildx and a multi-arch compile run.
-fun publish_registries(ctx: magus\Context) > [Registry] {
-    if (!ctx.has_charm("cd")) { return []; }
+fun publish_registries(ctx: magus\Context) > [Registry] !> any {
+    if (!ctx.hasCharm("cd")) { return []; }
     if (channel(ctx) == "commit") { return [GHCR]; }
     return REGISTRIES;
 }
@@ -487,7 +492,7 @@ fun publish_registries(ctx: magus\Context) > [Registry] {
 // string alone cannot tell a genuine prerelease (`rc.1`) from mere distance past a stable
 // tag - and reading it as the former would file an ordinary mid-development commit under a
 // published channel. Comparing revision ids is exact and says nothing it cannot know.
-fun exact_release_tag() > str {
+fun exact_release_tag() > str !> any {
     final head = vcs\commit().id;
     foreach (t in vcs\tags("v*")) {
         if (t.id == head) { return t.name; }
@@ -506,11 +511,11 @@ fun exact_release_tag() > str {
 // afterwards, an edit whose omission publishes a prerelease as `latest`. Deriving is safe
 // in the direction that matters: it can only ever withhold a floating tag, never grant one
 // a prerelease has not earned.
-fun channel(ctx: magus\Context) > str {
+fun channel(ctx: magus\Context) > str !> any {
     exclusive_charms(ctx, "stable", "unstable", "WS1002", "which channel to publish to");
-    final wantTagged = ctx.has_charm("tagged");
-    final wantStable = ctx.has_charm("stable");
-    final wantUnstable = ctx.has_charm("unstable");
+    final wantTagged = ctx.hasCharm("tagged");
+    final wantStable = ctx.hasCharm("stable");
+    final wantUnstable = ctx.hasCharm("unstable");
     if (wantTagged and (wantStable or wantUnstable)) {
         magus\raise("WS1002", message: "the `tagged` charm reads which channel to publish "
             + "to off the release tag, so naming `stable` or `unstable` beside it answers "
@@ -560,7 +565,7 @@ fun channel(ctx: magus\Context) > str {
 // registry under one and out of range under the other), and it is unreadable in a
 // workflow besides. A host that is not in the list is an error naming the ones that
 // are, rather than a silent no-op.
-fun select_registries(registries: [Registry], host: str) > [Registry] {
+fun select_registries(registries: [Registry], host: str) > [Registry] !> any {
     if (host == "") { return registries; }
     var hosts = "";
     foreach (reg in registries) {
@@ -590,18 +595,18 @@ fun select_registries(registries: [Registry], host: str) > [Registry] {
 //
 // A bare `magus run image-registries` reports nothing to do: the local --load build
 // pushes nowhere and needs no credentials.
-export fun image_registries(ctx: magus\Context, args: [str]) > void {
+export fun image_registries(ctx: magus\Context, args: [str]) > void !> any {
     var host = "";
     if (args.len() > 0) { host = args[0]; }
     final registries = select_registries(publish_registries(ctx), host);
     if (registries.len() == 0) {
-        magus\info("image-registries: this build pushes nowhere; add the cd charm to see where a delivery goes (`:cd` per-commit, `:cd,stable` a release)");
+        magus\log.info("image-registries: this build pushes nowhere; add the cd charm to see where a delivery goes (`:cd` per-commit, `:cd,stable` a release)");
         return;
     }
     // The CREDENTIALS column costs a provider round trip - and a prompt, on a provider
     // that has one - so it is only filled when `verify` asked for it. Without the charm
     // this target reads nothing and can never surprise anyone with an unlock dialog.
-    final checking = ctx.has_charm("verify");
+    final checking = ctx.hasCharm("verify");
     var table = pad("REGISTRY", 12) + pad("REPOSITORY", 28) + pad("USERNAME REF", 20) + pad("TOKEN REF", 20) + "CREDENTIALS";
     foreach (reg in registries) {
         var state = "not checked (add the verify charm)";
@@ -612,7 +617,7 @@ export fun image_registries(ctx: magus\Context, args: [str]) > void {
     }
     // Lead line, then the table: magus\info prefixes only its FIRST line with a level
     // marker, which would otherwise shift the header out of line with its columns.
-    magus\info("image-build under these charms publishes to:\n" + table);
+    magus\log.info("image-build under these charms publishes to:\n" + table);
 
     if (!checking) { return; }
     var unready = mut [<str>];
@@ -658,7 +663,7 @@ fun resolvable(ref: str) > bool {
     }
 }
 
-fun pad(s: str, width: int) > str {
+fun pad(s: str, width: int) > str !> any {
     var padded = s;
     while (padded.len() < width) { padded = padded + " "; }
     return padded + " ";
@@ -685,7 +690,7 @@ fun pad(s: str, width: int) > str {
 //   - It was resolved through magus\secret.read, so magus recognises the value and
 //     redacts it from captured output. That covers what this file does not control:
 //     docker itself, or any later tool, echoing the token back.
-export fun image_login(ctx: magus\Context, args: [str]) > void {
+export fun image_login(ctx: magus\Context, args: [str]) > void !> any {
     var host = "";
     if (args.len() > 0) { host = args[0]; }
     final registries = select_registries(publish_registries(ctx), host);
@@ -695,25 +700,25 @@ export fun image_login(ctx: magus\Context, args: [str]) > void {
     foreach (reg in registries) {
         final user = magus\secret.read(reg.user_ref);
         final token = magus\secret.read(reg.token_ref);
-        os\exec("docker", args: ["login", reg.host, "-u", user, "--password-stdin"],
+        proc\exec("docker", args: ["login", reg.host, "-u", user, "--password-stdin"],
             dir: ".", opts: {"stdin": token});
-        magus\info("image-login: " + reg.host + " authenticated as " + user);
+        magus\log.info("image-login: " + reg.host + " authenticated as " + user);
     }
 }
 
 // Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL.
-export fun image_scan(ctx: magus\Context, args: [str]) > void {
+export fun image_scan(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(image_build);
-    if (ctx.has_charm("rw")) {
-        fs\makeDirectory("dist");
-        os\exec("trivy", ["image",
+    if (ctx.hasCharm("rw")) {
+        fs\mkdirAll("dist");
+        proc\exec("trivy", ["image",
             "--format", "sarif",
             "--output", fs\join("dist", "trivy.sarif"),
             "--severity", "HIGH,CRITICAL",
             "--exit-code", "1",
             image_tag()]);
     } else {
-        os\exec("trivy", ["image", image_tag()]);
+        proc\exec("trivy", ["image", image_tag()]);
     }
 }
 
@@ -745,7 +750,7 @@ export fun image_scan(ctx: magus\Context, args: [str]) > void {
 //
 // The baseline when this landed was 265 findings, all `notice` or `unencumbered` and none
 // forbidden or restricted, so this gate starts green and only speaks up on a regression.
-export fun security(ctx: magus\Context, args: [str]) > void {
+export fun security(ctx: magus\Context, args: [str]) > void !> any {
     // Both halves of Software Composition Analysis over one dependency inventory:
     // govulncheck asks whether a dependency has a known flaw, trivy whether its terms may
     // legally be here at all. They share this target because they share that input and a
@@ -754,7 +759,7 @@ export fun security(ctx: magus\Context, args: [str]) > void {
     // answer across every op lint runs. GOEXPERIMENT is threaded through so the sandboxed
     // child builds with the same fingerprint as the rest of the workspace.
     go["govulncheck"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}));
-    os\exec("trivy", ["fs", "--scanners", "license",
+    proc\exec("trivy", ["fs", "--scanners", "license",
         "--severity", "HIGH,CRITICAL",
         "--ignored-licenses", "AGPL-3.0,AGPL-3.0-only,AGPL-3.0-or-later,"
             + "GPL-3.0,GPL-3.0-only,GPL-3.0-or-later,GPL-2.0-or-later,"
@@ -775,37 +780,43 @@ export fun security(ctx: magus\Context, args: [str]) > void {
 // one is regenerated without the other. It had no producing target at all before,
 // so TestAPIUpToDate's remedy was a raw `go generate` that `magus run generate`
 // never performed.
-export fun man_generate(ctx: magus\Context, args: [str]) > void {
+export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("manpage/*.1", "internal/manpage/testdata/api.lock");
-    fs\makeDirectory("manpage");
-    os\exec("go", ["run", "./cmd/magus-manpage", "-format", "roff", "-out", "manpage"]);
-    os\exec("go", ["generate", "./internal/manpage/..."]);
+    fs\mkdirAll("manpage");
+    proc\exec("go", ["run", "./cmd/magus-manpage", "-format", "roff", "-out", "manpage"]);
+    proc\exec("go", ["generate", "./internal/manpage/..."]);
 }
 
 // CHANGELOG.md is a root artifact. Keeping its generator beside the file avoids a
 // reverse docs -> root output edge while letting docs publication depend on the same
 // execution stage.
-export fun changelog_generate(ctx: magus\Context, args: [str]) > void {
+export fun changelog_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("releases/*.yaml", "cmd/magus-utils/**/*.go", "internal/**/*.go",
         "go.mod", "go.sum", "go.work", "go.work.sum");
     ctx.modifiesExistingFiles("CHANGELOG.md");
-    os\exec("go", ["run", "./cmd/magus-utils", "generate-changelog",
+    proc\exec("go", ["run", "./cmd/magus-utils", "generate-changelog",
         "-releases", "./releases", "-changelog", "./CHANGELOG.md"]);
 }
 
 // Regenerates the runtime BuzzObject maps before anything imports a host binding.
 // Its reflection lives only in magus-utils while writing this Go file; the emitted
 // methods use direct field access, so Magus never reflects at a Buzz boundary.
-export fun types_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("types/buzzobject_gen.go");
-    os\exec("go", ["generate", "./types"]);
+// The enum helpers (Values/Valid/String for each boundaryEnum) come from a SECOND
+// directive, and it lives in cmd/magus-utils rather than in types/, so
+// `go generate ./types` never ran it. Adding a boundaryEnums entry therefore left
+// types/enum_gen.go and spells/enum_gen.go stale with nothing to say so - found
+// when PlatformStyle was added and its Valid() simply was not there.
+export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("types/buzzobject_gen.go", "types/enum_gen.go", "spells/enum_gen.go");
+    proc\exec("go", ["generate", "./types"]);
+    proc\exec("go", ["generate", "./cmd/magus-utils"]);
 }
 
 // Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.
-export fun bindings_generate(ctx: magus\Context, args: [str]) > void {
+export fun bindings_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate);
     ctx.writesFiles("internal/interp/bindings/gen/*.go");
-    os\exec("go", ["generate", "./std/..."]);
+    proc\exec("go", ["generate", "./std/..."]);
 }
 
 // Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen),
@@ -816,20 +827,20 @@ export fun bindings_generate(ctx: magus\Context, args: [str]) > void {
 // Both trees are declared: undeclared, magus classified them as ordinary source,
 // so `magus describe file` told a reader a generated file was safe to hand-edit
 // and the agent guard's generated-file advisory stayed silent on every one of them.
-export fun spells_generate(ctx: magus\Context, args: [str]) > void {
+export fun spells_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate);
     ctx.writesFiles("internal/spellruntime/gen/*.bo", "internal/spellruntime/gen/types/*.buzz",
                     "internal/spellruntime/gen/decls/*.buzz");
-    os\exec("go", ["generate", "./internal/spellruntime/..."]);
+    proc\exec("go", ["generate", "./internal/spellruntime/..."]);
 }
 
 // Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked
 // interface's gen/ subdir. Mocks are committed and drift-gated like every other
 // generated tree; mockery is pinned in the go.mod tool block.
-export fun mocks_generate(ctx: magus\Context, args: [str]) > void {
+export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate);
     ctx.writesFiles("**/gen/mocks/*.go");
-    os\exec("go", ["tool", "mockery"]);
+    proc\exec("go", ["tool", "mockery"]);
 }
 
 // Reinstalls the agent skills from their embedded sources in cmd/magus/skills.
@@ -847,7 +858,7 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void {
 // touching it. This target used to end in an `install-agents-md` call that
 // rewrote the block on every generate, which is what made AGENTS.md a hybrid
 // file and put it at odds with the Markdown formatter.
-export fun skills_generate(ctx: magus\Context, args: [str]) > void {
+export fun skills_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(".claude/skills/**", ".agents/skills/**", ".opencode/skills/**");
     magus\cmd("agent", args: ["install", ".claude/skills", "--force"], opts: {"quiet": true});
     magus\cmd("agent", args: ["install", ".agents/skills", "--force"], opts: {"quiet": true});
@@ -859,11 +870,11 @@ export fun skills_generate(ctx: magus\Context, args: [str]) > void {
 // schema field list, and the env applier next to config itself. All four are
 // declared - undeclared they classified as ordinary source, so magus told a
 // reader they were safe to hand-edit.
-export fun config_generate(ctx: magus\Context, args: [str]) > void {
+export fun config_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate);
     ctx.writesFiles("cmd/magus/gen/*.go", "schema/gen/*.go", "internal/config/gen/*.go",
                 "cmd/magus/completions/*");
-    os\exec("go", ["generate", "./cmd/magus/..."]);
+    proc\exec("go", ["generate", "./cmd/magus/..."]);
 }
 
 // The committed docs Markdown (Buzz module reference, spell docs, Markdown manpages)
@@ -873,7 +884,7 @@ export fun config_generate(ctx: magus\Context, args: [str]) > void {
 // (man-generate above), which are a distribution artifact rather than site content.
 
 // Renders MAGUS.md via `magus describe graph`.
-export fun index_generate(ctx: magus\Context, args: [str]) > void {
+export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("MAGUS.md");
     final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs\writeFile("MAGUS.md", doc + "\n");
@@ -886,9 +897,9 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void {
 // generating target at all, which made it stale by construction with nothing to say so.
 // Whole-workspace scope is why this lives at the root rather than in docs/ - a describe
 // from inside a project only sees that project.
-export fun graph_generate(ctx: magus\Context, args: [str]) > void {
+export fun graph_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("gen/*.json");
-    fs\mkdirall("gen");
+    fs\mkdirAll("gen");
     // The knowledge graph (nodes/links). No dedicated binding for `graph export`, so
     // magus.cmd is the documented escape hatch.
     final knowledge = magus\cmd("graph", args: ["export", "--static", "-o", "json"], opts: {"quiet": true}).stdout;
@@ -904,15 +915,15 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void {
 // summary is the CI-facing equivalent now. It used to also append to a host path
 // under the `gha` charm; that branch was unreachable (nothing set
 // MAGUS_INSIGHT_OUTPUT_PATH or ran this target in CI) and was removed.
-export fun postflight(ctx: magus\Context, args: [str]) > void {
-    magus\info(magus\insight(["report", "--workspace"]).stdout);
+export fun postflight(ctx: magus\Context, args: [str]) > void !> any {
+    magus\log.info(magus\insight(["report", "--workspace"]).stdout);
 }
 
 // Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).
 // Drift = a path whose bytes the generators changed, measured by hashing before and
 // after rather than by asking whether the tree is clean, so the gate works on a dirty
 // tree. An uncommitted-but-current generated file still passes: its bytes do not move.
-export fun generate(ctx: magus\Context, args: [str]) > void {
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // Hash every already-dirty path BEFORE the generators run. The gate used to require a
     // clean tree, which disarmed it at exactly the moment it is reached: the documented
     // pre-push check is run with uncommitted work in the tree, so it printed "skipped" and
@@ -920,12 +931,12 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     // local run said it would not. Comparing before against after asks the question that
     // actually matters (did the generators change anything?) and an unrelated edit no
     // longer hides the answer.
-    var dirtyBefore: [str] = mut [<str>];
+    var dirtyBefore: mut [str] = mut [<str>];
     foreach (f in vcs\status().files) { dirtyBefore.append(f.value); }
     final before = drift.hashes(dirtyBefore);
     gomod\replaceWorkspaceModules(ctx, go, ".");
     ctx.needs(ctx.glob("*-generate", "!deploy-generate"));
-    if (ctx.has_charm("rw")) { return; }
+    if (ctx.hasCharm("rw")) { return; }
 
     // Drift is a path the generators moved: one that was clean and is now dirty, or one
     // that was already dirty and whose bytes changed during the run. status() is
@@ -933,7 +944,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     // it also covers a generator writing a path nobody declared. Not diagnoseDrift: that
     // classifies against ONE target's declared outputs and inputs, and with none to
     // compare it always lands on the dev-build verdict.
-    var dirtyNow: [str] = mut [<str>];
+    var dirtyNow: mut [str] = mut [<str>];
     foreach (f in vcs\status().files) { dirtyNow.append(f.value); }
     final changed = drift.changedSince(before, dirtyNow);
     if (changed.len() > 0) {
@@ -952,7 +963,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
                 + "\n... truncated; `magus query output <ref>` has it all";
         }
         if (body != "") {
-            magus\info("generate: what changed on this runner:\n" + body);
+            magus\log.info("generate: what changed on this runner:\n" + body);
         }
         // Two causes land here and they have different owners: output that was never
         // regenerated, and a generator that does not emit the same bytes twice. Only a
@@ -975,23 +986,23 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 // The GIFs are declared outputs all the same, so `magus describe file` reports them
 // as generated and the agent guard warns on a hand-edit - the same treatment
 // assets/coverage.svg gets.
-export fun tapes(ctx: magus\Context, args: [str]) > void {
+export fun tapes(ctx: magus\Context, args: [str]) > void !> any {
     // Declared, or the tapes and the script that stages their workspace would be
     // unclaimed: `magus describe file tapes/core-loop.tape` reported no owner, so
     // editing a tape invalidated nothing and told a reader it affected no target.
     ctx.readsFiles("tapes/*.tape", "tapes/demo-init.sh");
     ctx.writesFiles("assets/gen/*.gif");
-    // try/catch, not a sentinel: os.which RAISES when the tool is absent, so the check
+    // try/catch, not a sentinel: proc.which RAISES when the tool is absent, so the check
     // cannot be forgotten and the helpful message stays where it was.
     try {
-        os\which("vhs");
+        proc\which("vhs");
     } catch (e) {
         throw "tapes: vhs not found on PATH; install it with `brew install vhs` "
             + "(see tapes/README.md)";
     }
     foreach (tape in fs\glob("tapes/*.tape")) {
-        magus\info("recording {tape.value}");
-        os\exec("vhs", [tape.value], ".", {});
+        magus\log.info("recording {tape.value}");
+        proc\exec("vhs", [tape.value], ".", {});
     }
 }
 
@@ -1038,9 +1049,9 @@ fun goarm_level(goos: str, goarch: str) > str {
 // without executing anything, so this works on a cross-compiled artifact too. The license
 // TEXTS come from the module cache, where the module zips already put them - no classifier,
 // no network, no extra tool to pin.
-fun write_notices(stage: str, binary: str) > void {
-    final modcache = os\exec("go", ["env", "GOMODCACHE"], ".", {}).stdout.split(separator: "\n")[0];
-    final listing = os\exec("go", ["version", "-m", fs\join(stage, binary)], ".", {}).stdout;
+fun write_notices(stage: str, binary: str) > void !> any {
+    final modcache = proc\exec("go", ["env", "GOMODCACHE"], ".", {}).stdout.split(separator: "\n")[0];
+    final listing = proc\exec("go", ["version", "-m", fs\join(stage, binary)], ".", {}).stdout;
 
     var body = "THIRD-PARTY NOTICES\n\n"
         + "magus is licensed under the terms in the accompanying LICENSE file. It links the\n"
@@ -1077,11 +1088,11 @@ fun write_notices(stage: str, binary: str) > void {
             + missing.join(separator: ", ");
     }
     fs\writeFile(fs\join(stage, "THIRD-PARTY-NOTICES"), body);
-    magus\info("notices: documented {count} third-party modules");
+    magus\log.info("notices: documented {count} third-party modules");
 }
 
 // Reads one module's license text from the module cache, or "" when none is present.
-fun read_module_license(modcache: str, path: str, version: str) > str {
+fun read_module_license(modcache: str, path: str, version: str) > str !> any {
     final dir = fs\join(modcache, escape_module_path(path) + "@" + version);
     foreach (name in ["LICENSE", "LICENSE.md", "LICENSE.txt", "LICENCE", "LICENCE.txt",
                       "COPYING", "COPYING.md", "COPYING.txt"]) {
@@ -1107,7 +1118,7 @@ fun escape_module_path(path: str) > str {
     return escaped;
 }
 
-fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool, suffix: str) > void {
+fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool, suffix: str) > void !> any {
     // Resolved BEFORE anything is written: goarm_level rejects a platform this project
     // does not ship, and a rejected request should leave no trace. Creating the staging
     // directory first left an empty dist/windows-armv7 behind on every refusal, which
@@ -1115,13 +1126,13 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     // armv6/armv7 are asset names, not GOARCHes: fold them back to GOARCH=arm + GOARM.
     final goarm = goarm_level(goos, goarch);
 
-    fs\makeDirectory("dist");
+    fs\mkdirAll("dist");
     final v = version();
     var binary = "magus";
     if (goos == "windows") { binary = "magus.exe"; }
 
     final stage = fs\join("dist", goos + "-" + goarch + suffix);
-    fs\makeDirectory(stage);
+    fs\mkdirAll(stage);
 
     var env = mut {"GOOS": goos, "GOARCH": goarch, "GOEXPERIMENT": "jsonv2"};
     if (goarm != "") { env["GOARCH"] = "arm"; env["GOARM"] = goarm; }
@@ -1205,7 +1216,7 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
 
     final asset = fs\join("dist", "magus_" + v + "_" + goos + "_" + goarch + suffix + ".tar.gz");
     archive\compress(stage, asset, {});
-    fs\delete(stage);
+    fs\removeAll(stage);
 
     final digest = crypto\hash(crypto\HashAlgorithm.Sha256, fs\readFile(asset));
     fs\writeFile(asset + ".sha256", digest + "  " + fs\basename(asset) + "\n");
@@ -1215,7 +1226,7 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
 // the current runner's own native platform. So a bare `magus run release-build` (with
 // or without the static charm) builds exactly one binary — the one you're standing
 // on — never a silent "all 5" surprise.
-fun release_target_platform(goos: str, goarch: str) > [str] {
+fun release_target_platform(goos: str, goarch: str) > [str] !> any {
     if (goos != null and goos != "") { return [goos, goarch]; }
     // GOOS/GOARCH in the environment cross-target this build (the standard Go convention), so CD can
     // ask one runner for another platform's binary - e.g. the arm64 macOS job cross-builds darwin/amd64
@@ -1251,7 +1262,7 @@ fun release_target_platform(goos: str, goarch: str) > [str] {
 // `(ctx, goos: str, goarch: str)` signature put that list in goos and null in goarch -
 // which made `goos + "-"` a list+str concatenation and failed EVERY release-build, on
 // every platform, before it reached the compiler.
-export fun release_build(ctx: magus\Context, args: [str]) > void {
+export fun release_build(ctx: magus\Context, args: [str]) > void !> any {
     // dist/* is skip_cache (never snapshotted), but declaring it keeps
     // `magus clean --outputs` aware of the release artifacts via AllOutputs.
     ctx.writesFiles("dist/*");
@@ -1282,7 +1293,7 @@ export fun release_build(ctx: magus\Context, args: [str]) > void {
     // its arch as `arm64-cgo`. platformFromName in cmd/magus-utils strips it before
     // splitting, for the same reason.
     final p = release_target_platform(goos, goarch);
-    if (ctx.has_charm("dynamic")) {
+    if (ctx.hasCharm("dynamic")) {
         build_release_variant(ctx, p[0], p[1], true, "");
     } else {
         build_release_variant(ctx, p[0], p[1], false, "_static");
@@ -1294,9 +1305,9 @@ export fun release_build(ctx: magus\Context, args: [str]) > void {
 // release pubkey (internal/releasekey) before the release goes out — a cheap
 // regression guard, safe to run here (unlike setup-magus, which can't depend on the
 // magus source tree since it's reused by arbitrary external repos).
-export fun release_sign(ctx: magus\Context, args: [str]) > void {
-    os\exec("go", ["run", "./cmd/magus-utils", "sign", fs\join("dist", "SHA256SUMS")]);
-    os\exec("go", ["run", "./cmd/magus-utils", "verify",
+export fun release_sign(ctx: magus\Context, args: [str]) > void !> any {
+    proc\exec("go", ["run", "./cmd/magus-utils", "sign", fs\join("dist", "SHA256SUMS")]);
+    proc\exec("go", ["run", "./cmd/magus-utils", "verify",
         fs\join("dist", "SHA256SUMS"), fs\join("dist", "SHA256SUMS.sig")]);
 }
 
@@ -1337,13 +1348,13 @@ export fun release_sign(ctx: magus\Context, args: [str]) > void {
 //
 // Neither path ever pushes - a human reviews the tags and pushes deliberately.
 
-export fun release(ctx: magus\Context, args: [str]) > void {
+export fun release(ctx: magus\Context, args: [str]) > void !> any {
     // `cd` alone, and no `versioned`: cd is the deliver switch, meaning the same
     // thing here as in image_build above - do the side-effectful thing (push and
     // sign, there; tag and rewrite go.mod, here). The channel charm answers a
     // question this target does not have: cutting a version tag has only one
     // channel, so naming it would be a word with no alternative to distinguish.
-    final deliver = ctx.has_charm("cd");
+    final deliver = ctx.hasCharm("cd");
     final dirty = vcs\isDirty();
     final modules = releaser\releasableModules(magus\ls().projects);
 
@@ -1382,12 +1393,12 @@ export fun release(ctx: magus\Context, args: [str]) > void {
         final n = releaser\nextFor(cur);
         var at = "at " + cur;
         if (cur == "") { at = "unreleased"; }
-        magus\info("release: " + m["key"] + " - " + at
+        magus\log.info("release: " + m["key"] + " - " + at
             + ", next: patch " + n.patch + " | minor " + n.minor + " | major " + n.major);
     }
 
     if (wanted.keys().len() == 0) {
-        magus\info("release: nothing named, nothing released - e.g. `magus run release -- magus@0.4.0`");
+        magus\log.info("release: nothing named, nothing released - e.g. `magus run release -- magus@0.4.0`");
         return;
     }
 
@@ -1460,8 +1471,8 @@ export fun release(ctx: magus\Context, args: [str]) > void {
     }
 
     if (!deliver) {
-        magus\info("release: DRY RUN - add the cd charm to execute");
-        if (dirty) { magus\info("release: NOTE - tree is dirty; cd will refuse until it is clean"); }
+        magus\log.info("release: DRY RUN - add the cd charm to execute");
+        if (dirty) { magus\log.info("release: NOTE - tree is dirty; cd will refuse until it is clean"); }
     }
 
     // 1. Nested modules first: the root's go.mod must require a version that
@@ -1474,7 +1485,7 @@ export fun release(ctx: magus\Context, args: [str]) > void {
     foreach (m in modules) {
         final v = wanted[m["key"]];
         if (v == null or m["root"] != "") { continue; }
-        magus\info("release: tag " + m["prefix"] + "v" + v);
+        magus\log.info("release: tag " + m["prefix"] + "v" + v);
         if (deliver) { vcs\cmd(["tag", m["prefix"] + "v" + v]); }
         // Only a Go module is required by the root's go.mod; a library in another
         // language is tag-only, so there is nothing to repoint.
@@ -1485,9 +1496,9 @@ export fun release(ctx: magus\Context, args: [str]) > void {
         // throws on a missing line, which is right for a module the root does
         // require and whose line moved.
         if (m["gomodule"] != "" and gomod.indexOf(m["gomodule"] + " v") == null) {
-            magus\info("release: go.mod  " + m["gomodule"] + "  - not required by the root; tag only");
+            magus\log.info("release: go.mod  " + m["gomodule"] + "  - not required by the root; tag only");
         } else if (m["gomodule"] != "") {
-            magus\info("release: go.mod  " + m["gomodule"] + "  ->  v" + v);
+            magus\log.info("release: go.mod  " + m["gomodule"] + "  ->  v" + v);
             gomod = releaser\rewriteRequire(gomod, m["gomodule"], "v" + v);
             rewrote = true;
         }
@@ -1497,26 +1508,26 @@ export fun release(ctx: magus\Context, args: [str]) > void {
     // 2. Root tag LAST, so it captures the go.mod rewrite above.
     final rootV = wanted["magus"];
     if (rootV != null) {
-        magus\info("release: tag v" + rootV);
+        magus\log.info("release: tag v" + rootV);
         if (deliver) { vcs\cmd(["tag", "v" + rootV]); }
     }
 
     if (deliver) {
-        magus\info("release: done - nothing was pushed. Push the tags deliberately when ready.");
+        magus\log.info("release: done - nothing was pushed. Push the tags deliberately when ready.");
     } else {
-        magus\info("release: dry run only - nothing was tagged or written");
+        magus\log.info("release: dry run only - nothing was tagged or written");
     }
 }
 
 // Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.
-export fun watch(ctx: magus\Context, args: [str]) > void {
-    magus\info("watching cmd/ and internal/ — rebuilding on change (Ctrl-C to stop)");
+export fun watch(ctx: magus\Context, args: [str]) > void !> any {
+    magus\log.info("watching cmd/ and internal/ — rebuilding on change (Ctrl-C to stop)");
     fs\watch(["cmd", "internal"], fun(changed: [str]) > bool {
-        magus\info("change detected — rebuilding");
+        magus\log.info("change detected — rebuilding");
         try {
             go_build(ctx, []);
         } catch (e) {
-            magus\warn("build failed, still watching: " + e);
+            magus\log.warn("build failed, still watching: " + e);
         }
         return false;
     });
@@ -1543,7 +1554,7 @@ fun total_coverage(func_out: str) > str {
 // `import "advice"` for the shared comment plumbing and Buzz resolves a bare import
 // against the CWD. In CI the action supplies the same thing as BUZZ_INCLUDE_PATH.
 //
-export fun advice_test(ctx: magus\Context, args: [str]) > void {
+export fun advice_test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(".github/actions/advice/*.buzz", ".github/actions/magus/*.buzz");
     foreach (dir in [".github/actions/advice", ".github/actions/magus"]) {
         foreach (script in fs\glob(dir + "/*.buzz")) {
@@ -1553,7 +1564,7 @@ export fun advice_test(ctx: magus\Context, args: [str]) > void {
 }
 
 // Tests with race detection, coverage, and a drift-gated coverage badge.
-export fun test(ctx: magus\Context, args: [str]) > void {
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(advice_test);
     // Declared because this target WRITES the badge below and gates on its drift.
     // Undeclared, a declaration-based staging review would skip it as unclaimed while ci still failed on
@@ -1573,7 +1584,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     fs\writeFile("coverage.hand.out",
         cov\stripGenerated(fs\readFile("coverage.out"),
             prefix: cov\modulePath(fs\readFile("go.mod")) + "/"));
-    final pct = total_coverage(os\exec("go", ["tool", "cover", "-func=coverage.hand.out"]).stdout);
+    final pct = total_coverage(proc\exec("go", ["tool", "cover", "-func=coverage.hand.out"]).stdout);
     if (std\parseInt(pct.split(".")[0]) < 60) {
         throw "test: coverage " + pct + "% is below the 60% floor; investigate the regression or lower the floor deliberately";
     }
@@ -1586,7 +1597,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     // survives the crossing.
     fs\writeFile(fs\join("assets", "coverage.svg"),
         badge\coverage("go coverage", percent: pct.split(".")[0], radius: 3));
-    if (ctx.has_charm("rw")) { return; }
+    if (ctx.hasCharm("rw")) { return; }
     if (drift.changedSince(badgeBefore, [fs\join("assets", "coverage.svg")]).len() > 0) {
         throw "test: assets/coverage.svg is stale; re-run `magus run test:rw .` and commit the badge";
     }
@@ -1602,10 +1613,15 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 // aim them at. Every .buzz here imports "magus"/"magus/spell" and uses embedding-only
 // constructs, so a non-embedded parse rejects all 62 of them; that is by design, not
 // drift. What they were meant to protect is already covered: spells/examples/**
-// by TestExamplesParseAndRecord (ParseEmbedded), every spells/<dir>/spell.buzz by the
-// registry compile that doctor's spell-contract check exercises, and every magusfile by
-// doctor's magusfile-syntax check. Reviving them means first having standalone Buzz and
-// pinning `buzz` in mise.toml, which is not the case today.
+// by TestExamplesParseAndRecord (ParseEmbedded), every spell source by buzz-test's glob
+// below, and every magusfile by doctor's magusfile-syntax check. Reviving them means first
+// having standalone Buzz and pinning `buzz` in mise.toml, which is not the case today.
+//
+// That middle claim used to read "every spells/<dir>/spell.buzz by the registry compile
+// that doctor's spell-contract check exercises", and it was false in both halves. The
+// built-in compile in cmd/magus-utils only sees one directory level and skips anything in
+// its workspaceLocalSpells list; doctor only ever observes spells that REGISTERED, which a
+// spell no magusfile imports never does. Two sources fell through both - see buzz-test.
 
 // Runs the in-file `test "..." {}` blocks in this repo's own root Buzz modules, through
 // magus's embedded engine.
@@ -1621,7 +1637,8 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 // modules that are pure library code with tests. badge.buzz's six tests and coverage.buzz's
 // ten had never run in CI - nothing invoked them, and the buzz-check gate above only ever
 // covered cmd/magus/starter/spells - so both files were free to rot while looking covered.
-export fun buzz_test(ctx: magus\Context, args: [str]) > void {
+export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("badge.buzz", "coverage.buzz", "spells/**/*.buzz", "docs/lib/*.buzz");
     foreach (mod in ["badge.buzz", "coverage.buzz"]) {
         magus\cmd("buzz", args: ["-t", mod]);
     }
@@ -1634,9 +1651,22 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void {
     // upstream-strict and rejects the positional-argument style every one of them uses.
     // The docs libraries need `dir`, because they import each other by relative path
     // (`lib/text`) and resolve it from the docs project root.
-    foreach (spell in ["spells/github/actions/spell.buzz", "spells/gitlab/ci/spell.buzz",
-                       "spells/golang/gomod.buzz"]) {
-        magus\cmd("buzz", args: ["-t", "--embedded", spell]);
+    //
+    // GLOBBED, unlike the root modules above, and that is the whole point. The list used
+    // to name three spell sources by hand, which silently left `spells/aws/s3-cache` and
+    // `spells/onepassword` under NO gate at all: neither is imported by any magusfile, so
+    // neither ever registers for doctor's spell-contract check, and neither reaches the
+    // built-in compile in cmd/magus-utils either - that scanner reads `spells/<dir>/spell.buzz`
+    // one level deep, so a nested `aws/s3-cache` is invisible to it, and `onepassword` is
+    // named in its workspaceLocalSpells skip list. A hand-maintained list reproduces exactly
+    // that failure on the next spell someone adds, so match every source instead and let a
+    // new spell be covered by existing.
+    //
+    // spells/examples/** is excluded because TestExamplesParseAndRecord already parses all
+    // 48 of them, and they are illustrative sources that do not have to resolve host modules.
+    foreach (spell in fs\glob("spells/**/*.buzz")) {
+        if (spell.value.startsWith("spells/examples/")) { continue; }
+        magus\cmd("buzz", args: ["-t", "--embedded", spell.value]);
     }
     foreach (lib in ["lib/text.buzz", "lib/dom.buzz", "lib/feed.buzz", "lib/html.buzz",
                      "lib/csp.buzz", "lib/url.buzz", "lib/date.buzz", "lib/glossary.buzz",
@@ -1660,7 +1690,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void {
 // Compiles one artifact: the host binary, or the container image under the `container` charm.
 export fun build(ctx: magus\Context, args: [str])  > void {
     ctx.needs(format);
-    if (ctx.has_charm("container")) {
+    if (ctx.hasCharm("container")) {
         ctx.needs(image_build);
     } else {
         ctx.needs(go_build);
@@ -1679,10 +1709,10 @@ export fun build(ctx: magus\Context, args: [str])  > void {
 // EnsureMergeDriver writes into .gitattributes, and /custom-gcl is gitignored, so
 // declaring it would name an untrackable path. Same consequence too - a read-only
 // run leaves no binary, so a fresh worktree needs this again.
-export fun lint_build(ctx: magus\Context, args: [str]) > void {
+export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("libs/testsprawl/.custom-gcl.yml", "libs/testsprawl/go.mod",
                    "libs/testsprawl/go.sum", "libs/testsprawl/**/*.go");
-    os\exec("golangci-lint", ["custom"], "libs/testsprawl");
+    proc\exec("golangci-lint", ["custom"], "libs/testsprawl");
 }
 
 // Formats and builds the linter first, then golangci-lint, go vet, markdownlint, and
@@ -1704,7 +1734,7 @@ export fun lint_build(ctx: magus\Context, args: [str]) > void {
 // in a way only a user would have noticed.
 // The proto contract self-gates: the `proto` project owns its buf-lint/ci, run by
 // `magus affected ci` when it's affected - the root does not reach into it.
-export fun lint(ctx: magus\Context, args: [str]) > void {
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(format, lint_build);
     // NOT go["golangci-lint"], which runs the stock binary off PATH and cannot see
     // an in-repo linter. That op existed to get the linter version into the cache
@@ -1713,8 +1743,23 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     // `--version` on a custom binary carries a build timestamp that moves every
     // rebuild.
     ctx.readsFiles("libs/testsprawl/.custom-gcl.yml", "libs/testsprawl/**/*.go");
-    os\exec("./custom-gcl", ["run"]);
+    proc\exec("./custom-gcl", ["run"]);
     go["go-vet"](ctx);
+    // Compile the browser playground for wasm. COMPILE only, to /dev/null: TinyGo
+    // builds the shipped artifact, but that runs by hand and never in ci, so nothing
+    // here ever type-checked the wasm configuration. Two breaks reached main that way -
+    // std/crypto.go calling a checkRead that is //go:build !wasm, and a generated
+    // trampoline missing its !wasm tag - each invisible until someone rebuilt the
+    // playground.
+    //
+    // The stock go toolchain, not TinyGo: it is already pinned, it is fast, and the
+    // failures worth catching are unresolved symbols under the wasm build tags, which
+    // both compilers see identically. Not ./... either - the daemon and internal/proc
+    // legitimately do not build for wasm (syscall.SIGHUP), so only the playground's
+    // own dependency tree is graded.
+    os\withEnv({"GOOS": "js", "GOARCH": "wasm"}, fun () > void !> any {
+        proc\exec("go", ["build", "-o", "/dev/null", "./cmd/buzz-playground"]);
+    });
     markdown.markdownlint(ctx);
     // The repo-root prose, named rather than walked. NOT markdown.typos: that op takes no
     // paths and walks the project directory, and THIS project's directory is the whole
@@ -1726,7 +1771,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     // root file - so the error pointed at generated output while the fix belonged here.
     final prose = ["README.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md", "TODO.md"];
     ctx.readsFiles("_typos.toml", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md", "TODO.md");
-    os\exec("typos", ["--format", "brief"] + prose);
+    proc\exec("typos", ["--format", "brief"] + prose);
     bash["shellcheck"](ctx);
 }
 // Regenerates, then formats Go, tidies `go.mod`, and formats Markdown. dprint rather than
@@ -1773,12 +1818,12 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 // image appears, or if a pinned community digest becomes acceptable.
 // TODO: fish is uncovered for the same reason; upstream declined to publish an official
 // image in fish-shell/fish-shell#3440.
-export fun completion_test(ctx: magus\Context, args: [str]) > void {
+export fun completion_test(ctx: magus\Context, args: [str]) > void !> any {
     // Declared so `magus affected` knows when this matters. Without it CI had to
     // re-derive the same answer with a git-diff grep in the workflow.
     ctx.readsFiles("hack/completion-checks/*", "cmd/magus/completions/*");
     try {
-        os\which("docker");
+        proc\which("docker");
     } catch (e) {
         throw "completion-test needs a docker daemon: it runs each shell's official image";
     }
@@ -1816,11 +1861,11 @@ export fun completion_test(ctx: magus\Context, args: [str]) > void {
 // liblzma/libzstd build tags, covers one package, and has a hard pkg-config precondition.
 // A charm variant (`test:cgo`) cannot express it either - charms patch argv, and the
 // distinguishing input here is CGO_ENABLED in the environment.
-export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void {
+export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void !> any {
     // Narrow: affected reaches this only when the codecs or their tests move.
     ctx.readsFiles("internal/compress/*.go");
     foreach (lib in ["libzstd", "liblzma"]) {
-        os\exec("pkg-config", ["--exists", lib], ".", {});
+        proc\exec("pkg-config", ["--exists", lib], ".", {});
     }
     go["go-test"](ctx.withEnv({"CGO_ENABLED": "1"}),
         {"args": ["-tags", "liblzma,libzstd", "./internal/compress/"]});
@@ -1828,9 +1873,9 @@ export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void {
 
 // Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix
 // outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.
-export fun ci_shard(ctx: magus\Context, args: [str]) > void {
+export fun ci_shard(ctx: magus\Context, args: [str]) > void !> any {
     var input = "";
-    if (!os\stdinIsTerminal()) {
+    if (!proc\stdinIsTerminal()) {
         input = io.stdin.readAll();
     }
     if (input == "") {
@@ -1845,8 +1890,8 @@ export fun ci_shard(ctx: magus\Context, args: [str]) > void {
         + "count=" + plan.q("count").integerValue() + "\n"
         + "max_parallel=" + plan.q("max_parallel").integerValue() + "\n";
 
-    if (!ctx.has_charm("gha")) {
-        magus\info("ci-shard preview (add the gha charm — `magus run ci-shard:gha` — to write $GITHUB_OUTPUT):\n" + block);
+    if (!ctx.hasCharm("gha")) {
+        magus\log.info("ci-shard preview (add the gha charm — `magus run ci-shard:gha` — to write $GITHUB_OUTPUT):\n" + block);
         return;
     }
     final path = os\env("GITHUB_OUTPUT");
@@ -1890,9 +1935,9 @@ export fun ci_shard(ctx: magus\Context, args: [str]) > void {
 // install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this
 // replaced read that as ready and handed the missing packages to esbuild. On a warm tree
 // --frozen-lockfile is about a second and changes nothing.
-fun rebuild_console() > void {
-    os\exec("pnpm", ["install", "--frozen-lockfile"], "console", {});
-    os\exec("pnpm", ["run", "build"], "console", {});
+fun rebuild_console() > void !> any {
+    proc\exec("pnpm", ["install", "--frozen-lockfile"], "console", {});
+    proc\exec("pnpm", ["run", "build"], "console", {});
 }
 
 // rerender_docs re-renders docs/gen via the docs project's fast `render` target.
@@ -1902,10 +1947,10 @@ fun rebuild_console() > void {
 // never the workspace root - so a sub-invocation (which sets CWD=docs) is the only
 // way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set
 // for magus child processes) and fall back to `magus` on PATH.
-fun rerender_docs() > void {
+fun rerender_docs() > void !> any {
     var bin = os\env("MAGUS");
     if (bin == null or ("" + bin) == "") { bin = "magus"; }
-    os\exec("" + bin, ["run", "render", "docs"], ".", {});
+    proc\exec("" + bin, ["run", "render", "docs"], ".", {});
 }
 
 // missing_input phrases a deploy-generate precondition that ANOTHER project owns.
@@ -1967,7 +2012,7 @@ fun missing_input(path: str, project: str) > str {
 // renamed website/ to docs/ deliberately, so "website" is retired vocabulary. "site" itself is
 // the house term (the Site type, site_render, site_publish, docs/site/), which is exactly why
 // it needed a qualifier here rather than a replacement.
-export fun deploy_generate(ctx: magus\Context, args: [str]) > void {
+export fun deploy_generate(ctx: magus\Context, args: [str]) > void !> any {
     final DOCS_GEN = "docs/gen";
     final CONSOLE_GEN = "console/gen";
     // gen/site, not a new top-level name: gen/ is what every project in this workspace
@@ -1989,16 +2034,16 @@ export fun deploy_generate(ctx: magus\Context, args: [str]) > void {
 
     // Rebuilt from empty every time: a stale page left behind by a previous assembly would
     // publish as a live URL that no source produces any more.
-    if (fs\exists(OUT)) { fs\delete(OUT); }
+    if (fs\exists(OUT)) { fs\removeAll(OUT); }
     fs\copyDir(DOCS_GEN, OUT);
     // The console project OWNS /console/, so its subtree is replaced wholesale. This discards
     // the docs render's /console/ redirect stub, which exists only to satisfy the docs
     // asset-integrity gate, so the real app wins - the same precedence `serve` gets from
     // longest-prefix mount routing.
-    if (fs\exists(OUT + "/console")) { fs\delete(OUT + "/console"); }
+    if (fs\exists(OUT + "/console")) { fs\removeAll(OUT + "/console"); }
     fs\copyDir(CONSOLE_GEN, OUT + "/console");
 
-    magus\info("assembled " + OUT + " - docs at /, console at /console/");
+    magus\log.info("assembled " + OUT + " - docs at /, console at /console/");
 }
 
 // serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the
@@ -2016,7 +2061,7 @@ export fun deploy_generate(ctx: magus\Context, args: [str]) > void {
 //
 // This rebuilds docs/console CONTENT, never magus itself - it does NOT trip the
 // self-rebuild anti-pattern CLAUDE.md warns against.
-export fun serve(ctx: magus\Context, args: [str]) > void {
+export fun serve(ctx: magus\Context, args: [str]) > void !> any {
     final DOCS_GEN = "docs/gen";
     final CONSOLE_GEN = "console/gen";
     if (!fs\isDir(DOCS_GEN)) { throw "serve: " + DOCS_GEN + " not found - run `magus run build docs` first"; }
@@ -2026,10 +2071,10 @@ export fun serve(ctx: magus\Context, args: [str]) > void {
     // the printed URL is correct even when 8080 is busy. "/console/" is longer than
     // "/", so a /console/ request routes (longest-prefix) to the console tree.
     final port = http\server({"mounts": {"/": DOCS_GEN, "/console/": CONSOLE_GEN}});
-    magus\info("serving the deploy at http://localhost:{port}/");
-    magus\info("  /          -> " + DOCS_GEN + "  (docs)");
-    magus\info("  /console/  -> " + CONSOLE_GEN + "  (console SPA, shadows the docs /console/ redirect)");
-    magus\info("watching docs/ + blog/ (re-render docs) and console/ sources (rebuild console); Ctrl-C to stop");
+    magus\log.info("serving the deploy at http://localhost:{port}/");
+    magus\log.info("  /          -> " + DOCS_GEN + "  (docs)");
+    magus\log.info("  /console/  -> " + CONSOLE_GEN + "  (console SPA, shadows the docs /console/ redirect)");
+    magus\log.info("watching docs/ + blog/ (re-render docs) and console/ sources (rebuild console); Ctrl-C to stop");
 
     // Watch SOURCES only, never the gen/ output trees: fs.watch's built-in ignore
     // prunes any dir named gen/ or node_modules/, so watching docs/, blog/, and
@@ -2068,11 +2113,11 @@ export fun serve(ctx: magus\Context, args: [str]) > void {
             // precisely the callers that cannot infer the fix themselves. The watch is
             // ending here, so losing the remedy leaves no way forward. Hints carry what is
             // safe to lose; this is not.
-            magus\error("serve: the magus binary changed while this server was running (" + exe
+            magus\log.error("serve: the magus binary changed while this server was running (" + exe
                 + "); this process still runs the OLD code, so anything it regenerates now would be stale."
                 + " Stop it (Ctrl-C) and start it again to pick up the new build.");
             // Advisory, and safe to lose: the general rule behind this one instance.
-            magus\hint("a long-lived magus keeps regenerating with the logic it started with; restart it after a rebuild");
+            magus\log.hint("a long-lived magus keeps regenerating with the logic it started with; restart it after a rebuild");
             return true; // end the watch; a stale generator must not keep writing gen/
         }
         var docsHit = false;
@@ -2085,19 +2130,19 @@ export fun serve(ctx: magus\Context, args: [str]) > void {
             }
         }
         if (docsHit) {
-            magus\info("docs/blog change - re-rendering " + DOCS_GEN);
+            magus\log.info("docs/blog change - re-rendering " + DOCS_GEN);
             try {
                 rerender_docs();
             } catch (e) {
-                magus\warn("docs render failed, still watching: " + e);
+                magus\log.warn("docs render failed, still watching: " + e);
             }
         }
         if (consoleHit) {
-            magus\info("console change - rebuilding " + CONSOLE_GEN);
+            magus\log.info("console change - rebuilding " + CONSOLE_GEN);
             try {
                 rebuild_console();
             } catch (e) {
-                magus\warn("console build failed, still watching: " + e);
+                magus\log.warn("console build failed, still watching: " + e);
             }
         }
         return false;

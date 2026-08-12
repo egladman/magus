@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"testing"
 )
 
@@ -376,6 +377,43 @@ func TestSnapshotOneBlobDedup(t *testing.T) {
 	recB, err := c.snapshotOne(b, "b.txt")
 	require.NoError(t, err)
 	assert.Equal(t, recA.Blob, recB.Blob, "identical content must share one blob")
+}
+
+// TestSnapshotOneHashMatchesWrittenBytes verifies that the blob committed to
+// the CAS is always named after the bytes actually copied into it. snapshotOne
+// used to call hashFile(abs) and then separately re-open and re-read abs via
+// copyToFile(abs, tmp); anything that changes what a read of abs returns
+// between those two independent opens (a concurrent write is the real-world
+// trigger) would commit content under a name that does not match it,
+// permanently poisoning the CAS entry (the dedup gate trusts an existing blob
+// name forever).
+//
+// This test makes the failure deterministic instead of timing-dependent: abs
+// is a FIFO, so each of the two independent reads snapshotOne performs gets
+// whichever write session this test feeds it, exactly modelling "the content
+// TestSnapshotOneRefusesANonRegularFile pins the refusal that replaced a FIFO
+// round-trip here. Opening a FIFO blocks until a writer appears, with no timeout
+// and no diagnostic, so a declared output glob matching a stray pipe hung the
+// build; and a replay materializes every blob as a regular file, so a pipe could
+// never round-trip regardless. The old test fed a FIFO two write sessions to model
+// "the content changed between two reads" - which reader a writer paired with was
+// pure scheduling, so under load it deadlocked the package for its full ten-minute
+// timeout. The property it was really guarding, that a blob is named after the
+// bytes stored, is now structural: snapshotOne reads once and names from that pass.
+func TestSnapshotOneRefusesANonRegularFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("FIFOs are not available on Windows")
+	}
+	c := newBareCache(t)
+	root := t.TempDir()
+	abs := filepath.Join(root, "out.txt")
+	require.NoError(t, syscall.Mkfifo(abs, 0o644))
+
+	// No writer is ever opened: reaching an open at all would hang here, so this
+	// also proves the refusal happens before any open.
+	_, err := c.snapshotOne(abs, "out.txt")
+	require.Error(t, err, "a FIFO output must be refused, not opened")
+	assert.Contains(t, err.Error(), "not a regular file")
 }
 
 // TestExpandOutputGlobsRejectsAbsolute verifies absolute output globs are

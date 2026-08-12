@@ -1,0 +1,19 @@
+// @expect: true
+// `collect()` fires for an object the PROGRAM can no longer reach. Reachability is
+// computed over the VM's own roots, not Go's heap: a Go finalizer runs on another
+// goroutine at an unspecified time, so it could never satisfy "collect, then assert
+// the callback ran". A still-referenced object must NOT be collected.
+import "gc";
+
+var deadCollected = false;
+var liveCollected = false;
+
+object Dead { fun collect() > void { deadCollected = true; } }
+object Live { fun collect() > void { liveCollected = true; } }
+
+fun drop() > void { _ = Dead{}; }
+
+final kept = Live{};
+drop();
+gc\collect();
+final __r = deadCollected and !liveCollected and kept != null;

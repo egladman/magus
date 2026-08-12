@@ -120,5 +120,39 @@ func RegisterCrypto(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return StrVal(ret0), nil
 	}))
+	m.MapSet("hmacSha256", vm.DirectValue("crypto.hmacSha256", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		key := ByteSlice(bzArgs, 0)
+		data := ByteSlice(bzArgs, 1)
+		ret0, err := std.CryptoHmacSha256(ctx, key, data)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return ByteSliceVal(ret0), nil
+	}))
+	m.MapSet("hmacSha256Hex", vm.DirectValue("crypto.hmacSha256Hex", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		key := ByteSlice(bzArgs, 0)
+		data := ByteSlice(bzArgs, 1)
+		ret0, err := std.CryptoHmacSha256Hex(ctx, key, data)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrVal(ret0), nil
+	}))
+	m.MapSet("base64EncodeBytes", vm.DirectValue("crypto.base64EncodeBytes", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		data := ByteSlice(bzArgs, 0)
+		ret0, err := std.CryptoBase64EncodeBytes(ctx, data)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrVal(ret0), nil
+	}))
+	m.MapSet("base64DecodeBytes", vm.DirectValue("crypto.base64DecodeBytes", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		s := Str(bzArgs, 0)
+		ret0, err := std.CryptoBase64DecodeBytes(ctx, s)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return ByteSliceVal(ret0), nil
+	}))
 	return m
 }

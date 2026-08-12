@@ -21,7 +21,7 @@ export fun stamp(ctx: magus\Context, args: [str]) > void {
     // satisfies() tests a relation or a range; compare() orders two versions
     // and returns -1, 0, or 1, the way every other semver library spells it.
     final newer = semver\satisfies("1.10.0", constraint: "> 1.4.0");   // true: 1.10.0 outranks 1.4.0
-    magus\info("artifact slug: {slug}");
-    magus\info("tag:           v1.4.0");
-    magus\info("1.10.0 newer than 1.4.0? {newer}");
+    magus\log.info("artifact slug: {slug}");
+    magus\log.info("tag:           v1.4.0");
+    magus\log.info("1.10.0 newer than 1.4.0? {newer}");
 }

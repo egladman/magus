@@ -1,9 +1,16 @@
 // @expect: true
-// DELIBERATE DIVERGENCE, do not "fix" by adopting upstream's constant.
-// buzz declares pi as the 14-digit literal 3.1415926535898; gopherbuzz uses the
-// nearest double instead, because correct arithmetic beats bug-for-bug parity on
-// a numeric constant. This pins the FULL-PRECISION result, so a future change
-// that adopts the truncated literal to make tests/behavior/math.buzz pass fails
-// here instead of silently degrading every trig result.
+// Pins UPSTREAM's pi, which gopherbuzz adopted on 2026-08-11.
+//
+// This file used to assert the opposite. It pinned the full-precision result and
+// said "DELIBERATE DIVERGENCE, do not fix by adopting upstream's constant",
+// because correct arithmetic was judged to beat bug-for-bug parity. That was
+// reversed deliberately: this VM's job is to BE buzz, so a program moved from
+// upstream must not get different numbers here.
+//
+// Its role is unchanged - catch a SILENT drift. It now fails if anyone quietly
+// swaps buzzPi back to Go's math.Pi, which would give 114.59155902616465 and
+// 3.141592653589793. See the note on buzzPi in std/math.go before changing either.
 import "math";
-final __r = math.deg(2.0) == 114.59155902616465 and math.rad(math.deg(2.0)) == 2;
+final __r = math.deg(2.0) == 114.59155902616439
+    and math.pi == 3.1415926535898
+    and math.rad(math.deg(2.0)) == 2;

@@ -101,6 +101,29 @@ func TestVcsNameNeverRaises(t *testing.T) {
 	require.NoError(t, err, "detection must never raise; that is its whole job")
 }
 
+// TestResolveVCSDoesNotCacheAnError pins that a failed vcs.Resolve (here: an
+// unresolvable explicit VCS name from a misconfigured MAGUS_VCS_NAME) is not
+// remembered as "no VCS" for the cwd. resolveVCS keys its cache on cwd alone, so
+// before the fix the first call's error still set vcsCwdKey, and every later call
+// for the same cwd short-circuited to the stale (nil, "") even after whatever
+// caused the failure was gone.
+func TestResolveVCSDoesNotCacheAnError(t *testing.T) {
+	chdirOutsideAnyRepo(t)
+	ctx := context.Background()
+
+	t.Setenv("MAGUS_VCS_NAME", "totally-bogus-vcs-name")
+	v, base := resolveVCS(ctx)
+	require.Nil(t, v, "an unknown explicit VCS name must not resolve a driver")
+	assert.Empty(t, base)
+
+	// Clear the bad name; the SAME cwd must resolve normally now (git, per
+	// TestVcsNameNeverRaises' note that resolution succeeds even in a bare temp
+	// dir). Before the fix this returned the poisoned cached (nil, "") forever.
+	t.Setenv("MAGUS_VCS_NAME", "")
+	v, _ = resolveVCS(ctx)
+	assert.NotNil(t, v, "a transient resolve error must not be cached as \"no VCS\" for this cwd")
+}
+
 func TestOsWhichRaisesForAMissingCommand(t *testing.T) {
 	ctx := context.Background()
 

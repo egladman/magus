@@ -70,12 +70,14 @@ func WithOnRetry(fn func(attempt int, err error)) Option {
 }
 
 // WithFixedDelay holds the backoff constant at the [WithDelay] value rather than
-// doubling it each attempt — the curl --retry-delay behaviour.
+// doubling it each attempt — the curl --retry-delay behaviour. It has no effect
+// on [Do].
 func WithFixedDelay() Option { return func(o *options) { o.fixedDelay = true } }
 
 // WithMaxElapsed caps the total wall-clock time a retry loop may spend (curl
 // --retry-max-time). Zero (the default) means no cap. When the budget would be
-// exceeded by the next backoff, the loop stops and surfaces the last result.
+// exceeded by the next backoff, the loop stops and surfaces the last result. It
+// has no effect on [Do].
 func WithMaxElapsed(d time.Duration) Option { return func(o *options) { o.maxElapsed = d } }
 
 // WithRetryDecider replaces the default HTTP retry policy of the client built by
@@ -228,7 +230,7 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			if cfg.onRetry != nil {
 				cfg.onRetry(attempt, lastErr)
 			}
-			delay := retryAfterDelay(resp, backoff(cfg, attempt))
+			delay := retryAfterDelay(resp, backoff(cfg, attempt), cfg.maxDelay)
 			_ = resp.Body.Close()
 			resp = nil
 			if werr := t.waitBeforeRetry(req.Context(), start, delay); werr != nil {
@@ -320,11 +322,19 @@ func backoff(cfg options, attempt int) time.Duration {
 }
 
 // retryAfterDelay returns the delay from a Retry-After header, falling back to
-// the computed exponential delay when the header is absent or unparsable.
-func retryAfterDelay(resp *http.Response, fallback time.Duration) time.Duration {
+// the computed exponential delay when the header is absent or unparsable. A
+// header-supplied delay is capped at maxDelay - otherwise a server could name
+// an arbitrarily long wait and defeat the caller's own backoff ceiling. Every
+// current caller also sets WithTimeout, which already bounds the whole loop,
+// so this is defense-in-depth for a future caller that omits it.
+func retryAfterDelay(resp *http.Response, fallback, maxDelay time.Duration) time.Duration {
 	if v := resp.Header.Get("Retry-After"); v != "" {
 		if secs, err := strconv.Atoi(v); err == nil && secs >= 0 {
-			return time.Duration(secs) * time.Second
+			delay := time.Duration(secs) * time.Second
+			if maxDelay > 0 && delay > maxDelay {
+				return maxDelay
+			}
+			return delay
 		}
 	}
 	return fallback

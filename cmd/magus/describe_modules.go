@@ -6,8 +6,8 @@ import (
 	"os"
 	"slices"
 
+	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
 
@@ -41,9 +41,9 @@ func describeModules(args []string) error {
 	if len(rest) > 0 {
 		name = rest[0]
 	}
-	out := std.DescribeModules(name)
+	out := hostmodules.Describe(name)
 	if name != "" && len(out) == 0 {
-		mods := std.All()
+		mods := hostmodules.All()
 		names := make([]string, len(mods)) // module names, sorted for a stable suggestion
 		for i, m := range mods {
 			names[i] = m.Name
@@ -93,7 +93,7 @@ func describeModules(args []string) error {
 		for _, f := range m.Fields {
 			fmt.Printf("  %s: %s", f.Name, f.Type)
 			if f.Doc != "" {
-				fmt.Printf("  — %s", firstLine(f.Doc))
+				fmt.Printf("  - %s", firstLine(f.Doc))
 			}
 			fmt.Println()
 		}
@@ -107,7 +107,7 @@ func describeModules(args []string) error {
 		}
 		fmt.Printf("    Signature: %s\n", meth.Buzz)
 		if meth.BuzzStdlib != "" {
-			fmt.Printf("    (also in Buzz's stdlib: %s — the extra form is sandbox-aware)\n", meth.BuzzStdlib)
+			fmt.Printf("    (also in Buzz's stdlib: %s - the extra form is sandbox-aware)\n", meth.BuzzStdlib)
 		}
 	}
 	return nil

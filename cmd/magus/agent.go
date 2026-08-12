@@ -551,7 +551,7 @@ func adviseInstalledSkillWrite(path string) string {
 	if err != nil || !strings.Contains(string(body), "source: magus") {
 		return ""
 	}
-	return "magus workspace: that file is an INSTALLED skill - magus generates it from its own embedded sources and stamps it with a content digest. Editing it does not fail loudly, it fails silently in two ways: `magus graph verify` reports the file as stale rather than reading what you wrote, and the next `magus agent install <dir> --force` overwrites it. Rules that belong to THIS workspace go in a local skill beside the installed ones instead - a directory magus does not ship, conventionally magus-local, which install and verify both leave alone by construction. Stamp each rule with its evidence and the condition that retires it. Load the magus-adapt skill for the format and the rest of the method."
+	return "magus workspace: that file is an INSTALLED skill - magus generates it from its own embedded sources and stamps it with a content digest. Editing it does not fail loudly, it fails silently in two ways: `magus graph verify` reports the file as stale rather than reading what you wrote, and the next `magus agent install <dir> --force` overwrites it. Rules that belong to THIS workspace go in a local skill beside the installed ones instead - a directory magus does not ship, conventionally magus-local-development, which install and verify both leave alone by construction. Stamp each rule with its evidence and the condition that retires it. Load the magus-adapt skill for the format and the rest of the method."
 }
 
 // guardInput keeps the resolved command/path distinct from its rendering and

@@ -153,7 +153,7 @@ fun body(items: [{str: str}]) > str {
         + "`magus:silence:" + section + "` label and it will stay quiet.\n";
 }
 
-fun main() > void {
+fun main() > void !> any {
     final repo = advice\env("REPO");
     final pr = advice\env("PR_NUMBER");
     final base = advice\env("PR_BASE");
@@ -180,7 +180,7 @@ fun main() > void {
     if (configuredShare != "") { minShare = std\parseDouble(configuredShare) ?? 0.8; }
 
     var projects = mut [];
-    foreach (p in magus\targetGraph().projects) {
+    foreach (p in magus\targets().projects) {
         var spells = mut [];
         var targets = mut [];
         foreach (n in p.nodes) {
@@ -208,7 +208,6 @@ fun main() > void {
     std\print("missing-target: advised on {items.len()} gap(s)");
 }
 
-main();
 
 test "kind is order-independent and dedupes, so two projects match however written" {
     std\assert(kind(["go", "markdown", "go"]) == kind(["markdown", "go"]),

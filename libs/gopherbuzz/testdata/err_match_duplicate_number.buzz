@@ -1,0 +1,3 @@
+// @error: duplicate match condition
+// 1 and 1.0 are ONE condition: conditions compare numerically, not by type.
+final __r = match (1) { 1 -> "int", 1.0 -> "double", else -> "other" };

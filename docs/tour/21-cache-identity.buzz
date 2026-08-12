@@ -55,13 +55,13 @@ magus\project({
 // charm - the point is that the KEY differs regardless, because the charm is part of the
 // run's identity whether or not this target's code branches on it.
 export fun report(ctx: magus\Context, args: [str]) > void {
-    if (ctx.has_charm("loud")) {
-        magus\info("report: running LOUD");
+    if (ctx.hasCharm("loud")) {
+        magus\log.info("report: running LOUD");
     } else {
-        magus\info("report: running plain");
+        magus\log.info("report: running plain");
     }
     if (args.len() > 0) {
-        magus\info("report: extra args changed the key");
+        magus\log.info("report: extra args changed the key");
     }
 }
 
@@ -73,17 +73,17 @@ export fun report(ctx: magus\Context, args: [str]) > void {
 // It is per-INVOCATION, not per-machine: it is the dispatcher deduping a dependency graph,
 // not the cache replaying a previous run. Run `both` and count the prep line - one.
 export fun prep(ctx: magus\Context, args: [str]) > void {
-    magus\info("prep: ran once");
+    magus\log.info("prep: ran once");
 }
 
 export fun a(ctx: magus\Context, args: [str]) > void {
     ctx.needs(prep);
-    magus\info("a: done");
+    magus\log.info("a: done");
 }
 
 export fun b(ctx: magus\Context, args: [str]) > void {
     ctx.needs(prep);
-    magus\info("b: done");
+    magus\log.info("b: done");
 }
 
 // Both a and b need prep. prep runs once.

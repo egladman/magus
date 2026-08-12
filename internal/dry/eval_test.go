@@ -116,7 +116,7 @@ import "magus";
 import "magus/spell/docker";
 magus.project({"spells": [docker]});
 export fun image_build(ctx: magus\Context, args: [str]) > void {
-    if (ctx.has_charm("cd")) { docker["docker-build"]({"args": ["--push"]}); }
+    if (ctx.hasCharm("cd")) { docker["docker-build"]({"args": ["--push"]}); }
     else { docker["docker-build"]({"args": ["--load"]}); }
 }
 `
@@ -168,7 +168,7 @@ func TestRun_magusRunInvocation(t *testing.T) {
 	const src = `
 import "magus";
 export fun image_build(ctx: magus\Context, args: [str]) > void {}
-export fun release(ctx: magus\Context, args: [str]) > void { magus.run(["image-build:cd"]); }
+export fun release(ctx: magus\Context, args: [str]) > void !> any { magus.run(["image-build:cd"]); }
 `
 	g := LoadMagusfile(context.Background(), src)
 	require.True(t, g.OK, "load failed: %+v", g.Diag)
@@ -213,7 +213,7 @@ func hasEdge(edges []Edge, from, to string) bool {
 func TestEval_HostModules(t *testing.T) {
 	cases := map[string]string{
 		`import "strings"; return strings.camelCase("hello world");`: "helloWorld",
-		`import "encoding"; return encoding.base64Encode("hi");`:     "aGk=",
+		`import "encoding/base64"; return base64.encode("hi");`:      "aGk=",
 	}
 	for src, want := range cases {
 		r := Eval(context.Background(), src)

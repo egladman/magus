@@ -25,7 +25,7 @@ import (
 
 // SkillVersion changes when the installed skill contract changes. It is part
 // of the generated provenance and lets verification explain stale installs.
-const SkillVersion = 26
+const SkillVersion = 33
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -38,10 +38,11 @@ const anchorSkillRel = "magus-query/SKILL.md"
 // design rather than an omission: install writes only the names in
 // skillSources, and CheckStatuses grades only the anchor, so any name magus
 // does not ship is already untouchable. The reservation exists so it stays that
-// way - a future shipped skill called magus-local would, on the first
-// --force after the upgrade, silently overwrite every early adopter's file.
+// way - a future shipped skill called magus-local-development would, on the
+// first --force after the upgrade, silently overwrite every early adopter's
+// file.
 // TestLocalSkillNameIsReserved is what makes the promise enforceable.
-const LocalSkillName = "magus-local"
+const LocalSkillName = "magus-local-development"
 
 var wellKnownSkillDirs = []string{".agents/skills", ".claude/skills", ".opencode/skills"}
 
@@ -189,9 +190,10 @@ type skillSource struct {
 }
 
 var skillSources = []skillSource{
-	{name: "magus-adapt", description: "Adapt magus's installed agent surface to THIS workspace without breaking it. Use when repeated friction is not covered by a shipped skill, when tempted to edit an installed magus-* SKILL.md (they are stamped: `magus graph verify` reports the edit as drift and the next `magus agent install --force` erases it), and when deciding whether a workspace rule should graduate upstream as a pull request or an issue. Workspace-specific rules belong in a local magus-local skill, stamped with their evidence and a retire-when condition.", bodyPath: "skills/magus-adapt/SKILL.md"},
+	{name: "magus-adapt", description: "Adapt magus's installed agent surface to THIS workspace without breaking it. Use when repeated friction is not covered by a shipped skill, when tempted to edit an installed magus-* SKILL.md (they are stamped: `magus graph verify` reports the edit as drift and the next `magus agent install --force` erases it), and when deciding whether a workspace rule should graduate upstream as a pull request or an issue. Workspace-specific rules belong in a local magus-local-development skill, stamped with their evidence and a retire-when condition.", bodyPath: "skills/magus-adapt/SKILL.md"},
 	{name: "magus-architecture", description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition. Use when suggesting directory structure, package layout, or module boundaries, when deciding where new code belongs, when assessing the blast radius or risk of a refactor, or when asked where a magus workspace's coupling and churn concentrate.", bodyPath: "skills/magus-architecture/SKILL.md"},
 	{name: "magus-buzz", description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in. Use when writing or debugging a magusfile target, a spell, or a .buzz file, and when a one-off script is needed in a magus workspace - Buzz is already installed with the whole magus host surface (fs, http, json, yaml, template, vcs, ...), so it needs no dependency install. Also use when Buzz syntax surprises you: namespace access is a backslash, object literals use `=`, and `magus buzz` runs upstream-strict (no top-level control flow, every argument after the first must be labeled).", bodyPath: "skills/magus-buzz/SKILL.md"},
+	{name: "magus-buzz-review", description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance. Use when asked to review, audit, or critique a .buzz file or change, or when a finding needs to say whether it holds anywhere Buzz runs (UPSTREAM), only under gopherbuzz (GOPHERBUZZ), or runs here but not upstream (PORTABILITY). Fans out the three lenses via the Agent tool and merges the results, the same shape go-review-ultra uses for Go. Does NOT cover magusfile/target/spell contracts - caching, ctx.needs, wards, charms; use magus-buzz for those.", bodyPath: "skills/magus-buzz-review/SKILL.md"},
 	{name: "magus-changes", description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question. Use for \"what's been merged lately?\", \"catch me up since last week\", \"add this to the CHANGELOG\", and \"what exactly did this branch change?\" Covers three outputs: a short evidence-backed brief, a Keep a Changelog entry in the repo's existing shape, and per-question diff commands. Always answer through magus surfaces (graph diff, describe file, affected --impact/--explain) rather than reading a raw diff; do not infer features from commit subjects alone.", bodyPath: "skills/magus-changes/SKILL.md"},
 	{name: "magus-context-audit", description: "Audit the instructions an agent was given - the repo instruction file, installed skills, handoff-journal entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do. Use after changing a guard rule, a denied command, or a documented workflow; before shipping a change to the agent surface; and when an agent has been behaving inconsistently or ignoring a rule. This is a lens over INSTRUCTIONS, not over code: it reports ranked findings for a human to act on and never edits anything itself.", bodyPath: "skills/magus-context-audit/SKILL.md"},
 	{name: "magus-delegate-ultra", description: "Plan and execute potentially expensive multi-agent work in a magus workspace as an acceptance-criteria loop, using affected shard plans and knowledge-graph evidence to assign collision-resistant edit units, coordinate nested delegation, and choose cost-appropriate effort tiers. Use ONLY when the user names this skill, or asks in their own words for the work to be SPLIT ACROSS AGENTS - \"fan this out\", \"run these in parallel\", \"use several subagents\", \"spin up an agent per package\". Wanting the work faster, sooner, or more thorough is NOT that request: those are asks about the outcome, and this skill is a choice about the method, with a real cost. Never auto-trigger it on ordinary implementation.", bodyPath: "skills/magus-delegate-ultra/SKILL.md"},
@@ -322,6 +324,13 @@ func (c *Catalog) SkillTar(dest string, v Variant) ([]byte, error) {
 func (c *Catalog) WriteSkillTree(dir, dest string, force bool, v Variant) ([]string, error) {
 	if filepath.IsAbs(dest) || strings.HasPrefix(dest, "~") {
 		return nil, fmt.Errorf("agent install: destination %q is outside the working tree; pass --global or use --tar | tar -xf - -C <dir>", dest)
+	}
+	// filepath.IsAbs/~ catches an absolute escape but not "../../outside": Join
+	// with dir still resolves that to a path outside it. Clean the joined result
+	// and confirm it is still under dir before writing anything.
+	joined := filepath.Clean(filepath.Join(dir, dest))
+	if rel, err := filepath.Rel(dir, joined); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil, fmt.Errorf("agent install: destination %q escapes the working tree", dest)
 	}
 	skills, err := c.EmbeddedSkills(v)
 	if err != nil {

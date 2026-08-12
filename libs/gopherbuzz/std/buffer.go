@@ -3,8 +3,11 @@ package std
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
+	"math"
 	"strconv"
+	"strings"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -47,7 +50,10 @@ type bufferState struct {
 	bytes []byte  // growing slice backing the string/byte API
 	cap   int     // capacity passed to Buffer.init; size of the pinned block
 	addr  uintptr // pinned FFI block base, or 0 if not yet allocated
-	freed bool    // collect() has released the pinned block
+	// owned are C strings allocated for pointer fields written by writeStruct. The
+	// buffer owns them because the image outlives the values it was built from.
+	owned []uintptr
+	freed bool // collect() has released the pinned block
 }
 
 func bufferInit(_ context.Context, args []vm.Value) (vm.Value, error) {
@@ -68,13 +74,37 @@ func (st *bufferState) ensurePinned() (uintptr, error) {
 	if st.addr != 0 {
 		return st.addr, nil
 	}
-	if st.cap <= 0 {
-		return 0, fmt.Errorf("Buffer: the pointer/Zig API needs a capacity; use Buffer.init(capacity)")
+	// A buffer written through the byte/Zig API and only THEN handed to C has no
+	// declared capacity - upstream's ffi.buzz calls a bare Buffer.init(), fills it
+	// with writeZ, and passes ptr() to a foreign function. Sizing the block to what
+	// has actually been written makes that work, and keeps the explicit
+	// Buffer.init(capacity) form (an out-parameter a callee fills) exactly as it was.
+	// The block holds whichever is larger. Taking st.cap alone truncated a buffer
+	// written past its declared capacity, which would drop the tail silently.
+	size := st.cap
+	if len(st.bytes) > size {
+		size = len(st.bytes)
 	}
-	addr, err := buzz.AllocFFI(st.cap)
+	if size <= 0 {
+		return 0, fmt.Errorf("Buffer: the pointer/Zig API needs a capacity or some written bytes; use Buffer.init(capacity)")
+	}
+	addr, err := buzz.AllocFFI(size)
 	if err != nil {
 		return 0, err
 	}
+	// The block is a SNAPSHOT of what has been written. Pinning copies the bytes in
+	// once; a later writeZ appends to st.bytes and does not reach C. That is enough
+	// for the fill-then-pass shape, and the alternative (repinning per write) would
+	// invalidate a pointer a callee may still hold.
+	//
+	// Unconditional: gated on `st.cap <= 0` it handed C zeros for a buffer built
+	// with Buffer.init(capacity) and then written.
+	if len(st.bytes) > 0 {
+		if err := buzz.WriteFFIBytes(addr, st.bytes); err != nil {
+			return 0, err
+		}
+	}
+	st.cap = size
 	st.addr = addr
 	return addr, nil
 }
@@ -84,8 +114,16 @@ func makeBufferValue(st *bufferState) vm.Value {
 	m := mod()
 
 	m.MapSet("write", fn("Buffer.write", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		// Upstream's write takes a STR; gopherbuzz's took a [int]. Both are accepted
+		// rather than one replaced: the string form is what upstream's behavior suite
+		// uses, and the byte-list form is what this package's own callers already
+		// pass. They are unambiguous at the value level, so nothing has to choose.
+		if len(args) >= 1 && args[0].IsStr() {
+			*buf = append(*buf, args[0].AsString()...)
+			return vm.Null, nil
+		}
 		if len(args) < 1 || !args[0].IsList() {
-			return vm.Null, fmt.Errorf("Buffer.write: requires a [int] bytes argument")
+			return vm.Null, fmt.Errorf("Buffer.write: requires a str or [int] bytes argument")
 		}
 		for _, item := range args[0].ListItems() {
 			if !item.IsInt() {
@@ -117,11 +155,94 @@ func makeBufferValue(st *bufferState) vm.Value {
 		}
 		chunk := (*buf)[:n]
 		*buf = (*buf)[n:]
-		items := make([]vm.Value, len(chunk))
-		for i, b := range chunk {
-			items[i] = vm.IntValue(int64(b))
+		// A STR, as upstream returns. readAll and toList still hand back byte lists
+		// for callers that want the numeric view.
+		return vm.StrValue(string(chunk)), nil
+	}))
+
+	// The binary API. Upstream's Buffer is how a Buzz program serialises values, and
+	// each of these has a fixed on-the-wire width that its reader mirrors.
+	//
+	// An INT is six bytes, little-endian, not eight: upstream's Integer is an i48.
+	// Writing eight would round-trip fine here and disagree with every other Buzz
+	// program reading the same bytes, which is the kind of divergence a byte format
+	// cannot afford.
+	const intWidth = 6
+
+	m.MapSet("writeInt", fn("Buffer.writeInt", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 1 || !args[0].IsInt() {
+			return vm.Null, fmt.Errorf("Buffer.writeInt: requires an int argument")
 		}
-		return vm.ListValue(items), nil
+		var b [8]byte
+		binary.LittleEndian.PutUint64(b[:], uint64(args[0].AsInt()))
+		*buf = append(*buf, b[:intWidth]...)
+		return vm.Null, nil
+	}))
+
+	m.MapSet("readInt", fn("Buffer.readInt", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		// NULL on a short buffer rather than an error: upstream's caller writes
+		// `buffer.readInt() ?? -1`, so the miss is a value the program handles.
+		if len(*buf) < intWidth {
+			return vm.Null, nil
+		}
+		var b [8]byte
+		copy(b[:intWidth], (*buf)[:intWidth])
+		u := binary.LittleEndian.Uint64(b[:])
+		// Sign-extend from 48 bits so a negative round-trips.
+		if u&(1<<47) != 0 {
+			u |= uint64(0xFFFF) << 48
+		}
+		*buf = (*buf)[intWidth:]
+		return vm.IntValue(int64(u)), nil
+	}))
+
+	m.MapSet("writeDouble", fn("Buffer.writeDouble", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 1 || !(args[0].IsFloat() || args[0].IsInt()) {
+			return vm.Null, fmt.Errorf("Buffer.writeDouble: requires a double argument")
+		}
+		d := args[0].AsFloat()
+		var b [8]byte
+		binary.LittleEndian.PutUint64(b[:], math.Float64bits(d))
+		*buf = append(*buf, b[:]...)
+		return vm.Null, nil
+	}))
+
+	m.MapSet("readDouble", fn("Buffer.readDouble", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		if len(*buf) < 8 {
+			return vm.Null, nil
+		}
+		u := binary.LittleEndian.Uint64((*buf)[:8])
+		*buf = (*buf)[8:]
+		return vm.FloatValue(math.Float64frombits(u)), nil
+	}))
+
+	m.MapSet("writeBoolean", fn("Buffer.writeBoolean", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 1 || !args[0].IsBool() {
+			return vm.Null, fmt.Errorf("Buffer.writeBoolean: requires a bool argument")
+		}
+		var v byte
+		if args[0].Bool() {
+			v = 1
+		}
+		*buf = append(*buf, v)
+		return vm.Null, nil
+	}))
+
+	m.MapSet("readBoolean", fn("Buffer.readBoolean", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		if len(*buf) < 1 {
+			return vm.Null, nil
+		}
+		v := (*buf)[0]
+		*buf = (*buf)[1:]
+		return vm.BoolValue(v != 0), nil
+	}))
+
+	// empty() CLEARS the buffer. Note it is not the negation of isEmpty(), which
+	// only reports - upstream names them that way and both are kept as upstream has
+	// them rather than renamed for symmetry.
+	m.MapSet("empty", fn("Buffer.empty", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		*buf = (*buf)[:0]
+		return vm.Null, nil
 	}))
 
 	m.MapSet("readAll", fn("Buffer.readAll", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
@@ -232,6 +353,10 @@ func makeBufferValue(st *bufferState) vm.Value {
 				return vm.Null, err
 			}
 		}
+		for _, a := range st.owned {
+			_ = buzz.FreeFFI(a)
+		}
+		st.owned = nil
 		st.freed = true
 		return vm.Null, nil
 	}))
@@ -240,10 +365,100 @@ func makeBufferValue(st *bufferState) vm.Value {
 	// offset `at` — the value handed to a C out-parameter. align is an upstream
 	// alignment hint; addresses here are byte-addressed, so it is accepted and
 	// ignored. The block is allocated on first use.
+	// writeZ / readZAt are the Zig-typed binary API upstream's ffi.buzz uses to hand
+	// a buffer to a foreign function: writeZ appends each value encoded at the C
+	// width of zigType, readZAt decodes the element at an index.
+	m.MapSet("writeZ", fn("Buffer.writeZ", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 2 || !args[0].IsStr() || !args[1].IsList() {
+			return vm.Null, fmt.Errorf("Buffer.writeZ: requires (str zigType, [any] values)")
+		}
+		zt := args[0].AsString()
+		size, err := intZigWidth(zt)
+		if err != nil {
+			return vm.Null, err
+		}
+		for _, v := range args[1].ListItems() {
+			if !v.IsInt() {
+				return vm.Null, errFFITypeMismatch(zt, "a non-int value cannot be written as an integer type")
+			}
+			st.bytes = appendLE(st.bytes, uint64(v.AsInt()), size)
+		}
+		return vm.Null, nil
+	}))
+	m.MapSet("readZAt", fn("Buffer.readZAt", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 2 || !args[0].IsInt() || !args[1].IsStr() {
+			return vm.Null, fmt.Errorf("Buffer.readZAt: requires (int at, str zigType)")
+		}
+		zt := args[1].AsString()
+		size, err := intZigWidth(zt)
+		if err != nil {
+			return vm.Null, err
+		}
+		at := int(args[0].AsInt())
+		off := at * size
+		if at < 0 || off+size > len(st.bytes) {
+			return vm.Null, fmt.Errorf("Buffer.readZAt: index %d out of range", at)
+		}
+		return vm.IntValue(decodeLE(st.bytes[off:off+size], zt)), nil
+	}))
+
+	// writeStruct / readStruct move whole foreign structs through the buffer, laid
+	// out exactly as C would - which is what lets a script stage an array of them
+	// and hand the pointer to a callee.
+	m.MapSet("writeStruct", fn("Buffer.writeStruct", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 2 || !args[1].IsList() {
+			return vm.Null, fmt.Errorf("Buffer.writeStruct: requires (Type, [Type] values)")
+		}
+		types, offsets, size, err := foreignLayoutOf(args[0])
+		if err != nil {
+			return vm.Null, err
+		}
+		for _, inst := range args[1].ListItems() {
+			block := make([]byte, size)
+			for i, ct := range types {
+				fv, ok := inst.ObjectFieldAt(i)
+				if !ok {
+					break
+				}
+				encodeField(st, block[offsets[i]:], ct, fv)
+			}
+			st.bytes = append(st.bytes, block...)
+		}
+		return vm.Null, nil
+	}))
+	m.MapSet("readStruct", fn("Buffer.readStruct", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 1 {
+			return vm.Null, fmt.Errorf("Buffer.readStruct: requires the struct type")
+		}
+		// collect() frees the pointers st.bytes still holds, so decoding one
+		// afterwards walks freed memory. Only st.freed knows.
+		if st.freed {
+			return vm.Null, fmt.Errorf("Buffer.readStruct: use after collect()")
+		}
+		types, offsets, size, err := foreignLayoutOf(args[0])
+		if err != nil {
+			return vm.Null, err
+		}
+		if len(st.bytes) < size {
+			return vm.Null, fmt.Errorf("Buffer.readStruct: buffer holds %d bytes, the struct needs %d", len(st.bytes), size)
+		}
+		fields := make([]vm.Value, len(types))
+		for i, ct := range types {
+			fields[i] = decodeField(st.bytes[offsets[i]:], ct)
+		}
+		return args[0].NewInstance(fields)
+	}))
+
 	m.MapSet("ptr", fn("Buffer.ptr", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		at := 0
 		if len(args) >= 1 && args[0].IsInt() {
 			at = int(args[0].AsInt())
+		}
+		// `align` makes the offset an ELEMENT index rather than a byte count, which is
+		// how upstream walks a typed buffer: ptr(1, align: alignOf("i32")) is the
+		// second i32, not the second byte.
+		if len(args) >= 2 && args[1].IsInt() && args[1].AsInt() > 0 {
+			at *= int(args[1].AsInt())
 		}
 		addr, err := st.ensurePinned()
 		if err != nil {
@@ -338,4 +553,136 @@ func makeBufferValue(st *bufferState) vm.Value {
 	}
 
 	return m
+}
+
+// ffiTypeMismatch is a host error that presents as `ffi\FFITypeMismatchError`, so
+// upstream's `catch (_: ffi\FFITypeMismatchError)` selects it. See vm.TypedError.
+type ffiTypeMismatch struct {
+	zigType string
+	why     string
+}
+
+func (e ffiTypeMismatch) Error() string {
+	return fmt.Sprintf("ffi: type mismatch for %q: %s", e.zigType, e.why)
+}
+func (e ffiTypeMismatch) BuzzError() map[string]string {
+	return map[string]string{"zigType": e.zigType, "reason": e.why}
+}
+func (e ffiTypeMismatch) BuzzErrorType() string { return "FFITypeMismatchError" }
+
+func errFFITypeMismatch(zigType, why string) error {
+	return ffiTypeMismatch{zigType: zigType, why: why}
+}
+
+// intZigWidth returns the byte width of an INTEGER zig type, rejecting anything a
+// Buzz int cannot faithfully carry.
+//
+// u64 is the interesting rejection, and upstream's ffi.buzz asserts it: a Buzz int
+// is an i64, so half of u64's range has no representation and a silent wrap would
+// be the worst possible answer. That is a property of the type pair, not of the
+// call, which is why no `::<T>` argument is needed to detect it.
+func intZigWidth(zigType string) (int, error) {
+	switch zigType {
+	case "i8", "u8":
+		return 1, nil
+	case "i16", "u16":
+		return 2, nil
+	case "i32", "u32", "c_int", "c_uint":
+		return 4, nil
+	case "i64", "isize", "c_long", "c_longlong":
+		return 8, nil
+	case "u64", "usize", "c_ulong", "c_ulonglong":
+		return 0, errFFITypeMismatch(zigType, "a buzz int is an i64 and cannot represent the whole unsigned 64-bit range")
+	}
+	return 0, errFFITypeMismatch(zigType, "not an integer type buzz can write")
+}
+
+// appendLE appends the low `size` bytes of v, little-endian.
+func appendLE(dst []byte, v uint64, size int) []byte {
+	for i := 0; i < size; i++ {
+		dst = append(dst, byte(v>>(8*i)))
+	}
+	return dst
+}
+
+// decodeLE reads a little-endian integer, sign-extending a signed zig type so a
+// negative value round-trips through writeZ/readZAt.
+func decodeLE(b []byte, zigType string) int64 {
+	var u uint64
+	for i := len(b) - 1; i >= 0; i-- {
+		u = u<<8 | uint64(b[i])
+	}
+	if strings.HasPrefix(zigType, "i") || strings.HasPrefix(zigType, "c_long") || zigType == "c_int" || zigType == "isize" {
+		shift := uint(64 - 8*len(b))
+		return int64(u<<shift) >> shift
+	}
+	return int64(u)
+}
+
+// foreignLayoutOf resolves a zdef struct TYPE value to its field C types, byte
+// offsets and total size.
+func foreignLayoutOf(v vm.Value) (types []string, offsets []int, size int, err error) {
+	name := v.ObjectTypeName()
+	if name == "" {
+		return nil, nil, 0, fmt.Errorf("expected a struct type, got %s", v.Kind())
+	}
+	types, ok := buzz.ForeignStructTypes(name)
+	if !ok {
+		return nil, nil, 0, fmt.Errorf("%s is not a foreign struct declared by zdef", name)
+	}
+	size, _, offsets, err = buzz.StructLayout(types)
+	return types, offsets, size, err
+}
+
+// encodeField writes one field into a struct block, little-endian.
+//
+// A POINTER field is stored as a real address: upstream writes a struct into a
+// buffer and reads it back expecting the string to survive, which only works if the
+// bytes carry a pointer to it. The C string is allocated here and owned by the
+// BUFFER - freed by collect() - because the image may outlive the value it came
+// from. An image written by one process and read by another would of course hold a
+// dangling pointer; that is inherent to putting a C struct in a byte buffer.
+func encodeField(st *bufferState, dst []byte, ctype string, v vm.Value) {
+	size, _, ok := buzz.CTypeLayout(ctype)
+	if !ok || size > len(dst) {
+		return
+	}
+	switch {
+	case strings.Contains(ctype, "*"):
+		if !v.IsStr() {
+			return
+		}
+		addr, err := buzz.AllocCString(v.AsString())
+		if err != nil {
+			return
+		}
+		st.owned = append(st.owned, addr)
+		binary.LittleEndian.PutUint64(dst[:8], uint64(addr))
+	case ctype == "f64" || ctype == "double":
+		binary.LittleEndian.PutUint64(dst[:8], math.Float64bits(v.AsFloat()))
+	case ctype == "f32" || ctype == "float":
+		binary.LittleEndian.PutUint32(dst[:4], math.Float32bits(float32(v.AsFloat())))
+	default:
+		u := uint64(v.AsInt())
+		for i := 0; i < size; i++ {
+			dst[i] = byte(u >> (8 * i))
+		}
+	}
+}
+
+// decodeField reads one field back out of a struct block.
+func decodeField(src []byte, ctype string) vm.Value {
+	size, _, ok := buzz.CTypeLayout(ctype)
+	if !ok || size > len(src) {
+		return vm.Null
+	}
+	switch {
+	case strings.Contains(ctype, "*"):
+		return vm.StrValue(buzz.ReadCString(uintptr(binary.LittleEndian.Uint64(src[:8]))))
+	case ctype == "f64" || ctype == "double":
+		return vm.FloatValue(math.Float64frombits(binary.LittleEndian.Uint64(src[:8])))
+	case ctype == "f32" || ctype == "float":
+		return vm.FloatValue(float64(math.Float32frombits(binary.LittleEndian.Uint32(src[:4]))))
+	}
+	return vm.IntValue(decodeLE(src[:size], ctype))
 }

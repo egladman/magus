@@ -81,7 +81,7 @@ magus\project({
         "generate": {"skip_cache": "writes on every run; a replay would skip the write"},
     },
 });
-export fun generate(ctx: magus\Context, args: [str]) > void {
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("OUT.txt", "SIDE.txt");
     fs\writeFile("OUT.txt", "generated: regenerated\n");
     fs\writeFile("SIDE.txt", "generated: side-regenerated\n");

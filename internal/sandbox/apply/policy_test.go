@@ -3,6 +3,8 @@ package apply
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
@@ -99,6 +101,41 @@ func TestApplyFingerprintMismatch(t *testing.T) {
 	ctxA2, err := Apply(ctx, policyA, rootA)
 	require.NoError(t, err, "re-applying the same fingerprint should succeed")
 	assert.Same(t, policyA, sandbox.FromContext(ctxA2))
+}
+
+// TestConcurrentMarkAppliedExternallyAndApply races MarkAppliedExternally's writes to
+// the package globals policyFingerprint/appliedExternally against Apply's reads of the
+// same globals (policy.go ~91, ~123). Before the fix only the applyOnce-guarded write
+// was synchronized; this write went through neither a mutex nor atomics, so `go test
+// -race` flags it against any concurrent Apply.
+//
+// Skipped where landlock is actually supported: a goroutine that loses the race to
+// call MarkAppliedExternally first could still call the real kernel apply and
+// permanently sandbox the test runner (the same hazard TestApplyFingerprintMismatch
+// guards against).
+func TestConcurrentMarkAppliedExternallyAndApply(t *testing.T) {
+	if sandbox.Supported() {
+		t.Skip("landlock is supported here; a losing goroutine could call the real kernel apply. " +
+			"Covered by Linux integration tests instead.")
+	}
+
+	root := t.TempDir()
+	policy := FromConfig(t.Context(), root, config.Config{})
+	ctx := context.Background()
+
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(2)
+		go func(i int) {
+			defer wg.Done()
+			MarkAppliedExternally(fmt.Sprintf("fp-%d", i))
+		}(i)
+		go func() {
+			defer wg.Done()
+			_, _ = Apply(ctx, policy, root)
+		}()
+	}
+	wg.Wait()
 }
 
 // sanity: the sentinel-based match used above behaves as errors.Is expects, so a

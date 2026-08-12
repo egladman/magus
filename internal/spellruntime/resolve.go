@@ -193,8 +193,8 @@ func recordOp(ctx context.Context, sess *buzz.Session, fn vm.Value) (vm.Value, e
 	return mv, nil
 }
 
-// validateCmdFields checks a Command field map: bin is a string and args are all
-// strings, when present.
+// validateCmdFields checks a Command field map: bin is a string and args/sources
+// are all strings, when present.
 func validateCmdFields(m vm.Value) error {
 	if bin, ok := m.MapGet("bin"); ok && !bin.IsStr() {
 		return fmt.Errorf("command bin must be a string")
@@ -203,6 +203,13 @@ func validateCmdFields(m vm.Value) error {
 		for _, a := range args.ListItems() {
 			if !a.IsStr() {
 				return fmt.Errorf("command args must all be strings")
+			}
+		}
+	}
+	if sources, ok := m.MapGet("sources"); ok && sources.IsList() {
+		for _, s := range sources.ListItems() {
+			if !s.IsStr() {
+				return fmt.Errorf("command sources must all be strings")
 			}
 		}
 	}

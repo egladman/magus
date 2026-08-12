@@ -36,7 +36,7 @@ fun registerDevPage(title: str, desc: str, url: str, srcRel: str, site: Site) > 
 // shared renderPage() pipeline (nav, TOC, theme, search index). url ends in "/";
 // srcRel uses the "<dir>/_index.md" marker so rootPrefix/renderBreadcrumb derive the
 // right depth and trail.
-fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str, site: Site) > void {
+fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str, site: Site) > void !> any {
     // Register before rendering. renderRelated looks the CURRENT page up in
     // docPages and bails when it is absent, so a synthesized page that only
     // called addRecord (the search index) was searchable but had no Related
@@ -44,8 +44,8 @@ fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str,
     registerDevPage(title, desc, url, srcRel, site);
     final html = renderContentHTML(markdown\toHtml(md), "", "");
     final doc = renderPage(title, desc, html, srcRel, "", url, "", mut [], site);
-    final dir = site.outDir + "/" + url.sub(0, url.len() - 1);
-    fs\makeDirectory(dir);
+    final dir = fs\join(site.outDir, url.sub(0, url.len() - 1));
+    fs\mkdirAll(dir);
     fs\writeFile(dir + "/index.html", doc);
     site.addRecord(url, title, desc, md);
     site.pageUrls[url] = true;
@@ -57,11 +57,11 @@ fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str,
 // the trailing slash off relative links - so card hrefs like "magus/" stay
 // slash-terminated and resolve without a directory redirect. searchText is the plain
 // text to index, since the HTML carries no useful prose.
-fun renderDevelopmentPageRaw(title: str, desc: str, html: str, searchText: str, url: str, srcRel: str, site: Site) > void {
+fun renderDevelopmentPageRaw(title: str, desc: str, html: str, searchText: str, url: str, srcRel: str, site: Site) > void !> any {
     registerDevPage(title, desc, url, srcRel, site);
     final doc = renderPage(title, desc, html, srcRel, "", url, "", mut [], site);
-    final dir = site.outDir + "/" + url.sub(0, url.len() - 1);
-    fs\makeDirectory(dir);
+    final dir = fs\join(site.outDir, url.sub(0, url.len() - 1));
+    fs\mkdirAll(dir);
     fs\writeFile(dir + "/index.html", doc);
     site.addRecord(url, title, desc, searchText);
     site.pageUrls[url] = true;
@@ -91,7 +91,7 @@ fun projectLabel(path: str) > str {
 // pages answer "what can I run here"; this answers "what does changing it reach", which
 // no page showed before.
 //
-// It reads magus.graph()'s typed view: nodes already in topological order (so the table
+// It reads magus.projectGraph()'s typed view: nodes already in topological order (so the table
 // IS a valid build order, sorted by nobody here), each node's direct dependencies, and
 // its blast radius - the count of projects a change can transitively affect, which is
 // the number that tells a contributor whether an edit is contained or workspace-wide.
@@ -220,7 +220,7 @@ fun projectCatalog(proj: TargetGraphProject) > str {
 // generator that writes a committed MAGUS.md. Projects that keep one therefore render
 // identical content (the drift gate holds them equal), and the four with none are no
 // longer invisible. MAGUS.md stays committed for the offline and agent read paths.
-export fun renderDevelopment(site: Site) > void {
+export fun renderDevelopment(site: Site) > void !> any {
     final projects = site.targets.projects;
     if (projects.len() == 0) { return; }
 

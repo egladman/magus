@@ -30,8 +30,11 @@ type Runner interface {
 	// Start launches the service and returns once it is ready (Runner-defined), or
 	// an error if it could not be started or never became ready.
 	Start(ctx context.Context, s spells.Service) (Handle, error)
-	// Stop terminates a running service. It is called at most once per Handle.
-	Stop(h Handle)
+	// Stop terminates a running service. It is called at most once per Handle. ctx
+	// bounds how long Stop may take (e.g. a graceful-stop command or the wait for the
+	// process to be reaped); a Runner should still attempt to kill the process on
+	// ctx.Done rather than leaving it running, but may return before confirming exit.
+	Stop(ctx context.Context, h Handle)
 }
 
 // Handle is an opaque Runner-owned reference to a running service.
@@ -145,7 +148,7 @@ func (r *Registry) Release(key string) {
 		delete(r.entries, key)
 		r.mu.Unlock()
 		r.journal.forget(key)
-		r.stop(e) // ref-count-zero teardown: no keep-warm
+		r.stop(context.Background(), e) // ref-count-zero teardown: no keep-warm, no caller deadline
 		return
 	}
 	e.timer = time.AfterFunc(e.idle, func() { r.reap(key, e) })
@@ -163,24 +166,37 @@ func (r *Registry) reap(key string, e *entry) {
 	delete(r.entries, key)
 	r.mu.Unlock()
 	r.journal.forget(key)
-	r.stop(e)
+	r.stop(context.Background(), e) // idle reap: no caller deadline to honor
 }
 
 // stop tears down one entry's process, run outside the lock so it cannot block other
 // keys. It waits for the entry's Start to have completed (ready) so it never stops a
 // nil handle while a fork is still in flight - the fix for the Shutdown/reap-vs-Start
-// race.
-func (r *Registry) stop(e *entry) {
-	<-e.ready
+// race. That wait, and the Stop call itself, are bounded by ctx: if ctx is done first,
+// stop gives up rather than blocking teardown on it, at the cost of possibly leaving a
+// just-started process orphaned (an accepted trade-off - an uncancellable teardown is
+// worse). Release and reap have no caller deadline in scope and pass
+// context.Background(); Shutdown passes its own ctx through.
+func (r *Registry) stop(ctx context.Context, e *entry) {
+	select {
+	case <-e.ready:
+	case <-ctx.Done():
+		return
+	}
 	if e.handle != nil {
-		r.runner.Stop(e.handle)
+		r.runner.Stop(ctx, e.handle)
 	}
 }
 
 // Shutdown reaps every service regardless of ref-count or idle window, for daemon
-// teardown. It waits for any in-flight Start so no just-started process is orphaned.
-// After Shutdown the Registry is empty and reusable.
-func (r *Registry) Shutdown() {
+// teardown. It waits for any in-flight Start so no just-started process is orphaned,
+// bounded by ctx (see stop). Victims are torn down concurrently rather than one at a
+// time: run serially, N services could cost up to N * (ReadyTimeout + stop grace) of
+// uncancellable teardown. The entries map is swapped for a fresh one under r.mu
+// before any teardown starts, so the goroutines below touch only their own victim and
+// never r.entries or r.mu - nothing about the fan-out races Registry state. After
+// Shutdown the Registry is empty and reusable.
+func (r *Registry) Shutdown(ctx context.Context) {
 	r.mu.Lock()
 	victims := make([]*entry, 0, len(r.entries))
 	keys := make([]string, 0, len(r.entries))
@@ -193,10 +209,17 @@ func (r *Registry) Shutdown() {
 	}
 	r.entries = map[string]*entry{}
 	r.mu.Unlock()
+
+	var wg sync.WaitGroup
+	wg.Add(len(victims))
 	for i, e := range victims {
-		r.journal.forget(keys[i])
-		r.stop(e)
+		go func(key string, e *entry) {
+			defer wg.Done()
+			r.journal.forget(key)
+			r.stop(ctx, e)
+		}(keys[i], e)
 	}
+	wg.Wait()
 }
 
 // Held returns the number of services the registry is holding, whether running with

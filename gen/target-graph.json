@@ -202,6 +202,12 @@
           "writes_files": [
             {
               "glob": "types/buzzobject_gen.go"
+            },
+            {
+              "glob": "types/enum_gen.go"
+            },
+            {
+              "glob": "spells/enum_gen.go"
             }
           ]
         },
@@ -490,6 +496,24 @@
           "name": "buzz-test",
           "declared": "buzz_test",
           "doc": "Runs the in-file `test \"...\" {}` blocks in this repo's own root Buzz modules, through magus's embedded engine.",
+          "reads_files": [
+            {
+              "project": ".",
+              "glob": "badge.buzz"
+            },
+            {
+              "project": ".",
+              "glob": "coverage.buzz"
+            },
+            {
+              "project": ".",
+              "glob": "spells/**/*.buzz"
+            },
+            {
+              "project": ".",
+              "glob": "docs/lib/*.buzz"
+            }
+          ],
           "reads_secrets": false
         },
         {
@@ -1044,6 +1068,7 @@
             "build-mermaid",
             "build-hljs",
             "build-playground-editor",
+            "build-playground",
             "site-generate"
           ],
           "charms": [
@@ -1168,7 +1193,7 @@
         {
           "name": "build-playground",
           "declared": "build_playground",
-          "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground into vendor/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it.",
+          "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: the stock Go toolchain compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and Go's own wasm_exec.js glue is copied beside it.",
           "dependencies": [
             "preflight"
           ],
@@ -1178,7 +1203,15 @@
               "target": "build"
             }
           ],
-          "reads_secrets": false
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "gen/playground/buzz.wasm"
+            },
+            {
+              "glob": "gen/playground/wasm_exec.js"
+            }
+          ]
         },
         {
           "name": "build-mermaid",

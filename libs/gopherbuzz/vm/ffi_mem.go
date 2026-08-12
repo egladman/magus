@@ -94,9 +94,30 @@ func CTypeLayout(name string) (size, align int, ok bool) {
 // for a plain `struct { ... }` of scalar/pointer fields, so a Buzz script can
 // alloc(size), write each field at its offset, and pass the address to C.
 func StructLayout(fieldTypes []string) (size, align int, offsets []int, err error) {
+	return StructLayoutWith(fieldTypes, nil)
+}
+
+// NamedLayout is a previously-declared aggregate's computed size and alignment,
+// keyed by name for StructLayoutWith / UnionLayoutWith.
+type NamedLayout struct {
+	Size, Align int
+	// IsUnion records that the declaration was a union, so a later consumer picks
+	// UnionLayoutWith rather than StructLayoutWith. Size and Align alone cannot say:
+	// they are the ANSWER for this aggregate, while a consumer laying the same name
+	// out again (marshalStructArg does, to get field offsets) needs the RULE. Without
+	// it a union was marshalled with struct offsets and struct size.
+	IsUnion bool
+}
+
+// StructLayoutWith is StructLayout with a table of aggregates already declared in
+// the same zdef, so a field may name another struct or union. Upstream's ffi.buzz
+// relies on it: `Misc` is a union whose second member is the `Data` struct declared
+// above it. CTypeLayout knows only primitives, so without the table that field is
+// an "unknown C type".
+func StructLayoutWith(fieldTypes []string, known map[string]NamedLayout) (size, align int, offsets []int, err error) {
 	offsets = make([]int, len(fieldTypes))
 	for i, ft := range fieldTypes {
-		fsize, falign, ok := CTypeLayout(ft)
+		fsize, falign, ok := lookupLayout(ft, known)
 		if !ok {
 			return 0, 0, nil, fmt.Errorf("buzz: ffi: unknown C type %q in struct field %d", ft, i)
 		}
@@ -154,6 +175,27 @@ func AllocFFI(n int) (uintptr, error) {
 	memRegistry[addr] = pb
 	memMu.Unlock()
 	return addr, nil
+}
+
+// WriteFFIBytes copies b into a block previously returned by AllocFFI. It is how a
+// Buffer hands its accumulated contents to C in one step, rather than looping
+// through the per-scalar ffi.write path.
+//
+// The block is a pinned Go slice, so this is an ordinary copy - no unsafe write
+// through the address. A short block is an error rather than a truncating copy: the
+// caller sized the allocation and a mismatch means it got the size wrong.
+func WriteFFIBytes(addr uintptr, b []byte) error {
+	memMu.Lock()
+	defer memMu.Unlock()
+	pb, ok := memRegistry[addr]
+	if !ok {
+		return fmt.Errorf("buzz: ffi: write to unknown address %#x (not from ffi.alloc, or already freed)", addr)
+	}
+	if len(b) > len(pb.data) {
+		return fmt.Errorf("buzz: ffi: write of %d bytes into a %d-byte block", len(b), len(pb.data))
+	}
+	copy(pb.data, b)
+	return nil
 }
 
 // FreeFFI releases a block previously returned by AllocFFI, unpinning its memory.
@@ -300,4 +342,115 @@ func signExtend(u uint64, size int, signed bool) int64 {
 	bits := uint(size * 8)
 	shift := 64 - bits
 	return int64(u<<shift) >> shift
+}
+
+// UnionLayout computes a C union's layout: every member starts at offset 0, the
+// whole is as wide as the widest member, and its alignment is the strictest of
+// them - then rounded up so an array of the union stays aligned, the same rule
+// StructLayout applies to a struct's tail.
+func UnionLayout(fieldTypes []string) (size, align int, offsets []int, err error) {
+	return UnionLayoutWith(fieldTypes, nil)
+}
+
+// UnionLayoutWith is UnionLayout with the same aggregate table StructLayoutWith takes.
+func UnionLayoutWith(fieldTypes []string, known map[string]NamedLayout) (size, align int, offsets []int, err error) {
+	offsets = make([]int, len(fieldTypes))
+	for i, ft := range fieldTypes {
+		fsize, falign, ok := lookupLayout(ft, known)
+		if !ok {
+			return 0, 0, nil, fmt.Errorf("buzz: ffi: unknown C type %q in union field %d", ft, i)
+		}
+		if fsize > size {
+			size = fsize
+		}
+		if falign > align {
+			align = falign
+		}
+	}
+	if align == 0 {
+		align = 1
+	}
+	if rem := size % align; rem != 0 {
+		size += align - rem
+	}
+	return size, align, offsets, nil
+}
+
+// lookupLayout resolves a field spelling to its size and alignment, trying the
+// primitives first and then the aggregates declared earlier in the same zdef.
+func lookupLayout(ft string, known map[string]NamedLayout) (size, align int, ok bool) {
+	if s, a, found := CTypeLayout(ft); found {
+		return s, a, true
+	}
+	if l, found := known[ft]; found {
+		return l.Size, l.Align, true
+	}
+	return 0, 0, false
+}
+
+// declaredAggregates remembers every struct and union a zdef has declared, so a
+// LATER zdef can name one in a field. Upstream's ffi.buzz needs exactly that: it
+// declares `Data` in one zdef call and, in a separate call further down the file, a
+// union `Misc` with a `Data` member. Each call parses independently, so without this
+// the second sees an unknown C type.
+//
+// Process-wide rather than per-Session because FFIProvider is registered once and
+// carries no session; that matches the interface's stated contract (safe for one
+// Session at a time).
+//
+// Lives HERE, in the untagged file, not beside the purego provider: ForeignStructTypes
+// in value.go reads it, and value.go compiles on every platform. Putting it behind the
+// FFI build tag broke GOOS=windows, GOOS=js and -tags noffi outright.
+var declaredAggregates = map[string]NamedLayout{}
+
+// declaredFieldTypes remembers each aggregate's field C types, parallel to the object
+// type synthesized for it, so a struct argument can be marshalled field by field.
+var declaredFieldTypes = map[string][]string{}
+
+// AllocCString copies s into a NUL-terminated C block and returns its address. The
+// caller owns the block and frees it with FreeFFI.
+//
+// Untagged because it needs nothing from the FFI provider: it is AllocFFI plus a
+// copy, both of which are plain Go over a pinned slice.
+func AllocCString(s string) (uintptr, error) {
+	b := append([]byte(s), 0)
+	addr, err := AllocFFI(len(b))
+	if err != nil {
+		return 0, err
+	}
+	if err := WriteFFIBytes(addr, b); err != nil {
+		_ = FreeFFI(addr)
+		return 0, err
+	}
+	return addr, nil
+}
+
+// ReadCString reads a NUL-terminated C string at addr and returns it WITH the
+// terminator, matching ffi\cstr so a string that round-trips through C compares
+// equal to the one that went in. Empty for a null pointer.
+//
+// Untagged, alongside AllocCString, because a Buffer reads pointer fields back on
+// every platform - putting it behind the FFI build tag broke the non-FFI builds.
+// The deref is the same unsafe read AllocFFI's pinned block already relies on.
+func ReadCString(addr uintptr) string {
+	if addr == 0 {
+		return ""
+	}
+	// Read out of the pinned slice this package allocated, not by dereferencing
+	// the address. That is this file's stated contract - "read*/write* operate
+	// only on memory this package allocated (looked up in a registry)" - and
+	// ReadCString was the one place breaking it, which is also why it was the one
+	// place vet reported a possible misuse of unsafe.Pointer.
+	memMu.Lock()
+	pb, ok := memRegistry[addr]
+	memMu.Unlock()
+	if !ok {
+		return ""
+	}
+	for i, c := range pb.data {
+		if c == 0 {
+			return string(pb.data[:i]) + "\x00"
+		}
+	}
+	return string(pb.data) + "\x00"
 }

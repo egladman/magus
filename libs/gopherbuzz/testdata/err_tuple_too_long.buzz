@@ -1,0 +1,2 @@
+// @error: cannot have more than 4 elements
+final t = .{ 1, 2, 3, 4, 5 };

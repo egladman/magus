@@ -1,0 +1,6 @@
+// @expect: <void>
+// `typeof null` renders as <void>, matching upstream's types-as-value.buzz. Only
+// the SPELLING changes: null stays a distinct type in the checker, which is what
+// keeps it assignable to a nullable target where void is not.
+final nullable: int? = null;
+final __r = "{typeof null}";

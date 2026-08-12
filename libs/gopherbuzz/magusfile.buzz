@@ -18,10 +18,11 @@ import "magus/spell/go";
 import "magus/spell/markdown";
 import "../../spells/golang/gomod" as gomod;
 
-// os.exec runs the benchmark; fs reads and writes the profile (Buzz's stdlib has
+// proc.exec runs the benchmark; fs reads and writes the profile (Buzz's stdlib has
 // neither streaming exec nor raw file IO). tools/drift.buzz gates regenerated outputs.
 // env.home locates the upstream clone cache for the conformance target.
 import "os";
+import "proc";
 import "fs";
 import "vcs";
 import "env";
@@ -56,25 +57,25 @@ export fun preflight(ctx: magus\Context, args: [str]) > void {}
 // measured by hashing MAGUS.md before and after (tools/drift.buzz), not by asking whether
 // it was clean, so the gate still fires when you already have it uncommitted. A
 // locally-regenerated MAGUS.md passes either way: its bytes do not move.
-export fun generate(ctx: magus\Context, args: [str]) > void {
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     gomod\replaceWorkspaceModules(ctx, go, "libs/gopherbuzz");
     final before = drift.hashes(["MAGUS.md"]);
     ctx.needs(index_generate);
-    if (ctx.has_charm("rw")) { return; }
+    if (ctx.hasCharm("rw")) { return; }
 
     if (drift.changedSince(before, ["MAGUS.md"]).len() > 0) {
         // Print the diff, not just the verdict. This gate fires where its reader has
         // a CI log and no tree, and the index carries workspace-wide counts, so
         // "drifted" alone cannot say whether a count moved or a whole section did.
         final body = vcs\dirtyDiff(["MAGUS.md"]);
-        if (body != "") { magus\info("generate: what changed on this runner:\n" + body); }
+        if (body != "") { magus\log.info("generate: what changed on this runner:\n" + body); }
         throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/gopherbuzz` and commit" + drift.secondCause;
     }
 }
 
 // Renders MAGUS.md (target catalog plus graph) from this magusfile.
-export fun index_generate(ctx: magus\Context, args: [str]) > void {
+export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs\writeFile("MAGUS.md", doc + "\n");
 }
@@ -92,14 +93,14 @@ export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go[
 // The CLI is independently versioned from the gopherbuzz module tag namespace.
 // A local checkout before its first nested tag stays explicitly "dev"; it must
 // never inherit the root magus tag just because both modules share one Git repo.
-fun module_version() > str {
+fun module_version() > str !> any {
     final prefix = "libs/gopherbuzz/";
     final tags: [Tag] = vcs\tags(prefix + "v*");
     if (tags.len() == 0) { return "dev"; }
     return tags[0].name.sub(prefix.len());
 }
 
-fun buzz_ld_flags() > str {
+fun buzz_ld_flags() > str !> any {
     // try/catch, not field sniffing: vcs.commit RAISES when there is no VCS or the
     // revision cannot be read, so there is no zero object to inspect. Building outside a
     // checkout (a release tarball, a container context) is the real case this covers.
@@ -120,7 +121,7 @@ fun buzz_ld_flags() > str {
 
 // Compiles the standalone buzz CLI with the version of this nested module,
 // rather than the root magus module's version.
-export fun buzz_build(ctx: magus\Context, args: [str]) > void {
+export fun buzz_build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(format);
     go["go-build"](ctx, {"args": ["-trimpath", "-ldflags", buzz_ld_flags(), "-o", "buzz", "./cmd/buzz"]});
 }
@@ -150,21 +151,21 @@ fun upstream_pinned_sha(version_src: str) > str {
 // vendors upstream's test files into this repo - it fetches a pinned commit
 // into a cache directory outside the tree instead, so a later re-run reuses
 // (fetches, not re-clones) rather than re-downloading whole history.
-export fun conformance(ctx: magus\Context, args: [str]) > void {
+export fun conformance(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
 
     final pinned = upstream_pinned_sha(fs\readFile("version.go"));
     final cache_dir = fs\join(env\home(), ".cache", "magus", "gopherbuzz-upstream-buzz");
 
     if (fs\exists(cache_dir)) {
-        os\exec("git", ["fetch", "origin"], cache_dir, {});
+        proc\exec("git", ["fetch", "origin"], cache_dir, {});
     } else {
-        os\exec("git", ["clone", "https://github.com/buzz-language/buzz", cache_dir], ".", {});
+        proc\exec("git", ["clone", "https://github.com/buzz-language/buzz", cache_dir], ".", {});
     }
-    os\exec("git", ["checkout", pinned], cache_dir, {});
+    proc\exec("git", ["checkout", pinned], cache_dir, {});
 
-    magus\info("running upstream conformance against {cache_dir} @ {pinned}");
-    os\withEnv({"GOPHERBUZZ_UPSTREAM_DIR": cache_dir}, fun() > void {
-        os\exec("go", ["test", "-run", "TestUpstreamConformance", "-v", "."], ".", {});
+    magus\log.info("running upstream conformance against {cache_dir} @ {pinned}");
+    os\withEnv({"GOPHERBUZZ_UPSTREAM_DIR": cache_dir}, fun() > void !> any {
+        proc\exec("go", ["test", "-run", "TestUpstreamConformance", "-v", "."], ".", {});
     });
 }

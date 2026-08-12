@@ -14,6 +14,17 @@ func (c *Cache) Prune(ctx context.Context, cutoff time.Time, dryRun bool) (n int
 	_, entries := c.scanManifests()
 	casDir := filepath.Join(c.dir, "cas")
 
+	// Blob refcount across ALL entries (pruned and surviving), matching evictLRU:
+	// gcBlobs below only removes a blob once every manifest referencing it is
+	// gone, so a blob a surviving manifest still points to is never actually
+	// reclaimed and must not be counted as freed.
+	blobRefs := make(map[string]int)
+	for _, e := range entries {
+		for _, b := range e.blobs {
+			blobRefs[b]++
+		}
+	}
+
 	for _, e := range entries {
 		if ctx.Err() != nil {
 			return n, freed, ctx.Err()
@@ -25,9 +36,14 @@ func (c *Cache) Prune(ctx context.Context, cutoff time.Time, dryRun bool) (n int
 		if info, statErr := os.Stat(e.manifestPath); statErr == nil {
 			freed += info.Size()
 		}
-		// Tally associated blobs.
+		// Tally associated blobs, crediting bytes only when this was the last
+		// reference: gcBlobs will not remove a blob a surviving manifest still uses.
 		for _, blob := range e.blobs {
 			if len(blob) < 2 {
+				continue
+			}
+			blobRefs[blob]--
+			if blobRefs[blob] > 0 {
 				continue
 			}
 			bp := filepath.Join(casDir, blob[:2], blob)

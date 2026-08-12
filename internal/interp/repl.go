@@ -600,7 +600,7 @@ func Pry(ctx context.Context, sess engine.Session, pctx PryContext, opts ReplOpt
 	fmt.Fprintln(opts.Stdout, banner)
 	fmt.Fprintln(opts.Stdout, "Type .help for pry commands, .continue (or .exit) to resume.")
 
-	hist, _ := Open(DefaultPath(), 0)
+	hist, _ := OpenHistory(DefaultHistoryPath(), 0)
 	debug, _ := sess.(engine.DebugReader)
 
 	drivers := replDrivers(sess)

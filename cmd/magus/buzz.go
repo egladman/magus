@@ -105,8 +105,35 @@ func buzzCmd(ctx context.Context, args []string) error {
 	if err := sess.Exec(ctx, code); err != nil {
 		return fmt.Errorf("%s: %w", name, err)
 	}
+	// Warnings (e.g. BZZ3001 unused imports) never fail Exec, so they only reach
+	// the user if something prints them after the fact - print to stderr, matching
+	// how every other magus diagnostic (and the -t failure lines below) stays off
+	// stdout, which carries structured output only. -q/-s suppress them like any
+	// other non-error progress output.
+	if !global.quiet && !global.silent {
+		for _, w := range sess.Warnings() {
+			fmt.Fprintln(os.Stderr, w)
+		}
+	}
 	if test {
 		return runBuzzTests(ctx, sess, name)
+	}
+	// Like upstream's Run flavor and cmd/buzz, an entry script's `main` runs once
+	// its top level has. Without it a script had to call its own main, which strict
+	// mode cannot wrap: a top-level `try` is rejected and a bare call is BZZ1006.
+	if mainFn := sess.GetGlobal("main"); mainFn.IsFun() {
+		// Empty: buzzSource rejects a second positional, so there is no script argv
+		// to pass yet. main still takes the parameter, as upstream declares it.
+		var items []vm.Value
+		ret, err := sess.CallValue(ctx, mainFn, []vm.Value{vm.ListValue(items)})
+		if err != nil {
+			return fmt.Errorf("%s: %w", name, err)
+		}
+		// `fun main() > int` is upstream's exit-status convention, and the checker
+		// permits it; discarding the value made such a script always exit 0.
+		if ret.IsInt() && ret.AsInt() != 0 {
+			return errSilent{exitCode: int(ret.AsInt())}
+		}
 	}
 	return nil
 }

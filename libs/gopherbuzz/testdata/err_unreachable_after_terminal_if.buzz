@@ -1,0 +1,7 @@
+// @error: code will never be reached
+// Both arms transfer control away, so the if itself is terminal.
+fun f(flag: bool) > int !> str {
+    if (flag) { return 1; } else { throw "failed"; }
+    return 2;
+}
+final __r = 0;

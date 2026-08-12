@@ -63,17 +63,17 @@ stderr 'is not an artifact of this target'
 concurrency: 2
 -- magusfile.buzz --
 import "magus";
-import "os";
-export fun bundle(ctx: magus\Context, args: [str]) > void {
+import "proc";
+export fun bundle(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("dist/*.txt");
-    os\exec("sh", ["-c", "mkdir -p dist && echo built > dist/app.txt"]);
+    proc\exec("sh", ["-c", "mkdir -p dist && echo built > dist/app.txt"]);
 }
 -- changed.buzz --
 import "magus";
-import "os";
-export fun bundle(ctx: magus\Context, args: [str]) > void {
+import "proc";
+export fun bundle(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("dist/*.txt");
-    os\exec("sh", ["-c", "mkdir -p dist && echo changed > dist/app.txt"]);
+    proc\exec("sh", ["-c", "mkdir -p dist && echo changed > dist/app.txt"]);
 }
 -- stub-diff --
 #!/bin/sh

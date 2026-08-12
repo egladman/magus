@@ -6,7 +6,7 @@ namespace tour;
 import "fs";
 import "io";
 import "std";
-import "encoding";
+import "encoding/base64";
 import "template";
 import "engine/types" as _;
 import "engine/route" as _;
@@ -26,7 +26,7 @@ object TourStep {
 
     // renderCard renders this step's numbered <li>: code teaser, Open-in-Playground
     // deep link, and concept cross-link, all resolved against root.
-    fun renderCard(root: str, num: int) > str {
+    fun renderCard(root: str, num: int) > str !> any {
         final src = tourSrc(this.file);
         // The cross-link is inline at the end of the description, not a separate line.
         return template\render(`      <li class="tour-card" id="step-{{num}}">
@@ -47,7 +47,7 @@ object TourStep {
 // playground is standalone (custom head, wasm, own scripts), so it skips renderPage();
 // templating just the nav keeps it in lockstep with every other page. Its bottom
 // chrome is the console status bar (in playground.html), not the docs footer.
-export fun renderPlayground(site: Site) > void {
+export fun renderPlayground(site: Site) > void !> any {
     final f = io\File.open("playground.html", io\FileMode.read);
     var html = f.readAll();
     f.close();
@@ -61,8 +61,8 @@ export fun renderPlayground(site: Site) > void {
     // placeholder is also what CSP_INLINE_SCRIPT_SOURCES reads to compute site.csp, so
     // this file is both the hash's source and its sink.
     html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
-    fs\makeDirectory(site.outDir + "/" + outDir);
-    fs\writeFile(site.outDir + "/" + outDir + "/index.html", html);
+    fs\mkdirAll(fs\join(site.outDir, outDir));
+    fs\writeFile(fs\join(site.outDir, outDir, "index.html"), html);
 }
 
 
@@ -70,7 +70,7 @@ export fun renderPlayground(site: Site) > void {
 // then take the first several real lines - so the card shows code, not the header comment.
 fun codeTeaser(src: str) > str {
     var started = false;
-    final kept: [str] = mut [<str>];
+    final kept: mut [str] = mut [<str>];
     foreach (line in src.split("\n")) {
         if (started == false) {
             final t = line.trim();
@@ -98,7 +98,7 @@ fun tourSrc(file: str) > str {
 // url-safe unpadded base64 (matching src/site/run-example.ts and the wasm's
 // applyHashSource decoder), so the code stays client-side, never hitting server/CDN.
 fun playgroundLink(root: str, src: str) > str {
-    var enc = encoding\base64urlEncode(src);
+    var enc = base64\urlEncode(src);
     while (enc.endsWith("=")) { enc = enc.sub(0, enc.len() - 1); }
     return root + "playground/#source=" + enc;
 }
@@ -109,8 +109,8 @@ fun playgroundLink(root: str, src: str) > str {
 // guards drop the provenance/edit chrome.
 // tourSteps is the ordered curriculum, shared by the tour page and collectDemos (which
 // inverts each step's docSlug into a "see the demo" callout on the matching concept page).
-export fun tourSteps() > [TourStep] {
-    final steps: [TourStep] = mut [<TourStep>];
+export fun tourSteps() > [TourStep] !> any {
+    final steps: mut [TourStep] = mut [<TourStep>];
     // Discovered from the directory, not from a list kept here. A hand-maintained
     // registry silently omitted steps 19 through 22 for as long as they existed: the
     // files were on disk, linted and shipped in sources, and simply never appeared on
@@ -121,7 +121,7 @@ export fun tourSteps() > [TourStep] {
     // lets a step reference "step 8" in its prose and stay right.
     // glob returns Paths, and an immutable list that sort cannot mutate in place, so
     // take the relative value of each into a list this can order.
-    final files: [str] = mut [<str>];
+    final files: mut [str] = mut [<str>];
     foreach (f in fs\glob("tour/*.buzz")) { files.append(f.value); }
     final ordered = files.sort(fun (a: str, b: str) > bool { return a < b; });
     foreach (f in ordered) {
@@ -170,7 +170,7 @@ fun tourDocLabel(src: str) > str {
 // collectDemos maps each concept docSlug to the FIRST tour step that demonstrates it (its
 // title + card anchor), pre-walk, so renderFile can inject a "see the demo" callout on the
 // matching concept page.
-export fun collectDemos(site: Site) > void {
+export fun collectDemos(site: Site) > void !> any {
     var n = 1;
     foreach (step in tourSteps()) {
         if (step.docSlug != "" and site.demoBySlug[step.docSlug] == null) {
@@ -180,7 +180,7 @@ export fun collectDemos(site: Site) > void {
     }
 }
 
-export fun renderTourPage(site: Site) > void {
+export fun renderTourPage(site: Site) > void !> any {
     final root = rootPrefix("tour/index.md", site);
     final steps = tourSteps();
 
@@ -199,7 +199,7 @@ export fun renderTourPage(site: Site) > void {
     final title = "Tour";
     final desc = "A guided tour of magus: curated, runnable examples from a hello-world magusfile through a full multi-toolchain pipeline, custom targets, and the Buzz standard library.";
     final doc = renderPage(title, desc, body, "tour/index.md", "", "tour/", "", mut [], site);
-    fs\makeDirectory(site.outDir + "/tour");
+    fs\mkdirAll(site.outDir + "/tour");
     final of = io\File.open(site.outDir + "/tour/index.html", io\FileMode.write);
     of.write(doc);
     of.close();

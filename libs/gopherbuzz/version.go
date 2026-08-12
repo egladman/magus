@@ -14,9 +14,11 @@ const LanguageVersion = "0.6.0-dev"
 // number -- is the only precise statement of which upstream this is compared with.
 //
 // It is a comparison point, NOT a compatibility claim. gopherbuzz implements a
-// subset: 26 of upstream's 83 behavior tests passed when this was last measured.
-// The conformance test (conformance_test.go) is what enforces that score against
-// this ref; the README's parity section carries the running record. Bump this and
-// re-run the conformance target on every sync, so the score always describes the
-// upstream actually being tracked.
+// subset. Do NOT restate the score here: this comment carried "26 of 83" long
+// after the real figure moved, and a second stale number lived in
+// conformance_test.go at the same time, so the tree asserted three different
+// scores at once. The authority is testdata/upstream-behavior-allowlist.txt -
+// its line count IS the passing count, because the conformance test enforces the
+// list in both directions. The README's parity section carries the running record
+// in prose. Bump this ref and re-run the conformance target on every sync.
 const UpstreamRef = "0.5.0-251-ged42f47"

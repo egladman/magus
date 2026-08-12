@@ -103,12 +103,23 @@ func matchGlobs(name string, globs []string) bool {
 	return false
 }
 
-// ValidateGlobs returns the first invalid pattern (must end in exactly one "*" with non-empty prefix), or "".
+// ValidateGlobs returns the first invalid pattern (must end in exactly one "*" with
+// non-empty prefix), or "" once all patterns pass. An empty-string pattern is itself
+// invalid but cannot be returned verbatim - "" is already the success sentinel, so a
+// caller checking `!= ""` would silently treat it as valid. It is reported as
+// emptyPatternInvalid instead.
 func ValidateGlobs(globs []string) string {
 	for _, g := range globs {
 		if len(g) < 2 || strings.Count(g, "*") != 1 || !strings.HasSuffix(g, "*") {
+			if g == "" {
+				return emptyPatternInvalid
+			}
 			return g
 		}
 	}
 	return ""
 }
+
+// emptyPatternInvalid is ValidateGlobs' report for an empty-string pattern: it must be
+// non-empty so it can never collide with the "" success sentinel.
+const emptyPatternInvalid = `"" (empty pattern)`

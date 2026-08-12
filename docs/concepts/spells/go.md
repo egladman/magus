@@ -26,7 +26,7 @@ Every op is invoked as `go["<op>"](ctx, opts?)`. The first argument is the targe
 | `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L173) |
 
 
-Working directory and environment are NOT options: they ride the context, as `go["<op>"](ctx.withCwd("sub"))` and `go["<op>"](ctx.withEnv({"CGO_ENABLED": "0"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise - passing either as an option is an error.
+Working directory and environment are NOT options: they ride the context, as `go["<op>"](ctx.withCwd("sub"))` and `go["<op>"](ctx.withEnv({"CGO_ENABLED": "0"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise; passing either as an option is an error.
 
 Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).
 
@@ -205,7 +205,7 @@ export fun tidy(ctx: magus\Context, args: [str]) > void {
 
 <!-- magus-run-recorder -->
 ```buzz
-// Run a repo-local Go tool through the spell instead of os.exec. go-run has no
+// Run a repo-local Go tool through the spell instead of proc.exec. go-run has no
 // useful bare form: name the package and its flags via the "args" option, which
 // append after `go run`. This forks `go run ./cmd/gen-docs -out ./docs`.
 import "magus";
@@ -389,5 +389,5 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 
 ## scip
 
-**Command:** `sh -c scip-go --output "$MAGUS_SYMBOL_INDEX"`
+**Command:** `scip-go --output $MAGUS_SYMBOL_INDEX`
 

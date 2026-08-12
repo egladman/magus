@@ -109,7 +109,16 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 		)))
 		out := buf.String()
 		assert.Contains(t, out, "[fail] api build (ran,", "failure heading identifies the project and target")
-		assert.Contains(t, out, "cause: compile failed: undefined: Widget", "multi-line errors should remain scannable")
+		// This asserted the flattened "cause: compile failed: undefined: Widget" on
+		// the grounds that multi-line errors should remain scannable. That premise
+		// held while a cause was always ONE error whose message happened to wrap.
+		// It stopped holding once errors.Join made a cause routinely carry several
+		// INDEPENDENT failures, because flattening then ran two unrelated ones into
+		// a single sentence with no boundary - see
+		// TestFailureCausesSplitsAndStripsPlumbing for the real string that produced.
+		// Scannability is now served by a hanging indent instead of by one line.
+		assert.Contains(t, out, "cause: compile failed:\n       undefined: Widget",
+			"each line of a cause is its own line, aligned under the first")
 		assert.Contains(t, out, "output: outdeadbeef")
 		assert.Contains(t, out, "inspect: magus query output outdeadbeef")
 		assert.Contains(t, out, "reproduce: magus run build api")
@@ -726,4 +735,64 @@ func TestPrettyHandlerPrintsAfterCancellation(t *testing.T) {
 	out := sink.String()
 	assert.Contains(t, out, "before")
 	assert.Contains(t, out, "after", "a cancelled context must not silence a record")
+}
+
+// TestFailureCausesSplitsAndStripsPlumbing pins the readability of the `cause:`
+// line, using the exact string a real `magus run ci .` produced. Two independent
+// failures were joined by errors.Join with a newline and then flattened by
+// strings.Fields, so they ran together into one sentence with no boundary -
+// "dprint exited 20 test: ctx.needs: advice-test: ..." reads as a single clause
+// and names neither failure clearly.
+func TestFailureCausesSplitsAndStripsPlumbing(t *testing.T) {
+	const joined = "ctx.needs: build: ctx.needs: go-build: ctx.needs: ctx.needs: format: dprint exited 20\n" +
+		"test: ctx.needs: advice-test: magus.buzz: buzz -t blast-radius.buzz exited with code 1\n" +
+		"compress-cgo-test: go exited 1"
+
+	got := failureCauses(joined)
+
+	require.Len(t, got, 3, "each independent failure gets its own line")
+	assert.Equal(t, "build -> go-build -> format: dprint exited 20", got[0],
+		"the markers are consumed and the hops they named read as a path")
+	assert.Equal(t, "test -> advice-test: magus.buzz: buzz -t blast-radius.buzz exited with code 1", got[1],
+		"magus.buzz carries no marker, so it stays part of the message")
+	assert.Equal(t, "compress-cgo-test: go exited 1", got[2])
+	for _, c := range got {
+		assert.NotContains(t, c, "ctx.needs:", "no plumbing prefix survives")
+	}
+}
+
+// TestFailureCausesKeepsASingleCauseWhole guards the common case: one failure
+// must not be reshaped, and a cause with no newline still returns exactly one line.
+func TestFailureCausesKeepsASingleCauseWhole(t *testing.T) {
+	got := failureCauses("lint: markdownlint exited 1")
+	require.Len(t, got, 1)
+	assert.Equal(t, "lint: markdownlint exited 1", got[0])
+}
+
+// TestArrowChainLeavesAmbiguousCasesAlone guards the shape heuristic. A single
+// hop needs no arrow (one colon is unambiguous), and nothing after the first
+// space-bearing segment may be rewritten, or a message's own colons would be
+// mangled into fake hops.
+func TestHopChainUsesTheMarkersNotGuesswork(t *testing.T) {
+	cases := []struct{ name, in, want string }{
+		{"single hop", "lint: markdownlint exited 1", "lint: markdownlint exited 1"},
+		{"no colon at all", "go exited 1", "go exited 1"},
+		// Each of these has a second segment that LOOKS like a target and is not
+		// one. No marker precedes it, so none of them becomes a hop.
+		{"exec.Error is not a hop", `format: exec: "dprint": executable file not found in $PATH`,
+			`format: exec: "dprint": executable file not found in $PATH`},
+		{"a file:line:col is not a hop", "build: ./main.go:5:2: undefined: Widget",
+			"build: ./main.go:5:2: undefined: Widget"},
+		{"a URL is not a hop", "fetch: https://example.com/x: 404", "fetch: https://example.com/x: 404"},
+		{"a filename is not a hop", "advice-test: config.json: missing key: name",
+			"advice-test: config.json: missing key: name"},
+		// With markers, the same shapes DO become hops, because the chain says so.
+		{"markers name the hops", "test: ctx.needs: advice-test: magus.buzz: buzz -t x.buzz exited 1",
+			"test -> advice-test: magus.buzz: buzz -t x.buzz exited 1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, hopChain(tc.in))
+		})
+	}
 }

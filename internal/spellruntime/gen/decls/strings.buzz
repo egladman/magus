@@ -8,8 +8,19 @@
 
 export extern fun camelCase(s: str) > str;
 export extern fun capitalize(s: str) > str;
+export extern fun collapseWs(s: str) > str;
+export extern fun compare(a: str, b: str) > int;
+export extern fun contains(s: str, substr: str) > bool;
 export extern fun ellipsis(s: str, length: int) > str;
+export extern fun fields(s: str) > [str];
 export extern fun kebabCase(s: str) > str;
+export extern fun lines(s: str) > [str];
+export extern fun padLeft(s: str, length: int, pad: str = " ") > str !> any;
+export extern fun padRight(s: str, length: int, pad: str = " ") > str !> any;
 export extern fun pascalCase(s: str) > str;
 export extern fun snakeCase(s: str) > str;
+export extern fun splitN(s: str, sep: str, n: int) > [str];
+export extern fun trimPrefix(s: str, prefix: str) > str;
+export extern fun trimSuffix(s: str, suffix: str) > str;
+export extern fun upperFirst(s: str) > str;
 export extern fun words(s: str) > [str];

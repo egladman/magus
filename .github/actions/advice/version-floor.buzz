@@ -10,6 +10,7 @@
 //
 // Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA.
 import "os";
+import "proc";
 import "advice";
 import "std";
 
@@ -39,7 +40,7 @@ fun body(floor: str) > str {
         + "```sh\nmagus self update\n```\n";
 }
 
-fun main() > void {
+fun main() > void !> any {
     final repo = advice\env("REPO");
     final pr = advice\env("PR_NUMBER");
     final base = advice\env("PR_BASE");
@@ -59,8 +60,8 @@ fun main() > void {
         return;
     }
 
-    os\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
-    final diff = os\exec("git", args: ["diff", "origin/" + base + "..." + head, "--", "magus.yaml"],
+    proc\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
+    final diff = proc\exec("git", args: ["diff", "origin/" + base + "..." + head, "--", "magus.yaml"],
         dir: ".", opts: {"allow_failure": true}).stdout;
     final floor = raised(diff);
     if (floor == "") {
@@ -73,7 +74,6 @@ fun main() > void {
     std\print("version-floor: advised on " + floor);
 }
 
-main();
 
 test "raised reads a newly set floor" {
     std\assert(raised("+required_version: \">= 0.4.0\"\n") == ">= 0.4.0", message: "unquoted value");

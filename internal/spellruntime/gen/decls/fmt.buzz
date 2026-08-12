@@ -7,3 +7,4 @@
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
 // sprintf is variadic; Buzz has no variadic parameter, so it stays untyped.
+export final sprintf: any = null;

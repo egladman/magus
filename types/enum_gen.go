@@ -27,6 +27,110 @@ func (v SignAlgorithm) String() string {
 	return string(v)
 }
 
+// Values lists the TermStyle values a caller may choose, excluding the zero value.
+func (v TermStyle) Values() []string {
+	return []string{"1", "2", "31", "32", "33", "2;32", "2;37", "1;32"}
+}
+
+// Valid reports whether v is a declared TermStyle. The zero value is valid: it means the
+// field was not set, which callers distinguish from a wrong value.
+//
+// A switch rather than a scan over Values: Values allocates a fresh slice per call so
+// its result can never be mutated by a caller, which is the right trade for a helper
+// that builds an error message and the wrong one for a predicate.
+func (v TermStyle) Valid() bool {
+	switch v {
+	case "", "1", "2", "31", "32", "33", "2;32", "2;37", "1;32":
+		return true
+	}
+	return false
+}
+
+// String renders v for an error message: the value, or "unset" when empty.
+func (v TermStyle) String() string {
+	if v == "" {
+		return "unset"
+	}
+	return string(v)
+}
+
+// Values lists the TimeLayout values a caller may choose, excluding the zero value.
+func (v TimeLayout) Values() []string {
+	return []string{"2006-01-02T15:04:05Z07:00", "2006-01-02T15:04:05.999999999Z07:00", "2006-01-02", "15:04:05", "2006-01-02 15:04:05", "Mon, 02 Jan 2006 15:04:05 MST", "3:04PM"}
+}
+
+// Valid reports whether v is a declared TimeLayout. The zero value is valid: it means the
+// field was not set, which callers distinguish from a wrong value.
+//
+// A switch rather than a scan over Values: Values allocates a fresh slice per call so
+// its result can never be mutated by a caller, which is the right trade for a helper
+// that builds an error message and the wrong one for a predicate.
+func (v TimeLayout) Valid() bool {
+	switch v {
+	case "", "2006-01-02T15:04:05Z07:00", "2006-01-02T15:04:05.999999999Z07:00", "2006-01-02", "15:04:05", "2006-01-02 15:04:05", "Mon, 02 Jan 2006 15:04:05 MST", "3:04PM":
+		return true
+	}
+	return false
+}
+
+// String renders v for an error message: the value, or "unset" when empty.
+func (v TimeLayout) String() string {
+	if v == "" {
+		return "unset"
+	}
+	return string(v)
+}
+
+// Values lists the LogLevel values a caller may choose, excluding the zero value.
+func (v LogLevel) Values() []string { return []string{"trace", "debug", "info", "warn", "error"} }
+
+// Valid reports whether v is a declared LogLevel. The zero value is valid: it means the
+// field was not set, which callers distinguish from a wrong value.
+//
+// A switch rather than a scan over Values: Values allocates a fresh slice per call so
+// its result can never be mutated by a caller, which is the right trade for a helper
+// that builds an error message and the wrong one for a predicate.
+func (v LogLevel) Valid() bool {
+	switch v {
+	case "", "trace", "debug", "info", "warn", "error":
+		return true
+	}
+	return false
+}
+
+// String renders v for an error message: the value, or "unset" when empty.
+func (v LogLevel) String() string {
+	if v == "" {
+		return "unset"
+	}
+	return string(v)
+}
+
+// Values lists the PlatformStyle values a caller may choose, excluding the zero value.
+func (v PlatformStyle) Values() []string { return []string{"go", "uname"} }
+
+// Valid reports whether v is a declared PlatformStyle. The zero value is valid: it means the
+// field was not set, which callers distinguish from a wrong value.
+//
+// A switch rather than a scan over Values: Values allocates a fresh slice per call so
+// its result can never be mutated by a caller, which is the right trade for a helper
+// that builds an error message and the wrong one for a predicate.
+func (v PlatformStyle) Valid() bool {
+	switch v {
+	case "", "go", "uname":
+		return true
+	}
+	return false
+}
+
+// String renders v for an error message: the value, or "unset" when empty.
+func (v PlatformStyle) String() string {
+	if v == "" {
+		return "unset"
+	}
+	return string(v)
+}
+
 // Values lists the DoctorCheckStatus values a caller may choose, excluding the zero value.
 func (v DoctorCheckStatus) Values() []string { return []string{"ok", "fail", "advice"} }
 

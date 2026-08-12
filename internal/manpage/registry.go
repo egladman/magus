@@ -674,11 +674,15 @@ means none. Shell init hooks (e.g. Nix-injected .profile lines) typically
 check for the file with [ -S "$socket" ] before starting one.`,
 	Usage: "magus server <start|stop> [flags]",
 	Children: []Command{
-		{Name: "start", Short: "Start a persistent daemon (foreground; use & or a supervisor to background)"},
+		{Name: "start", Short: "Start a persistent daemon (auto-backgrounds by default; --foreground blocks)"},
 		{Name: "stop", Short: "Send a graceful shutdown request to a running daemon"},
 	},
+	BuildFlags: func(fs *flag.FlagSet) {
+		fs.Bool("foreground", false, "Run in the foreground and block, instead of auto-backgrounding (server start)")
+	},
 	Examples: []Example{
-		{"Start daemon in the background", "magus server start &"},
+		{"Start the daemon (auto-backgrounds)", "magus server start"},
+		{"Run the daemon in the foreground (supervisor or debugging)", "magus server start --foreground"},
 		{"Stop the running daemon", "magus server stop"},
 		{"Inspect daemon pool state", "magus status"},
 		{"Use a custom socket path", "magus --daemon-address unix:///tmp/m.sock server start"},
@@ -758,6 +762,7 @@ The VCS is taken from --vcs, or chosen interactively when stdin is a terminal.
 The "spell" subcommand scaffolds a new spell instead of bootstrapping a
 workspace: "magus init spell <name>" writes spells/<name>/spell.buzz with the
 mgs_ contract stubbed, each function documented, and a runnable test block.`,
+	Usage: "magus init [flags]",
 	BuildFlags: func(fs *flag.FlagSet) {
 		fs.Bool("global", false, "Write only the global config; skip the workspace bootstrap")
 		fs.Bool("local", false, "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/")

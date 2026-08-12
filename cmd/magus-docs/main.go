@@ -17,6 +17,7 @@ import (
 
 	"github.com/egladman/magus/internal/docs"
 	"github.com/egladman/magus/internal/dry"
+	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/std"
 )
 
@@ -80,7 +81,10 @@ var moduleCategories = []struct {
 }
 
 func main() {
-	outDir := flag.String("out", "docs/buzz/modules", "output directory for module docs")
+	// Default is where the docs ACTUALLY live, which is what docs/magusfile.buzz passes
+	// explicitly. It used to name docs/buzz/modules, a path nothing reads, so running
+	// the generator without flags wrote a second copy nobody regenerates or ships.
+	outDir := flag.String("out", "docs/reference/buzz", "output directory for module docs")
 	flag.Parse()
 
 	if err := os.MkdirAll(*outDir, 0o755); err != nil {
@@ -88,7 +92,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	modules := std.All()
+	// Both kinds of stdlib module, so the docs site cannot tell a Buzz-implemented
+	// one from a Go-implemented one. std.SourceModulesAsModules derives the method
+	// list from the Buzz source, which is the same shape writeModule already
+	// renders - the alternative was a second template nobody would keep in step.
+	// hostmodules.All(), not std.All(): std/encoding's nine leaf modules do not
+	// self-register into std's own registry (see hostmodules's doc for why).
+	modules := append(hostmodules.All(), std.SourceModulesAsModules()...)
 	slices.SortFunc(modules, func(a, b std.Module) int {
 		return strings.Compare(a.Name, b.Name)
 	})
@@ -384,7 +394,7 @@ func renderIndex(modules []std.Module) string {
 		Tags:        []string{"stdlib", "modules", "magusfile", "reference", "fs", "os", "http", "json"},
 	})
 	fmt.Fprintf(&b, "# Magusfile Module Reference\n\n")
-	fmt.Fprintf(&b, "These are the runtime utility modules. Import each under its bare name - `import \"fs\"`, then `fs.glob(...)` - with `camelCase` methods. magus layers these host methods onto Buzz's own stdlib, so a single `import \"fs\"` (or `os`, `crypto`) carries both surfaces, and the magus forms are sandbox-aware where Buzz's bare stdlib is not. Methods that are also in Buzz's own standard library are marked with an asterisk (`*`) and a footnote on their page; either form works.\n\n")
+	fmt.Fprintf(&b, "These are the runtime utility modules. Import each under its bare name (`import \"fs\"`, then `fs.glob(...)`) with `camelCase` methods. magus layers these host methods onto Buzz's own stdlib, so a single `import \"fs\"` (or `os`, `crypto`) carries both surfaces, and the magus forms are sandbox-aware where Buzz's bare stdlib is not. Methods that are also in Buzz's own standard library are marked with an asterisk (`*`) and a footnote on their page; either form works.\n\n")
 
 	// Render each category as its own section so the page has real headings (and
 	// thus a useful TOC). Track what's placed so nothing is dropped.

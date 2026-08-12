@@ -1033,7 +1033,10 @@ func (l *lexer) lexNumber(line, col int) (Token, error) {
 			if len(raw) == 2 {
 				return Token{}, fmt.Errorf("buzz: line %d:%d: unterminated hexa literal", line, col)
 			}
-			if raw[len(raw)-1] == '_' {
+			// BOTH ends: a separator has to sit between digits, so `0x_100` is as
+			// wrong as `0x100_`. Only the trailing case was checked, which let the
+			// leading form through as a valid literal.
+			if raw[2] == '_' || raw[len(raw)-1] == '_' {
 				return Token{}, fmt.Errorf("buzz: line %d:%d: '_' must be between digits", line, col)
 			}
 			return Token{Kind: Int, Val: raw, Line: line, Col: col}, nil
@@ -1048,7 +1051,8 @@ func (l *lexer) lexNumber(line, col int) (Token, error) {
 			if len(raw) == 2 {
 				return Token{}, fmt.Errorf("buzz: line %d:%d: unterminated binary literal", line, col)
 			}
-			if raw[len(raw)-1] == '_' {
+			// See the hex arm: leading separator, not only trailing.
+			if raw[2] == '_' || raw[len(raw)-1] == '_' {
 				return Token{}, fmt.Errorf("buzz: line %d:%d: '_' must be between digits", line, col)
 			}
 			return Token{Kind: Int, Val: raw, Line: line, Col: col}, nil

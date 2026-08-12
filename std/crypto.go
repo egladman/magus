@@ -3,10 +3,12 @@ package std
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/hmac"
 	"crypto/md5"  //nolint:gosec // G501: MD5 is exposed for interop with legacy checksum manifests, not security.
 	"crypto/sha1" //nolint:gosec // G505: SHA-1 is exposed for interop with legacy/git checksums, not security.
 	"crypto/sha256"
 	"crypto/sha512"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"hash"
@@ -15,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/types"
 )
 
 //go:generate go run ../cmd/magus-utils bindings -module crypto -lang buzz -out ../internal/interp/bindings/gen/crypto.go
@@ -22,25 +25,31 @@ import (
 func init() { Register(Crypto) }
 
 // Crypto is the "crypto" host module: content digests for checksum manifests
-// (SHA256SUMS for release assets) and verifying downloads. Digests only - not a
-// general crypto toolkit (no HMAC and no encryption). SHA-256/512 are the strong
-// defaults; SHA-1 and MD5 exist for interop with legacy checksums and are not
+// (SHA256SUMS for release assets), Ed25519 signing, and HMAC. Not a general
+// crypto toolkit - there is no encryption. SHA-256/512 are the strong defaults;
+// SHA-1 and MD5 exist for interop with legacy checksums and are not
 // collision-resistant - never use them for anything security-relevant.
+//
+// The HMAC and byte-list methods moved here from
+// internal/interp/bindings/crypto_bytes.go once the descriptor gained a byte-list
+// type tag. They worked as undeclared companions but were invisible to
+// `magus describe modules`, the knowledge graph and the docs, and untyped in the
+// checker - reachable only by knowing they existed.
 //
 // Signing is here so a magusfile can publish a signed artifact without a Go program
 // in the middle. Two things about its shape:
 //
 // The ALGORITHM is a parameter rather than part of the method name, so a second
-// algorithm is a case in signAlgorithm rather than four more methods. It is a
-// validated string and not an enum only because the host-module descriptor has no
-// enum tag - Buzz's own stdlib does this properly with HashAlgorithm.Sha256, and
-// matching that would mean teaching the binding generator about enums first.
+// algorithm is a case in signAlgorithm rather than four more methods. The
+// sign/verify/public_key methods below declare alg's Arg.Enum as "SignAlgorithm";
+// checkAlg is the runtime half, rejecting anything but SignEd25519 by name.
 //
 // The KEY is named by environment variable rather than passed as a value: a key
 // that never becomes a Buzz string cannot be interpolated into a log line, an
 // error, or a captured run output.
 var Crypto = Module{
 	Name: "crypto",
+	WASM: true,
 	Doc:  "Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop) and Ed25519 signing.",
 	Methods: []Method{
 		{
@@ -55,6 +64,7 @@ var Crypto = Module{
 			Doc:     "Return the lowercase hex SHA-256 digest of the file at path.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    CryptoSha256File,
 		},
 		{
@@ -69,6 +79,7 @@ var Crypto = Module{
 			Doc:     "Return the lowercase hex SHA-512 digest of the file at path.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    CryptoSha512File,
 		},
 		{
@@ -83,6 +94,7 @@ var Crypto = Module{
 			Doc:     "Return the lowercase hex SHA-1 digest of the file at path. For interop with legacy/git checksums only - SHA-1 is not collision-resistant; use sha256 for anything security-relevant.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    CryptoSha1File,
 		},
 		{
@@ -91,6 +103,7 @@ var Crypto = Module{
 				"The key is NAMED, never passed: a value that never enters Buzz cannot be interpolated into a log.",
 			Args:    []Arg{{Name: "alg", Type: TypeString, Enum: "SignAlgorithm"}, {Name: "data", Type: TypeString}, {Name: "key_env", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    CryptoSign,
 		},
 		{
@@ -98,6 +111,7 @@ var Crypto = Module{
 			Doc:     "Sign the file at path, write the detached signature to path + \".sig\", and return the lowercase hex signature. alg is \"ed25519\".",
 			Args:    []Arg{{Name: "alg", Type: TypeString, Enum: "SignAlgorithm"}, {Name: "path", Type: TypeString}, {Name: "key_env", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    CryptoSignFile,
 		},
 		{
@@ -105,6 +119,7 @@ var Crypto = Module{
 			Doc:     "Report whether sig_hex is a valid signature over data for the hex public key pub_hex. alg is \"ed25519\".",
 			Args:    []Arg{{Name: "alg", Type: TypeString, Enum: "SignAlgorithm"}, {Name: "data", Type: TypeString}, {Name: "sig_hex", Type: TypeString}, {Name: "pub_hex", Type: TypeString}},
 			Returns: []Ret{{Type: TypeBool}},
+			Raises:  true,
 			Impl:    CryptoVerify,
 		},
 		{
@@ -112,6 +127,7 @@ var Crypto = Module{
 			Doc:     "Return the lowercase hex PUBLIC key for the private key in the named environment variable, so a publisher can print what its readers must pin. alg is \"ed25519\".",
 			Args:    []Arg{{Name: "alg", Type: TypeString, Enum: "SignAlgorithm"}, {Name: "key_env", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    CryptoPublicKey,
 		},
 		{
@@ -126,9 +142,82 @@ var Crypto = Module{
 			Doc:     "Return the lowercase hex MD5 digest of the file at path. For interop with legacy checksum manifests only - MD5 is broken; use sha256 for anything security-relevant.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    CryptoMd5File,
 		},
+		{
+			Name: "hmac_sha256",
+			Doc:  "Return the raw HMAC-SHA256 of data keyed by key, as a BYTE LIST. key and data may each be a str or a byte list, which is what lets one result key the next call - the shape an AWS SigV4 signing chain needs (kDate to kRegion to kService to kSigning). Use hmac_sha256_hex for the final signature you actually send.",
+			Args: []Arg{
+				{Name: "key", Type: TypeByteSlice},
+				{Name: "data", Type: TypeByteSlice},
+			},
+			Returns: []Ret{{Type: TypeByteSlice}},
+			Impl:    CryptoHmacSha256,
+		},
+		{
+			Name: "hmac_sha256_hex",
+			Doc:  "Return the lowercase hex HMAC-SHA256 of data keyed by key - the form a signature header carries, once the signing key has been derived with hmac_sha256.",
+			Args: []Arg{
+				{Name: "key", Type: TypeByteSlice},
+				{Name: "data", Type: TypeByteSlice},
+			},
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    CryptoHmacSha256Hex,
+		},
+		{
+			Name:    "base64_encode_bytes",
+			Doc:     "Encode raw bytes as standard (padded) base64. The byte-list counterpart to encoding/base64's encode, for data that came from another byte-level call and must not round-trip through a rune-oriented str.",
+			Args:    []Arg{{Name: "data", Type: TypeByteSlice}},
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    CryptoBase64EncodeBytes,
+		},
+		{
+			Name:    "base64_decode_bytes",
+			Doc:     "Decode standard (padded) base64 into a byte list; errors on invalid input. Returns bytes rather than a str so arbitrary binary survives - a decoded key or archive would not.",
+			Args:    []Arg{{Name: "s", Type: TypeString}},
+			Returns: []Ret{{Type: TypeByteSlice}},
+			Raises:  true,
+			Impl:    CryptoBase64DecodeBytes,
+		},
 	},
+}
+
+// CryptoHmacSha256 returns the raw HMAC-SHA256 of data keyed by key.
+//
+// Bytes in and bytes out, which is the whole point: the result keys the next call
+// in a signing chain, and a str would not survive the round trip. It moved here
+// from internal/interp/bindings/crypto_bytes.go once a byte-list type tag existed
+// to declare it with - as an undeclared companion it worked but was invisible to
+// `magus describe modules`, the knowledge graph and the docs, and untyped in the
+// checker.
+func CryptoHmacSha256(_ context.Context, key, data []byte) ([]byte, error) {
+	m := hmac.New(sha256.New, key)
+	_, _ = m.Write(data) // hash.Hash.Write never returns an error
+	return m.Sum(nil), nil
+}
+
+// CryptoHmacSha256Hex returns the hex HMAC-SHA256 of data keyed by key.
+func CryptoHmacSha256Hex(ctx context.Context, key, data []byte) (string, error) {
+	sum, err := CryptoHmacSha256(ctx, key, data)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(sum), nil
+}
+
+// CryptoBase64EncodeBytes encodes raw bytes as standard padded base64.
+func CryptoBase64EncodeBytes(_ context.Context, data []byte) (string, error) {
+	return base64.StdEncoding.EncodeToString(data), nil
+}
+
+// CryptoBase64DecodeBytes decodes standard padded base64 into raw bytes.
+func CryptoBase64DecodeBytes(_ context.Context, s string) ([]byte, error) {
+	b, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		return nil, fmt.Errorf("crypto.base64_decode_bytes: %w", err)
+	}
+	return b, nil
 }
 
 // hashHex returns the lowercase hex digest of data using the hash from newHash.
@@ -201,8 +290,7 @@ func CryptoMd5File(ctx context.Context, path string) (string, error) {
 	return hashFile(ctx, "crypto.md5_file", md5.New, path)
 }
 
-// SignEd25519 is the only algorithm signing accepts today. It is a string rather
-// than a typed constant because the host-module descriptor has no enum tag.
+// SignEd25519 is the only algorithm signing accepts today.
 const SignEd25519 = "ed25519"
 
 // checkAlg rejects an unknown algorithm by NAME, listing what is accepted. A typo
@@ -265,6 +353,18 @@ func CryptoSignFile(ctx context.Context, alg, path, keyEnv string) (string, erro
 		return "", err
 	}
 	full := resolvePath(ctx, path)
+	// Read check first, tracing gate second: reads are left alone even in a dry
+	// run (types/trace.go), so a sandbox denial is still reported rather than
+	// silently skipped by the trace stub.
+	if err := checkRead(ctx, full); err != nil {
+		return "", err
+	}
+	if types.Tracing(ctx) {
+		return "", nil
+	}
+	if err := checkWrite(ctx, full+".sig"); err != nil {
+		return "", err
+	}
 	data, err := os.ReadFile(full)
 	if err != nil {
 		return "", fmt.Errorf("crypto.sign_file: read %s: %w", path, err)

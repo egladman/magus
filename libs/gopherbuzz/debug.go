@@ -70,7 +70,3 @@ func (s *Session) ClearStepHook() {
 		s.curVM.ClearStepHook()
 	}
 }
-
-// Ensure the vmpackage import is used (it's used via type aliases in vm_exports.go,
-// but we reference it here directly too via the method receivers on *VM).
-var _ = vmpackage.StepLine

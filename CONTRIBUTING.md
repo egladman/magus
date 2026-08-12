@@ -81,6 +81,30 @@ removed public surface. Regenerate it with `go generate ./internal/manpage/...`
 after an intentional addition, and treat a deletion as a question rather than a
 regeneration.
 
+**The fourth surface has no gate: `std/` host-module method names.** A whole-tree
+review in August 2026 established this, and it is worth knowing before you touch a
+descriptor. `Method.Name` in a `std/` module is run through `std.CamelCase` and
+becomes the identifier every magusfile calls, so renaming it breaks them - and
+nothing catches it:
+
+- MGS1025's removed-API table covers only the `magus.*` namespace, so it cannot
+  soften a `fs.*` or `os.*` rename, and it is a friendlier error rather than a
+  working alias either way.
+- `internal/interp/bindings/testdata/magus-api.lock` pins only `magus.*` member
+  names. No lock file lists std method names at all.
+
+So a std rename is a silent break that review has to catch by eye. If you make one
+deliberately, it belongs under **Breaking** in the changelog with the old and new
+spellings, and every in-repo caller must move with it - `magusfile.buzz`,
+`spells/`, `docs/**/*.buzz`, `tools/`, testdata scripts, and the `.txtar` fixtures
+under `cmd/magus/testdata/`.
+
+The same descriptor's `Doc:` string is not documentation either: it is codegen
+input, reaching the generated `.d.ts`, `docs/reference/buzz/*.md`, and editor
+hover text. A wrong `Doc` teaches every Buzz author the opposite of the contract,
+which is how three `fs` and `vcs` methods came to promise a `false`/zero/empty
+return while their bodies raised.
+
 **A new key means the workspace needs a newer magus.** Additive changes are safe
 for existing users and unsafe for the repo's own magusfile, which CI runs against
 a pinned release. The rule is release-first: if `magusfile.buzz` starts needing a
@@ -377,7 +401,7 @@ Two things worth knowing before you change any of it:
 - **The console lint target conflates formatting with linting, and should not.** The
   typescript spell exposes `biome-check` and `biome-format` as separate ops precisely so
   a target can compose them independently, but `console/magusfile.buzz` calls
-  `os\exec("pnpm", ["exec", "biome", "check", "src"])` directly, and `biome check`
+  `proc\exec("pnpm", ["exec", "biome", "check", "src"])` directly, and `biome check`
   reports formatting as lint findings. That is the exact blur the concepts page argues
   against, in our own tree. Route it through the spell ops when you next touch it.
 

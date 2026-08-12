@@ -1,0 +1,6 @@
+// @error: code will never be reached
+fun f() > int {
+    return 1;
+    final dead = 2;
+}
+final __r = f();

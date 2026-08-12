@@ -11,7 +11,7 @@ import (
 )
 
 // RegisterPath builds the "path" module map and returns it.
-// Pure path-string math: abs, rel, clean, is_abs, expand_user.
+// Pure path-string math: abs, rel, clean, is_abs, expand_user, and glob matching.
 func RegisterPath(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
@@ -44,6 +44,24 @@ func RegisterPath(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("isAbs", vm.DirectValue("path.isAbs", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		path := Str(bzArgs, 0)
 		ret0, err := std.PathIsAbs(ctx, path)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return BoolVal(ret0), nil
+	}))
+	m.MapSet("matches", vm.DirectValue("path.matches", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		pattern := Str(bzArgs, 0)
+		path := Str(bzArgs, 1)
+		ret0, err := std.PathMatch(ctx, pattern, path)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return BoolVal(ret0), nil
+	}))
+	m.MapSet("matchesAny", vm.DirectValue("path.matchesAny", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		patterns := StrSlice(bzArgs, 0)
+		path := Str(bzArgs, 1)
+		ret0, err := std.PathMatchAny(ctx, patterns, path)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}

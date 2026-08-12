@@ -56,12 +56,16 @@ func Decode(src Obj) (spells.Descriptor, error) {
 		return spells.Descriptor{}, fmt.Errorf("spell: name is required")
 	}
 	language, _ := src.Str("language")
+	tools, err := decodeTools(src)
+	if err != nil {
+		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
+	}
 	m := spells.Descriptor{
 		Name:       name,
 		Claims:     src.Strs("claims"),
 		IgnoreDirs: src.Strs("ignore_dirs"),
 		Manifests:  src.Strs("manifests"),
-		Tools:      decodeTools(src),
+		Tools:      tools,
 		Language:   language,
 		Opaque:     src.Bool("opaque"),
 	}
@@ -250,7 +254,12 @@ func validEnvName(s string) bool {
 // RFC 6902 patch. It is shared by a command op and by each of a service op's
 // run/ready/stop commands, so every command shape decodes identically.
 func decodeCommand(spellName, opName string, o Obj) (spells.Command, error) {
-	c := spells.Command{Args: o.Strs("args"), Capture: o.Bool("capture")}
+	c := spells.Command{
+		Args:        o.Strs("args"),
+		Capture:     o.Bool("capture"),
+		Sources:     o.Strs("sources"),
+		SourcesEach: o.Bool("sourcesEach"),
+	}
 	if bin, ok := o.Str("bin"); ok {
 		c.Bin = bin
 	}
@@ -375,10 +384,11 @@ func validateTools(m spells.Descriptor) error {
 // decodeTools reads the per-binary declarations: what prints its version, what part of
 // that keys the cache, and what proves it is usable. An entry with none of the three is
 // dropped rather than kept as a tool magus knows nothing about.
-func decodeTools(src Obj) map[string]spells.Tool {
+func decodeTools(src Obj) (map[string]spells.Tool, error) {
 	rec, ok := src.Obj("tools")
 	if !ok {
-		return nil
+		//nolint:nilnil // declaring no tools is not an error, and a nil map is the correct empty value here: every caller ranges it or takes its len, both of which read a nil map fine.
+		return nil, nil
 	}
 	var out map[string]spells.Tool
 	for _, name := range rec.Keys() {
@@ -388,9 +398,11 @@ func decodeTools(src Obj) map[string]spells.Tool {
 		}
 		t := spells.Tool{}
 		if pr, ok := o.Obj("probe"); ok {
-			if cmd, err := decodeCommand("", "", pr); err == nil {
-				t.Probe = cmd
+			cmd, err := decodeCommand("", "", pr)
+			if err != nil {
+				return nil, fmt.Errorf("tools[%q].probe: %w", name, err)
 			}
+			t.Probe = cmd
 		}
 		if k, ok := o.Obj("key"); ok {
 			if c, ok := k.Str("const"); ok {
@@ -410,9 +422,10 @@ func decodeTools(src Obj) map[string]spells.Tool {
 		}
 		if r, ok := o.Obj("ready"); ok {
 			cmd, err := decodeCommand("", "", r)
-			if err == nil {
-				t.Ready = cmd
+			if err != nil {
+				return nil, fmt.Errorf("tools[%q].ready: %w", name, err)
 			}
+			t.Ready = cmd
 		}
 		if d, ok := o.Str("diagnostics"); ok {
 			t.Diagnostics = spells.DiagnosticFormat(d)
@@ -426,5 +439,5 @@ func decodeTools(src Obj) map[string]spells.Tool {
 		}
 		out[name] = t
 	}
-	return out
+	return out, nil
 }

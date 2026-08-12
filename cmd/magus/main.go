@@ -755,11 +755,29 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "Env vars: MAGUS_* (see magus help for the full list).")
 }
 
+// snapshotGlobals captures globalCfg and global, returning a restore func that puts them
+// back. runTarget/affected write flags straight into these package globals via cmdParse
+// (gen.BindFlags binds the CURRENT field as each flag's default, so an unset flag keeps
+// whatever a previous dispatch left there) - dispatchAdopted defers the returned restore
+// so one adopted client's flags cannot bleed into the next one dispatched on this process.
+func snapshotGlobals() (restore func()) {
+	savedCfg, savedGlobal := globalCfg, global
+	return func() { globalCfg, global = savedCfg, savedGlobal }
+}
+
 // dispatchAdopted routes adopted child args; only "run" and "affected" are accepted.
 func dispatchAdopted(ctx context.Context, root string, rc runConfig, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no subcommand in forwarded args")
 	}
+	// Restore globalCfg/global to what they were before this dispatch touched them.
+	// This fixes only the SEQUENTIAL bleed between one adopted dispatch and the next
+	// on this process (e.g. a --dry-run or --cache-dir left set after this call
+	// returns). Two adopted dispatches running truly CONCURRENTLY still share these
+	// globals for the duration of both runs and can still stomp each other - a real
+	// fix means threading config explicitly through the call chain instead of
+	// reading it off ambient globals, which is out of scope here.
+	defer snapshotGlobals()()
 	// Strip global flags; display flags are ignored (parent's settings are authoritative).
 	var (
 		ignoredRoot   string
@@ -970,7 +988,15 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 		// Drain in-flight handlers (srv.Close waits on connWg) before reg.close so a
 		// workspace can't be closed under an in-flight build. Close is idempotent.
 		srv.Close()
-		svcReg.Shutdown() // stop every hosted service on daemon teardown
+		// ctx may already be Done here (the signal path above), and Shutdown's wait
+		// for an in-flight service Start returns immediately once its ctx is done -
+		// so passing the cancelled ctx straight through would skip stopping anything
+		// still starting. context.WithoutCancel plus a fresh bound keeps teardown
+		// running (and still cancellable) instead of either hanging forever (the bug
+		// this fixes) or aborting outright (worse: leaks the process).
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), service.DefaultShutdownTimeout)
+		svcReg.Shutdown(shutdownCtx) // stop every hosted service on daemon teardown
+		cancel()
 		reg.close()
 	}()
 }
@@ -1017,6 +1043,9 @@ func applyPreSubDisplayFlags(args, subArgs []string, sub string) error {
 
 func extractRootFlag(args []string) string {
 	for i, a := range args {
+		if a == "--" {
+			return ""
+		}
 		switch {
 		case a == "-root" || a == "--root":
 			if i+1 < len(args) {
@@ -1038,6 +1067,9 @@ func extractRootFlag(args []string) string {
 // run - the flag parse set global.silent long after the display was configured.
 func extractQuietFlag(args []string) bool {
 	for _, a := range args {
+		if a == "--" {
+			return false
+		}
 		switch a {
 		case "-q", "--quiet", "-quiet", "-s", "--silent", "-silent":
 			return true
@@ -1050,6 +1082,9 @@ func extractQuietFlag(args []string) bool {
 // notice-bubbling behavior is configured in the same early pass.
 func extractSilentFlag(args []string) bool {
 	for _, a := range args {
+		if a == "--" {
+			return false
+		}
 		switch a {
 		case "-s", "--silent", "-silent":
 			return true
@@ -1064,6 +1099,9 @@ func extractSilentFlag(args []string) bool {
 // flag was present; a bare --daemon-enabled means true (Go bool-flag convention).
 func extractDaemonEnabledFlag(args []string) (val, set bool) {
 	for _, a := range args {
+		if a == "--" {
+			return false, false
+		}
 		switch {
 		case a == "-daemon-enabled" || a == "--daemon-enabled":
 			return true, true
@@ -1081,6 +1119,9 @@ func extractDaemonEnabledFlag(args []string) (val, set bool) {
 func extractVerbosityCount(args []string) int {
 	n := 0
 	for _, a := range expandVerbosityArgs(args) {
+		if a == "--" {
+			break
+		}
 		if a == "-v" {
 			n++
 		}

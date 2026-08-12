@@ -157,7 +157,13 @@ func (puregoFFI) OpenLibrary(libname string, sigs []CFuncSig) (Value, error) {
 			// {size, align, offsets} so scripts can ffi.alloc and fill it by
 			// reference. The Zig extern-struct layout is the C layout, and the
 			// portable layout engine computes it (Zig type spellings included).
-			size, align, offsets, err := StructLayout(sig.FieldTypeNames)
+			layout := StructLayoutWith
+			if sig.IsUnion {
+				layout = UnionLayoutWith
+			}
+			// declared accumulates as the loop goes, so a later aggregate may name an
+			// earlier one - which is exactly the shape of upstream's `Misc`.
+			size, align, offsets, err := layout(sig.FieldTypeNames, declaredAggregates)
 			if err != nil {
 				return Null, fmt.Errorf("buzz: ffi: struct %s: %w", sig.Name, err)
 			}
@@ -170,6 +176,8 @@ func (puregoFFI) OpenLibrary(libname string, sigs []CFuncSig) (Value, error) {
 			}
 			lay.set("offsets", ListValue(items))
 			m.set(sig.Name, heapValue(tagMap, lay))
+			declaredAggregates[sig.Name] = NamedLayout{Size: size, Align: align, IsUnion: sig.IsUnion}
+			declaredFieldTypes[sig.Name] = sig.FieldTypeNames
 			continue
 		}
 		sym, err := purego.Dlsym(handle, sig.Name)
@@ -256,6 +264,7 @@ func loadExternVar(sig CFuncSig, sym uintptr) (Value, error) {
 }
 
 // goCString copies the NUL-terminated C string at addr into a Go string.
+
 func goCString(addr uintptr) string {
 	var b []byte
 	for i := uintptr(0); ; i++ {
@@ -412,7 +421,11 @@ func reflectRetToValue(r reflect.Value, kind CType) Value {
 	case CFloat, CDouble:
 		return FloatValue(r.Float())
 	case CCharPtr:
-		return StrValue(r.String())
+		// The NUL is part of the value, matching ffi\cstr: a C string handed into
+		// Buzz and one handed back must compare equal, and upstream's ffi.buzz asserts
+		// exactly that (`get_data_msg(data) == "bye world\000"`). Dropping the
+		// terminator here would make a round trip through C silently change the string.
+		return StrValue(r.String() + "\x00")
 	case CVoidPtr:
 		// A null pointer (address 0) surfaces as Buzz `null`, not 0, so
 		// `handle != null` nil-checks behave like upstream buzz (a zdef
@@ -488,7 +501,31 @@ func buildFFIFunc(sig CFuncSig, sym uintptr) (fn Value, err error) {
 				sig.Name, len(sig.Params), len(args))
 		}
 		in := make([]reflect.Value, len(sig.Params))
+		// A struct argument is passed BY REFERENCE, which is upstream's rule for a
+		// foreign struct. The instance is an ordinary Buzz object, so it is marshalled
+		// into a C block for the duration of the call and read back afterwards - that
+		// read-back is what makes `set_data_id(data)` visible as `data.id`.
+		var pinned []structArg
+		defer func() {
+			for _, sa := range pinned {
+				_ = FreeFFI(sa.addr)
+				for _, s := range sa.strs {
+					_ = FreeFFI(s)
+				}
+			}
+		}()
 		for i, p := range sig.Params {
+			if inst, ok := foreignStructArg(args[i]); ok {
+				sa, err := marshalStructArg(inst)
+				// Pin before checking err: the block is allocated early and returned
+				// alongside a later failure, and would otherwise leak.
+				pinned = append(pinned, sa)
+				if err != nil {
+					return Null, fmt.Errorf("buzz: ffi: %s() arg %d: %w", sig.Name, i, err)
+				}
+				in[i] = reflect.ValueOf(sa.addr)
+				continue
+			}
 			rv, err := buzzToReflectArg(args[i], p.Type)
 			if err != nil {
 				return Null, fmt.Errorf("buzz: ffi: %s() arg %d: %w", sig.Name, i, err)
@@ -496,6 +533,11 @@ func buildFFIFunc(sig CFuncSig, sym uintptr) (fn Value, err error) {
 			in[i] = rv
 		}
 		out := cfn.Call(in)
+		for _, sa := range pinned {
+			if err := unmarshalStructArg(sa); err != nil {
+				return Null, fmt.Errorf("buzz: ffi: %s(): reading back a struct argument: %w", sig.Name, err)
+			}
+		}
 		if sig.Ret == CVoid {
 			return Null, nil
 		}
@@ -546,4 +588,132 @@ func openLib(name string) (uintptr, error) {
 		lastErr = err
 	}
 	return 0, fmt.Errorf("buzz: ffi: cannot open library %q: %w", name, lastErr)
+}
+
+// structArg is one foreign-struct argument staged for a call: the object it came
+// from, the C block holding its fields, and any C strings allocated for pointer
+// fields. All of it is freed when the call returns.
+type structArg struct {
+	inst    *objectInst
+	addr    uintptr
+	offsets []int
+	ctypes  []string
+	strs    []uintptr
+}
+
+// foreignStructArg reports whether v is an object instance carrying a layout - the
+// shape a zdef `extern struct` produces - and yields it.
+func foreignStructArg(v Value) (*objectInst, bool) {
+	if v.tag() != tagObject {
+		return nil, false
+	}
+	inst := v.asObject()
+	if inst.Def == nil {
+		return nil, false
+	}
+	if _, known := declaredAggregates[inst.Def.Name]; !known {
+		return nil, false
+	}
+	return inst, true
+}
+
+// marshalStructArg copies an instance's fields into a fresh C block laid out the
+// way the declaration says, and returns the block for the callee to write through.
+func marshalStructArg(inst *objectInst) (structArg, error) {
+	types := declaredFieldTypes[inst.Def.Name]
+	// A union lays every field at 0; struct layout disagreed with the callee.
+	layout := StructLayoutWith
+	if declaredAggregates[inst.Def.Name].IsUnion {
+		layout = UnionLayoutWith
+	}
+	size, _, offsets, err := layout(types, declaredAggregates)
+	if err != nil {
+		return structArg{}, err
+	}
+	addr, err := AllocFFI(size)
+	if err != nil {
+		return structArg{}, err
+	}
+	sa := structArg{inst: inst, addr: addr, offsets: offsets, ctypes: types}
+	for i, ct := range types {
+		if i >= len(inst.Fields) {
+			break
+		}
+		v := inst.Fields[i]
+		// A pointer field needs a C string of its own: the block holds the ADDRESS,
+		// so the bytes have to live somewhere for the duration of the call.
+		if strings.Contains(ct, "*") && v.tag() == tagStr {
+			sp, err := AllocCString(v.asStr().V)
+			if err != nil {
+				return sa, err
+			}
+			sa.strs = append(sa.strs, sp)
+			if err := WriteScalar(addr, offsets[i], "u64", int64(sp), 0, false); err != nil {
+				return sa, err
+			}
+			continue
+		}
+		switch {
+		case v.tag() == tagInt:
+			if err := WriteScalar(addr, offsets[i], ct, v.AsInt(), 0, false); err != nil {
+				return sa, err
+			}
+		case v.tag() == tagBool:
+			// Unwritten, a bool kept AllocFFI's zero and reached C as false.
+			var n int64
+			if v.AsBool() {
+				n = 1
+			}
+			if err := WriteScalar(addr, offsets[i], ct, n, 0, false); err != nil {
+				return sa, err
+			}
+		case v.tag() == tagFloat:
+			if err := WriteScalar(addr, offsets[i], ct, 0, v.AsFloat(), true); err != nil {
+				return sa, err
+			}
+		}
+	}
+	return sa, nil
+}
+
+// unmarshalStructArg reads the block back into the instance, so a callee that wrote
+// through the pointer is visible in Buzz. A pointer field is re-read as a string.
+func unmarshalStructArg(sa structArg) error {
+	// A union's fields all live at offset 0, so reading each one back would
+	// overwrite every field with a reinterpretation of the same bytes. The
+	// caller's own values are left alone instead.
+	if declaredAggregates[sa.inst.Def.Name].IsUnion {
+		return nil
+	}
+	for i, ct := range sa.ctypes {
+		if i >= len(sa.inst.Fields) {
+			break
+		}
+		// A pointer field is left as the caller wrote it: the block holds an address
+		// into memory this call allocated, and handing that back as an int would
+		// replace a readable string with a number the script cannot use.
+		if strings.Contains(ct, "*") {
+			continue
+		}
+		// A nested aggregate is not a scalar; ReadScalar cannot resolve it, and
+		// failing here would fail a call that already ran. Same rule as a pointer.
+		if _, nested := declaredAggregates[ct]; nested {
+			continue
+		}
+		i64, f64, isFloat, err := ReadScalar(sa.addr, sa.offsets[i], ct)
+		if err != nil {
+			return err
+		}
+		switch {
+		case isFloat:
+			sa.inst.Fields[i] = FloatValue(f64)
+		case sa.inst.Fields[i].tag() == tagBool:
+			// A C bool is just a 1-byte int, so the field's own tag is the only
+			// thing that says to spell the result back as a bool.
+			sa.inst.Fields[i] = BoolValue(i64 != 0)
+		default:
+			sa.inst.Fields[i] = IntValue(i64)
+		}
+	}
+	return nil
 }

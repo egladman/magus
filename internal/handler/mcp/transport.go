@@ -113,10 +113,10 @@ func agentFromRequest(req *mcp.InitializeRequest) string {
 }
 
 // buildServer constructs the MCPServer with the standard magus options and
-// registers all tools. The three transports (newServer, ServeHTTP, ServeStdio)
-// share this so the server name, instructions, capabilities, recovery, and tool
-// set can never drift between them; each caller supplies only the
-// transport-specific hooks (agent tracking) and the originFn used at tool-call time.
+// registers all tools. The two transports (HTTPHandler, ServeStdio) share this
+// so the server name, instructions, capabilities, recovery, and tool set can
+// never drift between them; each caller supplies only the transport-specific
+// hooks (agent tracking) and the originFn used at tool-call time.
 func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, originFn func(context.Context) origin.Origin) *mcpserver.MCPServer {
 	srv := mcpserver.NewMCPServer(
 		"magus", opts.Version,
@@ -205,7 +205,7 @@ func HTTPHandler(opts Options) (http.Handler, error) {
 
 // ServeStdio runs the magus MCP server over standard I/O, blocking until
 // stdin closes or the context is cancelled. Kept for testing and scripted
-// smoke-checks; daemon mode uses ServeHTTP instead.
+// smoke-checks; daemon mode uses HTTPHandler instead.
 func ServeStdio(ctx context.Context, opts Options) error {
 	if err := opts.validate(); err != nil {
 		return err

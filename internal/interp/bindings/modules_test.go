@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/interp"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spellruntime"
@@ -53,11 +54,16 @@ func TestSupersetModules(t *testing.T) {
 		assert.True(t, ok, "module %q missing key %q", module, key)
 	}
 
-	// os: Buzz stdlib (env, execute) and magus (exec, which) coexist on one module.
-	hasKey(t, "os", "env")     // Buzz stdlib
-	hasKey(t, "os", "execute") // Buzz stdlib
-	hasKey(t, "os", "exec")    // magus
-	hasKey(t, "os", "which")   // magus
+	// os: Buzz stdlib (env, execute) plus the magus members about THIS machine.
+	// Running other processes is proc's, deliberately: os.execute returns an exit
+	// code the caller must check and magus's verb raises instead, and two verbs
+	// that are synonyms in English sharing one module is the trap that split them.
+	hasKey(t, "os", "env")      // Buzz stdlib
+	hasKey(t, "os", "execute")  // Buzz stdlib, and it stays untouched
+	hasKey(t, "os", "platform") // magus
+	hasKey(t, "proc", "exec")   // magus, and NOT on os
+	hasKey(t, "proc", "shell")  // magus
+	hasKey(t, "proc", "which")  // magus
 
 	// fs: Buzz stdlib (makeDirectory) plus magus (glob, readFile).
 	hasKey(t, "fs", "makeDirectory") // Buzz stdlib
@@ -129,7 +135,7 @@ import "std";
 import "magus";
 
 fun main() > void {
-    std\assert(magus\normalize("HTTPServer") == "http-server", message: "normalize");
+    std\assert(magus\canonicalName("HTTPServer") == "http-server", message: "normalize");
 }
 main();
 `)
@@ -222,23 +228,25 @@ export fun noop(ctx: magus\Context, _a: [str]) > void {}
 // TestEveryHostModuleIsWired guards against a std host module being declared (and
 // documented) but never exposed to Buzz sessions - the gap that left template,
 // toml, and uuid unreachable after they were added to std/ with generated bindings
-// trampolines but omitted from magusModules. Every module std.All() reports, save
-// the hand-assembled "magus" namespace, must resolve as a native module with
-// its first declared method present.
+// trampolines but omitted from magusModules. Every module hostmodules.All()
+// reports, save the hand-assembled "magus" namespace, must resolve as a
+// native module with its first declared method present.
 func TestEveryHostModuleIsWired(t *testing.T) {
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
 	registerMagusModules(ctx, sess)
 
-	for _, m := range std.All() {
+	for _, m := range hostmodules.All() {
 		// "magus" is not a bare import; it is wired as the magus.* namespace in
 		// buzz.go, not through magusModules.
 		if m.Name == "magus" {
 			continue
 		}
-		mod, ok := sess.NativeModule(m.Name)
-		if !assert.Truef(t, ok, "host module %q is declared in std but not wired into a Buzz session; add it to magusModules", m.Name) {
+		// Looked up by IMPORT PATH, not Name: a nested module registers at
+		// `encoding/json` and only binds as `json` once an import line names it.
+		mod, ok := sess.NativeModule(m.ImportPath())
+		if !assert.Truef(t, ok, "host module %q is declared in std but not wired into a Buzz session; add it to magusModules", m.ImportPath()) {
 			continue
 		}
 		if len(m.Methods) == 0 {
@@ -254,12 +262,12 @@ func TestEveryHostModuleIsWired(t *testing.T) {
 }
 
 // TestMagusModulesSharesDescribeCore is the parity lock for the native query
-// methods: magus.modules() (host) and `magus describe modules` (CLI) are two thin
+// methods: magus.describeModule() (host) and `magus describe module` (CLI) are two thin
 // adapters over the one typed core, host.ModulesOutput. This asserts the objects
 // the host method marshals are exactly that core (same names, docs, per-method Buzz
 // signatures) so the two surfaces can't drift.
 func TestMagusModulesSharesDescribeCore(t *testing.T) {
-	core := std.DescribeModules("") // what `magus describe modules` formats
+	core := hostmodules.Describe("") // what `magus describe modules` formats
 	require.NotEmpty(t, core)
 
 	// What a magusfile sees from magus.modules(): the same core, marshalled.
@@ -273,7 +281,7 @@ func TestMagusModulesSharesDescribeCore(t *testing.T) {
 	}
 
 	// Detail mode (magus.module) shares the same core, with typed methods + signatures.
-	fs := std.DescribeModules("fs")
+	fs := hostmodules.Describe("fs")
 	require.Len(t, fs, 1)
 	require.NotEmpty(t, fs[0].Methods)
 	assert.NotEmpty(t, fs[0].Methods[0].Buzz, "each method carries its Buzz signature")
@@ -285,12 +293,12 @@ func TestMagusModulesEndToEnd(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
-export fun check(ctx: magus\Context, args: [str]) > void {
-    final mods = magus.modules();
-    if (mods.len() == 0) { magus.fatal("magus.modules() returned nothing"); }
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
+    final mods = magus.describeModule();
+    if (mods.len() == 0) { magus.fatal("describeModule() returned nothing"); }
 
-    final fs = magus.module("fs");
-    if (fs.name != "fs") { magus.fatal("magus.module(\"fs\").name was not fs"); }
+    final fs = magus.describeModule("fs")[0];
+    if (fs.name != "fs") { magus.fatal("describeModule(fs).name was not fs"); }
     if (fs.methods.len() == 0) { magus.fatal("fs module has no methods"); }
     if (fs.methods[0].buzz == "") { magus.fatal("fs method missing its Buzz signature"); }
 }`)
@@ -308,7 +316,7 @@ func TestTemplatePartialsEndToEnd(t *testing.T) {
 	t.Chdir(dir)
 	writeFile(t, dir, "magusfile.buzz", "import \"magus\";\n"+
 		"import \"template\";\n"+
-		"export fun check(ctx: magus\\Context, args: [str]) > void {\n"+
+		"export fun check(ctx: magus\\Context, args: [str]) > void !> any {\n"+
 		"    final page = `{{>header}}[{{body}}]{{>footer}}`;\n"+
 		"    final partials = {\"header\": `<h>{{title}}</h>`, \"footer\": `<f/>`};\n"+
 		"    final got = template.renderPartials(page, {\"title\": \"magus\", \"body\": \"hi & <b>\"}, partials);\n"+
@@ -329,7 +337,7 @@ func TestMagusBustCacheReachable(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     magus.bustCache();
     fs.writeFile("ran", "ok");
 }
@@ -359,7 +367,7 @@ export fun build(args: [str]) > void {}
 		dir := t.TempDir()
 		writeMagusfile(t, dir, `import "magus";
 import "fs";
-export fun build(ctx: magus\Context, args: [str]) > void { fs.writeFile("ran", "ok"); }
+export fun build(ctx: magus\Context, args: [str]) > void !> any { fs.writeFile("ran", "ok"); }
 `)
 		require.NoError(t, runTargetIn(t, dir, "build"))
 		got, err := os.ReadFile(sentinel(dir))
@@ -413,7 +421,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 		writeMagusfile(t, dir, `import "magus";
 import "fs";
 export fun format(ctx: magus\Context, args: [str]) > void {}
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(format);
     ctx.needs(ctx.glob("form*"));
     fs.writeFile("ran", "ok");
@@ -429,7 +437,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 		writeMagusfile(t, dir, `import "magus";
 import "fs";
 export fun format(ctx: magus\Context, args: [str]) > void {}
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     // magus.needs( was removed; so was magus.glob(
     final note = "magus.needs(";
     ctx.needs(format);
@@ -447,7 +455,7 @@ func TestRunTopLevelTarget(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     fs.writeFile("ran", "build");
 }
 `)
@@ -462,7 +470,7 @@ func TestRunPathTarget(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
-export fun db_migrate(ctx: magus\Context, args: [str]) > void {
+export fun db_migrate(ctx: magus\Context, args: [str]) > void !> any {
     fs.writeFile("ran", "db:migrate");
 }
 `)
@@ -502,7 +510,7 @@ func TestRunImportsMagusfilesSibling(t *testing.T) {
 import "magus";
 import "fs";
 import "lib/calc";
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     fs.writeFile("ran", tag);
 }
 `)
@@ -525,9 +533,9 @@ import "magus";
 import "fs";
 import "charm";
 
-export fun verify(ctx: magus\Context, _opts: [str]) > void {
-    var joined = fs.join("a", "b", "c");
-    var patch = charm.append(["y", "z"]);
+export fun verify(ctx: magus\Context, _opts: [str]) > void !> any {
+    final joined = fs.join("a", "b", "c");
+    final patch = charm.append(["y", "z"]);
     fs.writeFile("ran", joined + "|" + patch.ops[1].value);
 }
 `), 0o644))
@@ -548,7 +556,7 @@ import "magus";
 import "fs";
 import "markdown";
 
-export fun verify(ctx: magus\Context, _opts: [str]) > void {
+export fun verify(ctx: magus\Context, _opts: [str]) > void !> any {
     fs.writeFile("ran", markdown.toHtml("# Hi"));
 }
 `), 0o644))
@@ -570,9 +578,9 @@ import "magus";
 import "fmt";
 import "fs";
 
-export fun verify(ctx: magus\Context, _opts: [str]) > void {
-    var asset = fmt.sprintf("magus_%s_%s_%s.tar.gz", "1.0", "linux", "amd64");
-    var none = fmt.sprintf("literal");
+export fun verify(ctx: magus\Context, _opts: [str]) > void !> any {
+    final asset = fmt.sprintf("magus_%s_%s_%s.tar.gz", "1.0", "linux", "amd64");
+    final none = fmt.sprintf("literal");
     fs.writeFile("ran", asset + "|" + none);
 }
 `), 0o644))
@@ -597,12 +605,14 @@ func TestRunBuzzAggregateUtil(t *testing.T) {
 import "magus";
 import "fs";
 import "os";
+import "proc";
 import "crypto";
 
-export fun verify(ctx: magus\Context, _opts: [str]) > void {
-    var joined = fs.join("a", "b", "c");
-    var res = os.execSh("printf hello").stdout;
-    var digest = crypto.hash(crypto.HashAlgorithm.Sha256, "").hex();
+export fun verify(ctx: magus\Context, _opts: [str]) > void !> any {
+    final joined = fs.join("a", "b", "c");
+    final sc = proc.shell("printf hello");
+    final res = proc.exec(sc.bin, sc.args, "", {}).stdout;
+    final digest = crypto.hash(crypto.HashAlgorithm.Sha256, "").hex();
     fs.writeFile("ran", joined + "|" + res + "|" + digest);
 }
 `), 0o644))
@@ -623,7 +633,7 @@ func TestRunTargetWithArgs(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
-export fun db_migrate(ctx: magus\Context, args: [str]) > void {
+export fun db_migrate(ctx: magus\Context, args: [str]) > void !> any {
     fs.writeFile("ran", args.join(" "));
 }
 `)
@@ -641,7 +651,7 @@ func TestRunTargetWithNoArgs(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
-export fun probe(ctx: magus\Context, args: [str]) > void {
+export fun probe(ctx: magus\Context, args: [str]) > void !> any {
     fs.writeFile("ran", "len={args.len()}");
 }
 `)
@@ -727,11 +737,11 @@ func TestNeedsForwardReference(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
-export fun top(ctx: magus\Context, _a: [str]) > void {
+export fun top(ctx: magus\Context, _a: [str]) > void !> any {
     ctx.needs(dep);
     fs.writeFile("ran", "top");
 }
-export fun dep(ctx: magus\Context, _a: [str]) > void { fs.writeFile("dep-ran", "dep"); }
+export fun dep(ctx: magus\Context, _a: [str]) > void !> any { fs.writeFile("dep-ran", "dep"); }
 `)
 	require.NoError(t, runTargetIn(t, dir, "top"))
 	_, err := os.Stat(filepath.Join(dir, "dep-ran"))
@@ -794,7 +804,7 @@ func TestOsExitRaisesExitError(t *testing.T) {
 import "magus";
 import "os";
 
-export fun bail(ctx: magus\Context, _a: [str]) > void { os.exit(3); }
+export fun bail(ctx: magus\Context, _a: [str]) > void !> any { os.exit(3); }
 `), 0o644))
 	err := runTargetIn(t, dir, "bail")
 	require.Error(t, err, "expected error from os.exit")
@@ -813,7 +823,7 @@ func TestOsSleep(t *testing.T) {
 import "magus";
 import "os";
 
-export fun nap(ctx: magus\Context, _a: [str]) > void {
+export fun nap(ctx: magus\Context, _a: [str]) > void !> any {
     os.sleep(1.5);
     os.sleep(0);
 }
@@ -821,7 +831,7 @@ export fun nap(ctx: magus\Context, _a: [str]) > void {
 	require.NoError(t, runTargetIn(t, dir, "nap"))
 }
 
-// TestOsWhich verifies os.which resolves a real command to a non-empty path and RAISES
+// TestOsWhich verifies proc.which resolves a real command to a non-empty path and RAISES
 // for a missing one (asserted inside the magusfile via os.exit).
 //
 // It used to return "" for a missing command so a caller could branch on equality. That
@@ -833,11 +843,12 @@ func TestOsWhich(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
 import "os";
+import "proc";
 
-export fun checkwhich(ctx: magus\Context, _a: [str]) > void {
-    if (os.which("sh") == "") { os.exit(2); }
+export fun checkwhich(ctx: magus\Context, _a: [str]) > void !> any {
+    if (proc.which("sh") == "") { os.exit(2); }
     var raised = false;
-    try { os.which("definitely-no-such-cmd-zzz"); } catch (e) { raised = true; }
+    try { proc.which("definitely-no-such-cmd-zzz"); } catch (e) { raised = true; }
     if (!raised) { os.exit(3); }
 }
 `), 0o644))
@@ -853,8 +864,8 @@ func TestMagusHint(t *testing.T) {
 import "magus";
 
 export fun nudge(ctx: magus\Context, _a: [str]) > void {
-    magus.hint("stale generated code — run: magus run generate -- --write");
-    magus.hint("stale generated code — run: magus run generate -- --write");
+    magus.log.hint("stale generated code — run: magus run generate -- --write");
+    magus.log.hint("stale generated code — run: magus run generate -- --write");
 }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "nudge"))
@@ -877,17 +888,20 @@ export fun boom(ctx: magus\Context, _a: [str]) > void { magus.fatal("boom"); }
 	assert.Equal(t, 1, ex.Code)
 }
 
-// TestOsExecShShellOption verifies opts.shell is accepted and the chosen shell
-// runs (sh is always present; the flag/derivation is unit-tested in host).
-func TestOsExecShShellOption(t *testing.T) {
+// TestProcShellChoosesShell verifies proc.shell honours an explicit shell and that
+// its {bin, args} feeds straight into proc.exec. This is the pair that replaced
+// os.execSh: building the argv and running it are separate steps now, so the shell
+// choice is visible at the call site instead of hidden inside a wrapper.
+func TestProcShellChoosesShell(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
 	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
-import "os";
+import "proc";
 
-export fun viash(ctx: magus\Context, _a: [str]) > void {
-    os.execSh("true", "", {"shell": "sh"});
+export fun viash(ctx: magus\Context, _a: [str]) > void !> any {
+    final c = proc.shell("true", "sh");
+    proc.exec(c.bin, c.args, "", {});
 }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "viash"))
@@ -901,8 +915,9 @@ func TestNeedsDedup(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
 import "os";
+import "proc";
 
-export fun dep(ctx: magus\Context, _a: [str]) > void { os.execSh("printf x >> mark", ""); }
+export fun dep(ctx: magus\Context, _a: [str]) > void !> any { final c = proc.shell("printf x >> mark"); proc.exec(c.bin, c.args, "", {}); }
 export fun top(ctx: magus\Context, _a: [str]) > void { ctx.needs(dep, dep); }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "top"))
@@ -962,10 +977,10 @@ func TestMagusLoggingBuzz(t *testing.T) {
 import "magus";
 
 export fun logit(ctx: magus\Context, _a: [str]) > void {
-    magus.info("hello");
-    magus.debug("dbg", {"k": "v"});
-    magus.warn("warn");
-    magus.error("err");
+    magus.log.info("hello");
+    magus.log.debug("dbg", {"k": "v"});
+    magus.log.warn("warn");
+    magus.log.error("err");
 }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "logit"))
@@ -1002,13 +1017,15 @@ func TestNeedsGlobHandle(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "os";
-fun note(s: str) > void {
-   os.execSh("printf '%s\n' " + s + " >> ran", "");
+import "proc";
+fun note(s: str) > void !> any {
+   final c = proc.shell("printf '%s\n' " + s + " >> ran");
+   proc.exec(c.bin, c.args, "", {});
 }
-export fun go_build(ctx: magus\Context, _a: [str]) > void { note("go-build"); }
-export fun image_build(ctx: magus\Context, _a: [str]) > void { note("image-build"); }
-export fun go_test(ctx: magus\Context, _a: [str]) > void { note("go-test"); }
-export fun build(ctx: magus\Context, _a: [str]) > void {
+export fun go_build(ctx: magus\Context, _a: [str]) > void !> any { note("go-build"); }
+export fun image_build(ctx: magus\Context, _a: [str]) > void !> any { note("image-build"); }
+export fun go_test(ctx: magus\Context, _a: [str]) > void !> any { note("go-test"); }
+export fun build(ctx: magus\Context, _a: [str]) > void !> any {
    ctx.needs(ctx.glob("*-build"));
    note("build-body");
 }
@@ -1046,13 +1063,13 @@ func TestRunRelativeFsResolvesToProjectDir(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
-export fun build(ctx: magus\Context, args: [str]) > void {
-    fs.mkdirall("sub");
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    fs.mkdirAll("sub");
     fs.writeFile("sub/a.txt", "alpha");
     fs.copyFile("sub/a.txt", "sub/b.txt");
     // glob returns paths relative to the project dir, sorted, each carrying that dir
     // as its base - so a caller can resolve one without knowing where the target ran.
-    var hits = fs.glob("sub/*.txt");
+    final hits = fs.glob("sub/*.txt");
     var acc = "";
     var first = true;
     var base = "";
@@ -1097,9 +1114,10 @@ func TestExecResultAnnotationChecksFields(t *testing.T) {
 		writeMagusfile(t, dir, `
 import "magus";
 import "os";
+import "proc";
 import "fs";
-export fun build(ctx: magus\Context, args: [str]) > void {
-    final r: ExecResult = os.exec("echo", ["hi"]);
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    final r: ExecResult = proc.exec("echo", ["hi"]);
     fs.writeFile("ran", r.stdout);
 }
 `)
@@ -1111,8 +1129,9 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 		writeMagusfile(t, dir, `
 import "magus";
 import "os";
-export fun build(ctx: magus\Context, args: [str]) > void {
-    final r: ExecResult = os.exec("echo", ["hi"]);
+import "proc";
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    final r: ExecResult = proc.exec("echo", ["hi"]);
     final x = r.stduot;
 }
 `)
@@ -1134,12 +1153,12 @@ func TestObjectAnnotationsCheckFields(t *testing.T) {
 		typ, expr, good, bad string
 		imports              string
 	}{
-		{"ExecResult", `os.exec("echo", ["hi"])`, "stdout", "stduot", `import "os";`},
+		{"ExecResult", `proc.exec("echo", ["hi"])`, "stdout", "stduot", `import "proc";`},
 		{"Commit", `vcs.commit()`, "author", "auther", `import "vcs";`},
 		{"FileInfo", `fs.stat(".")`, "size", "sizes", `import "fs";`},
 		{"HttpResponse", `http.get("http://x")`, "status", "staus", `import "http";`},
 		{"SemverVersion", `semver.parse("1.2.3")`, "major", "majr", `import "semver";`},
-		{"URL", `encoding.parseUrl("http://x")`, "scheme", "sceme", `import "encoding";`},
+		{"URL", `url.parse("http://x")`, "scheme", "sceme", `import "encoding/url";`},
 	}
 
 	mkfile := func(c struct{ typ, expr, good, bad, imports string }, field string) string {
@@ -1147,11 +1166,11 @@ func TestObjectAnnotationsCheckFields(t *testing.T) {
 import "magus";
 import "fs";
 %s
-fun probe() > void {
+fun probe() > void !> any {
     final r: %s = %s;
     final _ = r.%s;
 }
-export fun build(ctx: magus\Context, args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
     fs.writeFile("ran", "ok");
 }
 `, c.imports, c.typ, c.expr, field)
@@ -1195,21 +1214,23 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 	require.Len(t, targets, 2)
 }
 
-func TestOsExecShExitCode(t *testing.T) {
+func TestProcShellExitCode(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
 import "magus";
-import "os";
+import "proc";
 
-export fun check(ctx: magus\Context, args: [str]) > void {
-    var rc = os.execSh("true", "", {"allow_failure": true}).code;
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
+    final ok = proc.shell("true");
+    final rc = proc.exec(ok.bin, ok.args, "", {"allow_failure": true}).code;
     if (rc != 0) {
-        throw "os.execSh('true').code = {rc}";
+        throw "proc.shell('true') exited {rc}";
     }
-    var rc2 = os.execSh("false", "", {"allow_failure": true}).code;
+    final bad = proc.shell("false");
+    final rc2 = proc.exec(bad.bin, bad.args, "", {"allow_failure": true}).code;
     if (rc2 == 0) {
-        throw "os.execSh('false').code = 0, expected non-zero";
+        throw "proc.shell('false') exited 0, expected non-zero";
     }
 }
 `)
@@ -1223,10 +1244,12 @@ func TestOsWithEnvShellCapture(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "os";
+import "proc";
 
-export fun check(ctx: magus\Context, args: [str]) > void {
-    os.withEnv({"MY_BUZZ_VAR": "hello"}, fun() > void {
-        var captured = os.execSh("echo $MY_BUZZ_VAR").stdout;
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
+    os.withEnv({"MY_BUZZ_VAR": "hello"}, fun() > void !> any {
+        final ec = proc.shell("echo $MY_BUZZ_VAR");
+        final captured = proc.exec(ec.bin, ec.args, "", {}).stdout;
         if (captured != "hello") {
             throw "expected 'hello', got: [" + captured + "]";
         }
@@ -1245,7 +1268,7 @@ import "magus";
 import "fs";
 
 export fun check(ctx: magus\Context, args: [str]) > void {
-    var p = fs.join("a", "b", "c");
+    final p = fs.join("a", "b", "c");
     if (p == "") {
         throw "fs.join returned empty string";
     }
@@ -1266,8 +1289,8 @@ func TestFsListDirBinding(t *testing.T) {
 import "magus";
 import "fs";
 
-export fun check(ctx: magus\Context, args: [str]) > void {
-    var entries = fs.listDir("subdir");
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
+    final entries = fs.listDir("subdir");
     if (entries.len() == 0) {
         throw "expected at least one entry in subdir";
     }
@@ -1287,7 +1310,7 @@ func TestFsRemoveAllBinding(t *testing.T) {
 import "magus";
 import "fs";
 
-export fun check(ctx: magus\Context, args: [str]) > void {
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
     fs.removeAll("todelete");
 }
 `)
@@ -1324,7 +1347,7 @@ func TestVcsBindings(t *testing.T) {
 import "magus";
 import "vcs";
 
-export fun check(ctx: magus\Context, args: [str]) > void {
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
     // The target's own directory is a git repo, so every accessor answers about THAT
     // repo. The no-VCS path, where these RAISE rather than hand back "", is covered by
     // TestVcsCommitRaisesOutsideRepo.
@@ -1476,7 +1499,7 @@ func BenchmarkRunBuzzParallel(b *testing.B) {
 // A synthetic host module's own import (`import "os";`) only binds its native
 // functions: the type-declaration companion registered alongside it
 // (hostTypeModuleSources) is collected by the CHECKER for annotation-checking
-// (`final r: ExecResult = os.exec(...)`), but it is never compiled and run, so it
+// (`final r: ExecResult = proc.exec(...)`), but it is never compiled and run, so it
 // can never bind an object literal's constructor into the runtime env - `Name{}`
 // needs `Name` bound as an objectDef VALUE, which only a compiled-and-run source
 // module provides (see vm.buildObjectVal). This bundle is that compiled-and-run
@@ -1650,16 +1673,16 @@ func TestMagusNamespaceIsTyped(t *testing.T) {
 	wrongReturn := func(t *testing.T, body string) error {
 		t.Helper()
 		dir := t.TempDir()
-		writeMagusfile(t, dir, "import \"magus\";\nimport \"os\";\n"+body+
+		writeMagusfile(t, dir, "import \"magus\";\nimport \"os\";\nimport \"proc\";\n"+body+
 			"\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n")
 		return runTargetIn(t, dir, "build")
 	}
 
-	err := wrongReturn(t, `fun probe() > int { return magus\where("x"); }`)
+	err := wrongReturn(t, `fun probe() > int !> any { return magus\where("x"); }`)
 	require.Error(t, err, "magus\\where returns str; using it as int must be caught by the checker")
 	assert.Contains(t, err.Error(), "return type mismatch")
 
-	err = wrongReturn(t, `fun probe() > int { return os\which("ls"); }`)
+	err = wrongReturn(t, `fun probe() > int !> any { return proc\which("ls"); }`)
 	require.Error(t, err, "control: a bare-import module must stay typed")
 	assert.Contains(t, err.Error(), "return type mismatch")
 }
@@ -1687,4 +1710,118 @@ func TestMagusMirrorsResolveInAnnotations(t *testing.T) {
 			assert.NoError(t, runTargetIn(t, dir, "build"), "mirror must resolve in an annotation")
 		})
 	}
+}
+
+// TestDeclaredObjectsAreConstructible guards the runtime half of a declared
+// boundary object. The checker knowing HttpRetry is not enough - a caller has to
+// be able to BUILD one, and before declareObjectTypes existed this type-checked
+// and then threw "unknown object type" at run time.
+func TestDeclaredObjectsAreConstructible(t *testing.T) {
+	sess := scriptSession(t)
+	err := sess.Exec(context.Background(), `
+import "std";
+import "http";
+
+test "construct a declared boundary object" {
+    final p = HttpRetry{ attempts = 3, delay_ms = 250.0 };
+    std\assert(p.attempts == 3, message: "field set");
+    std\assert(p.all_errors == false, message: "field default");
+}
+`)
+	require.NoError(t, err)
+}
+
+// TestDeclaringObjectsKeepsNativeMethods is the other half: executing a module's
+// declarations must not replace the native module value with the extern-only
+// stub, or every host method it carries would silently become a no-op.
+func TestDeclaringObjectsKeepsNativeMethods(t *testing.T) {
+	sess := scriptSession(t)
+	err := sess.Exec(context.Background(), `
+import "std";
+import "http";
+final _p = HttpRetry{ attempts = 2 };
+final port = http\server({"dir": "."}) catch -1;
+std\assert(port > 0, message: "native http.server still bound a port");
+`)
+	require.NoError(t, err)
+}
+
+// TestCrossBundleDeclarationsStillImport is the degradation path. magus's own
+// declarations name DoctorCheckStatus, which is declared in a DIFFERENT bundle,
+// so executing them standalone fails. That must leave the import working exactly
+// as it did before - collected and checkable - rather than taking it down.
+func TestCrossBundleDeclarationsStillImport(t *testing.T) {
+	sess := scriptSession(t)
+	err := sess.Exec(context.Background(), `
+import "std";
+import "magus";
+std\assert(true, message: "magus imported despite non-self-contained declarations");
+`)
+	require.NoError(t, err)
+}
+
+// TestDeclarationsWithRealFunctionsAreNotExecuted is the guard for the narrowest
+// part of declareObjectTypes: a declaration source may only run if it is PURELY
+// declarations.
+//
+// Buzz's own io.buzz carries an `export object File` beside a real
+// `export fun runFile`. Executing it flat-merges runFile into the importing
+// scope, and for a magusfile that means magus reads it as a target - which broke
+// every workspace load with "MGS1008: target runFile must receive a magus\Context".
+// Nothing else in the suite caught that; it only showed up running the CLI.
+func TestDeclarationsWithRealFunctionsAreNotExecuted(t *testing.T) {
+	sess := scriptSession(t)
+	require.NoError(t, sess.Exec(context.Background(), `import "io";`))
+
+	_, leaked := sess.Exports()["runFile"]
+	assert.False(t, leaked,
+		"io.buzz's runFile leaked into the importing scope; a magusfile would read it as a target (MGS1008)")
+}
+
+// TestSourceModuleIsIndistinguishable is the whole point of the Buzz-source
+// module kind: which language implements a stdlib module must be an
+// implementation detail, invisible from every surface a user or a tool reads.
+//
+// It walks the surfaces that matter rather than asserting registration, because
+// registration was never the hard part - being SEEN was.
+func TestSourceModuleIsIndistinguishable(t *testing.T) {
+	// 1. It imports and RUNS like any other module.
+	sess := scriptSession(t)
+	err := sess.Exec(context.Background(), `
+import "std";
+import "lcov";
+
+test "a Buzz-implemented stdlib module behaves like a Go one" {
+    final report = "SF:/w/src/a.ts" + std\char(10) + "LF:4" + std\char(10) + "LH:2" + std\char(10);
+    std\assert(lcov\percent(report, keep: "src/") == "50.0", message: lcov\percent(report, keep: "src/"));
+}
+`)
+	require.NoError(t, err)
+
+	// 2. describe modules lists it in the catalogue, with its doc.
+	var summary *types.ModuleEntry
+	for _, m := range hostmodules.Describe("") {
+		if m.Name == "lcov" {
+			summary = &m
+			break
+		}
+	}
+	require.NotNil(t, summary, "a source module must appear in the module catalogue")
+	assert.NotEmpty(t, summary.Doc)
+
+	// 3. Its methods and their docs are derived from the Buzz source, so the
+	//    detail view is populated exactly as a Go module's is.
+	detail := hostmodules.Describe("lcov")
+	require.Len(t, detail, 1)
+	byName := map[string]types.ModuleMethodEntry{}
+	for _, meth := range detail[0].Methods {
+		byName[meth.Name] = meth
+	}
+	require.Contains(t, byName, "percent")
+	require.Contains(t, byName, "mergePercent")
+	assert.NotEmpty(t, byName["percent"].Doc, "the doc comment must come off the Buzz source")
+	assert.Contains(t, byName["percent"].Buzz, "lcov\\percent", "the Buzz signature must render")
+
+	// 4. A non-exported helper stays private, like an unexported Go function.
+	assert.NotContains(t, byName, "keepsSource")
 }

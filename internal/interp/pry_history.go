@@ -12,8 +12,8 @@ import (
 	"github.com/egladman/magus/internal/file"
 )
 
-// DefaultCap is the maximum number of lines kept in memory and on disk.
-const DefaultCap = 1000
+// DefaultHistoryCap is the maximum number of lines kept in memory and on disk.
+const DefaultHistoryCap = 1000
 
 // History is an append-only ring of REPL input lines, persisted to disk.
 type History struct {
@@ -23,8 +23,8 @@ type History struct {
 	lines []string
 }
 
-// DefaultPath returns $XDG_STATE_HOME/magus/pry_history, falling back to ~/.local/state.
-func DefaultPath() string {
+// DefaultHistoryPath returns $XDG_STATE_HOME/magus/pry_history, falling back to ~/.local/state.
+func DefaultHistoryPath() string {
 	if dir := os.Getenv("XDG_STATE_HOME"); dir != "" {
 		return filepath.Join(dir, "magus", "pry_history")
 	}
@@ -35,10 +35,10 @@ func DefaultPath() string {
 	return ".magus_pry_history"
 }
 
-// Open loads up to maxCap lines from path (0 = DefaultCap); a missing file is not an error.
-func Open(path string, maxCap int) (*History, error) {
+// OpenHistory loads up to maxCap lines from path (0 = DefaultHistoryCap); a missing file is not an error.
+func OpenHistory(path string, maxCap int) (*History, error) {
 	if maxCap <= 0 {
-		maxCap = DefaultCap
+		maxCap = DefaultHistoryCap
 	}
 	h := &History{path: path, cap: maxCap}
 	f, err := os.Open(path)

@@ -32,7 +32,7 @@ func newStepGate() run.StepGate {
 		}
 		for {
 			argv := append([]string{name}, args...)
-			fmt.Fprintf(os.Stderr, "\n→ %s  (cwd: %s)\n", strings.Join(argv, " "), dir)
+			fmt.Fprintf(os.Stderr, "\n-> %s  (cwd: %s)\n", strings.Join(argv, " "), dir)
 			fmt.Fprintf(os.Stderr, "  [s]tep  [c]ontinue  s[k]ip  [r]epl  [a]bort: ")
 
 			restoreTTY, err := tty.MakeRaw(os.Stderr.Fd())

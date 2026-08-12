@@ -16,7 +16,7 @@ import "std";
 
 // isPrerelease reports whether tag carries a semver prerelease component. Pure, so every
 // tag shape below is testable - which the one-line shell it replaced was not.
-export fun isPrerelease(tag: str) > bool {
+export fun isPrerelease(tag: str) > bool !> any {
     return semver\parse(tag).prerelease.len() > 0;
 }
 
@@ -26,7 +26,7 @@ fun env(name: str) > str {
     return "" + v;
 }
 
-fun main() > void {
+fun main() > void !> any {
     final tag = env("TAG");
     if (tag == "") {
         // On a TAG run an empty TAG is a wiring bug, and staying quiet would emit an empty
@@ -45,7 +45,6 @@ fun main() > void {
     std\print("{isPrerelease(tag)}");
 }
 
-main();
 
 test "a plain version is not a prerelease" {
     std\assert(isPrerelease("v0.4.0") == false, message: "v0.4.0 is a release");

@@ -59,7 +59,7 @@ So there are two shapes, and you do not get to choose - the imports choose for y
 | Imported as | `import "magus/spell/go"`            | `import "spells/onepassword"` (a path) |
 | Examples    | `go`, `docker`, `cosign`, `markdown` | `github-actions`, `onepassword`        |
 
-Almost every provider is workspace-local, because reaching a backend means `os\exec` or
+Almost every provider is workspace-local, because reaching a backend means `proc\exec` or
 `http`. That is expected, not a downgrade: `spells/github/actions` backs this repo's own
 remote cache that way.
 
@@ -75,11 +75,12 @@ the split is not arbitrary:
 
 That single fact decides which members you may call:
 
-|            | members                                                                                                 | in a spell                                                                                                                               |
-| ---------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| in-process | `ls`, `targets`, `affected`, `graph`, `where`                                                           | **raise [MGS1022](../reference/codes/magusfile/MGS1022.md)** - they read the workspace already open on the context, and there is not one |
-| declaring  | `project`, `cache.remote`, `ci.provider`                                                                | **raise MGS1022** - only a magusfile evaluation has the registry to declare into                                                         |
-| forking    | `cmd`, `run`, `describe`, `insight`, `doctor`, `describeFile`, `impact`, `targetGraph`, `insightReport` | **work** - each spawns a nested magus that discovers and loads its own workspace                                                         |
+|            | members                                                                                          | in a spell                                                                                                                               |
+| ---------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| in-process | `ls`, `affected`, `projectGraph`, `where`                                                        | **raise [MGS1022](../reference/codes/magusfile/MGS1022.md)** - they read the workspace already open on the context, and there is not one |
+| declaring  | `project`, `cache.remote`, `ci.provider`                                                         | **raise MGS1022** - only a magusfile evaluation has the registry to declare into                                                         |
+| forking    | `cmd`, `run`, `describe`, `insight`, `doctor`, `describeFile`, `affectedImpact`, `insightReport` | **work** - each spawns a nested magus that discovers and loads its own workspace                                                         |
+| either     | `targets`                                                                                        | **work** - serves the workspace on the context when there is one, forks a nested magus when there is not                                 |
 
 So the rule is: from a spell, fork. `magus\cmd("ls", args: ["-o", "json"])` answers what
 `magus\ls()` would have, at the cost of a subprocess.
@@ -244,7 +245,7 @@ export fun resolve_secret(target: Target, cb: fun(any)) > str {
     var io = {};
     cb(io);                       // fills io with the payload; io["ref"] is the reference
     final ref = "" + io["ref"];
-    return os\exec("op", args: ["read", "op://" + ref], dir: ".", opts: {}).stdout;
+    return proc\exec("op", args: ["read", "op://" + ref], dir: ".", opts: {}).stdout;
 }
 ```
 
@@ -255,10 +256,10 @@ more than any amount of documentation. Use `opts.allow_failure` to classify the 
 than raising a bare status:
 
 ```buzz
-if (os\which("op") == "") {
+if (proc\which("op") == "") {
     throw "onepassword: the `op` CLI is not on PATH.\n  mise: mise use -g op";
 }
-final res = os\exec("op", args: ["read", uri], dir: ".", opts: {"allow_failure": true});
+final res = proc\exec("op", args: ["read", uri], dir: ".", opts: {"allow_failure": true});
 if (res["code"] != 0) { /* classify res["stderr"], then throw something actionable */ }
 ```
 
@@ -280,7 +281,7 @@ branches without a 1Password account.
 ## Gotchas worth knowing before you hit them
 
 - **`magus buzz` runs upstream-strict.** Every argument after the first must be labeled
-  (`os\exec("op", args: [...], dir: ".", opts: {})`), and there is no top-level control
+  (`proc\exec("op", args: [...], dir: ".", opts: {})`), and there is no top-level control
   flow.
 - **`resolve` is a reserved keyword**, along with `yield` and `resume`. Member access on a
   keyword does not parse, which is why the secret namespace is `magus\secret.read`.

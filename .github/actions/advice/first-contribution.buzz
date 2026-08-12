@@ -10,6 +10,7 @@
 //
 // Reads REPO, PR_NUMBER, PR_AUTHOR.
 import "os";
+import "proc";
 import "advice";
 import "serialize";
 import "std";
@@ -19,9 +20,9 @@ final section = "first-contribution";
 // isFirst reports whether this author has no merged pull request here yet. The search
 // API answers it in one call; counting commits would miss a contributor whose work was
 // squashed under a different address.
-fun isFirst(repo: str, author: str) > bool {
+fun isFirst(repo: str, author: str) > bool !> any {
     final query = "repo:" + repo + "+author:" + author + "+is:pr+is:merged";
-    final res = os\exec("gh", args: ["api", "search/issues?q=" + query],
+    final res = proc\exec("gh", args: ["api", "search/issues?q=" + query],
         dir: ".", opts: {"quiet": true, "allow_failure": true});
     if (!res.ok) { return false; }
     return serialize\jsonDecode(res.stdout).q("total_count").integerValue() == 0;
@@ -42,7 +43,7 @@ export fun welcome(author: str) > str {
         + "Nothing above is a gate on this pull request; the checks below are.\n";
 }
 
-fun main() > void {
+fun main() > void !> any {
     final repo = advice\env("REPO");
     final pr = advice\env("PR_NUMBER");
     final author = advice\env("PR_AUTHOR");
@@ -68,7 +69,6 @@ fun main() > void {
     std\print("first-contribution: welcomed " + author);
 }
 
-main();
 
 test "welcome names the author and both repository-specific rules" {
     final body = welcome("octocat");

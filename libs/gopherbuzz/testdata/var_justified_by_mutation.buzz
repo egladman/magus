@@ -1,0 +1,11 @@
+// @expect: 1
+// A `var` is justified by REASSIGNMENT or by in-place mutation. Upstream's
+// anonymous-objects.buzz relies on the second: it declares `var board: mut [...]`
+// and only ever appends to it. `_` is exempt outright.
+fun f() > int {
+    var board = mut [<int>];
+    board.append(1);
+    var _ = 2;
+    return board.len();
+}
+final __r = f();

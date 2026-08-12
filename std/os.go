@@ -38,7 +38,7 @@ func warnIfMagusBinary(ctx context.Context, cmd string) {
 		return
 	}
 	magusWarnOnce.Do(func() {
-		slog.WarnContext(ctx, "magusfile: os.exec called with 'magus' binary",
+		slog.WarnContext(ctx, "magusfile: proc.exec called with 'magus' binary",
 			"hint", "use magus.cmd({...}) instead - in-process, version-pinned, no arg-quoting issues")
 	})
 }
@@ -65,50 +65,18 @@ func resolveDir(ctx context.Context, dir string) string {
 // Os is the "os" host module: direct-exec primitives (no shell invocation).
 var Os = Module{
 	Name: "os",
-	Doc:  "Process execution. os.exec runs a command directly (no shell); os.exec_sh runs a line through the shell. Both stream output live and return a result {stdout, stderr, code, ok}.",
+	Doc:  "The machine and this process: platform triple, CPU count, hostname, the running magus binary, and the two members that shadow Buzz's own (exit, sleep). Running OTHER processes lives in the proc module.",
 	Methods: []Method{
 		{
-			Name: "exec",
-			Doc:  "Run cmd directly (no shell; args are never shell-interpolated). Output streams live and is captured. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. Optional dir runs cmd there (relative to the target's cwd). opts.stdin is fed to the process as standard input - pipe by passing a prior call's stdout. opts.quiet captures the output without echoing it to the console.",
-			Args: []Arg{
-				{Name: "cmd", Type: TypeString},
-				{Name: "args", Type: TypeStringSlice, Optional: true},
-				{Name: "dir", Type: TypeString, Optional: true},
-				{Name: "opts", Type: TypeAnyMap, Optional: true},
-			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
-			Impl:    OsExec,
-		},
-		{
-			Name: "exec_sh",
-			Doc:  "Run line through a shell - for pipes, redirection, globs, and variable expansion. Default shell is /bin/sh (cmd on Windows); pass opts.shell (e.g. \"bash\") to override, resolved via PATH. A shell line is written in the platform shell's dialect, so sh and cmd lines are not portable across OSes - for cross-platform logic prefer os.exec plus the fs/os helpers. Same result and raise semantics as exec (opts.stdin, opts.allow_failure, and opts.quiet included); optional dir runs the shell there.",
-			Args: []Arg{
-				{Name: "line", Type: TypeString},
-				{Name: "dir", Type: TypeString, Optional: true},
-				{Name: "opts", Type: TypeAnyMap, Optional: true},
-			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
-			Impl:    OsExecSh,
-		},
-		{
 			Name: "with_env",
-			Doc:  "Set env vars for the duration of callback; restore after.",
+			Doc:  "Add env vars to subprocesses `proc\\exec` / `proc\\shell` start inside callback. Never touches the process's own environment - a lookup like os.env inside callback does not see them.",
 			Args: []Arg{
 				{Name: "env", Type: TypeStringMap},
 				{Name: "callback", Type: TypeFunc},
 			},
 			Returns: nil,
+			Raises:  true,
 			Impl:    OsWithEnv,
-		},
-		{
-			Name: "with_slots",
-			Doc:  "Reserve n slots from magus's concurrency budget for the duration of callback. Use when callback runs a command with its own internal parallelism (make -j, a test runner) that magus can't see, so the global budget is not oversubscribed.",
-			Args: []Arg{
-				{Name: "n", Type: TypeInt},
-				{Name: "callback", Type: TypeFunc},
-			},
-			Returns: nil,
-			Impl:    OsWithSlots,
 		},
 		{
 			Name:    "platform",
@@ -122,6 +90,7 @@ var Os = Module{
 			Doc:     "Abort the current run with the given exit code - typically after logging an error. Does NOT call os.Exit (that would kill a shared daemon); it raises, ending the target, and the code becomes magus's process exit status.",
 			Args:    []Arg{{Name: "code", Type: TypeInt}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    OsExit,
 		},
 		{
@@ -129,21 +98,8 @@ var Os = Module{
 			Doc:     "Pause for the given number of milliseconds (fractional allowed), matching Buzz's os.sleep. Cancellable: if the run is interrupted it returns early with the cancellation error rather than blocking.",
 			Args:    []Arg{{Name: "ms", Type: TypeFloat}},
 			Returns: nil,
+			Raises:  true,
 			Impl:    OsSleep,
-		},
-		{
-			Name:    "which",
-			Doc:     "Resolve cmd against PATH and return its absolute path. RAISES when the command is not found - wrap it in try/catch to check a tool is installed and emit a clear hint instead of a cryptic exec failure.",
-			Args:    []Arg{{Name: "cmd", Type: TypeString}},
-			Returns: []Ret{{Type: TypeString}},
-			Impl:    OsWhich,
-		},
-		{
-			Name:    "stdin_is_terminal",
-			Doc:     "Report whether standard input is a terminal (TTY) rather than a pipe, file, or /dev/null. Use it to fail fast with a clear message instead of blocking on a read of stdin that will never receive piped input.",
-			Args:    nil,
-			Returns: []Ret{{Type: TypeBool}},
-			Impl:    OsStdinIsTerminal,
 		},
 		{
 			Name:    "num_cpu",
@@ -157,6 +113,7 @@ var Os = Module{
 			Doc:     "Return the host machine's name.",
 			Args:    nil,
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    OsHostname,
 		},
 		{
@@ -164,6 +121,7 @@ var Os = Module{
 			Doc:     "Return the absolute path of the running magus binary. Pair it with fs.stat inside a long-lived watch loop to detect that the binary was rebuilt or upgraded underneath the process, which means any output it goes on to generate would be stale.",
 			Args:    nil,
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    OsExecutable,
 		},
 		{
@@ -175,6 +133,7 @@ var Os = Module{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAny}},
+			Raises:  true,
 			Impl:    OsRetry,
 		},
 	},
@@ -224,14 +183,14 @@ func OsStdinIsTerminal(_ context.Context) (bool, error) {
 
 // OsWhich resolves cmd against PATH, RAISING when it is not there.
 //
-// It used to return "" so a magusfile could branch on `os.which(cmd) == ""`. That is the
+// It used to return "" so a magusfile could branch on `proc.which(cmd) == ""`. That is the
 // same sentinel the vcs accessors carried, with the same two problems: the check is
 // optional, so forgetting it hands the empty string on to an exec or a path join; and it
 // is untyped, so nothing tells a reader the value needs testing at all. Raising makes the
 // missing tool a case the author has to answer, in the same shape as every other failure
 // in these modules:
 //
-//	try { final vhs = os\which("vhs"); ... } catch (e) { magus\info("vhs not installed"); }
+//	try { final vhs = proc\which("vhs"); ... } catch (e) { magus\log.info("vhs not installed"); }
 func OsWhich(_ context.Context, cmd string) (string, error) {
 	path, err := exec.LookPath(cmd)
 	if err != nil {
@@ -315,7 +274,7 @@ func optStringDefault(opts map[string]any, key, def string) string {
 //
 // opts.quiet keeps the capture and drops the live streaming, which is what a caller
 // consuming a value rather than watching a build wants. It is read HERE, the one path
-// os.exec, os.exec_sh, and vcs.cmd all share, so the three cannot offer different
+// proc.exec, proc.shell, and vcs.cmd all share, so the three cannot offer different
 // option sets by accident - and it spells the option the same way the magus.* methods
 // already do.
 //
@@ -330,21 +289,22 @@ func runResult(ctx context.Context, name string, args []string, dir, label, cmd 
 		Stdin:   optStringDefault(opts, "stdin", ""),
 		Capture: true,
 		Quiet:   optBoolDefault(opts, "quiet", false),
+		TTY:     optBoolDefault(opts, "tty", false),
 	})
 	if err != nil && errors.Is(err, types.ExecDenied) {
 		return types.ExecResult{}, err
 	}
 	if res.Code != 0 && !optBoolDefault(opts, "allow_failure", false) {
 		if !res.Started {
-			// Process never started. Common footgun: os.exec runs a single program
+			// Process never started. Common footgun: proc.exec runs a single program
 			// with no shell, so a command line ("a | b", "cd x", "$VAR") fails to
-			// start as a literal program name. Nudge toward os.exec_sh, but only on
-			// the not-found failure of a shell-shaped command (os.exec stays the
+			// start as a literal program name. Nudge toward proc.shell, but only on
+			// the not-found failure of a shell-shaped command (proc.exec stays the
 			// right, faster default for a plain program).
-			if label == "os.exec" && looksLikeShellCommand(cmd) {
+			if label == "proc.exec" && looksLikeShellCommand(cmd) {
 				interactive.Emit(os.Stderr, fmt.Sprintf(
-					"%q looks like a shell command line, but os.exec runs a single program directly with no shell; "+
-						"use os.exec_sh for pipes, redirection, globs, && / ||, or variable expansion", cmd))
+					"%q looks like a shell command line, but proc.exec runs a single program directly with no shell; "+
+						"use proc.shell for pipes, redirection, globs, && / ||, or variable expansion", cmd))
 			}
 			return types.ExecResult{}, fmt.Errorf("%s %s: %w", label, cmd, err)
 		}
@@ -376,11 +336,11 @@ func runResult(ctx context.Context, name string, args []string, dir, label, cmd 
 
 // looksLikeShellCommand reports whether cmd looks like a shell command line
 // (shell metacharacters or a shell builtin) rather than a single program name:
-// the signature of an os.exec call that should have been os.exec_sh.
+// the signature of an proc.exec call that should have been proc.shell.
 func looksLikeShellCommand(cmd string) bool {
 	// A space (a command line, not a program name), pipe/redirect/sequence
 	// operator, glob, variable, subshell, or brace expansion: things a shell
-	// interprets that os.exec passes literally as a program name.
+	// interprets that proc.exec passes literally as a program name.
 	if strings.ContainsAny(cmd, " \t|&;<>$`*?(){}\n") {
 		return true
 	}
@@ -403,21 +363,23 @@ func OsExec(ctx context.Context, cmd string, args []string, dir string, opts map
 			return types.ExecResult{}, err
 		}
 	}
-	return runResult(ctx, cmd, args, wd, "os.exec", cmd, opts)
+	return runResult(ctx, cmd, args, wd, "proc.exec", cmd, opts)
 }
 
-// OsExecSh runs line through a shell. The default is /bin/sh (cmd on Windows);
-// opts.shell overrides it (e.g. "bash"), resolved via PATH like any other command.
-// Same streaming, capture, and raise semantics as OsExec. See OsExec for dir.
-func OsExecSh(ctx context.Context, line string, dir string, opts map[string]any) (types.ExecResult, error) {
-	shell, flag := shellExe(optStringDefault(opts, "shell", ""))
-	wd := resolveDir(ctx, dir)
-	if wd != "" {
-		if err := checkRead(ctx, wd); err != nil {
-			return types.ExecResult{}, err
-		}
-	}
-	return runResult(ctx, shell, []string{flag, line}, wd, "os.exec_sh", line, opts)
+// OsShell builds the argv that runs line through the platform shell and returns
+// it, rather than running it. It replaced proc.shell, which had zero callers in
+// this tree - where a shell was genuinely wanted, people wrote proc.exec("sh",
+// ["-c", ...]) by hand, which says out loud what exec_sh hid.
+//
+// Two verbs for "run a process" cost more than they bought. Every option worth
+// having (stdin, quiet, allow_failure, tty) had to exist and be documented twice,
+// and the wrapper's only real content was ten lines of platform selection. That
+// selection IS worth having, so it survives here as a pure function: the shell
+// choice becomes a value you can print before anything executes, instead of a
+// decision taken inside a call you cannot see into.
+func OsShell(_ context.Context, line string, shell string) (types.ShellCommand, error) {
+	bin, flag := shellExe(shell)
+	return types.ShellCommand{Bin: bin, Args: []string{flag, line}}, nil
 }
 
 // shellExe returns the shell program and its command flag. The default is

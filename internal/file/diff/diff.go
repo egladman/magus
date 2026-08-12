@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Snap is a snapshot of files keyed by absolute path; values pack mtime_ns and size into one int64.
@@ -109,9 +110,17 @@ func GlobBaseDirs(root string, globs []string) []string {
 			// No wildcard: treat g as a file path, use its directory.
 			dir = filepath.Dir(filepath.Join(root, g))
 		} else {
-			// Has wildcard: the non-wildcard prefix is the directory.
-			// filepath.Clean strips the trailing separator.
-			dir = filepath.Clean(filepath.Join(root, g[:cut]))
+			// Has wildcard: the directory is everything before the wildcard's path
+			// SEGMENT, not just before the wildcard character itself - a mid-segment
+			// wildcard like "gen/index*.html" has cut mid-filename, and g[:cut]
+			// ("gen/index") is not a directory at all.
+			prefix := g[:cut]
+			if i := strings.LastIndexByte(prefix, '/'); i >= 0 {
+				prefix = prefix[:i]
+			} else {
+				prefix = ""
+			}
+			dir = filepath.Clean(filepath.Join(root, prefix))
 		}
 
 		if _, ok := seen[dir]; !ok {

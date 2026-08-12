@@ -39,7 +39,7 @@ func osModule() vm.Value {
 	return m
 }
 
-func osSleep(_ context.Context, args []vm.Value) (vm.Value, error) {
+func osSleep(ctx context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 1 {
 		return vm.Null, fmt.Errorf("os.sleep: requires a double argument (milliseconds)")
 	}
@@ -52,10 +52,17 @@ func osSleep(_ context.Context, args []vm.Value) (vm.Value, error) {
 	default:
 		return vm.Null, fmt.Errorf("os.sleep: argument must be double, got %s", args[0].Kind())
 	}
-	if ms > 0 {
-		time.Sleep(time.Duration(ms * float64(time.Millisecond)))
+	if ms <= 0 {
+		return vm.Null, nil
 	}
-	return vm.Null, nil
+	timer := time.NewTimer(time.Duration(ms * float64(time.Millisecond)))
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return vm.Null, nil
+	case <-ctx.Done():
+		return vm.Null, ctx.Err()
+	}
 }
 
 func osTime(_ context.Context, _ []vm.Value) (vm.Value, error) {
@@ -219,6 +226,35 @@ func socketConnect(ctx context.Context, args []vm.Value) (vm.Value, error) {
 	return makeSocketValue(conn), nil
 }
 
+// maxSocketReceiveSize bounds a single Socket.receive call's allocation. n is
+// script-controlled; 64 MiB is generous for a read buffer while still capping
+// a huge or malicious n to one fixed, sane allocation instead of an unchecked one.
+const maxSocketReceiveSize = 64 << 20 // 64 MiB
+
+func socketReceive(conn net.Conn, args []vm.Value) (vm.Value, error) {
+	n := 1024
+	if len(args) >= 1 && args[0].IsInt() {
+		v := args[0].AsInt()
+		if v < 0 {
+			return vm.Null, fmt.Errorf("Socket.receive: n must be >= 0, got %d", v)
+		}
+		if v > maxSocketReceiveSize {
+			return vm.Null, fmt.Errorf("Socket.receive: n must be <= %d, got %d", maxSocketReceiveSize, v)
+		}
+		n = int(v)
+	}
+	buf := make([]byte, n)
+	count, err := conn.Read(buf)
+	if err != nil {
+		return vm.Null, fmt.Errorf("Socket.receive: %w", err)
+	}
+	items := make([]vm.Value, count)
+	for i, b := range buf[:count] {
+		items[i] = vm.IntValue(int64(b))
+	}
+	return vm.ListValue(items), nil
+}
+
 func makeSocketValue(conn net.Conn) vm.Value {
 	m := mod()
 
@@ -239,20 +275,7 @@ func makeSocketValue(conn net.Conn) vm.Value {
 	}))
 
 	m.MapSet("receive", fn("Socket.receive", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		n := 1024
-		if len(args) >= 1 && args[0].IsInt() {
-			n = int(args[0].AsInt())
-		}
-		buf := make([]byte, n)
-		count, err := conn.Read(buf)
-		if err != nil {
-			return vm.Null, fmt.Errorf("Socket.receive: %w", err)
-		}
-		items := make([]vm.Value, count)
-		for i, b := range buf[:count] {
-			items[i] = vm.IntValue(int64(b))
-		}
-		return vm.ListValue(items), nil
+		return socketReceive(conn, args)
 	}))
 
 	m.MapSet("close", fn("Socket.close", func(_ context.Context, _ []vm.Value) (vm.Value, error) {

@@ -51,17 +51,17 @@ export fun a_gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
 	assert.Equal(t, []string{"a-gen"}, genAll.Dependencies, "*-gen glob")
 }
 
-// TestCharms checks that a target's charm reads are extracted: the magus.has_charm
+// TestCharms checks that a target's charm reads are extracted: the magus.hasCharm
 // names (including the built-in "rw"), sorted and deduped, while a has_charm
 // mention in a comment or string does not count.
 func TestCharms(t *testing.T) {
 	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
-    if (ctx.has_charm("container")) { ctx.needs(image_build); }
+    if (ctx.hasCharm("container")) { ctx.needs(image_build); }
     else { ctx.needs(go_build); }
 }
 export fun fmt(ctx: magus\Context, args: [str]) > void {
-    if (ctx.has_charm("rw")) { go["go-fmt"](); }
-    // ctx.has_charm("ignored") in a comment must not count
+    if (ctx.hasCharm("rw")) { go["go-fmt"](); }
+    // ctx.hasCharm("ignored") in a comment must not count
 }
 export fun plain(ctx: magus\Context, args: [str]) > void { go["x"](); }
 `)
@@ -73,36 +73,36 @@ export fun plain(ctx: magus\Context, args: [str]) > void { go["x"](); }
 	assert.Empty(t, plain.Charms)
 }
 
-// TestCtxFormCharms checks that a ctx-form target's ctx.has_charm reads are extracted
+// TestCtxFormCharms checks that a ctx-form target's ctx.hasCharm reads are extracted
 // too, so the static charm inventory (the doctor's charm/target-collision and
 // has_charm-typo checks) sees them - the receiver is ctx, not magus, but the charm
 // name is a real read all the same.
 func TestCtxFormCharms(t *testing.T) {
 	g := Extract(`import "magus";
 export fun release(ctx: magus\Context, args: [str]) > void {
-    if (ctx.has_charm("cd")) { ctx.writesFiles("dist/pkg.tar.gz"); }
+    if (ctx.hasCharm("cd")) { ctx.writesFiles("dist/pkg.tar.gz"); }
 }
 `)
 	release, _ := nodeByName(g, "release")
-	assert.Equal(t, []string{"cd"}, release.Charms, "ctx.has_charm names are extracted statically")
+	assert.Equal(t, []string{"cd"}, release.Charms, "ctx.hasCharm names are extracted statically")
 }
 
 // TestHasCharmBothReceivers pins that has_charm is read through BOTH receivers: the
-// still-live magus.has_charm global query and the ctx.has_charm form. Unlike
+// still-live magus.hasCharm global query and the ctx.hasCharm form. Unlike
 // needs/inputs/outputs (ctx-only now), has_charm keeps its global, so a target reading
 // either must contribute the same charm to the static inventory - or the doctor charm
-// checks and the MAGUS.md listing would silently miss a magus.has_charm read.
+// checks and the MAGUS.md listing would silently miss a magus.hasCharm read.
 func TestHasCharmBothReceivers(t *testing.T) {
 	viaCtx := Extract(`import "magus";
-export fun build(ctx: magus\Context, args: [str]) > void { if (ctx.has_charm("container")) {} }
+export fun build(ctx: magus\Context, args: [str]) > void { if (ctx.hasCharm("container")) {} }
 `)
 	viaMagus := Extract(`import "magus";
-export fun build(ctx: magus\Context, args: [str]) > void { if (magus.has_charm("container")) {} }
+export fun build(ctx: magus\Context, args: [str]) > void { if (magus.hasCharm("container")) {} }
 `)
 	c, _ := nodeByName(viaCtx, "build")
 	m, _ := nodeByName(viaMagus, "build")
-	assert.Equal(t, []string{"container"}, c.Charms, "ctx.has_charm read is extracted")
-	assert.Equal(t, c.Charms, m.Charms, "magus.has_charm must yield the identical charm inventory")
+	assert.Equal(t, []string{"container"}, c.Charms, "ctx.hasCharm read is extracted")
+	assert.Equal(t, c.Charms, m.Charms, "magus.hasCharm must yield the identical charm inventory")
 }
 
 // TestCtxFormCharmBranchSeesBothArms is the regression guard for the reason the graph
@@ -114,7 +114,7 @@ export fun build(ctx: magus\Context, args: [str]) > void { if (magus.has_charm("
 func TestCtxFormCharmBranchSeesBothArms(t *testing.T) {
 	g := Extract(`import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    if (ctx.has_charm("container")) {
+    if (ctx.hasCharm("container")) {
         ctx.needs(image_build);
     } else {
         ctx.needs(go_build);
@@ -126,7 +126,7 @@ export fun go_build(ctx: magus\Context, args: [str]) > void {}
 	build, ok := nodeByName(g, "build")
 	require.True(t, ok, "build node present")
 	assert.ElementsMatch(t, []string{"image-build", "go-build"}, build.Dependencies,
-		"both arms of the ctx.has_charm branch must be edges, not just the arm a run would take")
+		"both arms of the ctx.hasCharm branch must be edges, not just the arm a run would take")
 }
 
 // TestInputsOutputs pins the per-target cache-footprint extraction: magus.inputs /
@@ -285,7 +285,7 @@ func TestSpellOpsThroughHelper(t *testing.T) {
 import "magus/spell/cosign";
 
 fun build_variant(tag: str) > void {
-    if (ctx.has_charm("sign")) { cosign["cosign-sign"](); }
+    if (ctx.hasCharm("sign")) { cosign["cosign-sign"](); }
     docker["docker-buildx"]();
     self_loop();
 }
@@ -444,7 +444,7 @@ export fun preflight(ctx: magus\Context, args: [str]) > void { go["x"](); }
 func TestDependencyTokensInStringLiterals(t *testing.T) {
 	g := Extract(`import "project/../api" as api;
 export fun build(ctx: magus\Context, args: [str]) > void {
-    magus.info("run ctx.needs(setup) and api.compile first");
+    magus.log.info("run ctx.needs(setup) and api.compile first");
     go["go-build"]();
 }
 export fun setup(ctx: magus\Context, args: [str]) > void { go["x"](); }

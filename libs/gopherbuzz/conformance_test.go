@@ -2,8 +2,12 @@ package buzz_test
 
 // This file automates the "strict superset of upstream" claim in README.md and
 // the UpstreamRef pin in version.go. Nothing previously ran the upstream
-// behavior suite against gopherbuzz; measured reality (2026-07-28) is that only
-// 13 of the 84 files pass. TestUpstreamConformance makes that number a checked,
+// behavior suite against gopherbuzz. This comment used to name a score, and the
+// score it named was wrong twice over: "13 of 84" came from a hand-count against
+// an UNPINNED upstream checkout, which is both the wrong file count (83 at the
+// pin) and the wrong result - README.md calls out that exact mistake. The count
+// belongs in one place only, testdata/upstream-behavior-allowlist.txt, which this
+// test enforces. TestUpstreamConformance makes that number a checked,
 // monotonic fact instead of an unverified claim: it fails if a passing file
 // regresses, and it also fails if an un-listed file starts passing, so an
 // improvement cannot land without updating testdata/upstream-behavior-allowlist.txt.
@@ -76,7 +80,7 @@ func TestUpstreamConformance(t *testing.T) {
 	// Reading them from elsewhere failed on the working directory rather than on
 	// anything about the language. Done after loadAllowlist, which resolves
 	// allowlistPath relative to THIS package's directory.
-	t.Chdir(dir)
+	t.Chdir(stageRunDir(t, dir))
 
 	seen := make(map[string]bool, len(files))
 	var regressions, improvements []string
@@ -89,6 +93,10 @@ func TestUpstreamConformance(t *testing.T) {
 			regressions = append(regressions, fmt.Sprintf("%s: %s", name, detail))
 		case !allowed[name] && pass:
 			improvements = append(improvements, name)
+		case !allowed[name] && !pass:
+			// Not a failure - this file is known-red. Log WHY at -v so closing a
+			// gap starts with a diagnosis instead of a hacked copy of this loop.
+			t.Logf("still failing (not allowlisted): %s: %s", name, detail)
 		}
 	}
 
@@ -374,5 +382,121 @@ func TestUpstreamFuzzCorpusDoesNotPanic(t *testing.T) {
 		sort.Strings(panicked)
 		t.Errorf("the front end panicked on %d of %d fuzz inputs:\n%s",
 			len(panicked), len(files), strings.Join(panicked, "\n"))
+	}
+}
+
+// stageRunDir returns the directory the suite should run from: a symlink farm over
+// the upstream checkout, plus a real `zig-out/bin/buzz`.
+//
+// Two requirements pull against each other. Several files read paths relative to
+// the checkout root (fs.buzz stats README.md, run-file.buzz runs
+// tests/utils/testing.buzz), so the working directory has to look like that root.
+// But os.buzz asserts `os\execute(["./zig-out/bin/buzz", "--version"]) == 0`, and
+// upstream drops its interpreter there from its own Zig build - a path this repo
+// cannot create, because the checkout is shared and pinned and must stay pristine.
+//
+// Symlinking every top-level entry into a temp dir satisfies both: relative reads
+// resolve through to the real checkout, and zig-out is ours to populate. Nothing is
+// copied (the checkout is ~8M but that is beside the point - it is READ-ONLY to us)
+// and nothing is written back.
+//
+// gopherbuzz's own interpreter stands in for upstream's, which is the honest
+// reading: the assertion is about os\execute running a command, not about whose
+// binary it is. A stub that merely exits 0 would pass the file while testing
+// nothing. If the build fails the farm is still used, so os.buzz reports as failing
+// rather than the whole suite breaking on a machine that cannot compile cmd/buzz.
+func stageRunDir(t *testing.T, checkout string) string {
+	t.Helper()
+	pkgDir, err := os.Getwd() // captured before any Chdir: `go build ./cmd/buzz` is relative to it
+	if err != nil {
+		t.Logf("cannot resolve the package directory (%v); running from the checkout", err)
+		return checkout
+	}
+	entries, err := os.ReadDir(checkout)
+	if err != nil {
+		t.Logf("cannot read %s (%v); running from the checkout", checkout, err)
+		return checkout
+	}
+	run := t.TempDir()
+	for _, e := range entries {
+		switch e.Name() {
+		case "zig-out":
+			continue // ours to build, not upstream's to lend
+		case "tests":
+			// Recreated one level deeper rather than linked wholesale, so that
+			// tests/utils can hold a library we build. Linking `tests` outright would
+			// make tests/utils/libforeign resolve INTO the checkout.
+			if err := linkTreeExcept(filepath.Join(checkout, "tests"), filepath.Join(run, "tests"), "utils"); err != nil {
+				t.Logf("cannot stage tests/ (%v); running from the checkout", err)
+				return checkout
+			}
+			if err := linkTreeExcept(filepath.Join(checkout, "tests", "utils"), filepath.Join(run, "tests", "utils"), ""); err != nil {
+				t.Logf("cannot stage tests/utils (%v); running from the checkout", err)
+				return checkout
+			}
+			continue
+		}
+		if err := os.Symlink(filepath.Join(checkout, e.Name()), filepath.Join(run, e.Name())); err != nil {
+			t.Logf("cannot link %s (%v); running from the checkout", e.Name(), err)
+			return checkout
+		}
+	}
+	buildForeignLib(t, pkgDir, filepath.Join(run, "tests", "utils", "libforeign"))
+	out := filepath.Join(run, "zig-out", "bin", "buzz")
+	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
+		t.Logf("cannot create zig-out (%v); os.buzz will report as failing", err)
+		return run
+	}
+	build := exec.Command("go", "build", "-o", out, "./cmd/buzz")
+	build.Dir = pkgDir
+	if combined, err := build.CombinedOutput(); err != nil {
+		t.Logf("cannot build cmd/buzz (%v: %s); os.buzz will report as failing", err, combined)
+	}
+	return run
+}
+
+// linkTreeExcept makes dst a real directory holding a symlink to every entry of
+// src, skipping one name. It is how a subtree stays readable from the pinned
+// checkout while remaining writable at one level.
+func linkTreeExcept(src, dst, skip string) error {
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if e.Name() == skip {
+			continue
+		}
+		if err := os.Symlink(filepath.Join(src, e.Name()), filepath.Join(dst, e.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// buildForeignLib compiles testdata/upstream-foreign/foreign.c to out, the fixture
+// library ffi.buzz and types-as-value.buzz zdef against.
+//
+// Upstream builds the original with Zig and ships it in no release, so those files
+// were failing on a missing artifact. The source is plain C ABI, so `cc` is enough;
+// see the header of foreign.c for why reimplementing a FIXTURE is honest here. The
+// output has no extension because the zdef names an explicit path
+// ("tests/utils/libforeign"), which openLib tries verbatim.
+//
+// A missing or broken compiler is logged, not fatal: the two files then report as
+// still failing, which is the truthful outcome on a machine that cannot build it.
+func buildForeignLib(t *testing.T, pkgDir, out string) {
+	t.Helper()
+	cc := os.Getenv("CC")
+	if cc == "" {
+		cc = "cc"
+	}
+	src := filepath.Join(pkgDir, "testdata", "upstream-foreign", "foreign.c")
+	cmd := exec.Command(cc, "-shared", "-fPIC", "-o", out, src)
+	if combined, err := cmd.CombinedOutput(); err != nil {
+		t.Logf("cannot build the foreign fixture library (%v: %s); ffi.buzz and types-as-value.buzz will report as failing", err, combined)
 	}
 }

@@ -20,6 +20,7 @@
 
 import "magus";
 import "os";
+import "proc";
 import "vcs";
 
 magus\project({
@@ -38,9 +39,9 @@ export fun stamp(ctx: magus\Context, args: [str]) > void {
     try {
         commit = vcs\commit().short;
     } catch (e) {
-        magus\info("no VCS here (" + e["message"] + "); stamping as unknown");
+        magus\log.info("no VCS here (" + e["message"] + "); stamping as unknown");
     }
-    magus\info("build stamp: " + commit);
+    magus\log.info("build stamp: " + commit);
 }
 
 // Branching on the CODE, not the wording. MGS3003 is "tool not on PATH"; anything else is
@@ -49,10 +50,10 @@ export fun stamp(ctx: magus\Context, args: [str]) > void {
 export fun tools(ctx: magus\Context, args: [str]) > void {
     foreach (tool in ["sh", "definitely-absent-zzz"]) {
         try {
-            magus\info(tool + " -> " + os\which(tool));
+            magus\log.info(tool + " -> " + proc\which(tool));
         } catch (e) {
             if (e["code"] == "MGS3003") {
-                magus\info(tool + " is not installed; skipping the steps that need it");
+                magus\log.info(tool + " is not installed; skipping the steps that need it");
             } else {
                 throw e;
             }
@@ -65,12 +66,12 @@ export fun tools(ctx: magus\Context, args: [str]) > void {
 // actionable, report the rest, and carry on. Fail on what nobody can fix and someone will
 // mute the gate within a week.
 export fun gate(ctx: magus\Context, args: [str]) > void {
-    var blocking = mut [<str>];
-    var deferred = mut [<str>];
+    final blocking = mut [<str>];
+    final deferred = mut [<str>];
 
     foreach (tool in ["sh", "definitely-absent-zzz"]) {
         try {
-            os\which(tool);
+            proc\which(tool);
         } catch (e) {
             // A tool the project pins is actionable: install it. One it prefers is
             // not, so it is reported and the build continues.
@@ -83,10 +84,10 @@ export fun gate(ctx: magus\Context, args: [str]) > void {
     }
 
     foreach (d in deferred) {
-        magus\info("[deferred] " + d);
+        magus\log.info("[deferred] " + d);
     }
     if (blocking.len() > 0) {
         throw "gate: " + blocking.join(", ");
     }
-    magus\info("gate: nothing actionable outstanding");
+    magus\log.info("gate: nothing actionable outstanding");
 }

@@ -1,0 +1,8 @@
+import "std";
+import "term";
+
+// width is 0 when there is no terminal to measure, so check it rather than
+// catching an error.
+final size = term\size();
+final width = if (size.width > 0) size.width else 80;
+std\print("wrapping to {width} columns");

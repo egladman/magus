@@ -16,6 +16,7 @@ package registry
 import (
 	"crypto/ed25519"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -203,8 +204,18 @@ func requireHTTPS(raw string) error {
 	return fmt.Errorf("url %q must be https, got %q", raw, u.Scheme)
 }
 
+// isLoopback reports whether host (as returned by url.URL.Hostname(), so
+// already free of port and IPv6 brackets) names the local machine only.
+// A prefix check like strings.HasPrefix(host, "127.") also matches
+// "127.evil.example", a name an attacker registers and points DNS at
+// whatever they want - so this parses host as an IP and asks net for the
+// real answer instead of pattern-matching the text.
 func isLoopback(host string) bool {
-	return host == "localhost" || strings.HasPrefix(host, "127.") || host == "::1"
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // Keys returns the public keys a signature from this source may come from: the

@@ -12,12 +12,14 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/internal/sandbox/filesystem"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestOsExecTeesToOutputWriters verifies os.exec sends output through the run's
+// TestOsExecTeesToOutputWriters verifies proc.exec sends output through the run's
 // output writers (reusing the CLI's live+cached-log sink) while still capturing
 // it into the returned object.
 func TestOsExecTeesToOutputWriters(t *testing.T) {
@@ -245,20 +247,35 @@ func TestFsCopyDir(t *testing.T) {
 	}
 }
 
-func TestJSONStringify(t *testing.T) {
-	ctx := context.Background()
-	val := map[string]any{"a": 1.0}
+// TestFsCopyDirChecksReadOnDeniedSubtree pins that a source directory the sandbox
+// denies read on stops the copy - it must not be silently enumerated and have its
+// layout recreated in dest. The bug: the WalkDir callback only called checkRead
+// for FILE entries, never for a directory entry (nor the src root itself), so a
+// src tree with no files at all - just a denied subdirectory - copied "clean"
+// with no error and no read check ever firing.
+func TestFsCopyDirChecksReadOnDeniedSubtree(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+	require.NoError(t, os.MkdirAll(filepath.Join(src, "secret"), 0o755))
 
-	// No indent: compact (single line).
-	compact, err := JSONStringify(ctx, val, "")
-	require.NoError(t, err)
-	assert.NotContains(t, compact, "\n", "no-indent output should be compact")
+	// Grants write under dst but no read rule covers src at all - not even a
+	// directory-shaped one. Rule.Path must be pre-normalized the way policy-build
+	// time does (ResolveRulePath), or the write grant silently fails to match on a
+	// machine whose TMPDIR sits under a symlink (macOS: /var -> /private/var).
+	p := &sandbox.Policy{
+		Workspace: root,
+		FS: filesystem.Ruleset{Rules: []filesystem.Rule{
+			{Path: filesystem.ResolveRulePath(dst), Write: true},
+		}},
+	}
+	ctx := sandbox.WithPolicy(context.Background(), p)
 
-	// A non-empty indent: pretty, multi-line with that indent.
-	tabbed, err := JSONStringify(ctx, val, "\t")
-	require.NoError(t, err)
-	assert.Contains(t, tabbed, "\n", "indented output should be multi-line")
-	assert.Contains(t, tabbed, "\t", "indented output should be tab-indented")
+	err := FsCopyDir(ctx, src, dst)
+	require.Error(t, err, "a src tree with no read grant at all must not copy silently")
+
+	_, statErr := os.Stat(filepath.Join(dst, "secret"))
+	assert.True(t, os.IsNotExist(statErr), "dst/secret should never have been created for a read-denied source")
 }
 
 func TestEnvExpand(t *testing.T) {
@@ -490,21 +507,23 @@ func TestExecSignalKilledNamesTheSignal(t *testing.T) {
 	assert.NotContains(t, err.Error(), "exit -1")
 }
 
-// quiet is read in runResult, the one path os.exec, os.exec_sh, and vcs.cmd share, so
+// quiet is read in runResult, the one path proc.exec, proc.shell, and vcs.cmd share, so
 // the three cannot drift into offering different option sets. Capture stays on
 // regardless: a quiet call is still consuming the value, just not echoing it.
 func TestOsExecQuietStillCaptures(t *testing.T) {
 	res, err := OsExec(context.Background(), "sh", []string{"-c", "echo captured"}, "",
 		map[string]any{"quiet": true})
 	require.NoError(t, err)
-	assert.Equal(t, "captured", res.Stdout, "os.exec trims captured output")
+	assert.Equal(t, "captured", res.Stdout, "proc.exec trims captured output")
 	assert.Equal(t, 0, res.Code)
 }
 
-func TestOsExecShQuietStillCaptures(t *testing.T) {
-	res, err := OsExecSh(context.Background(), "echo captured", "", map[string]any{"quiet": true})
+func TestProcShellQuietStillCaptures(t *testing.T) {
+	c, err := OsShell(context.Background(), "echo captured", "")
 	require.NoError(t, err)
-	assert.Equal(t, "captured", res.Stdout, "os.exec trims captured output")
+	res, err := OsExec(context.Background(), c.Bin, c.Args, "", map[string]any{"quiet": true})
+	require.NoError(t, err)
+	assert.Equal(t, "captured", res.Stdout, "proc.exec trims captured output")
 }
 
 // Absent quiet must keep the streaming default. The option is opt-in because a build

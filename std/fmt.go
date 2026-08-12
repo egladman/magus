@@ -15,6 +15,7 @@ func init() { Register(Fmt) }
 // numeric verbs like %d have nothing typed to act on.
 var Fmt = Module{
 	Name: "fmt",
+	WASM: true,
 	Doc:  "String formatting (printf-style).",
 	Methods: []Method{
 		{

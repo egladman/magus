@@ -1,5 +1,5 @@
 import "std";
-import "json";
+import "encoding/json";
 
 final v = json\parse("\{\"name\": \"api\", \"port\": 8080\}");
 std\print(v["name"]);

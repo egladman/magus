@@ -1,0 +1,11 @@
+// @expect: 2
+// Two things count as using a local. A WRITE is one, even with no read after it -
+// upstream's protocols.buzz assigns a second value and never reads it back. A
+// leading underscore is the other, the conventional "deliberately unused" spelling.
+fun f() > int {
+    var written = 1;
+    written = 2;
+    final _ignored = "kept for its type";
+    return 2;
+}
+final __r = f();

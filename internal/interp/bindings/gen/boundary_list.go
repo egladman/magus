@@ -9,6 +9,7 @@ import "github.com/egladman/magus/types"
 var RuntimeBoundaryTypes = []any{
 	types.AffectedResult{},
 	types.AffinityOutput{},
+	types.ArchiveEntry{},
 	types.CoChange{},
 	types.CommitAuthor{},
 	types.CommitRecord{},
@@ -51,6 +52,7 @@ var RuntimeBoundaryTypes = []any{
 	types.ProjectsOutput{},
 	types.SemverNext{},
 	types.SemverVersion{},
+	types.ShellCommand{},
 	types.StatusRecord{},
 	types.StatusRun{},
 	types.StatusTargetRun{},
@@ -58,6 +60,7 @@ var RuntimeBoundaryTypes = []any{
 	types.TargetGraphOutput{},
 	types.TargetGraphProject{},
 	types.TargetSpellUse{},
+	types.TermSize{},
 	types.TrendEntry{},
 	types.TrendOutput{},
 	types.URL{},

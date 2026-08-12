@@ -67,7 +67,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return vm.Null, nil
 	}))
-	m.MapSet("mkdirall", vm.DirectValue("fs.mkdirall", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+	m.MapSet("mkdirAll", vm.DirectValue("fs.mkdirAll", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		path := Str(bzArgs, 0)
 		perm := Int(bzArgs, 1, 493)
 		if err := std.FsMkdirAll(ctx, path, perm); err != nil {
@@ -86,6 +86,45 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("removeAll", vm.DirectValue("fs.removeAll", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		path := Str(bzArgs, 0)
 		if err := std.FsRemoveAll(ctx, path); err != nil {
+			return vm.Null, HostError(err)
+		}
+		return vm.Null, nil
+	}))
+	m.MapSet("remove", vm.DirectValue("fs.remove", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		path := Str(bzArgs, 0)
+		if err := std.FsRemove(ctx, path); err != nil {
+			return vm.Null, HostError(err)
+		}
+		return vm.Null, nil
+	}))
+	m.MapSet("rename", vm.DirectValue("fs.rename", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		src := Str(bzArgs, 0)
+		dst := Str(bzArgs, 1)
+		if err := std.FsRename(ctx, src, dst); err != nil {
+			return vm.Null, HostError(err)
+		}
+		return vm.Null, nil
+	}))
+	m.MapSet("size", vm.DirectValue("fs.size", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		path := Str(bzArgs, 0)
+		ret0, err := std.FsSize(ctx, path)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return IntVal(ret0), nil
+	}))
+	m.MapSet("tempFile", vm.DirectValue("fs.tempFile", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		prefix := Str(bzArgs, 0)
+		ret0, err := std.FsTempFile(ctx, prefix)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrVal(ret0), nil
+	}))
+	m.MapSet("writeFileAtomic", vm.DirectValue("fs.writeFileAtomic", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		path := Str(bzArgs, 0)
+		content := Str(bzArgs, 1)
+		if err := std.FsWriteFileAtomic(ctx, path, content); err != nil {
 			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil

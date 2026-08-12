@@ -160,7 +160,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 export fun image_build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(build);
     final tag = IMAGE + ":" + VERSION;
-    if (ctx.has_charm("cd")) {
+    if (ctx.hasCharm("cd")) {
         docker["docker-build"](ctx, {"args": ["--platform", "linux/amd64,linux/arm64", "--push", "-t", tag, "."]});
     } else {
         docker["docker-build"](ctx, {"args": ["--load", "-t", tag, "."]});

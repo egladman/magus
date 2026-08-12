@@ -173,6 +173,17 @@ the `Step`. magus writes these lines, in this order, into one hash:
   is folded in (not the full permissions, which would differ across machines with
   different umasks), so `chmod +x` on a script - which changes no content -
   still invalidates the key.
+
+  **Magusfiles are always in this set, whether or not you declare them.** magus
+  appends the project's own magusfile and the workspace root's to every step's
+  sources. You never need to list `magusfile.buzz` in a project's `sources`, and
+  listing it changes nothing.
+
+  This is load-bearing rather than a convenience. A target's BODY is not hashed -
+  only its NAME goes into the key, as `target:` - so if the magusfile were not a
+  source, editing what a target actually does would leave the key unmoved and
+  replay the previous result. Everything a target does that magus can see comes in
+  through the files it reads; the file that DEFINES it has to be one of them.
 - **`env:` lines** - each allow-listed environment variable name and its value,
   sorted, distinguishing unset from set-to-empty. A variable's value contributes to
   the key only if the spell opted it in.

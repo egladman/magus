@@ -432,6 +432,14 @@ func (c *Cache) hashFileWithMtime(abs string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// Re-stat: if (mtime,size) changed between the pre-read stat and the hash
+	// read, skip the store to avoid recording a stale fingerprint - matches the
+	// io_uring tier's same guard above.
+	info2, err := os.Stat(abs)
+	if err != nil || info2.ModTime().UnixNano() != mtime || info2.Size() != size {
+		//nolint:nilerr // a failed re-stat means skip the fingerprint store, not fail the hash: h was computed from bytes we did read, and the store is an optimisation.
+		return h, nil
+	}
 	c.mtimes.set(abs, h, mtime, size)
 	return h, nil
 }
@@ -452,6 +460,30 @@ func hashFile(path string) (string, error) {
 
 // relAbs pairs a workspace-relative file path with its absolute form.
 type relAbs struct{ rel, abs string }
+
+// ExpandSources is expandSources exported for a caller outside this package that
+// needs the SAME source walk the cache key is built from - today, a spell op's
+// Sources placeholder (spells.Command.Sources): the engine-side replacement for a
+// spell shelling out to `find | xargs` to build its own file list at execution
+// time (see the field's doc). Reusing this walk, rather than a second one, is
+// what makes that op inherit root's declared ignore dirs instead of drifting from
+// the set the cache key itself was built from.
+//
+// Returns root-relative paths only, sorted (see expandSources): a caller building
+// argv for a subprocess that runs IN root wants paths relative to it, and handing
+// back relAbs's unexported pair would leak an internal type for no reason a
+// caller here needs.
+func ExpandSources(globs []string, root string, outputGlobs, ignoreDirs []string) ([]string, error) {
+	files, err := expandSources(globs, root, outputGlobs, ignoreDirs)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, len(files))
+	for i, f := range files {
+		out[i] = f.rel
+	}
+	return out, nil
+}
 
 // expandSources turns source globs into a sorted slice of (rel, abs) pairs.
 // Uses a single WalkDir pass with compiled matchers; prunes well-known ignore dirs early.
