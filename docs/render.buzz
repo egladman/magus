@@ -92,7 +92,7 @@ import "site/config" as _;
 // so a broken bundle wrote nothing and the render carried on to fail later somewhere else.
 // proc\exec raises on a non-zero exit, so a bundle that cannot build stops the render where
 // it broke.
-fun esbuild(args: [str]) > void {
+fun esbuild(args: [str]) > void !> any {
     proc\exec("esbuild", args, ".", {});
 }
 
@@ -404,7 +404,7 @@ export fun site_publish(root: str, docs: str, blog: str, outDir: str, targets: T
 // rather than behind an isDir check: an interrupted install leaves a node_modules that
 // exists but is incomplete, and the guard read that as ready and fed esbuild a half
 // tree. See the install() note in magusfile.buzz.
-fun generateJsBundles() > void {
+fun generateJsBundles() > void !> any {
     proc\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
     proc\exec("pnpm", ["run", "build"], ".", {});
 }

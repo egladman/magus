@@ -33,6 +33,7 @@ import "project/guides/integrations/agents" as agents;
 // The static site generator, a sibling module. Aliased so it does not collide with the
 // `render` target below: a same-name target shadows the import and nulls its members.
 import "render" as renderer;
+import "engine/gates" as gates;
 
 // magusfile binds this file's own exported targets (generate, render, ci, ...); ts adds
 // the TypeScript spell so the client bundles under src/ are symbol-capable - its `scip`
@@ -339,7 +340,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("**/*.md", "lib/conventions.buzz", "engine/gates.buzz",
         workspace.file("README.md"), workspace.file("CONTRIBUTING.md"));
-    renderer\conventionsCheck(ROOT, DOCS);
+    gates\conventionsCheck(ROOT, DOCS);
 }
 // lint runs the client-side TypeScript gates: tsc for type errors and Biome for the
 // banned patterns (no `any`, no non-null assertions - see biome.json). Both need

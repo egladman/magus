@@ -449,7 +449,7 @@ fun lintSkipDir(name: str) > bool {
 
 // collectMarkdown appends every .md file under dir (recursively) to acc, as a path relative
 // to the walk root.
-fun collectMarkdown(base: str, rel: str, acc: [str]) > void !> any {
+fun collectMarkdown(base: str, rel: str, acc: mut [str]) > void !> any {
     var dir = base;
     if (rel != "") { dir = base + "/" + rel; }
     foreach (name in fs\listDir(dir)) {
@@ -528,7 +528,7 @@ export fun conventionsCheck(root: str, docs: str) > void !> any {
 
 // collectFindings runs both halves over one file and sorts what they report into the tier
 // that throws and the tier that prints.
-fun collectFindings(root: str, file: str, abs: str, violations: [str], broken: [str]) > void !> any {
+fun collectFindings(root: str, file: str, abs: str, violations: mut [str], broken: mut [str]) > void !> any {
     final md = fs\readFile(abs);
     foreach (f in lintMarkdown(file, md)) {
         violations.append(f.file + ":" + "{f.line}" + ": [" + f.rule + "] " + f.message);

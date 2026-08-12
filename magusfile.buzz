@@ -123,7 +123,7 @@ magus\project({
     },
 });
 
-fun version() > str {
+fun version() > str !> any {
     try {
         final v = vcs\describe();
         if (v == "") { return "unknown"; }
@@ -139,7 +139,7 @@ fun version() > str {
 // from "the answer is empty". A build outside a checkout is a real case (a release tarball,
 // a container build context), so it is caught here and named, once, instead of every caller
 // remembering a check the type system never asked for.
-fun commit() > str {
+fun commit() > str !> any {
     try {
         return vcs\commit().short;
     } catch (e) {
@@ -148,7 +148,7 @@ fun commit() > str {
 }
 
 // Commit record date (RFC3339) for reproducible builds.
-fun build_date() > str {
+fun build_date() > str !> any {
     try {
         final c: Commit = vcs\commit();
         return c.date;
@@ -160,13 +160,13 @@ fun build_date() > str {
 // built_by is the CI workflow that produced the binary, empty for a local build so
 // nothing claims a pedigree it does not have. It should match the job_workflow_ref a
 // keyless signature carries, which is what lets the claim be checked against proof.
-fun built_by() > str {
+fun built_by() > str !> any {
     final ref = os\env("GITHUB_WORKFLOW_REF");
     if (ref == null) { return ""; }
     return "" + ref;
 }
 
-fun ld_flags() > str {
+fun ld_flags() > str !> any {
     return "-w -s"
         + " -X main.version=" + version()
         + " -X main.commit=" + commit()
@@ -175,7 +175,7 @@ fun ld_flags() > str {
 }
 
 // Compiles the version-stamped magus binary.
-export fun go_build(ctx: magus\Context, args: [str]) > void {
+export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(gopherbuzz\build);
     // The compiled built-in spells are go:embed'd into this binary, so the link has to
     // happen AFTER they are regenerated. The cache key cannot express that on its own:
@@ -212,7 +212,7 @@ export fun go_build(ctx: magus\Context, args: [str]) > void {
 // No ctx.writesFiles here, matching go_build: the declared-output globs are what
 // EnsureMergeDriver writes into .gitattributes, and declaring a gitignored binary there
 // marks a path that can never be tracked and so can never conflict.
-export fun dogfood(ctx: magus\Context, args: [str]) > void {
+export fun dogfood(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(gopherbuzz\build);
     go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
         "args": ["-trimpath",
@@ -290,10 +290,10 @@ final DOCKERHUB = Registry{
 // build, not a cache that survives between two.
 final REGISTRIES = [GHCR, DOCKERHUB];
 
-fun image_tag() > str { return "magus:" + commit(); }
+fun image_tag() > str !> any { return "magus:" + commit(); }
 
 // The build-args every variant stamps into the binary through the Dockerfiles' ldflags.
-fun image_stamps() > [str] {
+fun image_stamps() > [str] !> any {
     return ["--build-arg", "VERSION=" + version(),
         "--build-arg", "COMMIT=" + commit(),
         "--build-arg", "DATE=" + build_date()];
@@ -565,7 +565,7 @@ fun channel(ctx: magus\Context) > str !> any {
 // registry under one and out of range under the other), and it is unreadable in a
 // workflow besides. A host that is not in the list is an error naming the ones that
 // are, rather than a silent no-op.
-fun select_registries(registries: [Registry], host: str) > [Registry] {
+fun select_registries(registries: [Registry], host: str) > [Registry] !> any {
     if (host == "") { return registries; }
     var hosts = "";
     foreach (reg in registries) {
@@ -663,7 +663,7 @@ fun resolvable(ref: str) > bool {
     }
 }
 
-fun pad(s: str, width: int) > str {
+fun pad(s: str, width: int) > str !> any {
     var padded = s;
     while (padded.len() < width) { padded = padded + " "; }
     return padded + " ";
@@ -1226,7 +1226,7 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
 // the current runner's own native platform. So a bare `magus run release-build` (with
 // or without the static charm) builds exactly one binary — the one you're standing
 // on — never a silent "all 5" surprise.
-fun release_target_platform(goos: str, goarch: str) > [str] {
+fun release_target_platform(goos: str, goarch: str) > [str] !> any {
     if (goos != null and goos != "") { return [goos, goarch]; }
     // GOOS/GOARCH in the environment cross-target this build (the standard Go convention), so CD can
     // ask one runner for another platform's binary - e.g. the arm64 macOS job cross-builds darwin/amd64

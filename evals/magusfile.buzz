@@ -43,7 +43,7 @@ fun install() > void !> any {
 
 // lint validates every task file against the schema and checks that each named
 // constraint predicate exists. No network, no API key.
-export fun lint(ctx: magus\Context, args: [str]) > void {
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     proc\exec("pnpm", ["run", "lint"], ".", {});
 }
