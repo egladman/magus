@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2122,
-  "edge_count": 5069,
+  "edge_count": 5070,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -37333,6 +37333,14 @@
     {
       "source": "doc:docs/reference/skills/magus-query.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/skills/magus-query.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-query.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,

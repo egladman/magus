@@ -2,8 +2,8 @@
 title: magus-query
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
-skill_full_bytes: 7992
-skill_simple_bytes: 5782
+skill_full_bytes: 10607
+skill_simple_bytes: 8397
 ---
 
 # magus-query
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `34` |
+| `agent-skill-version` | `36` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `fc0c634b9456` |
+| `skill-content` | `e6100e60aac2` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -39,7 +39,7 @@ The `skill-content` digest is shared by both permutations below, so they version
 
 The default: the steps plus the rationale for each.
 
-```markdown
+````markdown
 # magus knowledge graph
 
 magus keeps a deterministic, cache-backed graph of its own domain. Query it to
@@ -101,6 +101,48 @@ unavailable too, or when a human explicitly asks what the committed index says.
    output globs (the generated files), spells, and policy for that target - use it
    when the question is "what feeds or comes out of this target", not "what relates
    to it".
+
+## Rewriting a symbol everywhere it appears
+
+`magus refs <symbol>` answers "where is this used" at file granularity, and its line
+list is CAPPED - it describes fan-in, and a rewrite driven off it silently skips sites.
+Add `--occurrences` for the edit-precise view: every occurrence, uncapped, with start and
+end line/column, and each range checked against the file on disk.
+
+```sh
+magus refs <symbol> --occurrences -o json
+```
+
+magus reports the sites; YOU apply the edits. It will not rewrite the tree for you, the
+same way `magus affected` names what a change reaches without touching it.
+
+Three things decide whether the result is usable, and skipping any of them is how a bulk
+rewrite corrupts a file:
+
+- **Edit only `verified` sites.** Each occurrence carries a `status`. `verified` means
+  magus read that exact range and found the symbol there. `mismatch` means it found
+  something else - the index predates an edit - and `unreadable` means the range is no
+  longer inside the file. The `text` field shows what is really there, and `names` is every
+  spelling that would have verified, so you can check the verdict rather than trust it.
+- **Check the exit status when scripting `-o name`.** It emits `file:line:col` for the
+  verified sites ONLY, so a wholly stale index prints nothing - which on its own is
+  indistinguishable from a symbol that is never used. Exit 1 means sites were found and
+  withheld, and the count goes to stderr. Do not read empty output as "nothing to do".
+- **Apply back-to-front within each file.** Replacing a name with one of a different
+  length shifts every later column on that line, so editing top-down invalidates each
+  subsequent range as you go. Walk each file's occurrences in reverse. Files are
+  independent of each other.
+- **Treat a `stale` file as a stop, not a filter.** A file is marked stale when any of its
+  ranges failed to verify, which proves it changed after indexing - so the index may also
+  be MISSING occurrences added since, and no per-site check can see a site that is not in
+  the list. Re-run that project's `scip` target and ask again. Editing the verified sites
+  and skipping the rest produces a half-renamed tree that may still compile.
+
+Completeness rests on the index being current even when everything verifies: an edit that
+appended a new use without disturbing existing ranges leaves every site verifying while
+adding one magus never saw. `magus status` reports which indexes are fresh. Re-index
+first when the tree has moved since you last did, and check the verdict for projects that
+declare no index at all - those are not searched.
 
 ## Query grammar
 
@@ -174,7 +216,7 @@ governs you too.
 
 For flags and behavior this skill does not cover, run any verb with `-h`, and read
 the magus documentation site. Prefer the tools' own output over assumptions.
-```
+````
 
 ## Short form (`--simple`)
 
@@ -183,7 +225,7 @@ The same steps with the rationale withheld; the bar under the heading above show
 <details>
 <summary>Show the short form</summary>
 
-```markdown
+````markdown
 # magus knowledge graph
 
 magus keeps a deterministic, cache-backed graph of its own domain. Query it to
@@ -228,6 +270,48 @@ only: no daemon AND no CLI, or a human asking what the committed index says.
 
    `magus describe target <name>` prints, per project, the resolved source globs,
    output globs (the generated files), spells, and policy for that target.
+
+## Rewriting a symbol everywhere it appears
+
+`magus refs <symbol>` answers "where is this used" at file granularity, and its line
+list is CAPPED - it describes fan-in, and a rewrite driven off it silently skips sites.
+Add `--occurrences` for the edit-precise view: every occurrence, uncapped, with start and
+end line/column, and each range checked against the file on disk.
+
+```sh
+magus refs <symbol> --occurrences -o json
+```
+
+magus reports the sites; YOU apply the edits. It will not rewrite the tree for you, the
+same way `magus affected` names what a change reaches without touching it.
+
+Three things decide whether the result is usable, and skipping any of them is how a bulk
+rewrite corrupts a file:
+
+- **Edit only `verified` sites.** Each occurrence carries a `status`. `verified` means
+  magus read that exact range and found the symbol there. `mismatch` means it found
+  something else - the index predates an edit - and `unreadable` means the range is no
+  longer inside the file. The `text` field shows what is really there, and `names` is every
+  spelling that would have verified, so you can check the verdict rather than trust it.
+- **Check the exit status when scripting `-o name`.** It emits `file:line:col` for the
+  verified sites ONLY, so a wholly stale index prints nothing - which on its own is
+  indistinguishable from a symbol that is never used. Exit 1 means sites were found and
+  withheld, and the count goes to stderr. Do not read empty output as "nothing to do".
+- **Apply back-to-front within each file.** Replacing a name with one of a different
+  length shifts every later column on that line, so editing top-down invalidates each
+  subsequent range as you go. Walk each file's occurrences in reverse. Files are
+  independent of each other.
+- **Treat a `stale` file as a stop, not a filter.** A file is marked stale when any of its
+  ranges failed to verify, which proves it changed after indexing - so the index may also
+  be MISSING occurrences added since, and no per-site check can see a site that is not in
+  the list. Re-run that project's `scip` target and ask again. Editing the verified sites
+  and skipping the rest produces a half-renamed tree that may still compile.
+
+Completeness rests on the index being current even when everything verifies: an edit that
+appended a new use without disturbing existing ranges leaves every site verifying while
+adding one magus never saw. `magus status` reports which indexes are fresh. Re-index
+first when the tree has moved since you last did, and check the verdict for projects that
+declare no index at all - those are not searched.
 
 ## Query grammar
 
@@ -292,7 +376,7 @@ Gephi, yEd, or a browser graph tool.
 
 For flags and behavior this skill does not cover, run any verb with `-h`, and read
 the magus documentation site.
-```
+````
 
 
 </details>

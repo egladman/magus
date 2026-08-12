@@ -23,8 +23,8 @@ See [Agents](../../guides/integrations/agents.md) for how to choose.
 | [magus-delegate-ultra](magus-delegate-ultra.md) | 8469 | 6526 | 22% | Plan and execute potentially expensive multi-agent work in a magus workspace as an acceptance-criteria loop, using affected shard plans and knowledge-graph evidence to assign collision-resistant edit units, coordinate nested delegation, and choose cost-appropriate effort tiers. |
 | [magus-docs](magus-docs.md) | 3670 | 2956 | 19% | Traverse magus's own documentation to answer a "how does magus do X / what does Y mean / where is Z documented" question, instead of guessing an answer or a URL. |
 | [magus-memory](magus-memory.md) | 3831 | 3156 | 17% | Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, and pointers that survive worktrees and sessions. |
-| [magus-query](magus-query.md) | 7992 | 5782 | 27% | Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs). |
+| [magus-query](magus-query.md) | 10607 | 8397 | 20% | Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs). |
 | [magus-run](magus-run.md) | 9375 | 5947 | 36% | Run builds, tests, lints, and codegen through magus targets. |
 | [magus-sdk](magus-sdk.md) | 13316 | 12879 | 3% | Help a Go developer consume magus as a library (import "github.com/egladman/magus") instead of shelling out to the CLI, and audit whether the SDK actually serves them. |
 | [magus-vcs](magus-vcs.md) | 7222 | 5265 | 27% | Safe git operations in a magus workspace (any repo with magusfile.buzz at the root). |
-| **all 13** | **104713** | **81854** | **21%** | |
+| **all 13** | **107328** | **84469** | **21%** | |

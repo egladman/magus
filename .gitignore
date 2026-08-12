@@ -136,13 +136,20 @@ coverage.hand.out
 !.claude/skills/magus-skill-authoring/
 !.claude/skills/magus-local-development/
 
-# Harness wiring, not repo configuration. settings.json hard-wires the PreToolUse guard to a
-# `magus hook` binary that a fresh clone may not have built - when it resolves something stale,
-# every Bash/Edit/Write fails closed for that contributor, which is how this file cost a whole
-# session once. launch.json pins one machine's dev-server command and port. Both are per
-# developer; the guard SCRIPTS they point at (docs/guides/integrations/agents/) are the
-# artifact worth versioning.
-.claude/settings.json
+# launch.json pins one machine's dev-server command and port, so it stays per developer.
+#
+# settings.json used to be ignored beside it, for a reason that no longer holds: it once
+# hard-wired the guard to a machine-specific `magus hook` binary, and a stale one was
+# believed to fail every Bash/Edit/Write CLOSED, which cost a session. Measured 2026-08-12,
+# both halves of that are now false. The tracked config names only a repo-relative script,
+# and that script resolves magus from PATH itself; and the guard fails OPEN in both failure
+# modes - a missing binary and a broken one each print a notice saying the rules are
+# unenforced, then allow. Nothing about installing it can block work.
+#
+# Keeping it ignored had a cost that was invisible because it was an absence: measured
+# across 54 worktrees, only 22 had any guard wired at all, so the deny rules did not run in
+# most checkouts and TestDogfoodedHookInvokesTheTemplate skipped itself. A guard that is
+# absent by default is not a guard.
 .claude/launch.json
 
 # Fetched upstream responses the registry aggregator reads. Not committed: the
