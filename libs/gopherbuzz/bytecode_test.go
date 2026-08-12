@@ -1807,20 +1807,23 @@ func TestJITDeoptsOnRuntimeError(t *testing.T) {
 }
 
 // TestJITBackendPresence pins the build-tag algebra: exactly the architectures with
-// a backend file must report a backend, on every OS. Without it the tag expressions
-// are only ever checked by whether the package compiles, and a stub silently
-// selected on an arch that has real codegen looks identical to a pass - every JIT
-// test would skip and the suite would go green having run nothing. It matters most on
-// a platform nobody runs the suite on by habit: Windows selects a different
-// executable-memory half (jit_mem_windows.go), so a tag mistake there would go
-// unnoticed until a user hit it.
+// a backend file must report a backend, on every OS, in every Value representation.
+// Without it the tag expressions are only ever checked by whether the package
+// compiles, and a stub silently selected on an arch that has real codegen looks
+// identical to a pass - every JIT test would skip and the suite would go green having
+// run nothing. It matters most on a platform nobody runs the suite on by habit:
+// Windows selects a different executable-memory half (jit_mem_windows.go), so a tag
+// mistake there would go unnoticed until a user hit it.
 func TestJITBackendPresence(t *testing.T) {
-	// Keep in sync with the //go:build lines on vm/jit_{amd64,arm64}.go.
+	// Keep in sync with the //go:build lines on vm/jit_{amd64,arm64}.go: an arch
+	// clause AND both alternate-representation tags being absent. jitTagged carries
+	// the latter half, so this tracks the tag expression instead of hardcoding an
+	// answer that only holds in the default build.
 	backends := map[string]bool{"amd64": true, "arm64": true}
-	want := backends[runtime.GOARCH]
+	want := backends[runtime.GOARCH] && !jitTagged
 	require.Equalf(t, want, vmpackage.JITAvailable(),
-		"GOOS=%s GOARCH=%s: JITAvailable()=%v but a backend is %spresent for this arch",
-		runtime.GOOS, runtime.GOARCH, vmpackage.JITAvailable(),
+		"GOOS=%s GOARCH=%s buzz_safe/buzz_unsafe=%v: JITAvailable()=%v but a backend is %spresent for this configuration",
+		runtime.GOOS, runtime.GOARCH, jitTagged, vmpackage.JITAvailable(),
 		map[bool]string{true: "", false: "not "}[want])
 }
 
