@@ -194,14 +194,32 @@ type TargetGraphNode struct {
 	// cross-project input only; a same-project one seeds by directory containment), and
 	// the consumes edge to the file node in the owning project.
 	ReadsFiles []InputRef `json:"reads_files,omitempty" yaml:"reads_files,omitempty"`
-	// ReadsSecrets records that the target body calls magus\secret.read. A resolved
-	// credential contributes NOTHING to the cache key - deliberately, since hashing one
-	// would write it into cache metadata - so rotating or revoking it invalidates nothing.
-	// A cacheable target that reads a credential therefore becomes a replay that reports
-	// success without ever contacting the provider, which is worst for exactly the
-	// authentication targets the `-login` convention encourages, whose sources rarely
-	// change. MGS1026 reports the combination; skip_cache with a reason is the fix.
+	// ReadsSecrets records that the target body reaches for a credential - magus\secret's
+	// read, grant or endpoint. A resolved credential contributes NOTHING to the cache key
+	// - deliberately, since hashing one would write it into cache metadata - so rotating
+	// or revoking it invalidates nothing. A cacheable target that uses one therefore
+	// becomes a replay that reports success without ever contacting the provider, which is
+	// worst for exactly the authentication targets the `-login` convention encourages,
+	// whose sources rarely change. MGS1026 reports the combination; skip_cache with a
+	// reason is the fix.
+	//
+	// A GRANT carries the same hazard in a sharper form, which is why it counts here: the
+	// magusfile never holds the value, so changing a grant's ref from staging to
+	// production alters nothing the cache can see, and the target replays its old output
+	// against a different credential. The name stays ReadsSecrets because it is a
+	// Buzz-visible describe field (readsSecrets); the concept it records is "uses".
 	ReadsSecrets bool `json:"reads_secrets,omitempty" yaml:"reads_secrets,omitempty"`
+	// SecretRefs are the credential REFERENCES this target names, sorted and deduped -
+	// never values, which magus does not have at describe time and would not print if it
+	// did. It answers "which credentials does this target touch" without running it,
+	// which is the question an operator reviewing a magusfile actually has.
+	//
+	// Only literal references appear. magus\secret.read takes a string literal, so its
+	// reference is here; magus\secret.endpoint takes an object usually declared as a
+	// `final` elsewhere, so its reference is not at the call site and only ReadsSecrets
+	// records the use. Under-reporting is deliberate: resolving that identifier would
+	// mean evaluating the magusfile, which a static read refuses to do.
+	SecretRefs []string `json:"secret_refs,omitempty" yaml:"secret_refs,omitempty"`
 	// WritesFiles are the per-target ctx.writesFiles(...) refs, each carrying its owning project
 	// (empty means this target's own). When present, they define the target's
 	// snapshot/replay set instead of inheriting project-wide and spell outputs.
@@ -603,9 +621,10 @@ const ToolDefinition = "A tool is a binary a spell drives. magus probes its vers
 // FileDefinition is the human-readable description printed by "magus describe file".
 const FileDefinition = "Describe file classifies paths against the workspace's declared " +
 	"globs: the project that owns each path, whether it is a declared output (generated: " +
-	"regenerate it, never hand-edit) or a declared source (it feeds cache keys and the " +
-	"affected set), and which projects claim it either way. It answers \"can I disregard " +
-	"this changed file\" from the workspace's own declarations."
+	"regenerate it, never hand-edit), a declared source (it feeds cache keys and the " +
+	"affected set), or one magus maintains itself outside any target, and which projects " +
+	"claim it either way. It answers \"can I disregard this changed file\" from the " +
+	"workspace's own declarations."
 
 // FileEntry classifies one workspace-relative path.
 type FileEntry struct {
@@ -615,8 +634,16 @@ type FileEntry struct {
 	Project string `json:"project,omitempty" yaml:"project,omitempty"`
 	// Role summarizes the strongest claim: "output" (a declared output glob
 	// matches - the file is generated), "source" (a declared source glob
-	// matches), or "unclaimed" (no project declares it; it invalidates no cache
-	// key and affects no target).
+	// matches), "maintained" (no project declares it, but magus's own core writes
+	// it - see IsMagusMaintained), or "unclaimed" (nothing writes it and no
+	// project declares it; it invalidates no cache key and affects no target).
+	//
+	// maintained is a REFINEMENT of unclaimed, not a rank above source: both are
+	// invisible to the cache and the affected set. It is separate because the
+	// handling rule inverts. An unclaimed path may be residue to ignore, so its
+	// hint says to check the ignore rules; a maintained path is one magus wrote
+	// and expects committed, and telling someone to consider ignoring it is
+	// advice to drop magus's own bookkeeping.
 	Role string `json:"role" yaml:"role"`
 	// OutputOf and SourceOf list the projects whose declared output/source globs
 	// match the path. A path can be both (a committed generated file is often a
@@ -628,6 +655,29 @@ type FileEntry struct {
 	// human or an agent.
 	Hint string `json:"hint,omitempty" yaml:"hint,omitempty"`
 }
+
+// magusMaintainedFiles are the workspace-relative paths magus's own core writes
+// outside any target's declared globs.
+//
+// .gitattributes is the whole list, and it is here rather than in the merge-driver
+// code that writes it because two features have to agree about it: staging
+// (StagingPlan.Maintained) and classification (FileEntry.Role). They disagreed -
+// `magus vcs add` reported the file as one magus maintains while `magus describe
+// file` called it unclaimed and suggested checking the ignore rules, for a file
+// magus had just written and needs tracked.
+//
+// Deliberately NOT derived from the declared output globs: it is the inverse of
+// them. EnsureMergeDriver writes .gitattributes FROM every project's output globs,
+// so a project declaring it would be circular - the input to the derivation
+// claiming to be its own product.
+var magusMaintainedFiles = map[string]bool{
+	".gitattributes": true,
+}
+
+// IsMagusMaintained reports whether path is one magus's own core writes and expects
+// committed, rather than a target output or anything a project declares. The path is
+// workspace-relative and slash-separated, as FileEntry.Path and StagingPlan carry it.
+func IsMagusMaintained(path string) bool { return magusMaintainedFiles[path] }
 
 // The *Report types below are RENDER shapes, not domain types: the {definition,
 // count, items} envelope `magus describe ... -o json` emits. The Inspector method

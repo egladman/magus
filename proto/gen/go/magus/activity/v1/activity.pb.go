@@ -56,6 +56,13 @@ const (
 	// host/tool/session data and the command or path; the response blob contains the guard decision.
 	// OUTCOME_OK means the observation was recorded, NOT that a pre-hooked command later succeeded.
 	Kind_KIND_AGENT_COMMAND Kind = 7
+	// A run made a credential reachable: a magusfile granted one to a destination host, or
+	// opened a loopback endpoint carrying one. The event names the REFERENCE, the host and
+	// the header, never the value - a grant resolves nothing at declaration time, and
+	// resolving one in order to log it would defeat that. It is the governance half of a
+	// fact the execution journal already records per invocation; this is what connects an
+	// agent's tool call to the credential it made spendable.
+	Kind_KIND_CREDENTIAL_GRANT Kind = 8
 )
 
 // Enum value maps for Kind.
@@ -69,16 +76,18 @@ var (
 		5: "KIND_SANDBOX_DENIAL",
 		6: "KIND_MEMORY",
 		7: "KIND_AGENT_COMMAND",
+		8: "KIND_CREDENTIAL_GRANT",
 	}
 	Kind_value = map[string]int32{
-		"KIND_UNSPECIFIED":     0,
-		"KIND_MCP_TOOL_CALL":   1,
-		"KIND_JOB":             2,
-		"KIND_CONFIG_CHANGE":   3,
-		"KIND_TOKEN_LIFECYCLE": 4,
-		"KIND_SANDBOX_DENIAL":  5,
-		"KIND_MEMORY":          6,
-		"KIND_AGENT_COMMAND":   7,
+		"KIND_UNSPECIFIED":      0,
+		"KIND_MCP_TOOL_CALL":    1,
+		"KIND_JOB":              2,
+		"KIND_CONFIG_CHANGE":    3,
+		"KIND_TOKEN_LIFECYCLE":  4,
+		"KIND_SANDBOX_DENIAL":   5,
+		"KIND_MEMORY":           6,
+		"KIND_AGENT_COMMAND":    7,
+		"KIND_CREDENTIAL_GRANT": 8,
 	}
 )
 
@@ -657,7 +666,7 @@ const file_magus_activity_v1_activity_proto_rawDesc = "" +
 	"\x03ref\x18\x01 \x01(\tB\x1c\xbaH\x19r\x172\x15^[a-z]{2,8}[0-9a-f]+$R\x03ref\">\n" +
 	"\x12GetPayloadResponse\x12\x12\n" +
 	"\x04body\x18\x01 \x01(\fR\x04body\x12\x14\n" +
-	"\x05bytes\x18\x02 \x01(\x03R\x05bytes*\xb6\x01\n" +
+	"\x05bytes\x18\x02 \x01(\x03R\x05bytes*\xd1\x01\n" +
 	"\x04Kind\x12\x14\n" +
 	"\x10KIND_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12KIND_MCP_TOOL_CALL\x10\x01\x12\f\n" +
@@ -666,7 +675,8 @@ const file_magus_activity_v1_activity_proto_rawDesc = "" +
 	"\x14KIND_TOKEN_LIFECYCLE\x10\x04\x12\x17\n" +
 	"\x13KIND_SANDBOX_DENIAL\x10\x05\x12\x0f\n" +
 	"\vKIND_MEMORY\x10\x06\x12\x16\n" +
-	"\x12KIND_AGENT_COMMAND\x10\a*E\n" +
+	"\x12KIND_AGENT_COMMAND\x10\a\x12\x19\n" +
+	"\x15KIND_CREDENTIAL_GRANT\x10\b*E\n" +
 	"\aOutcome\x12\x17\n" +
 	"\x13OUTCOME_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +

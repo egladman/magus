@@ -2,8 +2,8 @@
 title: magus-vcs
 description: "Safe git operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs]
-skill_full_bytes: 6848
-skill_simple_bytes: 5069
+skill_full_bytes: 7222
+skill_simple_bytes: 5265
 ---
 
 # magus-vcs
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `33` |
-| `knowledge-schema-version` | `8` |
-| `skill-content` | `26f270bc4a34` |
+| `agent-skill-version` | `34` |
+| `knowledge-schema-version` | `9` |
+| `skill-content` | `a4e5b76440c9` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -62,8 +62,13 @@ project and a role:
 - `output` - matches a declared outputs glob: the file is GENERATED.
 - `source` - matches a declared sources glob: it feeds cache keys and the
   affected set. This is the diff worth reading.
-- `unclaimed` - no project declares it: it affects no target. Check the VCS
-  ignore rules (`git check-ignore -v <path>`) - build residue should be
+- `maintained` - no project declares it, but magus wrote it: commit it, never
+  ignore it. `.gitattributes` is the one today. It is derived FROM every
+  project's declared output globs, so no project can declare it without the
+  derivation claiming to be its own product - which is why it needs its own role
+  rather than a wider glob somewhere.
+- `unclaimed` - no project declares it and magus does not write it: it affects
+  no target. Check the VCS ignore rules (`git check-ignore -v <path>`) - build residue should be
   ignored, and an unclaimed un-ignored file is at risk of being lost.
 
 WRONG: reading a 3000-line diff of `docs/gen/` to understand a change.
@@ -198,8 +203,11 @@ project and a role:
 - `output` - matches a declared outputs glob: the file is GENERATED.
 - `source` - matches a declared sources glob: it feeds cache keys and the
   affected set. This is the diff worth reading.
-- `unclaimed` - no project declares it: it affects no target. Check the VCS
-  ignore rules (`git check-ignore -v <path>`) - an unclaimed
+- `maintained` - no project declares it, but magus wrote it: commit it, never
+  ignore it - it is derived from the declared
+  output globs, so no project can claim it.
+- `unclaimed` - no project declares it and magus does not write it: it affects
+  no target. Check the VCS ignore rules (`git check-ignore -v <path>`) - an unclaimed
   un-ignored file is at risk of being lost.
 
 ## Rules for generated files

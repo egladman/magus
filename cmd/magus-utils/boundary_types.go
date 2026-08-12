@@ -28,6 +28,9 @@ var boundaryTypes = []boundaryType{
 	{Name: "VersionKey", Type: reflect.TypeFor[spells.VersionKey]()},
 	{Name: "VersionBounds", Type: reflect.TypeFor[spells.VersionBounds]()},
 	{Name: "Tool", Type: reflect.TypeFor[spells.Tool]()},
+	// A provider spell WRITES this one, like Project below: resolve_secret constructs it
+	// and returns it, so it needs the mirror but no Go-to-Buzz encoder.
+	{Name: "Secret", Type: reflect.TypeFor[spells.Secret]()},
 	// A spell WRITES this one, so it takes the bare Buzz name; the Go side carries
 	// the adjective because types.Project and types.ProjectEntry already exist. The
 	// registry keys on the Buzz name, which is what makes that split expressible.
@@ -68,33 +71,16 @@ var boundaryTypes = []boundaryType{
 	{Name: "TargetGraphNode", Type: reflect.TypeFor[types.TargetGraphNode](), RuntimeObject: true},
 	{Name: "TargetGraphProject", Type: reflect.TypeFor[types.TargetGraphProject](), RuntimeObject: true},
 	{Name: "TargetGraph", Type: reflect.TypeFor[types.TargetGraphOutput](), RuntimeObject: true},
-	// A run and the targets in it, as magus already models them for `magus status`:
-	// per-target state (queued/running/passed/failed/cached), duration, and the output
-	// ref each one minted. Mirrored so a caller can ITERATE a run - `t.state == "failed"`
-	// then `t.outputRef` - instead of parsing magus's own console output back out of a
-	// string. TargetRun precedes Run: Run.targets is a list of it.
-	// Leaf-first: an envelope's list field mirrors as its element's Buzz name, which
-	// must already be declared.
 	{Name: "FileEntry", Type: reflect.TypeFor[types.FileEntry](), RuntimeObject: true},
 	{Name: "FileReport", Type: reflect.TypeFor[types.FileReport](), RuntimeObject: true},
-	// Diagnostic is not a RuntimeObject: no host method RETURNS one. It reaches Buzz
-	// through a thrown error, which the VM renders from BuzzError, so only the mirror
-	// is needed - a caller narrows the caught value to it.
+	// Not a RuntimeObject: it reaches Buzz through a thrown error, not a return.
 	{Name: "Diagnostic", Type: reflect.TypeFor[types.Diagnostic]()},
 	{Name: "DoctorCheck", Type: reflect.TypeFor[types.DoctorCheck](), RuntimeObject: true},
 	{Name: "DoctorSummary", Type: reflect.TypeFor[types.DoctorSummary](), RuntimeObject: true},
 	{Name: "DoctorReport", Type: reflect.TypeFor[types.DoctorReport](), RuntimeObject: true},
-	// magus.insightReport's bundle, leaf-first. Every ELEMENT row below is an identity:
-	// the Go name and the Buzz name agree, so only the bundle rows rename across the
-	// boundary (Output -> the short plural name), the shape Projects/ProjectsOutput set.
-	//
-	// The element NAMES are deliberately not uniform, and this is the honest version of a
-	// comment that used to claim they were. OwnershipEntry and TrendEntry take the *Entry
-	// suffix because the bare noun is the bundle's name and the two would collide;
-	// FileHotspot and CoChange are domain nouns that say more than "entry" would, and
-	// nothing collides, so they keep their own names. Renaming either pair would change a
-	// PUBLIC Buzz object name that magusfiles annotate with, which is why the split
-	// stands rather than being tidied.
+	// magus.insightReport's bundle, leaf-first. Element names are not uniform on purpose:
+	// *Entry only where the bare noun collides with the bundle's own name. These are
+	// public Buzz names magusfiles annotate with, so do not tidy them.
 	{Name: "Node", Type: reflect.TypeFor[types.Node](), RuntimeObject: true},
 	{Name: "FileHotspot", Type: reflect.TypeFor[types.FileHotspot](), RuntimeObject: true},
 	{Name: "Hotspots", Type: reflect.TypeFor[types.HotspotOutput](), RuntimeObject: true},
@@ -116,7 +102,6 @@ var boundaryTypes = []boundaryType{
 	{Name: "UnreferencedEntry", Type: reflect.TypeFor[types.UnreferencedEntry](), RuntimeObject: true},
 	{Name: "Unreferenced", Type: reflect.TypeFor[types.UnreferencedOutput](), RuntimeObject: true},
 	{Name: "InsightReport", Type: reflect.TypeFor[types.InsightReport](), RuntimeObject: true},
-	// magus.affectedImpact's report, leaf-first.
 	{Name: "ImpactCoverage", Type: reflect.TypeFor[types.ImpactCoverage](), RuntimeObject: true},
 	{Name: "ImpactSymbol", Type: reflect.TypeFor[types.ImpactSymbol](), RuntimeObject: true},
 	{Name: "ImpactFileCoverage", Type: reflect.TypeFor[types.ImpactFileCoverage](), RuntimeObject: true},
@@ -137,9 +122,6 @@ var boundaryTypes = []boundaryType{
 // A case must be a legal Buzz identifier, and the first entry is the field's default,
 // so a zero-valued case belongs first.
 var boundaryEnums = []boundaryEnum{
-	// A case NAME must be a legal Buzz identifier while its VALUE is whatever the Go
-	// constant carries, which is why the two are separate: "up-to-date" and
-	// "both-deleted" are perfectly good JSON and impossible identifiers.
 	{
 		Name:  "SignAlgorithm",
 		Type:  reflect.TypeFor[types.SignAlgorithm](),

@@ -674,7 +674,7 @@ func appendHookActivity(ctx context.Context, input guardInput, who hookAttributi
 	} else {
 		command.Command = input.Value
 	}
-	trail.AppendAgentCommand(location.base, command)
+	trail.AppendAgentCommand(ctx, location.base, command)
 }
 
 // hookActivityTrail resolves the local workspace cache because a hook runs as a short-lived

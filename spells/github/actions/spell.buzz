@@ -56,11 +56,16 @@ export fun mgs_getName() > str { return "github-actions"; }
 // and invokes via magus\cache.remote(github). It declares no mgs_listTargets - a
 // cache backend contributes no operations a target could compose.
 
+// in_actions is the one condition the whole backend gates on. A private predicate
+// rather than a call to enabled() because enabled is a spell OP - it takes the op
+// signature - so the internal guards below cannot reuse it directly.
+fun in_actions() > bool { return getenv("GITHUB_ACTIONS") == "true"; }
+
 // enabled gates the whole backend on running under GitHub Actions. The cache
 // probes this once and skips fetch/push entirely when false, so wiring this spell
-// in a magusfile is a no-op everywhere except GHA — no remote calls, no exports.
+// in a magusfile is a no-op everywhere except GHA - no remote calls, no exports.
 export fun enabled(target: Target, cb: fun(any)) > bool {
-    return getenv("GITHUB_ACTIONS") == "true";
+    return in_actions();
 }
 
 // getenv reads one environment variable, returning "" when unset (os.env returns
@@ -82,7 +87,21 @@ final CACHE_VERSION = "magus-remote-v1";
 final SERVICE = "twirp/github.actions.results.api.v1.CacheService/";
 
 fun base() > str { return getenv("ACTIONS_RESULTS_URL"); }
-fun token() > str { return getenv("ACTIONS_RUNTIME_TOKEN"); }
+// token reads ACTIONS_RUNTIME_TOKEN through the SECRET PROVIDER, not getenv.
+//
+// That one-word difference is the whole fix. A value read with getenv is not a value
+// magus knows is a credential, so this token was absent from the redaction set entirely -
+// any run log, captured output or cached entry quoting it kept it in the clear, in CI.
+// Reading it through the provider registers it, and magus masks it everywhere it writes.
+//
+// Under Actions no provider is selected, so the built-in environment provider resolves
+// this to exactly the same variable getenv was reading. Same source, same value, one
+// meaningful difference.
+fun token() > str { return magus\secret.read("ACTIONS_RUNTIME_TOKEN"); }
+
+// has_token reports presence WITHOUT resolving, so enabled() and the cache-path guards
+// stay cheap and cannot prompt.
+fun has_token() > bool { return getenv("ACTIONS_RUNTIME_TOKEN") != ""; }
 
 // cache_key derives the cache key from the spec hash. The hash already folds in
 // the project path (see cache/hash.go), so it is unique per project and needs no
@@ -108,7 +127,7 @@ fun rpc(method: str, payload: any) > any !> any {
 // get_artifact downloads the cache artifact for payload.hash into payload.dest. Returns
 // true on a hit (dest written), false on a miss or when not running under Actions.
 export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
-    if (base() == "" or token() == "") { return false; }
+    if (!in_actions() or base() == "" or !has_token()) { return false; }
     final io = {};
     cb(io);
     final hash = "" + io["hash"];
@@ -126,7 +145,7 @@ export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
 // put_artifact uploads the artifact at payload.src for payload.hash. Returns true on
 // success or when another runner already stored the same key, else false.
 export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
-    if (base() == "" or token() == "") { return false; }
+    if (!in_actions() or base() == "" or !has_token()) { return false; }
     final io = {};
     cb(io);
     final hash = "" + io["hash"];
@@ -280,8 +299,11 @@ export fun quote_prefixes(target: Target, cb: fun(any)) > [str] {
 final OIDC_PREFIX = "oidc:";
 
 // resolve_secret is the secret-provider contract, detected by name and invoked by
-// magus\secret.read(). It receives the reference as payload.ref.
-export fun resolve_secret(target: Target, cb: fun(any)) > str !> any {
+// magus\secret.read(). It receives the reference as payload.ref and returns a Secret.
+//
+// `> Secret`, not `> str`: Buzz checks function signatures, so a provider returning the
+// wrong shape fails to load rather than failing at the first read.
+export fun resolve_secret(target: Target, cb: fun(any)) > Secret !> any {
     final io = {<str, any>};
     cb(io);
     final ref = "" + io["ref"];
@@ -296,7 +318,7 @@ export fun resolve_secret(target: Target, cb: fun(any)) > str !> any {
         value = workflowEnv(ref);
     }
     maskInRunnerLog(value);
-    return value;
+    return Secret{ value = value };
 }
 
 // maskInRunnerLog asks the RUNNER to redact value from its own log. magus already

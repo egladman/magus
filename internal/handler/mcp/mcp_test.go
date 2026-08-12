@@ -4,7 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/egladman/magus/internal/secret"
+	server "github.com/mark3labs/mcp-go/server"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -50,7 +55,7 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 	t.Run("ok outcome sizes input and output", func(t *testing.T) {
 		tel := &fakeTel{}
 		const out = "hello world result"
-		h := wrap(quietLogger(), originFn, "", tel, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		h := wrap(quietLogger(), originFn, "", noSecrets, tel, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			return mcplib.NewToolResultText(out), nil
 		})
 
@@ -69,7 +74,7 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 
 	t.Run("error outcome nil result contributes zero output", func(t *testing.T) {
 		tel := &fakeTel{}
-		h := wrap(quietLogger(), originFn, "", tel, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		h := wrap(quietLogger(), originFn, "", noSecrets, tel, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			return nil, errors.New("boom")
 		})
 
@@ -86,7 +91,7 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 	})
 
 	t.Run("nil telemetry is a no-op", func(t *testing.T) {
-		h := wrap(quietLogger(), originFn, "", nil, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		h := wrap(quietLogger(), originFn, "", noSecrets, nil, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			return mcplib.NewToolResultText("ok"), nil
 		})
 		result, err := h(context.Background(), req)
@@ -106,7 +111,7 @@ func TestWrapCapturesExchange(t *testing.T) {
 	}
 	req := callRequest("magus_query", map[string]any{"query": "kind:target"})
 	const out = "hello world result payload"
-	h := wrap(quietLogger(), originFn, dir, nil, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+	h := wrap(quietLogger(), originFn, dir, noSecrets, nil, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		return mcplib.NewToolResultText(out), nil
 	})
 
@@ -145,7 +150,7 @@ func TestWrapRecordsSoftErrorAsError(t *testing.T) {
 	dir := t.TempDir()
 	tel := &fakeTel{}
 	originFn := func(context.Context) origin.Origin { return origin.Origin{Agent: "a"} }
-	h := wrap(quietLogger(), originFn, dir, tel, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+	h := wrap(quietLogger(), originFn, dir, noSecrets, tel, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		return mcplib.NewToolResultError("bad arguments"), nil // soft error, err == nil
 	})
 
@@ -357,4 +362,60 @@ func TestToolLogger(t *testing.T) {
 
 	custom := slog.New(slog.NewTextHandler(nil, nil))
 	assert.Same(t, custom, toolLogger(withLogger(context.Background(), custom)))
+}
+
+// TestToolCallBlobsAreRedacted is the test the trail's ctx parameter always needed.
+//
+// internal/trail redacts through the resolver on its context, but the MCP request context
+// is an ANCESTOR of any run a tool starts, never a descendant, so it never inherited one.
+// The seam was threaded through four packages and did nothing on the path that motivated
+// it: a request/response pair is a whole tool payload, written verbatim to an append-only
+// file. wrap now installs the workspace resolver, and this pins that.
+//
+// Drop the ws.ContextWithSecrets call in wrap and this fails.
+func TestToolCallBlobsAreRedacted(t *testing.T) {
+	const credential = "sk-live-must-not-be-persisted"
+	base := t.TempDir()
+
+	res := secret.New()
+	t.Setenv("MCP_TEST_TOKEN", credential)
+	// Provenance is what marks a value as a credential, so resolve it once.
+	got, err := res.Read(secret.ContextWithResolver(t.Context(), res), "MCP_TEST_TOKEN")
+	require.NoError(t, err)
+	require.Equal(t, credential, got.Reveal())
+
+	// A tool whose arguments and result both carry the credential, which is exactly the
+	// shape an agent passing a token through a tool call produces.
+	h := wrapWithResolver(t, base, res, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		return mcplib.NewToolResultText("upstream said: " + credential), nil
+	})
+	_, err = h(context.Background(), callRequest("magus_query", map[string]any{"q": credential}))
+	require.NoError(t, err)
+
+	var found []string
+	require.NoError(t, filepath.WalkDir(filepath.Join(base, "activity"), func(path string, d os.DirEntry, werr error) error {
+		if werr != nil || d.IsDir() {
+			return werr
+		}
+		b, rerr := os.ReadFile(path)
+		if rerr != nil {
+			return rerr
+		}
+		if strings.Contains(string(b), credential) {
+			found = append(found, path)
+		}
+		return nil
+	}))
+	assert.Empty(t, found, "the credential was persisted to the activity trail in these files")
+}
+
+// noSecrets is the identity context seam, for the tests that are not about redaction.
+func noSecrets(ctx context.Context) context.Context { return ctx }
+
+// wrapWithResolver builds a handler whose trail writes redact against res.
+func wrapWithResolver(t *testing.T, trailDir string, res *secret.Resolver, fn handlerFn) server.ToolHandlerFunc {
+	t.Helper()
+	return wrap(quietLogger(), func(context.Context) origin.Origin { return origin.Origin{Agent: "test-agent"} },
+		trailDir, func(ctx context.Context) context.Context { return secret.ContextWithResolver(ctx, res) },
+		nil, new(atomic.Uint64), fn)
 }

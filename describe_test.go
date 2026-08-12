@@ -564,9 +564,9 @@ func TestClassifyFiles_Classification(t *testing.T) {
 	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
 	require.NoError(t, err, "Inspect")
 
-	out, err := ws.ClassifyFiles(context.Background(), []string{"GEN.md", "docs/guide.md", "web/dist/app.js", "web/app.ts", "scratch.tmp", "./web/magusfile.buzz"})
+	out, err := ws.ClassifyFiles(context.Background(), []string{"GEN.md", "docs/guide.md", "web/dist/app.js", "web/app.ts", "scratch.tmp", "./web/magusfile.buzz", ".gitattributes"})
 	require.NoError(t, err, "ClassifyFiles")
-	require.Len(t, out, 6)
+	require.Len(t, out, 7)
 	byPath := map[string]types.FileEntry{}
 	for _, f := range out {
 		byPath[f.Path] = f
@@ -595,8 +595,43 @@ func TestClassifyFiles_Classification(t *testing.T) {
 	assert.Empty(t, unclaimed.OutputOf)
 	assert.Contains(t, unclaimed.Hint, "no project declares")
 
+	// magus maintains .gitattributes outside every target's globs, so it matches no
+	// declared glob and would otherwise land in unclaimed beside scratch.tmp - with a
+	// hint telling you to consider ignoring a file magus wrote and needs tracked.
+	maintained := byPath[".gitattributes"]
+	assert.Equal(t, "maintained", maintained.Role)
+	assert.Empty(t, maintained.OutputOf, "maintained is not a declared output")
+	assert.Empty(t, maintained.SourceOf, "maintained keys nothing")
+	assert.Contains(t, maintained.Hint, "expects it committed")
+	assert.NotContains(t, maintained.Hint, "ignore rules",
+		"the unclaimed hint's ignore-rules advice must not reach a file magus maintains")
+
 	// A ./ prefix normalizes away; magusfiles always count as sources.
 	assert.Equal(t, "source", byPath["web/magusfile.buzz"].Role)
+}
+
+// TestClassifyFiles_DeclaredBeatsMaintained pins the precedence. maintained refines
+// the UNCLAIMED default; it must never mask a project's declaration, or a workspace
+// that legitimately declares one of these paths would stop being told it is keyed.
+func TestClassifyFiles_DeclaredBeatsMaintained(t *testing.T) {
+	// Not parallel: mutates the global spell registry.
+	const spellName = "zzz-df-attrs"
+	project.DefaultSpellRegistry().RegisterSpell(
+		spells.NewSpell(spellName, spells.WithSources(".gitattributes")))
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Inspect")
+
+	out, err := ws.ClassifyFiles(context.Background(), []string{".gitattributes"})
+	require.NoError(t, err, "ClassifyFiles")
+	require.Len(t, out, 1)
+	assert.Equal(t, "source", out[0].Role)
+	assert.Equal(t, []string{"."}, out[0].SourceOf)
 }
 
 // TestInspectorMethods_HonorCancelledContext pins that a context cancelled BEFORE

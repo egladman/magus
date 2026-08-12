@@ -161,6 +161,21 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		}
 		return vm.StrValue("<secret>"), nil
 	}))
+	// grant() and endpoint() validate exactly like the real namespace and then do
+	// nothing. A grant registers a rule rather than resolving anything, so there is no
+	// credential work for a dry run to avoid here - only the validation, which is the
+	// part a structure-only pass most wants to run.
+	//
+	// endpoint() returns a SYNTACTICALLY REAL but unroutable loopback URL. Null would
+	// make a trace die on the string concat a magusfile does with it (ctx.with_env),
+	// and a real listener has no business existing in a dry run; port 0 cannot be
+	// connected to, so a trace that leaks this into a command leaks nothing that works.
+	secretNS.MapSet("endpoint", fn("magus.secret.endpoint", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if err := secretGrantStubArg("endpoint", args); err != nil {
+			return vm.Null, err
+		}
+		return vm.StrValue("http://127.0.0.1:0"), nil
+	}))
 	m.MapSet("secret", secretNS)
 
 	// magus.workspace.<...>: wires a workspace-provider spell in the real module.
@@ -807,4 +822,59 @@ func pureMagus() vm.Value {
 	m := vm.NewMap()
 	addPureMagus(m)
 	return m
+}
+
+// secretGrantStubArg is the dry-run counterpart to bindings.secretGrantArg: read a
+// secret-grant object, reject what the real namespace would reject.
+//
+// Returns only an error - the dry run has no use for the grant itself, and both
+// callers were discarding it.
+//
+// The field READ is duplicated (a dozen lines, and the packages cannot share a helper
+// without internal/dry depending on the bindings layer it exists to stand in for); the
+// RULES are not - both call types.SecretGrant.Normalize, which is where every
+// judgement about a malformed grant lives. Duplicating the extraction is safe because
+// it has no rules in it; duplicating the validation would not be. The message must
+// stay in step with the real one, including its example: the dry run is the pass most
+// likely to surface this error, so giving the user less to work with than the real
+// namespace does inverts the point.
+func secretGrantStubArg(method string, args []vm.Value) error {
+	// MapView, not IsMap - see bindings.secretGrantArg. An object INSTANCE is tagObject,
+	// not tagMap, so the documented spelling was rejected here too.
+	// Length first: indexing args[0] to build the view before checking it exists
+	// panics on a no-argument call instead of reporting the error below.
+	if len(args) == 0 {
+		return fmt.Errorf(`magus\secret.%s: expected an object with ref/host/header/prefix fields, e.g. SecretGrant{ ref = "...", host = "api.example.com", header = "Authorization", prefix = "Bearer " } declared in your magusfile`, method)
+	}
+	fields, viewOK := args[0].MapView()
+	if !viewOK {
+		return fmt.Errorf(`magus\secret.%s: expected an object with ref/host/header/prefix fields, e.g. SecretGrant{ ref = "...", host = "api.example.com", header = "Authorization", prefix = "Bearer " } declared in your magusfile`, method)
+	}
+	var bad error
+	field := func(name string) string {
+		v, ok := fields.MapGet(name)
+		if !ok {
+			return ""
+		}
+		if !v.IsStr() {
+			if bad == nil {
+				bad = fmt.Errorf(`magus\secret.%s: field %q must be a str`, method, name)
+			}
+			return ""
+		}
+		return v.AsString()
+	}
+	g := types.SecretGrant{
+		Ref:    field("ref"),
+		Host:   field("host"),
+		Header: field("header"),
+		Prefix: field("prefix"),
+	}
+	if bad != nil {
+		return bad
+	}
+	if _, err := g.Normalize(); err != nil {
+		return fmt.Errorf(`magus\secret.%s: %w`, method, err)
+	}
+	return nil
 }

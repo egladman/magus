@@ -1,10 +1,10 @@
 {
   "definition": "The knowledge graph is a deterministic, cache-backed graph of the magus domain: projects, targets, spells, ops, charms, modules, methods, and diagnostics, connected by verified relations (depends_on, contains, uses, references, documents). Every node and edge is extracted or rubric-inferred from workspace sources - no LLM pass - so it is safe to rebuild implicitly and query instead of grepping.",
-  "schema_version": 8,
+  "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2075,
-  "edge_count": 4969,
+  "node_count": 2086,
+  "edge_count": 4996,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -268,6 +268,14 @@
       "label": "MGS1026",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1026/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1027",
+      "kind": "diagnostic",
+      "label": "MGS1027",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1027/"
       }
     },
     {
@@ -996,7 +1004,7 @@
       "source": "docs/reference",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "174",
+        "dir_files": "175",
         "dir_languages": "markdown"
       }
     },
@@ -1029,7 +1037,7 @@
       "source": "docs/reference/codes",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "80",
+        "dir_files": "81",
         "dir_languages": "markdown"
       }
     },
@@ -1073,7 +1081,7 @@
       "source": "docs/reference/codes/magusfile",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "27",
+        "dir_files": "28",
         "dir_languages": "markdown"
       }
     },
@@ -1172,7 +1180,7 @@
       "source": "docs/tour",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "23",
+        "dir_files": "24",
         "dir_languages": "buzz"
       }
     },
@@ -4156,7 +4164,19 @@
         "role": "doc",
         "section": "reference",
         "tags": "MGS1026,magusfile,secrets,cache,skip_cache,credentials,replay",
-        "title": "MGS1026: a cacheable target reads a credential"
+        "title": "MGS1026: a cacheable target reaches for a credential"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/magusfile/MGS1027.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/magusfile/MGS1027.md",
+      "source": "docs/reference/codes/magusfile/MGS1027.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1027,magusfile,secrets,credentials,grant,endpoint,injection",
+        "title": "MGS1027: a secret grant is malformed"
       }
     },
     {
@@ -6219,6 +6239,15 @@
       "kind": "file",
       "label": "docs/tour/23-charm-axes.buzz",
       "source": "docs/tour/23-charm-axes.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
+      "id": "file:docs/tour/24-secret-grants.buzz",
+      "kind": "file",
+      "label": "docs/tour/24-secret-grants.buzz",
+      "source": "docs/tour/24-secret-grants.buzz",
       "attrs": {
         "language": "buzz"
       }
@@ -10693,6 +10722,16 @@
       "source": "docs/tour/23-charm-axes.buzz:34"
     },
     {
+      "id": "function:docs/tour/24-secret-grants.buzz:agent_demo",
+      "kind": "function",
+      "label": "agent_demo",
+      "doc": "The subprocess half. A child cannot be handed a Go HTTP client, so magus binds a loopback endpoint for the run and the child is pointed at it. There is no gateway to install and no service to start: the listener belongs to this run and closes when it ends.  Note who decides which variable carries it. magus does NOT set one for you - you name it, because a tool with no base-URL knob should fail somewhere you can see it rather than silently talking to the real endpoint unauthenticated.  The URL carries a rand",
+      "source": "docs/tour/24-secret-grants.buzz:88",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:evals/magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
@@ -11406,7 +11445,7 @@
       "kind": "function",
       "label": "advice_test",
       "doc": "Runs the PR advisors' `test \"...\" {}` blocks.  They are the only .buzz sources in this tree that parse standalone: everything else imports magus/magus\\spell and uses embedding-only constructs, which is why the old standalone-Buzz test targets were deleted rather than repointed. The advisors run under a plain `magus buzz` in CI, so upstream-strict is exactly the parse they need checked, and `-t` is the runner.  Run from each script's own directory, not the project root, because they do `import \"advice\"` for",
-      "source": "magusfile.buzz:1557",
+      "source": "magusfile.buzz:1600",
       "attrs": {
         "exported": "true"
       }
@@ -11426,7 +11465,7 @@
       "kind": "function",
       "label": "build",
       "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
-      "source": "magusfile.buzz:1691",
+      "source": "magusfile.buzz:1734",
       "attrs": {
         "exported": "true"
       }
@@ -11442,7 +11481,7 @@
       "id": "function:magusfile.buzz:build_release_variant",
       "kind": "function",
       "label": "build_release_variant",
-      "source": "magusfile.buzz:1121"
+      "source": "magusfile.buzz:1164"
     },
     {
       "id": "function:magusfile.buzz:built_by",
@@ -11456,7 +11495,7 @@
       "kind": "function",
       "label": "buzz_test",
       "doc": "Runs the in-file `test \"...\" {}` blocks in this repo's own root Buzz modules, through magus's embedded engine.  NOT the buzz spell's buzz-test op: that one forks the UPSTREAM `buzz` toolchain, which is not reliably on PATH, and it globs `find . -name '*.buzz'` from the project root - which here would sweep in magusfile.buzz, releaser.buzz, every spell and every worktree copy, none of which run standalone (they import magus host modules the bare toolchain cannot resolve). `magus buzz -t` is always present an",
-      "source": "magusfile.buzz:1640",
+      "source": "magusfile.buzz:1683",
       "attrs": {
         "exported": "true"
       }
@@ -11483,7 +11522,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "Runs the CI gates through their declared dependencies.",
-      "source": "magusfile.buzz:1800",
+      "source": "magusfile.buzz:1843",
       "attrs": {
         "exported": "true"
       }
@@ -11493,7 +11532,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.",
-      "source": "magusfile.buzz:1876",
+      "source": "magusfile.buzz:1919",
       "attrs": {
         "exported": "true"
       }
@@ -11510,7 +11549,7 @@
       "kind": "function",
       "label": "completion_test",
       "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell. Part of ci, and it REQUIRES a docker daemon rather than skipping without one: a gate that silently skips when a tool is missing is how the zsh recipe stayed broken - it told users to append a script to ~/.zshrc that registers nothing, and nothing ever ran it to find out. Its declared footprint keeps the cost off every run: affected only reaches it when the completion scripts or their checks change.  One image per she",
-      "source": "magusfile.buzz:1821",
+      "source": "magusfile.buzz:1864",
       "attrs": {
         "exported": "true"
       }
@@ -11520,7 +11559,7 @@
       "kind": "function",
       "label": "compress_cgo_test",
       "doc": "Runs internal/compress's tests under the CGO tags, which the ordinary test target cannot reach.  `go-test` passes no tags, so it compiles the pure-Go fallbacks and never the ~470 lines of zstd_cgo.go and xz_cgo.go - exactly the files a release binary ships. The coverage figure hid it: 78.9% while the shipped half sat at zero.  It cost correctness. The cgo zstd reader dropped ZSTD_decompressStream's hint, so a stream cut mid-frame returned io.EOF with a NIL error and a truncated cache artifact extracted as a",
-      "source": "magusfile.buzz:1864",
+      "source": "magusfile.buzz:1907",
       "attrs": {
         "exported": "true"
       }
@@ -11530,7 +11569,7 @@
       "kind": "function",
       "label": "config_generate",
       "doc": "Regenerates the CLI config-flag plumbing from internal/config/config.go. One generator invocation, four trees: the flag/bind plumbing beside the CLI, the schema field list, and the env applier next to config itself. All four are declared - undeclared they classified as ordinary source, so magus told a reader they were safe to hand-edit.",
-      "source": "magusfile.buzz:873",
+      "source": "magusfile.buzz:916",
       "attrs": {
         "exported": "true"
       }
@@ -11547,7 +11586,7 @@
       "kind": "function",
       "label": "deploy_generate",
       "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/.  It lives here rather than in the Pages workflow because that workflow is meant to be thin - set up a toolchain, name targets, upload the artifact - and the layout below is portable logic that would otherwise be GitHub-specific shell. It is also what makes the deploy reproducible locally: run the same three commands, then serve gen/site, and what you see is what publishe",
-      "source": "magusfile.buzz:2015",
+      "source": "magusfile.buzz:2058",
       "attrs": {
         "exported": "true"
       }
@@ -11567,7 +11606,7 @@
       "kind": "function",
       "label": "escape_module_path",
       "doc": "Applies the module cache's case encoding: an uppercase letter becomes \"!\" plus its lowercase form, so github.com/Masterminds/sprig is stored at github.com/!masterminds/sprig. Without this every capitalised module path looks unlicensed - a false \"missing license\" that would abort a release for no reason.",
-      "source": "magusfile.buzz:1109"
+      "source": "magusfile.buzz:1152"
     },
     {
       "id": "function:magusfile.buzz:exact_release_tag",
@@ -11588,7 +11627,7 @@
       "kind": "function",
       "label": "format",
       "doc": "Regenerates, then formats Go, tidies `go.mod`, and formats Markdown. dprint rather than prettier because it needs no Node in the format path, and rather than biome because biome does not read Markdown at all. Every project with Markdown carries its own dprint.json and runs the op itself; see this project's for what a root-started run covers.",
-      "source": "magusfile.buzz:1782",
+      "source": "magusfile.buzz:1825",
       "attrs": {
         "exported": "true"
       }
@@ -11598,7 +11637,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd). Drift = a path whose bytes the generators changed, measured by hashing before and after rather than by asking whether the tree is clean, so the gate works on a dirty tree. An uncommitted-but-current generated file still passes: its bytes do not move.",
-      "source": "magusfile.buzz:926",
+      "source": "magusfile.buzz:969",
       "attrs": {
         "exported": "true"
       }
@@ -11618,14 +11657,14 @@
       "kind": "function",
       "label": "goarm_level",
       "doc": "Builds one (goos, goarch) release binary and archives it into dist/, writing a standard one-line <asset>.sha256 sidecar alongside it (sha256sum-compatible format). No cross-job aggregation needed: CD's publish job later does `cat dist/*.sha256 > dist/SHA256SUMS`, a plain shell one-liner, not a magus target. release-build's cgo and static (charm) modes both call this, differing only in CGO_ENABLED and the asset suffix. Maps an ASSET architecture token to the GOARM level it implies, or \"\" for the arches that",
-      "source": "magusfile.buzz:1029"
+      "source": "magusfile.buzz:1072"
     },
     {
       "id": "function:magusfile.buzz:graph_generate",
       "kind": "function",
       "label": "graph_generate",
       "doc": "Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects. Written into gen/ because they are generated, not authored: the knowledge graph previously sat at docs/graph.json as a hand-run export with no generating target at all, which made it stale by construction with nothing to say so. Whole-workspace scope is why this lives at the root rather than in docs/ - a describe from inside a pro",
-      "source": "magusfile.buzz:900",
+      "source": "magusfile.buzz:943",
       "attrs": {
         "exported": "true"
       }
@@ -11688,7 +11727,17 @@
       "kind": "function",
       "label": "index_generate",
       "doc": "Renders MAGUS.md via `magus describe graph`.",
-      "source": "magusfile.buzz:887",
+      "source": "magusfile.buzz:930",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:magusfile.buzz:langservice_generate",
+      "kind": "function",
+      "label": "langservice_generate",
+      "doc": "Regenerates the host-module snapshot the browser playground's completion and hover read (internal/langservice/manifest_data.go), from the same std declarations bindings_generate reads.  It has a target at all because it did not: the file carried a \"regenerate with `go run`\" header and nothing else, so a std descriptor edit left it stale with only its own drift test to say so, one commit later. A generated file whose only regeneration route is a hand-typed command is a file that rots.",
+      "source": "magusfile.buzz:860",
       "attrs": {
         "exported": "true"
       }
@@ -11704,7 +11753,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "Formats and builds the linter first, then golangci-lint, go vet, markdownlint, and shellcheck. STATIC ANALYSIS only - govulncheck lives in `security` with the other scanners, because a scanner's answer changes when its advisory database does, with no edit to this tree. golangci-lint USED to go through the go spell's op so the spell's version probe (mgs_getVersionProbes) reached the cache key - without it a linter upgrade changes which code passes while every cache entry replays the old verdict. It no longer",
-      "source": "magusfile.buzz:1737",
+      "source": "magusfile.buzz:1780",
       "attrs": {
         "exported": "true"
       }
@@ -11714,7 +11763,7 @@
       "kind": "function",
       "label": "lint_build",
       "doc": "Builds ./custom-gcl, the golangci-lint carrying this repo's own linters. golangci-lint compiles plugins in rather than loading them at runtime, so an in-repo rule only runs through a binary built here.  The build runs in libs/testsprawl because `golangci-lint custom` reads .custom-gcl.yml from its working directory and takes no config flag. That file lives with the linter it declares; `destination: ../..` puts the binary back at the root, where .golangci.yml and lint expect it.  No declared outputs, for go-",
-      "source": "magusfile.buzz:1712",
+      "source": "magusfile.buzz:1755",
       "attrs": {
         "exported": "true"
       }
@@ -11734,6 +11783,16 @@
       "source": "magusfile.buzz:412"
     },
     {
+      "id": "function:magusfile.buzz:magusfile_api_generate",
+      "kind": "function",
+      "label": "magusfile_api_generate",
+      "doc": "Regenerates the magusfile API surface lock: every member a magusfile can call on the magus namespace, one dotted name per line. Named for the magusfile surface rather than \"api\" alone, because two other things in this repo are also an API surface - internal/manpage/testdata/api.lock is the CLI's, and cmd/magus/surface.go drives completions.  The regeneration route is a TEST, not a generator, which is why this target exists: the snapshot is written by TestMagusSurfaceLocked under UPDATE_MAGUS_API_LOCK, so wi",
+      "source": "magusfile.buzz:843",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:magusfile.buzz:man_generate",
       "kind": "function",
       "label": "man_generate",
@@ -11748,14 +11807,14 @@
       "kind": "function",
       "label": "missing_input",
       "doc": "missing_input phrases a deploy-generate precondition that ANOTHER project owns.  Naming one single-project command teaches the wrong habit: the reader runs it, gets the next precondition, runs another, and learns the set by failing once per producer. So name every producer in one command. `magus run <target> [project...]` takes a LIST - `magus run build docs console` is one dispatch over both - which is the idiom this message teaches.  Deliberately NOT \"magus affected build\" or \"magus run build /\". Both wou",
-      "source": "magusfile.buzz:1976"
+      "source": "magusfile.buzz:2019"
     },
     {
       "id": "function:magusfile.buzz:mocks_generate",
       "kind": "function",
       "label": "mocks_generate",
       "doc": "Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir. Mocks are committed and drift-gated like every other generated tree; mockery is pinned in the go.mod tool block.",
-      "source": "magusfile.buzz:840",
+      "source": "magusfile.buzz:883",
       "attrs": {
         "exported": "true"
       }
@@ -11771,7 +11830,7 @@
       "kind": "function",
       "label": "postflight",
       "doc": "Renders the insight report (hotspots, affinity, ownership, trend) to stdout. Local only: no workflow invokes this target, and ci-outcome.buzz's volatility-lens step summary is the CI-facing equivalent now. It used to also append to a host path under the `gha` charm; that branch was unreachable (nothing set MAGUS_INSIGHT_OUTPUT_PATH or ran this target in CI) and was removed.",
-      "source": "magusfile.buzz:918",
+      "source": "magusfile.buzz:961",
       "attrs": {
         "exported": "true"
       }
@@ -11795,20 +11854,20 @@
       "kind": "function",
       "label": "read_module_license",
       "doc": "Reads one module's license text from the module cache, or \"\" when none is present.",
-      "source": "magusfile.buzz:1095"
+      "source": "magusfile.buzz:1138"
     },
     {
       "id": "function:magusfile.buzz:rebuild_console",
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json. Always let pnpm validate the install, matching console/magusfile.buzz. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready and handed the missing packages to esbuild. On a warm tree --frozen-lockfile is about a second and",
-      "source": "magusfile.buzz:1938"
+      "source": "magusfile.buzz:1981"
     },
     {
       "id": "function:magusfile.buzz:release",
       "kind": "function",
       "label": "release",
-      "source": "magusfile.buzz:1351",
+      "source": "magusfile.buzz:1394",
       "attrs": {
         "exported": "true"
       }
@@ -11818,7 +11877,7 @@
       "kind": "function",
       "label": "release_build",
       "doc": "Builds one release binary for one platform. Default is STATIC (CGO_ENABLED=0), and the `dynamic` charm (`magus run release-build:dynamic`) opts into the cgo build.  The default is static so that every layer says the same thing: the bare command produces the bare asset, and that asset is the one that runs anywhere - no loader, no glibc, no system libzstd. It used to be inverted, with the bare command producing the cgo build while the bare ARCHIVE was the static one, so `release-build` and `magus_<v>_<os>_<ar",
-      "source": "magusfile.buzz:1265",
+      "source": "magusfile.buzz:1308",
       "attrs": {
         "exported": "true"
       }
@@ -11828,7 +11887,7 @@
       "kind": "function",
       "label": "release_sign",
       "doc": "Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos).",
-      "source": "magusfile.buzz:1308",
+      "source": "magusfile.buzz:1351",
       "attrs": {
         "exported": "true"
       }
@@ -11838,14 +11897,14 @@
       "kind": "function",
       "label": "release_target_platform",
       "doc": "Resolves which platform to build: the explicit (goos, goarch) args when given, else the current runner's own native platform. So a bare `magus run release-build` (with or without the static charm) builds exactly one binary — the one you're standing on — never a silent \"all 5\" surprise.",
-      "source": "magusfile.buzz:1229"
+      "source": "magusfile.buzz:1272"
     },
     {
       "id": "function:magusfile.buzz:rerender_docs",
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:1950"
+      "source": "magusfile.buzz:1993"
     },
     {
       "id": "function:magusfile.buzz:resolvable",
@@ -11875,7 +11934,7 @@
       "kind": "function",
       "label": "serve",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than",
-      "source": "magusfile.buzz:2064",
+      "source": "magusfile.buzz:2107",
       "attrs": {
         "exported": "true"
       }
@@ -11885,7 +11944,7 @@
       "kind": "function",
       "label": "skills_generate",
       "doc": "Reinstalls the agent skills from their embedded sources in cmd/magus/skills.  The installed copies are GENERATED, and declaring them says so: without this they classified as ordinary source, so `magus describe file .claude/skills/...` reported a hand-editable file and the agent guard stayed silent on the one edit that is always wrong. CLAUDE.md has said \"edit the sources, not the installed copies\" all along; this is the declaration that makes the tooling say it too.  AGENTS.md is absent here, and no longer",
-      "source": "magusfile.buzz:861",
+      "source": "magusfile.buzz:904",
       "attrs": {
         "exported": "true"
       }
@@ -11895,7 +11954,7 @@
       "kind": "function",
       "label": "spells_generate",
       "doc": "Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen), the Buzz value-type mirrors (internal/spellruntime/gen/types) and the per-module host declarations (internal/spellruntime/gen/decls), all driven by the go:generate directives in internal/spellruntime.  Both trees are declared: undeclared, magus classified them as ordinary source, so `magus describe file` told a reader a generated file was safe to hand-edit and the agent guard's generated-file advisory stayed silent on every one of",
-      "source": "magusfile.buzz:830",
+      "source": "magusfile.buzz:873",
       "attrs": {
         "exported": "true"
       }
@@ -11905,7 +11964,7 @@
       "kind": "function",
       "label": "tapes",
       "doc": "Records every VHS tape in tapes/ into assets/gen/. Each tape drives a real magus binary through a real terminal, so the GIFs are documentation that cannot quietly go stale the way a pasted transcript does - re-record and the drift is visible.  Opt-in, never wired into `generate` or `ci`: a render takes tens of seconds, needs vhs (and the ttyd/ffmpeg it pulls in) on PATH, and produces a different file every time. Run it when the CLI's output actually changes, then commit the result.  The GIFs are declared ou",
-      "source": "magusfile.buzz:989",
+      "source": "magusfile.buzz:1032",
       "attrs": {
         "exported": "true"
       }
@@ -11915,7 +11974,7 @@
       "kind": "function",
       "label": "test",
       "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
-      "source": "magusfile.buzz:1567",
+      "source": "magusfile.buzz:1610",
       "attrs": {
         "exported": "true"
       }
@@ -11925,7 +11984,7 @@
       "kind": "function",
       "label": "total_coverage",
       "doc": "Renders a Go coverage badge locally (no third-party service, no network).",
-      "source": "magusfile.buzz:1537"
+      "source": "magusfile.buzz:1580"
     },
     {
       "id": "function:magusfile.buzz:types_generate",
@@ -11948,7 +12007,7 @@
       "kind": "function",
       "label": "watch",
       "doc": "Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.",
-      "source": "magusfile.buzz:1523",
+      "source": "magusfile.buzz:1566",
       "attrs": {
         "exported": "true"
       }
@@ -11965,7 +12024,7 @@
       "kind": "function",
       "label": "write_notices",
       "doc": "Writes THIRD-PARTY-NOTICES beside the staged binary, reading the module list OUT OF THAT BINARY rather than out of go.mod.  That distinction is the whole point. The two variants link different modules - the dynamic build carries ebitengine/purego for FFI, the static build carries ulikunitz/xz for pure-Go compression, and no shipped artifact contains both. A notices file resolved from go.mod would name modules that are not in the archive it sits in, which is the precise inaccuracy this file exists to prevent",
-      "source": "magusfile.buzz:1052"
+      "source": "magusfile.buzz:1095"
     },
     {
       "id": "function:proto/magusfile.buzz:ci",
@@ -12068,41 +12127,42 @@
       "id": "function:spells/aws/s3-cache/spell.buzz:access",
       "kind": "function",
       "label": "access",
-      "source": "spells/aws/s3-cache/spell.buzz:87"
+      "doc": "WHY THIS SPELL DOES NOT USE magus\\secret.grant, unlike spells/github/actions.  A grant attaches a credential to a request as a header VALUE: prefix + value, on one declared host. That fits a bearer token exactly, and the Actions cache spell was converted to it. It does not fit SigV4, for two independent reasons:  1. AWS_SECRET_ACCESS_KEY is never sent. It is an HMAC key input - see the kDate chain in sign() - so the thing on the wire is a derived signature, not the credential. There is no header for magus t",
+      "source": "spells/aws/s3-cache/spell.buzz:112"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:amzTimestamp",
       "kind": "function",
       "label": "amzTimestamp",
       "doc": "amzTimestamp formats the current UTC time as a SigV4 x-amz-date (YYYYMMDDTHHMMSSZ), handing the calendar math to the host time module (Go's time.Format under the hood). os.time() returns epoch millis as a double — exactly what the time module speaks — so it flows straight through with no conversion.",
-      "source": "spells/aws/s3-cache/spell.buzz:129"
+      "source": "spells/aws/s3-cache/spell.buzz:154"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:bucket",
       "kind": "function",
       "label": "bucket",
-      "source": "spells/aws/s3-cache/spell.buzz:90"
+      "source": "spells/aws/s3-cache/spell.buzz:115"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:cache_key",
       "kind": "function",
       "label": "cache_key",
       "doc": "cache_key derives the object key from the spec hash (already unique per project; hex, so URL-safe — no extra encoding needed in the canonical URI). NOTE: cache-key format differs from spells/github/actions/spell.buzz on purpose: S3 folds CACHE_VERSION into the key string (\"magus-<hash>-<version>\"), while GHA keeps the version in a separate `version` request field. Do NOT change the emitted string here — it would invalidate every existing S3 artifact. Track the inconsistency for follow-up only.",
-      "source": "spells/aws/s3-cache/spell.buzz:123"
+      "source": "spells/aws/s3-cache/spell.buzz:148"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:deleteObject",
       "kind": "function",
       "label": "deleteObject",
       "doc": "deleteObject removes one object by key (S3 DeleteObject, path-style). DeleteObject is idempotent, returning 204 No Content whether or not the key existed.",
-      "source": "spells/aws/s3-cache/spell.buzz:271"
+      "source": "spells/aws/s3-cache/spell.buzz:296"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:enabled",
       "kind": "function",
       "label": "enabled",
       "doc": "enabled gates the backend on having credentials and a bucket. The cache probes this once and skips fetch/push entirely when false — no remote calls.",
-      "source": "spells/aws/s3-cache/spell.buzz:192",
+      "source": "spells/aws/s3-cache/spell.buzz:217",
       "attrs": {
         "exported": "true"
       }
@@ -12111,14 +12171,14 @@
       "id": "function:spells/aws/s3-cache/spell.buzz:endpoint",
       "kind": "function",
       "label": "endpoint",
-      "source": "spells/aws/s3-cache/spell.buzz:100"
+      "source": "spells/aws/s3-cache/spell.buzz:125"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:get_artifact",
       "kind": "function",
       "label": "get_artifact",
       "doc": "get_artifact downloads the object for io.hash into io.dest. true on a hit (200), false on a miss (404) or when not configured.",
-      "source": "spells/aws/s3-cache/spell.buzz:198",
+      "source": "spells/aws/s3-cache/spell.buzz:223",
       "attrs": {
         "exported": "true"
       }
@@ -12135,21 +12195,21 @@
       "kind": "function",
       "label": "hostOf",
       "doc": "hostOf extracts the Host header value (authority) from a base URL. SigV4 signs the host header, and the server recomputes the signature against the Host it receives — which Go derives from the URL — so this must equal the URL authority.",
-      "source": "spells/aws/s3-cache/spell.buzz:109"
+      "source": "spells/aws/s3-cache/spell.buzz:134"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:listPage",
       "kind": "function",
       "label": "listPage",
       "doc": "listPage fetches one page of the bucket listing (S3 ListObjects v1, path-style) for objects under the magus- prefix, starting after marker (\"\"=from the start). Cache keys are hex + literal — all RFC-3986-unreserved — so neither prefix nor marker needs percent-encoding, and the canonical query string (keys sorted: marker before prefix) is byte-identical to the one on the URL. Returns the raw XML body, or \"\" on a non-200.",
-      "source": "spells/aws/s3-cache/spell.buzz:227"
+      "source": "spells/aws/s3-cache/spell.buzz:252"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:listing",
       "kind": "function",
       "label": "listing",
       "doc": "listing is a fiber generator over every magus- object in the bucket. Each resume yields the next {key, lastModified} object, transparently fetching the next S3 page when the current one drains — marker pagination stays hidden behind the coroutine. It returns null when the listing is exhausted; since a real artifact is never null, the consumer drains it with a resume-until-null loop. The bucket's LastModified is the S3-side mtime, so no per-object HEAD is needed.",
-      "source": "spells/aws/s3-cache/spell.buzz:243"
+      "source": "spells/aws/s3-cache/spell.buzz:268"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:mgs_getName",
@@ -12166,7 +12226,7 @@
       "kind": "function",
       "label": "prune",
       "doc": "prune evicts cache objects per a retention policy, enumerating them through the listing fiber. Inputs arrive via cb: older_than_secs : int  — evict objects older than this many seconds (0 = off) keep_last       : int  — keep only the newest N objects (0 = off) dry_run         : bool — report intended deletions without performing them The two bounds are additive — an object is doomed if it trips either — and the doomed set is keyed by object key so the overlap never double-deletes. Returns true onc",
-      "source": "spells/aws/s3-cache/spell.buzz:287",
+      "source": "spells/aws/s3-cache/spell.buzz:312",
       "attrs": {
         "exported": "true"
       }
@@ -12176,7 +12236,7 @@
       "kind": "function",
       "label": "put_artifact",
       "doc": "put_artifact uploads the file at io.src as the object for io.hash. true on a 200 store, false otherwise. The payload hash is the file's SHA-256 (S3 verifies it against x-amz-content-sha256).",
-      "source": "spells/aws/s3-cache/spell.buzz:210",
+      "source": "spells/aws/s3-cache/spell.buzz:235",
       "attrs": {
         "exported": "true"
       }
@@ -12185,26 +12245,26 @@
       "id": "function:spells/aws/s3-cache/spell.buzz:region",
       "kind": "function",
       "label": "region",
-      "source": "spells/aws/s3-cache/spell.buzz:92"
+      "source": "spells/aws/s3-cache/spell.buzz:117"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:secret",
       "kind": "function",
       "label": "secret",
-      "source": "spells/aws/s3-cache/spell.buzz:88"
+      "source": "spells/aws/s3-cache/spell.buzz:113"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:sign",
       "kind": "function",
       "label": "sign",
       "doc": "sign builds the signed request headers for an S3 path-style request. path is the canonical URI (\"/bucket/key\"); query is the canonical query string (keys sorted, \"\" for none); payloadHash is the hex SHA-256 of the body (EMPTY_SHA256 for a bodyless GET/DELETE). Returns the header map to hand extra/http.",
-      "source": "spells/aws/s3-cache/spell.buzz:137"
+      "source": "spells/aws/s3-cache/spell.buzz:162"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:token",
       "kind": "function",
       "label": "token",
-      "source": "spells/aws/s3-cache/spell.buzz:89"
+      "source": "spells/aws/s3-cache/spell.buzz:114"
     },
     {
       "id": "function:spells/bash/spell.buzz:mgs_getName",
@@ -12929,7 +12989,7 @@
       "kind": "function",
       "label": "annotate",
       "doc": "annotate raises a message that surfaces on the pull request, not just the log. Actions has no dedicated code field, so a diagnostic code leads the title where it stays greppable in the annotations list.",
-      "source": "spells/github/actions/spell.buzz:207",
+      "source": "spells/github/actions/spell.buzz:226",
       "attrs": {
         "exported": "true"
       }
@@ -12938,21 +12998,21 @@
       "id": "function:spells/github/actions/spell.buzz:base",
       "kind": "function",
       "label": "base",
-      "source": "spells/github/actions/spell.buzz:84"
+      "source": "spells/github/actions/spell.buzz:89"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:cache_key",
       "kind": "function",
       "label": "cache_key",
       "doc": "cache_key derives the cache key from the spec hash. The hash already folds in the project path (see cache/hash.go), so it is unique per project and needs no extra namespacing — and being hex, it is URL-safe. NOTE: cache-key format differs from spells/aws/s3-cache/spell.buzz on purpose: GHA keeps CACHE_VERSION in a separate `version` request field, while S3 folds it into the key string. Do NOT change the emitted string here — it would invalidate every existing GHA cache entry. Track the inconsistency for",
-      "source": "spells/github/actions/spell.buzz:94"
+      "source": "spells/github/actions/spell.buzz:113"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:enabled",
       "kind": "function",
       "label": "enabled",
-      "doc": "enabled gates the whole backend on running under GitHub Actions. The cache probes this once and skips fetch/push entirely when false, so wiring this spell in a magusfile is a no-op everywhere except GHA — no remote calls, no exports.",
-      "source": "spells/github/actions/spell.buzz:62",
+      "doc": "enabled gates the whole backend on running under GitHub Actions. The cache probes this once and skips fetch/push entirely when false, so wiring this spell in a magusfile is a no-op everywhere except GHA - no remote calls, no exports.",
+      "source": "spells/github/actions/spell.buzz:67",
       "attrs": {
         "exported": "true"
       }
@@ -12962,21 +13022,21 @@
       "kind": "function",
       "label": "escapeData",
       "doc": "escapeData encodes the characters Actions treats as structural in a command's message. A raw newline would end the command early and spill the rest into the log as loose text, and a failure's cause is usually the part after line one. Percent goes first, or it would corrupt the escapes introduced after it.",
-      "source": "spells/github/actions/spell.buzz:170"
+      "source": "spells/github/actions/spell.buzz:189"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:escapeProp",
       "kind": "function",
       "label": "escapeProp",
       "doc": "escapeProp additionally encodes the separators between properties, so a title containing a comma or colon cannot be read as the start of another property.",
-      "source": "spells/github/actions/spell.buzz:178"
+      "source": "spells/github/actions/spell.buzz:197"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:get_artifact",
       "kind": "function",
       "label": "get_artifact",
       "doc": "get_artifact downloads the cache artifact for payload.hash into payload.dest. Returns true on a hit (dest written), false on a miss or when not running under Actions.",
-      "source": "spells/github/actions/spell.buzz:110",
+      "source": "spells/github/actions/spell.buzz:129",
       "attrs": {
         "exported": "true"
       }
@@ -12986,14 +13046,14 @@
       "kind": "function",
       "label": "getenv",
       "doc": "getenv reads one environment variable, returning \"\" when unset (os.env returns null for an unset var; the callers below test against \"\"). NOTE: byte-identical to the getenv in spells/aws/s3-cache/spell.buzz. The duplication is intentional/temporary: there is no shared magus/... buzz helper module for it yet (extracting one needs the embed+register plumbing magus/charm uses). Track for follow-up; keep the two copies in sync.",
-      "source": "spells/github/actions/spell.buzz:72"
+      "source": "spells/github/actions/spell.buzz:77"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:group_end",
       "kind": "function",
       "label": "group_end",
       "doc": "group_end closes the current fold. Actions tracks a single open group, so the id is unused; it is in the contract for providers keyed by section name.",
-      "source": "spells/github/actions/spell.buzz:199",
+      "source": "spells/github/actions/spell.buzz:218",
       "attrs": {
         "exported": "true"
       }
@@ -13003,17 +13063,31 @@
       "kind": "function",
       "label": "group_start",
       "doc": "group_start opens a fold. Actions has no expanded section: ::group:: always starts collapsed. A caller asking for an expanded one wants output the reader must not have to click for, so the group is skipped and the content stays inline. Folding it anyway would be worse - a hidden failure is one nobody sees.",
-      "source": "spells/github/actions/spell.buzz:188",
+      "source": "spells/github/actions/spell.buzz:207",
       "attrs": {
         "exported": "true"
       }
+    },
+    {
+      "id": "function:spells/github/actions/spell.buzz:has_token",
+      "kind": "function",
+      "label": "has_token",
+      "doc": "has_token reports presence WITHOUT resolving, so enabled() and the cache-path guards stay cheap and cannot prompt.",
+      "source": "spells/github/actions/spell.buzz:104"
+    },
+    {
+      "id": "function:spells/github/actions/spell.buzz:in_actions",
+      "kind": "function",
+      "label": "in_actions",
+      "doc": "in_actions is the one condition the whole backend gates on. A private predicate rather than a call to enabled() because enabled is a spell OP - it takes the op signature - so the internal guards below cannot reuse it directly.",
+      "source": "spells/github/actions/spell.buzz:62"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:maskInRunnerLog",
       "kind": "function",
       "label": "maskInRunnerLog",
       "doc": "maskInRunnerLog asks the RUNNER to redact value from its own log. magus already redacts the output it captures; this covers the half magus cannot reach - a later step, or an action that never ran under magus at all. It is not pure belt and braces: the runner auto-masks anything interpolated from `secrets.*`, but NOT a step output injected into env:, and not a token minted mid-job like the OIDC one below.  std\\print rather than anything magus captures, for the same reason group_start above uses it: a workflo",
-      "source": "spells/github/actions/spell.buzz:326"
+      "source": "spells/github/actions/spell.buzz:348"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:mgs_getName",
@@ -13030,14 +13104,14 @@
       "kind": "function",
       "label": "oidcToken",
       "doc": "oidcToken mints an OIDC token for audience from the runner's token endpoint. Actions publishes the endpoint and its request token into the environment only when the job declares `permissions: id-token: write`, so an unset variable means a missing permission far more often than a broken runner - and the message says that rather than naming the variable.  The audience identifies the relying party: \"sts.amazonaws.com\" for AWS, the workload-identity-pool provider URL for GCP, whatever the trust policy on the ot",
-      "source": "spells/github/actions/spell.buzz:360"
+      "source": "spells/github/actions/spell.buzz:382"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:put_artifact",
       "kind": "function",
       "label": "put_artifact",
       "doc": "put_artifact uploads the artifact at payload.src for payload.hash. Returns true on success or when another runner already stored the same key, else false.",
-      "source": "spells/github/actions/spell.buzz:128",
+      "source": "spells/github/actions/spell.buzz:147",
       "attrs": {
         "exported": "true"
       }
@@ -13047,7 +13121,7 @@
       "kind": "function",
       "label": "quote_prefixes",
       "doc": "quote_prefixes declares the line prefixes that introduce a workflow command. magus captures subprocess output and replays it, so a dependency printing \"::error::\" would otherwise have the runner execute it and forge annotations. Returned once per run; magus does the per-line matching itself.",
-      "source": "spells/github/actions/spell.buzz:248",
+      "source": "spells/github/actions/spell.buzz:267",
       "attrs": {
         "exported": "true"
       }
@@ -13056,8 +13130,8 @@
       "id": "function:spells/github/actions/spell.buzz:resolve_secret",
       "kind": "function",
       "label": "resolve_secret",
-      "doc": "resolve_secret is the secret-provider contract, detected by name and invoked by magus\\secret.read(). It receives the reference as payload.ref.",
-      "source": "spells/github/actions/spell.buzz:284",
+      "doc": "resolve_secret is the secret-provider contract, detected by name and invoked by magus\\secret.read(). It receives the reference as payload.ref and returns a Secret.  `> Secret`, not `> str`: Buzz checks function signatures, so a provider returning the wrong shape fails to load rather than failing at the first read.",
+      "source": "spells/github/actions/spell.buzz:306",
       "attrs": {
         "exported": "true"
       }
@@ -13067,27 +13141,28 @@
       "kind": "function",
       "label": "rpc",
       "doc": "rpc POSTs a JSON Twirp request to the named CacheService method and returns the host http response map ({status, body}).",
-      "source": "spells/github/actions/spell.buzz:98"
+      "source": "spells/github/actions/spell.buzz:117"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:token",
       "kind": "function",
       "label": "token",
-      "source": "spells/github/actions/spell.buzz:85"
+      "doc": "token reads ACTIONS_RUNTIME_TOKEN through the SECRET PROVIDER, not getenv.  That one-word difference is the whole fix. A value read with getenv is not a value magus knows is a credential, so this token was absent from the redaction set entirely - any run log, captured output or cached entry quoting it kept it in the clear, in CI. Reading it through the provider registers it, and magus masks it everywhere it writes.  Under Actions no provider is selected, so the built-in environment provider resolves this to",
+      "source": "spells/github/actions/spell.buzz:100"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:tokenURL",
       "kind": "function",
       "label": "tokenURL",
       "doc": "tokenURL puts the audience on the runner's token endpoint. The separator is chosen rather than assumed: the endpoint arrives carrying ?api-version=2.0, so a hard-coded \"?\" would build a second query string and earn a 400 that names nothing.",
-      "source": "spells/github/actions/spell.buzz:410"
+      "source": "spells/github/actions/spell.buzz:432"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:workflowEnv",
       "kind": "function",
       "label": "workflowEnv",
       "doc": "workflowEnv reads a secret the workflow injected. There is no other way in, so a miss is a workflow-file edit rather than anything this run could recover from - which is why the error is the snippet to paste rather than a status.",
-      "source": "spells/github/actions/spell.buzz:335"
+      "source": "spells/github/actions/spell.buzz:357"
     },
     {
       "id": "function:spells/gitlab/ci/spell.buzz:annotate",
@@ -13462,7 +13537,7 @@
       "id": "function:spells/onepassword/spell.buzz:mgs_getTools",
       "kind": "function",
       "label": "mgs_getTools",
-      "source": "spells/onepassword/spell.buzz:109",
+      "source": "spells/onepassword/spell.buzz:113",
       "attrs": {
         "exported": "true"
       }
@@ -13471,8 +13546,8 @@
       "id": "function:spells/onepassword/spell.buzz:resolve_secret",
       "kind": "function",
       "label": "resolve_secret",
-      "doc": "resolve_secret is the secret-provider contract, detected by name and invoked by magus\\secret.read(). It receives the reference as payload.ref and returns the value.  The reference may be written either way, because both read naturally at a call site:  magus\\secret.read(\"Private/Docker Hub/credential\") magus\\secret.read(\"op://Private/Docker Hub/credential\")  `op read` prints the secret to stdout with a trailing newline; magus trims captured output, so nothing here has to. proc\\exec raises on a non-zero exit,",
-      "source": "spells/onepassword/spell.buzz:60",
+      "doc": "resolve_secret is the secret-provider contract, detected by name and invoked by magus\\secret.read(). It receives the reference as payload.ref and returns a Secret.  `> Secret`, not `> str`: Buzz checks function signatures, so this one is enforced at compile time - a provider returning the wrong shape fails to load rather than failing at the first read. Secret comes from magus/spell, like Target and Command.  The reference may be written either way, because both read naturally at a call site:  magus\\secret.r",
+      "source": "spells/onepassword/spell.buzz:64",
       "attrs": {
         "exported": "true"
       }
@@ -15798,7 +15873,7 @@
       "id": "method:magus.describe_file",
       "kind": "method",
       "label": "magus.describe_file",
-      "doc": "Classify paths against the workspace's declared globs: for each, the owning project and whether it is a declared `output` (generated - regenerate it, never hand-edit), a declared `source` (it feeds cache keys and the affected set), or `unclaimed`. Returns a typed DoctorReport-style envelope {definition, count, files}, not text to re-parse: this is the question \"can I disregard this changed file\", and a caller branches on `role` rather than grepping. Runs a nested magus, so it needs no workspace on the conte",
+      "doc": "Classify paths against the workspace's declared globs: for each, the owning project and whether it is a declared `output` (generated - regenerate it, never hand-edit), a declared `source` (it feeds cache keys and the affected set), `maintained` (magus writes it outside any target - commit it, never ignore it), or `unclaimed`. Returns a typed DoctorReport-style envelope {definition, count, files}, not text to re-parse: this is the question \"can I disregard this changed file\", and a caller branches on `role`",
       "attrs": {
         "buzz": "magus\\describeFile(paths, [opts]) → FileReport"
       }
@@ -17013,7 +17088,7 @@
       "id": "module:magus",
       "kind": "module",
       "label": "magus",
-      "doc": "Magus core primitives.  Three provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\\cache.remote(<spell>)` selects a remote cache backend, `magus\\ci.provider(<spell>)` a CI provider, and `magus\\secret.provider(<spell>)` / `magus\\secret.read(<ref>)` a secret backend and the credentials read through it. Each takes an imported spell handle. See [Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) and [CI in"
+      "doc": "Magus core primitives.  Three provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\\cache.remote(<spell>)` selects a remote cache backend, `magus\\ci.provider(<spell>)` a CI provider, and `magus\\secret.provider(<spell>)` / `magus\\secret.read(<ref>)` a secret backend and the credentials read through it. Each takes an imported spell handle. `magus\\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback base URL a CH"
     },
     {
       "id": "module:markdown",
@@ -17691,7 +17766,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "target_count": "37"
+        "target_count": "39"
       }
     },
     {
@@ -17785,18 +17860,25 @@
       }
     },
     {
-      "id": "rationale:magusfile.buzz:1821:TODO",
+      "id": "rationale:magusfile.buzz:1864:TODO",
       "kind": "rationale",
       "label": "TODO",
       "doc": "zsh is uncovered - it has no official image (zshusers/zsh is community-run), so",
-      "source": "magusfile.buzz:1821"
+      "source": "magusfile.buzz:1864"
     },
     {
-      "id": "rationale:spells/aws/s3-cache/spell.buzz:123:NOTE",
+      "id": "rationale:spells/aws/s3-cache/spell.buzz:112:WHY",
+      "kind": "rationale",
+      "label": "WHY",
+      "doc": "THIS SPELL DOES NOT USE magus\\secret.grant, unlike spells/github/actions.",
+      "source": "spells/aws/s3-cache/spell.buzz:112"
+    },
+    {
+      "id": "rationale:spells/aws/s3-cache/spell.buzz:148:NOTE",
       "kind": "rationale",
       "label": "NOTE",
       "doc": "cache-key format differs from spells/github/actions/spell.buzz on purpose:",
-      "source": "spells/aws/s3-cache/spell.buzz:123"
+      "source": "spells/aws/s3-cache/spell.buzz:148"
     },
     {
       "id": "rationale:spells/aws/s3-cache/spell.buzz:81:NOTE",
@@ -17806,18 +17888,18 @@
       "source": "spells/aws/s3-cache/spell.buzz:81"
     },
     {
-      "id": "rationale:spells/github/actions/spell.buzz:72:NOTE",
-      "kind": "rationale",
-      "label": "NOTE",
-      "doc": "byte-identical to the getenv in spells/aws/s3-cache/spell.buzz. The",
-      "source": "spells/github/actions/spell.buzz:72"
-    },
-    {
-      "id": "rationale:spells/github/actions/spell.buzz:94:NOTE",
+      "id": "rationale:spells/github/actions/spell.buzz:113:NOTE",
       "kind": "rationale",
       "label": "NOTE",
       "doc": "cache-key format differs from spells/aws/s3-cache/spell.buzz on purpose:",
-      "source": "spells/github/actions/spell.buzz:94"
+      "source": "spells/github/actions/spell.buzz:113"
+    },
+    {
+      "id": "rationale:spells/github/actions/spell.buzz:77:NOTE",
+      "kind": "rationale",
+      "label": "NOTE",
+      "doc": "byte-identical to the getenv in spells/aws/s3-cache/spell.buzz. The",
+      "source": "spells/github/actions/spell.buzz:77"
     },
     {
       "id": "spell:bash",
@@ -18137,6 +18219,17 @@
       }
     },
     {
+      "id": "target:.:langservice-generate",
+      "kind": "target",
+      "label": "langservice-generate",
+      "doc": "Regenerates the host-module snapshot the browser playground's completion and hover read (internal/langservice/manifest_data.go), from the same std declarations bindings_generate reads.",
+      "source": ".",
+      "attrs": {
+        "declared_as": "langservice_generate",
+        "engine": "buzz"
+      }
+    },
+    {
       "id": "target:.:lint",
       "kind": "target",
       "label": "lint",
@@ -18154,6 +18247,17 @@
       "source": ".",
       "attrs": {
         "declared_as": "lint_build",
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:.:magusfile-api-generate",
+      "kind": "target",
+      "label": "magusfile-api-generate",
+      "doc": "Regenerates the magusfile API surface lock: every member a magusfile can call on the magus namespace, one dotted name per line.",
+      "source": ".",
+      "attrs": {
+        "declared_as": "magusfile_api_generate",
         "engine": "buzz"
       }
     },
@@ -21301,6 +21405,14 @@
     },
     {
       "source": "dir:docs/reference/codes/magusfile",
+      "target": "doc:docs/reference/codes/magusfile/MGS1027.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1027.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/magusfile",
       "target": "doc:docs/reference/codes/magusfile/README.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -22178,6 +22290,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/tour/23-charm-axes.buzz"
+    },
+    {
+      "source": "dir:docs/tour",
+      "target": "file:docs/tour/24-secret-grants.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/24-secret-grants.buzz"
     },
     {
       "source": "dir:evals/fixtures",
@@ -31554,6 +31674,54 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1026.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1027.md",
+      "target": "diagnostic:MGS1026",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1027.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1027.md",
+      "target": "diagnostic:MGS1027",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1027.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1027.md",
+      "target": "diagnostic:MGS2011",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1027.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1027.md",
+      "target": "doc:docs/concepts/secrets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1027.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1027.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1026.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1027.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1027.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS2011.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1027.md"
     },
     {
       "source": "doc:docs/reference/codes/magusfile/README.md",
@@ -42860,6 +43028,46 @@
       "provenance": "docs/tour/23-charm-axes.buzz"
     },
     {
+      "source": "file:docs/tour/24-secret-grants.buzz",
+      "target": "function:docs/tour/24-secret-grants.buzz:agent_demo",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/24-secret-grants.buzz"
+    },
+    {
+      "source": "file:docs/tour/24-secret-grants.buzz",
+      "target": "import:http",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/24-secret-grants.buzz"
+    },
+    {
+      "source": "file:docs/tour/24-secret-grants.buzz",
+      "target": "import:magus",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/24-secret-grants.buzz"
+    },
+    {
+      "source": "file:docs/tour/24-secret-grants.buzz",
+      "target": "import:os",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/24-secret-grants.buzz"
+    },
+    {
+      "source": "file:docs/tour/24-secret-grants.buzz",
+      "target": "import:proc",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/24-secret-grants.buzz"
+    },
+    {
       "source": "file:evals/magusfile.buzz",
       "target": "function:evals/magusfile.buzz:ci",
       "relation": "contains",
@@ -44213,6 +44421,14 @@
     },
     {
       "source": "file:magusfile.buzz",
+      "target": "function:magusfile.buzz:langservice_generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:ld_flags",
       "relation": "contains",
       "confidence": "extracted",
@@ -44246,6 +44462,14 @@
     {
       "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:load_variant",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "file:magusfile.buzz",
+      "target": "function:magusfile.buzz:magusfile_api_generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -46502,6 +46726,22 @@
     {
       "source": "file:spells/github/actions/spell.buzz",
       "target": "function:spells/github/actions/spell.buzz:group_start",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/actions/spell.buzz",
+      "target": "function:spells/github/actions/spell.buzz:has_token",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/actions/spell.buzz",
+      "target": "function:spells/github/actions/spell.buzz:in_actions",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -50797,7 +51037,7 @@
     },
     {
       "source": "function:spells/github/actions/spell.buzz:enabled",
-      "target": "function:spells/github/actions/spell.buzz:getenv",
+      "target": "function:spells/github/actions/spell.buzz:in_actions",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -50829,7 +51069,7 @@
     },
     {
       "source": "function:spells/github/actions/spell.buzz:get_artifact",
-      "target": "function:spells/github/actions/spell.buzz:rpc",
+      "target": "function:spells/github/actions/spell.buzz:has_token",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -50837,7 +51077,15 @@
     },
     {
       "source": "function:spells/github/actions/spell.buzz:get_artifact",
-      "target": "function:spells/github/actions/spell.buzz:token",
+      "target": "function:spells/github/actions/spell.buzz:in_actions",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/actions/spell.buzz:get_artifact",
+      "target": "function:spells/github/actions/spell.buzz:rpc",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -50846,6 +51094,22 @@
     {
       "source": "function:spells/github/actions/spell.buzz:group_start",
       "target": "function:spells/github/actions/spell.buzz:escapeData",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/actions/spell.buzz:has_token",
+      "target": "function:spells/github/actions/spell.buzz:getenv",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/actions/spell.buzz:in_actions",
+      "target": "function:spells/github/actions/spell.buzz:getenv",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -50901,7 +51165,7 @@
     },
     {
       "source": "function:spells/github/actions/spell.buzz:put_artifact",
-      "target": "function:spells/github/actions/spell.buzz:rpc",
+      "target": "function:spells/github/actions/spell.buzz:has_token",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -50909,7 +51173,15 @@
     },
     {
       "source": "function:spells/github/actions/spell.buzz:put_artifact",
-      "target": "function:spells/github/actions/spell.buzz:token",
+      "target": "function:spells/github/actions/spell.buzz:in_actions",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/actions/spell.buzz:put_artifact",
+      "target": "function:spells/github/actions/spell.buzz:rpc",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -50950,14 +51222,6 @@
     {
       "source": "function:spells/github/actions/spell.buzz:rpc",
       "target": "function:spells/github/actions/spell.buzz:token",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "spells/github/actions/spell.buzz"
-    },
-    {
-      "source": "function:spells/github/actions/spell.buzz:token",
-      "target": "function:spells/github/actions/spell.buzz:getenv",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -53679,6 +53943,14 @@
     },
     {
       "source": "project:.",
+      "target": "target:.:langservice-generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
       "target": "target:.:lint",
       "relation": "contains",
       "confidence": "extracted",
@@ -53688,6 +53960,14 @@
     {
       "source": "project:.",
       "target": "target:.:lint-build",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "target:.:magusfile-api-generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -54686,20 +54966,28 @@
       "provenance": "proto"
     },
     {
-      "source": "rationale:magusfile.buzz:1821:TODO",
+      "source": "rationale:magusfile.buzz:1864:TODO",
       "target": "function:magusfile.buzz:completion_test",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "magusfile.buzz:1821"
+      "provenance": "magusfile.buzz:1864"
     },
     {
-      "source": "rationale:spells/aws/s3-cache/spell.buzz:123:NOTE",
+      "source": "rationale:spells/aws/s3-cache/spell.buzz:112:WHY",
+      "target": "function:spells/aws/s3-cache/spell.buzz:access",
+      "relation": "rationale_for",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/aws/s3-cache/spell.buzz:112"
+    },
+    {
+      "source": "rationale:spells/aws/s3-cache/spell.buzz:148:NOTE",
       "target": "function:spells/aws/s3-cache/spell.buzz:cache_key",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/aws/s3-cache/spell.buzz:123"
+      "provenance": "spells/aws/s3-cache/spell.buzz:148"
     },
     {
       "source": "rationale:spells/aws/s3-cache/spell.buzz:81:NOTE",
@@ -54710,20 +54998,20 @@
       "provenance": "spells/aws/s3-cache/spell.buzz:81"
     },
     {
-      "source": "rationale:spells/github/actions/spell.buzz:72:NOTE",
-      "target": "function:spells/github/actions/spell.buzz:getenv",
-      "relation": "rationale_for",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "spells/github/actions/spell.buzz:72"
-    },
-    {
-      "source": "rationale:spells/github/actions/spell.buzz:94:NOTE",
+      "source": "rationale:spells/github/actions/spell.buzz:113:NOTE",
       "target": "function:spells/github/actions/spell.buzz:cache_key",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/github/actions/spell.buzz:94"
+      "provenance": "spells/github/actions/spell.buzz:113"
+    },
+    {
+      "source": "rationale:spells/github/actions/spell.buzz:77:NOTE",
+      "target": "function:spells/github/actions/spell.buzz:getenv",
+      "relation": "rationale_for",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/actions/spell.buzz:77"
     },
     {
       "source": "spell:bash",
@@ -55651,6 +55939,22 @@
     },
     {
       "source": "target:.:generate",
+      "target": "target:.:langservice-generate",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:generate",
+      "target": "target:.:magusfile-api-generate",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:generate",
       "target": "target:.:man-generate",
       "relation": "depends_on",
       "confidence": "extracted",
@@ -55860,6 +56164,14 @@
     {
       "source": "target:.:lint",
       "target": "target:.:lint-build",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:magusfile-api-generate",
+      "target": "target:.:bindings-generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
@@ -57868,6 +58180,14 @@
     {
       "source": "target:docs:site-generate",
       "target": "file:docs/tour/23-charm-axes.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:site-generate",
+      "target": "file:docs/tour/24-secret-grants.buzz",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,

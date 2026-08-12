@@ -22,5 +22,5 @@ func TestManifestUpToDate(t *testing.T) {
 	require.NoError(t, err, "read the committed manifest")
 
 	assert.Equal(t, string(want), string(got),
-		"%s is out of date; regenerate with: go run ./cmd/langservice-manifest", outFile)
+		"%s is out of date; regenerate with: magus run generate", outFile)
 }

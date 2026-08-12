@@ -29,6 +29,7 @@ pry
 raise
 run
 secret
+secret.endpoint
 secret.provider
 secret.read
 targets

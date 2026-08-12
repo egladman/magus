@@ -294,7 +294,7 @@ func recordJobActivity(ctx context.Context, args []string, dur time.Duration, er
 		ev.Outcome = trail.OutcomeError
 		ev.Error = err.Error()
 	}
-	trail.Append(base, ev)
+	trail.Append(ctx, base, ev)
 }
 
 // adoptBridge registers an already-open Magus (the daemon's bridge workspace, loaded by

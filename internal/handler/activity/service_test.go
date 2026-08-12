@@ -47,25 +47,25 @@ func list(t *testing.T, dir string, q *activityv1.ActivityQuery) []*activityv1.A
 func seedTrail(t *testing.T) (dir, respRef string) {
 	t.Helper()
 	dir = t.TempDir()
-	respRef, _ = trail.WriteBlob(dir, "mcp", []byte("the result body"))
-	trail.Append(dir, trail.Event{
+	respRef, _ = trail.WriteBlob(t.Context(), dir, "mcp", []byte("the result body"))
+	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 1, Kind: trail.KindMCPToolCall, Actor: "claude", UserAgent: "claude-code/1.2.3",
 		Action: "magus_query", Outcome: trail.OutcomeOK,
 		ResponseRef: respRef, Preview: "the result body", DurMs: 12,
 	})
-	trail.Append(dir, trail.Event{
+	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 2, Kind: trail.KindTokenLifecycle, Actor: "cli",
 		Action: "connector.create", Outcome: trail.OutcomeOK,
 	})
-	trail.Append(dir, trail.Event{
+	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 3, Kind: trail.KindJob, Actor: "daemon", Workspace: "/ws/a",
 		Action: "graph build", Outcome: trail.OutcomeError, Error: "boom", DurMs: 40,
 	})
 	agentReqBody := []byte(`{"schema_version":1,"tool":"Bash","command":"go test ./..."}`)
 	agentRespBody := []byte(`{"schema_version":1,"decision":"deny","reason":"use magus"}`)
-	agentReq, _ := trail.WriteBlob(dir, "agent", agentReqBody)
-	agentResp, _ := trail.WriteBlob(dir, "agent", agentRespBody)
-	trail.Append(dir, trail.Event{
+	agentReq, _ := trail.WriteBlob(t.Context(), dir, "agent", agentReqBody)
+	agentResp, _ := trail.WriteBlob(t.Context(), dir, "agent", agentRespBody)
+	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 4, Kind: trail.KindAgentCommand, Actor: "session:abc", Workspace: "/ws/a",
 		Host: "codex", Session: "abc",
 		Action: "Bash", Outcome: trail.OutcomeOK, RequestRef: agentReq, ResponseRef: agentResp,
@@ -237,7 +237,7 @@ func seedAt(t *testing.T, ts ...int64) string {
 	t.Helper()
 	dir := t.TempDir()
 	for _, at := range ts {
-		trail.Append(dir, trail.Event{
+		trail.Append(t.Context(), dir, trail.Event{
 			Ts: at, Kind: trail.KindJob, Actor: "daemon", Workspace: "/ws" + dir,
 			Action: fmt.Sprintf("job-%d", at), Outcome: trail.OutcomeOK,
 		})
@@ -361,4 +361,27 @@ func TestEncodeKindAndOutcome_Defaults(t *testing.T) {
 	assert.Equal(t, activityv1.Outcome_OUTCOME_OK, encodeOutcome(trail.OutcomeOK))
 	assert.Equal(t, activityv1.Outcome_OUTCOME_ERROR, encodeOutcome(trail.OutcomeError))
 	assert.Equal(t, activityv1.Outcome_OUTCOME_UNSPECIFIED, encodeOutcome(""))
+}
+
+// TestEncodeKindCoversEveryTrailKind: a kind with no proto value encodes to
+// KIND_UNSPECIFIED, which is indistinguishable from "unset" and cannot be selected with
+// ActivityQuery.kinds - so the event is written, stored, and then invisible to the one
+// surface that exists to read it. KindCredentialGrant shipped that way and the docs
+// promised a governance view that did not exist.
+//
+// Guards every kind, not just that one, so the next producer cannot repeat it.
+func TestEncodeKindCoversEveryTrailKind(t *testing.T) {
+	for _, k := range []trail.Kind{
+		trail.KindMCPToolCall,
+		trail.KindJob,
+		trail.KindConfigChange,
+		trail.KindTokenLifecycle,
+		trail.KindSandboxDenial,
+		trail.KindMemory,
+		trail.KindAgentCommand,
+		trail.KindCredentialGrant,
+	} {
+		assert.NotEqual(t, activityv1.Kind_KIND_UNSPECIFIED, encodeKind(k),
+			"trail kind %q has no proto value, so the activity view cannot show or filter it", k)
+	}
 }

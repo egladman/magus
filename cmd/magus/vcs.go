@@ -323,7 +323,7 @@ func planResolution(ctx context.Context, m *magus.Magus, resolver types.Conflict
 		if p == nil {
 			// Not a declared output. The merge-driver registration is the exception:
 			// magus writes it, no target declares it, and it is re-derived.
-			if vcsMaintainedFiles[c.Path] && c.Kind == types.ConflictKindContent {
+			if types.IsMagusMaintained(c.Path) && c.Kind == types.ConflictKindContent {
 				plan.rederive = append(plan.rederive, c.Path)
 				continue
 			}
@@ -713,7 +713,7 @@ func isStatusColumn(c byte) bool {
 // Undeclared paths are the actual hazard `git add -A` poses. No target claims
 // them, so they are usually build residue or a scratch file - but they are also
 // where a genuinely new, not-yet-declared source file lives, and where a file
-// magus's own core writes directly (see vcsMaintainedFiles) shows up, since
+// magus's own core writes directly (types.IsMagusMaintained) shows up, since
 // neither has a target's declared-output glob to match against. They are
 // reported rather than dropped or assumed inert.
 func classifyForStaging(out []types.FileEntry) (sources, outputs, undeclared []string) {
@@ -782,26 +782,28 @@ func reportStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool
 	}
 }
 
-// vcsMaintainedFiles are paths magus's own core writes directly, rather than a
-// target through a declared output glob - so ClassifyFiles has nothing to match
-// them against and they land in "undeclared" alongside genuine residue. Calling
-// them undeclared is accurate; claiming they "affect nothing" is not, so they
-// get their own report line instead of being folded into the blanket message.
-//
-// .gitattributes is written by gitVCS.InstallMergeDriver (vcs/git.go) to
-// register magus's own merge driver for generated-output conflicts. It is also
-// why `vcs resolve` can settle a conflict in it: its content is derived from the
-// workspace's declared outputs, so it is re-deriveable rather than mergeable.
-var vcsMaintainedFiles = map[string]bool{
-	".gitattributes": true,
-}
-
 // splitMaintained separates paths magus's own core maintains from everything
 // else undeclared, so reportStaging can describe each group accurately instead
 // of asserting every undeclared path "affects nothing".
+//
+// A maintained path is one magus writes directly, rather than a target through a
+// declared output glob - so ClassifyFiles has nothing to match it against and it
+// lands in "undeclared" alongside genuine residue. Calling it undeclared is
+// accurate; claiming it "affects nothing" is not, so it gets its own report line
+// instead of being folded into the blanket message.
+//
+// .gitattributes is written by gitVCS.InstallMergeDriver (vcs/git.go) to register
+// magus's own merge driver for generated-output conflicts. It is also why `vcs
+// resolve` can settle a conflict in it: its content is derived from the workspace's
+// declared outputs, so it is re-deriveable rather than mergeable.
+//
+// The set itself is types.IsMagusMaintained rather than a local one, because
+// `describe file` classifies the same paths and the two answers must not diverge -
+// which they did, describe calling .gitattributes unclaimed and suggesting the
+// ignore rules while staging reported it as maintained.
 func splitMaintained(undeclared []string) (maintained, unclaimed []string) {
 	for _, p := range undeclared {
-		if vcsMaintainedFiles[p] {
+		if types.IsMagusMaintained(p) {
 			maintained = append(maintained, p)
 		} else {
 			unclaimed = append(unclaimed, p)

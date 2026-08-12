@@ -196,7 +196,7 @@ var TargetRunSource string
 var RunSource string
 
 // FileEntrySource / FileReportSource mirror magus.describeFile's result: one entry per
-// path with its role (output | source | unclaimed) and the projects claiming it.
+// path with its role (output | source | maintained | unclaimed) and the projects claiming it.
 //
 //go:generate go run ../../cmd/magus-utils types -type FileEntry -out gen/types/fileentry.buzz
 //go:embed gen/types/fileentry.buzz

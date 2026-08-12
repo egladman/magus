@@ -17,7 +17,7 @@ import (
 // RegisterMagus builds the "magus" module map and returns it.
 // Magus core primitives.
 //
-// Three provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\cache.remote(<spell>)` selects a remote cache backend, `magus\ci.provider(<spell>)` a CI provider, and `magus\secret.provider(<spell>)` / `magus\secret.read(<ref>)` a secret backend and the credentials read through it. Each takes an imported spell handle. See [Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) and [CI integration](../../guides/integrations/ci.md).
+// Three provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\cache.remote(<spell>)` selects a remote cache backend, `magus\ci.provider(<spell>)` a CI provider, and `magus\secret.provider(<spell>)` / `magus\secret.read(<ref>)` a secret backend and the credentials read through it. Each takes an imported spell handle. `magus\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback base URL a CHILD PROCESS is pointed at instead of the real API, so magus attaches the credential on the way upstream and the child never holds it. It takes an object with ref/host/header/prefix fields, declared in your own magusfile. For your own code, `read` is the ordinary choice. See [Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) and [CI integration](../../guides/integrations/ci.md).
 //
 // `import "magus"` resolves in a `magus buzz` script as well as in a magusfile. The members that declare into the workspace magus is loading (`magus\project`, the provider selections above) and the ones served in-process from a loaded workspace (`ls`, `affected`, `projectGraph`, `where`) raise [MGS1022](../codes/magusfile/MGS1022.md) in a script; the nested-command methods (`cmd`, `run`, `describe`, `insight`, `doctor`) work there and discover the workspace themselves. `targets` works in both: it serves the workspace on the context when there is one and forks a nested magus when there is not.
 func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
@@ -297,6 +297,11 @@ func buzzValueMagusTargetGraphNode(v types.TargetGraphNode) vm.Value {
 	}
 	out.MapSet("readsFiles", vm.ListValue(itemsReadsFiles))
 	out.MapSet("readsSecrets", vm.BoolValue(v.ReadsSecrets))
+	itemsSecretRefs := make([]vm.Value, len(v.SecretRefs))
+	for indexSecretRefs := range v.SecretRefs {
+		itemsSecretRefs[indexSecretRefs] = vm.StrValue(v.SecretRefs[indexSecretRefs])
+	}
+	out.MapSet("secretRefs", vm.ListValue(itemsSecretRefs))
 	itemsWritesFiles := make([]vm.Value, len(v.WritesFiles))
 	for indexWritesFiles := range v.WritesFiles {
 		itemsWritesFiles[indexWritesFiles] = buzzValueMagusOutputRef(v.WritesFiles[indexWritesFiles])

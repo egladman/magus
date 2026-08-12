@@ -82,32 +82,38 @@ var mgs = diagnostics.New(func(c DiagnosticCode) string {
 func CodeURL(c DiagnosticCode) string { return mgs.URL(c) }
 
 const (
-	NoCITarget                DiagnosticCode = "MGS1001"
-	SpellShadowed             DiagnosticCode = "MGS1002"
-	BespokePhaseFragmentName  DiagnosticCode = "MGS1003"
-	UnreachedFootprintDecl    DiagnosticCode = "MGS1004"
-	RedundantFootprintGlob    DiagnosticCode = "MGS1005"
-	UnknownTarget             DiagnosticCode = "MGS1006"
-	TargetDependencyCycle     DiagnosticCode = "MGS1007"
-	TargetMissingContext      DiagnosticCode = "MGS1008"
-	TargetNeverReplays        DiagnosticCode = "MGS1009"
-	AffectedSetUncomputable   DiagnosticCode = "MGS1010"
-	CrossOutputOwnerUnknown   DiagnosticCode = "MGS1011"
-	CrossOutputCycle          DiagnosticCode = "MGS1012"
-	CrossOutputGlobEscapes    DiagnosticCode = "MGS1013"
-	CrossOutputNotProduced    DiagnosticCode = "MGS1014"
-	CrossDepOwnerUnknown      DiagnosticCode = "MGS1015"
-	GoModReplaceDrift         DiagnosticCode = "MGS1016"
-	MagusfileIsNotASpell      DiagnosticCode = "MGS1017"
-	DeadOutputGlob            DiagnosticCode = "MGS1018"
-	SelfStalingOutput         DiagnosticCode = "MGS1019"
-	OutputOwnedByTwoTargets   DiagnosticCode = "MGS1020"
-	WorkspaceNeedsNewerMagus  DiagnosticCode = "MGS1021"
-	MagusfileOnlyMember       DiagnosticCode = "MGS1022"
-	ProviderPathRejected      DiagnosticCode = "MGS1023"
-	ProviderProjectShadowed   DiagnosticCode = "MGS1024"
-	MagusfileAPIRemoved       DiagnosticCode = "MGS1025"
-	CacheableSecretRead       DiagnosticCode = "MGS1026"
+	NoCITarget               DiagnosticCode = "MGS1001"
+	SpellShadowed            DiagnosticCode = "MGS1002"
+	BespokePhaseFragmentName DiagnosticCode = "MGS1003"
+	UnreachedFootprintDecl   DiagnosticCode = "MGS1004"
+	RedundantFootprintGlob   DiagnosticCode = "MGS1005"
+	UnknownTarget            DiagnosticCode = "MGS1006"
+	TargetDependencyCycle    DiagnosticCode = "MGS1007"
+	TargetMissingContext     DiagnosticCode = "MGS1008"
+	TargetNeverReplays       DiagnosticCode = "MGS1009"
+	AffectedSetUncomputable  DiagnosticCode = "MGS1010"
+	CrossOutputOwnerUnknown  DiagnosticCode = "MGS1011"
+	CrossOutputCycle         DiagnosticCode = "MGS1012"
+	CrossOutputGlobEscapes   DiagnosticCode = "MGS1013"
+	CrossOutputNotProduced   DiagnosticCode = "MGS1014"
+	CrossDepOwnerUnknown     DiagnosticCode = "MGS1015"
+	GoModReplaceDrift        DiagnosticCode = "MGS1016"
+	MagusfileIsNotASpell     DiagnosticCode = "MGS1017"
+	DeadOutputGlob           DiagnosticCode = "MGS1018"
+	SelfStalingOutput        DiagnosticCode = "MGS1019"
+	OutputOwnedByTwoTargets  DiagnosticCode = "MGS1020"
+	WorkspaceNeedsNewerMagus DiagnosticCode = "MGS1021"
+	MagusfileOnlyMember      DiagnosticCode = "MGS1022"
+	ProviderPathRejected     DiagnosticCode = "MGS1023"
+	ProviderProjectShadowed  DiagnosticCode = "MGS1024"
+	MagusfileAPIRemoved      DiagnosticCode = "MGS1025"
+	CacheableSecretRead      DiagnosticCode = "MGS1026"
+	// SecretGrantInvalid covers every way a secret grant is unusable: a missing field, a
+	// wildcard or non-ASCII host, a header that is not a legal field name. ONE code
+	// rather than one per rule, because the resolution is the same in every case - fix
+	// the declaration the error names - and a caller branching on it wants "this grant
+	// is malformed", not which clause caught it. The message carries the specifics.
+	SecretGrantInvalid        DiagnosticCode = "MGS1027"
 	PathReadDenied            DiagnosticCode = "MGS2001"
 	PathWriteDenied           DiagnosticCode = "MGS2002"
 	EnvStripped               DiagnosticCode = "MGS2003"
@@ -177,7 +183,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	CrossDepOwnerUnknown, GoModReplaceDrift, MagusfileIsNotASpell, DeadOutputGlob,
 	SelfStalingOutput, OutputOwnedByTwoTargets, WorkspaceNeedsNewerMagus,
 	MagusfileOnlyMember, ProviderPathRejected, ProviderProjectShadowed,
-	MagusfileAPIRemoved, CacheableSecretRead,
+	MagusfileAPIRemoved, CacheableSecretRead, SecretGrantInvalid,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,

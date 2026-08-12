@@ -61,6 +61,13 @@ var HintSource string
 //go:embed gen/types/command.buzz
 var CommandSource string
 
+// SecretSource is the generated mirror of spells.Secret - what a provider spell's
+// resolve_secret op returns. It references nothing, so it has no ordering constraint in
+// the bundle.
+//
+//go:embed gen/types/secret.buzz
+var SecretSource string
+
 // VersionKeySource is the generated mirror of spells.VersionKey - what a probed tool
 // contributes to the cache key - together with the VersionComponent enum its upTo
 // field is typed as. It ships in the magus/spell bundle so a spell can declare
@@ -122,7 +129,7 @@ var CharmModuleSource string
 // Service, each referencing the prior; Target and Project have no cross-references
 // so their position is free). Shared by the runtime registration (modules.go) and
 // the built-in inliner (builtinModuleSources) below, so the two can't drift apart.
-var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, HintSource, CommandSource, ServiceSource, VersionKeySource, VersionBoundsSource, ToolSource, ProjectSource}, "\n")
+var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, HintSource, CommandSource, ServiceSource, VersionKeySource, VersionBoundsSource, ToolSource, ProjectSource, SecretSource}, "\n")
 
 // builtinModuleSources maps an import path a self-contained built-in may use to
 // the module source prepended in its place (imports emit no bytecode, so an

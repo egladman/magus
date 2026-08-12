@@ -31,6 +31,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -51,7 +52,10 @@ type Provider interface {
 	// [Resolver] READS - it selects the provider, memoizes, and registers the value for
 	// redaction, which is the security-critical part. Two verbs so the two contracts
 	// cannot be confused at a call site.
-	Fetch(ctx context.Context, ref string) (string, error)
+	//
+	// Returns a [Value], so a provider implementation cannot accidentally log or format
+	// the credential it just fetched on its way back.
+	Fetch(ctx context.Context, ref string) (Value, error)
 }
 
 // minRedactLen is the shortest value [Resolver.Redact] will mask. Below it, masking does
@@ -75,15 +79,15 @@ type envProvider struct{}
 // Fetch returns the environment variable named by ref. Unset and set-to-empty are both
 // errors: returning "" would hand the caller a credential-shaped blank that fails later
 // at whatever consumes it, with an error far from the cause.
-func (envProvider) Fetch(_ context.Context, ref string) (string, error) {
+func (envProvider) Fetch(_ context.Context, ref string) (Value, error) {
 	v, ok := os.LookupEnv(ref)
 	if !ok {
-		return "", fmt.Errorf("$%s is not set", ref)
+		return Value{}, fmt.Errorf("$%s is not set", ref)
 	}
 	if v == "" {
-		return "", fmt.Errorf("$%s is set but empty", ref)
+		return Value{}, fmt.Errorf("$%s is set but empty", ref)
 	}
-	return v, nil
+	return NewValue(v), nil
 }
 
 // providerOpener builds a Provider from a selected spell's name. It is an extension
@@ -153,6 +157,35 @@ type Resolver struct {
 	// unlock prompts, which the memo alone does not prevent - the lookup and the fetch
 	// cannot share a lock without serializing unrelated references too.
 	group singleflight.Group
+	// grants are the destination-scoped credentials a magusfile declared, keyed by
+	// (host, header) so one host can carry two of them - a user and a token - while a
+	// redeclaration of the same slot is caught rather than silently replacing.
+	//
+	// Registering a grant resolves NOTHING. That is the whole interaction policy this
+	// feature inherits: a top-level declaration that resolved would pop an unlock
+	// prompt on `magus ls`, which is a bug that already shipped once here. The
+	// provider is invoked on the first request that matches.
+	// endpointMu guards endpoints. A mutex of its OWN rather than r.mu above: opening
+	// an endpoint binds a socket while the lock is held, and that must not block an
+	// unrelated Redact, which sits on the output capture hot path.
+	//
+	// LOCK ORDER: endpointMu then mu, never the reverse. OpenEndpoint holds endpointMu
+	// across registerRedactable, which takes mu. Nothing may take mu and then reach for
+	// endpointMu.
+	endpointMu sync.Mutex
+	// endpoints are the loopback forwarders opened through this resolver, one per
+	// distinct grant. Liveness-checked on lookup rather than assumed: the resolver
+	// outlives a single run. See endpoint.go.
+	endpoints map[endpointKey]*forwarder
+	// endpointTransport overrides the forwarder's round tripper. Written once at
+	// construction and never again, so it is deliberately outside the mutexes. Nil in
+	// production,
+	// where http.DefaultTransport is correct and the upstream scheme is always https -
+	// an origin that could be pointed at a plaintext upstream would undo the one
+	// guarantee this design makes about the hop magus controls. Set only by tests, so
+	// they can exercise the real forwarder against a TLS server with a self-signed
+	// cert instead of reaching the public internet.
+	endpointTransport http.RoundTripper
 }
 
 // Timeouts bounds how long a provider read may take. A struct rather than two duration
@@ -208,6 +241,35 @@ func (r *Resolver) Timeouts() Timeouts {
 	return r.timeouts
 }
 
+type runIDKey struct{}
+
+// ContextWithInvocationID carries the id of the invocation this context belongs to, so
+// an endpoint can be scoped to ONE run rather than shared by every run of the workspace.
+//
+// The same name journal uses for the same value, deliberately: an earlier version called
+// it a "run id", which put a second word for one concept into the codebase before
+// anything else keyed on it. A key this package owns, populated by the caller, rather
+// than reading journal.InvocationIDFromContext directly: internal/journal imports THIS
+// package for redaction, so that import would be a cycle. run.go sits above both.
+//
+// Process-unique is exactly the right strength here - the map it keys lives in one
+// process - even though an invocation id is not a machine-wide identity.
+func ContextWithInvocationID(ctx context.Context, id string) context.Context {
+	if id == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, runIDKey{}, id)
+}
+
+// InvocationIDFromContext returns the invocation id, or "" outside a run.
+func InvocationIDFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	id, _ := ctx.Value(runIDKey{}).(string)
+	return id
+}
+
 type resolverKey struct{}
 
 // ContextWithResolver installs r as the run's resolver.
@@ -257,12 +319,12 @@ func (r *Resolver) ProviderName() string {
 //
 // A value shorter than minRedactLen is returned but NOT registered - see that constant.
 // Callers that care must treat such a value as unprotected; nothing reports it.
-func (r *Resolver) Read(ctx context.Context, ref string) (string, error) {
+func (r *Resolver) Read(ctx context.Context, ref string) (Value, error) {
 	if r == nil {
-		return "", errors.New("secret: no resolver on this context")
+		return Value{}, errNoResolver
 	}
 	if ref == "" {
-		return "", errors.New("secret: empty reference")
+		return Value{}, errors.New("secret: empty reference")
 	}
 
 	name := r.ProviderName()
@@ -272,7 +334,7 @@ func (r *Resolver) Read(ctx context.Context, ref string) (string, error) {
 	v, hit := r.memo[key]
 	r.mu.RUnlock()
 	if hit {
-		return v, nil
+		return NewValue(v), nil
 	}
 
 	// singleflight rather than a lock held across the fetch: two targets reading the
@@ -292,14 +354,14 @@ func (r *Resolver) Read(ctx context.Context, ref string) (string, error) {
 		if err != nil {
 			return nil, err
 		}
-		v, err = p.Fetch(ctx, ref)
+		val, err := p.Fetch(ctx, ref)
 		if err != nil {
 			return nil, fmt.Errorf("secret %q: %w", ref, err)
 		}
-		if v == "" {
+		if val.IsZero() {
 			return nil, fmt.Errorf("secret %q: provider resolved it to an empty value", ref)
 		}
-		if len(v) < minRedactLen {
+		if val.Len() < minRedactLen {
 			// Say it out loud rather than declining in silence. record refuses to register
 			// a value this short because masking it would shred ordinary output, which
 			// means this credential is returned to the magusfile with NO redaction behind
@@ -313,20 +375,24 @@ func (r *Resolver) Read(ctx context.Context, ref string) (string, error) {
 					"secret %q is shorter than %d characters, so its value is NOT redacted from magus output; see %s",
 					ref, minRedactLen, types.CodeURL(types.SecretTooShortToMask))))
 		}
-		r.record(key, v)
-		return v, nil
+		// Reveal at the single registration site: the redaction set has to hold the
+		// plaintext to match against, and the memo has to hand it back. This is one of
+		// the handful of Reveal call sites the type exists to make greppable.
+		plain := val.Reveal()
+		r.record(key, plain)
+		return plain, nil
 	})
 	if err != nil {
-		return "", err
+		return Value{}, err
 	}
 	v, ok := got.(string)
 	if !ok {
 		// Unreachable: the flight function above returns only a string or an error.
 		// Checked anyway rather than asserting, so a future edit that returns another
 		// type fails loudly here instead of panicking inside a credential path.
-		return "", fmt.Errorf("secret %q: provider returned %T, not a string", ref, got)
+		return Value{}, fmt.Errorf("secret %q: provider returned %T, not a string", ref, got)
 	}
-	return v, nil
+	return NewValue(v), nil
 }
 
 // provider returns the backend for name, falling back to the built-in when a magusfile
@@ -346,6 +412,10 @@ func (r *Resolver) provider(ctx context.Context, name string) (Provider, error) 
 	}
 	return p, nil
 }
+
+// errNoResolver is the one message for "this call needs a run's resolver and there
+// is none". Shared so the three entry points cannot word it three ways.
+var errNoResolver = errors.New("secret: no resolver on this context")
 
 // record memoizes a resolved value and, when long enough to mask safely, adds it to the
 // redaction set ordered longest first. Longest-first matters: when one secret contains
@@ -382,6 +452,57 @@ func (r *Resolver) record(key memoKey, v string) {
 	for _, form := range encodedForms(v) {
 		r.addRedactable(form)
 	}
+}
+
+// registerRedactable adds v to the redaction set without memoizing it as a resolved
+// reference. It exists for values magus MINTS rather than reads - an endpoint's path
+// token and base URL, which authorize an authenticated request - which need the same
+// masking as a credential but belong to no provider and no reference.
+//
+// Encoded forms are registered too, for the same reason record does it: a value a tool
+// percent-escapes into a config file would otherwise pass straight through.
+func (r *Resolver) registerRedactable(v string) {
+	if r == nil || len(v) < minRedactLen {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, form := range encodedForms(v) {
+		r.addRedactable(form)
+	}
+}
+
+// unregisterRedactable removes v and its encoded forms from the redaction set.
+//
+// The ONLY caller is a forwarder's shutdown, and the distinction is what makes this
+// safe: an endpoint's token and base URL are credential-equivalent while the listener
+// is up and MEANINGLESS once it is down - the port is released and the token authorizes
+// nothing. A resolved credential is never removed, because it stays valid wherever it
+// was sent.
+//
+// Without this the set grew for the daemon's lifetime: a fresh token plus a base URL
+// plus seven encoded forms of each, per rebind, per run, all of it scanned linearly by
+// Redact on the output-capture hot path.
+func (r *Resolver) unregisterRedactable(v string) {
+	if r == nil || len(v) < minRedactLen {
+		return
+	}
+	drop := make(map[string]bool, len(encodedForms(v)))
+	for _, form := range encodedForms(v) {
+		drop[form] = true
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	kept := r.redactable[:0]
+	for _, existing := range r.redactable {
+		if !drop[existing] {
+			kept = append(kept, existing)
+		}
+	}
+	for i := len(kept); i < len(r.redactable); i++ {
+		r.redactable[i] = ""
+	}
+	r.redactable = kept
 }
 
 // encodedForms returns v plus the encodings of it worth matching. Duplicates are harmless

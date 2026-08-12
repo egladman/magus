@@ -33,7 +33,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph (schema v8). Query it instead of grepping:
+This workspace has a knowledge graph (schema v9). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -59,11 +59,11 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | file | 100+ | `magus query kind:file` | `magusfile.buzz`, `docs/render.buzz`, `docs/magusfile.buzz` |
 | function | 700+ | `magus query kind:function` | `tail`, `sign`, `renderContentHTML` |
 | import | 90+ | `magus query kind:import` | `magus`, `fs`, `std` |
-| rationale | 5 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
+| rationale | 6 | `magus query kind:rationale` | `TODO`, `WHY`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 37 | `magus query project:.` | `generate`, `lint`, `image-build` |
+| . | 39 | `magus query project:.` | `generate`, `lint`, `image-build` |
 | console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 4 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |

@@ -15,6 +15,7 @@ export object TargetGraphNode {
     crossDependencies: [CrossTargetRef] = [],
     readsFiles: [InputRef] = [],
     readsSecrets: bool = false,
+    secretRefs: [str] = [],
     writesFiles: [OutputRef] = [],
     modifiesExistingFiles: [UpdateRef] = [],
     execOverrides: [str] = [],

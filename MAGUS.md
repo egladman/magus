@@ -33,7 +33,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph (schema v8). Query it instead of grepping:
+This workspace has a knowledge graph (schema v9). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -59,11 +59,11 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | file | 100+ | `magus query kind:file` | `magusfile.buzz`, `docs/render.buzz`, `docs/magusfile.buzz` |
 | function | 700+ | `magus query kind:function` | `tail`, `sign`, `renderContentHTML` |
 | import | 90+ | `magus query kind:import` | `magus`, `fs`, `std` |
-| rationale | 5 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
+| rationale | 6 | `magus query kind:rationale` | `TODO`, `WHY`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 37 | `magus query project:.` | `generate`, `lint`, `image-build` |
+| . | 39 | `magus query project:.` | `generate`, `lint`, `image-build` |
 | console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 4 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
@@ -84,6 +84,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `image-login` | Logs in to every registry the active mode publishes to, resolving each one's credentials through the workspace's secret provider. |
 | `image-scan` | Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL. |
 | `bindings-generate` | Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations. |
+| `magusfile-api-generate` | Regenerates the magusfile API surface lock: every member a magusfile can call on the magus namespace, one dotted name per line. |
 | `spells-generate` | Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen), the Buzz value-type mirrors (internal/spellruntime/gen/types) and the per-module host declarations (internal/spellruntime/gen/decls), all driven by the go:generate directives in internal/spellruntime. |
 | `mocks-generate` | Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir. |
 | `config-generate` | Regenerates the CLI config-flag plumbing from internal/config/config.go. |
@@ -107,6 +108,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `man-generate` | Renders the roff man pages into manpage/ (repo root). |
 | `changelog-generate` | CHANGELOG.md is a root artifact. |
 | `types-generate` | Regenerates the runtime BuzzObject maps before anything imports a host binding. |
+| `langservice-generate` | Regenerates the host-module snapshot the browser playground's completion and hover read (internal/langservice/manifest_data.go), from the same std declarations bindings_generate reads. |
 | `skills-generate` | Reinstalls the agent skills from their embedded sources in cmd/magus/skills. |
 | `index-generate` | Renders MAGUS.md via `magus describe graph`. |
 | `graph-generate` | Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects. |

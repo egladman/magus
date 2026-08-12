@@ -33,7 +33,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph (schema v8). Query it instead of grepping:
+This workspace has a knowledge graph (schema v9). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -49,21 +49,21 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | target | 100+ | `magus query kind:target` | `content-generate`, `site-generate`, `generate` |
 | spell | 10+ | `magus query kind:spell` | `go`, `markdown`, `typescript` |
 | op | 60+ | `magus query kind:op` | `go-build`, `go-test`, `go-fmt` |
-| tool | 10+ | `magus query kind:tool` | `sh`, `go`, `pnpm` |
+| tool | 20+ | `magus query kind:tool` | `go`, `pnpm`, `buf` |
 | charm | 10+ | `magus query kind:charm` | `rw`, `cd`, `stable` |
-| module | 20+ | `magus query kind:module` | `fs`, `charm`, `magus` |
-| method | 100+ | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 60+ | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS1022` |
-| doc | 200+ | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
-| dir | 100+ | `magus query kind:dir` | `docs/reference/codes/magusfile`, `docs/concepts`, `std/examples/fs` |
+| module | 30+ | `magus query kind:module` | `fs`, `magus`, `charm` |
+| method | 200+ | `magus query kind:method` | `archive.compress`, `archive.list`, `archive.read_file` |
+| diagnostic | 60+ | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS3003` |
+| doc | 300+ | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
+| dir | 100+ | `magus query kind:dir` | `docs/reference/buzz`, `docs/reference/codes/magusfile`, `docs/concepts` |
 | file | 100+ | `magus query kind:file` | `magusfile.buzz`, `docs/render.buzz`, `docs/magusfile.buzz` |
 | function | 700+ | `magus query kind:function` | `tail`, `sign`, `renderContentHTML` |
-| import | 80+ | `magus query kind:import` | `magus`, `fs`, `std` |
-| rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
+| import | 90+ | `magus query kind:import` | `magus`, `fs`, `std` |
+| rationale | 6 | `magus query kind:rationale` | `TODO`, `WHY`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 37 | `magus query project:.` | `generate`, `lint`, `image-build` |
+| . | 39 | `magus query project:.` | `generate`, `lint`, `image-build` |
 | console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 4 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
@@ -84,6 +84,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `image-login` | Logs in to every registry the active mode publishes to, resolving each one's credentials through the workspace's secret provider. |
 | `image-scan` | Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL. |
 | `bindings-generate` | Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations. |
+| `magusfile-api-generate` | Regenerates the magusfile API surface lock: every member a magusfile can call on the magus namespace, one dotted name per line. |
 | `spells-generate` | Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen), the Buzz value-type mirrors (internal/spellruntime/gen/types) and the per-module host declarations (internal/spellruntime/gen/decls), all driven by the go:generate directives in internal/spellruntime. |
 | `mocks-generate` | Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir. |
 | `config-generate` | Regenerates the CLI config-flag plumbing from internal/config/config.go. |
@@ -107,6 +108,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `man-generate` | Renders the roff man pages into manpage/ (repo root). |
 | `changelog-generate` | CHANGELOG.md is a root artifact. |
 | `types-generate` | Regenerates the runtime BuzzObject maps before anything imports a host binding. |
+| `langservice-generate` | Regenerates the host-module snapshot the browser playground's completion and hover read (internal/langservice/manifest_data.go), from the same std declarations bindings_generate reads. |
 | `skills-generate` | Reinstalls the agent skills from their embedded sources in cmd/magus/skills. |
 | `index-generate` | Renders MAGUS.md via `magus describe graph`. |
 | `graph-generate` | Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects. |
@@ -138,7 +140,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `test` |  |
 | `security` | security audits what actually ships against the npm advisory database. |
 | `ci` |  |
-| `build-playground` | build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground into vendor/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it. |
+| `build-playground` | build-playground rebuilds the WebAssembly interpreter the playground loads: the stock Go toolchain compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and Go's own wasm_exec.js glue is copied beside it. |
 | `build-mermaid` | build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into gen/assets/mermaid.js. |
 | `build-hljs` | build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js. |
 | `build-playground-editor` | build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js. |

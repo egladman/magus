@@ -1078,6 +1078,11 @@ func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.Fil
 	case len(entry.SourceOf) > 0:
 		entry.Role = "source"
 		entry.Hint = "declared source: edits invalidate the owning project's cache keys and pull it into the affected set"
+	// After the declared cases, never before them: a project declaring the path is the
+	// stronger claim, and maintained only refines the unclaimed default.
+	case types.IsMagusMaintained(path):
+		entry.Role = "maintained"
+		entry.Hint = "magus maintains this outside any target's globs: it invalidates no cache key, but magus wrote it and expects it committed - regenerate it rather than hand-editing, and never ignore it"
 	default:
 		entry.Hint = "no project declares this path: it invalidates no cache key and affects no target; check your VCS ignore rules before committing it"
 	}
