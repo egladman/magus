@@ -211,7 +211,7 @@ export fun renderBlogIndex(site: Site) > void !> any {
         if (rec != null) { site.metaCommits[site.metaPrefix + site.blog + "/index.md"] = rec; }
     }
     final doc = renderPage(title, desc, body, site.blog + "/index.md", "", url, "", mut [], site);
-    fs\makeDirectory(site.outDir + "/" + site.blog);
+    fs\mkdirAll(site.outDir + "/" + site.blog);
     final of = io\File.open(site.outDir + "/" + site.blog + "/index.html", io\FileMode.write);
     of.write(doc);
     of.close();

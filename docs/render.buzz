@@ -184,7 +184,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // post, a dropped alias, a release out of CHANGELOG.md. Committed-but-not-rendered
     // artifacts (the playground WASM/editor bundle) persist untouched, since nothing here
     // writes or deletes them.
-    fs\makeDirectory(site.outDir);
+    fs\mkdirAll(site.outDir);
     std\print("generating site from " + site.root + "/" + site.docs + "/ -> " + site.outDir + "/");
 
     // Copy static assets the root README references (images, badges). Scoped delete-

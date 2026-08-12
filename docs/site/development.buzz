@@ -45,7 +45,7 @@ fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str,
     final html = renderContentHTML(markdown\toHtml(md), "", "");
     final doc = renderPage(title, desc, html, srcRel, "", url, "", mut [], site);
     final dir = site.outDir + "/" + url.sub(0, url.len() - 1);
-    fs\makeDirectory(dir);
+    fs\mkdirAll(dir);
     fs\writeFile(dir + "/index.html", doc);
     site.addRecord(url, title, desc, md);
     site.pageUrls[url] = true;
@@ -61,7 +61,7 @@ fun renderDevelopmentPageRaw(title: str, desc: str, html: str, searchText: str, 
     registerDevPage(title, desc, url, srcRel, site);
     final doc = renderPage(title, desc, html, srcRel, "", url, "", mut [], site);
     final dir = site.outDir + "/" + url.sub(0, url.len() - 1);
-    fs\makeDirectory(dir);
+    fs\mkdirAll(dir);
     fs\writeFile(dir + "/index.html", doc);
     site.addRecord(url, title, desc, searchText);
     site.pageUrls[url] = true;

@@ -52,7 +52,7 @@ final KEY_ENV = "MAGUS_REGISTRY_KEY";
 // Kept apart from the transform so a network failure stops here rather than being
 // folded into a build that would then publish a half-refreshed snapshot.
 fun fetchAll(dir: str) > int !> any {
-    fs\makeDirectory(dir);
+    fs\mkdirAll(dir);
     final listBody = http\get(UPSTREAM + "/", opts: {"fail": true}).body;
     final list = serialize\jsonDecode(listBody);
     var count = 0;
@@ -200,7 +200,7 @@ export fun main() > void !> any {
         throw "registry: {outDir}/index.json does NOT reproduce from the recorded inputs";
     }
 
-    fs\makeDirectory(outDir);
+    fs\mkdirAll(outDir);
     final path = outDir + "/index.json";
     fs\writeFile(path, content: body);
     std\print("wrote {path} ({body.len()} bytes)");

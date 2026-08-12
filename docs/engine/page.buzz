@@ -129,7 +129,7 @@ export fun writeOffline(site: Site) > void !> any {
         "title": title, "desc": desc, "basePath": basePath, "csp": site.csp,
         "nav": renderSiteNav(basePath, "", false, site.config), "footer": renderSiteFooter(basePath, site),
     });
-    fs\makeDirectory(site.outDir + "/offline");
+    fs\mkdirAll(site.outDir + "/offline");
     fs\writeFile(site.outDir + "/offline/index.html", doc);
     // Register so pruneStaleOutputs doesn't treat it as stale - it is always produced
     // (the SW precaches it).

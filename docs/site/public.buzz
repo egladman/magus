@@ -215,7 +215,7 @@ are hosted on GitHub; the links below go there.</p>
 </ul>
 `, {"hasReleases": hasReleases, "releases": releases, "hasFeeds": feeds.len() > 0, "feeds": feeds});
 
-    fs\makeDirectory(site.outDir + "/public");
+    fs\mkdirAll(site.outDir + "/public");
     // srcRel is a synthesized-page marker, not a file: the "/_index.md" suffix is
     // what tells renderPage there is no source to view or edit, and the depth is
     // what rootPrefix climbs. Pin its commit footer to CHANGELOG.md (this tree's

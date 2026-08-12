@@ -42,7 +42,7 @@ magus\project({
 export fun report(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles("data/**");
     ctx.writesFiles("gen/report.txt");
-    fs\makeDirectory("gen");
+    fs\mkdirAll("gen");
     fs\writeFile("gen/report.txt", "report");
     magus\log.info("wrote gen/report.txt");
 }
@@ -56,7 +56,7 @@ export fun report(ctx: magus\Context, args: [str]) > void {
 // and a third target combines them.
 export fun stamp(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/report.txt");
-    fs\makeDirectory("gen");
+    fs\mkdirAll("gen");
     fs\writeFile("gen/report.txt", "stamp");
 }
 

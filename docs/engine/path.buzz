@@ -43,7 +43,7 @@ export fun makeOutputDir(dir: str, what: str, url: str) > void !> any {
             + ", but " + dir + " is an existing file. A page cannot share a URL with a "
             + "static asset shipped in gen/ - give the page a different URL, or move the asset.";
     }
-    fs\makeDirectory(dir);
+    fs\mkdirAll(dir);
 }
 
 // isGeneratorDir reports whether a docs-ROOT child directory is the SSG's own rather than

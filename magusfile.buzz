@@ -710,7 +710,7 @@ export fun image_login(ctx: magus\Context, args: [str]) > void !> any {
 export fun image_scan(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(image_build);
     if (ctx.hasCharm("rw")) {
-        fs\makeDirectory("dist");
+        fs\mkdirAll("dist");
         proc\exec("trivy", ["image",
             "--format", "sarif",
             "--output", fs\join("dist", "trivy.sarif"),
@@ -782,7 +782,7 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 // never performed.
 export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("manpage/*.1", "internal/manpage/testdata/api.lock");
-    fs\makeDirectory("manpage");
+    fs\mkdirAll("manpage");
     proc\exec("go", ["run", "./cmd/magus-manpage", "-format", "roff", "-out", "manpage"]);
     proc\exec("go", ["generate", "./internal/manpage/..."]);
 }
@@ -1126,13 +1126,13 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     // armv6/armv7 are asset names, not GOARCHes: fold them back to GOARCH=arm + GOARM.
     final goarm = goarm_level(goos, goarch);
 
-    fs\makeDirectory("dist");
+    fs\mkdirAll("dist");
     final v = version();
     var binary = "magus";
     if (goos == "windows") { binary = "magus.exe"; }
 
     final stage = fs\join("dist", goos + "-" + goarch + suffix);
-    fs\makeDirectory(stage);
+    fs\mkdirAll(stage);
 
     var env = mut {"GOOS": goos, "GOARCH": goarch, "GOEXPERIMENT": "jsonv2"};
     if (goarm != "") { env["GOARCH"] = "arm"; env["GOARM"] = goarm; }

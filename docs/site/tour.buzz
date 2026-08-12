@@ -61,7 +61,7 @@ export fun renderPlayground(site: Site) > void !> any {
     // placeholder is also what CSP_INLINE_SCRIPT_SOURCES reads to compute site.csp, so
     // this file is both the hash's source and its sink.
     html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
-    fs\makeDirectory(site.outDir + "/" + outDir);
+    fs\mkdirAll(site.outDir + "/" + outDir);
     fs\writeFile(site.outDir + "/" + outDir + "/index.html", html);
 }
 
@@ -199,7 +199,7 @@ export fun renderTourPage(site: Site) > void !> any {
     final title = "Tour";
     final desc = "A guided tour of magus: curated, runnable examples from a hello-world magusfile through a full multi-toolchain pipeline, custom targets, and the Buzz standard library.";
     final doc = renderPage(title, desc, body, "tour/index.md", "", "tour/", "", mut [], site);
-    fs\makeDirectory(site.outDir + "/tour");
+    fs\mkdirAll(site.outDir + "/tour");
     final of = io\File.open(site.outDir + "/tour/index.html", io\FileMode.write);
     of.write(doc);
     of.close();
