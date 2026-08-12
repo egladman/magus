@@ -3,12 +3,16 @@
 package diff
 
 import (
+	"context"
 	"crypto/sha256"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/bmatcuk/doublestar/v4"
 )
 
 // Snap is a snapshot of files keyed by absolute path; values pack mtime_ns and size into one int64.
@@ -39,29 +43,97 @@ func Take(dirs []string) Snap {
 // ContentSnap is a SHA-256 snapshot per path; used for determinism replay where mtime+size is insufficient.
 type ContentSnap map[string][32]byte
 
-// HashContent walks each directory in dirs and returns a SHA-256 digest per
-// regular file. Missing directories are silently skipped.
-func HashContent(dirs []string) ContentSnap {
+// OutputGlobs is one root directory and the declared output globs RELATIVE to it.
+//
+// Relative because the root is a literal path and a glob is a pattern: joining them fed the
+// checkout's own directory name to the glob engine, so a repository under a path containing
+// `[`, `]`, `{` or `}` matched nothing and the replay passed having hashed zero files.
+// doublestar has no QuoteMeta, so keeping the root out of the pattern is the only fix that
+// covers the whole class. Globbing against os.DirFS(Root) also makes a `..` glob unable to
+// reach outside the root at all.
+//
+// A slice, not one root, because a target may declare an output into another project's tree.
+type OutputGlobs struct {
+	Root  string   // absolute
+	Globs []string // relative to Root, as the magusfile declared them
+}
+
+// HashContent returns a SHA-256 digest per regular file matching one of the declared output
+// globs in sets. A malformed glob is an error; a glob matching nothing is not.
+//
+// It expands globs exactly the way the cache snapshot does (internal/cache/snapshot.go):
+// glob against the root, and where a match is a DIRECTORY, take every file beneath it. That
+// agreement is the point. An earlier version walked base directories and matched each file
+// against the pattern, which reads as equivalent and is not: `*` does not cross a separator,
+// so a declared "dist/*" matched the cache's `dist/linux_amd64/` directory and none of the
+// files inside it. The replay then compared an empty snapshot and reported the target
+// deterministic, and the workaround was to widen a declaration that had been right all along.
+//
+// Globbing rather than walk-then-filter also makes the malformed-glob promise
+// unconditional: doublestar.Glob reports ErrBadPattern whether or not anything matches,
+// where a matcher only consulted per walked file could hide a typo behind an earlier glob
+// that matched, or behind an empty output directory.
+func HashContent(ctx context.Context, sets []OutputGlobs) (ContentSnap, error) {
 	snap := make(ContentSnap, 64)
-	for _, dir := range dirs {
-		_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-			if err != nil || d.IsDir() || d.Type()&fs.ModeSymlink != 0 {
-				return nil //nolint:nilerr // WalkDir: skip unreadable/dir/symlink entries, continue walking
-			}
-			f, err := os.Open(path) // symlinks are filtered above; path is a regular file under the workspace root
+	for _, set := range sets {
+		rootFS := os.DirFS(set.Root)
+		for _, g := range set.Globs {
+			matches, err := doublestar.Glob(rootFS, filepath.ToSlash(g))
 			if err != nil {
-				return nil //nolint:nilerr // skip files we cannot open, continue walking
+				return nil, fmt.Errorf("declared output glob %q: %w", g, err)
 			}
-			h := sha256.New()
-			_, _ = io.Copy(h, f)
-			_ = f.Close()
-			var sum [32]byte
-			copy(sum[:], h.Sum(nil))
-			snap[path] = sum
-			return nil
-		})
+			for _, m := range matches {
+				if err := hashPath(ctx, snap, filepath.Join(set.Root, m)); err != nil {
+					return nil, err
+				}
+			}
+		}
 	}
-	return snap
+	return snap, nil
+}
+
+// hashPath records abs when it is a regular file, and every regular file beneath it when it
+// is a directory. Symlinks are not followed.
+func hashPath(ctx context.Context, snap ContentSnap, abs string) error {
+	info, err := os.Lstat(abs)
+	if err != nil {
+		return nil //nolint:nilerr // a match that vanished between glob and stat is not an output
+	}
+	if !info.IsDir() {
+		if info.Mode()&os.ModeSymlink == 0 {
+			hashFileInto(snap, abs)
+		}
+		return nil
+	}
+	return filepath.WalkDir(abs, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || d.Type()&fs.ModeSymlink != 0 {
+			return nil //nolint:nilerr // skip unreadable/dir/symlink entries, keep walking
+		}
+		// A replay hashes every output tree twice, so this is the longest stretch in the run
+		// with nothing else to interrupt it.
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		hashFileInto(snap, path)
+		return nil
+	})
+}
+
+func hashFileInto(snap ContentSnap, path string) {
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		// A partial hash would read as non-determinism on the next pass, which is now a hard
+		// failure - drop the entry instead and let the missing path speak.
+		return
+	}
+	var sum [32]byte
+	copy(sum[:], h.Sum(nil))
+	snap[path] = sum
 }
 
 // DiffContent returns paths whose content differs between pre and post (added/removed counts as different).
