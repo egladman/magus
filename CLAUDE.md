@@ -84,6 +84,23 @@ workspace load, including the one that would build the binary that understands i
 Escape by shelving just that hunk - `git stash push -- <file>`, `magus run
 go_build .`, `git stash pop`.
 
+The same deadlock has a SECOND shape, and `git stash` does not fix it: pulling a
+change that adds a type the spell runtime provides (`Secret`, 2026-08-12). The spells
+now reference a name your binary lacks, the magusfile fails importing them, and
+stashing does nothing because the tree is already correct - it is the BINARY that is
+behind. Escape by putting the pre-pull spell sources back just long enough to build:
+
+```sh
+git show <pre-pull-ref>:spells/github/actions/spell.buzz > spells/github/actions/spell.buzz
+magus run go_build .
+git checkout HEAD -- spells/github/actions/spell.buzz
+```
+
+Only the spells the root magusfile IMPORTS have to be shelved; a local spell that
+fails to load is logged and skipped, not fatal. As of MGS1021's stale-binary
+explainer the error now says this is what is happening, rather than reading as a
+typo - but it still cannot build the binary for you.
+
 Note `magus affected ci --no-default-charms` can leave you without `./magus`; rebuild
 after gating. NOT because it is a declared output - `go-build` deliberately declares
 none (`magus describe target go-build .` shows `sources:` and no `outputs:`), so the

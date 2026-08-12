@@ -1,9 +1,13 @@
 package ward
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+
+	"github.com/egladman/magus/libs/diagnostics"
 
 	"github.com/egladman/magus/types"
 )
@@ -96,3 +100,63 @@ func CheckRequiredVersion(constraint, running string) *types.DiagnosticError {
 // default of `version` in cmd/magus/version.go (and proc's devVersionSentinel);
 // keep the three in sync.
 const DevVersion = "unknown"
+
+// Codes gopherbuzz reports when a name magus itself provides cannot be resolved.
+// Referenced as literals rather than by importing gopherbuzz: this package is in the
+// magus module's dependency floor, and the codes are the stable published identifier.
+const (
+	buzzUndefinedType    = "BZZ1002"
+	buzzUnresolvedImport = "BZZ2001"
+)
+
+// ExplainStaleBinary annotates a workspace-load failure that looks like an
+// out-of-date binary, and returns err untouched otherwise.
+//
+// CheckRequiredVersion above is the ward that PREVENTS this, and it only fires when
+// the workspace author remembered to raise the floor. When they did not - the common
+// case, because the floor is a separate manual edit from the change that needed it -
+// the failure lands here instead, as a name the magusfile or a spell reached for and
+// this binary has never heard of. That is indistinguishable from a typo unless
+// something says otherwise, and what makes it worse than a typo is that EVERY magus
+// command then fails the same way, including the one that would build a newer binary.
+// That is the deadlock: the tool cannot tell you to update the tool.
+//
+// This cannot say which release introduced the missing name - an old binary has never
+// heard of that release. It says the two things an old binary does know: what it is,
+// and what the workspace asked for. That is enough to act on.
+//
+// Deliberately NOT restricted to released builds. CheckRequiredVersion exempts dev
+// builds on the reasoning that a source build is compiled from the workspace it runs,
+// so it cannot lack a feature that workspace uses. That holds only until the checkout
+// moves: a binary built before a pull is a dev build that is genuinely too old, and it
+// is the single most likely way to reach this in day-to-day work.
+func ExplainStaleBinary(err error, running, constraint string) error {
+	if err == nil {
+		return nil
+	}
+	var d *diagnostics.Error
+	if !errors.As(err, &d) {
+		return err
+	}
+	if code := string(d.Code); code != buzzUndefinedType && code != buzzUnresolvedImport {
+		return err
+	}
+	build := running
+	if build == "" {
+		build = "an unstamped build"
+	}
+	floor := "declares no required_version floor"
+	if constraint != "" {
+		floor = fmt.Sprintf("requires %s", constraint)
+	}
+	// MGS1021, the same code CheckRequiredVersion raises: this is the same condition
+	// caught later and by a different signal, so it should be the same thing to look
+	// up. WrapDiagnostic keeps the original diagnostic in the chain, so a caller that
+	// branches on the BZZ code still can.
+	return types.WrapDiagnostic(types.WorkspaceNeedsNewerMagus, err,
+		"%s\n\nThis is what an out-of-date magus looks like: the workspace reached for a name this "+
+			"build does not provide. This build is %s, and the workspace %s. If the workspace is newer "+
+			"than the binary, update it (`magus self update`) or rebuild it from this checkout - a binary "+
+			"built before your last pull is the usual cause. If the name is genuinely misspelled, this "+
+			"note does not apply", err, build, floor)
+}

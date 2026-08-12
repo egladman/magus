@@ -1869,7 +1869,8 @@ export fun format(ctx: magus\Context, args: [str]) > void {
     // Passing paths scopes it (10 files, none in a child project). The excludes in
     // dprint.json still apply, so MAGUS.md and CHANGELOG.md stay out. Keep this list in
     // step with that file's `includes`.
-    markdown["dprint"](ctx, {"args": ["./*.md", "./benchmarks/**/*.md", "./tapes/**/*.md"]});
+    markdown["dprint"](ctx, {"args": ["./*.md", "./benchmarks/**/*.md", "./tapes/**/*.md",
+        "./cmd/magus/agents-section.md"]});
 }
 
 // Runs the CI gates through their declared dependencies.

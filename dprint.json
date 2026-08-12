@@ -11,7 +11,13 @@
   // config. `magus run format <project>` still scopes correctly, because the op runs in
   // that project's directory.
   "extends": "./dprint-base.json",
-  "includes": ["./*.md", "./benchmarks/**/*.md", "./tapes/**/*.md"],
+  //
+  // cmd/magus/agents-section.md is here because it is EMBEDDED and then pasted into
+  // AGENTS.md, which this config does format. Left out, the source drifted from
+  // dprint's normal form and `magus agent sample` emitted a block that dirtied the
+  // tree the moment a human followed its own paste instruction. A generated block and
+  // its destination have to agree on a formatter.
+  "includes": ["./*.md", "./benchmarks/**/*.md", "./tapes/**/*.md", "./cmd/magus/agents-section.md"],
   // MAGUS.md is generated outright. CHANGELOG.md is a HYBRID: hand-authored prose with a
   // generated block inside (changelog-generate), so formatting it oscillates - dprint
   // rewrites the block, the generator puts it back. Excluded until that generator emits

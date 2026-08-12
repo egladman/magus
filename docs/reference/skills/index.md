@@ -26,5 +26,5 @@ See [Agents](../../guides/integrations/agents.md) for how to choose.
 | [magus-query](magus-query.md) | 7992 | 5782 | 27% | Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs). |
 | [magus-run](magus-run.md) | 9375 | 5947 | 36% | Run builds, tests, lints, and codegen through magus targets. |
 | [magus-sdk](magus-sdk.md) | 13316 | 12879 | 3% | Help a Go developer consume magus as a library (import "github.com/egladman/magus") instead of shelling out to the CLI, and audit whether the SDK actually serves them. |
-| [magus-vcs](magus-vcs.md) | 6848 | 5069 | 25% | Safe git operations in a magus workspace (any repo with magusfile.buzz at the root). |
-| **all 13** | **104339** | **81658** | **21%** | |
+| [magus-vcs](magus-vcs.md) | 7222 | 5265 | 27% | Safe git operations in a magus workspace (any repo with magusfile.buzz at the root). |
+| **all 13** | **104713** | **81854** | **21%** | |
