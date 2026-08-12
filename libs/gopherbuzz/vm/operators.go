@@ -487,27 +487,6 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 		return newDirect("list.len", func(_ context.Context, _ []Value) (Value, error) {
 			return IntValue(int64(len(lo.Items))), nil
 		})
-	case "next":
-		// The explicit iterator protocol: next(key) returns the key AFTER key, with
-		// null meaning "start" and a null result meaning "exhausted". It returns keys
-		// rather than values so a caller can index back into the list, which is what
-		// makes it composable with the subscript.
-		return newDirect("list.next", func(_ context.Context, args []Value) (Value, error) {
-			if len(lo.Items) == 0 {
-				return Null, nil
-			}
-			if len(args) == 0 || args[0].tag() == tagNull {
-				return IntValue(0), nil
-			}
-			i, ok := asInt(args[0])
-			if !ok {
-				return Null, fmt.Errorf("list.next: key must be an int or null, got %s", args[0].buzzKind())
-			}
-			if i < 0 || int(i)+1 >= len(lo.Items) {
-				return Null, nil
-			}
-			return IntValue(i + 1), nil
-		})
 	case "append":
 		return newDirect("list.append", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 1 {
@@ -1301,7 +1280,20 @@ func callValue(vm *VM, ctx context.Context, callee Value, args []Value) (Value, 
 	case tagDirect:
 		return vm.asDirect(callee).Fn(ctx, args)
 	case tagFun:
+		// Parented to the caller's tree, so a collectable the callback allocates joins
+		// the one registry and is swept later. Detached, its registry died with this
+		// VM and its collect() never ran at all - measured: five Tracked built inside
+		// a map callback and then dropped collected ZERO times, where the same five
+		// built outside collected five.
+		//
+		// It also makes the sweep SAFER, not riskier: CollectUnreachable walks the
+		// chain from the requesting VM up to the root, so an object the caller still
+		// holds is marked even when the sweep is armed in here. (A detached VM was not
+		// collecting live outer objects, contrary to a review finding - registry and
+		// roots were both scoped to this VM, so a sweep could only reach its own
+		// garbage. The defect was the orphaning, not premature collection.)
 		callVM := NewVM(ctx)
+		callVM.gcParent = vm.gcRoot()
 		if err := callVM.Call(callee, args); err != nil {
 			return Null, err
 		}

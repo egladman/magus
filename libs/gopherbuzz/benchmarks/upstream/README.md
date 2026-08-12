@@ -87,19 +87,23 @@ either alone. These each cost real time to find:
 - **`fib` is a reserved word** in both. The recursive workload is named `fibo`.
 - **A script needs `fun main(_: [str]) > int`.** Upstream runs `main`, and the int
   return is the exit status, which is how each program reports its own answer.
-- **Upstream's int LITERAL ceiling is ~4e13**, well below the 64-bit range the
-  arithmetic itself handles: `41665416675000` parses, `333328333350000` is a
-  `[E78] int overflow` at parse time. Expected values are sized under it, which is
-  why `fiber` sums 50 000 squares rather than 200 000.
+- **Ints are 48-bit on both engines, not 64.** The literal ceiling is exactly
+  2^47-1 = `140737488355327`; `140737488355328` is `[E78] int overflow` at parse
+  time. The ARITHMETIC has the same range rather than a wider one - `140737488355327
+  - 1`evaluates to`-140737488355328`on upstream and on gopherbuzz alike, so the
+  literal limit is the value limit. Expected values are sized under it, which is why`fiber` sums 50 000 squares rather than 200 000. gopherbuzz reproducing the wrap
+    exactly is conformance, not a shared bug to route around.
 - **No int/double coercion.** `px + 0.0` where `px` is an `int` is a type error, not
   a promotion, so `mandelbrot` uses double grid counters throughout.
 - **A non-optional fiber yield type is now legal** (upstream `fb54e7b`). `fiber`
   declares `*> Tracked` and `*> int`; under the older rule `foreach` bound the loop
   variable as an optional and the arithmetic needed an unwrap.
-- **The stdlib import prefix is `buzz:`** (`import "buzz:std"`). A bare
-  `import "std"` resolves against the SCRIPT's directory upstream and fails. No
-  program here needs it -- they avoid printing so that neither engine's I/O is on
-  the clock -- but a new one would.
+- **The stdlib import prefix is `buzz:`** (`import "buzz:std"`), and it binds a
+  NAMESPACE. A bare `import "std"` resolves against the SCRIPT's directory upstream
+  and fails; after `import "buzz:std"`, bare `print("hi")` is `[E75] print is not
+  defined` and `std\print("hi")` is the working form. No program here needs it --
+  they avoid printing so that neither engine's I/O is on the clock -- but a new one
+  would hit both halves.
 
 ## Adding a workload
 

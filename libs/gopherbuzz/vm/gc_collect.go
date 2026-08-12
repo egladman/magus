@@ -77,13 +77,8 @@ func (vm *VM) maybeCollect() error {
 	if len(root.collectables) < root.gcThreshold {
 		return nil
 	}
-	if _, err := vm.CollectUnreachable(); err != nil {
-		return err
-	}
-	// Amortised: a program legitimately holding N collectables sweeps O(log N)
-	// times rather than once per allocation past the threshold.
-	root.gcThreshold = max(gcMinThreshold, 2*len(root.collectables))
-	return nil
+	_, err := vm.CollectUnreachable()
+	return err
 }
 
 // CollectUnreachable calls `collect()` on every tracked instance the program can no
@@ -143,6 +138,16 @@ func (vm *VM) CollectUnreachable() (int, error) {
 		collected++
 	}
 	root.collectables = append(kept, grown()...)
+	// Amortised, so a program legitimately holding N collectables sweeps O(log N)
+	// times rather than once per allocation past the threshold.
+	//
+	// Here rather than in maybeCollect, because BOTH paths reach this line and only
+	// one reached that one. An explicit gc\collect() that emptied a registry the
+	// automatic sweep had grown the threshold for used to leave the threshold high,
+	// so automatic sweeping stayed off until the registry regrew to the old mark.
+	// The early returns above are the decline and the error, neither of which swept,
+	// and neither of which should move it.
+	root.gcThreshold = max(gcMinThreshold, 2*len(root.collectables))
 	return collected, nil
 }
 

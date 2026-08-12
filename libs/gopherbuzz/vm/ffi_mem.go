@@ -31,6 +31,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"slices"
 	"strings"
 	"sync"
 	"unsafe"
@@ -141,14 +142,14 @@ func StructLayoutWith(fieldTypes []string, known map[string]NamedLayout) (size, 
 // plausible garbage instead of raising, so the offsets are the whole point of the
 // record. Guarded because the slice copy is not free on an unobserved run.
 func logLayout(msg string, fieldTypes []string, size, align int, offsets []int) {
-	if !ffiLogEnabled(LevelTrace) {
+	if !ffiLogEnabled(FFILevelTrace) {
 		return
 	}
-	ffiLog(LevelTrace, msg,
+	ffiLog(FFILevelTrace, msg,
 		slog.Any("fields", fieldTypes),
 		slog.Int("size", size),
 		slog.Int("align", align),
-		slog.Any("offsets", offsets),
+		slog.Any("offsets", slices.Clone(offsets)),
 	)
 }
 
@@ -192,11 +193,13 @@ func AllocFFI(n int) (uintptr, error) {
 	memRegistry[addr] = pb
 	live := len(memRegistry)
 	memMu.Unlock()
-	ffiLog(LevelTrace, "ffi alloc",
-		slog.Uint64("addr", uint64(addr)),
-		slog.Int("size", n),
-		slog.Int("live", live),
-	)
+	if ffiLogEnabled(FFILevelTrace) {
+		ffiLog(FFILevelTrace, "ffi alloc",
+			slog.Uint64("addr", uint64(addr)),
+			slog.Int("size", n),
+			slog.Int("live", live),
+		)
+	}
 	return addr, nil
 }
 
@@ -225,18 +228,25 @@ func WriteFFIBytes(addr uintptr, b []byte) error {
 // Freeing an unknown address is an error (double free or a foreign pointer).
 func FreeFFI(addr uintptr) error {
 	memMu.Lock()
-	defer memMu.Unlock()
 	pb, ok := memRegistry[addr]
 	if !ok {
+		memMu.Unlock()
 		return fmt.Errorf("buzz: ffi: free of unknown address %#x (not from ffi.alloc, or already freed)", addr)
 	}
 	pb.pin.Unpin()
 	delete(memRegistry, addr)
-	ffiLog(LevelTrace, "ffi free",
-		slog.Uint64("addr", uint64(addr)),
-		slog.Int("size", len(pb.data)),
-		slog.Int("live", len(memRegistry)),
-	)
+	size, live := len(pb.data), len(memRegistry)
+	// Unlocked BEFORE logging, matching AllocFFI. An embedder's slog.Handler is
+	// arbitrary code; running it under the allocator's mutex means a handler that
+	// itself allocates FFI memory deadlocks.
+	memMu.Unlock()
+	if ffiLogEnabled(FFILevelTrace) {
+		ffiLog(FFILevelTrace, "ffi free",
+			slog.Uint64("addr", uint64(addr)),
+			slog.Int("size", size),
+			slog.Int("live", live),
+		)
+	}
 	return nil
 }
 

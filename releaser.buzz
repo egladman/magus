@@ -57,7 +57,7 @@ export fun releasableModules(projects: [any]) > [{str: str}] {
     foreach (p in projects) {
         final manifests = p["manifests"];
         if (manifests.len() == 0) { continue; } // no manifest present: not independently versioned
-        final path = "" + p["path"];
+        final path = "{p["path"]}";
         final isRoot = path == ".";
         final manifest = manifests[0]; // first-existing-file-wins
         var gomodule = "";

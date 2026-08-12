@@ -1,0 +1,26 @@
+// @expect: true
+// A collectable allocated inside a map/filter/sort callback must be swept like any
+// other. callValue hands a Buzz callback its own VM; while that VM was DETACHED its
+// registry died with it, so these never had collect() called at all. Measured before
+// the fix: five built inside a callback and dropped collected ZERO times, where the
+// same five built outside collected five.
+import "gc";
+
+var collected = 0;
+
+object Tracked {
+    id: int,
+
+    fun collect() > void { collected = collected + 1; }
+}
+
+fun probe() > bool {
+    final seed = [1, 2, 3, 4, 5];
+    var made = seed.map(fun (_: int, n: int) > Tracked => Tracked{ id = n });
+    final howMany = made.len();
+    made = mut [<Tracked>];
+    gc\collect();
+    return howMany == 5 and collected == 5;
+}
+
+final __r = probe();

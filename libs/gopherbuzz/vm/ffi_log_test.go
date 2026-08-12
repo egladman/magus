@@ -42,7 +42,7 @@ func TestFFILogSilentByDefault(t *testing.T) {
 	SetFFILogger(nil)
 	t.Cleanup(func() { ffiLogger.Store(prev) })
 
-	assert.False(t, ffiLogEnabled(LevelTrace), "no logger installed means nothing is enabled")
+	assert.False(t, ffiLogEnabled(FFILevelTrace), "no logger installed means nothing is enabled")
 	assert.False(t, ffiLogEnabled(slog.LevelError), "not even at ERROR")
 
 	// The instrumented operations must run normally with no logger installed.
@@ -75,7 +75,7 @@ func TestFFILogNothingAtInfo(t *testing.T) {
 }
 
 func TestFFILogStructLayout(t *testing.T) {
-	records := captureFFILog(t, LevelTrace)
+	records := captureFFILog(t, FFILevelTrace)
 
 	size, align, offsets, err := StructLayout([]string{"char", "int", "char"})
 	require.NoError(t, err)
@@ -98,7 +98,7 @@ func TestFFILogStructLayout(t *testing.T) {
 }
 
 func TestFFILogUnionLayoutIsDistinguishable(t *testing.T) {
-	records := captureFFILog(t, LevelTrace)
+	records := captureFFILog(t, FFILevelTrace)
 
 	_, _, _, err := UnionLayout([]string{"int", "double"})
 	require.NoError(t, err)
@@ -110,7 +110,7 @@ func TestFFILogUnionLayoutIsDistinguishable(t *testing.T) {
 }
 
 func TestFFILogAllocFreeLifecycle(t *testing.T) {
-	records := captureFFILog(t, LevelTrace)
+	records := captureFFILog(t, FFILevelTrace)
 
 	addr, err := AllocFFI(64)
 	require.NoError(t, err)
@@ -144,13 +144,13 @@ func TestFFILogLayoutIsBelowDebug(t *testing.T) {
 	require.NoError(t, FreeFFI(addr))
 
 	assert.Empty(t, records(), "layout and lifecycle records belong at TRACE, below DEBUG")
-	assert.Less(t, LevelTrace, slog.LevelDebug)
+	assert.Less(t, FFILevelTrace, slog.LevelDebug)
 }
 
 // TestFFILogFailedLayoutIsNotReported pins that an error path stays silent: the
 // error is returned to the caller, and logging it here would report it twice.
 func TestFFILogFailedLayoutIsNotReported(t *testing.T) {
-	records := captureFFILog(t, LevelTrace)
+	records := captureFFILog(t, FFILevelTrace)
 
 	_, _, _, err := StructLayout([]string{"int", "struct nope"})
 	require.Error(t, err, "an unknown C type must still be an error")

@@ -78,11 +78,7 @@ final S3_TIME_LAYOUT = "2006-01-02T15:04:05Z07:00";
 // duplication is intentional/temporary: there is no shared magus/... buzz helper
 // module for it yet (extracting one needs the embed+register plumbing magus/charm
 // uses). Track for follow-up; keep the two copies in sync.
-fun getenv(name: str) > str {
-    final v = os\env(name);
-    if (v == null) { return ""; }
-    return "" + v;
-}
+fun getenv(name: str) > str { return os\env(name) ?? ""; }
 
 // WHY THIS SPELL DOES NOT USE magus\secret.grant, unlike spells/github/actions.
 //
@@ -224,9 +220,9 @@ export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
     if (access() == "" or bucket() == "") { return false; }
     final io = {};
     cb(io);
-    final path = "/" + bucket() + "/" + cache_key("" + io["hash"]);
+    final path = "/" + bucket() + "/" + cache_key("{io["hash"]}");
     final headers = sign("GET", path, "", EMPTY_SHA256);
-    return http\download(endpoint() + path, "" + io["dest"], headers) == 200;
+    return http\download(endpoint() + path, "{io["dest"]}", headers) == 200;
 }
 
 // put_artifact uploads the file at io.src as the object for io.hash. true on a 200
@@ -236,8 +232,8 @@ export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
     if (access() == "" or bucket() == "") { return false; }
     final io = {};
     cb(io);
-    final src = "" + io["src"];
-    final path = "/" + bucket() + "/" + cache_key("" + io["hash"]);
+    final src = "{io["src"]}";
+    final path = "/" + bucket() + "/" + cache_key("{io["hash"]}");
     final headers = sign("PUT", path, "", crypto\sha256File(src));
     final res = http\upload_chunked("PUT", endpoint() + path, src, 0, headers);
     return res[0] == 200;
@@ -264,10 +260,10 @@ fun listPage(marker: str) > str !> any {
     final headers = sign("GET", path, query, EMPTY_SHA256);
     final res = http\get(endpoint() + path + "?" + query, headers);
     if (res["status"] != 200) {
-        throw "s3 prune: listing page failed with status " + ("" + res["status"])
-            + " (marker \"" + marker + "\"); refusing to prune from a partial listing";
+        throw "s3 prune: listing page failed with status {res["status"]} "
+            + "(marker \"{marker}\"); refusing to prune from a partial listing";
     }
-    return "" + res["body"];
+    return "{res["body"]}";
 }
 
 // listing is a fiber generator over every magus- object in the bucket. Each resume
@@ -333,7 +329,7 @@ export fun prune(target: Target, cb: fun(any)) > bool !> any {
     final gen = &listing();
     var e = resume(gen);
     while (e != null) {
-        e["ms"] = time\parse(S3_TIME_LAYOUT, "" + e["lastModified"]);
+        e["ms"] = time\parse(S3_TIME_LAYOUT, "{e["lastModified"]}");
         artifacts.append(e);
         e = resume(gen);
     }
@@ -343,7 +339,7 @@ export fun prune(target: Target, cb: fun(any)) > bool !> any {
     if (olderSecs > 0) {
         final cutoffMs = os\time() - olderSecs * 1000;
         foreach (it in artifacts) {
-            if (it["ms"] < cutoffMs) { doomed["" + it["key"]] = it; }
+            if (it["ms"] < cutoffMs) { doomed["{it["key"]}"] = it; }
         }
     }
     if (keepLast > 0 and artifacts.len() > keepLast) {
@@ -353,7 +349,7 @@ export fun prune(target: Target, cb: fun(any)) > bool !> any {
         });
         for (var i = keepLast; i < sorted.len(); i = i + 1) {
             final it = sorted[i];
-            doomed["" + it["key"]] = it;
+            doomed["{it["key"]}"] = it;
         }
     }
 
@@ -362,16 +358,16 @@ export fun prune(target: Target, cb: fun(any)) > bool !> any {
     foreach (key in doomed.keys()) {
         final it = doomed[key];
         if (dry) {
-            std\print("s3 prune: would delete " + key + " (" + ("" + it["lastModified"]) + ")");
+            std\print("s3 prune: would delete {key} ({it["lastModified"]})");
             removed = removed + 1;
         } else {
             if (deleteObject(key)) { removed = removed + 1; }
         }
     }
     if (dry) {
-        std\print("s3 prune: " + removed + " object(s) would be deleted, " + artifacts.len() + " scanned");
+        std\print("s3 prune: {removed} object(s) would be deleted, {artifacts.len()} scanned");
     } else {
-        std\print("s3 prune: deleted " + removed + " object(s), " + artifacts.len() + " scanned");
+        std\print("s3 prune: deleted {removed} object(s), {artifacts.len()} scanned");
     }
     return true;
 }

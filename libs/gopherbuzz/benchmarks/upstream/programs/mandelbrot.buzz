@@ -23,5 +23,8 @@ fun main(_: [str]) > int {
         }
         py = py + 1.0;
     }
-    return if (checksum > 0) 0 else 1;
+    // The exact escape-time sum over the grid, computed independently rather than
+    // read back out of this program. `> 0` passed for any wrong answer, on the one
+    // workload where a broken float path is most likely and least visible.
+    return if (checksum == 3954085) 0 else 1;
 }

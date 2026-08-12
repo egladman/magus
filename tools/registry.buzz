@@ -46,6 +46,12 @@ final UPSTREAM = "https://endoflife.date/api/v1/products";
 // SCHEMA_VERSION must match internal/registry.SchemaVersion. Additive only.
 final SCHEMA_VERSION = 1;
 
+// MIN_PRODUCTS is the floor below which a build refuses to publish. endoflife.date
+// carried 462 products when this was written; the floor is set well under that so a
+// genuine upstream contraction does not wedge the pipeline, while still catching the
+// failure that matters - a fetch that produced almost nothing.
+final MIN_PRODUCTS = 100;
+
 // KEY_ENV names the signing key. Named, never held: see the header.
 final KEY_ENV = "MAGUS_REGISTRY_KEY";
 
@@ -61,12 +67,23 @@ final KEY_ENV = "MAGUS_REGISTRY_KEY";
 // alphanumerics with dashes or dots.
 fun safeSlug(slug: str) > bool {
     if (slug == "" or slug == "." or slug == "..") { return false; }
-    foreach (ch in slug) {
-        final ok = (ch >= "a" and ch <= "z")
-            or (ch >= "A" and ch <= "Z")
-            or (ch >= "0" and ch <= "9")
-            or ch == "-" or ch == "_" or ch == ".";
+    var i = 0;
+    while (i < slug.len()) {
+        // Compared as BYTES. Buzz has no relational operator on str - upstream
+        // rejects `ch >= "a"` with [E12] "Expected int or double", measured against
+        // 0.5.0-265-g294d8f9 - and docs/lib/text.buzz's strLess already worked around
+        // exactly this by indexing bytes. str.len() and str.byte() are both bytewise,
+        // so this also rejects every byte of a multi-byte codepoint, which is what we
+        // want: a real endoflife.date slug is ASCII.
+        final b = slug.byte(i);
+        final ok = (b >= 97 and b <= 122)   // a-z
+            or (b >= 65 and b <= 90)        // A-Z
+            or (b >= 48 and b <= 57)        // 0-9
+            or b == 45                      // -
+            or b == 95                      // _
+            or b == 46;                     // .
         if (!ok) { return false; }
+        i = i + 1;
     }
     return true;
 }
@@ -245,6 +262,19 @@ export fun main() > void !> any {
     if (expiresAt == "") {
         throw "registry: REGISTRY_EXPIRES is required (RFC3339); it is the bound on replaying an old copy, so there is no safe default to guess";
     }
+    // An empty or near-empty registry must never be published, and this is the only
+    // place that can notice. The signature makes it authentic, `verify` confirms it
+    // reproduces byte-for-byte from the same empty inputs, and registry.yaml's
+    // `git diff --quiet` sees a change and opens a PR - so every downstream check
+    // agrees on a file that has silently lost every product. A fetch that half-failed,
+    // or an upstream slug-shape change that safeSlug now skips, both land here.
+    //
+    // Counted on the INPUTS rather than the built document: productSlugs is what
+    // buildDoc reads, and it is typed [str] where doc["eol"] is any.
+    final cached = productSlugs(upstreamDir).len();
+    if (cached < MIN_PRODUCTS) {
+        throw "registry: refusing to build from {cached} cached product(s) in \"{upstreamDir}\"; expected at least {MIN_PRODUCTS}. Re-run REGISTRY_MODE=fetch, or lower MIN_PRODUCTS deliberately if upstream really shrank";
+    }
     final body = encode(buildDoc(upstreamDir, releasesDir, expiresAt));
 
     if (mode == "verify") {
@@ -254,6 +284,14 @@ export fun main() > void !> any {
             return;
         }
         throw "registry: {outDir}/index.json does NOT reproduce from the recorded inputs";
+    }
+
+    if (mode != "build") {
+        // Unreachable: the validation above admits only three modes and the other two
+        // returned. Explicit anyway, because signing must never be what happens when
+        // nothing else matched - a fourth mode added later that forgets its own return
+        // would otherwise publish and sign.
+        throw "registry: unreachable - mode \"" + mode + "\" fell through to the sign path";
     }
 
     fs\mkdirAll(outDir);

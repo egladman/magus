@@ -1,0 +1,12 @@
+// @error: null is not callable
+// `list.next` is not part of the language. gopherbuzz used to expose it as an
+// explicit iterator protocol; upstream removed it from the user surface (the same
+// change that stopped exposing map.next), so keeping it meant accepting a program
+// upstream rejects - the permissiveness direction that matters most. Nothing in
+// this workspace or upstream's own tests used it.
+//
+// The rejection is a runtime "null is not callable" rather than upstream's
+// compile-time [E57] "List property doesn't exist", because that is how every
+// unknown list member behaves here. Both refuse the program.
+final xs = [1, 2, 3];
+final __r = xs.next(0);

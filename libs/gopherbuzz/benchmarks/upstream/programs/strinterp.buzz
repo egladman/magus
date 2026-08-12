@@ -6,5 +6,7 @@ fun main(_: [str]) > int {
         last = "item {i} of many";
         i = i + 1;
     }
-    return if (last.len() > 10) 0 else 1;
+    // The whole final string. `len() > 10` passed for any interpolation emitting
+    // more than ten bytes, including one that dropped or mangled the {i}.
+    return if (last == "item 199999 of many") 0 else 1;
 }

@@ -327,7 +327,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     }
     site.pageAxes[canonUrl] = axes;
 
-    var contentBlock = "" + readingHtml + "    <article>\n" + content + "    </article>\n";
+    var contentBlock = readingHtml + "    <article>\n" + content + "    </article>\n";
     if (sectionNav != "" or subtree != "" or tocList != "") {
         // Muted closing hint at the foot of the aside, shown only when it is the mobile
         // bottom sheet; CSS hides it on the desktop sidebar, where there's nothing to dismiss.

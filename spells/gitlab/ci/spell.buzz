@@ -54,11 +54,7 @@ final HIDE = ESC + "[0K";
 
 // getenv reads one environment variable, returning "" when unset (os.env returns
 // null for an unset var; callers test against "").
-fun getenv(name: str) > str {
-    final v = os\env(name);
-    if (v == null) { return ""; }
-    return "" + v;
-}
+fun getenv(name: str) > str { return os\env(name) ?? ""; }
 
 // enabled gates the whole provider on running under GitLab CI, which sets
 // GITLAB_CI=true for every job. magus probes this once, so wiring the spell
@@ -89,22 +85,22 @@ fun sectionID(s: str) > str {
 // group_start opens a section. Unlike Actions, GitLab can show one expanded, so
 // a caller asking for that gets it rather than having the fold skipped.
 export fun group_start(target: Target, cb: fun(any)) > bool {
-    final io = {<str, any>};
+    final io = {<str: any>};
     cb(io);
-    final id = sectionID("" + io["id"]);
+    final id = sectionID("{io["id"]}");
     // A section with no name could never be closed, so emit nothing.
     if (id == "") { return true; }
     var collapsed = "";
     if (io["collapsed"] == true) { collapsed = "[collapsed=true]"; }
     std\print(HIDE + "section_start:" + nowSeconds() + ":" + id + collapsed
-        + "\r" + HIDE + ("" + io["title"]));
+        + "\r" + HIDE + ("{io["title"]}"));
     return true;
 }
 
 export fun group_end(target: Target, cb: fun(any)) > bool {
-    final io = {<str, any>};
+    final io = {<str: any>};
     cb(io);
-    final id = sectionID("" + io["id"]);
+    final id = sectionID("{io["id"]}");
     if (id == "") { return true; }
     std\print(HIDE + "section_end:" + nowSeconds() + ":" + id + "\r" + HIDE);
     return true;

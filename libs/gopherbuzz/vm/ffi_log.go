@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"context"
 	"log/slog"
 	"sync/atomic"
 )
@@ -21,15 +22,19 @@ import (
 //     is silent: a bad struct offset marshals plausible garbage rather than raising,
 //     and there is nothing to inspect after the fact.
 //
-// slog has no TRACE, so LevelTrace below is the customary negative offset. The
+// slog has no TRACE, so FFILevelTrace below is the customary negative offset. The
 // layout and lifecycle records use it because one zdef-heavy program emits a great
 // many of them; the zdef bind itself is DEBUG, being once per call.
 
-// LevelTrace is the level for per-operation FFI records: struct and union layout
+// FFILevelTrace is the level for per-operation FFI records: struct and union layout
 // decisions, and each alloc and free. It sits below slog.LevelDebug because a
 // program that marshals in a loop emits one per operation, which is too much for a
 // host that merely turned debug logging on.
-const LevelTrace = slog.LevelDebug - 4
+//
+// FFI-qualified deliberately, like AllocFFI and SetFFILogger beside it: this is not
+// a trace level for the vm package, and magus's own config.LevelTrace has the same
+// value, so an unqualified name would need an alias wherever both are imported.
+const FFILevelTrace = slog.LevelDebug - 4
 
 // ffiLogger is the embedder-installed logger, nil until SetFFILogger is called.
 // Package-level rather than per-VM because the functions that report -- the layout
@@ -38,9 +43,22 @@ const LevelTrace = slog.LevelDebug - 4
 // already running Buzz.
 var ffiLogger atomic.Pointer[slog.Logger]
 
-// SetFFILogger installs the logger the FFI boundary reports to. Passing nil
-// restores the default of emitting nothing. See the package comment above for what
-// is reported and at which levels; note that nothing is emitted at INFO or above.
+// ffiLogCtx is the context handed to the installed handler. It is Background and not
+// a caller's ctx because the reporting sites are package-level functions - the layout
+// calculators and the allocator - which take none and cannot without changing their
+// exported signatures. Passing a literal nil would also work, since slog substitutes
+// Background, but it hides the decision. A context-aware handler therefore gets no
+// correlation from this seam; wiring one is a signature change worth making
+// deliberately rather than by threading a TODO through six call sites.
+var ffiLogCtx = context.Background()
+
+// SetFFILogger installs the logger the FFI boundary reports to. Passing nil restores
+// the default of emitting nothing.
+//
+// What is reported: the zdef bind at slog.LevelDebug (once per zdef call), and struct
+// and union layout decisions plus each alloc and free at FFILevelTrace (once per
+// operation). NOTHING is emitted at INFO or above - choosing what an operator sees is
+// the host's call - and an error this package returns is never also logged.
 func SetFFILogger(l *slog.Logger) { ffiLogger.Store(l) }
 
 // ffiLog reports one FFI event, and is a no-op when no logger is installed or the
@@ -49,10 +67,10 @@ func SetFFILogger(l *slog.Logger) { ffiLogger.Store(l) }
 // stay queryable.
 func ffiLog(level slog.Level, msg string, attrs ...slog.Attr) {
 	l := ffiLogger.Load()
-	if l == nil || !l.Enabled(nil, level) {
+	if l == nil || !l.Enabled(ffiLogCtx, level) {
 		return
 	}
-	l.LogAttrs(nil, level, msg, attrs...)
+	l.LogAttrs(ffiLogCtx, level, msg, attrs...)
 }
 
 // ffiLogEnabled reports whether an FFI record at level would be emitted. Call it
@@ -60,5 +78,5 @@ func ffiLog(level slog.Level, msg string, attrs ...slog.Attr) {
 // is the case that matters -- so an unobserved run pays nothing for them.
 func ffiLogEnabled(level slog.Level) bool {
 	l := ffiLogger.Load()
-	return l != nil && l.Enabled(nil, level)
+	return l != nil && l.Enabled(ffiLogCtx, level)
 }

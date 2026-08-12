@@ -20,8 +20,10 @@ namespace testing;
 //     takes `fn: fun () > void` with no error set, which is what lets a caller pass a
 //     `fun () > void !> str` literal (std/lib/lcov.buzz and badge.buzz both do).
 //
-// Upstream also has `failedAsserts`, `failedTests`, `succeededTests` and `reset`,
-// which have no counterpart here.
+// `reset`, `failedAsserts`, `failedTests` and `succeededTests` DO exist here, with
+// upstream's names and arity. (An earlier revision of this header said they did not,
+// which was wrong and was exactly the mistake this paragraph was rewritten to fix -
+// it was asserted from a grep that never searched for those names.)
 //
 // The implementation is gopherbuzz's own (no upstream source is reused; the rest of
 // gopherbuzz's stdlib is likewise a clean-room implementation of the language).

@@ -65,7 +65,7 @@ final SCHEME = "op://";
 export fun resolve_secret(target: Target, cb: fun(any)) > Secret !> any {
     final io = {};
     cb(io);
-    final ref = "" + io["ref"];
+    final ref = "{io["ref"]}";
     if (ref == "") {
         throw "onepassword: no reference given";
     }
@@ -98,7 +98,7 @@ export fun resolve_secret(target: Target, cb: fun(any)) > Secret !> any {
     final res = proc\exec("op", args: ["read", uri], dir: ".",
         opts: {"allow_failure": true, "quiet": true});
     if (res["code"] != 0) {
-        final err = "" + res["stderr"];
+        final err = "{res["stderr"]}";
         if (has(err, "not signed in") or has(err, "no active session")) {
             throw "onepassword: not signed in. Run `op signin`, or for an unattended run "
                 + "set OP_SERVICE_ACCOUNT_TOKEN.\n  reference: " + uri;
@@ -110,7 +110,7 @@ export fun resolve_secret(target: Target, cb: fun(any)) > Secret !> any {
         throw "onepassword: `op read " + uri + "` failed: " + err.trim();
     }
 
-    final value = "" + res["stdout"];
+    final value = "{res["stdout"]}";
     if (value == "") {
         throw "onepassword: " + uri + " resolved to an empty value; check the item and field names";
     }

@@ -25,5 +25,8 @@ fun main(_: [str]) > int {
         total = total + band;
         i = i + 1;
     }
-    return if (total > 0) 0 else 1;
+    // 300000 * (mean enum weight 2.5 + mean band 2.5). Pinned exactly: `> 0` said
+    // nothing about the range arms' containment semantics, which is what this
+    // workload exists to exercise - a wrong arm still yields a large positive sum.
+    return if (total == 1500000) 0 else 1;
 }

@@ -22,11 +22,7 @@ import "assert";
 final comment_marker = "<!-- magus:advice -->";
 
 // env reads a variable, returning "" rather than null so callers can compare directly.
-export fun env(name: str) > str {
-    final v = os\env(name);
-    if (v == null) { return ""; }
-    return "" + v;
-}
+export fun env(name: str) > str { return os\env(name) ?? ""; }
 
 export fun beginMarker(name: str) > str { return "<!-- magus:advice:" + name + ":begin -->"; }
 export fun endMarker(name: str) > str { return "<!-- magus:advice:" + name + ":end -->"; }
@@ -200,9 +196,24 @@ fun footer() > str {
 // comment on every push whether or not a finding had moved. That is exactly the edit
 // churn and notification noise the single-comment design exists to avoid.
 fun withoutFooter(text: str) > str {
-    final at = text.indexOf(footer_marker);
+    // The LAST occurrence, not the first. compose always appends the footer last, so
+    // the trailing one is the real footer; an earlier one is content. An advisor that
+    // quotes a conflicted hunk or a doc containing the marker - merge-conflict and
+    // hand-edited-generated both paste repository text - would otherwise truncate
+    // both sides at its own quoted copy, and every finding after it would compare as
+    // absent, suppressing a PATCH that was genuinely needed.
+    //
+    // Buzz has no lastIndexOf, so this walks forward taking the last hit.
+    var at: int? = null;
+    var scan = 0;
+    while (true) {
+        final hit = text.indexOf(footer_marker, from: scan);
+        if (hit == null) { break; }
+        at = hit;
+        scan = hit + footer_marker.len();
+    }
     if (at == null) { return text.trim(); }
-    return text.sub(0, len: at).trim();
+    return text.sub(0, len: at!).trim();
 }
 
 test "withoutFooter ignores a changed timestamp" {
@@ -225,6 +236,19 @@ test "recomposing the same findings is a no-op under the guard" {
     assert\equal(withoutFooter(again), want: withoutFooter(first),
         message: "the guard must see an unchanged comment as unchanged");
     std\assert(first.indexOf(footer_marker) != null, message: "compose always writes a footer");
+}
+
+test "withoutFooter is not fooled by an advisor quoting the marker" {
+    // merge-conflict and hand-edited-generated both paste repository text into their
+    // findings, so the marker is reachable content. Truncating at the FIRST hit threw
+    // away every finding after it and suppressed a PATCH that was needed.
+    final quoted = "finding one\nsomeone pasted " + footer_marker + " into a diff\nfinding two";
+    final a = quoted + "\n" + footer_marker + "\n<sub>Last updated 10:00.</sub>";
+    final b = quoted + "\n" + footer_marker + "\n<sub>Last updated 11:30.</sub>";
+    assert\equal(withoutFooter(a), want: withoutFooter(b),
+        message: "only the real trailing footer differs");
+    std\assert(withoutFooter(a).indexOf("finding two") != null,
+        message: "the content after the quoted marker survives");
 }
 
 test "withoutFooter tolerates a comment with no footer yet" {
@@ -307,7 +331,7 @@ fun find(repo: str, pr: str) > str !> any {
         "repos/" + repo + "/issues/" + pr + "/comments"], dir: ".", opts: {"quiet": true});
     foreach (c in serialize\jsonDecode(listed.stdout).listValue()) {
         if (c.q("body").stringValue().indexOf(comment_marker) != null) {
-            return "" + c.q("id").integerValue();
+            return "{c.q("id").integerValue()}";
         }
     }
     return "";

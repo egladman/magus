@@ -1,0 +1,40 @@
+// @expect: true
+// The other direction, and the one that is unrecoverable if it breaks: a sweep armed
+// INSIDE a callback must not collect what the caller still holds. The callback below
+// allocates past the sweep threshold in a single invocation, so a sweep certainly
+// runs while it is the executing VM; the caller's three instances must survive it.
+//
+// Safe because CollectUnreachable walks the chain from the requesting VM up to the
+// root, so the caller's frame is marked. Ids separate the two populations: a bare
+// count cannot tell a live object from a throwaway.
+var throwaways = 0;
+var liveCollected = 0;
+
+object Tracked {
+    id: int,
+
+    fun collect() > void {
+        if (this.id >= 9000) { liveCollected = liveCollected + 1; }
+        else { throwaways = throwaways + 1; }
+    }
+}
+
+fun probe() > bool {
+    final live = mut [<Tracked>];
+    var i = 0;
+    while (i < 3) {
+        live.append(Tracked{ id = 9000 + i });
+        i = i + 1;
+    }
+    final ids = live.map(fun (_: int, t: Tracked) > int {
+        var k = 0;
+        while (k < 400) {
+            _ = Tracked{ id = k };
+            k = k + 1;
+        }
+        return t.id;
+    });
+    return liveCollected == 0 and throwaways > 0 and live.len() == 3 and ids.len() == 3;
+}
+
+final __r = probe();

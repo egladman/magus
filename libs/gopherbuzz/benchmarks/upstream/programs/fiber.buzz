@@ -1,6 +1,6 @@
 // A generator fiber driven by foreach: each yield suspends the fiber's own
-// execution state and resumes the driver. Sized so the checksum stays under
-// upstream's int-literal ceiling (~4e13).
+// execution state and resumes the driver. Sized so the checksum stays under the
+// 48-bit int ceiling (2^47-1), which both engines share.
 //
 // The yield type is non-optional, which upstream permitted from fb54e7b onward;
 // under the older rule foreach bound `v` as `int?` and the addition below needed
