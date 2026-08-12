@@ -651,6 +651,18 @@ func marshalStructArg(inst *objectInst) (structArg, error) {
 			if err := WriteScalar(addr, offsets[i], ct, v.AsInt(), 0, false); err != nil {
 				return sa, err
 			}
+		case v.tag() == tagBool:
+			// Without this a bool field was silently never written: the block kept
+			// the zero AllocFFI left, so every bool reached C as false however the
+			// script set it. C represents a bool as 0/1 in the field's own width,
+			// which is what ct already describes.
+			var n int64
+			if v.AsBool() {
+				n = 1
+			}
+			if err := WriteScalar(addr, offsets[i], ct, n, 0, false); err != nil {
+				return sa, err
+			}
 		case v.tag() == tagFloat:
 			if err := WriteScalar(addr, offsets[i], ct, 0, v.AsFloat(), true); err != nil {
 				return sa, err
@@ -677,9 +689,17 @@ func unmarshalStructArg(sa structArg) error {
 		if err != nil {
 			return err
 		}
-		if isFloat {
+		switch {
+		case isFloat:
 			sa.inst.Fields[i] = FloatValue(f64)
-		} else {
+		case sa.inst.Fields[i].tag() == tagBool:
+			// Restore the field's own kind. Writing IntValue here replaced a
+			// bool-declared field with 0 or 1, so a round trip through C changed the
+			// field's TYPE - and `if (s.flag)` then ran against an int. The declared
+			// C type cannot distinguish this (a bool is just a 1-byte integer), so
+			// the field's existing tag is what says how to spell the result.
+			sa.inst.Fields[i] = BoolValue(i64 != 0)
+		default:
 			sa.inst.Fields[i] = IntValue(i64)
 		}
 	}

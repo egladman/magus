@@ -425,6 +425,15 @@ func makeBufferValue(st *bufferState) vm.Value {
 		if len(args) < 1 {
 			return vm.Null, fmt.Errorf("Buffer.readStruct: requires the struct type")
 		}
+		// A pointer field decodes by walking the ADDRESS stored in st.bytes
+		// (decodeField -> ReadCString). collect() frees those addresses via
+		// st.owned but leaves st.bytes holding them, so reading a struct back
+		// afterwards walked freed memory - observed returning recycled heap, and
+		// able to fault outright past any recover since FreeFFI unpins. st.bytes
+		// alone cannot say whether its pointers are still live; st.freed can.
+		if st.freed {
+			return vm.Null, fmt.Errorf("Buffer.readStruct: use after collect()")
+		}
 		types, offsets, size, err := foreignLayoutOf(args[0])
 		if err != nil {
 			return vm.Null, err
