@@ -37,6 +37,8 @@ import "http";
 import "encoding/yaml";
 import "serialize";
 import "crypto";
+// Used by the test blocks below, which run under buzz_test now that it globs tools/.
+import "assert";
 
 // UPSTREAM is the API this republishes. One machine reads it once a day.
 final UPSTREAM = "https://endoflife.date/api/v1/products";
@@ -46,6 +48,45 @@ final SCHEMA_VERSION = 1;
 
 // KEY_ENV names the signing key. Named, never held: see the header.
 final KEY_ENV = "MAGUS_REGISTRY_KEY";
+
+// safeSlug reports whether a product name from the upstream API may be used as a
+// filename.
+//
+// The name is attacker-controlled in the only sense that matters here: it arrives in
+// a third-party HTTP response, and this runs in a CI job holding MAGUS_REGISTRY_KEY.
+// fs\join NORMALIZES a path, it does not confine one, so a name of `../../x` resolves
+// cleanly to a write outside the cache directory. The check is a whitelist rather
+// than a blacklist of separators because that is the form that stays correct when a
+// platform adds another one; every real endoflife.date slug is lowercase
+// alphanumerics with dashes or dots.
+fun safeSlug(slug: str) > bool {
+    if (slug == "" or slug == "." or slug == "..") { return false; }
+    foreach (ch in slug) {
+        final ok = (ch >= "a" and ch <= "z")
+            or (ch >= "A" and ch <= "Z")
+            or (ch >= "0" and ch <= "9")
+            or ch == "-" or ch == "_" or ch == ".";
+        if (!ok) { return false; }
+    }
+    return true;
+}
+
+test "safeSlug accepts the real product-name shapes" {
+    assert\isTrue(safeSlug("go"), message: "a bare slug");
+    assert\isTrue(safeSlug("dotnet-core"), message: "a dash");
+    assert\isTrue(safeSlug("node.js"), message: "an interior dot");
+    assert\isTrue(safeSlug("python_3"), message: "an underscore and a digit");
+}
+
+test "safeSlug refuses a name that would escape the cache directory" {
+    assert\isFalse(safeSlug(""), message: "empty");
+    assert\isFalse(safeSlug("."), message: "the directory itself");
+    assert\isFalse(safeSlug(".."), message: "the parent directory");
+    assert\isFalse(safeSlug("../../etc/cron.d/x"), message: "a traversal fs\\join would resolve, not confine");
+    assert\isFalse(safeSlug("a/b"), message: "a posix separator");
+    assert\isFalse(safeSlug("a\\b"), message: "a windows separator");
+    assert\isFalse(safeSlug("a b"), message: "a space");
+}
 
 // fetchAll downloads the product list and every product into dir, one file each.
 //
@@ -58,9 +99,15 @@ fun fetchAll(dir: str) > int !> any {
     var count = 0;
     foreach (entry in list.q("result").list()) {
         final slug = entry.q("name").stringValue();
-        if (slug == "") { continue; }
+        if (!safeSlug(slug)) { continue; }
         final body = http\get(UPSTREAM + "/" + slug, opts: {"fail": true}).body;
-        fs\writeFile(fs\join(dir, slug + ".json"), content: body);
+        // Bound to a name rather than inlined: this file runs under `magus buzz`
+        // WITHOUT --embedded (see .github/workflows/registry.yaml), so strict mode
+        // applies and every argument after the first must be labeled unless it is a
+        // bare identifier. fs\join is variadic, so it is declared untyped and has no
+        // parameter name to label with - an identifier is the only form that parses.
+        final file = slug + ".json";
+        fs\writeFile(fs\join(dir, file), content: body);
         count = count + 1;
     }
     return count;
@@ -68,7 +115,7 @@ fun fetchAll(dir: str) > int !> any {
 
 // productSlugs lists the cached responses, sorted, so the output does not depend on
 // what order the filesystem hands them back.
-fun productSlugs(dir: str) > [str] {
+fun productSlugs(dir: str) > [str] !> any {
     var names: mut [str] = mut [<str>];
     foreach (name in fs\listDir(dir)) {
         if (name.endsWith(".json")) { names.append(name); }
@@ -175,6 +222,15 @@ fun encode(doc: {str: any}) > str {
 
 export fun main() > void !> any {
     final mode = os\env("REGISTRY_MODE") ?? "build";
+    // Validated rather than dispatched on, because the fall-through case SIGNS. With
+    // only `fetch` and `verify` tested below, REGISTRY_MODE=verfiy did not verify
+    // anything - it rebuilt index.json, overwrote the published file, signed it with
+    // MAGUS_REGISTRY_KEY and reported success. The header sells verify as "a stranger
+    // can run verify and get a diff rather than a promise"; a one-character slip
+    // turned that into an unreviewed re-sign.
+    if (mode != "build" and mode != "fetch" and mode != "verify") {
+        throw "registry: REGISTRY_MODE must be build, fetch or verify; got \"" + mode + "\"";
+    }
     final upstreamDir = os\env("REGISTRY_UPSTREAM") ?? "upstream";
     final releasesDir = os\env("REGISTRY_RELEASES") ?? "releases";
     final outDir = os\env("REGISTRY_OUT") ?? "docs/gen/public/registry";

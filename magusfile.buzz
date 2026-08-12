@@ -1681,9 +1681,30 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 // ten had never run in CI - nothing invoked them, and the buzz-check gate above only ever
 // covered cmd/magus/starter/spells - so both files were free to rot while looking covered.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("badge.buzz", "coverage.buzz", "spells/**/*.buzz", "docs/lib/*.buzz");
+    ctx.readsFiles("badge.buzz", "coverage.buzz", "spells/**/*.buzz", "docs/lib/*.buzz",
+        "std/lib/*.buzz", "tools/*.buzz");
     foreach (mod in ["badge.buzz", "coverage.buzz"]) {
         magus\cmd("buzz", args: ["-t", mod]);
+    }
+    // GLOBBED, for the reason the spell paragraph below gives, applied to the two trees
+    // that were still hand-omitted. Both were carrying real breakage precisely because
+    // nothing ran them:
+    //
+    //   std/lib/*.buzz  four of lcov.buzz's nine tests called assert\equal with no
+    //                   `import "assert";`, so they failed the moment anything ran them.
+    //                   An embedded stdlib module, so --embedded like the spells.
+    //
+    //   tools/*.buzz    registry.buzz did not PARSE. Three steps of
+    //                   .github/workflows/registry.yaml invoke it as
+    //                   `magus buzz tools/registry.buzz`, so the registry workflow was
+    //                   dead - on a file that signs with MAGUS_REGISTRY_KEY. Run WITHOUT
+    //                   --embedded, matching those steps: that is the difference between
+    //                   catching a strict-mode error and hiding it.
+    foreach (mod in fs\glob("std/lib/*.buzz")) {
+        magus\cmd("buzz", args: ["-t", "--embedded", mod.value]);
+    }
+    foreach (mod in fs\glob("tools/*.buzz")) {
+        magus\cmd("buzz", args: ["-t", mod.value]);
     }
     // Spell sources and the docs libraries carry ~90 more `test "..." {}` blocks that
     // nothing ran until 2026-08-09. That gap is why a broken escaper shipped: every one

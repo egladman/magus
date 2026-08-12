@@ -14,6 +14,11 @@
 namespace lcov;
 
 import "std";
+// Used only by the test blocks at the foot of this file, four of which called
+// assert\equal / assert\throws with nothing importing the namespace. They had never
+// run: buzz_test named badge.buzz and coverage.buzz by hand and globbed spells and
+// docs/lib, and std/lib was in none of those.
+import "assert";
 
 // keepsSource decides whether one lcov SF: path counts toward the figure.
 //

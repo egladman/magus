@@ -225,17 +225,20 @@ were the language.{{end}}
   evaluates it once.** Authority: GOPHERBUZZ. See Lens 2 - flagged there as a
   correctness bug when the target has a side effect, flagged here as the
   reason it will not misbehave the same way upstream.
-- **A declared `!>` error set is parsed and thrown away; nothing enforces it.**
-  Authority: GOPHERBUZZ. Upstream Buzz treats `!> ErrType` as a real error set.
-  gopherbuzz consumes the annotation and calls skipType, and no AST node stores
-  it{{if .Full}}, so a function declaring `> str !> str` that throws, called
-  with no try/catch from a function declaring no raise at all, compiles and runs
-  clean{{end}}. Read a `!>` as documentation, never as a checked contract: it
-  tells you what the author BELIEVED raises, and the checker will not tell you
-  when that stops being true. Do NOT treat its absence as proof a call cannot
-  raise{{if .Full}}, and do not add one expecting it to gate anything - adding
-  `!>` to a signature that enforces nothing makes the docs assert a guarantee
-  the language does not keep, which is worse than the current honest silence{{end}}.
+- **A declared `!>` error set enforces PRESENCE but not TYPE.**
+  Authority: GOPHERBUZZ. Upstream Buzz treats `!> ErrType` as a real error set;
+  gopherbuzz checks only that a raising call is propagated or caught, never what
+  it raises. Calling a `!> str` function from one declaring no raise at all is
+  BZZ1006, "call may raise but is neither declared with !> nor caught" - a real
+  gate, and a common one{{if .Full}}: it is what a script invoked by `magus buzz`
+  trips on when it calls something like `fs\listDir` without declaring
+  `!>`{{end}}. But a function declaring `!> int` may throw a `str` through it and
+  nothing objects{{if .Full}}, so the named type is documentation while the arrow
+  itself is checked{{end}}.
+  So: do not treat a missing `!>` as proof a call cannot raise, and do not trust
+  the NAMED type. Both were measured against gopherbuzz{{if .Full}}; this bullet
+  previously said the whole annotation was "parsed and thrown away, nothing
+  enforces it", which sent reviewers straight past every BZZ1006-class defect{{end}}.
 - **An anonymous object field shadows a same-named builtin method.**
   Authority: GOPHERBUZZ. `rec.map` reads the FIELD `map` if the object was
   built with one, not the builtin `.map()` transform - the field wins. A

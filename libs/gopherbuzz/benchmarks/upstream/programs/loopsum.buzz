@@ -1,0 +1,10 @@
+// A tight numeric while-loop: locals, int arithmetic, backward jumps.
+fun main(_: [str]) > int {
+    var sum = 0;
+    var i = 0;
+    while (i < 3000000) {
+        sum = sum + i;
+        i = i + 1;
+    }
+    return if (sum == 4499998500000) 0 else 1;
+}

@@ -26,11 +26,12 @@
 // build belongs to the build, written in something that can express it.
 
 import "std";
-import "os";
 import "proc";
 import "encoding/json";
 import "semver";
 import "time";
+// Used by the test blocks, which run under buzz_test now that it globs tools/.
+import "assert";
 
 // coolingHours mirrors minimum-release-age in each project's .npmrc (14400 minutes).
 // Restated as a duration because .npmrc is not a format Buzz reads. Drift is safe in the
@@ -43,6 +44,55 @@ final coolingHours = "-240h";
 // a gate that cries about it teaches people to stop reading it.
 fun isBlockingSeverity(severity: str) > bool {
     return severity == "high" or severity == "critical";
+}
+
+// patchFloor extracts the lowest version named by an advisory's patched range, as a
+// BARE semver suitable for building a ">= x" constraint. Returns "" when the range
+// names no version at all.
+//
+// It scans for the first digit rather than stripping operators, because stripping is
+// what was wrong: the code here read `patched.replace(">=", with: "")` and re-prefixed
+// `">= "`, which handles `>=1.2.3` and nothing else. npm advisories also carry `^`,
+// `~`, `>`, and `||`-joined ranges, and `^1.2.3` came back out as the constraint
+// `">= ^1.2.3"`. semver\satisfies RAISES on that (measured), the bare catch in the
+// candidate loop swallowed it for every version, and hasInstallablePatch returned
+// false - silently reclassifying a high or critical advisory WITH a mature installable
+// patch from BLOCKING to DEFERRED. A security gate reporting "not actionable today"
+// about something that is.
+fun patchFloor(patched: str) > str {
+    var start = 0 - 1;
+    var i = 0;
+    while (i < patched.len()) {
+        final ch = patched.sub(i, len: 1);
+        if (ch >= "0" and ch <= "9") { start = i; break; }
+        i = i + 1;
+    }
+    if (start < 0) { return ""; }
+
+    var end = patched.len();
+    var j = start;
+    while (j < patched.len()) {
+        final ch = patched.sub(j, len: 1);
+        if (ch == " " or ch == "|" or ch == "<" or ch == ">" or ch == ",") { end = j; break; }
+        j = j + 1;
+    }
+    return patched.sub(start, len: end - start);
+}
+
+test "patchFloor reads the operator forms npm advisories actually use" {
+    assert\equal(patchFloor(">=1.2.3"), want: "1.2.3", message: "the form the old code handled");
+    assert\equal(patchFloor(">= 1.2.3"), want: "1.2.3", message: "with a space");
+    assert\equal(patchFloor("^1.2.3"), want: "1.2.3", message: "caret - built an invalid constraint before");
+    assert\equal(patchFloor("~1.2.3"), want: "1.2.3", message: "tilde - likewise");
+    assert\equal(patchFloor("1.2.3"), want: "1.2.3", message: "a bare version");
+    assert\equal(patchFloor(">=1.2.3 <2.0.0"), want: "1.2.3", message: "a bounded range takes the floor");
+    assert\equal(patchFloor(">=1.2.3 || >=2.1.0"), want: "1.2.3", message: "an or-range takes the first floor");
+    assert\equal(patchFloor("4.17.21"), want: "4.17.21", message: "multi-digit components");
+}
+
+test "patchFloor answers empty when the range names no version" {
+    assert\equal(patchFloor(""), want: "", message: "empty");
+    assert\equal(patchFloor("*"), want: "", message: "a wildcard");
 }
 
 // hasInstallablePatch reports whether any published version of pkg satisfies the
@@ -65,7 +115,12 @@ fun hasInstallablePatch(pkg: str, patched: str, installed: str) > bool !> any {
 
     final now = time\parse("2006-01-02T15:04:05Z", value: time\nowIso());
     final cutoff = time\add(now, duration: coolingHours);
-    final floor = patched.replace(">=", with: "").trim();
+    final floor = patchFloor(patched);
+    if (floor == "") {
+        // No version to compare against; say so rather than reporting "no patch".
+        std\print("audit: {pkg}: cannot read a version out of patched range \"{patched}\"; treating as no installable patch");
+        return false;
+    }
 
     // A candidate must be reachable from where the tree actually sits, which means
     // the SAME MAJOR as the installed version.

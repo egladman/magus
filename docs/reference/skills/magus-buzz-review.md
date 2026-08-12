@@ -2,8 +2,8 @@
 title: magus-buzz-review
 description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance."
 tags: [agents, skills, magus-buzz-review]
-skill_full_bytes: 20090
-skill_simple_bytes: 14965
+skill_full_bytes: 20249
+skill_simple_bytes: 15125
 ---
 
 # magus-buzz-review
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `34` |
-| `knowledge-schema-version` | `9` |
-| `skill-content` | `a4e5b76440c9` |
+| `agent-skill-version` | `33` |
+| `knowledge-schema-version` | `8` |
+| `skill-content` | `dc0788d61d11` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -267,17 +267,20 @@ were the language.
   evaluates it once.** Authority: GOPHERBUZZ. See Lens 2 - flagged there as a
   correctness bug when the target has a side effect, flagged here as the
   reason it will not misbehave the same way upstream.
-- **A declared `!>` error set is parsed and thrown away; nothing enforces it.**
-  Authority: GOPHERBUZZ. Upstream Buzz treats `!> ErrType` as a real error set.
-  gopherbuzz consumes the annotation and calls skipType, and no AST node stores
-  it, so a function declaring `> str !> str` that throws, called
-  with no try/catch from a function declaring no raise at all, compiles and runs
-  clean. Read a `!>` as documentation, never as a checked contract: it
-  tells you what the author BELIEVED raises, and the checker will not tell you
-  when that stops being true. Do NOT treat its absence as proof a call cannot
-  raise, and do not add one expecting it to gate anything - adding
-  `!>` to a signature that enforces nothing makes the docs assert a guarantee
-  the language does not keep, which is worse than the current honest silence.
+- **A declared `!>` error set enforces PRESENCE but not TYPE.**
+  Authority: GOPHERBUZZ. Upstream Buzz treats `!> ErrType` as a real error set;
+  gopherbuzz checks only that a raising call is propagated or caught, never what
+  it raises. Calling a `!> str` function from one declaring no raise at all is
+  BZZ1006, "call may raise but is neither declared with !> nor caught" - a real
+  gate, and a common one: it is what a script invoked by `magus buzz`
+  trips on when it calls something like `fs\listDir` without declaring
+  `!>`. But a function declaring `!> int` may throw a `str` through it and
+  nothing objects, so the named type is documentation while the arrow
+  itself is checked.
+  So: do not treat a missing `!>` as proof a call cannot raise, and do not trust
+  the NAMED type. Both were measured against gopherbuzz; this bullet
+  previously said the whole annotation was "parsed and thrown away, nothing
+  enforces it", which sent reviewers straight past every BZZ1006-class defect.
 - **An anonymous object field shadows a same-named builtin method.**
   Authority: GOPHERBUZZ. `rec.map` reads the FIELD `map` if the object was
   built with one, not the builtin `.map()` transform - the field wins. A
@@ -552,13 +555,15 @@ That is the fixture doing its job.
   evaluates it once.** Authority: GOPHERBUZZ. See Lens 2 - flagged there as a
   correctness bug when the target has a side effect, flagged here as the
   reason it will not misbehave the same way upstream.
-- **A declared `!>` error set is parsed and thrown away; nothing enforces it.**
-  Authority: GOPHERBUZZ. Upstream Buzz treats `!> ErrType` as a real error set.
-  gopherbuzz consumes the annotation and calls skipType, and no AST node stores
-  it. Read a `!>` as documentation, never as a checked contract: it
-  tells you what the author BELIEVED raises, and the checker will not tell you
-  when that stops being true. Do NOT treat its absence as proof a call cannot
-  raise.
+- **A declared `!>` error set enforces PRESENCE but not TYPE.**
+  Authority: GOPHERBUZZ. Upstream Buzz treats `!> ErrType` as a real error set;
+  gopherbuzz checks only that a raising call is propagated or caught, never what
+  it raises. Calling a `!> str` function from one declaring no raise at all is
+  BZZ1006, "call may raise but is neither declared with !> nor caught" - a real
+  gate, and a common one. But a function declaring `!> int` may throw a `str` through it and
+  nothing objects.
+  So: do not treat a missing `!>` as proof a call cannot raise, and do not trust
+  the NAMED type. Both were measured against gopherbuzz.
 - **An anonymous object field shadows a same-named builtin method.**
   Authority: GOPHERBUZZ. `rec.map` reads the FIELD `map` if the object was
   built with one, not the builtin `.map()` transform - the field wins. A

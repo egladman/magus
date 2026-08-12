@@ -1,0 +1,8 @@
+// foreach over a range, which iterates without materialising a list.
+fun main(_: [str]) > int {
+    var sum = 0;
+    foreach (n in 0..2000000) {
+        sum = sum + n;
+    }
+    return if (sum == 1999999000000) 0 else 1;
+}

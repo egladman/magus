@@ -1,0 +1,10 @@
+// String interpolation in a loop: builds a fresh string each iteration.
+fun main(_: [str]) > int {
+    var last = "";
+    var i = 0;
+    while (i < 200000) {
+        last = "item {i} of many";
+        i = i + 1;
+    }
+    return if (last.len() > 10) 0 else 1;
+}

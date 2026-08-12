@@ -205,7 +205,7 @@ fun escapeProp(s: str) > str {
 // must not have to click for, so the group is skipped and the content stays
 // inline. Folding it anyway would be worse - a hidden failure is one nobody sees.
 export fun group_start(target: Target, cb: fun(any)) > bool {
-    final io = {<str, any>};
+    final io = {<str: any>};
     cb(io);
     final collapsed = io["collapsed"];
     if (collapsed != true) { return true; }
@@ -224,7 +224,7 @@ export fun group_end(target: Target, cb: fun(any)) > bool {
 // Actions has no dedicated code field, so a diagnostic code leads the title where
 // it stays greppable in the annotations list.
 export fun annotate(target: Target, cb: fun(any)) > bool {
-    final io = {<str, any>};
+    final io = {<str: any>};
     cb(io);
 
     var title = "" + io["title"];
@@ -304,7 +304,7 @@ final OIDC_PREFIX = "oidc:";
 // `> Secret`, not `> str`: Buzz checks function signatures, so a provider returning the
 // wrong shape fails to load rather than failing at the first read.
 export fun resolve_secret(target: Target, cb: fun(any)) > Secret !> any {
-    final io = {<str, any>};
+    final io = {<str: any>};
     cb(io);
     final ref = "" + io["ref"];
     if (ref == "") {

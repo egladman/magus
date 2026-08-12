@@ -51,7 +51,7 @@ benchstat out.txt
 ```
 
 Sub-benchmark names are `BenchmarkComparison/<Workload>/<Protocol>/<Engine>`,
-e.g. `BenchmarkComparison/LoopSum/Warm/GopherbuzzJIT`. Filter with a regex on any
+e.g. `BenchmarkComparison/LoopSum/Warm/Gopherbuzz`. Filter with a regex on any
 segment - `-bench='LoopSum/Warm'`, `-bench='/Fresh/Goja'`, etc.
 
 ## Workloads
@@ -99,12 +99,12 @@ churn - the area gopherbuzz historically handled worst:
 - **SubstringSearch** - slide over the same string counting a short pattern by
   extracting and comparing each window, 100x (no map).
 
-`LoopSum` and `Mandelbrot` are JIT-eligible, so gopherbuzz appears on each as two
-rows (`GopherbuzzJIT` / `GopherbuzzInterp`) via `vm.SetJIT`. Mandelbrot exercises
-the JIT's full range - nested loops, an `and` short-circuit escape condition, and
-mixed int/float arithmetic. On the other workloads the JIT never engages (calls,
-collections, and strings aren't compiled), so gopherbuzz is reported as a single
-`Gopherbuzz` (interpreter) row.
+gopherbuzz is ONE row, `Gopherbuzz`, on every workload. It used to be split into
+`GopherbuzzJIT` / `GopherbuzzInterp` via `vm.SetJIT` on the two workloads where the
+JIT engages; that distinction is gone, because the JIT is always on and an
+interpreter-only configuration is not something a user can select or would ever
+run. Compiling is an implementation detail of the engine, not an axis of the
+comparison.
 
 ## Engines
 
@@ -126,18 +126,17 @@ conservative - gopherbuzz is reported on the slower box.
 
 **Warm - steady-state execution time** on a reused VM (ms/op, lower is better):
 
-| Engine           | LoopSum | Fib(30) |    Call | ForeachList | ForeachMap | StringInterp |
-| ---------------- | ------: | ------: | ------: | ----------: | ---------: | -----------: |
-| gopherbuzz (JIT) | **5.7** |       - |       - |           - |          - |            - |
-| gopherbuzz       |    40.6 | **187** | **126** |      **39** |     **51** |           38 |
-| gopher-lua       |    50.5 |     260 |     130 |         148 |        179 |       **25** |
-| tengo            |    84.0 |     220 |     139 |          60 |        139 |           28 |
-| goja (JS)        |     424 |     412 |     576 |         561 |        941 |           53 |
+| Engine     | LoopSum | Fib(30) |    Call | ForeachList | ForeachMap | StringInterp |
+| ---------- | ------: | ------: | ------: | ----------: | ---------: | -----------: |
+| gopherbuzz | **5.7** | **187** | **126** |      **39** |     **51** |           38 |
+| gopher-lua |    50.5 |     260 |     130 |         148 |        179 |       **25** |
+| tengo      |    84.0 |     220 |     139 |          60 |        139 |           28 |
+| goja (JS)  |     424 |     412 |     576 |         561 |        941 |           53 |
 
-The `gopherbuzz (JIT)` row exists only for `LoopSum`, the sole JIT-eligible
-workload; everywhere else gopherbuzz runs the interpreter (the `gopherbuzz` row).
-gopherbuzz leads every scripting workload except `StringInterp`, where
-gopher-lua's and tengo's string handling edge it out - disclosed, not hidden.
+The LoopSum figure is the one recorded with the JIT engaged, which is what a
+gopherbuzz run does; the old interpreter-only number for it was 40.6. gopherbuzz
+leads every scripting workload except `StringInterp`, where gopher-lua's and
+tengo's string handling edge it out - disclosed, not hidden.
 
 **Warm - allocation** (B/op, lower is better):
 
@@ -191,13 +190,12 @@ its strings are all unique, so interning can never amortize them.
 
 **Warm - execution time** (ms/op, lower is better):
 
-| Engine           | Mandelbrot | MatMul | BinaryTrees |   NBody |
-| ---------------- | ---------: | -----: | ----------: | ------: |
-| gopherbuzz (JIT) |     **26** |      - |           - |       - |
-| gopherbuzz       |        370 |     82 |         116 |     155 |
-| gopher-lua       |        246 | **55** |         163 |     155 |
-| tengo            |        406 |     80 |     **114** | **146** |
-| goja (JS)        |       2276 |    417 |         269 |     726 |
+| Engine     | Mandelbrot | MatMul | BinaryTrees |   NBody |
+| ---------- | ---------: | -----: | ----------: | ------: |
+| gopherbuzz |     **26** |     82 |         116 |     155 |
+| gopher-lua |        246 | **55** |         163 |     155 |
+| tengo      |        406 |     80 |     **114** | **146** |
+| goja (JS)  |       2276 |    417 |         269 |     726 |
 
 **Warm - allocation** (lower is better):
 
@@ -208,14 +206,16 @@ its strings are all unique, so interning can never amortize them.
 | tengo      |     103 MB |      13 MB |       24 MB |     27 MB |
 | goja (JS)  |     453 MB |      56 MB |      146 MB |     98 MB |
 
-The compute kernels are where the field is most honest. **On Mandelbrot the JIT
-changes the game outright: 26 ms vs gopher-lua's 246 - an ~9× lead** - because
-the kernel is now JIT-eligible (the baseline JIT learned the `and` short-circuit
-and int→float promotion, so its nested float loop compiles to native SSE code).
-Off the JIT, the interpreter is competitive rather than dominant: an inline
-float+float fast path in the arithmetic/comparison dispatch keeps float operands
-off the polymorphic `arith→asNumeric→floatArith` fallback, so `GopherbuzzInterp`
-lands at 370 ms - behind gopher-lua on Mandelbrot but, on the un-JIT'd kernels,
+The compute kernels are where the field is most honest. **On Mandelbrot
+gopherbuzz leads outright: 26 ms vs gopher-lua's 246, an ~9x lead** - the kernel
+compiles, because the baseline JIT learned the `and` short-circuit and int->float
+promotion, so its nested float loop becomes native SSE code. That 26 is what a
+gopherbuzz run does; the number without compilation was 370, and it is recorded here
+only to say what the compiler is worth. Uncompiled, the interpreter is competitive
+rather than dominant: an inline float+float fast path in the arithmetic/comparison
+dispatch keeps float operands off the polymorphic `arith→asNumeric→floatArith`
+fallback, so it lands at 370 ms - behind gopher-lua on Mandelbrot but, on the
+kernels that do not compile,
 level with gopher-lua on NBody (155 vs 155, a whisker behind tengo's 146) and now
 tied with tengo on BinaryTrees (116 vs 114, well ahead of gopher-lua's 163);
 gopher-lua keeps MatMul (55 vs 82). And gopherbuzz's _allocation_ is in a

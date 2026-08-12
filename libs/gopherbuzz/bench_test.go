@@ -30,6 +30,20 @@ func benchSetup(b *testing.B, init, hot string) (*vmpackage.Chunk, *vmpackage.En
 	return chunk, sess.env
 }
 
+// benchRun times b.N executions of an already-compiled chunk on a fresh VM, the
+// protocol every benchmark here uses.
+func benchRun(b *testing.B, chunk *vmpackage.Chunk, env *vmpackage.Env) {
+	b.Helper()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm := vmpackage.NewVM(_benchCtx)
+		if _, err := vm.Run(chunk, env); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 // BenchmarkFib measures recursive fibonacci(30) — call/return overhead, int
 // arithmetic, and conditional branching.
 func BenchmarkFib(b *testing.B) {
@@ -72,8 +86,7 @@ while (i < 1000000) {
 }
 
 // BenchmarkLoopSumFloat is BenchmarkLoopSum with double operands — it exercises
-// the JIT's SSE float fast path (and the interpreter's float arithmetic when the
-// JIT is disabled).
+// the float arithmetic path.
 func BenchmarkLoopSumFloat(b *testing.B) {
 	chunk, env := benchSetup(b, "", `
 var sum = 0.0;
@@ -591,4 +604,262 @@ while (i < haystack.len()) {
 			b.Fatal(err)
 		}
 	}
+}
+
+// The benchmarks below cover the language surface gopherbuzz gained after the set
+// above was written - fibers, match, closures over cells, optionals, mut
+// collections, higher-order collection methods, static dispatch and tuples - so the
+// benchmark set tracks what conformance now tests rather than lagging it.
+
+// BenchmarkFiberForeach drives a generator fiber 1 000 times through foreach, the
+// shape upstream's own examples use. Each yield suspends the fiber's private VM and
+// resumes the driver, so this measures fiber switch cost, not loop cost.
+func BenchmarkFiberForeach(b *testing.B) {
+	chunk, env := benchSetup(b,
+		`fun squares(n: int) > void *> int? {
+    foreach (i in 0..n) {
+        _ = yield (i * i);
+    }
+}`,
+		`var sum = 0;
+foreach (v in &squares(1000)) {
+    sum = sum + v;
+}`,
+	)
+	benchRun(b, chunk, env)
+}
+
+// BenchmarkFiberResume measures explicit resume/resolve rather than foreach: the
+// handle is bound, so each step pays the OpResume path and the status check.
+func BenchmarkFiberResume(b *testing.B) {
+	chunk, env := benchSetup(b,
+		`fun counter(n: int) > int *> int? {
+    var i = 0;
+    while (i < n) {
+        _ = yield i;
+        i = i + 1;
+    }
+    return i;
+}`,
+		`final f = &counter(1000);
+var sum = 0;
+foreach (v in f) {
+    sum = sum + v;
+}
+final __r = resolve f;`,
+	)
+	benchRun(b, chunk, env)
+}
+
+// BenchmarkMatchEnum measures an exhaustive match over an enum subject - the arm
+// comparison is enum-case identity, and no else arm is present.
+func BenchmarkMatchEnum(b *testing.B) {
+	chunk, env := benchSetup(b,
+		`enum Kind { one, two, three, four }
+
+fun label(k: Kind) > str {
+    return match (k) {
+        .one -> "one",
+        .two -> "two",
+        .three -> "three",
+        .four -> "four",
+    };
+}
+final kinds = [Kind.one, Kind.two, Kind.three, Kind.four];`,
+		`var n = 0;
+var i = 0;
+while (i < 25000) {
+    if (label(kinds[i % 4]).len() > 2) { n = n + 1; }
+    i = i + 1;
+}`,
+	)
+	benchRun(b, chunk, env)
+}
+
+// BenchmarkMatchRange measures range arms, which dispatch on CONTAINMENT rather
+// than equality - a different comparison path from the enum and literal arms.
+func BenchmarkMatchRange(b *testing.B) {
+	chunk, env := benchSetup(b, "",
+		`var n = 0;
+var i = 0;
+while (i < 25000) {
+    final band = match (i % 100) {
+        0..25 -> 1,
+        25..50 -> 2,
+        50..75 -> 3,
+        else -> 4,
+    };
+    n = n + band;
+    i = i + 1;
+}`,
+	)
+	benchRun(b, chunk, env)
+}
+
+// BenchmarkMatchPattern measures pattern (regex) arms, where each arm runs the
+// compiled pattern against the subject string.
+func BenchmarkMatchPattern(b *testing.B) {
+	chunk, env := benchSetup(b,
+		`final subjects = ["hello joe", "1234", "  ", "zz-99"];`,
+		`var n = 0;
+var i = 0;
+while (i < 5000) {
+    final kind = match (subjects[i % 4]) {
+        $"^[a-z]+ [a-z]+$" -> 1,
+        $"^\d+$" -> 2,
+        $"^\s+$" -> 3,
+        else -> 4,
+    };
+    n = n + kind;
+    i = i + 1;
+}`,
+	)
+	benchRun(b, chunk, env)
+}
+
+// BenchmarkTryCatchThrow measures a throw caught one frame up, the cross-frame
+// unwind path. The loop throws on half its iterations so both the raising and the
+// non-raising arm are represented.
+func BenchmarkTryCatchThrow(b *testing.B) {
+	chunk, env := benchSetup(b,
+		`fun risky(n: int) > int !> str {
+    if (n % 2 == 0) { throw "even"; }
+    return n;
+}`,
+		`var caught = 0;
+var ok = 0;
+var i = 0;
+while (i < 20000) {
+    try {
+        ok = ok + risky(i);
+    } catch (e: str) {
+        caught = caught + e.len();
+    }
+    i = i + 1;
+}`,
+	)
+	benchRun(b, chunk, env)
+}
+
+// BenchmarkClosureUpvalue measures a closure assigning to a captured local. Capture
+// is by reference through a shared cell, so every read and write in both the owning
+// frame and the closure goes through OpGetLocalCell/OpSetLocalCell.
+func BenchmarkClosureUpvalue(b *testing.B) {
+	chunk, env := benchSetup(b, "",
+		`var sum = 0;
+final add = fun (n: int) > void { sum = sum + n; };
+var i = 0;
+while (i < 100000) {
+    add(i);
+    i = i + 1;
+}`,
+	)
+	benchRun(b, chunk, env)
+}
+
+// BenchmarkForeachRange measures foreach over a range, which iterates without
+// materialising a list.
+func BenchmarkForeachRange(b *testing.B) {
+	chunk, env := benchSetup(b, "",
+		`var sum = 0;
+foreach (n in 0..200000) {
+    sum = sum + n;
+}`,
+	)
+	benchRun(b, chunk, env)
+}
+
+// BenchmarkForeachStr measures foreach over a string. Buzz iterates a string
+// BYTEWISE, so this walks the raw bytes rather than decoding runes.
+func BenchmarkForeachStr(b *testing.B) {
+	chunk, env := benchSetup(b,
+		`final doc = "abcdefghij".repeat(2000);`,
+		`var n = 0;
+foreach (c in doc) {
+    n = n + c.len();
+}`,
+	)
+	benchRun(b, chunk, env)
+}
+
+// BenchmarkOptionalUnwrap measures the optional operators together: null-coalesce
+// on a null subject, force-unwrap on a bound one, and optional subscript.
+func BenchmarkOptionalUnwrap(b *testing.B) {
+	chunk, env := benchSetup(b,
+		`final present: int? = 7;
+final absent: int? = null;
+final xs: [int]? = [1, 2, 3];`,
+		`var n = 0;
+var i = 0;
+while (i < 50000) {
+    n = n + present! + (absent ?? 1) + (xs?[i % 3] ?? 0);
+    i = i + 1;
+}`,
+	)
+	benchRun(b, chunk, env)
+}
+
+// BenchmarkListHigherOrder measures map/filter/reduce over a list. Each call
+// invokes a Buzz closure per element, so this is dominated by callback dispatch
+// rather than by the traversal.
+func BenchmarkListHigherOrder(b *testing.B) {
+	chunk, env := benchSetup(b,
+		`var seed = mut [<int>];
+foreach (i in 0..2000) {
+    seed.append(i);
+}`,
+		`final doubled = seed.map(fun (_: int, v: int) > int => v * 2);
+final evens = doubled.filter(fun (_: int, v: int) > bool => v % 4 == 0);
+final __r = evens.reduce::<int>(fun (_: int, v: int, acc: int) > int => acc + v, initial: 0);`,
+	)
+	benchRun(b, chunk, env)
+}
+
+// BenchmarkMutListAppend measures repeated append to a mut list, so the growth of
+// the backing slice is on the clock alongside the mutability check each call makes.
+func BenchmarkMutListAppend(b *testing.B) {
+	chunk, env := benchSetup(b, "",
+		`final xs = mut [<int>];
+var i = 0;
+while (i < 20000) {
+    xs.append(i);
+    i = i + 1;
+}`,
+	)
+	benchRun(b, chunk, env)
+}
+
+// BenchmarkStaticCall measures a static method call, which resolves on the TYPE
+// value and binds no receiver - a different dispatch path from BenchmarkMethodCall.
+func BenchmarkStaticCall(b *testing.B) {
+	chunk, env := benchSetup(b,
+		`object Point {
+    x: int = 0,
+    y: int = 0,
+    static fun at(x: int, y: int) > Point { return Point{ x = x, y = y }; }
+}`,
+		`var n = 0;
+var i = 0;
+while (i < 20000) {
+    n = n + Point.at(x: i, y: i).x;
+    i = i + 1;
+}`,
+	)
+	benchRun(b, chunk, env)
+}
+
+// BenchmarkTupleAccess measures building and reading a tuple, which is an anonymous
+// object keyed by each element's decimal index. The first element is parenthesised
+// because a bare identifier in `.{ }` is the `name = name` field shorthand.
+func BenchmarkTupleAccess(b *testing.B) {
+	chunk, env := benchSetup(b, "",
+		`var n = 0;
+var i = 0;
+while (i < 20000) {
+    final t = .{ (i), i + 1, i + 2 };
+    n = n + t.0 + t.1 + t.2;
+    i = i + 1;
+}`,
+	)
+	benchRun(b, chunk, env)
 }

@@ -8,12 +8,17 @@ namespace os;
 /// that does - the gap that let `crypto\hash` type-check against a module that never
 /// had it.
 ///
-/// NOT declared here: SocketProtocol, Socket and TcpServer. They exist at run time,
-/// but gopherbuzz's argument order diverges from upstream's - our Socket.connect
-/// takes (protocol, host, port) where upstream's takes (address, port, protocol),
-/// and TcpServer.init likewise. Declaring upstream's shape would describe a function
-/// this implementation does not have, which is worse than declaring nothing.
-/// Reconcile the runtime first, then declare them.
+/// SocketProtocol, Socket and TcpServer ARE declared below, with GOPHERBUZZ's
+/// argument order rather than upstream's - our Socket.connect takes
+/// (protocol, host, port) where upstream's takes (address, port, protocol), and
+/// TcpServer.init likewise. Declaring upstream's shape would describe a function
+/// this implementation does not have, so the declarations state what is actually
+/// callable and each carries a note saying so. A program written against upstream's
+/// order does not port; reconciling the runtime is the fix, and until then this file
+/// is honest about the divergence rather than hiding it.
+///
+/// (This paragraph used to say the three were NOT declared here. They were added
+/// without it being updated, so the file's own header denied its contents.)
 
 /// Sleep for `ms` milliseconds.
 export extern fun sleep(ms: double) > void;

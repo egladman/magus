@@ -226,31 +226,6 @@
           ]
         },
         {
-          "name": "magusfile-api-generate",
-          "declared": "magusfile_api_generate",
-          "doc": "Regenerates the magusfile API surface lock: every member a magusfile can call on the magus namespace, one dotted name per line.",
-          "dependencies": [
-            "bindings-generate"
-          ],
-          "reads_secrets": false,
-          "writes_files": [
-            {
-              "glob": "internal/interp/bindings/testdata/magus-api.lock"
-            }
-          ]
-        },
-        {
-          "name": "langservice-generate",
-          "declared": "langservice_generate",
-          "doc": "Regenerates the host-module snapshot the browser playground's completion and hover read (internal/langservice/manifest_data.go), from the same std declarations bindings_generate reads.",
-          "reads_secrets": false,
-          "writes_files": [
-            {
-              "glob": "internal/langservice/manifest_data.go"
-            }
-          ]
-        },
-        {
           "name": "spells-generate",
           "declared": "spells_generate",
           "doc": "Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen), the Buzz value-type mirrors (internal/spellruntime/gen/types) and the per-module host declarations (internal/spellruntime/gen/decls), all driven by the go:generate directives in internal/spellruntime.",
@@ -360,8 +335,6 @@
             "config-generate",
             "graph-generate",
             "index-generate",
-            "langservice-generate",
-            "magusfile-api-generate",
             "man-generate",
             "mocks-generate",
             "skills-generate",
@@ -539,6 +512,14 @@
             {
               "project": ".",
               "glob": "docs/lib/*.buzz"
+            },
+            {
+              "project": ".",
+              "glob": "std/lib/*.buzz"
+            },
+            {
+              "project": ".",
+              "glob": "tools/*.buzz"
             }
           ],
           "reads_secrets": false

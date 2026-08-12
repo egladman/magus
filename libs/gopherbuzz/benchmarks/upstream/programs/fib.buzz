@@ -1,0 +1,10 @@
+// Recursive fibonacci: call/return overhead, int arithmetic, branching.
+// Named `fibo` because `fib` is a reserved word in both engines.
+fun fibo(n: int) > int {
+    if (n <= 1) { return n; }
+    return fibo(n - 1) + fibo(n - 2);
+}
+
+fun main(_: [str]) > int {
+    return if (fibo(27) == 196418) 0 else 1;
+}

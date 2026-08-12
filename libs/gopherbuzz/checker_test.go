@@ -1146,3 +1146,24 @@ fun main() > void {
 	// real and separate; this test's subject is only that neither owner's
 	// declarations are lost.
 }
+
+// TestConformance_FiberAnnotationOrder pins `> Ret *> Yield !> Err`. gopherbuzz
+// parsed !> first, so upstream's documented order (src/lib/sqlite.buzz:193) did not
+// parse here, and the order gopherbuzz did accept is one upstream rejects, reading
+// the `*>` as a continuation of the error list. Measured against the upstream binary
+// at 0.5.0-265-g294d8f9.
+func TestConformance_FiberAnnotationOrder(t *testing.T) {
+	const body = ` { _ = yield 1; return 0; }
+final f = &g();
+final __r = resume f;`
+
+	t.Run("upstream order parses", func(t *testing.T) {
+		_, err := ParseEmbedded(`fun g() > int *> int !> str` + body)
+		require.NoError(t, err, "`> Ret *> Yield !> Err` is upstream's order and must parse")
+	})
+
+	t.Run("the reverse is rejected, as upstream rejects it", func(t *testing.T) {
+		_, err := ParseEmbedded(`fun g() > int !> str *> int` + body)
+		require.Error(t, err, "`!> Err *> Yield` parses nowhere but here; accepting it is the divergence")
+	})
+}

@@ -3,8 +3,8 @@
 //
 // Scripting microbenchmarks:
 //
-//   - LoopSum:      a tight numeric loop summing 0..1e6 (exercises gopherbuzz's JIT).
-//   - Fib:          recursive fib(30) (call-heavy; gopherbuzz runs it on the interpreter).
+//   - LoopSum:      a tight numeric loop summing 0..1e6.
+//   - Fib:          recursive fib(30) (call-heavy).
 //   - Call:         1e6 trivial function calls in a loop (isolates call/return overhead).
 //   - ForeachList:  build a 1000-element list and traverse it 1000 times.
 //   - ForeachMap:   iterate a small map's entries 1e5 times.
@@ -83,14 +83,9 @@ var modes = []struct {
 // data/function a workload needs is built inside the program.
 type workload struct {
 	name string
-	// jit reports whether gopherbuzz is split into JIT/Interp variants. Only a
-	// top-level numeric loop is JIT-eligible (LoopSum); elsewhere the JIT never
-	// engages, so a single Gopherbuzz (interpreter) row is reported.
-	jit bool
 	// session routes gopherbuzz through the shared-globals session path, needed
 	// for programs that define named functions (Fib, Call) or import std modules
-	// (NBody needs math.sqrt); other workloads use the standalone slot-mode path
-	// (which is also what lets the JIT engage).
+	// (NBody needs math.sqrt); other workloads use the standalone slot-mode path.
 	session bool
 	// bzStd registers the importable std modules (math, …) on the session, so the
 	// program can `import "math"`. Only NBody needs it.
@@ -114,7 +109,6 @@ type namedBench struct {
 var workloads = []workload{
 	{
 		name: "LoopSum",
-		jit:  true,
 		bzHot: `var sum = 0; var i = 0;
 while (i < 1000000) { sum = sum + i; i = i + 1; } return sum;`,
 		lua: `local sum = 0; local i = 0
@@ -205,7 +199,6 @@ for i := 0; i < 100000; i++ { s = "item " + string(i) }`,
 	},
 	{
 		name: "Mandelbrot", // 150x150 grid, max 100 iters: float-heavy nested loops
-		jit:  true,         // JIT-eligible: nested loops, `and` escape, mixed int/float
 		bzHot: `var checksum = 0; var py = 0;
 while (py < 150) {
   var px = 0;
@@ -595,8 +588,7 @@ count;`,
 }
 
 // BenchmarkComparison runs every workload through every engine under both
-// protocols, producing names like
-// BenchmarkComparison/LoopSum/Warm/GopherbuzzJIT and
+// protocols, producing names like BenchmarkComparison/LoopSum/Warm/Gopherbuzz and
 // BenchmarkComparison/Fib/Fresh/Lua. Compare engines at a fixed workload and
 // protocol with e.g. `benchstat` filtered on `-bench=LoopSum/Warm`.
 func BenchmarkComparison(b *testing.B) {
@@ -604,19 +596,13 @@ func BenchmarkComparison(b *testing.B) {
 		b.Run(w.name, func(b *testing.B) {
 			for _, mo := range modes {
 				b.Run(mo.name, func(b *testing.B) {
-					runBuzz := func(b *testing.B, jit bool) {
+					b.Run("Gopherbuzz", func(b *testing.B) {
 						if w.session {
-							benchBuzzSession(b, jit, mo.m, w.bzStd, w.bzSetup, w.bzHot)
+							benchBuzzSession(b, mo.m, w.bzStd, w.bzSetup, w.bzHot)
 							return
 						}
-						benchBuzzSlot(b, jit, mo.m, w.bzHot)
-					}
-					if w.jit {
-						b.Run("GopherbuzzJIT", func(b *testing.B) { runBuzz(b, true) })
-						b.Run("GopherbuzzInterp", func(b *testing.B) { runBuzz(b, false) })
-					} else {
-						b.Run("Gopherbuzz", func(b *testing.B) { runBuzz(b, false) })
-					}
+						benchBuzzSlot(b, mo.m, w.bzHot)
+					})
 					b.Run("Lua", func(b *testing.B) { benchLua(b, w.lua, mo.m) })
 					b.Run("Tengo", func(b *testing.B) { benchTengo(b, w.tengo, mo.m) })
 					b.Run("Goja", func(b *testing.B) { benchGoja(b, w.name+".js", w.js, mo.m) })
@@ -634,10 +620,10 @@ func BenchmarkComparison(b *testing.B) {
 
 // ── gopherbuzz ───────────────────────────────────────────────────────────────
 
-// benchBuzzSlot runs a self-contained top-level chunk on the standalone
-// slot-mode path (JIT-eligible). The chunk is compiled once; warm reuses one VM,
-// fresh builds a new VM per iteration.
-func benchBuzzSlot(b *testing.B, jit bool, m mode, program string) {
+// benchBuzzSlot runs a self-contained top-level chunk on the standalone slot-mode
+// path. The chunk is compiled once; warm reuses one VM, fresh builds a new VM per
+// iteration.
+func benchBuzzSlot(b *testing.B, m mode, program string) {
 	prog, err := buzz.ParseEmbedded(program)
 	if err != nil {
 		b.Fatalf("parse: %v", err)
@@ -648,8 +634,6 @@ func benchBuzzSlot(b *testing.B, jit bool, m mode, program string) {
 	}
 	env := vmpkg.NewEnv()
 	vmpkg.RegisterStdlib(env)
-	vmpkg.SetJIT(jit)
-	defer vmpkg.SetJIT(true)
 	ctx := context.Background()
 	b.ReportAllocs()
 
@@ -672,15 +656,11 @@ func benchBuzzSlot(b *testing.B, jit bool, m mode, program string) {
 }
 
 // benchBuzzSession runs setup once to define named functions on a session (the
-// shared-globals path magus uses), then times the hot chunk. The recursive Fib
-// call path is not JIT'd yet, so this runs on the interpreter regardless of the
-// JIT flag - an honest control.
+// shared-globals path magus uses), then times the hot chunk.
 //
 // Warm reuses one session and times only the hot chunk; fresh stands up a new
 // session (define + compile + run) per iteration, the honest cost of a cold run.
-func benchBuzzSession(b *testing.B, jit bool, m mode, useStd bool, setup, hot string) {
-	vmpkg.SetJIT(jit)
-	defer vmpkg.SetJIT(true)
+func benchBuzzSession(b *testing.B, m mode, useStd bool, setup, hot string) {
 	ctx := context.Background()
 	b.ReportAllocs()
 

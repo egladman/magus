@@ -73,6 +73,9 @@ coverage.hand.out
 /coverage-badge
 /langservice-manifest
 /buzz-playground
+# The standalone Buzz runner, built by `magus run buzz-build libs/gopherbuzz`.
+# Same rule as /magus above: a build output, never committed.
+/libs/gopherbuzz/buzz
 
 # golangci-lint binary built from libs/testsprawl/.custom-gcl.yml, carrying the
 # in-repo linters. Rebuilt from source, never committed.

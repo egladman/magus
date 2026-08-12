@@ -247,15 +247,26 @@ export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
 // for objects under the magus- prefix, starting after marker (""=from the start).
 // Cache keys are hex + literal — all RFC-3986-unreserved — so neither prefix nor
 // marker needs percent-encoding, and the canonical query string (keys sorted:
-// marker before prefix) is byte-identical to the one on the URL. Returns the raw
-// XML body, or "" on a non-200.
+// marker before prefix) is byte-identical to the one on the URL.
+//
+// RAISES on a non-200 rather than returning "". It used to return "", which listing()
+// reads as end-of-listing - indistinguishable from a genuinely complete one. A
+// transient 500 or throttle on page 3 of 10 therefore truncated the enumeration
+// silently, and prune then applied keep_last to the PARTIAL set: with 1000 objects
+// and keep_last=100, a failure after 200 evicted 100 of the 200 seen, including
+// objects inside the true global newest-100. It printed a plausible count and exited
+// 0. Deleting the wrong artifact is unrecoverable, so a listing that cannot be
+// completed must stop the prune, not shrink it.
 fun listPage(marker: str) > str !> any {
     var query = "prefix=magus-";
     if (marker != "") { query = "marker=" + marker + "&prefix=magus-"; }
     final path = "/" + bucket();
     final headers = sign("GET", path, query, EMPTY_SHA256);
     final res = http\get(endpoint() + path + "?" + query, headers);
-    if (res["status"] != 200) { return ""; }
+    if (res["status"] != 200) {
+        throw "s3 prune: listing page failed with status " + ("" + res["status"])
+            + " (marker \"" + marker + "\"); refusing to prune from a partial listing";
+    }
     return "" + res["body"];
 }
 
@@ -269,7 +280,6 @@ fun listing() > any !> any {
     var marker = "";
     while (true) {
         final body = listPage(marker);
-        if (body == "") { return null; }
         // Each <Contents> block carries one object's <Key> and <LastModified>;
         // blocks[0] is the preamble before the first object, so skip it.
         final blocks = body.split("<Contents>");
