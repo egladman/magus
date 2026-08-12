@@ -20,8 +20,7 @@ import "fs";
 
 magus\project({
     "spells": [go],
-    // Generated catalog; cached so a hit restores it without re-describing.
-    "outputs": ["MAGUS.md"],
+    // MAGUS.md is declared per-target on index_generate, not here: see the root magusfile.
     "targets": {
         // Drift-gates MAGUS.md via git status: run alone, every time.
         "generate": {"skip_cache": "drift-gates MAGUS.md via git status; a replay would skip the check", "exclusive": true},
@@ -59,6 +58,9 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 
 // Renders MAGUS.md (target catalog plus graph) from this magusfile.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
+    // Declared so `magus vcs resolve` can find the target that settles a conflict here:
+    // it matches per-TARGET outputs, and the project-level outputs list is not enough.
+    ctx.writesFiles("MAGUS.md");
     final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs\writeFile("MAGUS.md", doc + "\n");
 }
