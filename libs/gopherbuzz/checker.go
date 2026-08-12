@@ -73,7 +73,13 @@ type checker struct {
 	// inside either without the enclosing function declaring !>, since the
 	// error is handled right there rather than propagated.
 	catchDepth int
-	types      map[string]types.Type // named type definitions (objects, enums)
+	// fnScopeBase is the index of the scope a function body opened for its own
+	// parameters, so checkLocalShadowing knows where the enclosing function's locals
+	// stop being reusable. Upstream scopes shadowing to the CURRENT function: a
+	// nested closure is a fresh frame and may reuse an outer name. Saved and restored
+	// around every function body (declaration, method, and closure literal).
+	fnScopeBase int
+	types       map[string]types.Type // named type definitions (objects, enums)
 	// expected is the stack of types expected at the position being inferred; see
 	// inferExpected. Empty outside any annotated context.
 	expected []types.Type
@@ -569,7 +575,32 @@ func (c *checker) checkAssign(v *ast.AssignStmt) {
 	}
 	// A member or index target: its own type is likewise the expected type for the
 	// value (`mutableList[0] = .it` resolves through the list's element type).
+	//
+	// The write also justifies the root local's `var`, for the same reason
+	// noteMutatingUse counts `.append`: `digests[p] = h` and `point.x = 2` both write
+	// THROUGH the name. Without this the checker rejected correct programs - upstream
+	// accepts both, and even where it nudges (W102 on an index-assigned `var`) it warns
+	// rather than erroring, so a false positive here is strictly worse than upstream.
+	c.markAssigned(rootIdentName(v.Target))
 	c.inferExpected(v.Value, c.infer(v.Target))
+}
+
+// rootIdentName walks an assignment target down to the identifier it ultimately
+// writes through -- `a.b[0].c` is a write to `a` -- and returns "" for a target
+// rooted in anything else (a call result, a literal), which names no local.
+func rootIdentName(target ast.Node) string {
+	for {
+		switch t := target.(type) {
+		case *ast.IdentExpr:
+			return t.Name
+		case *ast.MemberExpr:
+			target = t.Object
+		case *ast.IndexExpr:
+			target = t.Object
+		default:
+			return ""
+		}
+	}
 }
 
 func (c *checker) checkReturn(v *ast.ReturnStmt) {
@@ -697,6 +728,8 @@ func (c *checker) checkFunDecl(fd *ast.FunDecl) {
 	}
 	c.raiseDeclared = fd.ErrAnnot != ""
 	c.pushScope()
+	savedFnBase := c.fnScopeBase
+	c.fnScopeBase = len(c.scopes) - 1
 	c.define("this", types.Unknown, false)
 	for i, name := range fd.Params {
 		pt := types.Unknown
@@ -729,6 +762,7 @@ func (c *checker) checkFunDecl(fd *ast.FunDecl) {
 	c.checkUnreachable(fd.Body)
 	c.checkFunReturns(fd)
 	c.popScope()
+	c.fnScopeBase = savedFnBase
 	c.retTyp = savedRet
 	c.retOptional = savedRetOpt
 	c.yieldTyp = savedYield
@@ -794,6 +828,8 @@ func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
 			c.yieldTyp = nil
 		}
 		c.pushScope()
+		savedFnBase := c.fnScopeBase
+		c.fnScopeBase = len(c.scopes) - 1
 		c.define("this", ot, false)
 		for i, name := range m.Params {
 			pt := types.Unknown
@@ -817,6 +853,7 @@ func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
 		// scope for `this` and the parameters, so it never went through checkBlock.
 		c.checkUnreachable(m.Body)
 		c.popScope()
+		c.fnScopeBase = savedFnBase
 		c.retTyp = savedRet
 		c.retOptional = savedRetOpt
 		c.raiseDeclared = savedRaise
@@ -1695,6 +1732,8 @@ func (c *checker) inferFunExpr(v *ast.FunExpr) types.Type {
 	c.yieldTyp = yield
 	c.raiseDeclared = v.ErrAnnot != ""
 	c.pushScope()
+	savedFnBase := c.fnScopeBase
+	c.fnScopeBase = len(c.scopes) - 1
 	for i, name := range v.Params {
 		c.define(name, params[i], false)
 	}
@@ -1702,6 +1741,7 @@ func (c *checker) inferFunExpr(v *ast.FunExpr) types.Type {
 		c.checkStmt(s)
 	}
 	c.popScope()
+	c.fnScopeBase = savedFnBase
 	c.retTyp = savedRet
 	c.yieldTyp = savedYield
 	c.raiseDeclared = savedRaise
@@ -2177,7 +2217,14 @@ func terminatesWith(n ast.Node, tryCounts bool) bool {
 		// `do { ... } until (cond)` runs its body at least once, so a body that
 		// transfers control away means the loop never completes normally - which is
 		// what makes the statement after upstream's labeled `continue outer` dead.
-		return terminates(s.Body)
+		//
+		// A break that exits THIS do is the exception, exactly as for While and For:
+		// it lands on the statement after the loop, so that statement is live. Without
+		// the guard `do { break; } until (false)` called everything after it dead, and
+		// upstream compiles that program clean. A do carries no label of its own
+		// (ast.DoStmt has no Label field), so "" is the whole story: a bare break at
+		// this level escapes it, and a labeled one unwinds through it either way.
+		return terminates(s.Body) && !loopHasEscapingBreak(s.Body, "")
 	case *ast.MatchExpr:
 		return matchTerminatesWith(s, tryCounts)
 	case *ast.TryStmt:
@@ -2435,11 +2482,21 @@ func (c *checker) checkProtocolConformance(v *ast.ObjectDecl, ot *types.ObjectTy
 // allows it and TestConformance_LocalShadowsGlobal pins it here. So does redeclaring
 // in a sibling block, since neither is visible from the other - only a name still
 // live at the point of declaration counts.
+//
+// It stops at the enclosing FUNCTION too, for the same reason: upstream scopes the
+// rule to the current function's locals, so a nested closure may reuse an outer
+// name. Walking past the boundary rejected correct programs - a closure declaring
+// its own `name` inside a function that already had one is legal upstream.
 func (c *checker) checkLocalShadowing(v *ast.DeclStmt) {
 	// The innermost scope is where this declaration lands. A clash THERE is a
 	// redeclaration in the same block, which is a different diagnostic; walk only
-	// the enclosing local scopes, stopping before the global one.
-	for i := len(c.scopes) - 2; i >= 1; i-- {
+	// the enclosing local scopes, stopping before the global one and before any
+	// scope belonging to an enclosing function.
+	floor := 1
+	if c.fnScopeBase > floor {
+		floor = c.fnScopeBase
+	}
+	for i := len(c.scopes) - 2; i >= floor; i-- {
 		if _, exists := c.scopes[i][v.Name]; exists {
 			c.errorf(v.Pos, "a local named %q already exists in an enclosing scope", v.Name)
 			return

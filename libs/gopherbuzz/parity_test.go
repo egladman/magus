@@ -1647,6 +1647,139 @@ fun probe() > str {
 	}
 }
 
+// ── Checker false positives, each measured against upstream ──────────────────
+//
+// Every case below is a program `~/Repos/buzz/zig-out/bin/buzz` compiles clean and
+// gopherbuzz rejected. They are grouped because they share a failure MODE that the
+// allowlists cannot catch: a strictness check that over-claims rejects correct
+// source, and neither upstream suite contains the shape, so both stayed green while
+// magus's own corpus failed to load.
+
+// TestParity_WriteThroughANameJustifiesItsVar covers the var-not-assigned check's
+// blind spot. It fired only for an *ast.IdentExpr target, so `digests[p] = h` and
+// `point.x = 2` both read as "never assigned" and the declaration was rejected -
+// which is what stopped tools/drift.buzz from loading. Upstream accepts both; where
+// it comments at all (W102 on an index-assigned `var`) it warns rather than errors.
+func TestParity_WriteThroughANameJustifiesItsVar(t *testing.T) {
+	cases := []struct{ name, body string }{
+		{"index assignment", `
+    var digests: mut {str: str} = mut {<str: str>};
+    digests["k"] = "v";
+    return digests["k"] ?? "";`},
+		{"field assignment", `
+    var p = mut Point{ x = 1 };
+    p.x = 2;
+    return "{p.x}";`},
+		{"nested target marks the root", `
+    var box = mut Box{ inner = mut Point{ x = 1 } };
+    box.inner.x = 9;
+    return "{box.inner.x}";`},
+	}
+	const decls = `
+object Point { x: int }
+object Box { inner: mut Point }
+`
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v := evalParity(t, decls+"\nfun probe() > str {"+tc.body+"\n}")
+			assert.NotEmpty(t, v.AsString(), "the program compiles and runs")
+		})
+	}
+}
+
+// TestParity_BreakOutOfADoUntilLeavesLiveCode pins the DoStmt terminal-flow guard.
+// `do { ... } until (cond)` runs its body once, so a body that transfers control
+// away does end the loop - but a break that exits the DO lands on the statement
+// after it, exactly as for while and for. Without the guard everything following a
+// `do { break; } until (...)` was reported unreachable.
+func TestParity_BreakOutOfADoUntilLeavesLiveCode(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > int {
+    var i = 0;
+    do {
+        i = i + 1;
+        break;
+    } until (i > 10)
+    // Dead by the old analysis; upstream compiles this clean and reaches it.
+    i = i + 100;
+    return i;
+}`)
+	assert.Equal(t, int64(101), v.AsInt(), "the break exits the do and the next statement runs")
+}
+
+// TestParity_ClosureMayReuseAnEnclosingFunctionsLocalName pins the shadowing rule's
+// scope. It walked every enclosing local scope, so a nested closure could not reuse
+// an outer name; upstream scopes the rule to the CURRENT function's locals, so a new
+// frame starts the name space over.
+func TestParity_ClosureMayReuseAnEnclosingFunctionsLocalName(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > int {
+    final name = 1;
+    final f = fun () > int {
+        // A different frame, so this is a fresh name rather than a shadow.
+        final name = 2;
+        return name;
+    };
+    return name + f();
+}`)
+	assert.Equal(t, int64(3), v.AsInt(), "a closure's local is its own, and the outer one is untouched")
+}
+
+// TestParity_ShadowingWithinOneFunctionIsStillRejected is the other side of that
+// boundary: narrowing the walk must not switch the check off. A nested BLOCK in the
+// same function is still the same frame.
+func TestParity_ShadowingWithinOneFunctionIsStillRejected(t *testing.T) {
+	s := buzz.NewSession(context.Background())
+	t.Cleanup(func() { _ = s.Close() })
+	err := s.Exec(context.Background(), `
+fun probe() > int {
+    final name = 1;
+    if (true) {
+        final name = 2;
+        return name;
+    }
+    return name;
+}`)
+	require.Error(t, err, "a block in the same function still shadows")
+	assert.Contains(t, err.Error(), "already exists in an enclosing scope")
+}
+
+// TestParity_MutatorThroughAnImmutableAnnotationIsRejected pins the rule that forced
+// magus's own 126-site migration, because the corpus was what was wrong. Upstream
+// rejects this source in the same words ("Method `append` requires mutable list"):
+// the ANNOTATION narrows the type, so appending through it is a type error however
+// the value was built. Recorded as a test so nobody relaxes the rule to spare a
+// corpus again.
+func TestParity_MutatorThroughAnImmutableAnnotationIsRejected(t *testing.T) {
+	s := buzz.NewSession(context.Background())
+	t.Cleanup(func() { _ = s.Close() })
+	err := s.Exec(context.Background(), `
+fun probe() > int {
+    final files: [str] = mut [<str>];
+    files.append("x");
+    return files.len();
+}`)
+	require.Error(t, err, "a mut value does not widen an immutable annotation")
+	assert.Contains(t, err.Error(), "requires a mutable list")
+}
+
+// TestParity_MutAnnotationAcceptsTheMutator is the migration's target shape, and the
+// reason the migration is safe: `mut [str]` takes the mut value AND permits the
+// mutator, and stays assignable where a plain `[str]` is wanted.
+func TestParity_MutAnnotationAcceptsTheMutator(t *testing.T) {
+	v := evalParity(t, `
+fun consume(xs: [str]) > int => xs.len();
+
+fun probe() > int {
+    final files: mut [str] = mut [<str>];
+    files.append("x");
+    // mut T is assignable to T, never the reverse, so widening the declaration
+    // cannot break a call that wanted the immutable one.
+    return consume(files);
+}`)
+	assert.Equal(t, int64(1), v.AsInt(), "the mut annotation permits the write and still satisfies [str]")
+}
+
 func TestParity_CryptoHashReturnsRawBytes(t *testing.T) {
 	// Upstream returns the raw digest and leaves rendering to `.hex()`. Returning hex
 	// directly made upstream's own `hash(...).hex()` double-encode.
