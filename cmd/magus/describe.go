@@ -103,7 +103,7 @@ func describeUsage() {
 	fmt.Fprintln(os.Stderr, "  workspace    the active workspace root and its config")
 	fmt.Fprintln(os.Stderr, "  module       magus stdlib modules; `module <name>` lists its methods + signatures")
 	fmt.Fprintln(os.Stderr, "  mcp-tool     tools exposed to AI agents via the MCP daemon")
-	fmt.Fprintln(os.Stderr, "  file         classify paths against declared globs: generated output, source, or unclaimed")
+	fmt.Fprintln(os.Stderr, "  file         classify paths against declared globs: generated output, source, maintained, or unclaimed")
 	fmt.Fprintln(os.Stderr, "  tool         binaries the spells drive, their probed versions, and the window each is held to")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Each noun accepts -o text|json|yaml|name|wide|template=<go-template>")

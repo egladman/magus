@@ -22,10 +22,13 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   means across the codebase: a VERDICT is the scalar judgment, and the thing carrying one
   is named for the question it answers. `DriftVerdict` was a record of drift, not a
   judgment value, and `StagingVerdict` (internal) was four slices classifying paths.
-- **Knowledge-graph schema v8.** The shard store invalidates and rebuilds on first run.
-  The bump is the symbol-to-symbol `calls` edges: the relation and both node kinds already
-  existed, so a v7 consumer parses a v8 graph unchanged, but it would read a symbol's edge
-  set as complete when it is not, and every shard fingerprint differs.
+- **Knowledge-graph schema v9.** The shard store invalidates and rebuilds on first run.
+  Two bumps landed in this window and neither breaks a parser; both break a WARM STORE,
+  which is what the version is for. v8 added symbol-to-symbol `calls` edges, so a v7
+  consumer would read a symbol's edge set as complete when it is not. v9 added
+  `secret_refs` to a target node, and its shards were extracted before the field existed
+  from a magusfile that has not changed since - so nothing but the version would ever
+  invalidate them.
 - **`vcs\diff` is now `vcs\changedFiles`.** It returns the file paths changed against a
   base ref, not a diff, and the name said otherwise. The confusion became concrete when
   `vcs\dirtyDiff` arrived and read like a variant of it rather than a different question.
@@ -110,6 +113,16 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Added
 
+- **`magus describe file` reports a `maintained` role.** It sits between `source` and
+  `unclaimed` for a path magus's own core writes outside every target's declared globs -
+  `.gitattributes` is the only one today. Both halves of magus already knew this and
+  disagreed out loud: `magus vcs add` reported it as a file "magus itself maintains",
+  while `describe file` called it unclaimed and advised checking the ignore rules, for a
+  file magus had just written and needs tracked. The advice was worse than cosmetic,
+  because acting on it drops magus's own merge-driver registration. `magus\describeFile`
+  and `magus_describe_file` carry the new value, and the PR advisor that lists unclaimed
+  files stops naming it. It is a refinement of `unclaimed`, never a rank above `source`:
+  a workspace that genuinely declares one of these paths still reports it as declared.
 - **A built symbol index no longer changes the committed graph.** A SCIP index is cache
   state - gitignored, per-worktree, present only where the `scip` op has run - but two
   aggregate shards folded its paths into the DEFAULT graph: `@dirs` minted a dir node per

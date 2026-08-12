@@ -20,8 +20,14 @@ project and a role:
 - `output` - matches a declared outputs glob: the file is GENERATED.
 - `source` - matches a declared sources glob: it feeds cache keys and the
   affected set. This is the diff worth reading.
-- `unclaimed` - no project declares it: it affects no target. Check the VCS
-  ignore rules (`git check-ignore -v <path>`){{if .Full}} - build residue should be
+- `maintained` - no project declares it, but magus wrote it: commit it, never
+  ignore it{{if .Full}}. `.gitattributes` is the one today. It is derived FROM every
+  project's declared output globs, so no project can declare it without the
+  derivation claiming to be its own product - which is why it needs its own role
+  rather than a wider glob somewhere{{else}} - it is derived from the declared
+  output globs, so no project can claim it{{end}}.
+- `unclaimed` - no project declares it and magus does not write it: it affects
+  no target. Check the VCS ignore rules (`git check-ignore -v <path>`){{if .Full}} - build residue should be
   ignored, and an unclaimed un-ignored file is at risk of being lost{{else}} - an unclaimed
   un-ignored file is at risk of being lost{{end}}.
 

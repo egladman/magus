@@ -621,9 +621,10 @@ const ToolDefinition = "A tool is a binary a spell drives. magus probes its vers
 // FileDefinition is the human-readable description printed by "magus describe file".
 const FileDefinition = "Describe file classifies paths against the workspace's declared " +
 	"globs: the project that owns each path, whether it is a declared output (generated: " +
-	"regenerate it, never hand-edit) or a declared source (it feeds cache keys and the " +
-	"affected set), and which projects claim it either way. It answers \"can I disregard " +
-	"this changed file\" from the workspace's own declarations."
+	"regenerate it, never hand-edit), a declared source (it feeds cache keys and the " +
+	"affected set), or one magus maintains itself outside any target, and which projects " +
+	"claim it either way. It answers \"can I disregard this changed file\" from the " +
+	"workspace's own declarations."
 
 // FileEntry classifies one workspace-relative path.
 type FileEntry struct {
@@ -633,8 +634,16 @@ type FileEntry struct {
 	Project string `json:"project,omitempty" yaml:"project,omitempty"`
 	// Role summarizes the strongest claim: "output" (a declared output glob
 	// matches - the file is generated), "source" (a declared source glob
-	// matches), or "unclaimed" (no project declares it; it invalidates no cache
-	// key and affects no target).
+	// matches), "maintained" (no project declares it, but magus's own core writes
+	// it - see IsMagusMaintained), or "unclaimed" (nothing writes it and no
+	// project declares it; it invalidates no cache key and affects no target).
+	//
+	// maintained is a REFINEMENT of unclaimed, not a rank above source: both are
+	// invisible to the cache and the affected set. It is separate because the
+	// handling rule inverts. An unclaimed path may be residue to ignore, so its
+	// hint says to check the ignore rules; a maintained path is one magus wrote
+	// and expects committed, and telling someone to consider ignoring it is
+	// advice to drop magus's own bookkeeping.
 	Role string `json:"role" yaml:"role"`
 	// OutputOf and SourceOf list the projects whose declared output/source globs
 	// match the path. A path can be both (a committed generated file is often a
@@ -646,6 +655,29 @@ type FileEntry struct {
 	// human or an agent.
 	Hint string `json:"hint,omitempty" yaml:"hint,omitempty"`
 }
+
+// magusMaintainedFiles are the workspace-relative paths magus's own core writes
+// outside any target's declared globs.
+//
+// .gitattributes is the whole list, and it is here rather than in the merge-driver
+// code that writes it because two features have to agree about it: staging
+// (StagingPlan.Maintained) and classification (FileEntry.Role). They disagreed -
+// `magus vcs add` reported the file as one magus maintains while `magus describe
+// file` called it unclaimed and suggested checking the ignore rules, for a file
+// magus had just written and needs tracked.
+//
+// Deliberately NOT derived from the declared output globs: it is the inverse of
+// them. EnsureMergeDriver writes .gitattributes FROM every project's output globs,
+// so a project declaring it would be circular - the input to the derivation
+// claiming to be its own product.
+var magusMaintainedFiles = map[string]bool{
+	".gitattributes": true,
+}
+
+// IsMagusMaintained reports whether path is one magus's own core writes and expects
+// committed, rather than a target output or anything a project declares. The path is
+// workspace-relative and slash-separated, as FileEntry.Path and StagingPlan carry it.
+func IsMagusMaintained(path string) bool { return magusMaintainedFiles[path] }
 
 // The *Report types below are RENDER shapes, not domain types: the {definition,
 // count, items} envelope `magus describe ... -o json` emits. The Inspector method
