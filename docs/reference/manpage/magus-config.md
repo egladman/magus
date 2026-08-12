@@ -1,6 +1,6 @@
 ---
 title: magus config
-description: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.
+description: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, history, cache, and mcp.
 tags: [cli, magus config, configuration, magus.yaml, settings, cache]
 ---
 
@@ -10,7 +10,7 @@ View or update magus configuration
 
 ## Synopsis
 
-**magus** config \<view|set|init\> [flags]
+**magus** config \<view|set|history|cache|mcp\> [flags]
 
 ## Description
 
@@ -34,11 +34,14 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 **set**
 : Write a key to the local (or global) config file
 
-**init**
-: Materialize built-in defaults to magus.yaml
+**history**
+: Manage forecaster runtime history
 
 **cache**
-: Manage the build cache (prune --older-than)
+: Manage the build cache (prune)
+
+**mcp**
+: Manage the MCP server auth token
 
 ## Examples
 
@@ -57,16 +60,16 @@ magus config view -o json
 *Set cache to read-only*
 
 ```sh
-magus config set cache.immutable true
+magus config set key=cache.immutable,value=true
 ```
 
-*Initialize magus.yaml from defaults*
+*Prune local cache entries older than a week*
 
 ```sh
-magus config init
+magus config cache prune --older-than 168h
 ```
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-insight**(1)](magus-insight.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-server**(1)](magus-server.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-insight**(1)](magus-insight.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-memory**(1)](magus-memory.md), [**magus-server**(1)](magus-server.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-hook**(1)](magus-hook.md), [**magus-notify**(1)](magus-notify.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

@@ -1,0 +1,105 @@
+.TH MAGUS-AGENT 1 "" "magus" "magus Manual"
+.SH NAME
+magus\-agent \- Install the knowledge\-graph agent skills into a repo
+.SH SYNOPSIS
+.B magus
+.RI "agent <install|sample> [flags]"
+.SH DESCRIPTION
+Render the agent skills embedded in this binary and write or stream them
+into named destinations (.claude/skills, .agents/skills, .opencode/skills,
+and so on).
+.PP
+magus never writes your AGENTS.md. That file is yours, and an installer that
+edits a file you own leaves bytes you did not write and cannot audit. So
+install PRINTS the managed magus block for you to paste, and only when your
+AGENTS.md is missing it or is carrying a stale one. sample prints a starter
+AGENTS.md to stdout for you to own and tweak, and never writes a file.
+.PP
+agent is a pure data generator, which is what makes \-\-tar the general
+answer: it streams a tar archive to stdout, so skills can be installed
+anywhere a shell can reach. The write\-to\-disk form exists for the in\-repo,
+paths\-relative\-to\-<dir> case. Absolute destinations are refused unless
+\-\-global is set, so magus cannot silently write outside the working tree.
+.SH OPTIONS
+.RS
+.TP
+\fB\-\-dir\fR \fIstring\fR (default: \&.)
+Repo directory to install into (agent install)
+.TP
+\fB\-\-force\fR
+Overwrite existing installed skill files (agent install)
+.TP
+\fB\-\-global\fR
+Allow absolute destination paths in write mode (agent install)
+.TP
+\fB\-\-simple\fR
+Install the shorter curated permutation of each skill (agent install)
+.TP
+\fB\-\-tar\fR
+Stream a tar archive to stdout instead of writing files (agent install)
+.RE
+.SH SUBCOMMANDS
+.RS
+.TP
+\fBinstall\fR
+Render the embedded skills and write or stream them into named destinations
+.TP
+\fBsample\fR
+Print a starter AGENTS.md to stdout; never writes a file
+.RE
+.SH EXAMPLES
+\fIInstall into a repo's Claude skills\fR
+.PP
+.EX
+magus agent install .claude/skills
+.EE
+.PP
+\fIRefresh installed skills\fR
+.PP
+.EX
+magus agent install .claude/skills --force
+.EE
+.PP
+\fIInstall anywhere via tar\fR
+.PP
+.EX
+magus agent install --tar | tar -xf - -C ~/.config/opencode/skills
+.EE
+.PP
+\fIPrint a starter AGENTS.md\fR
+.PP
+.EX
+magus agent sample
+.EE
+.PP
+.SH SEE ALSO
+\fBmagus\fR(1),
+\fBmagus\-ls\fR(1),
+\fBmagus\-describe\fR(1),
+\fBmagus\-run\fR(1),
+\fBmagus\-x\fR(1),
+\fBmagus\-where\fR(1),
+\fBmagus\-affected\fR(1),
+\fBmagus\-insight\fR(1),
+\fBmagus\-graph\fR(1),
+\fBmagus\-query\fR(1),
+\fBmagus\-explain\fR(1),
+\fBmagus\-path\fR(1),
+\fBmagus\-refs\fR(1),
+\fBmagus\-watch\fR(1),
+\fBmagus\-status\fR(1),
+\fBmagus\-clean\fR(1),
+\fBmagus\-vcs\fR(1),
+\fBmagus\-doctor\fR(1),
+\fBmagus\-config\fR(1),
+\fBmagus\-memory\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-buzz\fR(1),
+\fBmagus\-completion\fR(1),
+\fBmagus\-man\fR(1),
+\fBmagus\-init\fR(1),
+\fBmagus\-hook\fR(1),
+\fBmagus\-notify\fR(1),
+\fBmagus\-self\fR(1),
+\fBmagus\-version\fR(1)
+.br

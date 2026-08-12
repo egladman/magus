@@ -1,0 +1,91 @@
+.TH MAGUS-HOOK 1 "" "magus" "magus Manual"
+.SH NAME
+magus\-hook \- Evaluate one shell command or file path against the magus guard rules
+.SH SYNOPSIS
+.B magus
+.RI "hook [\-\-path] [flags]"
+.SH DESCRIPTION
+Evaluate ONE shell command, or one file path an edit is about to write,
+against this workspace's guard rules, and report a deny, advise, or pass
+verdict.
+.PP
+It is built for an agent host's pre\-tool\-use hook. The input arrives on
+stdin, so nothing has to survive being quoted through a shell twice.
+.PP
+Two input shapes are accepted. Plain text is the command (or the path)
+itself. A JSON envelope from a host that writes one needs neither \-\-path nor
+a JSON tool to unwrap it: the envelope already says what is about to run and
+whether it is a write. An explicit flag still wins, because a wrapper that
+passed one meant it.
+.PP
+\-\-host, \-\-session, and \-\-event are attribution, not policy. They record who
+produced the observation on the activity event, and the verdict never reads
+them. All three are optional and unvalidated, including the host name, which
+is an opaque label the caller chooses rather than a set magus knows: a magus
+that enumerated hosts would need a release per host, and a wrapper that
+cannot extract a session id must still be able to get a verdict.
+.SH OPTIONS
+.RS
+.TP
+\fB\-\-event\fR \fIstring\fR
+The host's hook event name (e.g. PreToolUse)
+.TP
+\fB\-\-host\fR \fIstring\fR
+Name of the agent host this invocation came from (attribution only)
+.TP
+\fB\-\-path\fR
+Judge the input as a file path an edit is about to write, not as a shell command
+.TP
+\fB\-\-session\fR \fIstring\fR
+The host's own session id for this invocation
+.RE
+.SH EXAMPLES
+\fIJudge a shell command\fR
+.PP
+.EX
+printf '%s' 'go build ./...' | magus hook
+.EE
+.PP
+\fIJudge a path an edit is about to write\fR
+.PP
+.EX
+printf '%s' 'MAGUS.md' | magus hook --path
+.EE
+.PP
+\fIMachine\-readable verdict\fR
+.PP
+.EX
+printf '%s' 'rm -rf /' | magus hook -o json
+.EE
+.PP
+.SH SEE ALSO
+\fBmagus\fR(1),
+\fBmagus\-ls\fR(1),
+\fBmagus\-describe\fR(1),
+\fBmagus\-run\fR(1),
+\fBmagus\-x\fR(1),
+\fBmagus\-where\fR(1),
+\fBmagus\-affected\fR(1),
+\fBmagus\-insight\fR(1),
+\fBmagus\-graph\fR(1),
+\fBmagus\-query\fR(1),
+\fBmagus\-explain\fR(1),
+\fBmagus\-path\fR(1),
+\fBmagus\-refs\fR(1),
+\fBmagus\-watch\fR(1),
+\fBmagus\-status\fR(1),
+\fBmagus\-clean\fR(1),
+\fBmagus\-vcs\fR(1),
+\fBmagus\-doctor\fR(1),
+\fBmagus\-config\fR(1),
+\fBmagus\-memory\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-buzz\fR(1),
+\fBmagus\-completion\fR(1),
+\fBmagus\-man\fR(1),
+\fBmagus\-init\fR(1),
+\fBmagus\-agent\fR(1),
+\fBmagus\-notify\fR(1),
+\fBmagus\-self\fR(1),
+\fBmagus\-version\fR(1)
+.br

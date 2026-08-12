@@ -125,6 +125,38 @@ func agentUsageErr() error {
 	return fmt.Errorf("agent: a subcommand is required (try: install)")
 }
 
+// hookUsage describes the guard, which is a different command from `agent` despite
+// sharing this file: it reads one command or path and answers with a verdict.
+func hookUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: magus hook [--path] [flags]   # the command or path arrives on stdin")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Evaluate ONE shell command, or one file path an edit is about to write,")
+	fmt.Fprintln(w, "against this workspace's guard rules, and report a deny/advise/pass")
+	fmt.Fprintln(w, "verdict. Built for an agent host's pre-tool-use hook: the input is read")
+	fmt.Fprintln(w, "from stdin, so nothing has to be quoted through a shell twice.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Two input shapes are accepted. Plain text is the command (or path) itself.")
+	fmt.Fprintln(w, "A JSON envelope from a host that writes one needs no --path and no jq: the")
+	fmt.Fprintln(w, "envelope says what is about to run and whether it is a write. An explicit")
+	fmt.Fprintln(w, "flag still wins, because a wrapper that passed it meant it.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Examples:")
+	// Fprintf with %% : vet rejects a Printf directive inside an Fprintln, and the
+	// example is worth more than the convenience. notifyUsage does the same.
+	fmt.Fprintf(w, "  printf '%%s' 'go build ./...' | magus hook\n")
+	fmt.Fprintf(w, "  printf '%%s' 'MAGUS.md' | magus hook --path\n")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Flags:")
+	fmt.Fprintln(w, "  --path              judge the input as a file path an edit is about to")
+	fmt.Fprintln(w, "                      write, not as a shell command")
+	fmt.Fprintln(w, "  --host <name>       agent host this invocation came from (attribution")
+	fmt.Fprintln(w, "                      only; the verdict never reads it)")
+	fmt.Fprintln(w, "  --session <id>      the host's own session id, recorded on the event")
+	fmt.Fprintln(w, "  --event <name>      the host's hook event name (e.g. PreToolUse)")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Global display flags (-o, -s, -q, -v, --tee) are accepted; see `magus -h`.")
+}
+
 // agentInstallCmd renders the embedded skills and either writes them under
 // <dir>/<dest>... or streams a tar archive to stdout (--tar). Destinations
 // are explicit, never inferred from an agent-host name: magus writes the
@@ -324,7 +356,9 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// is the reason for the rule - a flag accepted on most commands teaches
 	// callers it is unreliable everywhere.
 	bindDisplayFlags(fset)
-	fset.Usage = func() { agentUsage(os.Stderr) }
+	// hookUsage, not agentUsage: `hook` and `agent` share this file, and pointing at the
+	// wrong one makes `magus hook -h` answer a question nobody asked.
+	fset.Usage = func() { hookUsage(os.Stderr) }
 	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
