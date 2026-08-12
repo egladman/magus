@@ -7,7 +7,6 @@
 //
 // Reads REPO, PR_NUMBER, PR_BASE, and PR_HEAD_SHA from the environment, and writes its
 // section of the pull request's one magus comment through advice\publish.
-import "os";
 import "proc";
 import "advice";
 import "magus";
@@ -15,11 +14,13 @@ import "std";
 
 final section = "merge-conflicts";
 
-// conflicted reports which paths collide when head is merged into base, WITHOUT
-// performing a merge: `git merge-tree --write-tree` does the three-way merge in memory
-// and prints the conflicted paths, exiting 1 when there are any and 0 when it merges
-// clean. Nothing touches the working tree, so a cancelled job cannot strand a half-merge
-// the way a merge/abort pair can, and no committer identity is needed.
+// conflicted reports which paths collide when head is merged into base, WITHOUT performing a
+// merge: `git merge-tree --write-tree` does the three-way merge in memory and prints the
+// conflicted paths. Nothing touches the working tree, so a cancelled job cannot strand a
+// half-merge the way a merge/abort pair can, and no committer identity is needed.
+//
+// Its exit code is 0 for a clean merge and 1 for BOTH "merged with conflicts" and "could not
+// resolve a ref", which is why the empty-answer check below exists.
 //
 // Not `gh pr view --json mergeable`: that reports only THAT a PR conflicts, never which
 // files, and the files decide both whether to comment and what to name.
@@ -27,15 +28,35 @@ final section = "merge-conflicts";
 // head is passed explicitly rather than read as HEAD because actions/checkout resolves a
 // pull_request event to the ephemeral merge commit, which is base already merged with
 // head - comparing that against base would find nothing.
-fun conflicted(base: str, head: str) > [str] !> any {
-    proc\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
-    final res = proc\exec("git", args: ["merge-tree", "--write-tree", "--name-only",
-        "--no-messages", "origin/" + base, head], dir: ".", opts: {"allow_failure": true});
-    if (res.code == 0) { return mut []; }
-    // 1 is "merged with conflicts"; anything else is git failing to answer at all, which
-    // must not read as "no conflicts".
+fun conflicted(base: str, head: str) > [str] !> str {
+    // An explicit refspec, because a bare `git fetch origin <base>` writes FETCH_HEAD and
+    // only updates refs/remotes/origin/<base> when remote.origin.fetch already covers it -
+    // which actions/checkout does NOT configure on a pull_request. It exits 0 either way, so
+    // without this the merge-tree below runs against a ref that does not exist.
+    final fetched = proc\exec("git", args: ["fetch", "--no-tags", "origin",
+        "+refs/heads/" + base + ":refs/remotes/origin/" + base], dir: ".",
+        opts: {"allow_failure": true});
+    if (!fetched.ok) { throw "merge-conflict-advice: git fetch " + base + ": " + fetched.stderr; }
+
+    // core.quotePath would C-quote a non-ASCII path ("gen/caf\303\251.json", quotes and all),
+    // and that string reaches describeFile, matches no output glob, and gets reported to the
+    // author as their file.
+    final res = proc\exec("git", args: ["-c", "core.quotePath=false", "merge-tree",
+        "--write-tree", "--name-only", "--no-messages", "origin/" + base, head], dir: ".",
+        opts: {"allow_failure": true});
+    if (res.code == 0) { return mut [<str>]; }
     if (res.code != 1) { throw "merge-conflict-advice: git merge-tree: " + res.stderr; }
-    return conflictPaths(res.stdout);
+
+    // Exit 1 means "merged with conflicts" AND "could not resolve a ref" - measured on git
+    // 2.55.0, where an unresolvable ref exits 1 with empty stdout. Reading that as a clean
+    // merge is how this advisor RETRACTED its own warning and went green while the conflicts
+    // were still there, so an empty answer on exit 1 is a failure to answer.
+    final paths = conflictPaths(res.stdout);
+    if (paths.len() == 0) {
+        throw "merge-conflict-advice: git merge-tree reported conflicts but named none, so it "
+            + "could not compare origin/" + base + " with " + head + ": " + res.stderr;
+    }
+    return paths;
 }
 
 // conflictPaths reads `git merge-tree --write-tree --name-only` output: the first line
@@ -43,7 +64,7 @@ fun conflicted(base: str, head: str) > [str] !> any {
 // out from conflicted so the parse is testable without a repository. `text`, not `out`,
 // because `out` is a reserved word in Buzz.
 fun conflictPaths(text: str) > [str] {
-    var paths = mut [];
+    final paths = mut [<str>];
     var first = true;
     foreach (line in text.split("\n")) {
         if (first) { first = false; }
@@ -59,7 +80,7 @@ fun conflictPaths(text: str) > [str] {
 // result with q("files").listValue() / q("role").stringValue(), where a mistyped key is
 // a null at run time on a CI job nobody is watching.
 fun generated(paths: [str]) > [str] !> any {
-    var found = mut [];
+    final found = mut [<str>];
     if (paths.len() == 0) { return found; }
     foreach (f in magus\describeFile(paths).files) {
         if (f.role == "output") { found.append(f.path); }
@@ -67,18 +88,66 @@ fun generated(paths: [str]) > [str] !> any {
     return found;
 }
 
-// conflictBody is the section text. Pure, so the wording is testable.
-export fun conflictBody(base: str, files: [str]) > str {
-    var body = "This branch conflicts with `" + base + "` in files magus generates:\n\n";
-    foreach (f in files) { body = body + "- `" + f + "`\n"; }
-    return body
-        + "\nThese are build output, so the correct merge is whatever regenerating produces:\n\n"
-        + "```sh\ngit merge origin/" + base + "\nmagus vcs resolve\n```\n\n"
-        + "`magus vcs resolve` settles every conflicted generated file at once and regenerates "
-        + "once. Conflicts in hand-written files are still yours.\n";
+// authored keeps the conflicted paths magus does not generate, in the order git reported
+// them. Pure over plain lists so the set difference is testable without a repository.
+//
+// `mut [<str>]`, not `mut []`: an untyped empty list infers `mut [any]`, which gopherbuzz
+// accepts where `[str]` is expected and upstream rejects. Unexported for the same reason
+// conflictPaths is - nothing imports this file, and an export in a file with no `namespace`
+// is a compile error upstream.
+fun authored(all: [str], generated: [str]) > [str] {
+    final found = mut [<str>];
+    foreach (p in all) {
+        var claimed = false;
+        foreach (g in generated) { if (g == p) { claimed = true; } }
+        if (!claimed) { found.append(p); }
+    }
+    return found;
 }
 
-fun main() > void !> any {
+// conflictTitle is the collapsed comment's summary line. Pure because the count in it is
+// the whole signal a reader has for deciding whether to open the section, and inline in
+// main it was the one interpolation no test could reach.
+fun conflictTitle(n: int) > str {
+    return "Merge conflicts in generated files ({n})";
+}
+
+// conflictBody is the section text. Pure, so the wording is testable.
+//
+// Commands first, reasoning after: the commands are all most readers need, and the reasoning
+// is what stops the rest from opening the web conflict editor instead.
+//
+// Both lists are named, because "conflicts in hand-written files are still yours" was true
+// and useless - the merge that produced this comment already knows which files those are.
+fun conflictBody(base: str, files: [str], mine: [str]) > str {
+    var body = "These conflicts are in build output. Nothing here has to be reconciled by "
+        + "hand, because the correct merge of a generated file is not a blend of two byte "
+        + "streams - it is whatever regenerating produces.\n\n"
+        + "```sh\ngit merge origin/" + base + "\nmagus vcs resolve\ngit push\n```\n\n"
+        + "**Merge, do not rebase.** Merging the base in needs no force-push, so anything "
+        + "stacked on this branch stays valid, and a squash merge keeps the merge commit off "
+        + "`" + base + "` anyway.\n\n"
+        + "`magus vcs resolve` classifies every conflicted path at once and regenerates once "
+        + "rather than once per file. It settles the outputs git treats as binary, which no "
+        + "three-way merge can settle at all, and the deletions no merge driver is ever "
+        + "called for. It also stages what regeneration touched, so a following `git commit` "
+        + "or `git rebase --continue` does not refuse on a dirty tree.\n\n"
+        + "**magus settles these {files.len()}:**\n\n";
+    foreach (f in files) { body = body + "- `" + f + "`\n"; }
+    if (mine.len() > 0) {
+        body = body + "\n**These {mine.len()} are yours** - nothing in this "
+            + "workspace generates them, so `magus vcs resolve` reports them and leaves "
+            + "them alone:\n\n";
+        foreach (f in mine) { body = body + "- `" + f + "`\n"; }
+    }
+    return body + "\nWhy a conflict is reported at all when your own clone would settle it: "
+        + "a merge driver has to be registered per clone and cannot be committed, so "
+        + "github.com computes mergeability with a plain three-way merge. "
+        + "[Git integration](https://eli.gladman.cc/magus/guides/integrations/git/) has the "
+        + "detail.\n";
+}
+
+fun main() > void !> str {
     final repo = advice\env("REPO");
     final pr = advice\env("PR_NUMBER");
     final base = advice\env("PR_BASE");
@@ -101,7 +170,8 @@ fun main() > void !> any {
         return;
     }
 
-    final files = generated(conflicted(base, head: head));
+    final all = conflicted(base, head: head);
+    final files = generated(all);
     if (files.len() == 0) {
         // Retract: conflicts that have been resolved must not leave a section behind
         // claiming they are still there.
@@ -110,8 +180,8 @@ fun main() > void !> any {
         return;
     }
 
-    advice\publish(repo, pr: pr, name: section, title: "Merge conflicts in generated files ({files.len()})",
-        body: conflictBody(base, files: files));
+    advice\publish(repo, pr: pr, name: section, title: conflictTitle(files.len()),
+        body: conflictBody(base, files: files, mine: authored(all, generated: files)));
     std\print("advised on PR " + pr + ": " + files.join(", "));
 }
 
@@ -128,9 +198,38 @@ test "conflictPaths on a clean merge yields nothing" {
 }
 
 test "conflictBody names every file and the command that settles them" {
-    final body = conflictBody("main", files: ["MAGUS.md", "gen/target-graph.json"]);
+    final body = conflictBody("main", files: ["MAGUS.md", "gen/target-graph.json"], mine: mut []);
     std\assert(body.indexOf("- `MAGUS.md`") != null, message: "names the first file");
     std\assert(body.indexOf("- `gen/target-graph.json`") != null, message: "names the second");
     std\assert(body.indexOf("magus vcs resolve") != null, message: "names the command");
-    std\assert(body.indexOf("still yours") != null, message: "scopes what it does not cover");
+    std\assert(body.indexOf("git push") != null, message: "names the push, so no force-push is implied");
+    std\assert(body.indexOf("Merge, do not rebase") != null, message: "teaches the no-force-push path");
+    std\assert(body.indexOf("guides/integrations/git/") != null, message: "links the explanation");
+}
+
+test "conflictBody names the conflicts magus will not touch, and says nothing when there are none" {
+    final mixed = conflictBody("main", files: ["MAGUS.md"], mine: ["internal/run.go"]);
+    std\assert(mixed.indexOf("- `internal/run.go`") != null, message: "names the authored conflict");
+    std\assert(mixed.indexOf("are yours") != null, message: "scopes what it does not cover");
+
+    final only = conflictBody("main", files: ["MAGUS.md"], mine: mut []);
+    std\assert(only.indexOf("are yours") == null, message: "no empty section when magus settles everything");
+}
+
+// Every other assertion here reads a substring that CONCATENATION produced, so an
+// interpolation that stopped firing and rendered literal braces would leave this file green.
+test "conflictBody and conflictTitle render their counts, not the placeholder" {
+    final body = conflictBody("main", files: ["MAGUS.md", "gen/target-graph.json"],
+        mine: ["internal/run.go"]);
+    std\assert(body.indexOf("settles these 2") != null, message: "the generated count renders");
+    std\assert(body.indexOf("These 1 are yours") != null, message: "the authored count renders");
+    std\assert(conflictTitle(3) == "Merge conflicts in generated files (3)", message: "the summary line renders");
+}
+
+test "authored keeps the conflicts nothing generates, in git's order" {
+    final mine = authored(["a.go", "MAGUS.md", "b.go"], generated: ["MAGUS.md"]);
+    std\assert(mine.len() == 2, message: "two authored paths");
+    std\assert(mine[0] == "a.go", message: "order preserved");
+    std\assert(mine[1] == "b.go", message: "order preserved");
+    std\assert(authored(["MAGUS.md"], generated: ["MAGUS.md"]).len() == 0, message: "all generated");
 }
