@@ -166,28 +166,28 @@ export object Site {
     metaFull: str = "",
     metaShort: str = "",
     metaStamp: str = "",
-    metaCommits: {str: str} = mut {},
-    metaHistory: {str: [str]} = mut {},
+    metaCommits: mut {str: str},
+    metaHistory: mut {str: [str]},
     metaLoaded: bool = false,
 
     // One JSON-encoded search record per rendered page, joined into
     // gen/search-index.json at the end of a render, in the sorted walk order so the
     // index is deterministic and the drift gate stays stable.
-    searchRecords: [str] = mut [<str>],
+    searchRecords: mut [str],
 
     // URL-alias bookkeeping. aliasTarget maps a declared old path (frontmatter
     // aliases:) to the clean URL of the page that owns it; pageUrls is the set of
     // real written page URLs. Both feed the alias pass after the walk, which writes a
     // redirect stub per alias and throws on a collision.
-    aliasTarget: {str: str} = mut {},
-    pageUrls: {str: bool} = mut {},
+    aliasTarget: mut {str: str},
+    pageUrls: mut {str: bool},
 
     // Tag slugs that earned a /tags/<slug>/ page - carried by two or more pages. Populated
     // BEFORE the walk (collectTagIndex) because a tag chip renders during the walk and has to
     // know whether its destination will exist. A one-page tag gets no page: it would be a
     // redirect with extra steps, and 66% of this corpus's tags are one-page. Those chips keep
     // pointing at the search query, which is what a single-hit topic actually wants.
-    tagPages: {str: bool} = mut {},
+    tagPages: mut {str: bool},
 
     // url -> how many distinct KINDS of route reach this page: tree (a section index or an
     // overview ancestor), sequence (the pager), topic (a tag page). Counted per page during the
@@ -201,31 +201,31 @@ export object Site {
     // Related cards are deliberately excluded: they are computed from similarity rather than
     // authored, so counting them would let a page clear the floor with no editorial decision
     // behind it.
-    pageAxes: {str: int} = mut {},
+    pageAxes: mut {str: int},
 
     // Every gen-root-relative file this render actually wrote, populated at the choke points
     // that own a write (addRecord, writeAliases, renderAutoindex; a few one-off index.md
     // siblings track themselves). pruneStaleOutputs() diffs this against disk and deletes
     // leftovers from a previous run whose source is gone - so a rename or deletion cleans up
     // its old output without nuking and rebuilding the whole tree.
-    writtenPaths: {str: bool} = mut {},
+    writtenPaths: mut {str: bool},
 
     // Blog posts (consumed by the blog index, Atom feed, and pager). hasBlogPosts is
     // precomputed before the walk so an early page (README) can decide whether to
     // advertise the blog Atom feed in <head>.
-    blogPosts: [BlogPost] = mut [<BlogPost>],
+    blogPosts: mut [BlogPost],
     hasBlogPosts: bool = false,
 
     // Docs relatedness corpus, built pre-walk by collectDocPages so each page can
     // pick its Related neighbors.
-    docPages: [DocPage] = mut [<DocPage>],
+    docPages: mut [DocPage],
 
     // Glossary vocabulary, parsed pre-walk from glossary.md (longest term first). Each
     // rendered docs page auto-links the first occurrence of each term; glossaryRefs
     // accumulates which page URLs linked each anchor, emitted as glossary-index.json for
     // the term popover ("referenced on ...").
     glossaryTerms: [GlossaryTerm] = mut [<GlossaryTerm>],
-    glossaryRefs: {str: [str]} = mut {},
+    glossaryRefs: mut {str: [str]},
 
     // Documentation conventions, parsed pre-walk from conventions.md. Each rendered page gets
     // a subtle "?" hint next to a convention marker (an admonition title, a code caption)
@@ -239,7 +239,7 @@ export object Site {
     // fills DURING the walk and is only complete afterward, so it cannot drive an in-walk
     // Related block; this forward-built map can. Joined with "||" (never in an anchor slug)
     // so sharedTagCount counts the overlap without a second helper.
-    pageTerms: {str: str} = mut {},
+    pageTerms: mut {str: str},
 
     // Code-entity catalog (diagnostic codes, and later commands/methods/config), parsed
     // pre-walk. Each page auto-links the first inline-code occurrence of each entity to its
@@ -248,12 +248,12 @@ export object Site {
 
     // Concept docSlug -> the tour step that demonstrates it, built pre-walk (tour.collectDemos)
     // so a concept page can inject a "see the demo" callout linking to its tour card.
-    demoBySlug: {str: DemoLink} = mut {},
+    demoBySlug: mut {str: DemoLink},
 
     // Releases loaded from releases/*.yaml, for the Atom feed, announcement bar,
     // and /public/release/ artifact listing. Ordered newest-first (by file sort,
     // which matches semver descending for vX.Y.Z names).
-    releases: [Release] = mut [<Release>],
+    releases: mut [Release],
 
     // The default CSP meta content, computed once by computeCSP() at the top of
     // site_render() and threaded verbatim into every page's head EXCEPT home (non-home
@@ -353,7 +353,7 @@ export object Site {
     fun collectDocPages(rel: str) > void !> any {
         var dir = this.root + "/" + this.docs;
         if (rel != "") { dir = this.root + "/" + this.docs + "/" + rel; }
-        foreach (name in fs\list(dir)) {
+        foreach (name in fs\listDir(dir)) {
             var childRel = name;
             if (rel != "") { childRel = rel + "/" + name; }
             if (isDirectory(this.root + "/" + this.docs + "/" + childRel)) {
@@ -749,10 +749,10 @@ export object Site {
 
         final codesBase = this.root + "/" + this.docs + "/reference/codes";
         if (isDirectory(codesBase)) {
-            foreach (group in fs\list(codesBase)) {
+            foreach (group in fs\listDir(codesBase)) {
                 final gdir = codesBase + "/" + group;
                 if (isDirectory(gdir) == false) { continue; }
-                foreach (name in fs\list(gdir)) {
+                foreach (name in fs\listDir(gdir)) {
                     if (name.endsWith(".md") == false or name == "index.md" or name == "README.md") { continue; }
                     final code = name.sub(0, len: name.len() - 3);
                     ents.append(Entity{
@@ -767,7 +767,7 @@ export object Site {
 
         final manBase = this.root + "/" + this.docs + "/reference/manpage";
         if (isDirectory(manBase)) {
-            foreach (name in fs\list(manBase)) {
+            foreach (name in fs\listDir(manBase)) {
                 if (name.startsWith("magus-") == false or name.endsWith(".md") == false) { continue; }
                 final base = name.sub(0, len: name.len() - 3);   // "magus-run"
                 final sub = base.sub(6);                          // "run"
@@ -802,7 +802,7 @@ export object Site {
         // (backslash-namespaced, so it never collides with prose), anchor = its goldmark slug.
         final buzzBase = this.root + "/" + this.docs + "/reference/buzz";
         if (isDirectory(buzzBase)) {
-            foreach (name in fs\list(buzzBase)) {
+            foreach (name in fs\listDir(buzzBase)) {
                 if (name.endsWith(".md") == false or name == "index.md" or name == "README.md") { continue; }
                 final mod = name.sub(0, len: name.len() - 3);
                 final f = io\File.open(buzzBase + "/" + name, io\FileMode.read);
@@ -946,14 +946,44 @@ export object Site {
 // flat imports, or standalone (`magus buzz -t --embedded engine/types.buzz`). Buzz's == is
 // identity for maps, so assert.equal does the value comparison.
 test "Site.collectAlias trims slashes and records every alias" {
-    final s = mut Site{};
+    final s = mut Site{
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        glossaryRefs = mut {},
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
     s.collectAlias("/old-path/", "new-path/");
     s.collectAlias("same", "same/");
     assert\equal(s.aliasTarget, {"old-path": "new-path/", "same": "same/"}, "both aliases recorded with slashes trimmed");
 }
 
 test "Site.addRecord marks the URL written and appends one search record" {
-    final s = mut Site{};
+    final s = mut Site{
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        glossaryRefs = mut {},
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
     s.addRecord("guide/", "Guide", "", "---\ntitle: Guide\n---\nBody text.");
     assert\equal(s.pageUrls, {"guide/": true}, "url marked written");
     assert\len(s.searchRecords, 1, "one search record appended");
@@ -964,7 +994,22 @@ test "Site.addRecord marks the URL written and appends one search record" {
 
 
 test "renderSectionNav lists an overview's direct children and marks the current page" {
-    final s = mut Site{};
+    final s = mut Site{
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        glossaryRefs = mut {},
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
     s.docPages.append(DocPage{ url = "spells/", title = "Spells", srcRel = "docs/spells.md", overview = true, section = "spells" });
     s.docPages.append(DocPage{ url = "spells/go/", title = "go", srcRel = "docs/spells/go.md", section = "spells" });
     s.docPages.append(DocPage{ url = "spells/bash/", title = "bash", srcRel = "docs/spells/bash.md", section = "spells" });
@@ -980,14 +1025,44 @@ test "renderSectionNav lists an overview's direct children and marks the current
 }
 
 test "renderSectionNav returns empty for a childless page with no overview ancestor" {
-    final s = mut Site{};
+    final s = mut Site{
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        glossaryRefs = mut {},
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
     s.docPages.append(DocPage{ url = "targets/", title = "Targets", srcRel = "docs/targets.md", section = "targets" });
     s.docPages.append(DocPage{ url = "cache/", title = "Cache", srcRel = "docs/cache.md", section = "cache" });
     assert\equal(s.renderSectionNav("docs/targets.md", "targets/", "../"), "", "no section nav for a leaf with no children");
 }
 
 test "renderSectionNav lists a non-overview parent's own direct children" {
-    final s = mut Site{};
+    final s = mut Site{
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        glossaryRefs = mut {},
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
     // targets/ is NOT an overview and has no overview ancestor, but it is a parent.
     s.docPages.append(DocPage{ url = "targets/", title = "Targets", srcRel = "docs/targets.md", section = "targets" });
     s.docPages.append(DocPage{ url = "targets/ci/", title = "CI", srcRel = "docs/targets/ci.md", section = "targets" });
@@ -999,7 +1074,22 @@ test "renderSectionNav lists a non-overview parent's own direct children" {
 }
 
 test "renderRelated ranks neighbors by shared glossary terms over shared tags" {
-    final s = mut Site{};
+    final s = mut Site{
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        glossaryRefs = mut {},
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
     s.docs = "docs";
     s.docPages.append(DocPage{ url = "concepts/cache/", title = "Cache", srcRel = "docs/concepts/cache.md", section = "concepts", tags = "a||b" });
     // Shares 2 glossary terms with cache, no tags.
@@ -1019,7 +1109,22 @@ test "renderRelated ranks neighbors by shared glossary terms over shared tags" {
 }
 
 test "renderSubtree lists the whole branch, nested by depth" {
-    final s = mut Site{};
+    final s = mut Site{
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        glossaryRefs = mut {},
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
     s.docPages.append(DocPage{ url = "concepts/", title = "Concepts", srcRel = "docs/concepts.md", overview = true, section = "concepts" });
     s.docPages.append(DocPage{ url = "concepts/targets/", title = "Targets", srcRel = "docs/concepts/targets.md", section = "concepts" });
     s.docPages.append(DocPage{ url = "concepts/targets/ci/", title = "CI", srcRel = "docs/concepts/targets/ci.md", section = "concepts" });
@@ -1034,7 +1139,22 @@ test "renderSubtree lists the whole branch, nested by depth" {
 }
 
 test "renderSubtree stays quiet when it would repeat the section list" {
-    final s = mut Site{};
+    final s = mut Site{
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        glossaryRefs = mut {},
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
     // Only direct children: renderSectionNav already shows exactly this.
     s.docPages.append(DocPage{ url = "guides/", title = "Guides", srcRel = "docs/guides.md", overview = true, section = "guides" });
     s.docPages.append(DocPage{ url = "guides/mcp/", title = "MCP", srcRel = "docs/guides/mcp.md", section = "guides" });
@@ -1043,7 +1163,22 @@ test "renderSubtree stays quiet when it would repeat the section list" {
 }
 
 test "renderSubtree refuses to become a wall of links" {
-    final s = mut Site{};
+    final s = mut Site{
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        glossaryRefs = mut {},
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
     s.docPages.append(DocPage{ url = "all/", title = "All", srcRel = "docs/all.md", overview = true, section = "all" });
     // One deep child so the depth guard passes, then enough rows to trip the cap.
     s.docPages.append(DocPage{ url = "all/deep/child/", title = "Deep", srcRel = "docs/all/deep/child.md", section = "all" });

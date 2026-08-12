@@ -50,7 +50,7 @@ export fun loadReleases(site: Site) > void !> any {
     final relDir = site.root + "/releases";
     if (fs\isDir(relDir)) {
         var names: mut [str] = mut [<str>];
-        foreach (name in fs\list(relDir)) {
+        foreach (name in fs\listDir(relDir)) {
             if (name.endsWith(".yaml")) { names.append(name); }
         }
         foreach (name in sortNamesSemverDesc(names)) {

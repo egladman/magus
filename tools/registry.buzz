@@ -70,7 +70,7 @@ fun fetchAll(dir: str) > int !> any {
 // what order the filesystem hands them back.
 fun productSlugs(dir: str) > [str] {
     var names: mut [str] = mut [<str>];
-    foreach (name in fs\list(dir)) {
+    foreach (name in fs\listDir(dir)) {
         if (name.endsWith(".json")) { names.append(name); }
     }
     return names.sort(fun (a: str, b: str) > bool { return a < b; });
@@ -137,7 +137,7 @@ fun buildDoc(upstreamDir: str, releasesDir: str, expiresAt: str) > {str: any} !>
 // file rather than two half-synced ones.
 fun loadReleases(dir: str) > [{str: any}] !> any {
     var names: mut [str] = mut [<str>];
-    foreach (name in fs\list(dir)) {
+    foreach (name in fs\listDir(dir)) {
         if (name.endsWith(".yaml")) { names.append(name); }
     }
     // Newest first, which for v0.N.M filenames is a reverse sort.

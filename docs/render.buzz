@@ -101,7 +101,7 @@ fun esbuild(args: [str]) > void {
 // under blog/.
 fun walkBlog(site: Site) > void !> any {
     if (isDirectory(site.root + "/" + site.blog) == false) { return; }
-    foreach (name in fs\list(site.root + "/" + site.blog)) {
+    foreach (name in fs\listDir(site.root + "/" + site.blog)) {
         if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
             renderBlogPost(name, site);
         }
@@ -115,7 +115,7 @@ fun walk(rel: str, site: Site) > void !> any {
     var dir = site.root + "/" + site.docs;
     if (rel != "") { dir = site.root + "/" + site.docs + "/" + rel; }
 
-    foreach (name in fs\list(dir)) {
+    foreach (name in fs\listDir(dir)) {
         var childRel = name;
         if (rel != "") { childRel = rel + "/" + name; }
 
@@ -146,7 +146,22 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // Before anything else: a build too old to honor str.indexOf(from:) would not fail
     // here, it would HANG in the glossary linker. Probe once and say so instead.
     requireIndexOfFrom();
-    var site: Site = mut Site{};
+    var site: Site = mut Site{
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        glossaryRefs = mut {},
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
     site.config = magusConfig();
     site.targets = targets;
     site.graph = graph;
@@ -168,7 +183,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     site.blogPosts = mut [<BlogPost>];
     site.hasBlogPosts = false;
     if (isDirectory(site.root + "/" + site.blog)) {
-        foreach (name in fs\list(site.root + "/" + site.blog)) {
+        foreach (name in fs\listDir(site.root + "/" + site.blog)) {
             if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
                 site.hasBlogPosts = true;
             }

@@ -282,7 +282,7 @@ export fun scanReferencesInHTML(html: str, pageDir: str) > [str] {
 export fun walkGen(rel: str, acc: [str], site: Site) > void !> any {
     var dir = site.outDir;
     if (rel != "") { dir = site.outDir + "/" + rel; }
-    foreach (name in fs\list(dir)) {
+    foreach (name in fs\listDir(dir)) {
         var childRel = name;
         if (rel != "") { childRel = rel + "/" + name; }
         if (fs\isDir(site.outDir + "/" + childRel)) {
@@ -452,7 +452,7 @@ fun lintSkipDir(name: str) > bool {
 fun collectMarkdown(base: str, rel: str, acc: [str]) > void !> any {
     var dir = base;
     if (rel != "") { dir = base + "/" + rel; }
-    foreach (name in fs\list(dir)) {
+    foreach (name in fs\listDir(dir)) {
         var childRel = name;
         if (rel != "") { childRel = rel + "/" + name; }
         if (isDirectory(dir + "/" + name)) {

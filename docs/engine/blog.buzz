@@ -109,7 +109,7 @@ fun renderBlogPager(base: str, site: Site) > str !> any {
     // Rebuild the ordering deterministically from disk (site.blogPosts may be partial
     // during the walk). Newest first.
     var posts: mut [BlogPost] = mut [<BlogPost>];
-    foreach (name in fs\list(site.root + "/" + site.blog)) {
+    foreach (name in fs\listDir(site.root + "/" + site.blog)) {
         if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
             final f = io\File.open(site.root + "/" + site.blog + "/" + name, io\FileMode.read);
             final md = f.readAll();

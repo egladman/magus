@@ -186,7 +186,7 @@ fun renderPager(rel: str, site: Site) > str !> any {
     if (parts.len() > 1) { srcDir = srcDir + "/" + parts.sub(0, parts.len() - 1).join("/"); }
 
     var sibs: mut [str] = mut [<str>];
-    foreach (name in fs\list(srcDir)) {
+    foreach (name in fs\listDir(srcDir)) {
         // README.md/index.md are the directory's landing page (reached via breadcrumb and
         // nav, not a prev/next peer), and their clean URL is the parent dir, which a sibling
         // link can't express - so they stay out. isGeneratorFile drops the SSG's own
@@ -637,13 +637,43 @@ export fun renderFile(rel: str, site: Site) > void !> any {
 
 
 test "substituteVersionTokens replaces every __MAGUS_VERSION__ with the latest release tag" {
-    final s = mut Site{};
+    final s = mut Site{
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        glossaryRefs = mut {},
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
     s.releases.append(Release{ version = "v0.2.0" });
     final got = substituteVersionTokens("get __MAGUS_VERSION__/magus___MAGUS_VERSION___linux.tar.gz", s);
     assert\equal(got, "get v0.2.0/magus_v0.2.0_linux.tar.gz", "both tokens replaced with the tag");
 }
 
 test "substituteVersionTokens is a no-op before any release has shipped" {
-    final s = mut Site{};
+    final s = mut Site{
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        glossaryRefs = mut {},
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
     assert\equal(substituteVersionTokens("install __MAGUS_VERSION__", s), "install __MAGUS_VERSION__", "token left literal with no releases");
 }
