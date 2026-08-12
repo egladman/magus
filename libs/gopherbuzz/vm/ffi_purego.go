@@ -517,11 +517,8 @@ func buildFFIFunc(sig CFuncSig, sym uintptr) (fn Value, err error) {
 		for i, p := range sig.Params {
 			if inst, ok := foreignStructArg(args[i]); ok {
 				sa, err := marshalStructArg(inst)
-				// Pin BEFORE checking the error. marshalStructArg allocates the block
-				// early and returns it alongside a later failure (a C string it could
-				// not allocate, a scalar it could not write), so returning here without
-				// pinning leaked that block into memRegistry permanently. A zero addr
-				// from the early paths is harmless: the deferred FreeFFI ignores it.
+				// Pin before checking err: the block is allocated early and returned
+				// alongside a later failure, and would otherwise leak.
 				pinned = append(pinned, sa)
 				if err != nil {
 					return Null, fmt.Errorf("buzz: ffi: %s() arg %d: %w", sig.Name, i, err)
@@ -624,9 +621,7 @@ func foreignStructArg(v Value) (*objectInst, bool) {
 // way the declaration says, and returns the block for the callee to write through.
 func marshalStructArg(inst *objectInst) (structArg, error) {
 	types := declaredFieldTypes[inst.Def.Name]
-	// A union lays every field at offset 0 and sizes to the widest. Laying one out
-	// with StructLayoutWith gave it struct offsets and a struct size - reported 16
-	// where the layout map said 8 - so the block disagreed with what the callee read.
+	// A union lays every field at 0; struct layout disagreed with the callee.
 	layout := StructLayoutWith
 	if declaredAggregates[inst.Def.Name].IsUnion {
 		layout = UnionLayoutWith
@@ -664,10 +659,7 @@ func marshalStructArg(inst *objectInst) (structArg, error) {
 				return sa, err
 			}
 		case v.tag() == tagBool:
-			// Without this a bool field was silently never written: the block kept
-			// the zero AllocFFI left, so every bool reached C as false however the
-			// script set it. C represents a bool as 0/1 in the field's own width,
-			// which is what ct already describes.
+			// Unwritten, a bool kept AllocFFI's zero and reached C as false.
 			var n int64
 			if v.AsBool() {
 				n = 1
@@ -687,6 +679,12 @@ func marshalStructArg(inst *objectInst) (structArg, error) {
 // unmarshalStructArg reads the block back into the instance, so a callee that wrote
 // through the pointer is visible in Buzz. A pointer field is re-read as a string.
 func unmarshalStructArg(sa structArg) error {
+	// A union's fields all live at offset 0, so reading each one back would
+	// overwrite every field with a reinterpretation of the same bytes. The
+	// caller's own values are left alone instead.
+	if declaredAggregates[sa.inst.Def.Name].IsUnion {
+		return nil
+	}
 	for i, ct := range sa.ctypes {
 		if i >= len(sa.inst.Fields) {
 			break
@@ -697,13 +695,8 @@ func unmarshalStructArg(sa structArg) error {
 		if strings.Contains(ct, "*") {
 			continue
 		}
-		// A field whose type is another declared aggregate is not a scalar, and
-		// ReadScalar cannot resolve it - CTypeLayout knows only primitive spellings.
-		// That error surfaced AFTER the C function had already run, turning a
-		// perfectly good call into a failure, and it is not even a real problem: the
-		// nested bytes are in the block, and the instance already holds the nested
-		// value the caller passed in. Leaving it alone is the same rule the pointer
-		// case above follows.
+		// A nested aggregate is not a scalar; ReadScalar cannot resolve it, and
+		// failing here would fail a call that already ran. Same rule as a pointer.
 		if _, nested := declaredAggregates[ct]; nested {
 			continue
 		}
@@ -715,11 +708,8 @@ func unmarshalStructArg(sa structArg) error {
 		case isFloat:
 			sa.inst.Fields[i] = FloatValue(f64)
 		case sa.inst.Fields[i].tag() == tagBool:
-			// Restore the field's own kind. Writing IntValue here replaced a
-			// bool-declared field with 0 or 1, so a round trip through C changed the
-			// field's TYPE - and `if (s.flag)` then ran against an int. The declared
-			// C type cannot distinguish this (a bool is just a 1-byte integer), so
-			// the field's existing tag is what says how to spell the result.
+			// A C bool is just a 1-byte int, so the field's own tag is the only
+			// thing that says to spell the result back as a bool.
 			sa.inst.Fields[i] = BoolValue(i64 != 0)
 		default:
 			sa.inst.Fields[i] = IntValue(i64)

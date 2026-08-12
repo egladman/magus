@@ -82,11 +82,7 @@ func (vm *VM) CollectUnreachable() (int, error) {
 			// Keep it tracked: a collector that failed has not run to completion, and
 			// silently dropping it would hide the failure on a later sweep.
 			//
-			// The TAIL has to survive too. kept holds only what this sweep has
-			// visited, so assigning it alone deregistered every instance after the
-			// failing one - none of their collect() methods would ever run, on this
-			// sweep or any later one. Only the failure itself is early; the rest of
-			// the registry is untouched work, not garbage.
+			// kept holds only what this sweep visited; the tail is untouched work.
 			vm.collectables = append(append(kept, inst), vm.collectables[i+1:]...)
 			return collected, err
 		}
@@ -150,17 +146,12 @@ func markReachable(v Value, live map[*objectInst]bool, seen map[any]bool) {
 		for _, item := range mo.Vals {
 			markReachable(item, live, seen)
 		}
-		// keyVals holds the real key VALUES, and a key may be an object. Walking
-		// only Vals left an object used as a map key invisible to the mark, so
-		// gc\collect() reclaimed it while the map still keyed on it.
+		// A key may itself be an object; walking only Vals collected it in use.
 		for _, k := range mo.keyVals {
 			markReachable(k, live, seen)
 		}
 	case tagIterState:
-		// The collection a foreach is walking lives ONLY in the iterator state
-		// while the loop runs - it is not on the stack and not in any env. Without
-		// this case, iterating three objects and calling gc\collect() inside the
-		// body collected the elements the loop had not reached yet.
+		// While a foreach runs, its collection is reachable only from here.
 		is := v.asIterState()
 		if is == nil || seen[is] {
 			return

@@ -73,11 +73,8 @@ type checker struct {
 	// inside either without the enclosing function declaring !>, since the
 	// error is handled right there rather than propagated.
 	catchDepth int
-	// fnScopeBase is the index of the scope a function body opened for its own
-	// parameters, so checkLocalShadowing knows where the enclosing function's locals
-	// stop being reusable. Upstream scopes shadowing to the CURRENT function: a
-	// nested closure is a fresh frame and may reuse an outer name. Saved and restored
-	// around every function body (declaration, method, and closure literal).
+	// fnScopeBase is where the current function's own scope starts. Upstream scopes
+	// shadowing to the current function, so a nested closure may reuse an outer name.
 	fnScopeBase int
 	types       map[string]types.Type // named type definitions (objects, enums)
 	// expected is the stack of types expected at the position being inferred; see
@@ -576,18 +573,16 @@ func (c *checker) checkAssign(v *ast.AssignStmt) {
 	// A member or index target: its own type is likewise the expected type for the
 	// value (`mutableList[0] = .it` resolves through the list's element type).
 	//
-	// The write also justifies the root local's `var`, for the same reason
-	// noteMutatingUse counts `.append`: `digests[p] = h` and `point.x = 2` both write
-	// THROUGH the name. Without this the checker rejected correct programs - upstream
-	// accepts both, and even where it nudges (W102 on an index-assigned `var`) it warns
-	// rather than erroring, so a false positive here is strictly worse than upstream.
-	c.markAssigned(rootIdentName(v.Target))
+	// Writing through the name justifies its `var`, same as noteMutatingUse does
+	// for `.append`. Upstream accepts both, and only warns where it comments.
+	if root := rootIdentName(v.Target); root != "" {
+		c.markAssigned(root)
+	}
 	c.inferExpected(v.Value, c.infer(v.Target))
 }
 
-// rootIdentName walks an assignment target down to the identifier it ultimately
-// writes through -- `a.b[0].c` is a write to `a` -- and returns "" for a target
-// rooted in anything else (a call result, a literal), which names no local.
+// rootIdentName returns the identifier a target writes through (`a.b[0].c` is a
+// write to `a`), or "" when it is rooted in something that names no local.
 func rootIdentName(target ast.Node) string {
 	for {
 		switch t := target.(type) {
@@ -2218,12 +2213,8 @@ func terminatesWith(n ast.Node, tryCounts bool) bool {
 		// transfers control away means the loop never completes normally - which is
 		// what makes the statement after upstream's labeled `continue outer` dead.
 		//
-		// A break that exits THIS do is the exception, exactly as for While and For:
-		// it lands on the statement after the loop, so that statement is live. Without
-		// the guard `do { break; } until (false)` called everything after it dead, and
-		// upstream compiles that program clean. A do carries no label of its own
-		// (ast.DoStmt has no Label field), so "" is the whole story: a bare break at
-		// this level escapes it, and a labeled one unwinds through it either way.
+		// A break exiting the do lands after it, as for While and For. A do carries
+		// no label, so "" suffices: a labeled break unwinds through it regardless.
 		return terminates(s.Body) && !loopHasEscapingBreak(s.Body, "")
 	case *ast.MatchExpr:
 		return matchTerminatesWith(s, tryCounts)
@@ -2483,10 +2474,7 @@ func (c *checker) checkProtocolConformance(v *ast.ObjectDecl, ot *types.ObjectTy
 // in a sibling block, since neither is visible from the other - only a name still
 // live at the point of declaration counts.
 //
-// It stops at the enclosing FUNCTION too, for the same reason: upstream scopes the
-// rule to the current function's locals, so a nested closure may reuse an outer
-// name. Walking past the boundary rejected correct programs - a closure declaring
-// its own `name` inside a function that already had one is legal upstream.
+// It stops at the enclosing function too: a nested closure may reuse an outer name.
 func (c *checker) checkLocalShadowing(v *ast.DeclStmt) {
 	// The innermost scope is where this declaration lands. A clash THERE is a
 	// redeclaration in the same block, which is a different diagnostic; walk only

@@ -24,17 +24,13 @@ type Session struct {
 	env     *vmpackage.Env
 	targets map[string]vmpackage.Callable
 	tests   []TestEntry
-	// exportedNames is every name exported by any chunk this session ran, imported
-	// modules included. It answers a VISIBILITY question: a name some flat import
-	// made private stays visible to the checker if another module exported it.
+	// exportedNames is every name any chunk exported, imports included. It answers
+	// VISIBILITY: a name a flat import made private stays visible if another module
+	// exported it.
 	exportedNames map[string]bool
-	// rootExportedNames is the subset exported by chunks run OUTSIDE an import -
-	// the file the caller actually executed. Exports() answers with this one,
-	// because its callers ask an OWNERSHIP question ("what does this magusfile
-	// declare?"), not a visibility one. Conflating the two made every member of an
-	// imported module look like the importer's own export: `import "lcov"` in
-	// console/magusfile.buzz turned lcov's percent and mergePercent into targets of
-	// the console project, which then failed MGS1008 for taking no magus\Context.
+	// rootExportedNames is the subset from chunks run outside an import. Exports()
+	// answers with this, because its callers ask what a file OWNS - conflated, an
+	// `import "lcov"` turned lcov's exports into the importer's targets (MGS1008).
 	rootExportedNames map[string]bool
 	// embedded relaxes the script-conformance rules upstream Buzz enforces (no
 	// top-level control flow, labeled args). Default false (strict, like upstream);
@@ -522,8 +518,7 @@ func (s *Session) exec(ctx context.Context, code string) ([]string, error) {
 	}
 	for _, name := range chunk.Exports {
 		s.exportedNames[name] = true
-		// collectImportPrivate is on for exactly the duration of an import (see
-		// execImport), so it is what separates a module's exports from the caller's.
+		// collectImportPrivate is on for exactly the duration of an import.
 		if !s.collectImportPrivate {
 			s.rootExportedNames[name] = true
 		}
