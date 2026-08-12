@@ -151,11 +151,17 @@ evaluates its target twice, and generics are erased.
 property of the EMBEDDING rather than by unwritten code, so this list is not a
 backlog:
 
-- **A plain C library nobody ships.** `ffi` and `types-as-value` `zdef` against
-  `tests/utils/libforeign`, which `build.zig` compiles from `tests/utils/foreign.zig`.
-  That source is ordinary C ABI (`export fn acos(value: f64) callconv(.c) f64`, no
-  buzz import, not linked against libbuzz), so gopherbuzz's own FFI could call it
-  unchanged. These two are blocked on HAVING the artifact, nothing more.
+- **Foreign STRUCT types.** `ffi` and `types-as-value` were long filed here as
+  needing a library upstream builds with Zig. They no longer do: `foreign.zig` is
+  plain C ABI, so the harness now compiles an ABI-compatible twin with `cc`
+  (testdata/upstream-foreign/foreign.c) and both files load it and call into it -
+  `acos`, `fprint` and `sum` all work through gopherbuzz's own FFI.
+  What actually blocks them is a real gap this exposed: a `zdef` struct declaration
+  binds only a `{size, align, offsets}` LAYOUT, so `Data` is not a type. `Data{...}`
+  fails to construct, and `typeof Data == <type>` has nothing to name. Making a
+  foreign struct a first-class type - constructible, field-addressable, passable by
+  pointer - is the remaining work, and it is FFI feature work rather than a property
+  of the embedding.
 - **buzz's own native-extension ABI.** `extern-library` and `c-buzz-api` are a
   different problem, and the failure mode hides it: `extern-library` looks like it
   only wants a shared library, and "null is not callable" is just its unbound

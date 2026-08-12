@@ -1844,6 +1844,13 @@ func canonicalTypeName(t types.Type) string {
 	if t == types.Unknown || t == nil {
 		return "any"
 	}
+	// `typeof null` is `<void>` upstream, not `<null>` - types-as-value.buzz asserts
+	// it outright. Only the SPELLING of a type value changes here; types.Null stays a
+	// distinct type everywhere else, which is what keeps null assignable to a
+	// nullable target while void is not.
+	if t == types.Null {
+		return "void"
+	}
 	return t.TypeName()
 }
 

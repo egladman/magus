@@ -419,14 +419,29 @@ func stageRunDir(t *testing.T, checkout string) string {
 	}
 	run := t.TempDir()
 	for _, e := range entries {
-		if e.Name() == "zig-out" {
+		switch e.Name() {
+		case "zig-out":
 			continue // ours to build, not upstream's to lend
+		case "tests":
+			// Recreated one level deeper rather than linked wholesale, so that
+			// tests/utils can hold a library we build. Linking `tests` outright would
+			// make tests/utils/libforeign resolve INTO the checkout.
+			if err := linkTreeExcept(filepath.Join(checkout, "tests"), filepath.Join(run, "tests"), "utils"); err != nil {
+				t.Logf("cannot stage tests/ (%v); running from the checkout", err)
+				return checkout
+			}
+			if err := linkTreeExcept(filepath.Join(checkout, "tests", "utils"), filepath.Join(run, "tests", "utils"), ""); err != nil {
+				t.Logf("cannot stage tests/utils (%v); running from the checkout", err)
+				return checkout
+			}
+			continue
 		}
 		if err := os.Symlink(filepath.Join(checkout, e.Name()), filepath.Join(run, e.Name())); err != nil {
 			t.Logf("cannot link %s (%v); running from the checkout", e.Name(), err)
 			return checkout
 		}
 	}
+	buildForeignLib(t, pkgDir, filepath.Join(run, "tests", "utils", "libforeign"))
 	out := filepath.Join(run, "zig-out", "bin", "buzz")
 	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
 		t.Logf("cannot create zig-out (%v); os.buzz will report as failing", err)
@@ -438,4 +453,50 @@ func stageRunDir(t *testing.T, checkout string) string {
 		t.Logf("cannot build cmd/buzz (%v: %s); os.buzz will report as failing", err, combined)
 	}
 	return run
+}
+
+// linkTreeExcept makes dst a real directory holding a symlink to every entry of
+// src, skipping one name. It is how a subtree stays readable from the pinned
+// checkout while remaining writable at one level.
+func linkTreeExcept(src, dst, skip string) error {
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if e.Name() == skip {
+			continue
+		}
+		if err := os.Symlink(filepath.Join(src, e.Name()), filepath.Join(dst, e.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// buildForeignLib compiles testdata/upstream-foreign/foreign.c to out, the fixture
+// library ffi.buzz and types-as-value.buzz zdef against.
+//
+// Upstream builds the original with Zig and ships it in no release, so those files
+// were failing on a missing artifact. The source is plain C ABI, so `cc` is enough;
+// see the header of foreign.c for why reimplementing a FIXTURE is honest here. The
+// output has no extension because the zdef names an explicit path
+// ("tests/utils/libforeign"), which openLib tries verbatim.
+//
+// A missing or broken compiler is logged, not fatal: the two files then report as
+// still failing, which is the truthful outcome on a machine that cannot build it.
+func buildForeignLib(t *testing.T, pkgDir, out string) {
+	t.Helper()
+	cc := os.Getenv("CC")
+	if cc == "" {
+		cc = "cc"
+	}
+	src := filepath.Join(pkgDir, "testdata", "upstream-foreign", "foreign.c")
+	cmd := exec.Command(cc, "-shared", "-fPIC", "-o", out, src)
+	if combined, err := cmd.CombinedOutput(); err != nil {
+		t.Logf("cannot build the foreign fixture library (%v: %s); ffi.buzz and types-as-value.buzz will report as failing", err, combined)
+	}
 }
