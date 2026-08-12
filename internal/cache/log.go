@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -524,7 +525,14 @@ func (h *PrettyHandler) printFailure(colorize bool, label, project, target strin
 		h.printf("%s %s (ran, %s)\n", h.glyph(colorize, "fail", colRed), heading, fmtDur(dur))
 	}
 	if cause != "" {
-		h.printf("  cause: %s\n", failureCauseExcerpt(cause))
+		causes := failureCauses(cause)
+		h.printf("  cause: %s\n", causes[0])
+		// One line per INDEPENDENT failure. errors.Join separates them with a
+		// newline and they used to be flattened into a single run-on line, so two
+		// unrelated failures read as one sentence ("dprint exited 20 test: ...").
+		for _, c := range causes[1:] {
+			h.printf("       %s\n", c)
+		}
 	}
 	if ref != "" {
 		h.printf("  output: %s\n", ref)
@@ -565,6 +573,72 @@ func failureCauseExcerpt(cause string) string {
 		return cause
 	}
 	return string([]rune(cause)[:maxRunes-1]) + "…"
+}
+
+// needsChainRe matches the dependency-plumbing prefixes an error accumulates on
+// its way up: every ctx.needs hop wraps the message again, so a failure four
+// levels down arrives as "ctx.needs: build: ctx.needs: go-build: ctx.needs:
+// ctx.needs: format: dprint exited 20". The repeats say nothing a reader can act
+// on - the target names between them already give the path - so only the bare,
+// consecutive ones are folded away.
+var needsChainRe = regexp.MustCompile(`(?:ctx\.needs: )+`)
+
+// arrowChain rewrites the leading colon-separated hops of a cause as an arrow
+// path, so the route to the failure reads as a route:
+//
+//	build: go-build: format: dprint exited 20
+//	build -> go-build -> format: dprint exited 20
+//
+// A colon does double duty in these strings - it separates one target from the
+// next AND separates the last target from its message - so a reader has to work
+// out which colon is which. Only the target hops become arrows; the final colon
+// stays, marking where the path ends and the error begins.
+//
+// A hop is recognized by SHAPE: a bare target-ish token with no spaces. The
+// first segment containing a space is the message, and everything from there is
+// left exactly as it came ("buzz -t blast-radius.buzz exited with code 1" holds
+// colons of its own that must not be touched).
+func arrowChain(cause string) string {
+	segs := strings.Split(cause, ": ")
+	if len(segs) < 3 {
+		return cause // one hop and a message: the single colon is unambiguous
+	}
+	hops := 0
+	for _, s := range segs[:len(segs)-1] {
+		if strings.ContainsAny(s, " \t") || s == "" {
+			break
+		}
+		hops++
+	}
+	if hops < 2 {
+		return cause
+	}
+	return strings.Join(segs[:hops], " -> ") + ": " + strings.Join(segs[hops:], ": ")
+}
+
+// failureCauses splits a joined failure into one readable line per INDEPENDENT
+// cause, and strips the repeated ctx.needs plumbing from each.
+//
+// Both halves matter. errors.Join renders its parts newline-separated, and
+// collapsing that with strings.Fields ran two unrelated failures together into
+// one sentence, so a reader could not tell where one ended - the reason this
+// output read as nonsense. Splitting first keeps them apart; the excerpt budget
+// then applies per cause rather than to the concatenation, so a long first
+// failure can no longer truncate the second away entirely.
+func failureCauses(cause string) []string {
+	var out []string
+	for _, part := range strings.Split(cause, "\n") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		part = needsChainRe.ReplaceAllString(part, "")
+		out = append(out, failureCauseExcerpt(arrowChain(part)))
+	}
+	if len(out) == 0 {
+		return []string{failureCauseExcerpt(cause)}
+	}
+	return out
 }
 
 // printRef prints a successful target's output reference id on its own line.

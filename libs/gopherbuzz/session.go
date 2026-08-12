@@ -19,11 +19,11 @@ import (
 // Session is a single Buzz execution context.
 // Not safe for concurrent use; ensure one goroutine owns it at a time.
 type Session struct {
-	ctx           context.Context
-	cancel        context.CancelFunc
-	env           *vmpackage.Env
-	targets       map[string]vmpackage.Callable
-	tests         []TestEntry
+	ctx     context.Context
+	cancel  context.CancelFunc
+	env     *vmpackage.Env
+	targets map[string]vmpackage.Callable
+	tests   []TestEntry
 	// exportedNames is every name exported by any chunk this session ran, imported
 	// modules included. It answers a VISIBILITY question: a name some flat import
 	// made private stays visible to the checker if another module exported it.

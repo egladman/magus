@@ -56,13 +56,13 @@ type scopeEntry struct {
 }
 
 type checker struct {
-	errors   []typeError
-	scopes   []map[string]scopeEntry
-	retTyp   types.Type
+	errors []typeError
+	scopes []map[string]scopeEntry
+	retTyp types.Type
 	// retOptional records that the enclosing function's return annotation ended in
 	// `?`. Like scopeEntry.optional it exists because ParseAnnot erases the marker.
 	retOptional bool
-	yieldTyp types.Type // non-nil when inside a function with a *> yield annotation
+	yieldTyp    types.Type // non-nil when inside a function with a *> yield annotation
 	// raiseDeclared is true while checking the body of a function that declared
 	// !> - a call to a raising function is legal there without a surrounding
 	// try/catch, because the caller's own caller must handle it (or itself

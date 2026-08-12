@@ -269,6 +269,7 @@ were the language.{{end}}
   their exact API or semantics has no upstream equivalent to fall back to,
   by design, not by omission.
 {{if .Full}}
+
 ### If you are reviewing gopherbuzz's own implementation
 
 The above applies to reviewing a workspace's magusfile or spells; skip this
@@ -281,6 +282,7 @@ directions: it fails if a passing file regresses, and it also fails if a
 newly-passing file is not added to the list, so the list can only be as stale
 as the last test run.
 {{end}}
+
 ## Running the three lenses
 
 Spawn three `Agent` tool calls **in a single message** (parallel),
@@ -289,7 +291,7 @@ it needs the section text, not the skill's name.
 
 Prompt template per subagent:
 
-```
+```text
 Read the "Lens: <idiom and style|skeptic and correctness|upstream conformance>"
 section of the installed magus-buzz-review skill (.claude/skills/magus-buzz-review/SKILL.md,
 or wherever this workspace installed it) and apply it to <target file/dir>.

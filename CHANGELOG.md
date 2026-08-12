@@ -52,7 +52,7 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   `fs\mkdirall(...)` must be updated to `fs\mkdirAll(...)`.
 - **`has_charm` is now `hasCharm`, on both receivers.** `magus\hasCharm(...)` and
   `ctx.hasCharm(...)`. It was the ONLY snake_case member on either surface, sitting
-  beside camelCase neighbours (`ctx.needs`, `ctx.readsFiles`, `magus\bustCache`); the
+  beside camelCase neighbors (`ctx.needs`, `ctx.readsFiles`, `magus\bustCache`); the
   lock file now has no underscore in it at all. The name was pinned because the static
   charm extractor in `internal/describe` matches it literally to build the charm
   inventory - that matcher moved with it, and the existing tests for both receivers and
