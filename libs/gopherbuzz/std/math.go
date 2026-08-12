@@ -8,31 +8,44 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
-// DELIBERATE DIVERGENCE from upstream, do not "fix" this.
+// buzzPi is upstream's pi: the 14-digit literal buzz declares in src/lib/math.buzz.
+// It is NOT the nearest double to the real number - Go's math.Pi is
+// 3.141592653589793, this is 3.1415926535898 - so every result derived from it is
+// very slightly off.
 //
-// buzz declares pi in src/lib/math.buzz as the 14-digit literal
-// `3.1415926535898`, which is not the nearest double to π. gopherbuzz uses Go's
-// math.Pi instead: correct arithmetic beats bug-for-bug parity on a numeric
-// constant, and adopting the truncated literal would make every trig result in
-// every magusfile measurably worse to satisfy one assertion.
+// That is deliberate, and it REVERSES an earlier decision recorded in this same
+// spot. gopherbuzz used math.Pi on the reasoning that correct arithmetic beats
+// bug-for-bug parity, and let upstream's tests/behavior/math.buzz fail as the price.
+// The call was changed on 2026-08-11: this VM's job is to BE buzz, and a program
+// moved from upstream must not get different numbers here. Conformance wins on a
+// value that is upstream's to define.
 //
-// The cost is that upstream's tests/behavior/math.buzz cannot pass - it asserts
-// `math.deg(2.0) == 114.59155902616439`, the value the truncated pi produces,
-// where full precision gives 114.59155902616465. That file is intentionally
-// absent from the conformance allowlist; it is not an unimplemented feature.
+// What it costs, precisely - the scope is smaller than the old note implied:
+//
+//	math\pi         3.1415926535898     was 3.141592653589793
+//	math\deg(2.0)   114.59155902616439  was 114.59155902616465
+//	degrees/radian  57.295779513082195  correctly rounded is 57.29577951308232
+//
+// Only pi, deg and rad read it. sin/cos/tan/asin/acos/atan call Go's own
+// implementations and never see this constant, so they are unchanged and remain
+// correctly rounded. The round trip still holds: rad(deg(2.0)) == 2.
+//
+// std/testdata/math_pi_upstream.buzz pins these values, so a silent drift back to
+// math.Pi fails there. Changing this again is a decision, not a cleanup.
+const buzzPi = 3.1415926535898
 
 // mathModule builds the "math" module matching Buzz's math reference:
 // https://buzz-lang.dev/0.5.0/reference/std/math.html
 func mathModule() vm.Value {
 	m := mod()
-	m.MapSet("pi", vm.FloatValue(math.Pi))
+	m.MapSet("pi", vm.FloatValue(buzzPi))
 	m.MapSet("abs", fn("math.abs", mathAbs))
 	m.MapSet("acos", fn("math.acos", mathUnary("math.acos", math.Acos)))
 	m.MapSet("asin", fn("math.asin", mathUnary("math.asin", math.Asin)))
 	m.MapSet("atan", fn("math.atan", mathUnary("math.atan", math.Atan)))
 	m.MapSet("ceil", fn("math.ceil", mathCeil))
 	m.MapSet("cos", fn("math.cos", mathUnary("math.cos", math.Cos)))
-	m.MapSet("deg", fn("math.deg", mathUnary("math.deg", func(r float64) float64 { return r * 180 / math.Pi })))
+	m.MapSet("deg", fn("math.deg", mathUnary("math.deg", func(r float64) float64 { return r * 180 / buzzPi })))
 	m.MapSet("exp", fn("math.exp", mathUnary("math.exp", math.Exp)))
 	m.MapSet("floor", fn("math.floor", mathFloor))
 	m.MapSet("log", fn("math.log", mathLog))
@@ -60,7 +73,7 @@ func mathModule() vm.Value {
 		}
 		return b
 	})))
-	m.MapSet("rad", fn("math.rad", mathUnary("math.rad", func(d float64) float64 { return d * math.Pi / 180 })))
+	m.MapSet("rad", fn("math.rad", mathUnary("math.rad", func(d float64) float64 { return d * buzzPi / 180 })))
 	m.MapSet("sin", fn("math.sin", mathUnary("math.sin", math.Sin)))
 	m.MapSet("sqrt", fn("math.sqrt", mathUnary("math.sqrt", math.Sqrt)))
 	m.MapSet("tan", fn("math.tan", mathUnary("math.tan", math.Tan)))

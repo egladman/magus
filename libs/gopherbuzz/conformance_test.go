@@ -80,16 +80,7 @@ func TestUpstreamConformance(t *testing.T) {
 	// Reading them from elsewhere failed on the working directory rather than on
 	// anything about the language. Done after loadAllowlist, which resolves
 	// allowlistPath relative to THIS package's directory.
-	//
-	// This is also why os.buzz cannot be closed here. It asserts
-	// `os\execute(["./zig-out/bin/buzz", "--version"]) == 0` - a fair test of
-	// os\execute, and gopherbuzz could build its own interpreter to stand in for
-	// upstream's. But the path resolves against THIS directory, the pinned upstream
-	// checkout, which is shared and must stay pristine; and the cwd cannot move
-	// because the files above need it. Staging the binary was tried and reverted:
-	// the only ways through are writing into the checkout or copying it wholesale
-	// per run, and neither is worth one file.
-	t.Chdir(dir)
+	t.Chdir(stageRunDir(t, dir))
 
 	seen := make(map[string]bool, len(files))
 	var regressions, improvements []string
@@ -392,4 +383,59 @@ func TestUpstreamFuzzCorpusDoesNotPanic(t *testing.T) {
 		t.Errorf("the front end panicked on %d of %d fuzz inputs:\n%s",
 			len(panicked), len(files), strings.Join(panicked, "\n"))
 	}
+}
+
+// stageRunDir returns the directory the suite should run from: a symlink farm over
+// the upstream checkout, plus a real `zig-out/bin/buzz`.
+//
+// Two requirements pull against each other. Several files read paths relative to
+// the checkout root (fs.buzz stats README.md, run-file.buzz runs
+// tests/utils/testing.buzz), so the working directory has to look like that root.
+// But os.buzz asserts `os\execute(["./zig-out/bin/buzz", "--version"]) == 0`, and
+// upstream drops its interpreter there from its own Zig build - a path this repo
+// cannot create, because the checkout is shared and pinned and must stay pristine.
+//
+// Symlinking every top-level entry into a temp dir satisfies both: relative reads
+// resolve through to the real checkout, and zig-out is ours to populate. Nothing is
+// copied (the checkout is ~8M but that is beside the point - it is READ-ONLY to us)
+// and nothing is written back.
+//
+// gopherbuzz's own interpreter stands in for upstream's, which is the honest
+// reading: the assertion is about os\execute running a command, not about whose
+// binary it is. A stub that merely exits 0 would pass the file while testing
+// nothing. If the build fails the farm is still used, so os.buzz reports as failing
+// rather than the whole suite breaking on a machine that cannot compile cmd/buzz.
+func stageRunDir(t *testing.T, checkout string) string {
+	t.Helper()
+	pkgDir, err := os.Getwd() // captured before any Chdir: `go build ./cmd/buzz` is relative to it
+	if err != nil {
+		t.Logf("cannot resolve the package directory (%v); running from the checkout", err)
+		return checkout
+	}
+	entries, err := os.ReadDir(checkout)
+	if err != nil {
+		t.Logf("cannot read %s (%v); running from the checkout", checkout, err)
+		return checkout
+	}
+	run := t.TempDir()
+	for _, e := range entries {
+		if e.Name() == "zig-out" {
+			continue // ours to build, not upstream's to lend
+		}
+		if err := os.Symlink(filepath.Join(checkout, e.Name()), filepath.Join(run, e.Name())); err != nil {
+			t.Logf("cannot link %s (%v); running from the checkout", e.Name(), err)
+			return checkout
+		}
+	}
+	out := filepath.Join(run, "zig-out", "bin", "buzz")
+	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
+		t.Logf("cannot create zig-out (%v); os.buzz will report as failing", err)
+		return run
+	}
+	build := exec.Command("go", "build", "-o", out, "./cmd/buzz")
+	build.Dir = pkgDir
+	if combined, err := build.CombinedOutput(); err != nil {
+		t.Logf("cannot build cmd/buzz (%v: %s); os.buzz will report as failing", err, combined)
+	}
+	return run
 }

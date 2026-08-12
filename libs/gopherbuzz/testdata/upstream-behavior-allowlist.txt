@@ -60,6 +60,7 @@ lists.buzz
 long-namespace.buzz
 maps.buzz
 match.buzz
+math.buzz
 multiline-strings.buzz
 mutual-import.buzz
 named-expr.buzz
@@ -69,6 +70,7 @@ object-generics.buzz
 objects.buzz
 operators.buzz
 optionals.buzz
+os.buzz
 pattern.buzz
 placeholder-cycle.buzz
 placeholder-nested-call.buzz

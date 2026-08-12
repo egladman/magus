@@ -22,7 +22,7 @@ rather than only the flattering one.
 
 | upstream suite          | files |      gopherbuzz | what it asks                                                     |
 | ----------------------- | ----: | --------------: | ---------------------------------------------------------------- |
-| `tests/behavior/`       |    83 |     **76 pass** | does correct source produce the right answer?                    |
+| `tests/behavior/`       |    83 |     **78 pass** | does correct source produce the right answer?                    |
 | `tests/compile_errors/` |    77 | **71 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
 | `tests/fuzzed/`         |   644 |    **0 panics** | can malformed input crash the front end?                         |
 | `tests/bench/`          |    11 |         not run | upstream's benchmarks (ours are in [`benchmarks/`](benchmarks/)) |
@@ -159,17 +159,6 @@ backlog:
   library gopherbuzz would then `dlopen` through its own FFI.
   `c-buzz-api` is deeper: `buzz_c_api.c` calls INTO buzz's C API (`buzz_api.zig`),
   so satisfying it means exposing an equivalent C ABI over gopherbuzz's VM.
-- **`os` needs a binary inside the pinned checkout.** It asserts
-  `os\execute(["./zig-out/bin/buzz", "--version"]) == 0`, which is a fair test of
-  `os\execute` and could run gopherbuzz's own interpreter instead of upstream's.
-  But the harness must keep the working directory at the upstream checkout (other
-  files read README.md and tests/utils from it), so that path resolves inside a
-  shared, pinned tree this repo must not write to. Tried and reverted; see the note
-  in conformance_test.go.
-- **`math\deg` will not be matched.** Upstream's result implies a degrees-per-radian
-  constant of 57.295779513082195; the correctly-rounded f64 value is
-  57.29577951308232, which is what gopherbuzz returns. Matching upstream here would
-  mean shipping a less accurate constant to satisfy a test.
 - **GC collector callbacks** depend on Buzz's own collector running at points a Go
   program does not control. Upstream's test asserts a collector ran after dropping a
   reference; Go's GC gives no such guarantee.
