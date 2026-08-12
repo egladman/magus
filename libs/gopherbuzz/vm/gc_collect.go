@@ -30,6 +30,23 @@ func FromContext(ctx context.Context) *VM {
 	return v
 }
 
+// gcMinThreshold is the smallest registry length that arms an automatic sweep.
+// Only types declaring collect() are tracked and in practice nearly none do, so
+// this is reached rarely; it exists to bound the program that allocates them in a
+// loop and never calls gc\collect().
+const gcMinThreshold = 256
+
+// gcRoot returns the VM owning the fiber tree's registry. A fiber runs on a VM of
+// its own but shares the program's object graph with its creator, so one registry
+// and one root walk cover the tree. Per-VM registries would let a sweep inside a
+// fiber judge an object the parent still holds unreachable and collect it.
+func (vm *VM) gcRoot() *VM {
+	for vm.gcParent != nil {
+		vm = vm.gcParent
+	}
+	return vm
+}
+
 // trackCollectable records an instance whose type declares a `collect()` method, so
 // CollectUnreachable can find it later. Instances without one are not tracked:
 // nothing would ever be called on them, and the registry is walked per collection.
@@ -39,10 +56,29 @@ func (vm *VM) trackCollectable(inst *objectInst) {
 	}
 	for _, m := range inst.Def.Methods {
 		if m.Name == "collect" {
-			vm.collectables = append(vm.collectables, inst)
+			root := vm.gcRoot()
+			root.collectables = append(root.collectables, inst)
 			return
 		}
 	}
+}
+
+// maybeCollect sweeps once the registry has outgrown its threshold, so a program
+// that allocates collectables and never calls `gc\collect()` does not retain every
+// one. Upstream fires collect() when an object becomes garbage rather than when the
+// program asks, so an unrequested sweep is the closer behaviour.
+//
+// The caller must have made the new instance reachable first: a sweep run before
+// the push finds it unreachable and collects it on the spot. A sweep nested inside
+// one already running is declined by CollectUnreachable, the one place both this
+// path and an explicit gc\collect() go through.
+func (vm *VM) maybeCollect() error {
+	root := vm.gcRoot()
+	if len(root.collectables) < root.gcThreshold {
+		return nil
+	}
+	_, err := vm.CollectUnreachable()
+	return err
 }
 
 // CollectUnreachable calls `collect()` on every tracked instance the program can no
@@ -53,27 +89,39 @@ func (vm *VM) trackCollectable(inst *objectInst) {
 // none. A collected instance is dropped from the registry, so its collect() runs at
 // most once however many times this is called.
 func (vm *VM) CollectUnreachable() (int, error) {
-	if len(vm.collectables) == 0 {
+	root := vm.gcRoot()
+	// A collector runs on a VM parented to this tree (see callCollector), so a
+	// collectable it allocates can arm the automatic sweep, and a collector may also
+	// call gc\collect() outright. Either way a nested sweep would walk the registry
+	// the enclosing one is midway through and call collect() a second time on an
+	// instance already collected, breaking the at-most-once guarantee. Declining is
+	// correct rather than merely safe: the enclosing sweep is already collecting
+	// everything currently unreachable.
+	if root.gcSweeping || len(root.collectables) == 0 {
 		return 0, nil
 	}
+	root.gcSweeping = true
+	defer func() { root.gcSweeping = false }()
 	live := map[*objectInst]bool{}
 	seen := map[any]bool{}
-	for i := range vm.stack {
-		markReachable(vm.stack[i], live, seen)
+	// Every VM from the requesting one up to the root is executing right now, so its
+	// frames are roots whether or not its fiber handle is on an operand stack at this
+	// instant - an inline `resume &work()` never binds one. Fibers reachable by value
+	// are picked up by the mark itself (see markFib).
+	for v := vm; v != nil; v = v.gcParent {
+		markVMRoots(v, live, seen)
 	}
-	for i := range vm.frames {
-		markEnv(vm.frames[i].env, live, seen)
-		markReachable(vm.frames[i].this, live, seen)
-		if f := vm.frames[i].fun; f != nil {
-			for _, uv := range f.Upvals {
-				markReachable(uv, live, seen)
-			}
-		}
-	}
+
+	// Snapshot the registry: a collector may append to it (it runs on a parented VM),
+	// and those entries are this sweep's OUTPUT, not its input. Ranging the snapshot
+	// keeps the loop finite, and grown holds whatever arrived past it so the
+	// reassignment below does not discard it.
+	snapshot := root.collectables
+	grown := func() []*objectInst { return root.collectables[len(snapshot):] }
 
 	var kept []*objectInst
 	var collected int
-	for i, inst := range vm.collectables {
+	for i, inst := range snapshot {
 		if live[inst] {
 			kept = append(kept, inst)
 			continue
@@ -82,13 +130,24 @@ func (vm *VM) CollectUnreachable() (int, error) {
 			// Keep it tracked: a collector that failed has not run to completion, and
 			// silently dropping it would hide the failure on a later sweep.
 			//
-			// kept holds only what this sweep visited; the tail is untouched work.
-			vm.collectables = append(append(kept, inst), vm.collectables[i+1:]...)
+			// kept holds only what this sweep visited; snapshot[i:] is the untouched
+			// tail, starting with the instance that just failed.
+			root.collectables = append(append(kept, snapshot[i:]...), grown()...)
 			return collected, err
 		}
 		collected++
 	}
-	vm.collectables = kept
+	root.collectables = append(kept, grown()...)
+	// Amortised, so a program legitimately holding N collectables sweeps O(log N)
+	// times rather than once per allocation past the threshold.
+	//
+	// Here rather than in maybeCollect, because BOTH paths reach this line and only
+	// one reached that one. An explicit gc\collect() that emptied a registry the
+	// automatic sweep had grown the threshold for used to leave the threshold high,
+	// so automatic sweeping stayed off until the registry regrew to the old mark.
+	// The early returns above are the decline and the error, neither of which swept,
+	// and neither of which should move it.
+	root.gcThreshold = max(gcMinThreshold, 2*len(root.collectables))
 	return collected, nil
 }
 
@@ -105,14 +164,61 @@ func (vm *VM) callCollector(inst *objectInst) error {
 		// vtable is the unbound definition shared by every instance.
 		fn := *m.Fn
 		fn.This = heapValue(tagObject, inst)
-		// callValue, not vm.Call + vm.Exec: this runs from inside a host call on a VM
+		// A fresh VM, not vm.Call + vm.Exec: this runs from inside a host call on a VM
 		// that is already mid-execution, and driving that same VM re-entrantly walks
-		// off its own frame stack. callValue is the path a map.filter callback takes,
-		// and it runs the closure on a fresh VM sharing the environment.
-		_, err := callValue(vm, vm.ctx, heapValue(tagFun, &fn), nil)
+		// off its own frame stack. That is what callValue does for a map.filter
+		// callback, and this is callValue's tagFun arm with one addition -- the VM is
+		// PARENTED to this tree.
+		//
+		// The parent is why this is not just callValue. A collector body may allocate
+		// a collectable of its own; on callValue's detached VM (gcParent nil, so its
+		// own gcRoot) that instance joined a registry thrown away with the VM, and its
+		// collect() never ran at all. Measured before the parent was added: 3000
+		// collectors each allocating one instance produced ZERO collections of those
+		// instances, even after two explicit gc\collect() calls.
+		callVM := NewVM(vm.ctx)
+		callVM.gcParent = vm.gcRoot()
+		if err := callVM.Call(heapValue(tagFun, &fn), nil); err != nil {
+			return err
+		}
+		_, err := callVM.Exec()
 		return err
 	}
 	return nil
+}
+
+// markVMRoots walks one VM's roots: its operand stack and every frame's env,
+// receiver and upvalues. A fiber owns a VM of its own, so this runs again for each
+// reachable fiber (see markFib) rather than only for the VM being swept.
+func markVMRoots(vm *VM, live map[*objectInst]bool, seen map[any]bool) {
+	if vm == nil || seen[vm] {
+		return
+	}
+	seen[vm] = true
+	for i := range vm.stack {
+		markReachable(vm.stack[i], live, seen)
+	}
+	for i := range vm.frames {
+		markEnv(vm.frames[i].env, live, seen)
+		markReachable(vm.frames[i].this, live, seen)
+		if f := vm.frames[i].fun; f != nil {
+			for _, uv := range f.Upvals {
+				markReachable(uv, live, seen)
+			}
+		}
+	}
+}
+
+// markFib walks a fiber: its cached return value and the whole VM it suspended on.
+// A suspended fiber's locals are live - the program can still resume it - so its
+// frames are roots for as long as the fiber handle itself is reachable.
+func markFib(fb *fibObj, live map[*objectInst]bool, seen map[any]bool) {
+	if fb == nil || seen[fb] {
+		return
+	}
+	seen[fb] = true
+	markReachable(fb.returnVal, live, seen)
+	markVMRoots(fb.vm, live, seen)
 }
 
 // markReachable walks a value, recording every object instance it can reach. seen
@@ -170,6 +276,9 @@ func markReachable(v Value, live map[*objectInst]bool, seen map[any]bool) {
 				markReachable(k, live, seen)
 			}
 		}
+		markFib(is.fib, live, seen)
+	case tagFib:
+		markFib(v.asFib(), live, seen)
 	case tagCell:
 		markReachable(v.asCell().v, live, seen)
 	case tagFun:

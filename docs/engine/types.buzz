@@ -665,11 +665,11 @@ export object Site {
         if (rows.len() > maxSubtreeRows) { return ""; }
 
         final ordered = rows.sort(fun (a: {str: any}, b: {str: any}) > bool {
-            return strLess("" + a["url"], "" + b["url"]);
+            return strLess("{a["url"]}", "{b["url"]}");
         });
         var picks: mut [{str: any}] = mut [<{str: any}>];
         foreach (r in ordered) {
-            picks.append(mut {"url": r["url"], "title": r["title"], "depth": "" + r["depth"]});
+            picks.append(mut {"url": r["url"], "title": r["title"], "depth": "{r["depth"]}"});
         }
         return template\render(`        <p class="toc-title">Everything here</p>
         <ul class="subtree-nav">

@@ -1,0 +1,20 @@
+// A throw caught one frame up, on half the iterations.
+fun risky(n: int) > int !> str {
+    if (n % 2 == 0) { throw "even"; }
+    return n;
+}
+
+fun main(_: [str]) > int {
+    var caught = 0;
+    var ok = 0;
+    var i = 0;
+    while (i < 200000) {
+        try {
+            ok = ok + risky(i);
+        } catch (e: str) {
+            caught = caught + e.len();
+        }
+        i = i + 1;
+    }
+    return if (caught == 400000) 0 else 1;
+}

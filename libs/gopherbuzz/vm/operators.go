@@ -451,7 +451,7 @@ func getMember(vm *VM, obj Value, name string) (Value, error) {
 		enumDef := vm.asEnumDef(obj)
 		for i, c := range enumDef.Cases {
 			if c == name {
-				return vm.allocEnumVal(&enumValObj{Enum: enumDef.Name, Case: name, Val: enumDef.Values[i]}), nil
+				return vm.enumCase(enumDef, i), nil
 			}
 		}
 		return Null, fmt.Errorf("buzz: enum %s has no case %q", enumDef.Name, name)
@@ -486,27 +486,6 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 	case "len":
 		return newDirect("list.len", func(_ context.Context, _ []Value) (Value, error) {
 			return IntValue(int64(len(lo.Items))), nil
-		})
-	case "next":
-		// The explicit iterator protocol: next(key) returns the key AFTER key, with
-		// null meaning "start" and a null result meaning "exhausted". It returns keys
-		// rather than values so a caller can index back into the list, which is what
-		// makes it composable with the subscript.
-		return newDirect("list.next", func(_ context.Context, args []Value) (Value, error) {
-			if len(lo.Items) == 0 {
-				return Null, nil
-			}
-			if len(args) == 0 || args[0].tag() == tagNull {
-				return IntValue(0), nil
-			}
-			i, ok := asInt(args[0])
-			if !ok {
-				return Null, fmt.Errorf("list.next: key must be an int or null, got %s", args[0].buzzKind())
-			}
-			if i < 0 || int(i)+1 >= len(lo.Items) {
-				return Null, nil
-			}
-			return IntValue(i + 1), nil
 		})
 	case "append":
 		return newDirect("list.append", func(_ context.Context, args []Value) (Value, error) {
@@ -992,6 +971,22 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 
 // strMethod returns the callable for the named built-in String method, or nil if
 // name is not a known string method.
+// enumCase returns the interned Value for one case of def, building the table on
+// first use. See enumDefObj.vals for why sharing is safe.
+func (vm *VM) enumCase(def *enumDefObj, i int) Value {
+	if def.vals == nil {
+		def.vals = make([]Value, len(def.Cases))
+		for j := range def.Cases {
+			def.vals[j] = vm.allocEnumVal(&enumValObj{
+				Enum: def.Name,
+				Case: def.Cases[j],
+				Val:  def.Values[j],
+			})
+		}
+	}
+	return def.vals[i]
+}
+
 func strMethod(vm *VM, s Value, name string) *directObj {
 	sobj := vm.asStr(s)
 	str := sobj.V
@@ -1301,7 +1296,20 @@ func callValue(vm *VM, ctx context.Context, callee Value, args []Value) (Value, 
 	case tagDirect:
 		return vm.asDirect(callee).Fn(ctx, args)
 	case tagFun:
+		// Parented to the caller's tree, so a collectable the callback allocates joins
+		// the one registry and is swept later. Detached, its registry died with this
+		// VM and its collect() never ran at all - measured: five Tracked built inside
+		// a map callback and then dropped collected ZERO times, where the same five
+		// built outside collected five.
+		//
+		// It also makes the sweep SAFER, not riskier: CollectUnreachable walks the
+		// chain from the requesting VM up to the root, so an object the caller still
+		// holds is marked even when the sweep is armed in here. (A detached VM was not
+		// collecting live outer objects, contrary to a review finding - registry and
+		// roots were both scoped to this VM, so a sweep could only reach its own
+		// garbage. The defect was the orphaning, not premature collection.)
 		callVM := NewVM(ctx)
+		callVM.gcParent = vm.gcRoot()
 		if err := callVM.Call(callee, args); err != nil {
 			return Null, err
 		}

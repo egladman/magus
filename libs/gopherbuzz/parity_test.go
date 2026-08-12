@@ -810,15 +810,10 @@ fun probe() > int {
 
 // TestParity_MatchCompoundTypeCondition pins that a match arm whose condition is a
 // COMPOUND type value actually matches. A type value carries the canonical spelling
-// ("[str]"), while the runtime type test compares against the reduced shape ("list"),
-// so passing the canonical name straight through made every such arm silently dead:
-// the arm fell to `else` even where the equivalent `is` answered true. Upstream's own
-// match.buzz only exercises simple arms (`<int>`, `<str>`, a named object), all of
-// which reduce to themselves, so it cannot catch this.
-//
-// testdata/65_regressions.buzz covers the same ground through the bytecode codec now
-// that a type-value constant serializes (v21); this keeps a direct, readable assertion
-// on the reduction itself.
+// ("[str]") while the runtime test compares the reduced shape ("list"), so passing
+// the canonical name through made every such arm silently dead - it fell to `else`
+// where the equivalent `is` answered true. Upstream's match.buzz exercises only
+// simple arms, which reduce to themselves, so it cannot catch this.
 func TestParity_MatchCompoundTypeCondition(t *testing.T) {
 	v := evalParity(t, `
 fun probe() > str {
@@ -913,13 +908,9 @@ fun probe() > str {
 }
 
 // TestParity_ExternFunDeclaresASignature covers `extern fun name(...) > T;`, the
-// body-less forward declaration upstream uses to give its NATIVE stdlib types
-// (src/lib/debug.buzz: `export extern fun dump(value: any) > void;`). Before it,
-// `extern` was a reserved word the parser knew only well enough to refuse as a
-// binding name, so every host-provided function typed as Unknown.
-//
-// It emits no code by design: the implementation is whatever the host already
-// bound to that name, so a declaration must not shadow it with an empty closure.
+// body-less declaration upstream uses to type its native stdlib. It emits no code by
+// design: the implementation is whatever the host already bound to that name, so the
+// declaration must not shadow it with an empty closure.
 func TestParity_ExternFunDeclaresASignature(t *testing.T) {
 	s := buzz.NewSession(context.Background())
 	t.Cleanup(func() { _ = s.Close() })
@@ -1284,17 +1275,13 @@ fun probe() > str {
 }
 
 func TestParity_MatchWithoutElseIsRejected(t *testing.T) {
-	// This test used to assert the opposite of what it now does. It ran
-	// `match (99) { 1 -> "one", 2 -> "two" }` and pinned that falling off the last
-	// arm yields null - correct as a description of the VM, but NOT parity, which
-	// is what the name claimed. Upstream rejects that source outright
-	// (tests/compile_errors/match-non-exhaustive.buzz, "Non-exhaustive `match`,
-	// `else` branch required"), so upstream never lets the null be observed. The
-	// checker now rejects it too, and the guarantee worth pinning is the rejection.
+	// This test used to assert the opposite: that falling off the last arm yields
+	// null. True of the VM, but not parity - upstream rejects the source outright
+	// (compile_errors/match-non-exhaustive.buzz), so it never lets the null be
+	// observed. The rejection is the guarantee worth pinning.
 	//
-	// The VM's fall-through-yields-null behaviour is deliberately UNCHANGED: a `.bo`
-	// blob compiled before this check exists still runs, and the compiler still
-	// emits the trailing push.
+	// Fall-through-yields-null is deliberately UNCHANGED in the VM, so a `.bo` blob
+	// compiled before this check still runs.
 	ctx := context.Background()
 	s := buzz.NewSession(ctx)
 	t.Cleanup(func() { _ = s.Close() })
@@ -1590,14 +1577,12 @@ fun probe() > str {
 }
 
 func TestParity_ImmutableCollectionsRejectSorting(t *testing.T) {
-	// This used to run the program and assert that `sort` refused at RUNTIME via
-	// `catch null`. The checker now rejects an in-place mutator on a receiver it can
-	// see is immutable, so the source no longer compiles - a strictly earlier failure
-	// for the same rule, and what upstream does (compile_errors/immutable-list.buzz).
+	// This used to assert that `sort` refused at RUNTIME. The checker now rejects an
+	// in-place mutator on a receiver it can see is immutable, so the source no longer
+	// compiles - an earlier failure for the same rule, and what upstream does.
 	//
-	// The VM's own guard is unchanged and still load-bearing: it catches a receiver
-	// whose mutability the checker cannot determine, which is why errImmutable is not
-	// dead code.
+	// The VM's guard is unchanged and still load-bearing: it catches a receiver whose
+	// mutability the checker cannot determine, so errImmutable is not dead code.
 	ctx := context.Background()
 	s := buzz.NewSession(ctx)
 	t.Cleanup(func() { _ = s.Close() })
@@ -1810,6 +1795,9 @@ func TestParity_CollectorKeepsReachableObjects(t *testing.T) {
     gc\collect();
     return collected;`,
 		},
+		// The fiber cases live in testdata/gc_collect_*.buzz: the fixture runner
+		// builds the same session this helper does, and a file there is round-tripped
+		// through the bytecode codec by TestBytecodeRoundTrip as well.
 	}
 	const decls = `
 import "gc";
@@ -1830,6 +1818,36 @@ object Tracked {
 			assert.Equal(t, int64(0), v.AsInt(), "a reachable object must not be collected")
 		})
 	}
+}
+
+// TestParity_CollectorSweepsWithoutAnExplicitCall pins the automatic sweep. The
+// registry pinned every collectable until the program called gc\collect(), so a
+// program that never called it retained all of them. Upstream fires collect() when
+// an object becomes garbage, not when asked, so sweeping unbidden is the closer
+// behaviour as well as the bounded one.
+func TestParity_CollectorSweepsWithoutAnExplicitCall(t *testing.T) {
+	v := evalWithStd(t, `
+var collected = 0;
+
+object Tracked {
+    id: int,
+
+    fun collect() > void {
+        collected = collected + 1;
+    }
+}
+
+fun probe() > int {
+    var i = 0;
+    // Each instance is unreachable the moment the next statement runs, and the
+    // program never imports gc, let alone calls collect().
+    while (i < 5000) {
+        _ = Tracked{ id = i };
+        i = i + 1;
+    }
+    return collected;
+}`)
+	assert.Positive(t, v.AsInt(), "an unreachable collectable must be swept without an explicit gc\\collect()")
 }
 
 func TestParity_CryptoHashReturnsRawBytes(t *testing.T) {

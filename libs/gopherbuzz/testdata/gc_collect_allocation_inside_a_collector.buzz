@@ -1,0 +1,42 @@
+// @expect: true
+// A collect() body may allocate a collectable of its own, and that instance must
+// be swept like any other. It was not: the collector ran on a DETACHED VM, so its
+// allocation joined a registry thrown away with that VM and its own collect()
+// never ran at all. Measured before the fix: 3000 Outer collectors each allocating
+// one Inner produced ZERO Inner collections, even after two explicit sweeps.
+//
+// Two sweeps are needed and that is the contract, not a workaround: the first is
+// what RUNS the Outer collectors, so the Inner instances do not exist until it is
+// under way, and a sweep declines to nest. They are swept by the next one.
+import "gc";
+
+var outerCollected = 0;
+var innerCollected = 0;
+
+object Inner {
+    id: int,
+
+    fun collect() > void { innerCollected = innerCollected + 1; }
+}
+
+object Outer {
+    id: int,
+
+    fun collect() > void {
+        outerCollected = outerCollected + 1;
+        _ = Inner{ id = 0 };
+    }
+}
+
+fun probe() > bool {
+    var i = 0;
+    while (i < 1000) {
+        _ = Outer{ id = i };
+        i = i + 1;
+    }
+    gc\collect();
+    gc\collect();
+    return outerCollected == 1000 and innerCollected == 1000;
+}
+
+final __r = probe();

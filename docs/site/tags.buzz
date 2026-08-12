@@ -97,7 +97,7 @@ export fun renderTagPages(site: Site) > void !> any {
         if (cards.len() == 0) { continue; }
 
         final ordered = cards.sort(fun (a: {str: any}, b: {str: any}) > bool {
-            return strLess("" + a["title"], "" + b["title"]);
+            return strLess("{a["title"]}", "{b["title"]}");
         });
 
         final url = "tags/" + slug + "/";

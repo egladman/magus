@@ -1,0 +1,30 @@
+// Escape-time grid: float-heavy nested loops. The grid counters are doubles
+// throughout because Buzz does not coerce int to double, so `px + 0.0` is a
+// type error rather than a promotion.
+fun main(_: [str]) > int {
+    var checksum = 0;
+    var py = 0.0;
+    while (py < 300.0) {
+        var px = 0.0;
+        while (px < 300.0) {
+            final x0 = px / 150.0 - 1.5;
+            final y0 = py / 150.0 - 1.0;
+            var x = 0.0;
+            var y = 0.0;
+            var it = 0;
+            while (it < 100 and x * x + y * y <= 4.0) {
+                final xt = x * x - y * y + x0;
+                y = 2.0 * x * y + y0;
+                x = xt;
+                it = it + 1;
+            }
+            checksum = checksum + it;
+            px = px + 1.0;
+        }
+        py = py + 1.0;
+    }
+    // The exact escape-time sum over the grid, computed independently rather than
+    // read back out of this program. `> 0` passed for any wrong answer, on the one
+    // workload where a broken float path is most likely and least visible.
+    return if (checksum == 3954085) 0 else 1;
+}

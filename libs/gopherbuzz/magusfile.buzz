@@ -81,6 +81,16 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 export fun format(ctx: magus\Context, args: [str]) > void {
+    // The markdown dprint formats has to be DECLARED, or a markdown-only change does
+    // not move the cache key and format:rw replays a pass without running dprint at
+    // all. Measured: a violation added to benchmarks/comparison/README.md survived
+    // `magus run format:rw libs/gopherbuzz` and was fixed only by --no-cache. A
+    // formatter that silently no-ops on the files it exists to format is worse than
+    // one that is missing.
+    //
+    // The glob mirrors this project's dprint.json `includes` (./**/*.md); keep the two
+    // in step. Go sources need no declaration here - the go ops declare their own.
+    ctx.readsFiles("**/*.md");
     ctx.needs(generate);
     go["go-fmt"](ctx);
     go["go-mod-tidy"](ctx);

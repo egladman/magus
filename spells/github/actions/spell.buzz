@@ -74,11 +74,7 @@ export fun enabled(target: Target, cb: fun(any)) > bool {
 // duplication is intentional/temporary: there is no shared magus/... buzz helper
 // module for it yet (extracting one needs the embed+register plumbing magus/charm
 // uses). Track for follow-up; keep the two copies in sync.
-fun getenv(name: str) > str {
-    final v = os\env(name);
-    if (v == null) { return ""; }
-    return "" + v;
-}
+fun getenv(name: str) > str { return os\env(name) ?? ""; }
 
 // Version salt mixed into every entry's `version` field; bump to invalidate all
 // artifacts at once. Independent of the cache *service* version (v2).
@@ -130,8 +126,8 @@ export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
     if (!in_actions() or base() == "" or !has_token()) { return false; }
     final io = {};
     cb(io);
-    final hash = "" + io["hash"];
-    final dest = "" + io["dest"];
+    final hash = "{io["hash"]}";
+    final dest = "{io["dest"]}";
     final res = rpc("GetCacheEntryDownloadURL", {"key": cache_key(hash), "version": CACHE_VERSION});
     if (res["status"] != 200) { return false; }
     final decoded = serialize\jsonDecode(res["body"]);
@@ -148,8 +144,8 @@ export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
     if (!in_actions() or base() == "" or !has_token()) { return false; }
     final io = {};
     cb(io);
-    final hash = "" + io["hash"];
-    final src = "" + io["src"];
+    final hash = "{io["hash"]}";
+    final src = "{io["src"]}";
     final key = cache_key(hash);
 
     // 1. Reserve the entry → pre-signed Azure upload URL.
@@ -168,7 +164,7 @@ export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
     // 3. Commit with the exact byte size. int64 fields are JSON strings in proto3,
     //    so send sizeBytes as a string.
     final fres = rpc("FinalizeCacheEntryUpload",
-        {"key": key, "sizeBytes": "" + http\byteSize(src), "version": CACHE_VERSION});
+        {"key": key, "sizeBytes": "{http\byteSize(src)}", "version": CACHE_VERSION});
     if (fres["status"] != 200) { return false; }
     return serialize\jsonDecode(fres["body"]).q("ok").booleanValue();
 }
@@ -205,11 +201,11 @@ fun escapeProp(s: str) > str {
 // must not have to click for, so the group is skipped and the content stays
 // inline. Folding it anyway would be worse - a hidden failure is one nobody sees.
 export fun group_start(target: Target, cb: fun(any)) > bool {
-    final io = {<str, any>};
+    final io = {<str: any>};
     cb(io);
     final collapsed = io["collapsed"];
     if (collapsed != true) { return true; }
-    std\print("::group::" + escapeData("" + io["title"]));
+    std\print("::group::" + escapeData("{io["title"]}"));
     return true;
 }
 
@@ -224,11 +220,11 @@ export fun group_end(target: Target, cb: fun(any)) > bool {
 // Actions has no dedicated code field, so a diagnostic code leads the title where
 // it stays greppable in the annotations list.
 export fun annotate(target: Target, cb: fun(any)) > bool {
-    final io = {<str, any>};
+    final io = {<str: any>};
     cb(io);
 
-    var title = "" + io["title"];
-    final code = "" + io["code"];
+    var title = "{io["title"]}";
+    final code = "{io["code"]}";
     if (code != "") {
         if (title == "") { title = code; } else { title = code + " " + title; }
     }
@@ -241,22 +237,22 @@ export fun annotate(target: Target, cb: fun(any)) > bool {
     }
     fun addNum(k: str, v: any) > void {
         if (v == null) { return; }
-        final n = "" + v;
+        final n = "{v}";
         if (n == "0" or n == "") { return; }
         if (props != "") { props = props + ","; }
         props = props + k + "=" + n;
     }
 
-    addProp("file", "" + io["file"]);
+    addProp("file", "{io["file"]}");
     addNum("line", io["line"]);
     addNum("endLine", io["end_line"]);
     addNum("col", io["col"]);
     addNum("endColumn", io["end_col"]);
     addProp("title", title);
 
-    var line = "::" + ("" + io["level"]);
+    var line = "::{io["level"]}";
     if (props != "") { line = line + " " + props; }
-    std\print(line + "::" + escapeData("" + io["message"]));
+    std\print(line + "::" + escapeData("{io["message"]}"));
     return true;
 }
 
@@ -304,9 +300,9 @@ final OIDC_PREFIX = "oidc:";
 // `> Secret`, not `> str`: Buzz checks function signatures, so a provider returning the
 // wrong shape fails to load rather than failing at the first read.
 export fun resolve_secret(target: Target, cb: fun(any)) > Secret !> any {
-    final io = {<str, any>};
+    final io = {<str: any>};
     cb(io);
-    final ref = "" + io["ref"];
+    final ref = "{io["ref"]}";
     if (ref == "") {
         throw "github-actions: no reference given";
     }
@@ -415,8 +411,8 @@ fun oidcToken(audience: str) > str !> any {
         // is the one that can CONTAIN a token, and an error string is the least
         // redacted thing magus handles - it has not been resolved yet, so nothing is
         // registered for redaction at the moment it is thrown.
-        throw "github-actions: the OIDC token endpoint answered " + ("" + res["status"])
-            + " for audience " + audience;
+        throw "github-actions: the OIDC token endpoint answered {res["status"]} "
+            + "for audience {audience}";
     }
     final value = serialize\jsonDecode(res["body"]).q("value").stringValue();
     if (value == "") {

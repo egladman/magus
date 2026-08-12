@@ -1,0 +1,20 @@
+// A generator fiber driven by foreach: each yield suspends the fiber's own
+// execution state and resumes the driver. Sized so the checksum stays under the
+// 48-bit int ceiling (2^47-1), which both engines share.
+//
+// The yield type is non-optional, which upstream permitted from fb54e7b onward;
+// under the older rule foreach bound `v` as `int?` and the addition below needed
+// an unwrap.
+fun squares(n: int) > void *> int {
+    foreach (i in 0..n) {
+        _ = yield (i * i);
+    }
+}
+
+fun main(_: [str]) > int {
+    var sum = 0;
+    foreach (v in &squares(50000)) {
+        sum = sum + v;
+    }
+    return if (sum == 41665416675000) 0 else 1;
+}

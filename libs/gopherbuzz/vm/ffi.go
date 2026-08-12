@@ -33,6 +33,7 @@ package vm
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 )
 
@@ -494,5 +495,15 @@ func builtinZdef(_ context.Context, args []Value) (Value, error) {
 	if err != nil {
 		return Null, err
 	}
-	return ffiProvider.OpenLibrary(libName, sigs)
+	v, err := ffiProvider.OpenLibrary(libName, sigs)
+	// DEBUG, not TRACE: one record per zdef() call, where the layout and lifecycle
+	// records are one per operation. Errors are returned to the caller, so a failure
+	// is reported by the count being absent, not by a second log line.
+	if err == nil {
+		ffiLog(slog.LevelDebug, "ffi zdef bound",
+			slog.String("library", libName),
+			slog.Int("symbols", len(sigs)),
+		)
+	}
+	return v, err
 }

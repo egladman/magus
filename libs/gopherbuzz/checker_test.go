@@ -741,14 +741,44 @@ func confRejects(t *testing.T, src, wantSubstr string) {
 	assert.Contains(t, err.Error(), wantSubstr)
 }
 
+// TestConformance_FiberYieldTypeNeedNotBeOptional pins the rule this file used to
+// assert the opposite of. Upstream required a fiber's yield type to be optional or
+// void until fb54e7b, which dropped the check and instead types `resume` as the
+// yield type made optional. gopherbuzz needs no counterpart to that second half:
+// this checker does not model optionality (types.annotParser consumes a trailing
+// `?` and records nothing, and Null is assignable to every type), so removing the
+// reject was the whole change. Verified against the upstream binary at
+// 0.5.0-265-g294d8f9; testdata/57_fiber_nonoptional_yield.buzz runs one end to end.
+func TestConformance_FiberYieldTypeNeedNotBeOptional(t *testing.T) {
+	for _, annot := range []string{"int", "int?", "void", "[str]", "Point"} {
+		t.Run(annot, func(t *testing.T) {
+			src := `object Point { x: int = 0 }
+fun g() > void *> ` + annot + ` { _ = yield ` + yieldOperandFor(annot) + `; }
+final f = &g();
+final __r = resume f;`
+			_, err := ParseEmbedded(src)
+			require.NoErrorf(t, err, "a %q yield type must parse", annot)
+		})
+	}
+}
+
+// yieldOperandFor returns a value of the given yield-type annotation, so each case
+// in the test above yields something its own signature admits.
+func yieldOperandFor(annot string) string {
+	switch annot {
+	case "[str]":
+		return `["a"]`
+	case "Point":
+		return "Point{ x = 1 }"
+	default:
+		return "1"
+	}
+}
+
 // TestConformance_StrictParityRejections pins the leniencies gopherbuzz no longer
 // accepts, matching upstream Buzz. Each case is valid upstream-Buzz-rejected and
 // gopherbuzz-rejected.
 func TestConformance_StrictParityRejections(t *testing.T) {
-	t.Run("non-optional fiber yield type", func(t *testing.T) {
-		confRejects(t, `fun g() > void *> int { _ = yield 1; } final f = &g();`,
-			"expected optional type or void")
-	})
 	t.Run("untyped parameter", func(t *testing.T) {
 		confRejects(t, `fun f(n) > int { return n; } final r = f(1);`,
 			"must have a type annotation")
@@ -1115,4 +1145,25 @@ fun main() > void {
 	// today, merged or not - so asserting it would be testing a wish. That gap is
 	// real and separate; this test's subject is only that neither owner's
 	// declarations are lost.
+}
+
+// TestConformance_FiberAnnotationOrder pins `> Ret *> Yield !> Err`. gopherbuzz
+// parsed !> first, so upstream's documented order (src/lib/sqlite.buzz:193) did not
+// parse here, and the order gopherbuzz did accept is one upstream rejects, reading
+// the `*>` as a continuation of the error list. Measured against the upstream binary
+// at 0.5.0-265-g294d8f9.
+func TestConformance_FiberAnnotationOrder(t *testing.T) {
+	const body = ` { _ = yield 1; return 0; }
+final f = &g();
+final __r = resume f;`
+
+	t.Run("upstream order parses", func(t *testing.T) {
+		_, err := ParseEmbedded(`fun g() > int *> int !> str` + body)
+		require.NoError(t, err, "`> Ret *> Yield !> Err` is upstream's order and must parse")
+	})
+
+	t.Run("the reverse is rejected, as upstream rejects it", func(t *testing.T) {
+		_, err := ParseEmbedded(`fun g() > int !> str *> int` + body)
+		require.Error(t, err, "`!> Err *> Yield` parses nowhere but here; accepting it is the divergence")
+	})
 }

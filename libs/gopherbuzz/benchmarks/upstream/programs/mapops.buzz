@@ -1,0 +1,16 @@
+// Map insert then lookup, keyed by interpolated strings.
+fun main(_: [str]) > int {
+    final m = mut {<str: int>};
+    var i = 0;
+    while (i < 60000) {
+        m["k{i}"] = i;
+        i = i + 1;
+    }
+    var sum = 0;
+    var j = 0;
+    while (j < 60000) {
+        sum = sum + (m["k{j}"] ?? 0);
+        j = j + 1;
+    }
+    return if (sum == 1799970000) 0 else 1;
+}

@@ -1,0 +1,16 @@
+// mut list growth then indexed traversal.
+fun main(_: [str]) > int {
+    final xs = mut [<int>];
+    var i = 0;
+    while (i < 300000) {
+        xs.append(i * 2);
+        i = i + 1;
+    }
+    var sum = 0;
+    var j = 0;
+    while (j < xs.len()) {
+        sum = sum + xs[j];
+        j = j + 1;
+    }
+    return if (sum == 89999700000) 0 else 1;
+}

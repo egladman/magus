@@ -46,7 +46,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Size | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 10+ | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 100+ | `magus query kind:target` | `content-generate`, `site-generate`, `generate` |
+| target | 100+ | `magus query kind:target` | `content-generate`, `site-generate`, `format` |
 | spell | 10+ | `magus query kind:spell` | `go`, `markdown`, `typescript` |
 | op | 60+ | `magus query kind:op` | `go-build`, `go-test`, `go-fmt` |
 | tool | 20+ | `magus query kind:tool` | `go`, `pnpm`, `buf` |
@@ -56,14 +56,14 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | diagnostic | 60+ | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS3003` |
 | doc | 300+ | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 100+ | `magus query kind:dir` | `docs/reference/buzz`, `docs/reference/codes/magusfile`, `docs/concepts` |
-| file | 100+ | `magus query kind:file` | `magusfile.buzz`, `docs/render.buzz`, `docs/magusfile.buzz` |
+| file | 200+ | `magus query kind:file` | `magusfile.buzz`, `docs/render.buzz`, `docs/magusfile.buzz` |
 | function | 700+ | `magus query kind:function` | `tail`, `sign`, `renderContentHTML` |
 | import | 90+ | `magus query kind:import` | `magus`, `fs`, `std` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `WHY`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 39 | `magus query project:.` | `generate`, `lint`, `image-build` |
+| . | 40 | `magus query project:.` | `buzz-test`, `generate`, `lint` |
 | console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 4 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |

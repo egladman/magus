@@ -20,11 +20,7 @@ export fun isPrerelease(tag: str) > bool !> any {
     return semver\parse(tag).prerelease.len() > 0;
 }
 
-fun env(name: str) > str {
-    final v = os\env(name);
-    if (v == null) { return ""; }
-    return "" + v;
-}
+fun env(name: str) > str { return os\env(name) ?? ""; }
 
 fun main() > void !> any {
     final tag = env("TAG");

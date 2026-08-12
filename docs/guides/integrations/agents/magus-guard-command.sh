@@ -16,6 +16,8 @@
 #   GUARD_MAGUS_BIN  path to the binary, when it is not on PATH
 #   GUARD_UNAVAILABLE_RESPONSE  what to print when magus cannot be found, so a
 #                    host can choose its own fail-open or fail-closed stance
+#   GUARD_FAILED_RESPONSE  the same, for a magus that IS found but cannot judge
+#                    the command (too old for `hook`, cannot load the workspace)
 #
 # The defaults are Claude Code's event and response shape.
 #
@@ -48,6 +50,7 @@
 [ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}{{end}}'
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 [ -n "$GUARD_UNAVAILABLE_RESPONSE" ] || GUARD_UNAVAILABLE_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set GUARD_MAGUS_BIN to its path, to restore the guard."}}'
+[ -n "$GUARD_FAILED_RESPONSE" ] || GUARD_FAILED_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: the magus binary was found but could not judge this command, so its deny and advise rules are unenforced right now. It is probably too old for the hook subcommand, or cannot load this workspace - run magus hook by hand to see the error, then rebuild or update it to restore the guard."}}'
 
 if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
   printf '%s' "$GUARD_UNAVAILABLE_RESPONSE"
@@ -81,7 +84,28 @@ guard() {
 # cannot tell the cases apart either, because a pass renders empty on purpose. Both
 # together can: a rejected flag prints its usage to STDERR and leaves stdout empty, while
 # any real verdict that is not a pass leaves something on stdout.
-verdict=$(guard --host "$GUARD_HOST" --session "$session" 2>/dev/null) || {
-  [ -n "$verdict" ] || verdict=$(guard 2>/dev/null)
-}
+verdict=$(guard --host "$GUARD_HOST" --session "$session" 2>/dev/null)
+status=$?
+if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
+  verdict=$(guard 2>/dev/null)
+  status=$?
+fi
+
+# A PASS and a BROKEN GUARD both render nothing, and telling them apart is the whole
+# point of this block. A pass exits 0 with empty output because there was nothing to
+# say; a binary that cannot run - too old for `hook`, unable to load the workspace,
+# half-written by a concurrent build - exits non-zero with empty output, and printing
+# that as a pass silently disables every rule with nothing anywhere saying so.
+#
+# That silence is the failure mode this guard can least afford, because it looks
+# exactly like a clean session. The same reasoning is already spelled out above for a
+# MISSING binary; a broken one had been left to fail quietly, which is the case that
+# actually occurs - a stale binary on PATH outlives a missing one.
+#
+# Fail OPEN either way. A guard that blocks work because it cannot judge it has its
+# priorities backwards, and an unguarded session you know about beats one you do not.
+if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
+  printf '%s' "$GUARD_FAILED_RESPONSE"
+  exit 0
+fi
 printf '%s' "$verdict"

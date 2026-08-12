@@ -1,0 +1,21 @@
+// Instance method dispatch in a loop: member lookup, receiver binding, field
+// reads through `this`.
+object Point {
+    x: int = 0,
+    y: int = 0,
+
+    fun norm() > int {
+        return this.x * this.x + this.y * this.y;
+    }
+}
+
+fun main(_: [str]) > int {
+    final p = Point{ x = 3, y = 4 };
+    var sum = 0;
+    var i = 0;
+    while (i < 500000) {
+        sum = sum + p.norm();
+        i = i + 1;
+    }
+    return if (sum == 12500000) 0 else 1;
+}

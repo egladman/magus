@@ -3,6 +3,12 @@ import "magus";
 // module rather than an export on this file.
 import "./tools/toolchain-policy" as policy;
 import "./tools/drift" as drift;
+// The optional half of toolchain observation: the `tools` window above is the gate
+// that can fail a build and makes no network calls; this reports when a declared
+// window has gone stale. Aliased `toolchains` because a module and a target function
+// cannot share a name - the alias would shadow and the call fails with "null is not
+// callable" at run time.
+import "./tools/toolchain" as toolchains;
 
 // Host modules: magus layers its methods onto Buzz's stdlib (camelCase).
 import "os";
@@ -160,11 +166,7 @@ fun build_date() > str !> any {
 // built_by is the CI workflow that produced the binary, empty for a local build so
 // nothing claims a pedigree it does not have. It should match the job_workflow_ref a
 // keyless signature carries, which is what lets the claim be checked against proof.
-fun built_by() > str !> any {
-    final ref = os\env("GITHUB_WORKFLOW_REF");
-    if (ref == null) { return ""; }
-    return "" + ref;
-}
+fun built_by() > str !> any { return os\env("GITHUB_WORKFLOW_REF") ?? ""; }
 
 fun ld_flags() > str !> any {
     return "-w -s"
@@ -352,7 +354,7 @@ fun publish_variant(ctx: magus\Context, dockerfile: str, platforms: str, registr
 // local `magus run image-build:cd` needs no extra flag to stay quiet.
 fun write_image_summary(refs: [str]) > void !> any {
     final summaryPath = os\env("GITHUB_STEP_SUMMARY");
-    if (summaryPath == null or ("" + summaryPath) == "") { return; }
+    if (summaryPath == null or ("{summaryPath}") == "") { return; }
     if (refs.len() == 0) { return; }
 
     var md = "## Container images\n\n| Reference | Pull |\n| --- | --- |\n";
@@ -362,7 +364,7 @@ fun write_image_summary(refs: [str]) > void !> any {
     md = md + "\nRun one against this workspace:\n\n```sh\ndocker run --rm -v \"$PWD\":/workspace "
         + refs[0] + " ls\n```\n";
 
-    final sp = "" + summaryPath;
+    final sp = "{summaryPath}";
     var existing = "";
     if (fs\exists(sp)) { existing = fs\readFile(sp); }
     fs\writeFile(sp, existing + md);
@@ -573,7 +575,7 @@ fun select_registries(registries: [Registry], host: str) > [Registry] !> any {
         if (hosts != "") { hosts = hosts + ", "; }
         hosts = hosts + reg.host;
     }
-    throw "no registry \"" + host + "\" for these charms; this mode publishes to: " + hosts;
+    throw "no registry \"{host}\" for these charms; this mode publishes to: {hosts}";
 }
 
 // Reports the registries `magus run image-build` under the SAME charms will push to,
@@ -1436,8 +1438,8 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         final n = releaser\nextFor(cur);
         var at = "at " + cur;
         if (cur == "") { at = "unreleased"; }
-        magus\log.info("release: " + m["key"] + " - " + at
-            + ", next: patch " + n.patch + " | minor " + n.minor + " | major " + n.major);
+        magus\log.info("release: {m["key"]} - {at}"
+            + ", next: patch {n.patch} | minor {n.minor} | major {n.major}");
     }
 
     if (wanted.keys().len() == 0) {
@@ -1472,8 +1474,8 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         final cur = releaser\currentVersion(m["prefix"]);
         if (!releaser\isCandidate(v, cur)) {
             final n = releaser\nextFor(cur);
-            throw "release: " + m["key"] + " v" + v + " is not a legal next version from "
-                + cur + " - choose " + n.patch + ", " + n.minor + " or " + n.major
+            throw "release: {m["key"]} v{v} is not a legal next version from {cur}"
+                + " - choose {n.patch}, {n.minor} or {n.major}"
                 + " (a prerelease or +metadata build of one of those is fine)";
         }
     }
@@ -1490,7 +1492,7 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         if (v == null) { continue; }
         final major = semver\parse(v).major;
         if (major < 2) { continue; }
-        var path = "" + m["gomodule"];
+        var path = "{m["gomodule"]}";
         // The root's gomodule is "" by design (it is never repointed to itself), so
         // its path comes from the declaration instead.
         if (m["root"] != "") { path = releaser\modulePath(fs\readFile("go.mod")); }
@@ -1681,9 +1683,40 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 // ten had never run in CI - nothing invoked them, and the buzz-check gate above only ever
 // covered cmd/magus/starter/spells - so both files were free to rot while looking covered.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("badge.buzz", "coverage.buzz", "spells/**/*.buzz", "docs/lib/*.buzz");
+    ctx.readsFiles("badge.buzz", "coverage.buzz", "spells/**/*.buzz", "docs/lib/*.buzz",
+        "std/lib/*.buzz", "tools/*.buzz");
     foreach (mod in ["badge.buzz", "coverage.buzz"]) {
         magus\cmd("buzz", args: ["-t", mod]);
+    }
+    // GLOBBED, for the reason the spell paragraph below gives, applied to the two trees
+    // that were still hand-omitted. Both were carrying real breakage precisely because
+    // nothing ran them:
+    //
+    //   std/lib/*.buzz  four of lcov.buzz's nine tests called assert\equal with no
+    //                   `import "assert";`, so they failed the moment anything ran them.
+    //                   An embedded stdlib module, so --embedded like the spells.
+    //
+    //   tools/*.buzz    registry.buzz did not PARSE. Three steps of
+    //                   .github/workflows/registry.yaml invoke it as
+    //                   `magus buzz tools/registry.buzz`, so the registry workflow was
+    //                   dead - on a file that signs with MAGUS_REGISTRY_KEY.
+    //
+    // The MODE is per file, not per directory, because tools/ is not uniform.
+    // registry.buzz is the only one invoked bare, so it is the only one that has to
+    // survive strict; audit, drift and toolchain-policy are magusfile imports and
+    // therefore always embedded, and running THEM strict would fail a top-level `if`
+    // or an unlabeled second argument that is legal everywhere they actually load - a
+    // red for a defect that does not exist. (toolchain.buzz has no importer and no
+    // invoker at all; it is gated embedded on the assumption it is meant to be one.)
+    foreach (mod in fs\glob("std/lib/*.buzz")) {
+        magus\cmd("buzz", args: ["-t", "--embedded", mod.value]);
+    }
+    foreach (mod in fs\glob("tools/*.buzz")) {
+        if (mod.value == "tools/registry.buzz") {
+            magus\cmd("buzz", args: ["-t", mod.value]);
+        } else {
+            magus\cmd("buzz", args: ["-t", "--embedded", mod.value]);
+        }
     }
     // Spell sources and the docs libraries carry ~90 more `test "..." {}` blocks that
     // nothing ran until 2026-08-09. That gap is why a broken escaper shipped: every one
@@ -1836,7 +1869,8 @@ export fun format(ctx: magus\Context, args: [str]) > void {
     // Passing paths scopes it (10 files, none in a child project). The excludes in
     // dprint.json still apply, so MAGUS.md and CHANGELOG.md stay out. Keep this list in
     // step with that file's `includes`.
-    markdown["dprint"](ctx, {"args": ["./*.md", "./benchmarks/**/*.md", "./tapes/**/*.md"]});
+    markdown["dprint"](ctx, {"args": ["./*.md", "./benchmarks/**/*.md", "./tapes/**/*.md",
+        "./cmd/magus/agents-section.md"]});
 }
 
 // Runs the CI gates through their declared dependencies.
@@ -1939,7 +1973,7 @@ export fun ci_shard(ctx: magus\Context, args: [str]) > void !> any {
     }
     final path = os\env("GITHUB_OUTPUT");
     var p = "";
-    if (path != null) { p = "" + path; }
+    if (path != null) { p = "{path}"; }
     if (p == "") {
         throw "ci-shard: the gha charm is set but $GITHUB_OUTPUT is unset — run this inside a GitHub Actions step";
     }
@@ -1949,8 +1983,8 @@ export fun ci_shard(ctx: magus\Context, args: [str]) > void !> any {
 
     // Render an actionable, portable summary to the job step summary.
     final summaryPath = os\env("GITHUB_STEP_SUMMARY");
-    if (summaryPath != null and ("" + summaryPath) != "") {
-        final sp = "" + summaryPath;
+    if (summaryPath != null and ("{summaryPath}") != "") {
+        final sp = "{summaryPath}";
         var md = "## Affected CI plan\n\n"
             + plan.q("count").integerValue() + " shard(s), max parallel "
             + plan.q("max_parallel").integerValue() + "\n\n"
@@ -1992,8 +2026,8 @@ fun rebuild_console() > void !> any {
 // for magus child processes) and fall back to `magus` on PATH.
 fun rerender_docs() > void !> any {
     var bin = os\env("MAGUS");
-    if (bin == null or ("" + bin) == "") { bin = "magus"; }
-    proc\exec("" + bin, ["run", "render", "docs"], ".", {});
+    if (bin == null or ("{bin}") == "") { bin = "magus"; }
+    proc\exec("{bin}", ["run", "render", "docs"], ".", {});
 }
 
 // missing_input phrases a deploy-generate precondition that ANOTHER project owns.
@@ -2104,6 +2138,23 @@ export fun deploy_generate(ctx: magus\Context, args: [str]) > void !> any {
 //
 // This rebuilds docs/console CONTENT, never magus itself - it does NOT trip the
 // self-rebuild anti-pattern CLAUDE.md warns against.
+// toolchain_report observes each wired toolchain against the tags its own project
+// publishes, and prints. It never installs, never selects, never rewrites a pin - see
+// tools/toolchain.buzz for why that boundary is load-bearing.
+//
+// Deliberately OUT of ci, and out of every target ci reaches: it runs `git ls-remote`
+// against half a dozen third-party hosts, so it is neither hermetic nor fast, and
+// nothing it reports is a build failure. Run it by hand, or on the audit cron, which
+// is where the other non-blocking network checks already live.
+//
+// It was unreachable before this: tools/toolchain.buzz exports report() and nothing in
+// the workspace imported it, so a complete, documented feature sat with no caller. It
+// has no test blocks of its own, so buzz-test gating tools/ only proved it parses -
+// this target is what makes it runnable at all.
+export fun toolchain_report(ctx: magus\Context, args: [str]) > void !> any {
+    toolchains\report();
+}
+
 export fun serve(ctx: magus\Context, args: [str]) > void !> any {
     final DOCS_GEN = "docs/gen";
     final CONSOLE_GEN = "console/gen";

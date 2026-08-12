@@ -26,11 +26,12 @@
 // build belongs to the build, written in something that can express it.
 
 import "std";
-import "os";
 import "proc";
 import "encoding/json";
 import "semver";
 import "time";
+// Used by the test blocks, which run under buzz_test now that it globs tools/.
+import "assert";
 
 // coolingHours mirrors minimum-release-age in each project's .npmrc (14400 minutes).
 // Restated as a duration because .npmrc is not a format Buzz reads. Drift is safe in the
@@ -43,6 +44,28 @@ final coolingHours = "-240h";
 // a gate that cries about it teaches people to stop reading it.
 fun isBlockingSeverity(severity: str) > bool {
     return severity == "high" or severity == "critical";
+}
+
+test "an advisory range is honoured whole, not reduced to its floor" {
+    // The minimist shape, and the regression that motivated this test: a derived
+    // floor of ">= 0.2.1" reported the VULNERABLE 1.2.5 as patched. The range must
+    // be used as written.
+    final patched = ">=0.2.1 <1.0.0 || >=1.2.6";
+    assert\isFalse(semver\satisfies("1.2.5", constraint: patched),
+        message: "1.2.5 is inside the vulnerable window, not patched");
+    assert\isTrue(semver\satisfies("1.2.6", constraint: patched),
+        message: "1.2.6 is the patch");
+    assert\isTrue(semver\satisfies("0.5.0", constraint: patched),
+        message: "the lower branch of the range still counts");
+}
+
+test "semver takes npm range syntax directly, so nothing needs deriving" {
+    assert\isTrue(semver\satisfies("1.5.0", constraint: "^1.2.3"), message: "caret");
+    assert\isFalse(semver\satisfies("1.5.0", constraint: "~1.2.3"), message: "tilde");
+    assert\isTrue(semver\satisfies("1.2.6", constraint: ">=1.2.3"), message: "plain lower bound");
+    // "<0.0.0" is how the advisory database says "no patch exists"; it is short
+    // circuited before this point, but it must not match anything if it gets here.
+    assert\isFalse(semver\satisfies("9.9.9", constraint: "<0.0.0"), message: "no patch published");
 }
 
 // hasInstallablePatch reports whether any published version of pkg satisfies the
@@ -65,7 +88,25 @@ fun hasInstallablePatch(pkg: str, patched: str, installed: str) > bool !> any {
 
     final now = time\parse("2006-01-02T15:04:05Z", value: time\nowIso());
     final cutoff = time\add(now, duration: coolingHours);
-    final floor = patched.replace(">=", with: "").trim();
+    // The advisory's patched range is used AS the constraint, underived.
+    //
+    // Two earlier shapes were both wrong. `">= " + patched.replace(">=", ...)` built
+    // `">= ^1.2.3"` for a caret range, which semver\satisfies RAISES on. Replacing
+    // that with a derived floor fixed the caret and broke something worse: taking
+    // only the first version token DISCARDS the rest of the range, so
+    // `">=0.2.1 <1.0.0 || >=1.2.6"` became `">= 0.2.1"` and reported the VULNERABLE
+    // 1.2.5 as an installable patch (measured). `"<1.2.3"` inverted outright.
+    //
+    // semver\satisfies accepts npm range syntax directly - caret, tilde, bounded, and
+    // ||-joined were all measured against this workspace's binary - so there is
+    // nothing to derive. Validate it once here rather than per candidate, so an
+    // unusable range is reported instead of silently deferring the advisory.
+    try {
+        _ = semver\satisfies(installed, constraint: patched);
+    } catch (e) {
+        std\print("audit: {pkg}: patched range \"{patched}\" is not a usable constraint; treating as no installable patch");
+        return false;
+    }
 
     // A candidate must be reachable from where the tree actually sits, which means
     // the SAME MAJOR as the installed version.
@@ -84,14 +125,14 @@ fun hasInstallablePatch(pkg: str, patched: str, installed: str) > bool !> any {
     // range, which is a human change, and the gate's contract is to fail only on
     // what is actionable TODAY. It stays printed loudly on every run.
     final installedMajor = std\parseInt(installed.split(".")[0]) ?? 0;
-    final nextMajor = "" + (installedMajor + 1) + ".0.0";
+    final nextMajor = "{installedMajor + 1}.0.0";
 
     foreach (version, published in json\parse(res.stdout)) {
         if (version == "created" or version == "modified") {
             continue;
         }
         try {
-            if (!semver\satisfies(version, constraint: ">= " + floor)) {
+            if (!semver\satisfies(version, constraint: patched)) {
                 continue;
             }
             if (installedMajor > 0 and !semver\satisfies(version, constraint: "< " + nextMajor)) {
@@ -101,7 +142,10 @@ fun hasInstallablePatch(pkg: str, patched: str, installed: str) > bool !> any {
                 return true; // a fix exists and our own policy would let it in
             }
         } catch (e) {
-            continue; // unparsable version or timestamp: not a fix to rely on
+            // Only an unparseable VERSION or timestamp reaches here now - the
+            // constraint was validated once above, so this can no longer swallow a
+            // range bug for every candidate at once.
+            continue
         }
     }
     return false;

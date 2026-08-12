@@ -58,13 +58,14 @@ final SCHEME = "op://";
 //   magus\secret.read("op://Private/Docker Hub/credential")
 //
 // `op read` prints the secret to stdout with a trailing newline; magus trims captured
-// output, so nothing here has to. proc\exec raises on a non-zero exit, which is the
-// behavior wanted: a locked vault, an expired session, or a typo'd path all fail the
-// read rather than returning a blank that fails later at whatever consumes it.
+// output, so nothing here has to. A locked vault, an expired session, or a typo'd path
+// all fail the read rather than returning a blank that fails later at whatever consumes
+// it - but by way of the classified throws below, not proc\exec's own raise, which
+// allow_failure deliberately turns off so the exit code can be inspected first.
 export fun resolve_secret(target: Target, cb: fun(any)) > Secret !> any {
     final io = {};
     cb(io);
-    final ref = "" + io["ref"];
+    final ref = "{io["ref"]}";
     if (ref == "") {
         throw "onepassword: no reference given";
     }
@@ -83,15 +84,21 @@ export fun resolve_secret(target: Target, cb: fun(any)) > Secret !> any {
             + "  other:    https://developer.1password.com/docs/cli/get-started/";
     }
 
-    // allow_failure so the exit can be CLASSIFIED instead of raising a bare exit status.
-    // This is the whole friction budget for this spell: someone wiring a secret provider
-    // for the first time hits "not installed", "not signed in", or "wrong path", and a
-    // message that names which one and what to type is the difference between a
-    // five-second fix and an afternoon.
+    // quiet is not optional here, and is the one line in this file to copy without
+    // thinking about it. proc.exec's default is "output streams live and is captured",
+    // and this command's stdout IS the secret - without quiet it is echoed to the
+    // console and written into the run log magus persists, which a later failure
+    // prints the path to.
+    //
+    // allow_failure so the exit can be CLASSIFIED rather than raising a bare exit
+    // status. That is the whole friction budget for this spell: someone wiring a
+    // secret provider for the first time hits "not installed", "not signed in", or
+    // "wrong path", and a message naming which one and what to type is the difference
+    // between a five-second fix and an afternoon.
     final res = proc\exec("op", args: ["read", uri], dir: ".",
-        opts: {"allow_failure": true});
+        opts: {"allow_failure": true, "quiet": true});
     if (res["code"] != 0) {
-        final err = "" + res["stderr"];
+        final err = "{res["stderr"]}";
         if (has(err, "not signed in") or has(err, "no active session")) {
             throw "onepassword: not signed in. Run `op signin`, or for an unattended run "
                 + "set OP_SERVICE_ACCOUNT_TOKEN.\n  reference: " + uri;
@@ -103,7 +110,7 @@ export fun resolve_secret(target: Target, cb: fun(any)) > Secret !> any {
         throw "onepassword: `op read " + uri + "` failed: " + err.trim();
     }
 
-    final value = "" + res["stdout"];
+    final value = "{res["stdout"]}";
     if (value == "") {
         throw "onepassword: " + uri + " resolved to an empty value; check the item and field names";
     }

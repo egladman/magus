@@ -8,6 +8,8 @@ require (
 	github.com/yuin/gopher-lua v1.1.1
 )
 
+require github.com/egladman/magus/libs/diagnostics v0.0.0 // indirect
+
 require (
 	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/ebitengine/purego v0.10.0 // indirect
@@ -21,3 +23,5 @@ require (
 )
 
 replace github.com/egladman/magus/libs/gopherbuzz => ../..
+
+replace github.com/egladman/magus/libs/diagnostics => ../../../diagnostics

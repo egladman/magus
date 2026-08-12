@@ -16,21 +16,24 @@ answers differently from upstream, or accepts source upstream refuses.
 
 ## Upstream parity
 
-Measured against `UpstreamRef` (`0.5.0-251-ged42f47`) on 2026-08-11. Upstream ships
+Measured against `UpstreamRef` (`0.5.0-265-g294d8f9`) on 2026-08-12. Upstream ships
 six test directories; three are measurable here, and all three numbers are below
 rather than only the flattering one.
 
 | upstream suite          | files |      gopherbuzz | what it asks                                                     |
 | ----------------------- | ----: | --------------: | ---------------------------------------------------------------- |
-| `tests/behavior/`       |    83 |     **81 pass** | does correct source produce the right answer?                    |
-| `tests/compile_errors/` |    77 | **71 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
+| `tests/behavior/`       |    85 |     **83 pass** | does correct source produce the right answer?                    |
+| `tests/compile_errors/` |    82 | **72 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
 | `tests/fuzzed/`         |   644 |    **0 panics** | can malformed input crash the front end?                         |
 | `tests/bench/`          |    11 |         not run | upstream's benchmarks (ours are in [`benchmarks/`](benchmarks/)) |
 | `tests/manual/`         |     9 |         not run | interactive                                                      |
 | `tests/utils/`          |    10 |             n/a | helper modules the behavior tests import                         |
 
-**The compile-error row is the uncomfortable one and the most important.** 6 of those
-77 programs compile CLEAN here that upstream refuses. That is not a missing feature, it
+The two behavior files still failing are `c-buzz-api.buzz` and `extern-library.buzz`,
+both of which need upstream's C API rather than a language feature.
+
+**The compile-error row is the uncomfortable one and the most important.** 10 of those
+82 programs compile CLEAN here that upstream refuses. That is not a missing feature, it
 is missing strictness: gopherbuzz will accept source upstream tells you is wrong. If
 you are evaluating this VM as a Buzz implementation, weigh that at least as heavily as
 the behavior row -- a permissive checker is the failure mode a subset does not warn you

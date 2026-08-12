@@ -1,0 +1,16 @@
+// @error: collector failed
+// A collector that throws must surface rather than be swallowed, and its instance
+// stays tracked: it has not run to completion, and dropping it would hide the
+// failure from a later sweep.
+import "gc";
+
+object Boom {
+    id: int,
+
+    fun collect() > void !> str {
+        throw "collector failed";
+    }
+}
+
+_ = Boom{ id = 1 };
+gc\collect();

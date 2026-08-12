@@ -15,16 +15,14 @@ import "fs";
 import "time";
 import "serialize";
 import "std";
+// Used by the test blocks; advice_test runs this file.
+import "assert";
 
 // The comment marker identifies OUR comment among everyone else's. Never rendered.
 final comment_marker = "<!-- magus:advice -->";
 
 // env reads a variable, returning "" rather than null so callers can compare directly.
-export fun env(name: str) > str {
-    final v = os\env(name);
-    if (v == null) { return ""; }
-    return "" + v;
-}
+export fun env(name: str) > str { return os\env(name) ?? ""; }
 
 export fun beginMarker(name: str) > str { return "<!-- magus:advice:" + name + ":begin -->"; }
 export fun endMarker(name: str) > str { return "<!-- magus:advice:" + name + ":end -->"; }
@@ -189,6 +187,74 @@ fun footer() > str {
 // Every section carries a heading and a rule above it. Run together, the sections read as
 // one wall of bold sentences and a reader cannot tell where one finding ends and the next
 // begins - which is what the first live comment looked like.
+// withoutFooter returns text up to its footer marker, so two renderings of the same
+// comment compare on CONTENT alone.
+//
+// The footer carries time\nowIso(), and compose appends it on every path, so comparing
+// whole bodies made the "nothing changed" guard below unreachable: the composed body
+// differed from the stored one on every call, and all eleven advisors PATCHed the
+// comment on every push whether or not a finding had moved. That is exactly the edit
+// churn and notification noise the single-comment design exists to avoid.
+fun withoutFooter(text: str) > str {
+    // The LAST occurrence, not the first. compose always appends the footer last, so
+    // the trailing one is the real footer; an earlier one is content. An advisor that
+    // quotes a conflicted hunk or a doc containing the marker - merge-conflict and
+    // hand-edited-generated both paste repository text - would otherwise truncate
+    // both sides at its own quoted copy, and every finding after it would compare as
+    // absent, suppressing a PATCH that was genuinely needed.
+    //
+    // Buzz has no lastIndexOf, so this walks forward taking the last hit.
+    var at: int? = null;
+    var scan = 0;
+    while (true) {
+        final hit = text.indexOf(footer_marker, from: scan);
+        if (hit == null) { break; }
+        at = hit;
+        scan = hit + footer_marker.len();
+    }
+    if (at == null) { return text.trim(); }
+    return text.sub(0, len: at!).trim();
+}
+
+test "withoutFooter ignores a changed timestamp" {
+    final a = "body text\n" + footer_marker + "\n<sub>Last updated 2026-08-12T10:00:00Z.</sub>";
+    final b = "body text\n" + footer_marker + "\n<sub>Last updated 2026-08-12T11:30:00Z.</sub>";
+    assert\equal(withoutFooter(a), want: withoutFooter(b),
+        message: "only the footer differs, so these are the same comment");
+}
+
+test "withoutFooter still sees a real change" {
+    final a = "one finding\n" + footer_marker + "\n<sub>x</sub>";
+    final b = "two findings\n" + footer_marker + "\n<sub>x</sub>";
+    assert\notEqual(withoutFooter(a), want: withoutFooter(b),
+        message: "the body moved, so the comment must be rewritten");
+}
+
+test "recomposing the same findings is a no-op under the guard" {
+    final first = compose("", name: "demo", title: "Demo", body: "one finding");
+    final again = compose(first, name: "demo", title: "Demo", body: "one finding");
+    assert\equal(withoutFooter(again), want: withoutFooter(first),
+        message: "the guard must see an unchanged comment as unchanged");
+    std\assert(first.indexOf(footer_marker) != null, message: "compose always writes a footer");
+}
+
+test "withoutFooter is not fooled by an advisor quoting the marker" {
+    // merge-conflict and hand-edited-generated both paste repository text into their
+    // findings, so the marker is reachable content. Truncating at the FIRST hit threw
+    // away every finding after it and suppressed a PATCH that was needed.
+    final quoted = "finding one\nsomeone pasted " + footer_marker + " into a diff\nfinding two";
+    final a = quoted + "\n" + footer_marker + "\n<sub>Last updated 10:00.</sub>";
+    final b = quoted + "\n" + footer_marker + "\n<sub>Last updated 11:30.</sub>";
+    assert\equal(withoutFooter(a), want: withoutFooter(b),
+        message: "only the real trailing footer differs");
+    std\assert(withoutFooter(a).indexOf("finding two") != null,
+        message: "the content after the quoted marker survives");
+}
+
+test "withoutFooter tolerates a comment with no footer yet" {
+    assert\equal(withoutFooter("  bare  "), want: "bare", message: "trimmed, not dropped");
+}
+
 export fun compose(current: str, name: str, title: str, body: str) > str {
     final begin = beginMarker(name);
     final end = endMarker(name);
@@ -265,7 +331,7 @@ fun find(repo: str, pr: str) > str !> any {
         "repos/" + repo + "/issues/" + pr + "/comments"], dir: ".", opts: {"quiet": true});
     foreach (c in serialize\jsonDecode(listed.stdout).listValue()) {
         if (c.q("body").stringValue().indexOf(comment_marker) != null) {
-            return "" + c.q("id").integerValue();
+            return "{c.q("id").integerValue()}";
         }
     }
     return "";
@@ -283,11 +349,16 @@ export fun publish(repo: str, pr: str, name: str, title: str, body: str) > void 
         current = serialize\jsonDecode(got.stdout).q("body").stringValue();
     }
     final composed = compose(current, name: name, title: title, body: body);
-    if (composed.trim() == current.trim()) { return; }
+    if (withoutFooter(composed) == withoutFooter(current)) { return; }
 
     // The body goes through a JSON file, never an -f flag: it is markdown with newlines,
     // backticks, and quotes, and every one of those is a shell-quoting hazard.
-    final payload = "/tmp/magus-advice-payload.json";
+    // A fresh file per call, not a fixed /tmp path. The old one was shared by all
+    // eleven advisors and never cleaned up: two running concurrently clobbered each
+    // other's payload and one posted the other's body, and on a reused or self-hosted
+    // runner a predictable name is a pre-creation target for content that is then
+    // POSTed to the repo under the workflow's token.
+    final payload = fs\tempFile("magus-advice-payload");
     fs\writeFile(payload, content: serialize\jsonEncode({"body": composed}));
     if (id == "") {
         proc\exec("gh", args: ["api", "--method", "POST",

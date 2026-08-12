@@ -433,6 +433,120 @@ type KnowledgeRefSite struct {
 	Lines []int  `json:"lines,omitempty" yaml:"lines,omitempty"`
 }
 
+// SymbolOccurrenceStatus says whether one occurrence's recorded range still describes
+// the file on disk. It exists because a SCIP range is only meaningful against the exact
+// bytes that were indexed: an index built before an edit points at text that has since
+// moved, and applying a rewrite to it would corrupt the file at a plausible-looking
+// offset. Every occurrence carries one, and only SymbolOccurrenceVerified is safe to edit.
+type SymbolOccurrenceStatus string
+
+const (
+	// SymbolOccurrenceVerified means magus read the range out of the current file and
+	// found exactly the symbol's name there. This is the only status a mechanical
+	// rewrite may act on.
+	SymbolOccurrenceVerified SymbolOccurrenceStatus = "verified"
+	// SymbolOccurrenceMismatch means the range resolved but holds something other than
+	// the symbol's name - a stale index, or a position encoding that is not the byte
+	// offsets magus assumed. Either way the range is not editable, and saying so is the
+	// whole point: the alternative is a confident wrong edit.
+	SymbolOccurrenceMismatch SymbolOccurrenceStatus = "mismatch"
+	// SymbolOccurrenceUnreadable means the file could not be read, or the range falls
+	// outside it. Distinct from mismatch because the fix differs: a deleted or moved
+	// file needs a re-index, not a closer look at the line.
+	SymbolOccurrenceUnreadable SymbolOccurrenceStatus = "unreadable"
+)
+
+// SymbolOccurrence is one exact source range where a symbol appears, precise enough to
+// drive a mechanical edit. This is deliberately NOT KnowledgeRefSite: that type carries a
+// per-file count and a list of lines capped at MaxRefLines, which is right for describing
+// fan-in and wrong for rewriting, because a hot symbol's list is silently truncated and a
+// line number alone does not say WHICH occurrence on the line to replace. Occurrences are
+// complete and column-precise.
+//
+// Line and Column are 1-based, matching the file:line:col convention magus already prints
+// and every editor understands. The end is EXCLUSIVE: the text to replace is the half-open
+// span [Column, EndColumn), so a three-character name at column 6 has EndColumn 9.
+type SymbolOccurrence struct {
+	Line      int `json:"line"       yaml:"line"`
+	Column    int `json:"column"     yaml:"column"`
+	EndLine   int `json:"end_line"   yaml:"end_line"`
+	EndColumn int `json:"end_column" yaml:"end_column"`
+	// Definition marks the site that declares the symbol rather than referencing it. A
+	// rename treats the two identically, but a caller that only wants call sites (or only
+	// the declaration) needs them told apart, and the index already knows.
+	Definition bool `json:"definition,omitempty" yaml:"definition,omitempty"`
+	// Text is what magus actually read at this range. It is the evidence behind Status,
+	// not decoration: on a mismatch it shows what is really there, which is what tells a
+	// reader whether the index is stale or the encoding assumption was wrong.
+	Text   string                 `json:"text,omitempty" yaml:"text,omitempty"`
+	Status SymbolOccurrenceStatus `json:"status"         yaml:"status"`
+}
+
+// SymbolOccurrenceFile groups one file's occurrences. Occurrences are sorted by position,
+// which is also the order a caller must NOT apply them in - see KnowledgeOccurrencesOutput.
+type SymbolOccurrenceFile struct {
+	File        string             `json:"file"        yaml:"file"`
+	Occurrences []SymbolOccurrence `json:"occurrences" yaml:"occurrences"`
+	// Stale means at least one of this file's occurrences did not verify, which proves
+	// the file changed after it was indexed. That matters beyond the individual bad site:
+	// an index whose view of a file is out of date may also be MISSING occurrences added
+	// since, and no per-site check can see a site that is not in the list. So this marks
+	// the file as one where a rewrite cannot be assumed complete, even for the sites that
+	// did verify. Re-index before trusting it.
+	//
+	// The converse does not hold, and the gap is worth stating plainly: an edit that
+	// disturbed no existing range - appending a new use at the end of the file - leaves
+	// every occurrence verifying while still adding a site the index never saw. Nothing
+	// magus can compute from the index alone detects that. Completeness rests on the
+	// index being current; `magus status` reports which indexes are.
+	Stale bool `json:"stale,omitempty" yaml:"stale,omitempty"`
+}
+
+// KnowledgeOccurrencesOutput is the result of `magus refs <symbol> --occurrences`: every
+// site the symbol appears, with ranges verified against the working tree.
+//
+// It is an ANSWER, not an action. magus reports where the symbol is and whether each site
+// is safe to touch; applying the edit is the caller's job, the same division `magus
+// affected` keeps between naming what a change reaches and doing anything about it.
+//
+// Applying edits within a file requires walking occurrences BACK TO FRONT: replacing a
+// name with one of a different length shifts every later column on the same line, so
+// front-to-back application corrupts each subsequent site. Files are independent.
+type KnowledgeOccurrencesOutput struct {
+	Definition    string `json:"definition"     yaml:"definition"`
+	SchemaVersion int    `json:"schema_version" yaml:"schema_version"`
+	Symbol        string `json:"symbol"         yaml:"symbol"`
+	Label         string `json:"label"          yaml:"label"`
+	// Name is the identifier a rename would replace: the first of Names. It is derived from
+	// the symbol's own descriptor, not from the index's display name - for a package those
+	// differ, and the descriptor's last segment is what call sites write.
+	Name string `json:"name" yaml:"name"`
+	// Names is every spelling an occurrence was allowed to hold, in the order they were
+	// tried. A symbol can legitimately be written more than one way - a package's import
+	// statement holds its full path while its call sites hold the bare identifier - so a
+	// site is checked against this whole set, not against Name alone. It is surfaced so a
+	// consumer can reproduce the verdict instead of having to trust it.
+	Names           []string `json:"names,omitempty"  yaml:"names,omitempty"`
+	FileCount       int      `json:"file_count"       yaml:"file_count"`
+	OccurrenceCount int      `json:"occurrence_count" yaml:"occurrence_count"`
+	// VerifiedCount is how many of OccurrenceCount are safe to edit. A caller comparing
+	// the two learns, in one subtraction, whether a rewrite would be complete - which is
+	// the question that decides whether to proceed at all.
+	VerifiedCount int `json:"verified_count"   yaml:"verified_count"`
+	// StaleFiles is how many of Files carry a stale marker. Non-zero means a rewrite would
+	// be acting on an index that no longer matches the tree, and the honest move is to
+	// re-index rather than to edit around the bad sites.
+	StaleFiles int                    `json:"stale_files,omitempty" yaml:"stale_files,omitempty"`
+	Files      []SymbolOccurrenceFile `json:"files,omitempty"       yaml:"files,omitempty"`
+	Answer     KnowledgeAnswer        `json:"answer"                yaml:"answer"`
+}
+
+// KnowledgeOccurrencesDefinition is the human-readable description of the occurrence view.
+const KnowledgeOccurrencesDefinition = "refs --occurrences lists every exact source range " +
+	"where a symbol appears, complete and column-precise, with each range verified against " +
+	"the file on disk. It is the view a mechanical rewrite needs; the default file:line " +
+	"view caps its line list and cannot say which occurrence on a line to replace."
+
 // KnowledgeQueryOutput is the result of `magus query`: the ranked seed matches
 // plus the induced subgraph (neighborhood) collected up to the node budget. The
 // Nodes/Links carry the node-link keys so the subgraph is itself a valid export.

@@ -48,6 +48,18 @@ cache:
 # feature that workspace uses. The binary this catches is a shipped release built
 # somewhere else - which is the only kind that can actually be too old.
 #
+# WHEN TO RAISE IT, because the answer is not "whenever you use something new". While
+# this names an UNRELEASED version, every capability added lands in that same version, so
+# the floor stays true for free - `Secret` was added after this line was written and
+# needed no change. It rots on exactly one event: the named version SHIPS, and a later
+# change starts using something the shipped one lacks. That is the only trigger.
+#
+# The reason to state it: that trigger depends on somebody noticing a release boundary,
+# and when they do not, the failure is a DEADLOCK rather than a warning - every magus
+# command fails at workspace load, including the one that would build a newer binary.
+# ward.ExplainStaleBinary is the backstop for when this goes stale anyway; it cannot
+# prevent the failure, only name it. Keeping this line current is what prevents it.
+#
 # It does NOT catch a binary older than required_version itself, which simply does not
 # know the key: v0.3.1 warns "field required_version not found" and then fails on whatever
 # it hits first. A floor is only enforceable by a binary that has heard of floors. That is

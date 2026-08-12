@@ -6,12 +6,29 @@ namespace testing;
 // several problems at once.
 //
 // The public surface -- the `Tester` object, `init`/`it`/`summary`, and the
-// `assert*` matchers -- is API-compatible with upstream Buzz's `testing` module
-// so a program written against upstream runs here unchanged. The implementation
-// is gopherbuzz's own (no upstream source is reused; the rest of gopherbuzz's
-// stdlib is likewise a clean-room implementation of the language).
+// `assert*` matchers -- FOLLOWS upstream Buzz's `testing` module, but is not a drop-in
+// replacement for it, and the header used to claim it was ("a program written against
+// upstream runs here unchanged"). Measured against upstream at 0.5.0-265-g294d8f9,
+// three things break such a program:
 //
-// Two surfaces differ from upstream, forced by gopherbuzz's current semantics:
+//   - Upstream's failure-printing method is `report(error: str?, message: str?)`.
+//     There is no `report` here; the equivalent is
+//     `record(ok: bool, detail: str, message: str?)`, a different name and shape.
+//   - Every `assert*` here is a `mut fun`, so it is reachable only through a `mut
+//     Tester` binding. Upstream declares them plain `fun`.
+//   - Upstream's `assertThrows` is `::<T>(fn: fun () > void !> T, ...)`; this one
+//     takes `fn: fun () > void` with no error set, which is what lets a caller pass a
+//     `fun () > void !> str` literal (std/lib/lcov.buzz and badge.buzz both do).
+//
+// `reset`, `failedAsserts`, `failedTests` and `succeededTests` DO exist here, with
+// upstream's names and arity. (An earlier revision of this header said they did not,
+// which was wrong and was exactly the mistake this paragraph was rewritten to fix -
+// it was asserted from a grep that never searched for those names.)
+//
+// The implementation is gopherbuzz's own (no upstream source is reused; the rest of
+// gopherbuzz's stdlib is likewise a clean-room implementation of the language).
+//
+// Two further surfaces differ, forced by gopherbuzz's current semantics:
 //   - assertOfType takes the expected type as a NAME string. Upstream's
 //     `assertOfType::<int>(v)` DOES work: gopherbuzz erases type arguments, but the
 //     spelling is known statically, and a call binds it to a `typeName: str`

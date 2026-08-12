@@ -33,11 +33,7 @@ export fun outcome(result: str, shards: str) > str {
         + "jobs above for the failing step.\n";
 }
 
-fun env(name: str) > str {
-    final v = os\env(name);
-    if (v == null) { return ""; }
-    return "" + v;
-}
+fun env(name: str) > str { return os\env(name) ?? ""; }
 
 // volatilitySection is the ONLY insight lens on this surface, and it is empty unless there
 // is something to say.

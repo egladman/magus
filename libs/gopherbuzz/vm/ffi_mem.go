@@ -29,7 +29,9 @@ package vm
 import (
 	"encoding/binary"
 	"fmt"
+	"log/slog"
 	"math"
+	"slices"
 	"strings"
 	"sync"
 	"unsafe"
@@ -132,7 +134,23 @@ func StructLayoutWith(fieldTypes []string, known map[string]NamedLayout) (size, 
 		align = 1
 	}
 	size = roundUp(size, align)
+	logLayout("ffi struct layout", fieldTypes, size, align, offsets)
 	return size, align, offsets, nil
+}
+
+// logLayout reports one computed aggregate layout. A wrong offset here marshals
+// plausible garbage instead of raising, so the offsets are the whole point of the
+// record. Guarded because the slice copy is not free on an unobserved run.
+func logLayout(msg string, fieldTypes []string, size, align int, offsets []int) {
+	if !ffiLogEnabled(FFILevelTrace) {
+		return
+	}
+	ffiLog(FFILevelTrace, msg,
+		slog.Any("fields", fieldTypes),
+		slog.Int("size", size),
+		slog.Int("align", align),
+		slog.Any("offsets", slices.Clone(offsets)),
+	)
 }
 
 func roundUp(n, to int) int {
@@ -173,7 +191,15 @@ func AllocFFI(n int) (uintptr, error) {
 	addr := uintptr(unsafe.Pointer(&pb.data[0]))
 	memMu.Lock()
 	memRegistry[addr] = pb
+	live := len(memRegistry)
 	memMu.Unlock()
+	if ffiLogEnabled(FFILevelTrace) {
+		ffiLog(FFILevelTrace, "ffi alloc",
+			slog.Uint64("addr", uint64(addr)),
+			slog.Int("size", n),
+			slog.Int("live", live),
+		)
+	}
 	return addr, nil
 }
 
@@ -202,13 +228,25 @@ func WriteFFIBytes(addr uintptr, b []byte) error {
 // Freeing an unknown address is an error (double free or a foreign pointer).
 func FreeFFI(addr uintptr) error {
 	memMu.Lock()
-	defer memMu.Unlock()
 	pb, ok := memRegistry[addr]
 	if !ok {
+		memMu.Unlock()
 		return fmt.Errorf("buzz: ffi: free of unknown address %#x (not from ffi.alloc, or already freed)", addr)
 	}
 	pb.pin.Unpin()
 	delete(memRegistry, addr)
+	size, live := len(pb.data), len(memRegistry)
+	// Unlocked BEFORE logging, matching AllocFFI. An embedder's slog.Handler is
+	// arbitrary code; running it under the allocator's mutex means a handler that
+	// itself allocates FFI memory deadlocks.
+	memMu.Unlock()
+	if ffiLogEnabled(FFILevelTrace) {
+		ffiLog(FFILevelTrace, "ffi free",
+			slog.Uint64("addr", uint64(addr)),
+			slog.Int("size", size),
+			slog.Int("live", live),
+		)
+	}
 	return nil
 }
 
@@ -373,6 +411,7 @@ func UnionLayoutWith(fieldTypes []string, known map[string]NamedLayout) (size, a
 	if rem := size % align; rem != 0 {
 		size += align - rem
 	}
+	logLayout("ffi union layout", fieldTypes, size, align, offsets)
 	return size, align, offsets, nil
 }
 

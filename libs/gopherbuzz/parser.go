@@ -2741,21 +2741,23 @@ func (p *parser) parseFunRest(extern bool) (funRest, error) {
 	// following type (permitted by the grammar below) still counts as a
 	// declared raise, of an unnamed error set - recorded as "any" to match the
 	// checker's existing convention for an untyped catch clause.
-	if p.check(token.ErrArrow) {
-		p.advance()
-		if p.isTypeStart() {
-			ea, err := p.readType()
-			if err != nil {
-				return funRest{}, err
-			}
-			out.errAnnot = ea
-		} else {
-			out.errAnnot = "any"
-		}
-	}
-	// Consume optional *> yield-type annotation: fun f() > R *> Y { }
+	// Consume optional *> yield-type annotation, BEFORE !>: upstream's order is
+	// `> Ret *> Yield !> Err` (its own src/lib/sqlite.buzz:193 writes it that way) and
+	// it rejects the reverse with "Expected `,` after error type", reading the `*>` as
+	// a continuation of the error LIST. gopherbuzz parsed !> first, so the one form
+	// upstream documents did not parse here at all and the only form that did was one
+	// upstream refuses - a divergence in both directions at once. Nothing in this
+	// workspace used the old order.
+	//
+	// A non-optional yield type is legal. Upstream required optional-or-void until
+	// fb54e7b, which dropped the check and instead types `resume` as the yield type
+	// made optional -- resume still answers null when the fiber returns without
+	// yielding again. gopherbuzz needs no counterpart to that second half: this
+	// checker does not model optionality at all (annotParser consumes a trailing `?`
+	// and records nothing, and Null is assignable to every type), so `resume` was
+	// already permissive in exactly that direction. The reject was all there was.
 	if p.check(token.YieldArrow) {
-		ya := p.advance()
+		p.advance()
 		if p.check(token.Void) {
 			p.advance()
 			out.yieldAnnot = "void"
@@ -2766,12 +2768,17 @@ func (p *parser) parseFunRest(extern bool) (funRest, error) {
 			}
 			out.yieldAnnot = ya
 		}
-		// Strict parity with upstream Buzz (src/Parser.zig): a fiber's yield type
-		// must be optional or void — resume returns null on completion, so the
-		// yielded type is inherently optional. Reject a non-optional yield type
-		// rather than leniently accepting it.
-		if out.yieldAnnot != "void" && !strings.HasSuffix(out.yieldAnnot, "?") {
-			return funRest{}, fmt.Errorf("buzz: line %d:%d: expected optional type or void for fiber yield type, got %q", ya.Line, ya.Col, out.yieldAnnot)
+	}
+	if p.check(token.ErrArrow) {
+		p.advance()
+		if p.isTypeStart() {
+			ea, err := p.readType()
+			if err != nil {
+				return funRest{}, err
+			}
+			out.errAnnot = ea
+		} else {
+			out.errAnnot = "any"
 		}
 	}
 	// An extern declaration stops here: the semicolon stands where a body would be,

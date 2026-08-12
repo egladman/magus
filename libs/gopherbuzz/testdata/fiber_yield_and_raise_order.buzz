@@ -1,0 +1,24 @@
+// @expect: 3
+// The annotation order is `> Ret *> Yield !> Err`, matching upstream, whose own
+// src/lib/sqlite.buzz:193 writes `> [[Boxed]] *> [Boxed] !> SQLiteError`.
+//
+// gopherbuzz used to parse !> FIRST, which was wrong in both directions at once: the
+// one form upstream documents did not parse here, and the only form that did parse
+// here is one upstream rejects ("Expected `,` after error type" - it reads the `*>`
+// as a continuation of the error list). Verified against the upstream binary at
+// 0.5.0-265-g294d8f9.
+fun counting() > int *> int !> str {
+    var i = 0;
+    while (i < 3) {
+        _ = yield i;
+        i = i + 1;
+    }
+    if (i != 3) { throw "never"; }
+    return i;
+}
+
+var seen = 0;
+foreach (v in &counting()) {
+    seen = seen + 1;
+}
+final __r = seen;

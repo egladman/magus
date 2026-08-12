@@ -1,0 +1,32 @@
+// match over an enum subject and over range arms (containment, not equality).
+enum Kind { one, two, three, four }
+
+fun weight(k: Kind) > int {
+    return match (k) {
+        Kind.one -> 1,
+        Kind.two -> 2,
+        Kind.three -> 3,
+        Kind.four -> 4,
+    };
+}
+
+fun main(_: [str]) > int {
+    final kinds = [Kind.one, Kind.two, Kind.three, Kind.four];
+    var total = 0;
+    var i = 0;
+    while (i < 300000) {
+        total = total + weight(kinds[i % 4]);
+        final band = match (i % 100) {
+            0..25 -> 1,
+            25..50 -> 2,
+            50..75 -> 3,
+            else -> 4,
+        };
+        total = total + band;
+        i = i + 1;
+    }
+    // 300000 * (mean enum weight 2.5 + mean band 2.5). Pinned exactly: `> 0` said
+    // nothing about the range arms' containment semantics, which is what this
+    // workload exists to exercise - a wrong arm still yields a large positive sum.
+    return if (total == 1500000) 0 else 1;
+}

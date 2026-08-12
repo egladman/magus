@@ -4,10 +4,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/types"
 )
@@ -17,9 +19,10 @@ import (
 // loads the lazily-loaded @symbols shards. Its output is occurrence-shaped (file:line
 // rows), which is why it is a distinct subcommand rather than a `magus query` neighborhood.
 func refsCmd(ctx context.Context, root string, args []string) error {
-	var refresh bool
+	var refresh, occurrences bool
 	pos, err := cmdParse("refs", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&refresh, "refresh", false, "force a full graph rebuild before resolving")
+		fs.BoolVar(&occurrences, "occurrences", false, "every exact source range, verified against the tree (for mechanical edits)")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus refs <symbol> [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -80,6 +83,10 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	}
 	out.Answer = types.Answer(len(out.Refs) > 0, reason, gaps)
 
+	if occurrences {
+		return emitOccurrences(ctx, root, opts, out)
+	}
+
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, out)
@@ -117,6 +124,139 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	for _, r := range out.Refs {
 		fmt.Printf("  %s  (%d)%s\n", r.File, r.Count, linesSuffix(r.Lines))
 	}
+	return nil
+}
+
+// emitOccurrences renders `magus refs <symbol> --occurrences`: every exact source range
+// the symbol appears at, verified against the tree. refs has already resolved the symbol
+// and computed the coverage answer; this re-reads the declared indexes for the ranges the
+// graph edge does not keep.
+//
+// It reports; it does not edit. The output is what a caller needs to make the edit itself,
+// which is the same division every other magus verb keeps between naming what a change
+// touches and touching it.
+func emitOccurrences(ctx context.Context, root string, opts OutputOptions, refs types.KnowledgeRefsOutput) error {
+	ws, err := inspectWorkspace(ctx, root)
+	if err != nil {
+		return err
+	}
+	key := strings.TrimPrefix(refs.Symbol, types.KindSymbol+":")
+	read, probed := magus.SymbolOccurrences(ctx, ws, ws.Root(), globalCfg, slog.Default(), key)
+	if !probed {
+		// The probe itself failed, so magus cannot say where the symbol appears. Reporting
+		// an empty list here would read as "nowhere", which is the one answer it has no
+		// basis for.
+		fmt.Fprintln(os.Stderr, "magus refs: cannot read the symbol indexes")
+		return errSilent{exitCode: 1}
+	}
+	files := read.Files
+
+	out := types.KnowledgeOccurrencesOutput{
+		Definition:    types.KnowledgeOccurrencesDefinition,
+		SchemaVersion: types.KnowledgeSchemaVersion,
+		Symbol:        refs.Symbol,
+		Label:         refs.Label,
+		Names:         read.Names,
+		Files:         files,
+		FileCount:     len(files),
+	}
+	if len(read.Names) > 0 {
+		out.Name = read.Names[0]
+	}
+	// The refs verdict describes the refs answer, and this is a different read of a
+	// different source: an index that is merely declared satisfies refs' coverage check and
+	// can still fail to decode here. So the gaps are recomposed rather than inherited, and
+	// an index this read could not open downgrades the verdict even when refs was clean.
+	out.Answer = types.Answer(len(files) > 0, refs.Answer.Reason, append(append([]types.KnowledgeSymbolGap(nil), refs.Answer.Gaps...), read.Unreadable...))
+	for _, f := range files {
+		out.OccurrenceCount += len(f.Occurrences)
+		if f.Stale {
+			out.StaleFiles++
+		}
+		for _, occ := range f.Occurrences {
+			if occ.Status == types.SymbolOccurrenceVerified {
+				out.VerifiedCount++
+			}
+		}
+	}
+
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(opts, out)
+	case outputName:
+		// file:line:col, the form every editor and `xargs` already understands. Only
+		// verified sites: -o name has nowhere to put a status, and emitting an unverified
+		// range in a list that looks actionable is exactly the confusion the status exists
+		// to prevent.
+		for _, f := range out.Files {
+			for _, occ := range f.Occurrences {
+				if occ.Status == types.SymbolOccurrenceVerified {
+					fmt.Printf("%s:%d:%d\n", f.File, occ.Line, occ.Column)
+				}
+			}
+		}
+		// Filtering to verified sites is what makes this format safe to pipe, and it is also
+		// what makes a wholly stale index print NOTHING - byte-identical to a symbol with no
+		// occurrences at all. This is the format a script reads, so the difference has to
+		// live in the exit status, which is the only channel it has left.
+		if out.VerifiedCount < out.OccurrenceCount {
+			fmt.Fprintf(os.Stderr, "magus refs: %d of %d site(s) did not verify and were not listed; re-run this project's scip target\n",
+				out.OccurrenceCount-out.VerifiedCount, out.OccurrenceCount)
+			return errSilent{exitCode: 1}
+		}
+		// Deliberately NOT exitForVerdict here. The coverage verdict is `unknown` whenever any
+		// project declares no index, which in a polyglot workspace is the steady state (a
+		// TypeScript project holds no Go symbols), so folding it in would make this format
+		// exit non-zero on every successful run and teach a caller to ignore the status. The
+		// exit code carries one meaning: sites were found and withheld.
+		return nil
+	}
+
+	fmt.Printf("symbol: %s", out.Symbol)
+	if out.Label != "" {
+		fmt.Printf("  (%s)", out.Label)
+	}
+	fmt.Println()
+	if out.OccurrenceCount == 0 {
+		fmt.Println("no occurrences found")
+		printVerdict(os.Stdout, out.Answer, "")
+		if out.Answer.Verdict == types.VerdictUnknown {
+			return errSilent{exitCode: 1}
+		}
+		return nil
+	}
+	fmt.Printf("name: %s\n", out.Name)
+	fmt.Printf("%d occurrence(s) in %d file(s), %d verified:\n", out.OccurrenceCount, out.FileCount, out.VerifiedCount)
+	for _, f := range out.Files {
+		fmt.Printf("  %s", f.File)
+		if f.Stale {
+			fmt.Print("  (stale: this file changed after it was indexed)")
+		}
+		fmt.Println()
+		for _, occ := range f.Occurrences {
+			fmt.Printf("    %d:%d-%d:%d  %s", occ.Line, occ.Column, occ.EndLine, occ.EndColumn, occ.Status)
+			if occ.Definition {
+				fmt.Print("  definition")
+			}
+			if occ.Status != types.SymbolOccurrenceVerified && occ.Text != "" {
+				// "want one of": the check is against the whole spelling set, so naming a
+				// single expectation would misreport what would actually have verified.
+				fmt.Printf("  (found %q, want one of %q)", occ.Text, out.Names)
+			}
+			fmt.Println()
+		}
+	}
+	if out.VerifiedCount < out.OccurrenceCount {
+		// The count alone does not say what to do about it, and the wrong response - edit
+		// the good ones, skip the rest - produces a half-renamed tree that still compiles
+		// in some languages.
+		fmt.Printf("\n%d site(s) in %d file(s) did not verify: the index no longer matches the tree.\n",
+			out.OccurrenceCount-out.VerifiedCount, out.StaleFiles)
+		fmt.Println("Re-run this project's scip target and try again; sites may also be MISSING from a stale index.")
+		printVerdict(os.Stdout, out.Answer, "")
+		return errSilent{exitCode: 1}
+	}
+	printVerdict(os.Stdout, out.Answer, "")
 	return nil
 }
 

@@ -64,6 +64,7 @@ object-prop-immutable-value.buzz
 out-last-statement.buzz
 placeholder-nested-call.buzz
 protocol.buzz
+string-interpolation-invalid-object-init.buzz
 terminal-break-unreachable.buzz
 terminal-continue-unreachable.buzz
 terminal-if-unreachable.buzz

@@ -1,0 +1,5 @@
+// The floor: a program that does nothing. Both engines pay process spawn, load and
+// compile on every run here, so this row is what the others should be read net of.
+fun main(_: [str]) > int {
+    return 0;
+}

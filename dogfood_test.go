@@ -23,7 +23,6 @@ package magus_test
 // careful reader would notice.
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -70,17 +69,17 @@ type hookSettings struct {
 // TestDogfoodedHookInvokesTheTemplate keeps this repository honest: its own
 // guard must run the same file a reader downloads, not a copy that can drift.
 //
-// The config it reads is per-developer and deliberately untracked - committing one
-// machine's settings.json shipped that machine's guard wiring to every clone - so this
-// runs for whoever wired their own hooks and skips in a fresh clone and in CI, where
-// there is no dogfooded config to check. The docs-versus-template drift this file exists
-// to prevent is still gated unconditionally by TestHookTemplatesAreEmbeddedInTheGuide.
+// The config is TRACKED, so its absence is a failure rather than a skip. It used to be
+// per-developer, on the theory that committing one machine's settings.json would ship that
+// machine's wiring everywhere - true of a config naming an absolute path, false of this
+// one, which names only a repo-relative script that resolves magus from PATH itself.
+//
+// The skip is what made the change worth making: it fired in every fresh clone and in CI,
+// so the one test that checks this repo's own guard wiring had effectively never run. An
+// absent guard and a passing suite is the combination worth refusing.
 func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 	raw, err := os.ReadFile(dogfoodedHookConfig)
-	if errors.Is(err, os.ErrNotExist) {
-		t.Skipf("%s is untracked per-developer wiring; no dogfooded config to check", dogfoodedHookConfig)
-	}
-	require.NoError(t, err, "read %s", dogfoodedHookConfig)
+	require.NoError(t, err, "read %s - it is tracked, so a missing one means this checkout has no guard wired", dogfoodedHookConfig)
 
 	var cfg hookSettings
 	require.NoError(t, json.Unmarshal(raw, &cfg), "parse %s", dogfoodedHookConfig)

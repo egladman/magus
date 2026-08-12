@@ -68,6 +68,15 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 export fun format(ctx: magus\Context, args: [str]) > void {
+    // Declared because the markdown spell is NOT in this project's spell list - the
+    // dprint OP is imported on its own, so the spell's `**/*.md` claim never joins
+    // these sources. Without this the cache key does not move when only markdown
+    // changes, and format:rw replays a pass without running dprint at all. Same fix,
+    // same reason, as libs/gopherbuzz.
+    //
+    // The glob mirrors this project's dprint.json `includes` (./**/*.md); keep the two
+    // in step.
+    ctx.readsFiles("**/*.md");
     ctx.needs(generate);
     go["go-fmt"](ctx);
     go["go-mod-tidy"](ctx);

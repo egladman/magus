@@ -1,0 +1,12 @@
+// A closure assigning to a captured local: capture is by reference, so every
+// read and write goes through one shared cell.
+fun main(_: [str]) > int {
+    var sum = 0;
+    final add = fun (n: int) > void { sum = sum + n; };
+    var i = 0;
+    while (i < 1000000) {
+        add(i);
+        i = i + 1;
+    }
+    return if (sum == 499999500000) 0 else 1;
+}

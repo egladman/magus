@@ -62,7 +62,19 @@ guard() {
 # verdict, never merely because it exited non-zero. This surface only advises today, so a
 # blocking exit cannot reach it - the shapes stay identical so neither file grows a
 # behavior the other lacks.
-verdict=$(guard --host "$GUARD_HOST" --session "$session" 2>/dev/null) || {
-  [ -n "$verdict" ] || verdict=$(guard 2>/dev/null)
-}
+verdict=$(guard --host "$GUARD_HOST" --session "$session" 2>/dev/null)
+status=$?
+if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
+  verdict=$(guard 2>/dev/null)
+  status=$?
+fi
+
+# A pass and a broken guard both render nothing; see magus-guard-command.sh for why
+# telling them apart matters. Kept identical here so neither surface grows a behavior
+# the other lacks - the difference is only that this one has no default message,
+# because for most hosts an empty response on this surface already means "allow".
+if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
+  [ -n "$GUARD_FAILED_RESPONSE" ] && printf '%s' "$GUARD_FAILED_RESPONSE"
+  exit 0
+fi
 printf '%s' "$verdict"
