@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2122,
-  "edge_count": 5066,
+  "edge_count": 5069,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -25435,6 +25435,14 @@
       "provenance": "cmd/magus/skills/magus-query/SKILL.md"
     },
     {
+      "source": "doc:cmd/magus/skills/magus-query/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "cmd/magus/skills/magus-query/SKILL.md"
+    },
+    {
       "source": "doc:cmd/magus/skills/magus-run/SKILL.md",
       "target": "doc:docs/reference/manpage/magus-affected.md",
       "relation": "references",
@@ -37883,6 +37891,14 @@
       "provenance": "evals/fixtures/full/.claude/skills/magus-query/SKILL.md"
     },
     {
+      "source": "doc:evals/fixtures/full/.claude/skills/magus-query/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-query/SKILL.md"
+    },
+    {
       "source": "doc:evals/fixtures/full/.claude/skills/magus-run/SKILL.md",
       "target": "doc:docs/reference/manpage/magus-affected.md",
       "relation": "references",
@@ -38029,6 +38045,14 @@
     {
       "source": "doc:evals/fixtures/simple/.claude/skills/magus-query/SKILL.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/simple/.claude/skills/magus-query/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,

@@ -434,3 +434,64 @@ func TestShortRevision(t *testing.T) {
 		})
 	}
 }
+
+// TestSymbolOccurrencesReportsACorruptIndexAsAGap is the completeness half of the
+// occurrence read. An index that exists but will not decode contributes no sites, and
+// dropping it quietly would present a short list under a verdict saying magus searched
+// everywhere - the exact failure a rewrite driven off that list cannot survive.
+//
+// Note what this does NOT change: TestSymbolGapsTreatsCorruptIndexAsPresent still pins the
+// probe's Stat-only behavior. The trade recorded there is about not paying a full decode on
+// every empty query; this path has already decoded, so recording the failure here costs
+// nothing the probe was protecting.
+func TestSymbolOccurrencesReportsACorruptIndexAsAGap(t *testing.T) {
+	root := t.TempDir()
+	cacheDir := filepath.Join(root, ".magus")
+	path := symbols.IndexPath(cacheDir, filepath.Join(root, "pkg/a"))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte("not a protobuf"), 0o644))
+
+	projects, spells := goWorkspace("pkg/a")
+	got := symbolOccurrences(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells), "gomod example.com/a Foo#")
+
+	assert.Empty(t, got.Files, "a corrupt index yields no sites")
+	require.Len(t, got.Unreadable, 1, "and the hole must be recorded, not swallowed")
+	assert.Equal(t, "pkg/a", got.Unreadable[0].Project.Path)
+	assert.Equal(t, "does not decode", got.Unreadable[0].Detail)
+}
+
+// TestSymbolOccurrencesLeavesAnUnbuiltIndexToTheProbe keeps the two reports from
+// double-counting. A never-built index is the constant case, and SymbolGaps already names
+// it from its own Stat; reporting it here as well would show the same project twice in one
+// verdict.
+func TestSymbolOccurrencesLeavesAnUnbuiltIndexToTheProbe(t *testing.T) {
+	root := t.TempDir()
+	projects, spells := goWorkspace("pkg/a") // no index written
+	got := symbolOccurrences(t.Context(), ingest(config.Config{}, root, filepath.Join(root, ".magus"), projects, spells), "gomod example.com/a Foo#")
+
+	assert.Empty(t, got.Files)
+	assert.Empty(t, got.Unreadable, "not-built belongs to SymbolGaps, which reports it already")
+}
+
+// TestSymbolOccurrencesReadsAGoodIndex is the contrast that keeps the two tests above
+// honest: a decodable index reports its sites and no gap at all.
+func TestSymbolOccurrencesReadsAGoodIndex(t *testing.T) {
+	root := t.TempDir()
+	cacheDir := filepath.Join(root, ".magus")
+	// The source tree is created BEFORE the index: IndexPath resolves symlinks, and on a
+	// platform where the temp root is one (macOS /var -> /private/var) a project dir that
+	// springs into existence between two IndexPath calls hashes to two different locations,
+	// so the read would look for the index somewhere it was never written.
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg/a/pkg/a"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "pkg/a/pkg/a/a.go"), []byte("Foo\n"), 0o644))
+	writeSCIP(t, symbols.IndexPath(cacheDir, filepath.Join(root, "pkg/a")))
+
+	projects, spells := goWorkspace("pkg/a")
+	got := symbolOccurrences(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells), "gomod example.com/a Foo#")
+
+	assert.Empty(t, got.Unreadable)
+	require.Len(t, got.Files, 1)
+	require.Len(t, got.Files[0].Occurrences, 1)
+	assert.Equal(t, types.SymbolOccurrenceVerified, got.Files[0].Occurrences[0].Status,
+		"the range holds Foo, so the site is editable")
+}
