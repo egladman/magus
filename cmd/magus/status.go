@@ -97,13 +97,11 @@ func status(ctx context.Context, args []string) error {
 
 	animFrame := 0
 	report := buildStatusReport(ctx, f.socket, f.symbols)
+	repaint := &inlineRepaint{w: os.Stdout, probe: tty.SystemProbe}
+	defer repaint.finish()
+	inline := opts.Format == outputText && isTTY
 	for {
-		if opts.Format == outputText && isTTY {
-			// Repaint in place. This is a plain clear, never the alternate
-			// screen buffer, so the user keeps their scrollback after quitting.
-			_ = tty.ClearScreen(os.Stdout)
-		}
-		if err := printStatus(report, opts, animFrame, f.compact); err != nil {
+		if err := paintStatusFrame(repaint, inline, report, opts, animFrame, f.compact); err != nil {
 			return err
 		}
 		if !useGrid {
@@ -135,16 +133,24 @@ func clampStatusWatch(interval time.Duration) time.Duration {
 
 // printStatus renders one status snapshot; animFrame drives the active-cell pulse (0 = static).
 func printStatus(r types.StatusReport, opts OutputOptions, animFrame int, compact bool) error {
+	return writeStatus(os.Stdout, r, opts, animFrame, compact)
+}
+
+// writeStatus renders one status frame to w. Split from printStatus so the
+// watch loop can render into a buffer and redraw it in place, rather than
+// printing straight at the terminal and having to erase the whole screen to
+// get rid of it.
+func writeStatus(w io.Writer, r types.StatusReport, opts OutputOptions, animFrame int, compact bool) error {
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, r)
 	default:
 		if compact {
-			printStatusCompact(os.Stdout, r, time.Now())
+			printStatusCompact(w, r, time.Now())
 			return nil
 		}
 		isTTY := tty.IsTerminalWriter(os.Stdout, tty.SystemProbe)
-		printStatusText(os.Stdout, r, gridEnabled(opts, isTTY), animFrame)
+		printStatusText(w, r, gridEnabled(opts, isTTY), animFrame)
 	}
 	return nil
 }
@@ -303,7 +309,7 @@ func buildCacheStatus(c config.Cache) types.CacheStatus {
 	return types.CacheStatus{Immutable: !c.WriteEnabled(), Dir: c.Dir, SizeMB: c.SizeMB}
 }
 
-func printStatusText(w *os.File, r types.StatusReport, useGrid bool, animFrame int) {
+func printStatusText(w io.Writer, r types.StatusReport, useGrid bool, animFrame int) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "telemetry")
 	fmt.Fprintf(tw, "  enabled\t%t\n", r.Telemetry.Enabled)
@@ -943,4 +949,29 @@ func printLockStatus(w io.Writer, locks []types.StatusLock) {
 			fmt.Fprintln(w, line)
 		}
 	}
+}
+
+// paintStatusFrame draws one watch frame, redrawing in place when it can.
+//
+// The fallback is the old behaviour - erase the screen and reprint - and it is
+// kept for the one case the in-place redraw genuinely cannot serve: a frame as
+// tall as the terminal, where erasing upward would walk off the top and eat the
+// transcript above. Falling back is worse than redrawing in place and much
+// better than a corrupted screen.
+func paintStatusFrame(p *inlineRepaint, inline bool, r types.StatusReport, opts OutputOptions, animFrame int, compact bool) error {
+	if !inline {
+		return printStatus(r, opts, animFrame, compact)
+	}
+	var frame strings.Builder
+	if err := writeStatus(&frame, r, opts, animFrame, compact); err != nil {
+		return err
+	}
+	if p.paint(frame.String()) {
+		return nil
+	}
+	p.lines = 0
+	if err := tty.ClearScreen(os.Stdout); err != nil {
+		return err
+	}
+	return printStatus(r, opts, animFrame, compact)
 }

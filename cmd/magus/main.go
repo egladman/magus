@@ -124,6 +124,15 @@ func runCLI() int {
 	default:
 		code = exitCodeOf(dispatchSub(res.rootCtx, res.root, res.rc, res.sub, res.subArgs))
 	}
+	// Offer the run's pinned failures for rerun or inspection, while they are
+	// still on screen. A no-op unless a run left failures on a terminal, so
+	// every other command reaches it and returns immediately.
+	//
+	// HERE rather than inside the run commands, so that rerunning a failure
+	// cannot re-enter the prompt from inside itself.
+	if err := promptFailures(res.rootCtx, res.root, cache.StderrDisplay()); err != nil {
+		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
+	}
 	cleanup()
 	return code
 }

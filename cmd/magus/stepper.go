@@ -35,7 +35,12 @@ func newStepGate() run.StepGate {
 			fmt.Fprintf(os.Stderr, "\n-> %s  (cwd: %s)\n", strings.Join(argv, " "), dir)
 			fmt.Fprintf(os.Stderr, "  [s]tep  [c]ontinue  s[k]ip  [r]epl  [a]bort: ")
 
-			restoreTTY, err := tty.MakeRaw(os.Stderr.Fd())
+			// Raw mode goes on the descriptor this READS, which is stdin. It
+			// used to go on stderr, and that only ever worked because the two
+			// normally point at the same device: with stdin redirected the
+			// terminal went raw, the first read hit EOF, and the run aborted
+			// with no explanation of why.
+			restoreTTY, err := tty.MakeRaw(os.Stdin.Fd())
 			if err != nil {
 				// Can't go raw: fall back to step-always so the user still sees commands.
 				fmt.Fprintln(os.Stderr, "(terminal unavailable, stepping)")

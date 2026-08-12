@@ -148,7 +148,15 @@ func restoreTerminal() {
 	if h != nil {
 		_ = h.Close()
 	}
+	// Give back every leased row on stderr and stop the notification band's
+	// expiry sweeper. This is the ordered teardown; the unconditional reset
+	// below is still the backstop for margins nothing here owns.
+	_ = tty.CloseStderr()
 	_ = tty.ResetScrollMargins(os.Stderr, tty.SystemProbe)
+	// And mouse reporting, for the same reason and on the same unconditional
+	// terms: a process that exits with tracking on leaves the user unable to
+	// select text in their own shell.
+	_ = tty.ResetMouseTracking(os.Stderr, tty.SystemProbe)
 }
 
 // applyDisplay configures the process-global slog logger and writes the resolved level back to globalCfg.

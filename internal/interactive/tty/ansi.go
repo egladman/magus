@@ -37,10 +37,19 @@ const (
 	// CSI pair claimed to do.
 	cursorSave    = "\x1b7"
 	cursorRestore = "\x1b8"
-	sgrFmt        = "\x1b[%sm"
-	sgrReset      = "\x1b[0m"
-	sgrBoldRed    = "\x1b[1;31m"
-	sgrDim        = "\x1b[2m"
+	// IND - index: move down one row, scrolling at the bottom margin, and leave
+	// the COLUMN alone.
+	//
+	// This is what reserves rows, rather than the "\n" it used to be. A cooked
+	// terminal has ONLCR set, so a newline is carriage-return-plus-line-feed
+	// and silently returns the caller's cursor to column 1. Region promises the
+	// caller's cursor never moves, and for a caller mid-line - a REPL holding a
+	// prompt, anything writing a partial line - that promise was broken by the
+	// one sequence meant to be invisible. IND is the VT100 original with
+	// exactly the semantics wanted here, and needs no mode to behave.
+	ind      = "\x1bD"
+	sgrFmt   = "\x1b[%sm"
+	sgrReset = "\x1b[0m"
 )
 
 // SGR parameter codes. These name the colour, not the meaning: a caller
@@ -48,11 +57,16 @@ const (
 // signal differs per surface. Shared so the codes themselves are written
 // once.
 const (
-	SGRBold        = "1"
-	SGRDim         = "2"
-	SGRRed         = "31"
-	SGRGreen       = "32"
-	SGRYellow      = "33"
+	SGRBold    = "1"
+	SGRDim     = "2"
+	SGRRed     = "31"
+	SGRGreen   = "32"
+	SGRYellow  = "33"
+	SGRBoldRed = "1;31"
+	// SGRReverse swaps foreground and background. It marks the selected row of
+	// an interactive band, and is used instead of a colour because it composes:
+	// "7;1;31" is the same red the row already had, highlighted.
+	SGRReverse     = "7"
 	SGRDimGreen    = "2;32"
 	SGRDimGrey     = "2;37"
 	SGRBrightGreen = "1;32"
@@ -70,6 +84,32 @@ func Colorize(s, sgr string) string {
 		return s
 	}
 	return fmt.Sprintf(sgrFmt, sgr) + s + sgrReset
+}
+
+// OSC 8 hyperlink framing: ESC ] 8 ; params ; URI ST ... ESC ] 8 ; ; ST.
+const (
+	osc8Fmt = "\x1b]8;;%s\x1b\\"
+	osc8End = "\x1b]8;;\x1b\\"
+)
+
+// Hyperlink makes text a real clickable link to uri, for terminals that
+// support OSC 8 - iTerm2, kitty, VTE, WezTerm, Windows Terminal - and returns
+// text unchanged for everything else.
+//
+// It is worth having where a mouse cannot reach: the reserved zone can be
+// hit-tested because magus knows where it drew, but the SCROLLING transcript
+// belongs to the terminal, and a click there is the user selecting text. A
+// hyperlink is the only way to make something up there actionable, and it
+// needs no mouse capture at all, survives into scrollback, and stays
+// copy-pasteable as plain text.
+//
+// Callers gate on [WantsHyperlinks] first; this composes the sequence and does
+// not decide whether to.
+func Hyperlink(text, uri string) string {
+	if uri == "" {
+		return text
+	}
+	return fmt.Sprintf(osc8Fmt, uri) + text + osc8End
 }
 
 // ClearScreen erases the screen and homes the cursor, the repaint a

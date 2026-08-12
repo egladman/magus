@@ -430,8 +430,7 @@ func TestPrettyHandlerErrorWritesHeadingToStickyRegion(t *testing.T) {
 
 	var buf ttyBuf
 	h := newTerminalHandler(&buf)
-	require.NotNil(t, h.region, "region should be reserved on a TTY writer")
-	require.True(t, h.region.Enabled(), "region should be enabled for 24x80 writer")
+	require.True(t, h.lease.Enabled(), "a TTY writer must be granted a band in the zone")
 
 	require.NoError(t, h.Handle(context.Background(), buildRecord(
 		"cache.error",
@@ -481,7 +480,40 @@ func TestPrettyHandlerSummaryReleasesStickyRegion(t *testing.T) {
 	// lifecycle is what this test cares about.
 	assert.Contains(t, out, "3 cached, 1 ran, 1 failed", "summary line present")
 	assert.Regexp(t, `\x1b\[\d+;\d+r`, out, "DECSTBM was set by the sticky region")
-	assert.Contains(t, out, "\x1b[r", "DECSTBM is reset on cache.summary")
+
+	// The band is HELD here rather than released, because a failure is pinned
+	// in it: releasing would erase the list at the exact moment it became
+	// actionable. Whoever offers the prompt gives the rows back, and the
+	// process exit path releases them regardless if nobody does.
+	assert.NotContains(t, out, "\x1b[r", "a band with pinned failures survives the summary")
+
+	require.NoError(t, h.ReleaseBand())
+	assert.Contains(t, buf.String(), "\x1b[r", "and the rows come back when the prompt is done")
+}
+
+// TestPrettyHandlerSummaryReleasesACleanBand is the other half: with nothing
+// pinned there is nothing to act on, so the rows go back immediately and the
+// shell prompt returns to a full-screen terminal.
+func TestPrettyHandlerSummaryReleasesACleanBand(t *testing.T) {
+	t.Parallel()
+
+	var buf ttyBuf
+	h := newTerminalHandler(&buf)
+	require.NoError(t, h.Handle(context.Background(), buildRecord(
+		"cache.pool",
+		slog.Int("capacity", 8),
+		slog.Int("running", 2),
+		slog.Int("queued", 0),
+	)), "Handle cache.pool")
+	require.NoError(t, h.Handle(context.Background(), buildRecord(
+		"cache.summary",
+		slog.Int("hits", 4),
+		slog.Int("misses", 0),
+		slog.Int("errors", 0),
+		slog.Int64("elapsed", int64(time.Second)),
+	)), "Handle cache.summary")
+
+	assert.Contains(t, buf.String(), "\x1b[r", "no failures means nothing to hold the rows for")
 }
 
 // TestPrettyHandlerCloseIsIdempotent verifies Close() can be called multiple
@@ -506,7 +538,7 @@ func TestPrettyHandlerNonTTYSkipsStickyRegion(t *testing.T) {
 
 	var buf bytes.Buffer
 	h := NewPrettyHandler(&buf, slog.LevelInfo)
-	assert.False(t, h.region.Enabled(), "region should be disabled on a non-TTY writer")
+	assert.False(t, h.lease.Enabled(), "a non-TTY writer must be granted no rows")
 
 	require.NoError(t, h.Handle(context.Background(), buildRecord(
 		"cache.error",
@@ -555,7 +587,8 @@ func TestStatusLineRender(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.want, tc.line.render(base))
+			left, _ := tc.line.render(base)
+			assert.Equal(t, tc.want, left)
 		})
 	}
 }
@@ -566,7 +599,9 @@ func TestStatusLineRenderShowsElapsed(t *testing.T) {
 	t.Parallel()
 	start := time.Now()
 	line := statusLine{capacity: 4, running: 1, start: start}
-	assert.Contains(t, line.render(start.Add(90*time.Second)), "1m30s")
+	left, elapsed := line.render(start.Add(90 * time.Second))
+	assert.Equal(t, "1m30s", elapsed, "elapsed is returned separately so the band can pin it right")
+	assert.NotContains(t, left, "1m30s", "and does not shove the counters sideways once a second")
 }
 
 // TestPrettyHandlerPoolEventPaintsTheStatusRow verifies a cache.pool
@@ -795,4 +830,169 @@ func TestHopChainUsesTheMarkersNotGuesswork(t *testing.T) {
 			assert.Equal(t, tc.want, hopChain(tc.in))
 		})
 	}
+}
+
+// TestHitFailureResolvesAClickToTheTargetThatFailed is the property that makes
+// the band actionable rather than merely visible.
+func TestHitFailureResolvesAClickToTheTargetThatFailed(t *testing.T) {
+	var buf ttyBuf
+	h := newTerminalHandler(&buf)
+	require.True(t, h.lease.Enabled())
+
+	for _, target := range []string{"build", "test"} {
+		require.NoError(t, h.Handle(context.Background(), buildRecord(
+			"cache.error",
+			slog.String("project", "api"),
+			slog.String("target", target),
+			slog.Int64("duration", int64(250*time.Millisecond)),
+			slog.String("error", "exit status 2"),
+			slog.String("ref", "out-"+target),
+		)), "Handle cache.error")
+	}
+
+	// A 6-row band on a 24-row terminal sits at rows 19-24: status on 19, then
+	// the failure ring.
+	_, ok := h.HitFailure(19)
+	assert.False(t, ok, "the status row is not a failure")
+
+	got, ok := h.HitFailure(20)
+	require.True(t, ok)
+	assert.Equal(t, "build", got.Target)
+	assert.Equal(t, "api", got.Project)
+	assert.Equal(t, "out-build", got.Ref, "the ref travels with the row, so the output is one click away")
+
+	got, ok = h.HitFailure(21)
+	require.True(t, ok)
+	assert.Equal(t, "test", got.Target)
+
+	_, ok = h.HitFailure(22)
+	assert.False(t, ok, "an empty ring slot is not a failure")
+
+	// Rows above the band belong to the scrolling transcript and the terminal's
+	// own selection.
+	for _, row := range []int{1, 15, 18} {
+		_, ok := h.HitFailure(row)
+		assert.False(t, ok, "row %d", row)
+	}
+
+	failures := h.Failures()
+	require.Len(t, failures, 2, "the keyboard path sees the same list")
+	assert.Equal(t, "build", failures[0].Target)
+	assert.Equal(t, "test", failures[1].Target)
+}
+
+// TestPrettyHandlerResetsPerRunStateAcrossRuns is the long-lived-process
+// property: this handler is per-PROCESS, but everything it shows is per-RUN.
+//
+// Anything that outlives a single run - a TUI left open, the daemon - drives
+// more than one through the same handler, and without the split the second run
+// reports the first one's failures and a clock that started before it did.
+func TestPrettyHandlerResetsPerRunStateAcrossRuns(t *testing.T) {
+	t.Parallel()
+
+	var buf ttyBuf
+	h := newTerminalHandler(&buf)
+	ctx := context.Background()
+
+	require.NoError(t, h.Handle(ctx, buildRecord("cache.scope",
+		slog.String("label", "api"), slog.String("source", "vcs"))))
+	require.NoError(t, h.Handle(ctx, buildRecord("cache.error",
+		slog.String("project", "api"), slog.String("target", "build"),
+		slog.Int64("duration", int64(time.Second)), slog.String("error", "boom"))))
+	require.NoError(t, h.Handle(ctx, buildRecord("cache.summary",
+		slog.Int("hits", 0), slog.Int("misses", 1), slog.Int("errors", 1),
+		slog.Int64("elapsed", int64(time.Second)))))
+	require.Len(t, h.Failures(), 1)
+	firstStart := h.status.start
+	require.False(t, firstStart.IsZero())
+
+	// A second run through the SAME handler.
+	require.NoError(t, h.Handle(ctx, buildRecord("cache.scope",
+		slog.String("label", "api"), slog.String("source", "vcs"))))
+
+	assert.Empty(t, h.Failures(), "the previous run's failures must not carry over")
+	assert.Zero(t, h.status.failed, "nor its counters")
+	assert.True(t, h.status.start.IsZero(), "nor its clock, or the second run reports the first one's elapsed time")
+
+	require.NoError(t, h.Handle(ctx, buildRecord("cache.hit",
+		slog.String("project", "api"), slog.String("target", "build"),
+		slog.Int64("duration", int64(time.Millisecond)))))
+	assert.Equal(t, 1, h.status.cached)
+	assert.Equal(t, 0, h.status.failed)
+}
+
+// TestNoEscapeSequencesEverReachAPipe is the CI persona's one demand, as a
+// gate rather than a promise.
+//
+// Everything this package gained - a pinned band, notifications, a selection
+// highlight, hyperlinked refs - emits escape sequences, and every one of them
+// is supposed to be gated on the writer being a terminal. Gates are easy to add
+// and easy to forget, and the failure mode is not subtle: a CI log full of
+// \x1b[2m garbage, in the output people read when something is already broken.
+//
+// So this asserts the whole class at once rather than one gate at a time: drive
+// a realistic failing run through a writer with no descriptor and require that
+// not one escape byte comes out.
+func TestNoEscapeSequencesEverReachAPipe(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer // no Fd(), so never a terminal
+	h := NewPrettyHandler(&buf, slog.LevelInfo)
+	ctx := context.Background()
+
+	for _, rec := range []slog.Record{
+		buildRecord("cache.scope", slog.String("label", "api"), slog.String("source", "vcs")),
+		buildRecord("cache.pool", slog.Int("capacity", 8), slog.Int("running", 3), slog.Int("queued", 1)),
+		buildRecord("lock.waiting", slog.String("project", "api"),
+			slog.String("holder_pid", "4211"), slog.String("holder_command", "magus run build")),
+		buildRecord("lock.acquired"),
+		buildRecord("cache.hit", slog.String("project", "api"), slog.String("target", "build"),
+			slog.Int64("duration", int64(time.Millisecond))),
+		buildRecord("cache.miss", slog.String("project", "api"), slog.String("target", "test"),
+			slog.Int64("duration", int64(time.Second))),
+		buildRecord("cache.error", slog.String("project", "api"), slog.String("target", "test"),
+			slog.Int64("duration", int64(2*time.Second)), slog.String("error", "exit status 1"),
+			slog.String("ref", "out-7c21"), slog.String("log", "/tmp/magus/logs/api/abc.log")),
+		buildRecord("cache.warn", slog.String("msg", "something worth saying")),
+		buildRecord("cache.summary", slog.Int("hits", 1), slog.Int("misses", 1),
+			slog.Int("errors", 1), slog.Int64("elapsed", int64(3*time.Second))),
+	} {
+		require.NoError(t, h.Handle(ctx, rec), rec.Message)
+	}
+
+	out := buf.String()
+	require.NotEmpty(t, out, "the run must still be reported, just plainly")
+	assert.NotContains(t, out, "\x1b", "no escape byte may reach a writer that is not a terminal")
+
+	// And the content survives the plainness: a CI log is the copy people read
+	// when something is already broken, so it has to carry the actionable bits.
+	assert.Contains(t, out, "exit status 1", "the cause")
+	assert.Contains(t, out, "out-7c21", "the output ref")
+	assert.Contains(t, out, "magus query output out-7c21", "the command that retrieves it")
+	assert.Contains(t, out, "1 cached, 1 ran, 1 failed", "the summary")
+}
+
+// TestBandHonoursNoColor closes a gap the non-TTY audit exposed: term.notify
+// already stripped styling under NO_COLOR while the handler's own band did not,
+// so the same run answered the same question two ways.
+func TestBandHonoursNoColor(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	var buf ttyBuf
+	h := newTerminalHandler(&buf)
+	ctx := context.Background()
+	require.NoError(t, h.Handle(ctx, buildRecord("cache.error",
+		slog.String("project", "api"), slog.String("target", "build"),
+		slog.Int64("duration", int64(time.Second)), slog.String("error", "boom"))))
+
+	out := buf.String()
+	require.Contains(t, out, "[fail] api build", "the failure is still pinned, just not coloured")
+	assert.NotContains(t, out, "\x1b[1;31m", "NO_COLOR has no exception for the parts we like")
+	assert.NotContains(t, out, "\x1b[2m")
+
+	// The selection survives, because it is not decoration: it says which row a
+	// keypress acts on, and reverse video is not a colour.
+	buf.Reset()
+	h.SetSelection(0)
+	assert.Contains(t, buf.String(), "\x1b[7m", "the selection must stay legible under NO_COLOR")
 }

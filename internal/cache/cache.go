@@ -521,6 +521,10 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 			// directly above the cause line.
 			slog.String("error", types.CauseText(runErr)),
 			slog.String("ref", ref),
+			// The captured log's path on disk. Carried so the pretty handler can
+			// make the ref a real hyperlink without resolving anything: a
+			// file:// link needs no daemon running, so it cannot be dead.
+			slog.String("log", lp),
 		)
 		if rc.onError != nil {
 			rc.onError(runErr)
@@ -559,6 +563,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				slog.Int64("duration", int64(result.Duration)),
 				slog.String("error", types.CauseText(snapErr)),
 				slog.String("ref", ref),
+				slog.String("log", lp),
 			)
 			if rc.onError != nil {
 				rc.onError(snapErr)

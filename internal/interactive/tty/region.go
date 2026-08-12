@@ -17,9 +17,14 @@ const (
 )
 
 // Region pins the bottom rows of a terminal as a zone that does not
-// scroll, so failures written there stay on screen while ordinary
-// output continues to scroll above. The zone is established with
-// DECSTBM scroll margins.
+// scroll, so what is drawn there stays on screen while ordinary output
+// continues to scroll above. The zone is established with DECSTBM scroll
+// margins.
+//
+// Callers do not build one directly: [Zone] owns the terminal's bottom rows
+// for the whole process and hands out bands of them as leases. A second
+// Region on the same terminal would set its own margins from its own row
+// arithmetic, and the two would overwrite each other.
 //
 // The contract is additive, never destructive:
 //   - Scrollback above the region is preserved; selection and copy
@@ -27,8 +32,9 @@ const (
 //   - Release restores the terminal. A panic or interrupted run leaves
 //     the terminal in its default state, never in an alternate-screen
 //     mode the user cannot escape.
-//   - On any non-TTY (pipe, file, CI log, `script`), every method
-//     degrades to plain line output so the caller does not branch.
+//   - On any non-TTY (pipe, file, CI log, `script`), every method is inert,
+//     so the caller does not branch. A repainted view replayed line by line
+//     into a pipe would be noise; the caller decides what to print instead.
 //   - THE CALLER'S CURSOR NEVER MOVES. Reserve makes room without
 //     shifting it relative to the caller's own text, every paint saves
 //     and restores it inside one write, and Release does not reposition
@@ -53,8 +59,10 @@ const (
 // difference between a useful status area and the full-screen takeovers
 // some build tools use.
 //
-// A Region is not safe for concurrent use; callers serialise their own
-// writes (the cache's pretty handler holds its mutex across a record).
+// A Region is not safe for concurrent use. [Zone] is the boundary that makes
+// it so: every access to the Region it owns goes through the zone's mutex,
+// because the consumers leasing from it (a run's pool, a notification
+// sweeper, a daemon job) are on different threads.
 type Region struct {
 	w      io.Writer
 	probe  Probe
@@ -72,27 +80,22 @@ type Region struct {
 	// line is waste, and a failed mid-run query would otherwise drive
 	// the row arithmetic negative.
 	width, termHeight int
-	// cursorRow is the absolute terminal row the next line lands on. It
-	// advances per line and wraps back to the top of the failure zone, so
-	// the newest failure overwrites the oldest.
-	cursorRow int
-	// statusActive records that SetStatus has claimed the region's first
-	// row. Until it does, failure lines use the whole region; afterwards
-	// they start one row lower. It latches on first use rather than being
-	// declared up front so a caller that never shows a status line does
-	// not pay a blank row for the option.
-	statusActive bool
 	// buf composes one line so it reaches the terminal as a single
 	// Write. Keeps cursor positioning atomic and avoids per-byte flicker.
 	buf []byte
+	// painted is the last frame [Region.Render] drew, so the next one can skip
+	// rows that did not change. Nil means "nothing on screen is known", which
+	// is the state after any repaint of the zone by other means (Reserve
+	// clears it, a resize re-reserves), and forces a full redraw.
+	painted []Row
 }
 
 // NewRegion returns a Region that will pin height rows at the bottom of
 // the terminal behind w, measured through p.
 //
-// Nothing is written to w here. The reservation happens on Reserve, or
-// on the first WriteLine, so a run that never fails never touches the
-// user's terminal. Enabled reports whether the reservation will be
+// Nothing is written to w here. The reservation happens on Reserve, or on
+// the first Render, so a run that never draws never touches the user's
+// terminal. Enabled reports whether the reservation will be
 // attempted at all: it is false when w has no descriptor, when p says
 // the descriptor is not a terminal, when the terminal is too small to
 // host height rows alongside a useful scrolling area, or when the size
@@ -105,7 +108,7 @@ func NewRegion(w io.Writer, height int, p Probe) *Region {
 		return r
 	}
 	fd, ok := Fd(w)
-	if !ok || !p.IsTerminal(fd) {
+	if !ok || !CanRender(w, p) {
 		return r
 	}
 	width, termHeight, err := p.Size(fd)
@@ -124,13 +127,13 @@ func fits(width, termHeight, height int) bool {
 	return width >= minUsefulWidth && termHeight >= minUsefulHeight+height
 }
 
-// Enabled reports whether this Region will drive the terminal. When
-// false, WriteLine emits plain lines and Reserve and Release do nothing.
+// Enabled reports whether this Region will drive the terminal. When false,
+// Render drops its rows and Reserve and Release do nothing.
 func (r *Region) Enabled() bool { return r.enabled }
 
 // Reserve sets the scroll margins so the bottom rows stop scrolling.
-// Idempotent, and WriteLine calls it for you, so callers do not have to
-// pair them.
+// Idempotent, and Render calls it for you, so callers do not have to pair
+// them.
 //
 // The terminal is re-measured here rather than trusting the dimensions
 // from NewRegion: the window may have been resized in between, and
@@ -140,8 +143,8 @@ func (r *Region) Enabled() bool { return r.enabled }
 //
 // It leaves the caller's cursor exactly where it found it, relative to the
 // caller's own output. That is the whole contract this type keeps (see
-// [Region]), and it is what the opening newlines are for: printing height
-// blank lines and stepping back up over them guarantees height rows exist
+// [Region]), and it is what the opening index sequences are for: moving down
+// height rows and stepping back up over them guarantees height rows exist
 // below the cursor without moving the cursor relative to the text. When the
 // cursor was already at the bottom, the screen scrolls and the transcript
 // slides up out of the way; when it was mid-screen, nothing scrolls and the
@@ -165,8 +168,9 @@ func (r *Region) Reserve() error {
 
 	r.buf = r.buf[:0]
 	// Make room first, before any margin is set, so the scroll is an ordinary
-	// one the terminal performs over the whole screen.
-	r.buf = append(r.buf, strings.Repeat("\n", r.height)...)
+	// one the terminal performs over the whole screen. IND rather than a
+	// newline, so the caller's column survives; see [ind].
+	r.buf = append(r.buf, strings.Repeat(ind, r.height)...)
 	r.buf = append(r.buf, fmt.Sprintf(cuuFmt, r.height)...)
 	// Save AFTER making room and BEFORE the margins: DECSTBM homes the cursor
 	// in some terminals, so a save afterwards would record row 1.
@@ -182,7 +186,10 @@ func (r *Region) Reserve() error {
 		return err
 	}
 	r.open = true
-	r.cursorRow = r.failureFirstRow()
+	// The zone was just erased, so nothing Render believes is on screen still
+	// is. Dropping the cache here is what keeps the diff honest across a
+	// resize, which re-reserves.
+	r.painted = nil
 	return nil
 }
 
@@ -206,66 +213,232 @@ func (r *Region) paint(row int, body func()) error {
 	return err
 }
 
-// WriteLine renders msg as one line inside the region, in bold red so a
-// failure reads distinctly from the scrolling output above. The line is
-// clipped to the terminal width, and the colour is closed so the next
-// line cannot inherit it.
+// Align says which edge a [Span] is laid out from.
+type Align int
+
+const (
+	// AlignLeft packs a span after the previous left-aligned one, from column 1.
+	AlignLeft Align = iota
+	// AlignRight packs a span against the right edge, after any other
+	// right-aligned spans on the row.
+	AlignRight
+)
+
+// Span is one styled, aligned segment of a row.
 //
-// Once the region is full the cursor wraps to the top, so the newest
-// failures replace the oldest. A disabled Region writes msg plainly to
-// the underlying writer, which is what makes a single call path serve
-// both TTY and piped runs.
+// Spans exist because a row often carries two unrelated things - what is
+// happening on the left, and how to get out of it on the right - and a single
+// string cannot express that. The alignment is resolved at PAINT time rather
+// than by the caller, because only the region knows the terminal's width, and a
+// caller padding to a width it guessed is a caller that is wrong after the
+// first resize.
+type Span struct {
+	Text  string
+	Style string
+	Align Align
+}
+
+// Row is one line of a whole-zone repaint.
 //
-// The name is WriteLine, not Write, because Region deliberately does not
-// implement io.Writer: the cursor accounting depends on one call being
-// exactly one line.
-func (r *Region) WriteLine(msg string) error {
+// Text and Style are shorthand for the overwhelmingly common single-span row;
+// Spans is the general form and wins when both are set. They are not two code
+// paths - [Row.spans] normalises the shorthand into a one-element list and the
+// renderer only ever sees spans - so the convenience cannot drift from the
+// general case.
+type Row struct {
+	Text  string
+	Style string
+	Spans []Span
+}
+
+// spans normalises a Row into the form the renderer works with.
+func (r Row) spans() []Span {
+	if len(r.Spans) > 0 {
+		return r.Spans
+	}
+	if r.Text == "" {
+		return nil
+	}
+	return []Span{{Text: r.Text, Style: r.Style}}
+}
+
+// equal reports whether two rows would paint identically. Row carries a slice,
+// so the frame diff in [Region.Render] cannot use ==.
+func (r Row) equal(o Row) bool {
+	a, b := r.spans(), o.spans()
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// layout composes one row's spans into the bytes for a terminal `width` wide.
+//
+// RIGHT-ALIGNED SPANS ARE LAID OUT FIRST AND KEPT; the left side is clipped to
+// whatever remains. That order is the policy, not an implementation detail: the
+// things that sit on the right are the ones that must not vanish when the
+// window is narrow - the way out of a prompt, the state of a run - while the
+// left is a description that degrades usefully. Doing it the other way round is
+// how an 80-column terminal ends up hiding the only key that closes a prompt.
+func layout(spans []Span, width int) []byte {
+	if width <= 0 {
+		return nil
+	}
+	var left, right []Span
+	for _, s := range spans {
+		if s.Align == AlignRight {
+			right = append(right, s)
+			continue
+		}
+		left = append(left, s)
+	}
+
+	rightWidth := 0
+	for _, s := range right {
+		rightWidth += len(s.Text)
+	}
+	if rightWidth > width {
+		rightWidth = width
+	}
+
+	var b []byte
+	used := 0
+	budget := width - rightWidth
+	for _, s := range left {
+		if used >= budget {
+			break
+		}
+		text := Clip(s.Text, budget-used)
+		if text == "" {
+			continue
+		}
+		b = appendStyled(b, text, s.Style)
+		used += len(text)
+	}
+	// A gap only exists when something is aligned right; otherwise the row ends
+	// where its text ends and no trailing spaces are written.
+	if rightWidth > 0 {
+		for ; used < width-rightWidth; used++ {
+			b = append(b, ' ')
+		}
+		for _, s := range right {
+			text := Clip(s.Text, width-used)
+			if text == "" {
+				continue
+			}
+			b = appendStyled(b, text, s.Style)
+			used += len(text)
+		}
+	}
+	return b
+}
+
+// appendStyled writes text wrapped in sgr, closing it so the next span cannot
+// inherit it. An empty sgr writes the text bare rather than an empty sequence.
+func appendStyled(b []byte, text, sgr string) []byte {
+	if sgr == "" {
+		return append(b, text...)
+	}
+	b = append(b, fmt.Sprintf(sgrFmt, sgr)...)
+	b = append(b, text...)
+	return append(b, sgrReset...)
+}
+
+// Render repaints the ENTIRE reserved zone from rows, in a single write.
+//
+// It is the counterpart to [Region.WriteLine], for content that is a VIEW
+// rather than a record. WriteLine appends into a ring, so a line, once
+// written, stays until something newer displaces it; that is right for
+// failures and wrong for anything that can disappear on its own. Render draws
+// the whole zone every time, which is what lets an entry vanish: rows past the
+// end of the slice are erased, so a list that shrank leaves no residue behind
+// it.
+//
+// Rows beyond the zone's height are DROPPED rather than scrolled. The caller
+// owns the choice of which entries fit, because only it knows whether the
+// newest or the oldest is the one worth keeping.
+//
+// A disabled Region drops the call entirely rather than printing the rows, for
+// the reason [Region.SetStatus] gives: a repainted view replayed line by line
+// into a pipe or a CI log is noise, not information.
+//
+// A Region is driven EITHER by WriteLine/SetStatus or by Render, not both:
+// they keep separate ideas of which rows are spoken for, and interleaving them
+// makes each overwrite the other's.
+func (r *Region) Render(rows []Row) error {
 	if !r.enabled {
-		_, err := fmt.Fprintln(r.w, msg)
-		return err
+		return nil
 	}
 	if err := r.Reserve(); err != nil {
-		// Reserve failed mid-run. Fall back to plain output so the
-		// failure still reaches the user, and report why.
-		if _, werr := fmt.Fprintln(r.w, msg); werr != nil {
-			return werr
-		}
 		return err
 	}
 	if !r.enabled {
-		// Reserve disabled the region (the window shrank).
-		_, err := fmt.Fprintln(r.w, msg)
-		return err
+		return nil
 	}
 	if err := r.reflow(); err != nil {
 		return err
 	}
 	if !r.enabled {
-		// The window shrank past what the region needs.
-		_, err := fmt.Fprintln(r.w, msg)
-		return err
+		return nil
 	}
 
-	// paint addresses the row and restores the cursor; without an explicit row
-	// each write would resume wherever the last left off and every line in the
-	// region would run together.
-	if err := r.paint(r.cursorRow, func() {
-		r.buf = append(r.buf, sgrBoldRed...)
-		// EL from column 1 clears the whole row, so a short message cannot
-		// leave a longer predecessor's tail behind it.
+	// One write for the whole frame, bracketed by a single save/restore: a
+	// per-row write would let a concurrent caller's output land between two
+	// rows, and would leave the cursor parked mid-zone in between.
+	//
+	// Only CHANGED rows are addressed and redrawn. A zone repainted on a timer
+	// - a status line ticking, a notification expiring - is mostly unchanged
+	// from frame to frame, and rewriting every row costs bytes on the wire and
+	// shows as flicker where the terminal repaints faster than it composites.
+	// That is affordable for a six-row failure region and is not for a tall
+	// inline viewport, which is the direction this is built for.
+	r.buf = r.buf[:0]
+	r.buf = append(r.buf, cursorSave...)
+	changed := 0
+	for i := range r.height {
+		var row Row
+		if i < len(rows) {
+			row = rows[i]
+		}
+		if i < len(r.painted) && r.painted[i].equal(row) {
+			continue
+		}
+		changed++
+		r.buf = append(r.buf, fmt.Sprintf(cupFmt, r.firstRow()+i, 1)...)
+		// EL from column 1 erases the whole row, so a row that is now shorter
+		// than its predecessor - or empty - cannot leave a tail behind.
 		r.buf = append(r.buf, el...)
-		r.buf = append(r.buf, Clip(msg, r.width-1)...)
-		r.buf = append(r.buf, sgrReset...)
-	}); err != nil {
-		return err
+		r.buf = append(r.buf, layout(row.spans(), r.width-1)...)
 	}
+	r.buf = append(r.buf, cursorRestore...)
 
-	r.cursorRow++
-	if r.cursorRow > r.lastRow() {
-		// Wrap to the top of the failure zone so the newest failure
-		// overwrites the oldest. Wrapping only past the final row means
-		// the bottom row is used before reuse begins.
-		r.cursorRow = r.failureFirstRow()
+	// Record the frame BEFORE the write is attempted only if it succeeds: a
+	// partial write leaves the screen in a state neither frame describes, so
+	// the cache is dropped and the next Render redraws in full.
+	if changed > 0 {
+		if _, err := r.w.Write(r.buf); err != nil {
+			r.painted = nil
+			return err
+		}
+	}
+	// Padded to the zone's full height, so a frame with fewer rows than the
+	// zone still records the blanks it drew and the next frame does not
+	// needlessly rewrite them.
+	if cap(r.painted) < r.height {
+		r.painted = make([]Row, r.height)
+	}
+	r.painted = r.painted[:r.height]
+	for i := range r.height {
+		if i < len(rows) {
+			r.painted[i] = rows[i]
+			continue
+		}
+		r.painted[i] = Row{}
 	}
 	return nil
 }
@@ -300,23 +473,12 @@ func (r *Region) Release() error {
 		return err
 	}
 	r.open = false
-	r.statusActive = false
 	return nil
 }
 
-// firstRow and lastRow bound the reserved zone, in absolute terminal
-// rows, using the dimensions cached at Reserve.
+// firstRow is the top of the reserved zone, in absolute terminal rows, using
+// the dimensions cached at Reserve.
 func (r *Region) firstRow() int { return r.termHeight - r.height + 1 }
-func (r *Region) lastRow() int  { return r.termHeight }
-
-// failureFirstRow is the top row available to WriteLine. It sits one
-// below firstRow once a status line has claimed the region's first row.
-func (r *Region) failureFirstRow() int {
-	if r.statusActive {
-		return r.firstRow() + 1
-	}
-	return r.firstRow()
-}
 
 // reflow re-measures the terminal and re-applies the scroll margins when
 // the window has been resized since the region was reserved.
@@ -355,55 +517,6 @@ func (r *Region) reflow() error {
 		return err
 	}
 	return nil
-}
-
-// SetStatus pins msg to the region's first row, redrawing it in place.
-//
-// It is for a live counter the reader watches rather than a record they
-// scroll back to: a concurrency pool's occupancy, for instance. Failure
-// lines written by WriteLine sit below it and are never overwritten by
-// it. The status row is dim, not red, so it reads as ambient state next
-// to the failures it sits above.
-//
-// The first call claims the row, which shrinks the failure zone by one.
-// Call it before the first WriteLine (a run reports pool state as soon
-// as work starts, so this holds in practice); calling it later costs the
-// oldest visible failure line.
-//
-// A disabled Region drops the message entirely rather than printing it:
-// a status line is a repainted view, and replaying every update into a
-// pipe or a CI log would be noise, not information.
-func (r *Region) SetStatus(msg string) error {
-	if !r.enabled {
-		return nil
-	}
-	if err := r.Reserve(); err != nil {
-		return err
-	}
-	if !r.enabled {
-		return nil
-	}
-	if err := r.reflow(); err != nil {
-		return err
-	}
-	if !r.enabled {
-		return nil
-	}
-	if !r.statusActive {
-		r.statusActive = true
-		// The failure zone just lost its top row; move the write cursor
-		// out of the status row if it was still parked there.
-		if r.cursorRow < r.failureFirstRow() {
-			r.cursorRow = r.failureFirstRow()
-		}
-	}
-
-	return r.paint(r.firstRow(), func() {
-		r.buf = append(r.buf, sgrDim...)
-		r.buf = append(r.buf, el...)
-		r.buf = append(r.buf, Clip(msg, r.width-1)...)
-		r.buf = append(r.buf, sgrReset...)
-	})
 }
 
 // ellipsis marks a clipped line. Three ASCII dots rather than U+2026
