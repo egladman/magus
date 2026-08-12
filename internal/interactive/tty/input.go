@@ -31,6 +31,12 @@ const (
 	KeyRight
 	KeyCtrlC
 	KeyCtrlD
+	// KeyCtrlN and KeyCtrlP are the emacs-style down/up an incremental
+	// selector is expected to answer to, by anyone who has used one.
+	KeyCtrlN
+	KeyCtrlP
+	// KeyCtrlU clears a line of input.
+	KeyCtrlU
 )
 
 // MouseButton names which button an [Event] carries. Wheel movement arrives as
@@ -52,6 +58,9 @@ type EventKind int
 const (
 	EventKey EventKind = iota
 	EventMouse
+	// eventCursor is a terminal REPLY, not something the user did: the answer
+	// to a cursor-position query. It never reaches a Read caller.
+	eventCursor
 )
 
 // Event is one thing the user did.
@@ -105,6 +114,9 @@ const (
 	mouseTrackAny   = "\x1b[?1003h\x1b[?1006h"
 	mouseTrackClick = "\x1b[?1000h\x1b[?1006h"
 	mouseTrackOff   = "\x1b[?1006l\x1b[?1003l\x1b[?1000l"
+	// DSR 6 - ask the terminal to report the cursor position, answered with
+	// CPR ("ESC [ row ; col R").
+	dsrCursor = "\x1b[6n"
 )
 
 // mouseTrackFor picks how much of the mouse to ask for.
@@ -167,9 +179,14 @@ func ResetMouseTracking(w io.Writer, p Probe) error {
 // Not safe for concurrent use: one goroutine reads.
 type Input struct {
 	r       *bufio.Reader
+	in      *os.File
 	out     io.Writer
 	restore func() error
 	closed  bool
+	// pending holds user events decoded while waiting for a query reply. A
+	// keystroke that arrives mid-query is still a keystroke and must not be
+	// dropped just because it overtook the terminal's answer.
+	pending []Event
 
 	// lastPress is the previous press, for timing a double click.
 	lastPress  time.Time
@@ -206,7 +223,7 @@ func OpenInput(in *os.File, out io.Writer, p Probe) (*Input, error) {
 		_ = restore()
 		return nil, fmt.Errorf("tty: enable mouse reporting: %w", err)
 	}
-	return &Input{r: bufio.NewReader(in), out: out, restore: restore, now: time.Now}, nil
+	return &Input{r: bufio.NewReader(in), in: in, out: out, restore: restore, now: time.Now}, nil
 }
 
 // Close turns mouse reporting off and restores the terminal. Idempotent and
@@ -236,6 +253,37 @@ func (i *Input) Close() error {
 // something else meanwhile runs this in its own goroutine and closes the Input
 // to release it.
 func (i *Input) Read() (Event, error) {
+	for {
+		ev, err := i.read()
+		if err != nil {
+			return Event{}, err
+		}
+		if ev.Kind == eventCursor {
+			// A reply nobody asked for, or one that outlived its query. It is
+			// not input; drop it rather than handing a caller a phantom key.
+			continue
+		}
+		return ev, nil
+	}
+}
+
+// read returns the next event, taking queued ones first. Includes replies;
+// callers of the exported Read never see those.
+func (i *Input) read() (Event, error) {
+	if len(i.pending) > 0 {
+		ev := i.pending[0]
+		i.pending = i.pending[1:]
+		return ev, nil
+	}
+	return i.decode()
+}
+
+// decode reads one event straight off the terminal, bypassing the queue.
+//
+// The distinction matters exactly once, and getting it wrong hangs: a caller
+// that queues what it reads must not read from the queue, or it re-consumes
+// its own output forever. [Input.CursorPosition] is that caller.
+func (i *Input) decode() (Event, error) {
 	b, err := i.r.ReadByte()
 	if err != nil {
 		return Event{}, err
@@ -277,6 +325,12 @@ func (i *Input) decodeByte(b byte) (Event, error) {
 		return Event{Kind: EventKey, Key: KeyCtrlC}, nil
 	case 0x04:
 		return Event{Kind: EventKey, Key: KeyCtrlD}, nil
+	case 0x0e:
+		return Event{Kind: EventKey, Key: KeyCtrlN}, nil
+	case 0x10:
+		return Event{Kind: EventKey, Key: KeyCtrlP}, nil
+	case 0x15:
+		return Event{Kind: EventKey, Key: KeyCtrlU}, nil
 	}
 	if b < 0x20 {
 		return Event{Kind: EventKey, Key: KeyUnknown}, nil
@@ -315,14 +369,81 @@ func (i *Input) decodeCSI() (Event, error) {
 	case 'D':
 		return Event{Kind: EventKey, Key: KeyLeft}, nil
 	}
-	// Some other sequence. Consume to its final byte so the next Read starts
-	// clean rather than interpreting this one's tail as fresh keystrokes.
+	// Collect the rest of the sequence up to its final byte, so the next read
+	// starts clean rather than interpreting this one's tail as fresh keystrokes.
+	var params []byte
 	for b < 0x40 || b > 0x7e {
+		params = append(params, b)
 		if b, err = i.r.ReadByte(); err != nil {
 			return Event{}, err
 		}
 	}
+	if b == 'R' {
+		// CPR: the reply to a cursor-position query, "row;col".
+		if row, col, ok := twoInts(string(params)); ok {
+			return Event{Kind: eventCursor, Row: row, Col: col}, nil
+		}
+	}
 	return Event{Kind: EventKey, Key: KeyUnknown}, nil
+}
+
+// twoInts parses "a;b".
+func twoInts(s string) (int, int, bool) {
+	a, b, ok := strings.Cut(s, ";")
+	if !ok {
+		return 0, 0, false
+	}
+	x, err1 := strconv.Atoi(a)
+	y, err2 := strconv.Atoi(b)
+	return x, y, err1 == nil && err2 == nil
+}
+
+// cprTimeout bounds the wait for a cursor-position reply.
+//
+// It exists because the failure mode is a HANG. A terminal that does not
+// implement the query simply says nothing, and a blocking read on it never
+// returns - so an interactive surface that asked would freeze with no output
+// and no way out, which is the worst thing in this package's power to do. A
+// terminal that does answer does so in microseconds, so this is generous.
+const cprTimeout = 250 * time.Millisecond
+
+// CursorPosition asks the terminal where the cursor is, in absolute 1-based
+// terminal coordinates.
+//
+// This is what makes a mouse usable on an INLINE view. A [Zone] band can be
+// hit-tested because magus chose the rows it drew on, but a view rendered where
+// the cursor happened to be - the picker, a watch frame - knows only its own
+// shape, not its position, so a click coordinate cannot be resolved against it.
+// The terminal is the only thing that knows, and this is how it is asked.
+//
+// Returns ok=false when the terminal does not answer in time, which is an
+// ordinary answer: the caller keeps its keyboard handling and goes without
+// mouse support rather than failing.
+func (i *Input) CursorPosition() (row, col int, ok bool) {
+	if _, err := io.WriteString(i.out, dsrCursor); err != nil {
+		return 0, 0, false
+	}
+	if err := i.in.SetReadDeadline(time.Now().Add(cprTimeout)); err != nil {
+		// Deadlines are unavailable on this descriptor, so a query could block
+		// forever. Refuse rather than risk it.
+		return 0, 0, false
+	}
+	defer func() { _ = i.in.SetReadDeadline(time.Time{}) }()
+
+	for {
+		// decode, not read: this loop APPENDS to the queue, so reading from it
+		// would consume its own output and never terminate.
+		ev, err := i.decode()
+		if err != nil {
+			return 0, 0, false
+		}
+		if ev.Kind == eventCursor {
+			return ev.Row, ev.Col, true
+		}
+		// Something the user did, which overtook the reply. Queue it: a
+		// keystroke is not less real for having arrived at an awkward moment.
+		i.pending = append(i.pending, ev)
+	}
 }
 
 // decodeMouse parses an SGR mouse report, the part after "ESC [ <":

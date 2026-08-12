@@ -287,3 +287,126 @@ func TestMouseTrackingOffDisablesBothModes(t *testing.T) {
 	assert.Contains(t, mouseTrackOff, "1000l")
 	assert.Contains(t, mouseTrackOff, "1006l")
 }
+
+func TestInputParsesACursorReply(t *testing.T) {
+	t.Parallel()
+	// The reply arrives in the same stream as keystrokes, so it has to be
+	// recognised rather than swallowed as an unknown sequence.
+	in, _ := newTestInput("\x1b[12;40R")
+	ev, err := in.read()
+	require.NoError(t, err)
+	assert.Equal(t, eventCursor, ev.Kind)
+	assert.Equal(t, 12, ev.Row)
+	assert.Equal(t, 40, ev.Col)
+}
+
+func TestInputNeverSurfacesACursorReplyAsInput(t *testing.T) {
+	t.Parallel()
+	// A stray reply - one nobody asked for, or one that outlived its query -
+	// is not something the user did. Handing it to a caller would look like a
+	// phantom keypress.
+	in, _ := newTestInput("\x1b[12;40Rx")
+	ev, err := in.Read()
+	require.NoError(t, err)
+	assert.Equal(t, KeyRune, ev.Key)
+	assert.Equal(t, 'x', ev.Rune, "the reply was dropped and the real keystroke came through")
+}
+
+func TestInputQueuesKeystrokesThatOvertakeAReply(t *testing.T) {
+	t.Parallel()
+	// A keystroke is not less real for having arrived at an awkward moment. It
+	// must survive the query and be delivered in order afterwards.
+	in, _ := newTestInput("ab\x1b[7;3R")
+
+	// The same loop CursorPosition runs, minus the deadline a string reader
+	// cannot carry. It uses decode rather than read: a loop that appends to the
+	// queue must not also read from it, or it consumes its own output forever.
+	var row, col int
+	for {
+		ev, err := in.decode()
+		require.NoError(t, err)
+		if ev.Kind == eventCursor {
+			row, col = ev.Row, ev.Col
+			break
+		}
+		in.pending = append(in.pending, ev)
+	}
+	assert.Equal(t, 7, row)
+	assert.Equal(t, 3, col)
+
+	first, err := in.Read()
+	require.NoError(t, err)
+	assert.Equal(t, 'a', first.Rune)
+	second, err := in.Read()
+	require.NoError(t, err)
+	assert.Equal(t, 'b', second.Rune, "queued keystrokes keep their order")
+}
+
+func TestCursorPositionRefusesWhenItCannotBoundTheWait(t *testing.T) {
+	// The failure mode being guarded is a HANG: a terminal that does not
+	// implement the query says nothing at all, and a blocking read on it never
+	// returns. Without a deadline to bound the wait, refuse outright - the
+	// caller keeps its keyboard handling and goes without mouse support.
+	var out ttyBuf
+	in, _ := newTestInput("")
+	in.out = &out
+	_, _, ok := in.CursorPosition()
+	assert.False(t, ok)
+	assert.Contains(t, out.String(), dsrCursor, "the query is sent before the wait is given up on")
+}
+
+// TestCursorPositionTimesOutWhenNothingAnswers is the one claim in this file
+// that cannot be checked by feeding bytes to a string reader, and it is also
+// the highest-consequence one: a terminal that does not implement the query
+// says NOTHING, and a blocking read on it never returns. If the deadline does
+// not work, an interactive surface that asks freezes with no output and no way
+// out.
+//
+// A pipe stands in for the terminal because the property under test is whether
+// the descriptor is pollable enough for a read deadline to fire, which it is
+// for both.
+func TestCursorPositionTimesOutWhenNothingAnswers(t *testing.T) {
+	t.Parallel()
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = r.Close(); _ = w.Close() })
+
+	var out ttyBuf
+	in := &Input{r: bufio.NewReader(r), in: r, out: &out, now: time.Now}
+
+	start := time.Now()
+	_, _, ok := in.CursorPosition()
+	elapsed := time.Since(start)
+
+	assert.False(t, ok, "silence must report as unsupported, not as a position")
+	assert.GreaterOrEqual(t, elapsed, cprTimeout, "it waited for the reply before giving up")
+	assert.Less(t, elapsed, 5*time.Second, "and gave up rather than hanging")
+	assert.Contains(t, out.String(), dsrCursor)
+}
+
+// TestCursorPositionReadsARealReply is the other half: when the terminal does
+// answer, over a real descriptor, the position comes back.
+func TestCursorPositionReadsARealReply(t *testing.T) {
+	t.Parallel()
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = r.Close() })
+
+	go func() {
+		// A keystroke racing ahead of the reply, which is the case that would
+		// otherwise lose it.
+		_, _ = w.WriteString("k\x1b[14;7R")
+		_ = w.Close()
+	}()
+
+	var out ttyBuf
+	in := &Input{r: bufio.NewReader(r), in: r, out: &out, now: time.Now}
+	row, col, ok := in.CursorPosition()
+	require.True(t, ok)
+	assert.Equal(t, 14, row)
+	assert.Equal(t, 7, col)
+
+	ev, err := in.Read()
+	require.NoError(t, err)
+	assert.Equal(t, 'k', ev.Rune, "the keystroke that overtook the reply survived")
+}

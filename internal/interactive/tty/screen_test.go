@@ -21,6 +21,12 @@ import (
 // model of terminals in general. An unrecognised sequence is dropped rather
 // than guessed at.
 //
+// That last rule cuts both ways, and it has already bitten once: a sequence
+// this does not know is SILENTLY IGNORED, so adding one to the production code
+// without adding it here makes the emulator quietly model a different terminal
+// than the one users have. Anything new in ansi.go belongs here in the same
+// change.
+//
 // The scroll-region behaviour is the part that carries its weight: a newline on
 // the last row of the scroll region scrolls only rows [top, bottom], leaving
 // the reserved zone below untouched. That single rule is what the whole Region
@@ -129,6 +135,8 @@ func (s *screen) escape(src string) int {
 		s.row, s.col = clamp(r, 1, s.height), clamp(c, 1, s.width)
 	case 'A': // CUU
 		s.row = clamp(s.row-oneParam(params, 1), 1, s.height)
+	case 'B': // CUD
+		s.row = clamp(s.row+oneParam(params, 1), 1, s.height)
 	case 'K': // EL
 		switch params {
 		case "2":

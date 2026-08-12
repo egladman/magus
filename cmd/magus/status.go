@@ -97,8 +97,8 @@ func status(ctx context.Context, args []string) error {
 
 	animFrame := 0
 	report := buildStatusReport(ctx, f.socket, f.symbols)
-	repaint := &inlineRepaint{w: os.Stdout, probe: tty.SystemProbe}
-	defer repaint.finish()
+	repaint := tty.NewInlineView(os.Stdout, tty.SystemProbe)
+	defer repaint.Finish()
 	inline := opts.Format == outputText && isTTY
 	for {
 		if err := paintStatusFrame(repaint, inline, report, opts, animFrame, f.compact); err != nil {
@@ -958,7 +958,7 @@ func printLockStatus(w io.Writer, locks []types.StatusLock) {
 // tall as the terminal, where erasing upward would walk off the top and eat the
 // transcript above. Falling back is worse than redrawing in place and much
 // better than a corrupted screen.
-func paintStatusFrame(p *inlineRepaint, inline bool, r types.StatusReport, opts OutputOptions, animFrame int, compact bool) error {
+func paintStatusFrame(p *tty.InlineView, inline bool, r types.StatusReport, opts OutputOptions, animFrame int, compact bool) error {
 	if !inline {
 		return printStatus(r, opts, animFrame, compact)
 	}
@@ -966,10 +966,10 @@ func paintStatusFrame(p *inlineRepaint, inline bool, r types.StatusReport, opts 
 	if err := writeStatus(&frame, r, opts, animFrame, compact); err != nil {
 		return err
 	}
-	if p.paint(frame.String()) {
+	if p.Paint(frame.String()) {
 		return nil
 	}
-	p.lines = 0
+	p.Reset()
 	if err := tty.ClearScreen(os.Stdout); err != nil {
 		return err
 	}

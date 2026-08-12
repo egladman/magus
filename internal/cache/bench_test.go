@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // discardLogger is a slog.Logger that drops all output, keeping benchmark
@@ -225,4 +226,51 @@ func indexOfStep(steps []Step, project string) int {
 		}
 	}
 	return 0
+}
+
+// countingTerm records bytes reaching the terminal. For the pinned band the
+// number that matters is not how fast a frame is composed but how much of it
+// has to be re-sent, since the row repaints after every counter-moving event.
+type countingTerm struct{ n int }
+
+func (c *countingTerm) Write(p []byte) (int, error) { c.n += len(p); return len(p), nil }
+func (*countingTerm) Fd() uintptr                   { return 2 }
+
+// BenchmarkStatusRowClockOnly isolates the clock: the pool is sampled
+// repeatedly with identical numbers, so the ONLY thing that could differ
+// between repaints is the elapsed time.
+//
+// It exists because of a hypothesis that turned out to be wrong. fmtDur
+// resolves to milliseconds under a second, and the status row repaints after
+// every counter-moving event, so it looked like the clock would make every
+// repaint a real one and defeat the frame diff on the busiest row on screen.
+// Isolating it says otherwise: about 4 bytes per sample, against a row of
+// sixty-odd characters, because the clock only crosses a display boundary a
+// few times a second and the diff drops every repaint in between.
+//
+// Kept as the guard the hypothesis deserved: if the status row ever starts
+// differing on every repaint - a spinner, a finer clock, a counter that moves
+// per sample - this is where it shows up.
+func BenchmarkStatusRowClockOnly(b *testing.B) {
+	const samples = 300
+	ctx := context.Background()
+	var total int
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		c := &countingTerm{}
+		h := newPrettyHandler(c, slog.LevelInfo, terminalProbe{})
+		pool := buildRecord("cache.pool",
+			slog.Int("capacity", 8), slog.Int("running", 4), slog.Int("queued", 2))
+		_ = h.Handle(ctx, pool)
+		start := time.Now().Add(-3 * time.Second)
+		c.n = 0
+		for i := range samples {
+			// One second of samples, counters unchanged throughout.
+			h.status.start = start.Add(-time.Duration(i) * (time.Second / samples))
+			_ = h.Handle(ctx, pool)
+		}
+		total = c.n
+	}
+	b.ReportMetric(float64(total)/samples, "B_written/sample")
 }
