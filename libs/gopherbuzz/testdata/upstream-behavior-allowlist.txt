@@ -38,6 +38,7 @@ forward-method-placeholders.buzz
 free-identifiers.buzz
 fs.buzz
 functional.buzz
+gc.buzz
 generics.buzz
 if-arrow.buzz
 import-export.buzz

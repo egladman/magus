@@ -94,14 +94,19 @@ type mcacheEntry struct {
 // vm executes compiled Buzz chunks. It is package-internal; embedders run code
 // through Session (Exec/ExecChunk/CallValue), never by constructing a vm.
 type VM struct {
-	ctx         context.Context
-	stack       []Value
-	frames      []frame // value slice: no pointer per frame
-	catchStack  []catchEntry
-	cancelN     int            // per-VM back-edge counter; avoids false sharing of a global
-	ncache      []envNameEntry // inline name cache; indexed by chunk const-pool index
-	ncacheChunk *Chunk         // chunk for which ncache entries are valid
-	ncacheEnv   *Env           // resolving env those entries were resolved against
+	ctx context.Context
+	// collectables are instances whose type declares a `collect()` method, tracked
+	// so CollectUnreachable can call it when the program can no longer reach them.
+	// See gc_collect.go for why reachability is computed over the VM's own roots
+	// rather than left to Go's GC.
+	collectables []*objectInst
+	stack        []Value
+	frames       []frame // value slice: no pointer per frame
+	catchStack   []catchEntry
+	cancelN      int            // per-VM back-edge counter; avoids false sharing of a global
+	ncache       []envNameEntry // inline name cache; indexed by chunk const-pool index
+	ncacheChunk  *Chunk         // chunk for which ncache entries are valid
+	ncacheEnv    *Env           // resolving env those entries were resolved against
 	// mcache is a per-instruction inline cache for OpGetMember/OpSetMember on
 	// object receivers. Each entry stores the chunk it was learned in, the
 	// objectDef pointer, and the field index for the last object type seen at that
@@ -171,12 +176,17 @@ type iterSlot struct {
 }
 
 func NewVM(ctx context.Context) *VM {
-	return &VM{
+	vm := &VM{
 		ctx:         ctx,
 		stack:       make([]Value, 0, 64),
 		frames:      make([]frame, 0, 16),
 		heapLastLen: heapLen(),
 	}
+	// The VM is reachable from the context every host callable receives, which is
+	// what lets `gc\collect()` ask the interpreter about its own reachability. It is
+	// the only operation that needs this; everything else works from its arguments.
+	vm.ctx = context.WithValue(ctx, vmCtxKey{}, vm)
+	return vm
 }
 
 // newFiberVM creates a VM that runs as a fiber (OpYield suspends instead of dismissing).
@@ -2319,7 +2329,9 @@ func (vm *VM) buildObjectVal(typeName string, fieldCount int, env *Env, mut bool
 			flatFields[j] = p.val
 		}
 	}
-	vm.push(vm.allocObject(&objectInst{Def: def, Fields: flatFields, Mut: mut}))
+	inst := &objectInst{Def: def, Fields: flatFields, Mut: mut}
+	vm.trackCollectable(inst)
+	vm.push(vm.allocObject(inst))
 	return nil
 }
 
