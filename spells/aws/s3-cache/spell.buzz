@@ -197,7 +197,7 @@ export fun enabled(target: Target, cb: fun(any)) > bool {
 // false on a miss (404) or when not configured.
 export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
     if (access() == "" or bucket() == "") { return false; }
-    var io = {};
+    final io = {};
     cb(io);
     final path = "/" + bucket() + "/" + cache_key("" + io["hash"]);
     final headers = sign("GET", path, "", EMPTY_SHA256);
@@ -209,7 +209,7 @@ export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
 // against x-amz-content-sha256).
 export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
     if (access() == "" or bucket() == "") { return false; }
-    var io = {};
+    final io = {};
     cb(io);
     final src = "" + io["src"];
     final path = "/" + bucket() + "/" + cache_key("" + io["hash"]);
@@ -262,7 +262,8 @@ fun listing() > any !> any {
         if (last == "") { return null; } // defensive: truncated but nothing parsed
         marker = last;
     }
-    return null;
+    // No trailing return: the loop is `while (true)` with no break, so every exit
+    // is one of the returns above and anything here is unreachable.
 }
 
 // deleteObject removes one object by key (S3 DeleteObject, path-style). DeleteObject
@@ -285,7 +286,7 @@ fun deleteObject(key: str) > bool !> any {
 // only learns completion).
 export fun prune(target: Target, cb: fun(any)) > bool !> any {
     if (access() == "" or bucket() == "") { return false; }
-    var io = {};
+    final io = {};
     cb(io);
     final olderSecs = std\toInt(io["older_than_secs"]);
     final keepLast = std\toInt(io["keep_last"]);
@@ -303,7 +304,7 @@ export fun prune(target: Target, cb: fun(any)) > bool !> any {
     }
 
     // Select objects to evict, de-duplicated by key across the two bounds.
-    var doomed = mut {};
+    final doomed = mut {};
     if (olderSecs > 0) {
         final cutoffMs = os\time() - olderSecs * 1000;
         foreach (it in artifacts) {

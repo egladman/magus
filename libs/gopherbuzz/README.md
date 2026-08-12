@@ -57,13 +57,13 @@ because those two biases disagree about try/catch.
 Most of what is left is a DIALECT DECISION or a disproportionate migration rather
 than a missing check. Each of these was implemented, measured, and reverted:
 
-| File(s) | What it needs | Measured cost |
-| --- | --- | --- |
-| `yield-location`, `yield-without-annotation` | require `*>` on any function that yields | reverses a recorded choice (`ast.YieldExpr`, `TestYieldOutsideFiberDismissed`); ~18 fixtures here plus magus's s3-cache spell |
-| `fiber-error-location` | hold a direct `throw` to propagate-or-catch, as a CALL already is | breaks seven of magus's suites: its spells, tour files and scripts throw without `!>` |
-| `unused-import` | make BZZ3001 an error | impossible as stated -- see the note in `session.go` |
-| `selective-import` | stop `assert` resolving unimported | blocked on `registerBuiltins`, which pre-defines the stdlib names on purpose |
-| `error-message` | rendering a thrown object's message | the test body never runs under `Exec`, so nothing can surface it here |
+| File(s)                                      | What it needs                                                     | Measured cost                                                                                                                 |
+| -------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `yield-location`, `yield-without-annotation` | require `*>` on any function that yields                          | reverses a recorded choice (`ast.YieldExpr`, `TestYieldOutsideFiberDismissed`); ~18 fixtures here plus magus's s3-cache spell |
+| `fiber-error-location`                       | hold a direct `throw` to propagate-or-catch, as a CALL already is | breaks seven of magus's suites: its spells, tour files and scripts throw without `!>`                                         |
+| `unused-import`                              | make BZZ3001 an error                                             | impossible as stated -- see the note in `session.go`                                                                          |
+| `selective-import`                           | stop `assert` resolving unimported                                | blocked on `registerBuiltins`, which pre-defines the stdlib names on purpose                                                  |
+| `error-message`                              | rendering a thrown object's message                               | the test body never runs under `Exec`, so nothing can surface it here                                                         |
 
 Each is a call to make deliberately, with the migration budgeted -- not a gap to
 patch. The one structural item worth naming: **optionality is erased**, which is
@@ -160,7 +160,6 @@ backlog:
   NativeCtx layout and buzz_api entry points so a library compiled against buzz's VM
   can pull arguments from gopherbuzz's. `c-buzz-api` (`buzz_c_api.c`) is the same
   requirement stated openly. Building these with Zig would not help.
-
 
 ### Where the skeletons are
 

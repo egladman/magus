@@ -12086,7 +12086,7 @@
       "kind": "function",
       "label": "deleteObject",
       "doc": "deleteObject removes one object by key (S3 DeleteObject, path-style). DeleteObject is idempotent, returning 204 No Content whether or not the key existed.",
-      "source": "spells/aws/s3-cache/spell.buzz:270"
+      "source": "spells/aws/s3-cache/spell.buzz:271"
     },
     {
       "id": "function:spells/aws/s3-cache/spell.buzz:enabled",
@@ -12157,7 +12157,7 @@
       "kind": "function",
       "label": "prune",
       "doc": "prune evicts cache objects per a retention policy, enumerating them through the listing fiber. Inputs arrive via cb: older_than_secs : int  — evict objects older than this many seconds (0 = off) keep_last       : int  — keep only the newest N objects (0 = off) dry_run         : bool — report intended deletions without performing them The two bounds are additive — an object is doomed if it trips either — and the doomed set is keyed by object key so the overlap never double-deletes. Returns true onc",
-      "source": "spells/aws/s3-cache/spell.buzz:286",
+      "source": "spells/aws/s3-cache/spell.buzz:287",
       "attrs": {
         "exported": "true"
       }
