@@ -151,14 +151,20 @@ evaluates its target twice, and generics are erased.
 property of the EMBEDDING rather than by unwritten code, so this list is not a
 backlog:
 
-- **A compiled native library.** `ffi` and `types-as-value` `zdef` against
-  `tests/utils/libforeign`, which `build.zig` compiles from `tests/utils/foreign.zig`
-  and which ships in no release; `extern-library` imports a file whose only export is
-  a body-less `extern fun`, so the "null is not callable" it fails with IS the
-  unbound extern. Those three need nothing from this VM - only Zig, to build the
-  library gopherbuzz would then `dlopen` through its own FFI.
-  `c-buzz-api` is deeper: `buzz_c_api.c` calls INTO buzz's C API (`buzz_api.zig`),
-  so satisfying it means exposing an equivalent C ABI over gopherbuzz's VM.
+- **A plain C library nobody ships.** `ffi` and `types-as-value` `zdef` against
+  `tests/utils/libforeign`, which `build.zig` compiles from `tests/utils/foreign.zig`.
+  That source is ordinary C ABI (`export fn acos(value: f64) callconv(.c) f64`, no
+  buzz import, not linked against libbuzz), so gopherbuzz's own FFI could call it
+  unchanged. These two are blocked on HAVING the artifact, nothing more.
+- **buzz's own native-extension ABI.** `extern-library` and `c-buzz-api` are a
+  different problem, and the failure mode hides it: `extern-library` looks like it
+  only wants a shared library, and "null is not callable" is just its unbound
+  `extern fun sayHello()`. But `tests/utils/hello.zig` takes a `*api.NativeCtx`,
+  imports `buzz_api.zig` and LINKS AGAINST LIBBUZZ, exposing a `hello(symbol)`
+  resolver keyed by name. Loading it would mean gopherbuzz reproducing upstream's
+  NativeCtx layout and buzz_api entry points so a library compiled against buzz's VM
+  can pull arguments from gopherbuzz's. `c-buzz-api` (`buzz_c_api.c`) is the same
+  requirement stated openly. Building these with Zig would not help.
 - **GC collector callbacks** depend on Buzz's own collector running at points a Go
   program does not control. Upstream's test asserts a collector ran after dropping a
   reference; Go's GC gives no such guarantee.
