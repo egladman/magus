@@ -1,3 +1,6 @@
-// @error: unknown C type
+// @error: Could not parse zig type
+// The wording is upstream's, verbatim: its ffi.buzz catches this as
+// ffi\FFIZigTypeParseError and asserts the message. It used to be a bare
+// "unknown C type", which no typed catch could select.
 import "ffi";
 ffi\sizeOf("notatype");

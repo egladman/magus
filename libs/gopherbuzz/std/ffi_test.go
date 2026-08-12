@@ -203,7 +203,11 @@ export final answer = lib.answer;
 	assert.Equal(t, 4.5, half.AsFloat(), "half")
 	hello := exp["hello"]
 	assert.True(t, hello.IsStr(), "hello IsStr")
-	assert.Equal(t, "hey", hello.AsString(), "hello")
+	// "hey\x00", not "hey": a C string carries its terminator on the way back, the
+	// same way ffi\cstr adds one on the way in, so a value that round-trips through C
+	// compares equal to the one that went in. Upstream's ffi.buzz asserts exactly that
+	// (`get_data_msg(data) == "bye world\000"`). This expectation predated the rule.
+	assert.Equal(t, "hey\x00", hello.AsString(), "hello")
 	answer := exp["answer"]
 	assert.True(t, answer.IsInt(), "answer IsInt")
 	assert.Equal(t, int64(41), answer.AsInt(), "answer")
