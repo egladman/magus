@@ -144,6 +144,35 @@ func markReachable(v Value, live map[*objectInst]bool, seen map[any]bool) {
 		for _, item := range mo.Vals {
 			markReachable(item, live, seen)
 		}
+		// keyVals holds the real key VALUES, and a key may be an object. Walking
+		// only Vals left an object used as a map key invisible to the mark, so
+		// gc\collect() reclaimed it while the map still keyed on it.
+		for _, k := range mo.keyVals {
+			markReachable(k, live, seen)
+		}
+	case tagIterState:
+		// The collection a foreach is walking lives ONLY in the iterator state
+		// while the loop runs - it is not on the stack and not in any env. Without
+		// this case, iterating three objects and calling gc\collect() inside the
+		// body collected the elements the loop had not reached yet.
+		is := v.asIterState()
+		if is == nil || seen[is] {
+			return
+		}
+		seen[is] = true
+		if is.list != nil {
+			for _, item := range is.list.Items {
+				markReachable(item, live, seen)
+			}
+		}
+		if is.mapObj != nil {
+			for _, item := range is.mapObj.Vals {
+				markReachable(item, live, seen)
+			}
+			for _, k := range is.mapObj.keyVals {
+				markReachable(k, live, seen)
+			}
+		}
 	case tagCell:
 		markReachable(v.asCell().v, live, seen)
 	case tagFun:

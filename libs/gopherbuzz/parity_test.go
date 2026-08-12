@@ -1780,6 +1780,58 @@ fun probe() > int {
 	assert.Equal(t, int64(1), v.AsInt(), "the mut annotation permits the write and still satisfies [str]")
 }
 
+// TestParity_CollectorKeepsReachableObjects covers the reachability sweep in
+// vm/gc_collect.go, which had NO test at all - which is how both holes below
+// survived. The dangerous direction of this check is a false COLLECT: calling a
+// live object's collect() is unrecoverable, where missing a dead one merely
+// delays it.
+func TestParity_CollectorKeepsReachableObjects(t *testing.T) {
+	cases := []struct{ name, body string }{
+		{
+			// The list literal is reachable ONLY through the iterator state: it is
+			// bound to no local and sits on no frame's env. markReachable had no
+			// tagIterState case, so collecting mid-loop reclaimed the elements the
+			// loop had not reached yet.
+			name: "the collection under a foreach",
+			body: `
+    foreach (t in [ Tracked{ id = 1 }, Tracked{ id = 2 }, Tracked{ id = 3 } ]) {
+        gc\collect();
+        _ = t.id;
+    }
+    return collected;`,
+		},
+		{
+			// markReachable walked mo.Vals but not mo.keyVals, so an object used as
+			// a KEY was invisible to the mark while the map still keyed on it.
+			name: "an object used as a map key",
+			body: `
+    final m = mut {};
+    m[Tracked{ id = 1 }] = "v";
+    gc\collect();
+    return collected;`,
+		},
+	}
+	const decls = `
+import "gc";
+
+var collected = 0;
+
+object Tracked {
+    id: int,
+
+    fun collect() > void {
+        collected = collected + 1;
+    }
+}
+`
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v := evalWithStd(t, decls+"\nfun probe() > int {"+tc.body+"\n}")
+			assert.Equal(t, int64(0), v.AsInt(), "a reachable object must not be collected")
+		})
+	}
+}
+
 func TestParity_CryptoHashReturnsRawBytes(t *testing.T) {
 	// Upstream returns the raw digest and leaves rendering to `.hex()`. Returning hex
 	// directly made upstream's own `hash(...).hex()` double-encode.
