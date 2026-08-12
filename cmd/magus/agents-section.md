@@ -58,7 +58,8 @@ because the verdict would describe a tree nobody ships.
 Generated files are declared. Classify changed paths before reading diffs or
 committing: `magus describe file <path>...` reports each path's owning project
 and role (output = generated: never hand-edit, regenerate and commit with the
-source change; source = the diff worth reading; unclaimed = affects nothing).
+source change; source = the diff worth reading; maintained = magus wrote it
+itself, commit it and never ignore it; unclaimed = affects nothing).
 
 At session start, or after an MCP tool fails, check `magus status --probe=mcp`.
 When it is serving, prefer the MCP tools (magus_query, magus_run_target,
