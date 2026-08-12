@@ -126,11 +126,6 @@ fun main() > void !> any {
     std\print("fix-generated-drift: pushed " + files.join(", "));
 }
 
-try {
-    main();
-} catch (e) {
-    throw e;
-}
 
 test "fixedBody names every file and how to stop it" {
     final body = fixedBody(["MAGUS.md", "gen/target-graph.json"], sha: "abc1234");

@@ -72,11 +72,6 @@ fun main() > void !> any {
     std\print("skip-cache: advised on {entries.len()} declaration(s)");
 }
 
-try {
-    main();
-} catch (e) {
-    throw e;
-}
 
 test "optedOut keeps added skip_cache lines with their reason" {
     // A raw string: the fixture is a magusfile fragment full of braces, and a plain

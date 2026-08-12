@@ -115,11 +115,6 @@ fun main() > void !> any {
     std\print("advised on PR " + pr + ": " + files.join(", "));
 }
 
-try {
-    main();
-} catch (e) {
-    throw e;
-}
 
 test "conflictPaths drops the merged tree's oid and keeps the rest" {
     final paths = conflictPaths("38d2ff24\nMAGUS.md\ngen/target-graph.json\n");

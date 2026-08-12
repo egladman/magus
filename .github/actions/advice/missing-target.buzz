@@ -208,11 +208,6 @@ fun main() > void !> any {
     std\print("missing-target: advised on {items.len()} gap(s)");
 }
 
-try {
-    main();
-} catch (e) {
-    throw e;
-}
 
 test "kind is order-independent and dedupes, so two projects match however written" {
     std\assert(kind(["go", "markdown", "go"]) == kind(["markdown", "go"]),

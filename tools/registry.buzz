@@ -213,8 +213,3 @@ export fun main() > void !> any {
     std\print("signed {path} (readers pin: {crypto\publicKey(.Ed25519, key_env: KEY_ENV)})");
 }
 
-try {
-    main();
-} catch (e) {
-    throw e;
-}

@@ -69,11 +69,6 @@ fun main() > void !> any {
     std\print("first-contribution: welcomed " + author);
 }
 
-try {
-    main();
-} catch (e) {
-    throw e;
-}
 
 test "welcome names the author and both repository-specific rules" {
     final body = welcome("octocat");

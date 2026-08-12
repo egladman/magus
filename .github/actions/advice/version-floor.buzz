@@ -74,11 +74,6 @@ fun main() > void !> any {
     std\print("version-floor: advised on " + floor);
 }
 
-try {
-    main();
-} catch (e) {
-    throw e;
-}
 
 test "raised reads a newly set floor" {
     std\assert(raised("+required_version: \">= 0.4.0\"\n") == ">= 0.4.0", message: "unquoted value");

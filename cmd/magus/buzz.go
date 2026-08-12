@@ -118,6 +118,23 @@ func buzzCmd(ctx context.Context, args []string) error {
 	if test {
 		return runBuzzTests(ctx, sess, name)
 	}
+	// Like upstream's Run flavor and cmd/buzz, an entry script's `main` runs once
+	// its top level has. Without it a script had to call its own main, which strict
+	// mode cannot wrap: a top-level `try` is rejected and a bare call is BZZ1006.
+	if mainFn := sess.GetGlobal("main"); mainFn.IsFun() {
+		// Empty: buzzSource rejects a second positional, so there is no script argv
+		// to pass yet. main still takes the parameter, as upstream declares it.
+		var items []vm.Value
+		ret, err := sess.CallValue(ctx, mainFn, []vm.Value{vm.ListValue(items)})
+		if err != nil {
+			return fmt.Errorf("%s: %w", name, err)
+		}
+		// `fun main() > int` is upstream's exit-status convention, and the checker
+		// permits it; discarding the value made such a script always exit 0.
+		if ret.IsInt() && ret.AsInt() != 0 {
+			return errSilent{exitCode: int(ret.AsInt())}
+		}
+	}
 	return nil
 }
 

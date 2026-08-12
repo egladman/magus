@@ -107,11 +107,6 @@ fun main() > void !> any {
     std\print("hand-edited-generated: advised on " + files.join(", "));
 }
 
-try {
-    main();
-} catch (e) {
-    throw e;
-}
 
 test "explained is false when no producing project had a source change" {
     std\assert(!explained(["."], touched: ["docs"]), message: "a docs edit does not explain a root output");

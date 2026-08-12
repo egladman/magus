@@ -81,11 +81,6 @@ fun main() > void !> any {
     std\print("unclaimed: advised on " + found.join(", "));
 }
 
-try {
-    main();
-} catch (e) {
-    throw e;
-}
 
 test "body says the checks did not verify the unclaimed files" {
     final text = body([".editorconfig"], total: 4);

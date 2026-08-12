@@ -13,7 +13,7 @@ import "std";
 // outcome renders the summary for one CI result. Pure, so the wording and the branch for
 // every result GitHub can report are testable - which a shell `case` in a workflow is not.
 export fun outcome(result: str, shards: str) > str {
-    var text = "## CI outcome\n\n";
+    final text = "## CI outcome\n\n";
     if (result == "success") {
         return text + "Passed across " + shards + " affected shard(s).\n";
     }
@@ -79,11 +79,6 @@ fun main() > void !> any {
     std\print("ci-outcome: summarized " + env("CI_RESULT"));
 }
 
-try {
-    main();
-} catch (e) {
-    throw e;
-}
 
 test "outcome reports a pass with the shard count" {
     final got = outcome("success", shards: "3");

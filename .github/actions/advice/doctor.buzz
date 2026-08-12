@@ -61,11 +61,6 @@ fun main() > void !> any {
     std\print("doctor: advised on {fails.len()} failure(s), {advisories.len()} advisory");
 }
 
-try {
-    main();
-} catch (e) {
-    throw e;
-}
 
 test "summarize separates failures from advice" {
     final body = summarize(["`sockets` - no daemon"], advisories: ["`naming` - bespoke name"]);

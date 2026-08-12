@@ -110,11 +110,6 @@ fun main() > void !> any {
     std\print("target-outputs: advised on " + bare.join(", "));
 }
 
-try {
-    main();
-} catch (e) {
-    throw e;
-}
 
 test "added reads new target names out of a diff" {
     final diff = "+export fun release(ctx: magus\\Context, args: [str]) > void\n"

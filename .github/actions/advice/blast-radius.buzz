@@ -138,11 +138,6 @@ fun main() > void !> any {
     std\print("blast-radius: advised on {reached.len()} of {total}");
 }
 
-try {
-    main();
-} catch (e) {
-    throw e;
-}
 
 test "trips fires when the reach is at or over the share" {
     std\assert(trips(5, total: 10, share: 0.5), message: "half the workspace");
