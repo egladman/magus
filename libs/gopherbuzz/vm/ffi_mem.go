@@ -436,12 +436,21 @@ func ReadCString(addr uintptr) string {
 	if addr == 0 {
 		return ""
 	}
-	var b []byte
-	for i := uintptr(0); ; i++ {
-		c := *(*byte)(unsafe.Pointer(addr + i)) //nolint:govet // reading a C string byte by byte to its terminator
-		if c == 0 {
-			return string(b) + "\x00"
-		}
-		b = append(b, c)
+	// Read out of the pinned slice this package allocated, not by dereferencing
+	// the address. That is this file's stated contract - "read*/write* operate
+	// only on memory this package allocated (looked up in a registry)" - and
+	// ReadCString was the one place breaking it, which is also why it was the one
+	// place vet reported a possible misuse of unsafe.Pointer.
+	memMu.Lock()
+	pb, ok := memRegistry[addr]
+	memMu.Unlock()
+	if !ok {
+		return ""
 	}
+	for i, c := range pb.data {
+		if c == 0 {
+			return string(pb.data[:i]) + "\x00"
+		}
+	}
+	return string(pb.data) + "\x00"
 }
