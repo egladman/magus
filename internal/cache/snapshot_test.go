@@ -2,8 +2,6 @@ package cache
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"os"
@@ -393,8 +391,16 @@ func TestSnapshotOneBlobDedup(t *testing.T) {
 // This test makes the failure deterministic instead of timing-dependent: abs
 // is a FIFO, so each of the two independent reads snapshotOne performs gets
 // whichever write session this test feeds it, exactly modelling "the content
-// changed between the two reads" without depending on goroutine scheduling.
-func TestSnapshotOneHashMatchesWrittenBytes(t *testing.T) {
+// TestSnapshotOneRefusesANonRegularFile pins the refusal that replaced a FIFO
+// round-trip here. Opening a FIFO blocks until a writer appears, with no timeout
+// and no diagnostic, so a declared output glob matching a stray pipe hung the
+// build; and a replay materializes every blob as a regular file, so a pipe could
+// never round-trip regardless. The old test fed a FIFO two write sessions to model
+// "the content changed between two reads" - which reader a writer paired with was
+// pure scheduling, so under load it deadlocked the package for its full ten-minute
+// timeout. The property it was really guarding, that a blob is named after the
+// bytes stored, is now structural: snapshotOne reads once and names from that pass.
+func TestSnapshotOneRefusesANonRegularFile(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("FIFOs are not available on Windows")
 	}
@@ -403,44 +409,11 @@ func TestSnapshotOneHashMatchesWrittenBytes(t *testing.T) {
 	abs := filepath.Join(root, "out.txt")
 	require.NoError(t, syscall.Mkfifo(abs, 0o644))
 
-	// snapshotOne performs exactly ONE open-for-read of a non-regular file, so
-	// exactly one write session is fed. Feeding a second (as this test did
-	// while snapshotOne still took a preHash) made the test itself the hazard:
-	// which reader a writer's open rendezvous with is pure scheduling, so under
-	// load the sole remaining open blocked forever and timed the whole package
-	// out at ten minutes. A FIFO open has no timeout, so an unpaired open here
-	// hangs rather than fails.
-	writes := [][]byte{[]byte("version-one")}
-	errCh := make(chan error, 1)
-	go func() {
-		for _, data := range writes {
-			w, err := os.OpenFile(abs, os.O_WRONLY, 0)
-			if err != nil {
-				errCh <- err
-				return
-			}
-			if _, err := w.Write(data); err != nil {
-				_ = w.Close()
-				errCh <- err
-				return
-			}
-			if err := w.Close(); err != nil {
-				errCh <- err
-				return
-			}
-		}
-		errCh <- nil
-	}()
-
-	rec, err := c.snapshotOne(abs, "out.txt")
-	require.NoError(t, err)
-	require.NoError(t, <-errCh, "fifo writer")
-
-	got, err := os.ReadFile(c.blobPath(rec.Blob))
-	require.NoError(t, err)
-	sum := sha256.Sum256(got)
-	assert.Equal(t, hex.EncodeToString(sum[:]), rec.Blob,
-		"blob must be named after the bytes actually stored in the CAS")
+	// No writer is ever opened: reaching an open at all would hang here, so this
+	// also proves the refusal happens before any open.
+	_, err := c.snapshotOne(abs, "out.txt")
+	require.Error(t, err, "a FIFO output must be refused, not opened")
+	assert.Contains(t, err.Error(), "not a regular file")
 }
 
 // TestExpandOutputGlobsRejectsAbsolute verifies absolute output globs are

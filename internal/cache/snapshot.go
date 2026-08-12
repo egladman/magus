@@ -98,6 +98,13 @@ func (c *Cache) snapshotOne(abs, rel string) (OutputRecord, error) {
 	if info.IsDir() {
 		return OutputRecord{}, fmt.Errorf("snapshotOne: %s is a directory (use a glob like %s/**)", rel, rel)
 	}
+	// Opening a FIFO blocks until a writer appears - no timeout, no diagnostic -
+	// so an output glob matching a stray pipe hung the build outright. A replay
+	// materializes every blob as a regular file, so a non-regular output cannot
+	// round-trip anyway; refusing it is both the fix and the honest contract.
+	if !info.Mode().IsRegular() {
+		return OutputRecord{}, fmt.Errorf("snapshotOne: %s is not a regular file (%s); a target's declared outputs must be regular files or symlinks", rel, info.Mode().Type())
+	}
 	// preHash is a cheap fast-path check only: if the CAS already holds a blob
 	// under it, we're done without touching abs again. It must never be used
 	// to name a blob we actually write below — that name has to come from the
@@ -105,40 +112,17 @@ func (c *Cache) snapshotOne(abs, rel string) (OutputRecord, error) {
 	// write to abs between this hash and a later separate read would store
 	// bytes under a hash they don't match, permanently poisoning the CAS
 	// entry (the dedup gate trusts an existing blob name forever).
-	//
-	// It is taken ONLY for a regular file, because it costs a second open of
-	// abs. Opening a regular file twice is free; opening a FIFO twice BLOCKS
-	// FOREVER on the second one unless another writer happens to appear, with
-	// no timeout and no diagnostic - a declared output glob that matches a
-	// pipe would hang the build outright. Everything non-regular therefore
-	// takes the single-open path below, where the hash-while-copy already
-	// produces the authoritative name.
-	hash := ""
-	dst := ""
-	regular := info.Mode().IsRegular()
-	if regular {
-		preHash, err := hashFile(abs)
-		if err != nil {
-			return OutputRecord{}, err
-		}
-		hash = preHash
-		dst = c.blobPath(preHash)
+	preHash, err := hashFile(abs)
+	if err != nil {
+		return OutputRecord{}, err
 	}
-	if _, err := os.Stat(dst); !regular || errors.Is(err, os.ErrNotExist) {
-		// Stage inside the CAS so the final rename stays on one filesystem. With
-		// no preHash there is no shard directory to aim at yet, so a non-regular
-		// file stages in the CAS root and is renamed into its shard once the
-		// hash-while-copy has named it.
-		stageDir := filepath.Join(c.dir, "cas")
-		stagePrefix := "blob.tmp.*"
-		if regular {
-			stageDir = filepath.Dir(dst)
-			stagePrefix = filepath.Base(dst) + ".tmp.*"
-		}
-		if err := os.MkdirAll(stageDir, 0o755); err != nil {
+	hash := preHash
+	dst := c.blobPath(preHash)
+	if _, err := os.Stat(dst); errors.Is(err, os.ErrNotExist) {
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return OutputRecord{}, err
 		}
-		tmp, err := os.CreateTemp(stageDir, stagePrefix)
+		tmp, err := os.CreateTemp(filepath.Dir(dst), filepath.Base(dst)+".tmp.*")
 		if err != nil {
 			return OutputRecord{}, err
 		}

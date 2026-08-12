@@ -752,9 +752,9 @@ func TestFailureCausesSplitsAndStripsPlumbing(t *testing.T) {
 
 	require.Len(t, got, 3, "each independent failure gets its own line")
 	assert.Equal(t, "build -> go-build -> format: dprint exited 20", got[0],
-		"the repeated ctx.needs plumbing is dropped, and the target hops read as a path")
-	assert.Equal(t, "test -> advice-test -> magus.buzz: buzz -t blast-radius.buzz exited with code 1", got[1],
-		"the message keeps its own colons; only the target hops become arrows")
+		"the markers are consumed and the hops they named read as a path")
+	assert.Equal(t, "test -> advice-test: magus.buzz: buzz -t blast-radius.buzz exited with code 1", got[1],
+		"magus.buzz carries no marker, so it stays part of the message")
 	assert.Equal(t, "compress-cgo-test: go exited 1", got[2])
 	for _, c := range got {
 		assert.NotContains(t, c, "ctx.needs:", "no plumbing prefix survives")
@@ -773,17 +773,26 @@ func TestFailureCausesKeepsASingleCauseWhole(t *testing.T) {
 // hop needs no arrow (one colon is unambiguous), and nothing after the first
 // space-bearing segment may be rewritten, or a message's own colons would be
 // mangled into fake hops.
-func TestArrowChainLeavesAmbiguousCasesAlone(t *testing.T) {
+func TestHopChainUsesTheMarkersNotGuesswork(t *testing.T) {
 	cases := []struct{ name, in, want string }{
 		{"single hop", "lint: markdownlint exited 1", "lint: markdownlint exited 1"},
-		{"two hops", "build -> go-build: exited 2", "build -> go-build: exited 2"},
-		{"colons inside the message survive", "test -> advice: buzz -t x.buzz: exited 1",
-			"test -> advice: buzz -t x.buzz: exited 1"},
 		{"no colon at all", "go exited 1", "go exited 1"},
+		// Each of these has a second segment that LOOKS like a target and is not
+		// one. No marker precedes it, so none of them becomes a hop.
+		{"exec.Error is not a hop", `format: exec: "dprint": executable file not found in $PATH`,
+			`format: exec: "dprint": executable file not found in $PATH`},
+		{"a file:line:col is not a hop", "build: ./main.go:5:2: undefined: Widget",
+			"build: ./main.go:5:2: undefined: Widget"},
+		{"a URL is not a hop", "fetch: https://example.com/x: 404", "fetch: https://example.com/x: 404"},
+		{"a filename is not a hop", "advice-test: config.json: missing key: name",
+			"advice-test: config.json: missing key: name"},
+		// With markers, the same shapes DO become hops, because the chain says so.
+		{"markers name the hops", "test: ctx.needs: advice-test: magus.buzz: buzz -t x.buzz exited 1",
+			"test -> advice-test: magus.buzz: buzz -t x.buzz exited 1"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, arrowChain(strings.ReplaceAll(tc.in, " -> ", ": ")))
+			assert.Equal(t, tc.want, hopChain(tc.in))
 		})
 	}
 }
