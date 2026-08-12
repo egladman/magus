@@ -286,6 +286,32 @@ func decodeRune(s string) (rune, int) {
 	return utf8.DecodeRuneInString(s)
 }
 
+// Snapshot returns an independent copy of the screen as it is right now.
+//
+// This is how a frame is captured for a recording: the terminal keeps being
+// written to, and a sequence of pointers to one live Screen would all show its
+// final state. The copy carries the CELLS, styles included - which the obvious
+// alternative of re-rendering String() into a fresh screen does not, because
+// String is plain text and drops every colour.
+//
+// Cursor position and scroll region are copied too, so a snapshot is a complete
+// terminal rather than a picture of one.
+func (s *Screen) Snapshot() *Screen {
+	c := &Screen{
+		width: s.width, height: s.height,
+		row: s.row, col: s.col,
+		savedRow: s.savedRow, savedCol: s.savedCol, savedStyle: s.savedStyle,
+		scrollTop: s.scrollTop, scrollBot: s.scrollBot,
+		style: s.style, scrolled: s.scrolled,
+	}
+	c.cells = make([][]cell, len(s.cells))
+	for i, row := range s.cells {
+		c.cells[i] = make([]cell, len(row))
+		copy(c.cells[i], row)
+	}
+	return c
+}
+
 // Cursor reports where the cursor is, in 1-based terminal coordinates.
 func (s *Screen) Cursor() (row, col int) { return s.row, s.col }
 

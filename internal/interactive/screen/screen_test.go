@@ -124,3 +124,36 @@ func TestInvalidBytesAdvanceByOne(t *testing.T) {
 	fmt.Fprint(s, "a\xffbc")
 	assert.Equal(t, 4, len([]rune(s.Row(1))), "every byte accounted for: a, replacement, b, c")
 }
+
+// TestSnapshotKeepsStyles is the capability a recording needs, and the one its
+// absence quietly broke: rendering String() into a fresh screen loses every
+// colour, because String is plain text.
+func TestSnapshotKeepsStyles(t *testing.T) {
+	t.Parallel()
+	s := New(20, 6)
+	fmt.Fprint(s, "\x1b[32mgreen\x1b[0m\n\x1b[1;31mbold red\x1b[0m\n")
+
+	shot := s.Snapshot()
+	assert.Equal(t, "32", shot.StyleAt(1, 1), "colour survives the copy")
+	assert.Equal(t, "1;31", shot.StyleAt(2, 1))
+	assert.Equal(t, "green", shot.Row(1))
+
+	// And it is INDEPENDENT: the live screen keeps being written to, and a
+	// sequence of pointers to one screen would all show its final state.
+	fmt.Fprint(s, "\x1b[33mlater\x1b[0m\n")
+	assert.Equal(t, "", shot.Row(3), "the snapshot does not follow the screen forward")
+	assert.Equal(t, "later", s.Row(3))
+}
+
+func TestSnapshotCarriesTheWholeTerminal(t *testing.T) {
+	t.Parallel()
+	s := New(20, 10)
+	fmt.Fprint(s, "\x1b[1;7r\x1b[4;2H")
+	shot := s.Snapshot()
+	row, col := shot.Cursor()
+	assert.Equal(t, 4, row)
+	assert.Equal(t, 2, col)
+	top, bottom := shot.ScrollRegion()
+	assert.Equal(t, 1, top)
+	assert.Equal(t, 7, bottom, "a snapshot is a terminal, not a picture of one")
+}
