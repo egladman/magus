@@ -62,17 +62,17 @@ export fun renderCommitFooter(path: str, site: Site) > str !> any {
     if (hist != null and hist.len() > 0) {
         var earlier: mut [{str: any}] = mut [<{str: any}>];
         foreach (row in hist) {
-            final parts = row.split("|");
-            if (parts.len() >= 3 and parts[0] != cFull) {
-                final rec = mut {<str: any>};
-                rec["full"] = parts[0];
-                rec["short"] = parts[1];
-                rec["stampAttr"] = parts[2];
-                rec["stampDisplay"] = formatISOShort(parts[2]);
+            final histParts = row.split("|");
+            if (histParts.len() >= 3 and histParts[0] != cFull) {
+                final histRec = mut {<str: any>};
+                histRec["full"] = histParts[0];
+                histRec["short"] = histParts[1];
+                histRec["stampAttr"] = histParts[2];
+                histRec["stampDisplay"] = formatISOShort(histParts[2]);
                 var rowSubj = "";
-                if (parts.len() >= 4) { rowSubj = parts[3]; }
-                rec["subj"] = rowSubj;
-                earlier.append(rec);
+                if (histParts.len() >= 4) { rowSubj = histParts[3]; }
+                histRec["subj"] = rowSubj;
+                earlier.append(histRec);
             }
         }
         if (earlier.len() > 0) {

@@ -1216,7 +1216,7 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
 
     final asset = fs\join("dist", "magus_" + v + "_" + goos + "_" + goarch + suffix + ".tar.gz");
     archive\compress(stage, asset, {});
-    fs\delete(stage);
+    fs\removeAll(stage);
 
     final digest = crypto\hash(crypto\HashAlgorithm.Sha256, fs\readFile(asset));
     fs\writeFile(asset + ".sha256", digest + "  " + fs\basename(asset) + "\n");
@@ -2034,13 +2034,13 @@ export fun deploy_generate(ctx: magus\Context, args: [str]) > void !> any {
 
     // Rebuilt from empty every time: a stale page left behind by a previous assembly would
     // publish as a live URL that no source produces any more.
-    if (fs\exists(OUT)) { fs\delete(OUT); }
+    if (fs\exists(OUT)) { fs\removeAll(OUT); }
     fs\copyDir(DOCS_GEN, OUT);
     // The console project OWNS /console/, so its subtree is replaced wholesale. This discards
     // the docs render's /console/ redirect stub, which exists only to satisfy the docs
     // asset-integrity gate, so the real app wins - the same precedence `serve` gets from
     // longest-prefix mount routing.
-    if (fs\exists(OUT + "/console")) { fs\delete(OUT + "/console"); }
+    if (fs\exists(OUT + "/console")) { fs\removeAll(OUT + "/console"); }
     fs\copyDir(CONSOLE_GEN, OUT + "/console");
 
     magus\log.info("assembled " + OUT + " - docs at /, console at /console/");

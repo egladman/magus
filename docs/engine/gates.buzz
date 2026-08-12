@@ -29,7 +29,7 @@ import "lib/conventions" as _;
 // canonical line, not a fabricated branch), rename-proof (survives a default-branch
 // rename), and identical on every branch so a feature-branch render never drifts -
 // the reason the old hardcoded "main" existed, now solved without the lie.
-export fun loadMeta(site: Site) > void {
+export fun loadMeta(site: Site) > void !> any {
     if (site.metaLoaded) { return; }
     site.metaPrefix = capture("git -C " + site.root + " rev-parse --show-prefix");
     site.metaBranch = "HEAD";
@@ -48,7 +48,7 @@ export fun loadMeta(site: Site) > void {
 // that fails the build the moment someone adds a page - before they have tagged it - trains
 // people to reach for an escape hatch. Print the shortfall, let it be burned down, and promote
 // it to a throw once the number is at zero and staying there.
-export fun axisReport(site: Site) > void {
+export fun axisReport(site: Site) > void !> any {
     var thin: mut [str] = mut [<str>];
     foreach (p in site.docPages) {
         final n = site.pageAxes[p.url];
@@ -70,7 +70,7 @@ export fun axisReport(site: Site) > void {
 // assetIntegrityCheck throws on any dangling href/src in the written output, so a
 // renamed bundle or forgotten alias fails the build instead of shipping a 404.
 export fun assetIntegrityCheck(site: Site) > void !> any {
-    var files: mut [str] = mut [<str>];
+    final files: mut [str] = mut [<str>];
     walkGen("", files, site);
     foreach (f in files) {
         if (f.endsWith(".html") == false and f.endsWith(".xml") == false and f.endsWith(".txt") == false) {
@@ -96,7 +96,7 @@ export fun assetIntegrityCheck(site: Site) > void !> any {
 export fun orphanCheck(site: Site) > void !> any {
     // Every written page, keyed the way pageKey() yields, so BFS can tell a page
     // link from an asset link.
-    var files: mut [str] = mut [<str>];
+    final files: mut [str] = mut [<str>];
     walkGen("", files, site);
     var isPage: mut {str: bool} = mut {};
     foreach (f in files) {
@@ -139,17 +139,17 @@ export fun orphanCheck(site: Site) > void !> any {
 }
 
 
-export fun capture(cmd: str) > str {
+export fun capture(cmd: str) > str !> any {
     final tmp = os\tmpFilename("sitegen");
     final code = os\execute(["sh", "-c", cmd + " > " + tmp + " 2>/dev/null"]);
     if (code != 0) {
-        fs\delete(tmp);
+        fs\removeAll(tmp);
         return "";
     }
     final f = io\File.open(tmp, io\FileMode.read);
     final result = f.readAll();
     f.close();
-    fs\delete(tmp);
+    fs\removeAll(tmp);
     return result.trim();
 }
 
@@ -170,7 +170,7 @@ final HISTORY_MAX = 8;
 //     first; drives the collapsed history panel.
 // The log prints "SUBJ:<subject>" after each ">>>" header so both fields ride together
 // without a second git spawn.
-export fun buildCommits(site: Site) > {str: str} {
+export fun buildCommits(site: Site) > {str: str} !> any {
     var m: mut {str: str} = mut {};
     site.metaHistory = mut {};
     final log = capture("TZ=UTC git -C " + site.root + " log --first-parent --diff-merges=first-parent --name-only "
@@ -279,7 +279,7 @@ export fun scanReferencesInHTML(html: str, pageDir: str) > [str] {
 
 // walkGen recursively enumerates every written file under gen/ so the integrity check
 // reads each once.
-export fun walkGen(rel: str, acc: [str], site: Site) > void !> any {
+export fun walkGen(rel: str, acc: mut [str], site: Site) > void !> any {
     var dir = site.outDir;
     if (rel != "") { dir = site.outDir + "/" + rel; }
     foreach (name in fs\listDir(dir)) {
@@ -343,7 +343,7 @@ export fun pruneStaleOutputs(site: Site) > void !> any {
         }
         if (produced) { continue; }
         std\print("  pruning stale " + dir + "/ (no longer produced)");
-        fs\delete(site.outDir + "/" + dir);
+        fs\removeAll(site.outDir + "/" + dir);
     }
 }
 
@@ -492,8 +492,8 @@ export fun conventionsCheck(root: str, docs: str) > void !> any {
     collectMarkdown(root + "/" + docs, "", files);
     final sorted = files.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
 
-    var broken: mut [str] = mut [<str>];
-    var violations: mut [str] = mut [<str>];
+    final broken: mut [str] = mut [<str>];
+    final violations: mut [str] = mut [<str>];
     var checked = 0;
 
     // The docs corpus, addressed as docs/<rel> so a finding names a path you can open.

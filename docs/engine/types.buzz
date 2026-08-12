@@ -167,7 +167,7 @@ export object Site {
     metaShort: str = "",
     metaStamp: str = "",
     metaCommits: mut {str: str},
-    metaHistory: mut {str: [str]},
+    metaHistory: mut {str: mut [str]},
     metaLoaded: bool = false,
 
     // One JSON-encoded search record per rendered page, joined into
@@ -225,7 +225,7 @@ export object Site {
     // accumulates which page URLs linked each anchor, emitted as glossary-index.json for
     // the term popover ("referenced on ...").
     glossaryTerms: [GlossaryTerm] = mut [<GlossaryTerm>],
-    glossaryRefs: mut {str: [str]},
+    glossaryRefs: mut {str: mut [str]},
 
     // Documentation conventions, parsed pre-walk from conventions.md. Each rendered page gets
     // a subtle "?" hint next to a convention marker (an admonition title, a code caption)
@@ -454,7 +454,7 @@ export object Site {
         while (i < dirCount) {
             final seg = segs[i];
             if (acc == "") { acc = seg; } else { acc = acc + "/" + seg; }
-            var label = capitalizeFirst(seg);
+            final label = capitalizeFirst(seg);
             final t = this.lookupTitle(acc + "/");
             if (t != "") {
                 li = li + "<li><a href=\"" + root + acc + "/\">" + t + "</a></li>";
@@ -885,7 +885,7 @@ export object Site {
             // Dropping the untitled spelling both fixes that and de-duplicates the
             // home page, which would otherwise be listed twice under one term.
             var seen: mut {str: bool} = mut {};
-            final bySection = mut {<str: [{str: str}]>};
+            final bySection = mut {<str: mut [{str: str}]>};
             var count = 0;
             foreach (u in urls!) {
                 final title = this.lookupTitle(u);
