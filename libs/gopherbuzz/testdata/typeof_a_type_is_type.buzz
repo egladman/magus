@@ -1,0 +1,7 @@
+// @expect: <type>|<A>|<type>
+// Naming a TYPE yields `<type>`; an INSTANCE yields its own type. A local that
+// shadows the name with a value reports the value's type, which is why the check
+// compares the scope binding against the registered type by identity.
+object A { x: int = 1 }
+protocol P { fun go() > void; }
+final __r = "{typeof A}|{typeof A{}}|{typeof P}";

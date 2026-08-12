@@ -294,10 +294,12 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 			// calls type-check regardless of arity or argument labels.
 			// A zdef struct is a TYPE, registered the same way a written `object`
 			// is, so the literal and `typeof` resolve through the usual paths.
+			isStruct := map[string]bool{}
 			if structs := zdefStructDecls(v.Expr); len(structs) > 0 {
 				nodes := make([]ast.Node, len(structs))
 				for i, od := range structs {
 					nodes[i] = od
+					isStruct[od.Name] = true
 				}
 				c.registerTypeDecls(nodes)
 			}
@@ -307,6 +309,12 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 				// fire E28 (Unknown is the tracking-failure sentinel, not user `any`).
 				ffiFn := &types.FuncType{Params: []types.Type{types.Unknown}, Ret: types.Unknown, Variadic: true}
 				for _, name := range names {
+					// A struct name is a TYPE, already bound by registerTypeDecls above.
+					// Rebinding it as a callable made `typeof Data` answer the callable's
+					// type instead of `<type>`, and would let `Data(...)` type-check.
+					if isStruct[name] {
+						continue
+					}
 					c.define(name, ffiFn, true)
 				}
 			}
@@ -882,6 +890,21 @@ func (c *checker) infer(n ast.Node) types.Type {
 		// operand is never evaluated at runtime, which is what lets `typeof` tell
 		// `final list = []` ([any]) from `final slist: [str] = []` ([str]) - the same
 		// empty list, distinguishable only before it runs.
+		// Naming a TYPE yields `<type>`, not that type. `typeof A{}` is `<A>` - the
+		// type of an instance - but `typeof A` asks after the type VALUE itself, whose
+		// type is `type`. Upstream's types-as-value.buzz asserts both, and the two read
+		// identically here otherwise: a type name is bound in scope carrying its own
+		// type, so inferring the operand answered `<A>` for either spelling.
+		if id, isName := v.Operand.(*ast.IdentExpr); isName {
+			if declared, isType := c.types[id.Name]; isType {
+				// Compared by identity so a local that SHADOWS the name with an
+				// instance still reports the instance's type.
+				if e, bound := c.lookup(id.Name); !bound || e.typ == declared {
+					v.Resolved = canonicalTypeName(types.TypeVal)
+					return types.TypeVal
+				}
+			}
+		}
 		v.Resolved = canonicalTypeName(c.infer(v.Operand))
 		return types.TypeVal
 	case *ast.IntLit:

@@ -88,5 +88,6 @@ testing.buzz
 throw-inside-try.buzz
 try-catch.buzz
 tuples.buzz
+types-as-value.buzz
 upvalues.buzz
 utf8.buzz

@@ -22,7 +22,7 @@ rather than only the flattering one.
 
 | upstream suite          | files |      gopherbuzz | what it asks                                                     |
 | ----------------------- | ----: | --------------: | ---------------------------------------------------------------- |
-| `tests/behavior/`       |    83 |     **79 pass** | does correct source produce the right answer?                    |
+| `tests/behavior/`       |    83 |     **80 pass** | does correct source produce the right answer?                    |
 | `tests/compile_errors/` |    77 | **71 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
 | `tests/fuzzed/`         |   644 |    **0 panics** | can malformed input crash the front end?                         |
 | `tests/bench/`          |    11 |         not run | upstream's benchmarks (ours are in [`benchmarks/`](benchmarks/)) |
@@ -151,9 +151,6 @@ evaluates its target twice, and generics are erased.
 property of the EMBEDDING rather than by unwritten code, so this list is not a
 backlog:
 
-- **`typeof` over a type.** `types-as-value` is down to `typeof C == <type>` for a
-  protocol and `typeof Data == <type>` for a foreign struct: naming a TYPE yields the
-  type itself, not `<type>`. (`ffi.buzz` now passes outright - see "What works".)
 - **buzz's own native-extension ABI.** `extern-library` and `c-buzz-api` are a
   different problem, and the failure mode hides it: `extern-library` looks like it
   only wants a shared library, and "null is not callable" is just its unbound
