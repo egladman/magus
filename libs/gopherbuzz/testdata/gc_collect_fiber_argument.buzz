@@ -1,0 +1,25 @@
+// @expect: true
+// A fiber owns a VM of its own, so its stack and frames are collector roots too.
+// This instance is built here but survives only as an argument bound in the
+// SUSPENDED fiber's frame; this frame holds just the handle. markReachable had no
+// tagFib case at all, so the sweep could not see it and called collect() on a live
+// object -- the unrecoverable direction.
+import "gc";
+
+var collected = false;
+
+object Tracked {
+    id: int,
+
+    fun collect() > void { collected = true; }
+}
+
+fun hold(t: Tracked) > int *> int {
+    _ = yield 0;
+    return t.id;
+}
+
+final f = &hold(Tracked{ id = 1 });
+final first = resume f;
+gc\collect();
+final __r = !collected and first == 0;

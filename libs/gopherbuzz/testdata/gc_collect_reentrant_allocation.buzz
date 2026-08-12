@@ -1,0 +1,21 @@
+// @expect: true
+// callCollector runs Buzz, so a collect() body may itself build a collectable.
+// Without a guard that allocation re-enters the sweep from inside its own
+// callback; the new instance must simply be tracked for a later sweep.
+var collected = 0;
+
+object Spawner {
+    id: int,
+
+    fun collect() > void {
+        collected = collected + 1;
+        _ = Spawner{ id = 0 };
+    }
+}
+
+var i = 0;
+while (i < 2000) {
+    _ = Spawner{ id = i };
+    i = i + 1;
+}
+final __r = collected > 0;

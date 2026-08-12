@@ -1,0 +1,29 @@
+// @expect: 3
+// One registry per fiber tree, held on the root VM. While each VM kept its own,
+// an instance built inside a fiber was invisible to the parent's sweep and its
+// collect() never ran at all.
+import "gc";
+
+var collected = 0;
+
+object Tracked {
+    id: int,
+
+    fun collect() > void { collected = collected + 1; }
+}
+
+fun spawn(n: int) > void *> int {
+    var i = 0;
+    while (i < n) {
+        // Unreachable as soon as the next statement runs.
+        _ = Tracked{ id = i };
+        _ = yield i;
+        i = i + 1;
+    }
+}
+
+foreach (v in &spawn(3)) {
+    _ = v;
+}
+gc\collect();
+final __r = collected;

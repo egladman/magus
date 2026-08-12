@@ -29,6 +29,7 @@ package vm
 import (
 	"encoding/binary"
 	"fmt"
+	"log/slog"
 	"math"
 	"strings"
 	"sync"
@@ -132,7 +133,23 @@ func StructLayoutWith(fieldTypes []string, known map[string]NamedLayout) (size, 
 		align = 1
 	}
 	size = roundUp(size, align)
+	logLayout("ffi struct layout", fieldTypes, size, align, offsets)
 	return size, align, offsets, nil
+}
+
+// logLayout reports one computed aggregate layout. A wrong offset here marshals
+// plausible garbage instead of raising, so the offsets are the whole point of the
+// record. Guarded because the slice copy is not free on an unobserved run.
+func logLayout(msg string, fieldTypes []string, size, align int, offsets []int) {
+	if !ffiLogEnabled(LevelTrace) {
+		return
+	}
+	ffiLog(LevelTrace, msg,
+		slog.Any("fields", fieldTypes),
+		slog.Int("size", size),
+		slog.Int("align", align),
+		slog.Any("offsets", offsets),
+	)
 }
 
 func roundUp(n, to int) int {
@@ -173,7 +190,13 @@ func AllocFFI(n int) (uintptr, error) {
 	addr := uintptr(unsafe.Pointer(&pb.data[0]))
 	memMu.Lock()
 	memRegistry[addr] = pb
+	live := len(memRegistry)
 	memMu.Unlock()
+	ffiLog(LevelTrace, "ffi alloc",
+		slog.Uint64("addr", uint64(addr)),
+		slog.Int("size", n),
+		slog.Int("live", live),
+	)
 	return addr, nil
 }
 
@@ -209,6 +232,11 @@ func FreeFFI(addr uintptr) error {
 	}
 	pb.pin.Unpin()
 	delete(memRegistry, addr)
+	ffiLog(LevelTrace, "ffi free",
+		slog.Uint64("addr", uint64(addr)),
+		slog.Int("size", len(pb.data)),
+		slog.Int("live", len(memRegistry)),
+	)
 	return nil
 }
 
@@ -373,6 +401,7 @@ func UnionLayoutWith(fieldTypes []string, known map[string]NamedLayout) (size, a
 	if rem := size % align; rem != 0 {
 		size += align - rem
 	}
+	logLayout("ffi union layout", fieldTypes, size, align, offsets)
 	return size, align, offsets, nil
 }
 

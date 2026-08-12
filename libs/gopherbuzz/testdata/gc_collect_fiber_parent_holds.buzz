@@ -1,0 +1,43 @@
+// @expect: true
+// The dangerous half of the shared registry. Each instance is built inside the
+// fiber and handed straight out; only the CALLER retains it. A sweep that ran
+// inside the fiber and judged reachability against that fiber's roots alone would
+// collect every one of them while the caller still holds it -- and the automatic
+// sweep is what makes that fire without the program asking. The loop runs well
+// past the sweep threshold on purpose.
+//
+// `sink` MUST be a local of hold(), not a top-level binding. A top-level `final`
+// is a global, and the fiber's own env chain reaches the globals through its
+// parent pointer, so a global sink stays reachable from the fiber alone and the
+// test silently stops discriminating. As a local of a frame the fiber never
+// names, it is reachable only by walking from the fiber up to its creator, which
+// is the thing under test. Measured: with a per-VM registry this collects 1785 of
+// the 2000 live instances.
+import "gc";
+
+var collected = 0;
+
+object Tracked {
+    id: int,
+
+    fun collect() > void { collected = collected + 1; }
+}
+
+fun spawn(n: int) > void *> Tracked {
+    var i = 0;
+    while (i < n) {
+        _ = yield Tracked{ id = i };
+        i = i + 1;
+    }
+}
+
+fun hold() > bool {
+    final sink = mut [<Tracked>];
+    foreach (t in &spawn(2000)) {
+        sink.append(t);
+    }
+    gc\collect();
+    return collected == 0 and sink.len() == 2000;
+}
+
+final __r = hold();

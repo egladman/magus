@@ -47,6 +47,7 @@ inferred-enum-case.buzz
 inferred-var-type.buzz
 inline-catch.buzz
 inline-if.buzz
+interpolation-nested-string-literal.buzz
 interpolation.buzz
 invoke.buzz
 io.buzz
@@ -83,6 +84,7 @@ run-file.buzz
 scope.buzz
 std.buzz
 str.buzz
+tail-call-try-state.buzz
 tail-call.buzz
 terminal-flow.buzz
 testing.buzz

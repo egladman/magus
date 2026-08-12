@@ -1,0 +1,21 @@
+// @expect: true
+// The registry pinned every collectable until the program called gc\collect(), so
+// a program that never called it retained all of them. Upstream fires collect()
+// when an object becomes garbage rather than when asked, so sweeping unbidden is
+// the closer behaviour as well as the bounded one. Note this file never imports
+// gc: the sweep must happen with no cooperation from the program.
+var collected = 0;
+
+object Tracked {
+    id: int,
+
+    fun collect() > void { collected = collected + 1; }
+}
+
+var i = 0;
+// Each instance is unreachable the moment the next statement runs.
+while (i < 5000) {
+    _ = Tracked{ id = i };
+    i = i + 1;
+}
+final __r = collected > 0;

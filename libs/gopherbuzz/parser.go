@@ -2754,8 +2754,15 @@ func (p *parser) parseFunRest(extern bool) (funRest, error) {
 		}
 	}
 	// Consume optional *> yield-type annotation: fun f() > R *> Y { }
+	// A non-optional yield type is legal. Upstream required optional-or-void until
+	// fb54e7b, which dropped the check and instead types `resume` as the yield type
+	// made optional -- resume still answers null when the fiber returns without
+	// yielding again. gopherbuzz needs no counterpart to that second half: this
+	// checker does not model optionality at all (annotParser consumes a trailing `?`
+	// and records nothing, and Null is assignable to every type), so `resume` was
+	// already permissive in exactly that direction. The reject was all there was.
 	if p.check(token.YieldArrow) {
-		ya := p.advance()
+		p.advance()
 		if p.check(token.Void) {
 			p.advance()
 			out.yieldAnnot = "void"
@@ -2765,13 +2772,6 @@ func (p *parser) parseFunRest(extern bool) (funRest, error) {
 				return funRest{}, err
 			}
 			out.yieldAnnot = ya
-		}
-		// Strict parity with upstream Buzz (src/Parser.zig): a fiber's yield type
-		// must be optional or void — resume returns null on completion, so the
-		// yielded type is inherently optional. Reject a non-optional yield type
-		// rather than leniently accepting it.
-		if out.yieldAnnot != "void" && !strings.HasSuffix(out.yieldAnnot, "?") {
-			return funRest{}, fmt.Errorf("buzz: line %d:%d: expected optional type or void for fiber yield type, got %q", ya.Line, ya.Col, out.yieldAnnot)
 		}
 	}
 	// An extern declaration stops here: the semicolon stands where a body would be,

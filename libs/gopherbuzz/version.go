@@ -21,4 +21,4 @@ const LanguageVersion = "0.6.0-dev"
 // its line count IS the passing count, because the conformance test enforces the
 // list in both directions. The README's parity section carries the running record
 // in prose. Bump this ref and re-run the conformance target on every sync.
-const UpstreamRef = "0.5.0-251-ged42f47"
+const UpstreamRef = "0.5.0-265-g294d8f9"

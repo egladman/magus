@@ -1,0 +1,30 @@
+// @expect: true
+// The mark must follow a fiber held by another fiber: `held` is reachable only
+// from the inner fiber's frame, which is reachable only from the outer fiber's
+// frame, which is reachable only from the top level.
+import "gc";
+
+var collected = false;
+
+object Tracked {
+    id: int,
+
+    fun collect() > void { collected = true; }
+}
+
+fun inner(t: Tracked) > void *> int {
+    _ = yield t.id;
+}
+
+fun outer() > void *> int {
+    final held = Tracked{ id = 1 };
+    foreach (v in &inner(held)) {
+        gc\collect();
+        _ = yield v;
+    }
+}
+
+foreach (v in &outer()) {
+    _ = v;
+}
+final __r = !collected;

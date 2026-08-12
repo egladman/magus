@@ -1,0 +1,9 @@
+// @expect: 1
+// A fiber's yield type need not be optional. Upstream required optional-or-void
+// until fb54e7b; it now accepts `*> int` and types `resume` as the optional of the
+// yield type instead. Verified against the upstream binary at 0.5.0-265-g294d8f9.
+fun work() > void *> int {
+    _ = yield 1;
+}
+final f = &work();
+final __r = resume f;
