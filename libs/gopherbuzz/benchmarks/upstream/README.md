@@ -40,44 +40,49 @@ Apple M5, darwin/arm64, `-benchtime 15x`, upstream at `0.5.0-265-g294d8f9` built
 `-Doptimize=ReleaseSafe`. Milliseconds per run; "net" subtracts the startup floor.
 Ratio is upstream-relative, so >1 means upstream is faster.
 
-| workload        | gopherbuzz | upstream | gb net | up net |    ratio |
-| --------------- | ---------: | -------: | -----: | -----: | -------: |
-| `startup`       |       3.54 |     2.13 |      - |      - |     1.7x |
-| `fiber`         |       6.68 |     6.23 |   3.14 |   4.10 | **0.8x** |
-| `strinterp`     |      60.36 |    60.11 |  56.82 |  57.98 | **1.0x** |
-| `mapops`        |      33.21 |    23.51 |  29.68 |  21.39 |     1.4x |
-| `trycatch`      |      19.93 |     9.57 |  16.39 |   7.44 |     2.2x |
-| `listops`       |      26.81 |     8.96 |  23.27 |   6.83 |     3.4x |
-| `fib`           |      23.35 |     6.42 |  19.81 |   4.30 |     4.6x |
-| `loopsum`       |      46.34 |    10.57 |  42.80 |   8.44 |     5.1x |
-| `closure`       |      45.25 |    10.11 |  41.72 |   7.99 |     5.2x |
-| `object`        |      42.39 |     8.84 |  38.85 |   6.71 |     5.8x |
-| `mandelbrot`    |     395.38 |    67.56 | 391.84 |  65.43 |     6.0x |
-| `foreach_range` |      41.83 |     7.72 |  38.29 |   5.59 |     6.8x |
-| `match`         |     164.89 |    10.03 | 161.35 |   7.90 |  **20x** |
+Read the ratios, not the milliseconds. One run at 15x carries real noise -- upstream's
+`strinterp` moved 21% between two runs of this same suite on an idle machine -- so treat
+anything inside roughly +/-25% as a tie. Allocation counts, in `../../bench_test.go`, are
+the stable number when a change needs proving.
 
-Upstream leads nearly everywhere, which is the expected shape: it compiles to
-native code through MIR, and gopherbuzz is a bytecode interpreter written in Go.
-The interesting rows are the ones that depart from that shape.
+| workload        | gopherbuzz | upstream | gb net | up net |     ratio |
+| --------------- | ---------: | -------: | -----: | -----: | --------: |
+| `startup`       |       3.41 |     2.06 |      - |      - |      1.7x |
+| `strinterp`     |      53.97 |    72.98 |  50.56 |  70.92 |  **0.7x** |
+| `fiber`         |       7.59 |     6.15 |   4.18 |   4.09 |  **1.0x** |
+| `mapops`        |      31.28 |    22.58 |  27.87 |  20.52 |      1.4x |
+| `trycatch`      |      18.87 |     8.39 |  15.46 |   6.33 |      2.4x |
+| `listops`       |      26.51 |     8.87 |  23.10 |   6.81 |      3.4x |
+| `fib`           |      22.59 |     6.38 |  19.18 |   4.32 |      4.4x |
+| `loopsum`       |      46.84 |    10.49 |  43.43 |   8.43 |      5.2x |
+| `closure`       |      43.22 |     9.52 |  39.81 |   7.46 |      5.3x |
+| `mandelbrot`    |     380.86 |    65.57 | 377.45 |  63.51 |      5.9x |
+| `object`        |      41.52 |     8.12 |  38.11 |   6.06 |      6.3x |
+| `foreach_range` |      40.28 |     7.75 |  36.87 |   5.69 |      6.5x |
+| `match`         |     110.68 |     9.86 | 107.27 |   7.80 | **13.8x** |
 
-**`match` is the outlier and the actionable one.** 20x is not the ~5x the
-interpreter/JIT gap explains elsewhere, so it is a gopherbuzz problem rather than a
-structural one. `BenchmarkMatchEnum` in `../../bench_test.go` shows why: roughly 7
-allocations per evaluated arm. Reducing that is the single largest win available
-here, and it is worth taking before any of the broad interpreter work.
+**Geometric mean 3.5x, median 5.2x.** That is the honest one-line answer: upstream is
+roughly three to five times faster across this set. The shape is expected - upstream
+compiles to native code through MIR, gopherbuzz is a bytecode interpreter written in Go
 
-**`fiber` is gopherbuzz's win**, and the only one. A fiber switch costs less here
-than upstream's, which is worth keeping an eye on as a property rather than an
-accident.
+- and a 3-5x gap against a JIT is a respectable place for an interpreter to sit. The
+  interesting rows are the ones that depart from it.
 
-**`strinterp` is a dead heat**, and both are slow in absolute terms -- it is the
-most expensive non-`mandelbrot` workload for upstream too. So gopherbuzz's
-long-standing "strings are the soft spot" framing is only half right: the gap to
-upstream has closed here, and what remains is that string building is expensive in
-both.
+**gopherbuzz WINS `strinterp`** (0.7x) and ties `fiber` (1.0x). The long-standing
+"strings are gopherbuzz's soft spot" framing is now wrong: string building is the most
+expensive non-`mandelbrot` workload for UPSTREAM, and gopherbuzz does it faster.
 
-**`mapops` at 1.4x** is the second-best relative showing, so the map implementation
-is not where the remaining time is.
+**`match` is still the outlier at 13.8x**, down from 20.4x. Interning one Value per enum
+case removed 71% of `BenchmarkMatchEnum`'s allocations (175007 -> 50007): every arm
+comparison used to heap-allocate, take a global mutex, and append a permanent entry to
+the global heap table. What remains is measured and not yet done - `rangeValue` allocates
+on every range arm even though the bounds are compile-time constants, and folding it into
+the const pool needs a bytecode format bump because the codec has no `tagRange`.
+Separately `strMethod` allocates a closure plus a wrapper on every string method call,
+which is a larger and more general win than match.
+
+**`mapops` at 1.4x** is the next-best relative showing, so the map implementation is not
+where the remaining time is.
 
 ## Dialect notes
 

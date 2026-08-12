@@ -451,7 +451,7 @@ func getMember(vm *VM, obj Value, name string) (Value, error) {
 		enumDef := vm.asEnumDef(obj)
 		for i, c := range enumDef.Cases {
 			if c == name {
-				return vm.allocEnumVal(&enumValObj{Enum: enumDef.Name, Case: name, Val: enumDef.Values[i]}), nil
+				return vm.enumCase(enumDef, i), nil
 			}
 		}
 		return Null, fmt.Errorf("buzz: enum %s has no case %q", enumDef.Name, name)
@@ -971,6 +971,22 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 
 // strMethod returns the callable for the named built-in String method, or nil if
 // name is not a known string method.
+// enumCase returns the interned Value for one case of def, building the table on
+// first use. See enumDefObj.vals for why sharing is safe.
+func (vm *VM) enumCase(def *enumDefObj, i int) Value {
+	if def.vals == nil {
+		def.vals = make([]Value, len(def.Cases))
+		for j := range def.Cases {
+			def.vals[j] = vm.allocEnumVal(&enumValObj{
+				Enum: def.Name,
+				Case: def.Cases[j],
+				Val:  def.Values[j],
+			})
+		}
+	}
+	return def.vals[i]
+}
+
 func strMethod(vm *VM, s Value, name string) *directObj {
 	sobj := vm.asStr(s)
 	str := sobj.V

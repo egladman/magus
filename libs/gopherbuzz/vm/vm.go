@@ -1338,11 +1338,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 					if wantKey {
 						vm.push(IntValue(int64(state.idx)))
 					}
-					vm.push(vm.allocEnumVal(&enumValObj{
-						Enum: state.enumDef.Name,
-						Case: state.enumDef.Cases[state.idx],
-						Val:  state.enumDef.Values[state.idx],
-					}))
+					vm.push(vm.enumCase(state.enumDef, state.idx))
 					state.idx++
 				} else {
 					done = true
@@ -1978,7 +1974,7 @@ func (vm *VM) enumFromValue(enum Value, args []Value) (Value, error) {
 	def := vm.asEnumDef(enum)
 	for i, cv := range def.Values {
 		if valuesEqual(cv, args[0]) {
-			return vm.allocEnumVal(&enumValObj{Enum: def.Name, Case: def.Cases[i], Val: cv}), nil
+			return vm.enumCase(def, i), nil
 		}
 	}
 	return Null, nil

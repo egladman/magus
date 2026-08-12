@@ -134,6 +134,44 @@ jobs:
       - name: Replay every generator and compare declared outputs
         run: magus run generate:rw --race=replay
 
+  toolchain:
+    # Has anything this workspace runs been superseded upstream? Squarely this
+    # workflow's shape: it changes when a THIRD PARTY cuts a tag, never when a diff
+    # lands, so on the PR path it would be noise that fires on unrelated changes.
+    #
+    # It reports and never fails. tools/toolchain.buzz makes no selection and keeps no
+    # state by design - there is no "move to this version" here and no first-seen file,
+    # because that is a lockfile with another name. So the job's value is the log, and
+    # a red X would be claiming an authority the tool deliberately does not take.
+    # continue-on-error keeps a `git ls-remote` against someone else's host from
+    # colouring the run.
+    #
+    # The blocking half is elsewhere and needs no network: the `tools` window in
+    # magusfile.buzz, checked against the version magus already probes.
+    name: toolchain currency
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: '2026.4.8'
+
+      # source-path, not git-ref: this runs the magus THIS commit defines, so a
+      # magusfile change that adds or renames a wired tool is exercised by the same run
+      # that introduces it.
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      - name: Report installed versions against upstream tags
+        run: magus run toolchain-report .
+
   skill-evals:
     # MUTED 2026-08-03. This drives promptfoo against live models and costs real money.
     # The evals `smoke` and `grid` targets it calls are commented out in

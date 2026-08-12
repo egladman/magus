@@ -160,7 +160,8 @@ admin role - so each opens one instead, and merging it is what publishes the ind
 `setup-magus` is called two ways, on purpose:
 
 - `source-path: .` - nearly everything: ci's `preflight`, `ci`, `advice`,
-  `site-build`, `report`, both cd jobs, and audit's `determinism` and `skill-evals`. Builds the magus
+  `site-build`, `report`, both cd jobs, and audit's `determinism`, `toolchain` and
+  `skill-evals`. Builds the magus
   THIS commit defines and runs it against this commit's magusfile, so a change that
   `magusfile.buzz` needs is exercised by the very run that introduces it - there is
   no "release first" chicken-and-egg.

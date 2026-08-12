@@ -3,6 +3,12 @@ import "magus";
 // module rather than an export on this file.
 import "./tools/toolchain-policy" as policy;
 import "./tools/drift" as drift;
+// The optional half of toolchain observation: the `tools` window above is the gate
+// that can fail a build and makes no network calls; this reports when a declared
+// window has gone stale. Aliased `toolchains` because a module and a target function
+// cannot share a name - the alias would shadow and the call fails with "null is not
+// callable" at run time.
+import "./tools/toolchain" as toolchains;
 
 // Host modules: magus layers its methods onto Buzz's stdlib (camelCase).
 import "os";
@@ -2131,6 +2137,23 @@ export fun deploy_generate(ctx: magus\Context, args: [str]) > void !> any {
 //
 // This rebuilds docs/console CONTENT, never magus itself - it does NOT trip the
 // self-rebuild anti-pattern CLAUDE.md warns against.
+// toolchain_report observes each wired toolchain against the tags its own project
+// publishes, and prints. It never installs, never selects, never rewrites a pin - see
+// tools/toolchain.buzz for why that boundary is load-bearing.
+//
+// Deliberately OUT of ci, and out of every target ci reaches: it runs `git ls-remote`
+// against half a dozen third-party hosts, so it is neither hermetic nor fast, and
+// nothing it reports is a build failure. Run it by hand, or on the audit cron, which
+// is where the other non-blocking network checks already live.
+//
+// It was unreachable before this: tools/toolchain.buzz exports report() and nothing in
+// the workspace imported it, so a complete, documented feature sat with no caller. It
+// has no test blocks of its own, so buzz-test gating tools/ only proved it parses -
+// this target is what makes it runnable at all.
+export fun toolchain_report(ctx: magus\Context, args: [str]) > void !> any {
+    toolchains\report();
+}
+
 export fun serve(ctx: magus\Context, args: [str]) > void !> any {
     final DOCS_GEN = "docs/gen";
     final CONSOLE_GEN = "console/gen";

@@ -336,6 +336,21 @@ func (o *objDeclPayload) heapKind() valueTag { return tagObjDecl }
 type enumDefObj struct {
 	Name  string
 	Cases []string
+	// vals interns one Value per case, built on first use and shared thereafter.
+	//
+	// optimization: an enum value is immutable and fully determined by (def, case
+	//   index), so `Kind.one` was allocating an identical enumValObj on every
+	//   evaluation - and under the nanbox representation each allocation also takes
+	//   the global heap mutex and appends a permanent entry to the global heap table.
+	//   A four-arm `match` over an enum paid that up to four times per iteration.
+	// measured: BenchmarkMatchEnum 175007 -> 50007 allocs/op; the alloc profile
+	//   attributed 71% of the benchmark's objects to getMember -> allocEnumVal.
+	// trade-off: one Value slice retained per enum definition, for the life of the
+	//   definition. Enums are declared, not constructed, so the count is bounded by
+	//   the source.
+	// assumes: enum values are compared STRUCTURALLY (valuesEqual, tagEnumVal case),
+	//   so sharing a pointer can only make values equal that already were.
+	vals []Value
 	// Values holds each case's `.value`, parallel to Cases: the ordinal for a
 	// plain enum, the case name for an `enum<str>`, or whatever literal the case
 	// assigned. The compiler resolves all three forms, so the VM only reads.

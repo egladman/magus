@@ -723,8 +723,13 @@
           "reads_secrets": false
         },
         {
-          "name": "serve",
+          "name": "toolchain-report",
+          "declared": "toolchain_report",
           "doc": "serve is the workspace-root dev loop for BOTH deployables.",
+          "reads_secrets": false
+        },
+        {
+          "name": "serve",
           "reads_secrets": false
         }
       ],
@@ -1495,6 +1500,12 @@
               ]
             }
           ],
+          "reads_files": [
+            {
+              "project": "libs/gopherbuzz",
+              "glob": "**/*.md"
+            }
+          ],
           "reads_secrets": false
         },
         {
@@ -1624,6 +1635,12 @@
               "ops": [
                 "dprint"
               ]
+            }
+          ],
+          "reads_files": [
+            {
+              "project": "libs/testsprawl",
+              "glob": "**/*.md"
             }
           ],
           "reads_secrets": false

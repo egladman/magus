@@ -46,7 +46,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Size | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 10+ | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 100+ | `magus query kind:target` | `content-generate`, `site-generate`, `buzz-test` |
+| target | 100+ | `magus query kind:target` | `content-generate`, `site-generate`, `format` |
 | spell | 10+ | `magus query kind:spell` | `go`, `markdown`, `typescript` |
 | op | 60+ | `magus query kind:op` | `go-build`, `go-test`, `go-fmt` |
 | tool | 20+ | `magus query kind:tool` | `go`, `pnpm`, `buf` |
@@ -63,7 +63,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 37 | `magus query project:.` | `buzz-test`, `generate`, `lint` |
+| . | 38 | `magus query project:.` | `buzz-test`, `generate`, `lint` |
 | console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 4 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
@@ -101,7 +101,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `ci` | Runs the CI gates through their declared dependencies. |
 | `ci-shard` | Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed. |
 | `deploy-generate` | deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/. |
-| `serve` | serve is the workspace-root dev loop for BOTH deployables. |
+| `toolchain-report` | serve is the workspace-root dev loop for BOTH deployables. |
+| `serve` |  |
 | `image-build` | Two axes, one charm each. |
 | `security` | Gates on dependency LICENSE terms, which is a separate question from image_scan's vulnerability pass even though both drive trivy. |
 | `man-generate` | Renders the roff man pages into manpage/ (repo root). |
