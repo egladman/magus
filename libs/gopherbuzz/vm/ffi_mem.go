@@ -379,3 +379,61 @@ func lookupLayout(ft string, known map[string]NamedLayout) (size, align int, ok 
 	}
 	return 0, 0, false
 }
+
+// declaredAggregates remembers every struct and union a zdef has declared, so a
+// LATER zdef can name one in a field. Upstream's ffi.buzz needs exactly that: it
+// declares `Data` in one zdef call and, in a separate call further down the file, a
+// union `Misc` with a `Data` member. Each call parses independently, so without this
+// the second sees an unknown C type.
+//
+// Process-wide rather than per-Session because FFIProvider is registered once and
+// carries no session; that matches the interface's stated contract (safe for one
+// Session at a time).
+//
+// Lives HERE, in the untagged file, not beside the purego provider: ForeignStructTypes
+// in value.go reads it, and value.go compiles on every platform. Putting it behind the
+// FFI build tag broke GOOS=windows, GOOS=js and -tags noffi outright.
+var declaredAggregates = map[string]NamedLayout{}
+
+// declaredFieldTypes remembers each aggregate's field C types, parallel to the object
+// type synthesized for it, so a struct argument can be marshalled field by field.
+var declaredFieldTypes = map[string][]string{}
+
+// AllocCString copies s into a NUL-terminated C block and returns its address. The
+// caller owns the block and frees it with FreeFFI.
+//
+// Untagged because it needs nothing from the FFI provider: it is AllocFFI plus a
+// copy, both of which are plain Go over a pinned slice.
+func AllocCString(s string) (uintptr, error) {
+	b := append([]byte(s), 0)
+	addr, err := AllocFFI(len(b))
+	if err != nil {
+		return 0, err
+	}
+	if err := WriteFFIBytes(addr, b); err != nil {
+		_ = FreeFFI(addr)
+		return 0, err
+	}
+	return addr, nil
+}
+
+// ReadCString reads a NUL-terminated C string at addr and returns it WITH the
+// terminator, matching ffi\cstr so a string that round-trips through C compares
+// equal to the one that went in. Empty for a null pointer.
+//
+// Untagged, alongside AllocCString, because a Buffer reads pointer fields back on
+// every platform - putting it behind the FFI build tag broke the non-FFI builds.
+// The deref is the same unsafe read AllocFFI's pinned block already relies on.
+func ReadCString(addr uintptr) string {
+	if addr == 0 {
+		return ""
+	}
+	var b []byte
+	for i := uintptr(0); ; i++ {
+		c := *(*byte)(unsafe.Pointer(addr + i)) //nolint:govet // reading a C string byte by byte to its terminator
+		if c == 0 {
+			return string(b) + "\x00"
+		}
+		b = append(b, c)
+	}
+}

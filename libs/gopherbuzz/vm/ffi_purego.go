@@ -141,23 +141,6 @@ func buzzRetToReflect(v Value, kind CType, outType reflect.Type) reflect.Value {
 // puregoFFI implements FFIProvider using purego's dlopen/dlsym + RegisterFunc.
 type puregoFFI struct{}
 
-// declaredAggregates remembers every struct and union a zdef has declared, so a
-// LATER zdef can name one in a field. Upstream's ffi.buzz needs exactly that: it
-// declares `Data` in one zdef call and, in a separate call further down the file,
-// a union `Misc` with a `Data` member. Each call parses independently, so without
-// this the second sees an unknown C type.
-//
-// Process-wide rather than per-Session because FFIProvider is registered once and
-// carries no session; that matches the interface's stated contract (safe for one
-// Session at a time). A name redeclared with a different layout simply wins, which
-// is the same last-writer-wins a second zdef of the same symbol already has.
-var declaredAggregates = map[string]NamedLayout{}
-
-// declaredFieldTypes remembers each aggregate's field C types, parallel to the
-// object type synthesized for it, so a struct argument can be marshalled field by
-// field. Kept beside declaredAggregates and for the same reason.
-var declaredFieldTypes = map[string][]string{}
-
 // OpenLibrary opens libname and binds each signature, returning a Buzz map of
 // function name -> direct callable. An `extern` variable declaration binds as
 // a plain value instead: its symbol is resolved and read once at zdef() time
@@ -281,15 +264,6 @@ func loadExternVar(sig CFuncSig, sym uintptr) (Value, error) {
 }
 
 // goCString copies the NUL-terminated C string at addr into a Go string.
-// ReadCString reads a NUL-terminated C string at addr and returns it WITH the
-// terminator, matching ffi\cstr so a string that round-trips through C compares
-// equal to the one that went in.
-func ReadCString(addr uintptr) string {
-	if addr == 0 {
-		return ""
-	}
-	return goCString(addr) + "\x00"
-}
 
 func goCString(addr uintptr) string {
 	var b []byte
@@ -662,7 +636,7 @@ func marshalStructArg(inst *objectInst) (structArg, error) {
 		// A pointer field needs a C string of its own: the block holds the ADDRESS,
 		// so the bytes have to live somewhere for the duration of the call.
 		if strings.Contains(ct, "*") && v.tag() == tagStr {
-			sp, err := allocCString(v.asStr().V)
+			sp, err := AllocCString(v.asStr().V)
 			if err != nil {
 				return sa, err
 			}
@@ -710,22 +684,4 @@ func unmarshalStructArg(sa structArg) error {
 		}
 	}
 	return nil
-}
-
-// allocCString copies s into a NUL-terminated C block and returns its address. The
-// caller owns it and frees it when the call returns.
-// AllocCString copies s into a NUL-terminated C block and returns its address.
-func AllocCString(s string) (uintptr, error) { return allocCString(s) }
-
-func allocCString(s string) (uintptr, error) {
-	b := append([]byte(s), 0)
-	addr, err := AllocFFI(len(b))
-	if err != nil {
-		return 0, err
-	}
-	if err := WriteFFIBytes(addr, b); err != nil {
-		_ = FreeFFI(addr)
-		return 0, err
-	}
-	return addr, nil
 }
