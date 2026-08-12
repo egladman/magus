@@ -931,7 +931,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // local run said it would not. Comparing before against after asks the question that
     // actually matters (did the generators change anything?) and an unrelated edit no
     // longer hides the answer.
-    var dirtyBefore: [str] = mut [<str>];
+    var dirtyBefore: mut [str] = mut [<str>];
     foreach (f in vcs\status().files) { dirtyBefore.append(f.value); }
     final before = drift.hashes(dirtyBefore);
     gomod\replaceWorkspaceModules(ctx, go, ".");
@@ -944,7 +944,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // it also covers a generator writing a path nobody declared. Not diagnoseDrift: that
     // classifies against ONE target's declared outputs and inputs, and with none to
     // compare it always lands on the dev-build verdict.
-    var dirtyNow: [str] = mut [<str>];
+    var dirtyNow: mut [str] = mut [<str>];
     foreach (f in vcs\status().files) { dirtyNow.append(f.value); }
     final changed = drift.changedSince(before, dirtyNow);
     if (changed.len() > 0) {
@@ -1613,10 +1613,15 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 // aim them at. Every .buzz here imports "magus"/"magus/spell" and uses embedding-only
 // constructs, so a non-embedded parse rejects all 62 of them; that is by design, not
 // drift. What they were meant to protect is already covered: spells/examples/**
-// by TestExamplesParseAndRecord (ParseEmbedded), every spells/<dir>/spell.buzz by the
-// registry compile that doctor's spell-contract check exercises, and every magusfile by
-// doctor's magusfile-syntax check. Reviving them means first having standalone Buzz and
-// pinning `buzz` in mise.toml, which is not the case today.
+// by TestExamplesParseAndRecord (ParseEmbedded), every spell source by buzz-test's glob
+// below, and every magusfile by doctor's magusfile-syntax check. Reviving them means first
+// having standalone Buzz and pinning `buzz` in mise.toml, which is not the case today.
+//
+// That middle claim used to read "every spells/<dir>/spell.buzz by the registry compile
+// that doctor's spell-contract check exercises", and it was false in both halves. The
+// built-in compile in cmd/magus-utils only sees one directory level and skips anything in
+// its workspaceLocalSpells list; doctor only ever observes spells that REGISTERED, which a
+// spell no magusfile imports never does. Two sources fell through both - see buzz-test.
 
 // Runs the in-file `test "..." {}` blocks in this repo's own root Buzz modules, through
 // magus's embedded engine.
@@ -1633,6 +1638,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 // ten had never run in CI - nothing invoked them, and the buzz-check gate above only ever
 // covered cmd/magus/starter/spells - so both files were free to rot while looking covered.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("badge.buzz", "coverage.buzz", "spells/**/*.buzz", "docs/lib/*.buzz");
     foreach (mod in ["badge.buzz", "coverage.buzz"]) {
         magus\cmd("buzz", args: ["-t", mod]);
     }
@@ -1645,9 +1651,22 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // upstream-strict and rejects the positional-argument style every one of them uses.
     // The docs libraries need `dir`, because they import each other by relative path
     // (`lib/text`) and resolve it from the docs project root.
-    foreach (spell in ["spells/github/actions/spell.buzz", "spells/gitlab/ci/spell.buzz",
-                       "spells/golang/gomod.buzz"]) {
-        magus\cmd("buzz", args: ["-t", "--embedded", spell]);
+    //
+    // GLOBBED, unlike the root modules above, and that is the whole point. The list used
+    // to name three spell sources by hand, which silently left `spells/aws/s3-cache` and
+    // `spells/onepassword` under NO gate at all: neither is imported by any magusfile, so
+    // neither ever registers for doctor's spell-contract check, and neither reaches the
+    // built-in compile in cmd/magus-utils either - that scanner reads `spells/<dir>/spell.buzz`
+    // one level deep, so a nested `aws/s3-cache` is invisible to it, and `onepassword` is
+    // named in its workspaceLocalSpells skip list. A hand-maintained list reproduces exactly
+    // that failure on the next spell someone adds, so match every source instead and let a
+    // new spell be covered by existing.
+    //
+    // spells/examples/** is excluded because TestExamplesParseAndRecord already parses all
+    // 48 of them, and they are illustrative sources that do not have to resolve host modules.
+    foreach (spell in fs\glob("spells/**/*.buzz")) {
+        if (spell.value.startsWith("spells/examples/")) { continue; }
+        magus\cmd("buzz", args: ["-t", "--embedded", spell.value]);
     }
     foreach (lib in ["lib/text.buzz", "lib/dom.buzz", "lib/feed.buzz", "lib/html.buzz",
                      "lib/csp.buzz", "lib/url.buzz", "lib/date.buzz", "lib/glossary.buzz",

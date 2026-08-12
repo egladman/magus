@@ -66,7 +66,7 @@ magus\project({
     },
 });
 
-export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
+export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install(); }
 
 // pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason.
 // Always let pnpm validate the install. An interrupted install leaves a node_modules
@@ -74,7 +74,7 @@ export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
 // handing the missing packages straight to tsc/esbuild. Reached once per invocation
 // through preflight, which every target below already needs, so the unconditional
 // --frozen-lockfile costs about a second on a warm tree and never races itself.
-fun install() > void {
+fun install() > void !> any {
     proc\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
 }
 
@@ -161,7 +161,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.
-export fun lint(ctx: magus\Context, args: [str]) > void {
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     // The Reference drawer imports the search grammar from the shared libs/textsearch
     // source, so gate its type-check + biome here: a lib edit fails console lint too.
