@@ -403,12 +403,14 @@ func TestSnapshotOneHashMatchesWrittenBytes(t *testing.T) {
 	abs := filepath.Join(root, "out.txt")
 	require.NoError(t, syscall.Mkfifo(abs, 0o644))
 
-	// snapshotOne performs exactly two independent opens-for-read of abs on
-	// the pre-fix code path (hashFile, then copyToFile); a fixed snapshotOne
-	// performs exactly one. Feed a distinct payload to each read session so a
-	// second read (if one happens) unambiguously sees different content than
-	// the first.
-	writes := [][]byte{[]byte("version-one"), []byte("version-two-is-longer")}
+	// snapshotOne performs exactly ONE open-for-read of a non-regular file, so
+	// exactly one write session is fed. Feeding a second (as this test did
+	// while snapshotOne still took a preHash) made the test itself the hazard:
+	// which reader a writer's open rendezvous with is pure scheduling, so under
+	// load the sole remaining open blocked forever and timed the whole package
+	// out at ten minutes. A FIFO open has no timeout, so an unpaired open here
+	// hangs rather than fails.
+	writes := [][]byte{[]byte("version-one")}
 	errCh := make(chan error, 1)
 	go func() {
 		for _, data := range writes {
