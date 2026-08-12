@@ -85,6 +85,9 @@ type CFuncSig struct {
 	// it by reference — upstream's struct semantics ("always by reference").
 	IsStruct       bool
 	FieldTypeNames []string
+	// FieldNames is parallel to FieldTypeNames. A layout needs only the types, but
+	// a zdef struct is a constructible TYPE, so its fields must be nameable.
+	FieldNames []string
 }
 
 // FFIProvider binds parsed C function signatures from a shared library into

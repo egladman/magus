@@ -139,22 +139,26 @@ func parseZigStruct(src string) (CFuncSig, error) {
 	if name == "" || lb < 0 || rb < lb {
 		return CFuncSig{}, fmt.Errorf("buzz: ffi: malformed struct declaration: %q", src)
 	}
-	var fields []string
+	var fields, fieldNames []string
 	for _, f := range splitZigParams(rest[lb+1 : rb]) {
 		f = strings.TrimSpace(f)
 		if f == "" {
 			continue
 		}
-		_, ftype, ok := strings.Cut(f, ":")
+		fname, ftype, ok := strings.Cut(f, ":")
 		if !ok {
 			return CFuncSig{}, fmt.Errorf("buzz: ffi: struct field needs `name: type` in %s: %q", name, f)
 		}
 		fields = append(fields, strings.TrimSpace(ftype))
+		// Kept, not discarded as it used to be: the layout only needs the types, but
+		// a struct is a TYPE here now, and its fields have to be addressable by name
+		// (`Data{ id = 1 }`, `data.msg`).
+		fieldNames = append(fieldNames, strings.TrimSpace(fname))
 	}
 	if len(fields) == 0 {
 		return CFuncSig{}, fmt.Errorf("buzz: ffi: struct %s has no fields", name)
 	}
-	return CFuncSig{Name: name, IsStruct: true, FieldTypeNames: fields}, nil
+	return CFuncSig{Name: name, IsStruct: true, FieldTypeNames: fields, FieldNames: fieldNames}, nil
 }
 
 // structReturnKind classifies a by-value struct return: two doubles ride the
