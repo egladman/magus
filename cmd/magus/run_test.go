@@ -333,3 +333,21 @@ func TestWithoutDetachFlagStripsEverySpelling(t *testing.T) {
 	assert.Equal(t, []string{"ci", "--", "--detach"}, withoutDetachFlag([]string{"ci", "--", "--detach"}),
 		"a --detach past the -- separator belongs to the forwarded tool and must survive verbatim")
 }
+
+// TestLocalOnlyFlagsNeverReachTheDaemon guards the argv that is re-submitted.
+//
+// --detach left in would make the daemon detach again, handing the work to
+// itself forever. --wait left in would be acted on by a run that is not
+// detaching, where it is a usage error - so a valid local invocation would
+// arrive at the daemon as an invalid one.
+func TestLocalOnlyFlagsNeverReachTheDaemon(t *testing.T) {
+	got := withoutDetachFlag([]string{
+		"ci", "-detach", "docs", "--detach", "--detach=true", "--wait", "--wait=true", "--detach-me", "--waiting",
+	})
+	assert.Equal(t, []string{"ci", "docs", "--detach-me", "--waiting"}, got,
+		"both local flags go, in every spelling; lookalikes stay")
+
+	assert.Equal(t, []string{"ci", "--", "--wait"},
+		withoutDetachFlag([]string{"ci", "--", "--wait"}),
+		"past the separator the tokens belong to the forwarded tool")
+}

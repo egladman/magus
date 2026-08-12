@@ -119,6 +119,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		openViewer      *bool
 		noCache         *bool
 		detach          *bool
+		wait            *bool
 	)
 	_, err := cmdParse("affected "+target, flagArgs, func(fs *flag.FlagSet) {
 		// affected-only: VCS diff base ref; `magus run` has no diff. See run_affected_parity_test.go.
@@ -138,7 +139,8 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		noDefaultCharms = fs.Bool("no-default-charms", false, "Ignore magus.yaml default_charms for this run")
 		openViewer = fs.Bool("open", false, "Open this run in the browser log viewer and stream to it as it goes, over an ephemeral loopback server (127.0.0.1); the link and data never leave your machine")
 		noCache = fs.Bool("no-cache", false, "Force a fresh run even on a cache hit; still refreshes the entry (unlike a skip_cache target, which never snapshots)")
-		detach = fs.Bool("detach", false, "Hand this run to the daemon and return immediately; watch it with magus status --watch")
+		detach = fs.Bool("detach", false, "Hand this run to the daemon and return immediately; it prints an invocation id that magus query invocation reads")
+		wait = fs.Bool("wait", false, "With --detach, block until the run finishes and exit with its status")
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus affected %s [flags] [-- <extra args>]\n", target)
 			fmt.Fprintln(os.Stderr, "")
@@ -152,8 +154,11 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if err != nil {
 		return err
 	}
+	if wait != nil && *wait && (detach == nil || !*detach) {
+		return usagef("magus affected: --wait applies to --detach; a plain run already blocks until it finishes")
+	}
 	if detach != nil && *detach {
-		return detachToDaemon(ctx, append([]string{"affected"}, withoutDetachFlag(origArgs)...))
+		return detachToDaemon(ctx, root, append([]string{"affected"}, withoutDetachFlag(origArgs)...), wait != nil && *wait)
 	}
 
 	if *step && *stdin {

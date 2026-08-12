@@ -5,9 +5,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -40,6 +42,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// Parsed before the run, not after it: a typo'd verb used to build the whole
 	// project and only then exit 2 on something checkable up front.
 	var detach *bool
+	var wait *bool
 	var chain chainPlan
 	if chained {
 		var proceed bool
@@ -101,7 +104,8 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		noDefaultCharms = fs.Bool("no-default-charms", false, "Ignore magus.yaml default_charms for this run")
 		openViewer = fs.Bool("open", false, "Open this run in the browser log viewer and stream to it as it goes, over an ephemeral loopback server (127.0.0.1); the link and data never leave your machine")
 		noCache = fs.Bool("no-cache", false, "Force a fresh run even on a cache hit; still refreshes the entry (unlike a skip_cache target, which never snapshots)")
-		detach = fs.Bool("detach", false, "Hand this run to the daemon and return immediately; watch it with magus status --watch")
+		detach = fs.Bool("detach", false, "Hand this run to the daemon and return immediately; it prints an invocation id that magus query invocation reads")
+		wait = fs.Bool("wait", false, "With --detach, block until the run finishes and exit with its status")
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus run %s [flags] [project...] [-- <extra args>]\n", rawTarget)
 			fmt.Fprintln(os.Stderr, "")
@@ -119,15 +123,25 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if err != nil {
 		return err
 	}
+	if wait != nil && *wait && (detach == nil || !*detach) {
+		return usagef("magus run: --wait applies to --detach; a plain run already blocks until it finishes")
+	}
 	if detach != nil && *detach {
-		return detachToDaemon(ctx, append([]string{"run"}, withoutDetachFlag(origArgs)...))
+		return detachToDaemon(ctx, root, append([]string{"run"}, withoutDetachFlag(origArgs)...), wait != nil && *wait)
 	}
 	// -s deliberately suppresses the usual target progress. That is useful to an
 	// agent, but a person otherwise has no positive signal that a slow invocation
 	// is alive. Say it once, before any potentially long workspace load, and point
 	// at the existing observer rather than inventing another progress surface.
 	if global.silent {
-		interactive.Emit(os.Stderr, "running quietly; follow progress in another terminal with `magus status --watch 15s`")
+		// Says what arrives and when, rather than sending the reader to poll a
+		// dashboard in another terminal. This run BLOCKS: waiting for it is the
+		// normal thing to do, and every target that runs prints an output ref
+		// on the way past, so there is already an exact handle for anything
+		// worth reading afterwards.
+		interactive.Emit(os.Stderr, fmt.Sprintf(
+			"running quietly; output refs print as targets finish, and `%s` reads any of them",
+			clihint.QueryOutput.With("<ref>")))
 	}
 
 	if *step && !isInteractiveTTY() {
@@ -618,13 +632,18 @@ func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, targ
 
 // detachFlagName is the one flag these helpers act on; it is named once so the two that
 // add and remove it cannot disagree.
+// localOnlyFlags never travel to the daemon. --detach would make it detach
+// again, handing the work to itself forever; --wait describes what THIS process
+// does after submitting and means nothing to the run itself.
 const detachFlagName = "detach"
 
-// withoutDetachFlag drops --detach from an argv, in every spelling the flag package
-// accepts: -name, --name, and either with an inline =value.
+var localOnlyFlags = []string{detachFlagName, "wait"}
+
+// withoutDetachFlag drops the local-only flags from an argv, in every spelling
+// the flag package accepts: -name, --name, and either with an inline =value.
 //
-// The argv is re-submitted verbatim to the daemon, so leaving the flag in would make the
-// daemon detach again - handing the work to itself, forever.
+// The argv is re-submitted verbatim to the daemon, so leaving one in would be
+// acted on there.
 func withoutDetachFlag(args []string) []string {
 	out := make([]string, 0, len(args))
 	for i, a := range args {
@@ -636,7 +655,7 @@ func withoutDetachFlag(args []string) []string {
 			break
 		}
 		trimmed := strings.TrimLeft(a, "-")
-		if key, _, _ := strings.Cut(trimmed, "="); key == detachFlagName && strings.HasPrefix(a, "-") {
+		if key, _, _ := strings.Cut(trimmed, "="); strings.HasPrefix(a, "-") && slices.Contains(localOnlyFlags, key) {
 			continue
 		}
 		out = append(out, a)
@@ -652,7 +671,7 @@ func withoutDetachFlag(args []string) []string {
 // this invocation exits, so submitting there would queue work that is silently dropped:
 // the caller would be told it detached, and nothing would ever run. Refusing is the only
 // honest answer, and the remedy is one command.
-func detachToDaemon(ctx context.Context, argv []string) error {
+func detachToDaemon(ctx context.Context, root string, argv []string, wait bool) error {
 	addr, err := resolveDaemonAddr(ctx, "")
 	if err != nil || addr == "" {
 		return types.WrapDiagnostic(types.DaemonRequired, nil,
@@ -672,6 +691,75 @@ func detachToDaemon(ctx context.Context, argv []string) error {
 		fmt.Fprintln(os.Stderr, "magus: the daemon is already running this exact command; not queued twice")
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "magus: detached (job %s); watch it with `%s`\n", inv, clihint.Status.With("--watch 15s"))
+	// Hand back the HANDLE and the command that resolves it, never a dashboard
+	// to poll. A "watch it with status --watch" hint gives an agent nothing to
+	// parse and no completion signal, and gives a human another window to
+	// babysit; the invocation id is addressable, and `query invocation` reads
+	// its journal - outcome, timings, the output refs of every target it ran -
+	// whenever the reader actually wants it.
+	if !wait {
+		fmt.Fprintf(os.Stderr, "magus: detached as %s\n  read it with: %s\n",
+			inv, clihint.QueryInvocation.With(inv))
+		return nil
+	}
+	fmt.Fprintf(os.Stderr, "magus: running as %s on the daemon\n", inv)
+	return awaitInvocation(ctx, root, inv)
+}
+
+// awaitInvocation blocks until the daemon's run records a finished event, then
+// reports its outcome and exits with it.
+//
+// This is what --detach --wait is FOR, and the combination is not a
+// contradiction: the daemon owns the run, so it coalesces with an identical one
+// already in flight and shares the pool, while the caller still gets a
+// synchronous answer and an exit status to branch on. Detach alone is for
+// firing and forgetting; this is for wanting the daemon's scheduling without
+// giving up the shell's.
+//
+// Waiting on Status, never on FinishedMs: an interrupted run has no finished
+// event, and InvocationFromEvents backfills its finish time from the last event
+// it saw - so a timestamp says "something happened last", while a status is the
+// only thing that says "this is over".
+func awaitInvocation(ctx context.Context, root, inv string) error {
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return err
+	}
+	for delay := 100 * time.Millisecond; ; {
+		select {
+		case <-ctx.Done():
+			// Ctrl-C detaches the WATCHER, not the run: the daemon owns it and
+			// keeps going, so say how to pick it up again rather than implying
+			// it was cancelled.
+			fmt.Fprintf(os.Stderr, "\nmagus: stopped waiting; %s is still running on the daemon\n  read it with: %s\n",
+				inv, clihint.QueryInvocation.With(inv))
+			return ctx.Err()
+		case <-time.After(delay):
+		}
+		// A log that does not exist yet is a run the daemon has not started, not
+		// an error - it is the ordinary first tick.
+		header, err := m.InvocationByID(inv)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("--wait: read run log for %s: %w", inv, err)
+		}
+		if err == nil && header.Status != "" {
+			return reportInvocation(header, inv)
+		}
+		if delay < 2*time.Second {
+			delay *= 2
+		}
+	}
+}
+
+// reportInvocation prints a finished run's outcome and exits with it.
+func reportInvocation(header magus.Invocation, inv string) error {
+	took := time.Duration(header.FinishedMs-header.StartedMs) * time.Millisecond
+	if header.Status != "pass" {
+		fmt.Fprintf(os.Stderr, "magus: %s failed (%s)\n  read it with: %s\n",
+			inv, formatDur(took), clihint.QueryInvocation.With(inv))
+		return errSilent{exitCode: 1}
+	}
+	fmt.Fprintf(os.Stderr, "magus: %s passed (%s)\n  read it with: %s\n",
+		inv, formatDur(took), clihint.QueryInvocation.With(inv))
 	return nil
 }

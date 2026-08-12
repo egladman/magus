@@ -270,16 +270,27 @@ func (l *projectLocker) acquire(ctx context.Context, projectPath string) (func()
 		l.emitWaiting(ctx, projectPath)
 		stopWaiter := l.recordWaiter(ctx, projectPath)
 		stopHeartbeat := l.startWaitHeartbeat(ctx, projectPath)
+		waitStart := time.Now()
 		got, err = fl.TryLockContext(ctx, lockRetryDelay)
+		waited := time.Since(waitStart)
 		stopHeartbeat()
 		stopWaiter()
 		if err != nil {
-			return nil, fmt.Errorf("workspace lock: lock %s: %w", projectPath, err)
+			// HOW LONG, not just which. This is the path a lock wait actually
+			// ends on - TryLockContext returns the context's own error - and
+			// "workspace lock: lock api: context deadline exceeded" leaves the
+			// reader unable to tell a wait that timed out after five seconds
+			// from one cancelled immediately. The duration is the difference
+			// between "the holder is slow" and "my deadline was too tight",
+			// which are opposite fixes. %w keeps the sentinel intact.
+			return nil, fmt.Errorf("workspace lock: gave up waiting for %s after %s: %w",
+				projectPath, waited.Round(time.Millisecond), err)
 		}
 		if !got {
 			// TryLockContext only returns (false, nil) when ctx is done.
 			if ctx.Err() != nil {
-				return nil, ctx.Err()
+				return nil, fmt.Errorf("workspace lock: gave up waiting for %s after %s: %w",
+					projectPath, waited.Round(time.Millisecond), ctx.Err())
 			}
 			return nil, fmt.Errorf("workspace lock: could not lock %s", projectPath)
 		}

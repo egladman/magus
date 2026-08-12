@@ -3,6 +3,7 @@ package magus
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -223,25 +224,44 @@ func TestAcquireAllSortedNoDeadlock(t *testing.T) {
 	set1 := []string{"a", "b", "c"}
 	set2 := []string{"c", "b", "a"}
 
+	// Named and timed, because this test has failed intermittently in the full
+	// suite and reported only "AcquireAll goroutine failed: <err>" - which said
+	// nothing about which order was waiting, how far it had got, or how long the
+	// call took. A flake nobody can diagnose gets rerun until it passes, which
+	// is how a real defect hides.
 	done := make(chan error, 2)
-	run := func(paths []string) {
+	run := func(name string, paths []string) {
+		slowest := time.Duration(0)
 		for i := 0; i < 50; i++ {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			start := time.Now()
 			rel, err := locker.acquireAll(ctx, paths)
+			took := time.Since(start)
 			if err != nil {
 				cancel()
-				done <- err
+				done <- fmt.Errorf("%s iteration %d after %s (slowest so far %s): %w",
+					name, i, took.Round(time.Millisecond), slowest.Round(time.Millisecond), err)
 				return
+			}
+			if took > slowest {
+				slowest = took
 			}
 			// Tiny critical section to interleave the two goroutines.
 			time.Sleep(time.Millisecond)
 			rel()
 			cancel()
 		}
+		if slowest > time.Second {
+			// Not a failure: acquisition is retry-polled, so contention costs a
+			// retry delay and the budget is generous. Worth SAYING, because a
+			// slowest that has crept toward the timeout is the warning that
+			// precedes the flake.
+			t.Logf("%s slowest acquireAll: %s", name, slowest.Round(time.Millisecond))
+		}
 		done <- nil
 	}
-	go run(set1)
-	go run(set2)
+	go run("a,b,c", set1)
+	go run("c,b,a", set2)
 
 	deadline := time.After(30 * time.Second)
 	for i := 0; i < 2; i++ {
@@ -659,5 +679,39 @@ func TestWatchWorkspaceRootStopJoins(t *testing.T) {
 	time.Sleep(40 * time.Millisecond)
 	if released.Load() {
 		t.Error("released after stop() returned; stop must join, not merely signal")
+	}
+}
+
+// TestAcquireNamesTheLockItGaveUpOn covers the one path where a lock wait ends
+// in failure.
+//
+// It used to return ctx.Err() bare, so a run that timed out waiting reported
+// "context deadline exceeded" - the same sentence as any other cancelled
+// operation, naming neither the lock nor the project. That is the moment a
+// reader most needs to know which project is held and by whom, and it was the
+// only error in this function that did not say.
+func TestAcquireNamesTheLockItGaveUpOn(t *testing.T) {
+	locker := newProjectLocker(t.TempDir(), false)
+
+	rel, err := locker.acquire(context.Background(), "api")
+	if err != nil {
+		t.Fatalf("first acquire: %v", err)
+	}
+	defer rel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	_, err = locker.acquire(ctx, "api")
+	if err == nil {
+		t.Fatal("second acquire should have given up; the lock is held")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("callers branch on the sentinel, so it must survive wrapping: %v", err)
+	}
+	if !strings.Contains(err.Error(), "api") {
+		t.Errorf("error must name the project it gave up on: %v", err)
+	}
+	if !strings.Contains(err.Error(), "waiting") {
+		t.Errorf("error must say a lock wait is what failed: %v", err)
 	}
 }
