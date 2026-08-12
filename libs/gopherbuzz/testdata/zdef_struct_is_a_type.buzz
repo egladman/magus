@@ -1,0 +1,19 @@
+// @expect: 7:hi
+// A zdef `extern struct` is a real TYPE, not just a {size, align, offsets} layout:
+// it constructs, its fields are named, and typeof can name it. The declaration is
+// synthesized into an ast.ObjectDecl (see zdef_decl.go), so the checker and compiler
+// reach it through the paths a hand-written `object` already uses.
+import "ffi";
+
+zdef(
+    "c",
+    `
+        pub const Pair = extern struct {
+            id: i32,
+            msg: [*:0]u8,
+        };
+    `
+);
+
+final p = Pair{ id = 7, msg = "hi" };
+final __r = "{p.id}:{p.msg}";

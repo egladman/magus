@@ -696,6 +696,22 @@ func (c *compiler) initModuleScope(prog *ast.Program) {
 // temp holding the handle map, then binds each declared name to handle[name].
 // The symbols are exported so importing modules can call them by bare name.
 func (c *compiler) compileZdefDecl(call *ast.CallExpr, names []string) error {
+	// A struct declares a TYPE, so it gets a real object definition bound under its
+	// name rather than the handle's {size, align, offsets} entry. Without this the
+	// name resolves at run time to a map and `Data{...}` fails with "not an object
+	// type", even though the checker and compiler both know the type statically.
+	// The layout is still reachable through the handle and ffi\structLayout.
+	structNames := map[string]bool{}
+	for _, od := range zdefStructDecls(call) {
+		structNames[od.Name] = true
+		// No operand pushes: buildObjectDef pops METHODS and STATIC FIELDS, of which a
+		// C struct has none, and pushes the definition. Pushing a null per field left
+		// them stranded on the stack.
+		declIdx := c.chunk.AddConst(vmpackage.ObjDeclValue(od))
+		c.chunk.Emit(vmpackage.OpNewObject, declIdx, 0)
+		c.chunk.Emit(vmpackage.OpDefName, c.nameConst(od.Name), 0)
+		c.chunk.Exports = append(c.chunk.Exports, od.Name)
+	}
 	if err := c.compileExpr(call); err != nil { // → handle map on the stack
 		return err
 	}
@@ -704,6 +720,9 @@ func (c *compiler) compileZdefDecl(call *ast.CallExpr, names []string) error {
 	c.chunk.Emit(vmpackage.OpDefName, c.nameConst(tmp), 0) // bind handle, pops it
 	c.chunk.Private = append(c.chunk.Private, tmp)
 	for _, name := range names {
+		if structNames[name] {
+			continue // already bound above, as a type
+		}
 		c.chunk.Emit(vmpackage.OpLoadName, c.nameConst(tmp), 0)   // push handle
 		c.chunk.Emit(vmpackage.OpLoadConst, c.nameConst(name), 0) // push key
 		c.chunk.Emit(vmpackage.OpGetIndex, 0, 0)                  // → handle[name]
@@ -853,6 +872,12 @@ func (c *compiler) compileStmt(n ast.Node) error {
 		// (OpDefName), reachable by bare name in both compile modes.
 		if c.depth == 0 {
 			if call, names, ok := zdefDeclNames(v.Expr); ok {
+				// Register each struct as a type BEFORE lowering the call, so an
+				// object literal later in the file resolves through c.typeDecls the
+				// same way a hand-written `object` does.
+				for _, od := range zdefStructDecls(v.Expr) {
+					c.typeDecls[od.Name] = od
+				}
 				return c.compileZdefDecl(call, names)
 			}
 		}

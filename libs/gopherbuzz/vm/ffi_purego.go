@@ -141,6 +141,18 @@ func buzzRetToReflect(v Value, kind CType, outType reflect.Type) reflect.Value {
 // puregoFFI implements FFIProvider using purego's dlopen/dlsym + RegisterFunc.
 type puregoFFI struct{}
 
+// declaredAggregates remembers every struct and union a zdef has declared, so a
+// LATER zdef can name one in a field. Upstream's ffi.buzz needs exactly that: it
+// declares `Data` in one zdef call and, in a separate call further down the file,
+// a union `Misc` with a `Data` member. Each call parses independently, so without
+// this the second sees an unknown C type.
+//
+// Process-wide rather than per-Session because FFIProvider is registered once and
+// carries no session; that matches the interface's stated contract (safe for one
+// Session at a time). A name redeclared with a different layout simply wins, which
+// is the same last-writer-wins a second zdef of the same symbol already has.
+var declaredAggregates = map[string]NamedLayout{}
+
 // OpenLibrary opens libname and binds each signature, returning a Buzz map of
 // function name -> direct callable. An `extern` variable declaration binds as
 // a plain value instead: its symbol is resolved and read once at zdef() time
@@ -157,7 +169,13 @@ func (puregoFFI) OpenLibrary(libname string, sigs []CFuncSig) (Value, error) {
 			// {size, align, offsets} so scripts can ffi.alloc and fill it by
 			// reference. The Zig extern-struct layout is the C layout, and the
 			// portable layout engine computes it (Zig type spellings included).
-			size, align, offsets, err := StructLayout(sig.FieldTypeNames)
+			layout := StructLayoutWith
+			if sig.IsUnion {
+				layout = UnionLayoutWith
+			}
+			// declared accumulates as the loop goes, so a later aggregate may name an
+			// earlier one - which is exactly the shape of upstream's `Misc`.
+			size, align, offsets, err := layout(sig.FieldTypeNames, declaredAggregates)
 			if err != nil {
 				return Null, fmt.Errorf("buzz: ffi: struct %s: %w", sig.Name, err)
 			}
@@ -170,6 +188,7 @@ func (puregoFFI) OpenLibrary(libname string, sigs []CFuncSig) (Value, error) {
 			}
 			lay.set("offsets", ListValue(items))
 			m.set(sig.Name, heapValue(tagMap, lay))
+			declaredAggregates[sig.Name] = NamedLayout{Size: size, Align: align}
 			continue
 		}
 		sym, err := purego.Dlsym(handle, sig.Name)

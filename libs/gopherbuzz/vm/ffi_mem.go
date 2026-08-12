@@ -94,9 +94,22 @@ func CTypeLayout(name string) (size, align int, ok bool) {
 // for a plain `struct { ... }` of scalar/pointer fields, so a Buzz script can
 // alloc(size), write each field at its offset, and pass the address to C.
 func StructLayout(fieldTypes []string) (size, align int, offsets []int, err error) {
+	return StructLayoutWith(fieldTypes, nil)
+}
+
+// NamedLayout is a previously-declared aggregate's computed size and alignment,
+// keyed by name for StructLayoutWith / UnionLayoutWith.
+type NamedLayout struct{ Size, Align int }
+
+// StructLayoutWith is StructLayout with a table of aggregates already declared in
+// the same zdef, so a field may name another struct or union. Upstream's ffi.buzz
+// relies on it: `Misc` is a union whose second member is the `Data` struct declared
+// above it. CTypeLayout knows only primitives, so without the table that field is
+// an "unknown C type".
+func StructLayoutWith(fieldTypes []string, known map[string]NamedLayout) (size, align int, offsets []int, err error) {
 	offsets = make([]int, len(fieldTypes))
 	for i, ft := range fieldTypes {
-		fsize, falign, ok := CTypeLayout(ft)
+		fsize, falign, ok := lookupLayout(ft, known)
 		if !ok {
 			return 0, 0, nil, fmt.Errorf("buzz: ffi: unknown C type %q in struct field %d", ft, i)
 		}
@@ -300,4 +313,48 @@ func signExtend(u uint64, size int, signed bool) int64 {
 	bits := uint(size * 8)
 	shift := 64 - bits
 	return int64(u<<shift) >> shift
+}
+
+// UnionLayout computes a C union's layout: every member starts at offset 0, the
+// whole is as wide as the widest member, and its alignment is the strictest of
+// them - then rounded up so an array of the union stays aligned, the same rule
+// StructLayout applies to a struct's tail.
+func UnionLayout(fieldTypes []string) (size, align int, offsets []int, err error) {
+	return UnionLayoutWith(fieldTypes, nil)
+}
+
+// UnionLayoutWith is UnionLayout with the same aggregate table StructLayoutWith takes.
+func UnionLayoutWith(fieldTypes []string, known map[string]NamedLayout) (size, align int, offsets []int, err error) {
+	offsets = make([]int, len(fieldTypes))
+	for i, ft := range fieldTypes {
+		fsize, falign, ok := lookupLayout(ft, known)
+		if !ok {
+			return 0, 0, nil, fmt.Errorf("buzz: ffi: unknown C type %q in union field %d", ft, i)
+		}
+		if fsize > size {
+			size = fsize
+		}
+		if falign > align {
+			align = falign
+		}
+	}
+	if align == 0 {
+		align = 1
+	}
+	if rem := size % align; rem != 0 {
+		size += align - rem
+	}
+	return size, align, offsets, nil
+}
+
+// lookupLayout resolves a field spelling to its size and alignment, trying the
+// primitives first and then the aggregates declared earlier in the same zdef.
+func lookupLayout(ft string, known map[string]NamedLayout) (size, align int, ok bool) {
+	if s, a, found := CTypeLayout(ft); found {
+		return s, a, true
+	}
+	if l, found := known[ft]; found {
+		return l.Size, l.Align, true
+	}
+	return 0, 0, false
 }

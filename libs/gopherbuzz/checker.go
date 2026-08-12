@@ -292,6 +292,15 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 			// functions (upstream Buzz semantics; the compiler binds them as
 			// globals). Pre-declare each as a lenient variadic callable so bare
 			// calls type-check regardless of arity or argument labels.
+			// A zdef struct is a TYPE, registered the same way a written `object`
+			// is, so the literal and `typeof` resolve through the usual paths.
+			if structs := zdefStructDecls(v.Expr); len(structs) > 0 {
+				nodes := make([]ast.Node, len(structs))
+				for i, od := range structs {
+					nodes[i] = od
+				}
+				c.registerTypeDecls(nodes)
+			}
 			if _, names, ok := zdefDeclNames(v.Expr); ok {
 				// zdef symbols are FFI callables whose return types can't be tracked
 				// statically; return Unknown so field access on their results doesn't
