@@ -99,7 +99,15 @@ func StructLayout(fieldTypes []string) (size, align int, offsets []int, err erro
 
 // NamedLayout is a previously-declared aggregate's computed size and alignment,
 // keyed by name for StructLayoutWith / UnionLayoutWith.
-type NamedLayout struct{ Size, Align int }
+type NamedLayout struct {
+	Size, Align int
+	// IsUnion records that the declaration was a union, so a later consumer picks
+	// UnionLayoutWith rather than StructLayoutWith. Size and Align alone cannot say:
+	// they are the ANSWER for this aggregate, while a consumer laying the same name
+	// out again (marshalStructArg does, to get field offsets) needs the RULE. Without
+	// it a union was marshalled with struct offsets and struct size.
+	IsUnion bool
+}
 
 // StructLayoutWith is StructLayout with a table of aggregates already declared in
 // the same zdef, so a field may name another struct or union. Upstream's ffi.buzz

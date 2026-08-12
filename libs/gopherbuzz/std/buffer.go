@@ -79,8 +79,10 @@ func (st *bufferState) ensurePinned() (uintptr, error) {
 	// with writeZ, and passes ptr() to a foreign function. Sizing the block to what
 	// has actually been written makes that work, and keeps the explicit
 	// Buffer.init(capacity) form (an out-parameter a callee fills) exactly as it was.
+	// The block holds whichever is larger. Taking st.cap alone truncated a buffer
+	// written past its declared capacity, which would drop the tail silently.
 	size := st.cap
-	if size <= 0 {
+	if len(st.bytes) > size {
 		size = len(st.bytes)
 	}
 	if size <= 0 {
@@ -94,12 +96,18 @@ func (st *bufferState) ensurePinned() (uintptr, error) {
 	// once; a later writeZ appends to st.bytes and does not reach C. That is enough
 	// for the fill-then-pass shape, and the alternative (repinning per write) would
 	// invalidate a pointer a callee may still hold.
-	if st.cap <= 0 && len(st.bytes) > 0 {
+	//
+	// The copy is unconditional. It used to be gated on `st.cap <= 0`, so a buffer
+	// built with Buffer.init(capacity) and THEN written handed C a block of zeros -
+	// the writes never arrived. Upstream's ffi.buzz uses the bare Buffer.init()
+	// form, so conformance stayed green over it. A declared capacity with nothing
+	// written copies nothing, which is the out-parameter shape, unchanged.
+	if len(st.bytes) > 0 {
 		if err := buzz.WriteFFIBytes(addr, st.bytes); err != nil {
 			return 0, err
 		}
-		st.cap = size
 	}
+	st.cap = size
 	st.addr = addr
 	return addr, nil
 }

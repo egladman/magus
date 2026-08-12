@@ -176,7 +176,7 @@ func (puregoFFI) OpenLibrary(libname string, sigs []CFuncSig) (Value, error) {
 			}
 			lay.set("offsets", ListValue(items))
 			m.set(sig.Name, heapValue(tagMap, lay))
-			declaredAggregates[sig.Name] = NamedLayout{Size: size, Align: align}
+			declaredAggregates[sig.Name] = NamedLayout{Size: size, Align: align, IsUnion: sig.IsUnion}
 			declaredFieldTypes[sig.Name] = sig.FieldTypeNames
 			continue
 		}
@@ -517,10 +517,15 @@ func buildFFIFunc(sig CFuncSig, sym uintptr) (fn Value, err error) {
 		for i, p := range sig.Params {
 			if inst, ok := foreignStructArg(args[i]); ok {
 				sa, err := marshalStructArg(inst)
+				// Pin BEFORE checking the error. marshalStructArg allocates the block
+				// early and returns it alongside a later failure (a C string it could
+				// not allocate, a scalar it could not write), so returning here without
+				// pinning leaked that block into memRegistry permanently. A zero addr
+				// from the early paths is harmless: the deferred FreeFFI ignores it.
+				pinned = append(pinned, sa)
 				if err != nil {
 					return Null, fmt.Errorf("buzz: ffi: %s() arg %d: %w", sig.Name, i, err)
 				}
-				pinned = append(pinned, sa)
 				in[i] = reflect.ValueOf(sa.addr)
 				continue
 			}
@@ -619,7 +624,14 @@ func foreignStructArg(v Value) (*objectInst, bool) {
 // way the declaration says, and returns the block for the callee to write through.
 func marshalStructArg(inst *objectInst) (structArg, error) {
 	types := declaredFieldTypes[inst.Def.Name]
-	size, _, offsets, err := StructLayoutWith(types, declaredAggregates)
+	// A union lays every field at offset 0 and sizes to the widest. Laying one out
+	// with StructLayoutWith gave it struct offsets and a struct size - reported 16
+	// where the layout map said 8 - so the block disagreed with what the callee read.
+	layout := StructLayoutWith
+	if declaredAggregates[inst.Def.Name].IsUnion {
+		layout = UnionLayoutWith
+	}
+	size, _, offsets, err := layout(types, declaredAggregates)
 	if err != nil {
 		return structArg{}, err
 	}
@@ -683,6 +695,16 @@ func unmarshalStructArg(sa structArg) error {
 		// into memory this call allocated, and handing that back as an int would
 		// replace a readable string with a number the script cannot use.
 		if strings.Contains(ct, "*") {
+			continue
+		}
+		// A field whose type is another declared aggregate is not a scalar, and
+		// ReadScalar cannot resolve it - CTypeLayout knows only primitive spellings.
+		// That error surfaced AFTER the C function had already run, turning a
+		// perfectly good call into a failure, and it is not even a real problem: the
+		// nested bytes are in the block, and the instance already holds the nested
+		// value the caller passed in. Leaving it alone is the same rule the pointer
+		// case above follows.
+		if _, nested := declaredAggregates[ct]; nested {
 			continue
 		}
 		i64, f64, isFloat, err := ReadScalar(sa.addr, sa.offsets[i], ct)

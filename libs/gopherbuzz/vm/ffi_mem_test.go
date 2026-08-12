@@ -153,3 +153,26 @@ func TestMarshalStructArgRoundTripsBool(t *testing.T) {
 	assert.False(t, inst.Fields[2].AsBool(), "which stays false")
 	assert.Equal(t, int64(7), inst.Fields[1].AsInt(), "the int field is unaffected")
 }
+
+// TestMarshalStructArgUsesUnionLayout pins that a union argument is laid out as a
+// union. declaredAggregates recorded only {Size, Align}, so marshalStructArg had
+// nothing to distinguish one and always called StructLayoutWith - giving a union
+// struct offsets and a struct size, disagreeing with the layout the declaration
+// had already published and with what the callee reads.
+func TestMarshalStructArgUsesUnionLayout(t *testing.T) {
+	withDeclaredStruct(t, "U", []string{"i64", "i32"})
+	declaredAggregates["U"] = NamedLayout{Size: 8, Align: 8, IsUnion: true}
+
+	inst := &objectInst{
+		Def:    &objectDefObj{Name: "U"},
+		Fields: []Value{IntValue(1), IntValue(2)},
+	}
+	sa, err := marshalStructArg(inst)
+	require.NoError(t, err, "marshalStructArg")
+	t.Cleanup(func() { _ = FreeFFI(sa.addr) })
+
+	// Every union field starts at 0; a struct layout would put the second at 8.
+	for i, off := range sa.offsets {
+		assert.Equal(t, 0, off, "union field %d must lie at offset 0", i)
+	}
+}
