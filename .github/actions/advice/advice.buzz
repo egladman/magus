@@ -151,7 +151,8 @@ export fun linkCodes(text: str) > str {
         }
         rest = rest.sub(at + 7);
     }
-    return joined;
+    // No trailing return: the loop is `while (true)` with no break, so every exit
+    // is one of the returns above and anything here is unreachable.
 }
 
 // The way out, kept where an unsubscribe link belongs: last, small, and never in the way

@@ -27,7 +27,6 @@
               "target": "build"
             }
           ],
-          "reads_secrets": false,
           "exec_overrides": [
             "env:GOEXPERIMENT=jsonv2"
           ]
@@ -49,7 +48,6 @@
               "target": "build"
             }
           ],
-          "reads_secrets": false,
           "exec_overrides": [
             "env:GOEXPERIMENT=jsonv2"
           ]
@@ -81,7 +79,6 @@
               ]
             }
           ],
-          "reads_secrets": false,
           "exec_overrides": [
             "cwd:."
           ]
@@ -120,8 +117,7 @@
           ],
           "charms": [
             "rw"
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "security",
@@ -134,7 +130,6 @@
               ]
             }
           ],
-          "reads_secrets": false,
           "exec_overrides": [
             "env:GOEXPERIMENT=jsonv2"
           ]
@@ -143,7 +138,6 @@
           "name": "man-generate",
           "declared": "man_generate",
           "doc": "Renders the roff man pages into manpage/ (repo root).",
-          "reads_secrets": false,
           "writes_files": [
             {
               "glob": "manpage/*.1"
@@ -187,7 +181,6 @@
               "glob": "go.work.sum"
             }
           ],
-          "reads_secrets": false,
           "modifies_existing_files": [
             {
               "glob": "CHANGELOG.md"
@@ -198,7 +191,6 @@
           "name": "types-generate",
           "declared": "types_generate",
           "doc": "Regenerates the runtime BuzzObject maps before anything imports a host binding.",
-          "reads_secrets": false,
           "writes_files": [
             {
               "glob": "types/buzzobject_gen.go"
@@ -214,11 +206,10 @@
         {
           "name": "bindings-generate",
           "declared": "bindings_generate",
-          "doc": "Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.",
+          "doc": "Regenerates the Go host bindings (std -\u003e internal/interp/bindings/gen) from std.Module declarations.",
           "dependencies": [
             "types-generate"
           ],
-          "reads_secrets": false,
           "writes_files": [
             {
               "glob": "internal/interp/bindings/gen/*.go"
@@ -232,7 +223,6 @@
           "dependencies": [
             "types-generate"
           ],
-          "reads_secrets": false,
           "writes_files": [
             {
               "glob": "internal/spellruntime/gen/*.bo"
@@ -252,7 +242,6 @@
           "dependencies": [
             "types-generate"
           ],
-          "reads_secrets": false,
           "writes_files": [
             {
               "glob": "**/gen/mocks/*.go"
@@ -263,7 +252,6 @@
           "name": "skills-generate",
           "declared": "skills_generate",
           "doc": "Reinstalls the agent skills from their embedded sources in cmd/magus/skills.",
-          "reads_secrets": false,
           "writes_files": [
             {
               "glob": ".claude/skills/**"
@@ -283,7 +271,6 @@
           "dependencies": [
             "types-generate"
           ],
-          "reads_secrets": false,
           "writes_files": [
             {
               "glob": "cmd/magus/gen/*.go"
@@ -303,7 +290,6 @@
           "name": "index-generate",
           "declared": "index_generate",
           "doc": "Renders MAGUS.md via `magus describe graph`.",
-          "reads_secrets": false,
           "writes_files": [
             {
               "glob": "MAGUS.md"
@@ -314,7 +300,6 @@
           "name": "graph-generate",
           "declared": "graph_generate",
           "doc": "Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects.",
-          "reads_secrets": false,
           "writes_files": [
             {
               "glob": "gen/*.json"
@@ -323,8 +308,7 @@
         },
         {
           "name": "postflight",
-          "doc": "Renders the insight report (hotspots, affinity, ownership, trend) to stdout.",
-          "reads_secrets": false
+          "doc": "Renders the insight report (hotspots, affinity, ownership, trend) to stdout."
         },
         {
           "name": "generate",
@@ -351,8 +335,7 @@
                 "replaceWorkspaceModules"
               ]
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "tapes",
@@ -367,7 +350,6 @@
               "glob": "tapes/demo-init.sh"
             }
           ],
-          "reads_secrets": false,
           "writes_files": [
             {
               "glob": "assets/gen/*.gif"
@@ -389,7 +371,6 @@
               ]
             }
           ],
-          "reads_secrets": false,
           "writes_files": [
             {
               "glob": "dist/*"
@@ -399,8 +380,7 @@
         {
           "name": "release-sign",
           "declared": "release_sign",
-          "doc": "Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos).",
-          "reads_secrets": false
+          "doc": "Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos)."
         },
         {
           "name": "release",
@@ -415,7 +395,6 @@
               ]
             }
           ],
-          "reads_secrets": false,
           "modifies_existing_files": [
             {
               "glob": "go.mod"
@@ -442,7 +421,6 @@
               "target": "build"
             }
           ],
-          "reads_secrets": false,
           "exec_overrides": [
             "env:GOEXPERIMENT=jsonv2"
           ]
@@ -460,8 +438,7 @@
               "project": ".",
               "glob": ".github/actions/magus/*.buzz"
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "test",
@@ -482,7 +459,6 @@
               ]
             }
           ],
-          "reads_secrets": false,
           "writes_files": [
             {
               "glob": "assets/coverage.svg"
@@ -496,7 +472,24 @@
           "name": "buzz-test",
           "declared": "buzz_test",
           "doc": "Runs the in-file `test \"...\" {}` blocks in this repo's own root Buzz modules, through magus's embedded engine.",
-          "reads_secrets": false
+          "reads_files": [
+            {
+              "project": ".",
+              "glob": "badge.buzz"
+            },
+            {
+              "project": ".",
+              "glob": "coverage.buzz"
+            },
+            {
+              "project": ".",
+              "glob": "spells/**/*.buzz"
+            },
+            {
+              "project": ".",
+              "glob": "docs/lib/*.buzz"
+            }
+          ]
         },
         {
           "name": "build",
@@ -508,8 +501,7 @@
           ],
           "charms": [
             "container"
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "lint-build",
@@ -532,8 +524,7 @@
               "project": ".",
               "glob": "libs/testsprawl/**/*.go"
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "lint",
@@ -595,8 +586,7 @@
               "project": ".",
               "glob": "TODO.md"
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "format",
@@ -618,8 +608,7 @@
                 "dprint"
               ]
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "ci",
@@ -631,8 +620,7 @@
             "compress-cgo-test",
             "completion-test",
             "security"
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "completion-test",
@@ -655,8 +643,7 @@
               "project": ".",
               "glob": "cmd/magus/completions/*"
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "compress-cgo-test",
@@ -676,7 +663,6 @@
               "glob": "internal/compress/*.go"
             }
           ],
-          "reads_secrets": false,
           "exec_overrides": [
             "env:CGO_ENABLED=1"
           ]
@@ -687,19 +673,16 @@
           "doc": "Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.",
           "charms": [
             "gha"
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "deploy-generate",
           "declared": "deploy_generate",
-          "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/.",
-          "reads_secrets": false
+          "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/."
         },
         {
           "name": "serve",
-          "doc": "serve is the workspace-root dev loop for BOTH deployables.",
-          "reads_secrets": false
+          "doc": "serve is the workspace-root dev loop for BOTH deployables."
         }
       ],
       "depends_on": [
@@ -713,8 +696,7 @@
       "engine": "buzz",
       "nodes": [
         {
-          "name": "preflight",
-          "reads_secrets": false
+          "name": "preflight"
         },
         {
           "name": "test",
@@ -725,7 +707,6 @@
           "charms": [
             "rw"
           ],
-          "reads_secrets": false,
           "writes_files": [
             {
               "glob": "coverage.svg"
@@ -746,8 +727,7 @@
               "project": ".",
               "target": "graph-generate"
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "lint",
@@ -760,16 +740,14 @@
               "project": "libs/textsearch",
               "target": "lint"
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "security",
           "doc": "security audits the dependency tree against the npm advisory database.",
           "dependencies": [
             "preflight"
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "ci",
@@ -780,8 +758,7 @@
             "test",
             "build",
             "security"
-          ],
-          "reads_secrets": false
+          ]
         }
       ],
       "depends_on": [
@@ -795,8 +772,7 @@
       "engine": "buzz",
       "nodes": [
         {
-          "name": "preflight",
-          "reads_secrets": false
+          "name": "preflight"
         },
         {
           "name": "index-generate",
@@ -812,7 +788,6 @@
               "glob": "**/magusfile.buzz"
             }
           ],
-          "reads_secrets": false,
           "writes_files": [
             {
               "glob": "MAGUS.md"
@@ -905,7 +880,6 @@
               "glob": "CHANGELOG.md"
             }
           ],
-          "reads_secrets": false,
           "writes_files": [
             {
               "glob": "reference/buzz/*.md"
@@ -1027,7 +1001,6 @@
               "glob": "releases/*.yaml"
             }
           ],
-          "reads_secrets": false,
           "writes_files": [
             {
               "glob": "gen/**"
@@ -1050,6 +1023,7 @@
             "build-mermaid",
             "build-hljs",
             "build-playground-editor",
+            "build-playground",
             "site-generate"
           ],
           "charms": [
@@ -1060,8 +1034,7 @@
               "project": ".",
               "target": "changelog-generate"
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "format",
@@ -1075,8 +1048,7 @@
                 "dprint"
               ]
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "conventions",
@@ -1102,8 +1074,7 @@
               "project": ".",
               "glob": "CONTRIBUTING.md"
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "lint",
@@ -1129,37 +1100,32 @@
               "project": "docs/guides/integrations/agents",
               "target": "lint"
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "build",
           "dependencies": [
             "generate"
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "buzz-test",
           "declared": "buzz_test",
-          "doc": "buzz-test runs render's in-file `test \"...\" {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve.",
-          "reads_secrets": false
+          "doc": "buzz-test runs render's in-file `test \"...\" {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve."
         },
         {
           "name": "test",
           "dependencies": [
             "format",
             "buzz-test"
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "security",
           "doc": "security audits what actually ships against the npm advisory database.",
           "dependencies": [
             "preflight"
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "ci",
@@ -1168,13 +1134,12 @@
             "lint",
             "build",
             "test"
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "build-playground",
           "declared": "build_playground",
-          "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground into vendor/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it.",
+          "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: the stock Go toolchain compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and Go's own wasm_exec.js glue is copied beside it.",
           "dependencies": [
             "preflight"
           ],
@@ -1184,16 +1149,22 @@
               "target": "build"
             }
           ],
-          "reads_secrets": false
+          "writes_files": [
+            {
+              "glob": "gen/playground/buzz.wasm"
+            },
+            {
+              "glob": "gen/playground/wasm_exec.js"
+            }
+          ]
         },
         {
           "name": "build-mermaid",
           "declared": "build_mermaid",
-          "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into gen/assets/mermaid.js.",
+          "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -\u003e mermaid@11) into gen/assets/mermaid.js.",
           "dependencies": [
             "preflight"
           ],
-          "reads_secrets": false,
           "writes_files": [
             {
               "glob": "gen/assets/mermaid.js"
@@ -1203,11 +1174,10 @@
         {
           "name": "build-hljs",
           "declared": "build_hljs",
-          "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js.",
+          "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -\u003e highlight.js@11) into gen/assets/hljs.js.",
           "dependencies": [
             "preflight"
           ],
-          "reads_secrets": false,
           "writes_files": [
             {
               "glob": "gen/assets/hljs.js"
@@ -1221,7 +1191,6 @@
           "dependencies": [
             "preflight"
           ],
-          "reads_secrets": false,
           "writes_files": [
             {
               "glob": "gen/playground/editor.js"
@@ -1230,8 +1199,7 @@
         },
         {
           "name": "render",
-          "doc": "render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.",
-          "reads_secrets": false
+          "doc": "render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks."
         }
       ],
       "depends_on": [
@@ -1248,24 +1216,21 @@
       "engine": "buzz",
       "nodes": [
         {
-          "name": "preflight",
-          "reads_secrets": false
+          "name": "preflight"
         },
         {
           "name": "lint",
           "doc": "lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way).",
           "dependencies": [
             "preflight"
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "test",
           "doc": "test runs the OpenCode plugin's transport cases: does it ASK magus correctly (the top-level `hook` subcommand, the input on stdin) and handle each decision the way it declares.",
           "dependencies": [
             "preflight"
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "ci",
@@ -1273,8 +1238,7 @@
           "dependencies": [
             "lint",
             "test"
-          ],
-          "reads_secrets": false
+          ]
         }
       ]
     },
@@ -1284,32 +1248,28 @@
       "engine": "buzz",
       "nodes": [
         {
-          "name": "preflight",
-          "reads_secrets": false
+          "name": "preflight"
         },
         {
           "name": "lint",
           "doc": "lint validates every task file against the schema and checks that each named constraint predicate exists.",
           "dependencies": [
             "preflight"
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "security",
           "doc": "security audits what actually ships against the npm advisory database.",
           "dependencies": [
             "preflight"
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "ci",
           "doc": "ci is LINT ONLY, deliberately.",
           "dependencies": [
             "lint"
-          ],
-          "reads_secrets": false
+          ]
         }
       ]
     },
@@ -1319,8 +1279,7 @@
       "engine": "buzz",
       "nodes": [
         {
-          "name": "preflight",
-          "reads_secrets": false
+          "name": "preflight"
         },
         {
           "name": "generate",
@@ -1331,14 +1290,12 @@
           ],
           "charms": [
             "rw"
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "index-generate",
           "declared": "index_generate",
-          "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-          "reads_secrets": false
+          "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
         },
         {
           "name": "format",
@@ -1353,8 +1310,7 @@
                 "go-mod-tidy"
               ]
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "lint",
@@ -1368,8 +1324,7 @@
                 "go-vet"
               ]
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "build",
@@ -1383,8 +1338,7 @@
                 "go-build"
               ]
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "test",
@@ -1398,8 +1352,7 @@
                 "go-test"
               ]
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "ci",
@@ -1408,8 +1361,7 @@
             "lint",
             "build",
             "test"
-          ],
-          "reads_secrets": false
+          ]
         }
       ]
     },
@@ -1419,8 +1371,7 @@
       "engine": "buzz",
       "nodes": [
         {
-          "name": "preflight",
-          "reads_secrets": false
+          "name": "preflight"
         },
         {
           "name": "generate",
@@ -1431,14 +1382,12 @@
           ],
           "charms": [
             "rw"
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "index-generate",
           "declared": "index_generate",
-          "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-          "reads_secrets": false
+          "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
         },
         {
           "name": "format",
@@ -1459,8 +1408,7 @@
                 "dprint"
               ]
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "lint",
@@ -1474,8 +1422,7 @@
                 "go-vet"
               ]
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "build",
@@ -1489,8 +1436,7 @@
                 "go-build"
               ]
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "test",
@@ -1504,8 +1450,7 @@
                 "go-test"
               ]
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "buzz-build",
@@ -1521,8 +1466,7 @@
                 "go-build"
               ]
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "ci",
@@ -1531,16 +1475,14 @@
             "lint",
             "build",
             "test"
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "conformance",
           "doc": "Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go).",
           "dependencies": [
             "preflight"
-          ],
-          "reads_secrets": false
+          ]
         }
       ]
     },
@@ -1550,8 +1492,7 @@
       "engine": "buzz",
       "nodes": [
         {
-          "name": "preflight",
-          "reads_secrets": false
+          "name": "preflight"
         },
         {
           "name": "generate",
@@ -1562,14 +1503,12 @@
           ],
           "charms": [
             "rw"
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "index-generate",
           "declared": "index_generate",
-          "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-          "reads_secrets": false
+          "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
         },
         {
           "name": "format",
@@ -1590,8 +1529,7 @@
                 "dprint"
               ]
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "lint",
@@ -1606,8 +1544,7 @@
                 "go-vet"
               ]
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "build",
@@ -1621,8 +1558,7 @@
                 "go-build"
               ]
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "test",
@@ -1636,8 +1572,7 @@
                 "go-test"
               ]
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "ci",
@@ -1646,8 +1581,7 @@
             "lint",
             "build",
             "test"
-          ],
-          "reads_secrets": false
+          ]
         }
       ]
     },
@@ -1657,8 +1591,7 @@
       "engine": "buzz",
       "nodes": [
         {
-          "name": "preflight",
-          "reads_secrets": false
+          "name": "preflight"
         },
         {
           "name": "generate",
@@ -1669,22 +1602,19 @@
           ],
           "charms": [
             "rw"
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "index-generate",
           "declared": "index_generate",
-          "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-          "reads_secrets": false
+          "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
         },
         {
           "name": "lint",
           "doc": "lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json).",
           "dependencies": [
             "preflight"
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "test",
@@ -1695,7 +1625,6 @@
           "charms": [
             "rw"
           ],
-          "reads_secrets": false,
           "writes_files": [
             {
               "project": "../..",
@@ -1709,8 +1638,7 @@
           "dependencies": [
             "lint",
             "test"
-          ],
-          "reads_secrets": false
+          ]
         }
       ]
     },
@@ -1730,8 +1658,7 @@
                 "buf-build"
               ]
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "lint",
@@ -1742,16 +1669,14 @@
                 "buf-lint"
               ]
             }
-          ],
-          "reads_secrets": false
+          ]
         },
         {
           "name": "ci",
           "dependencies": [
             "generate",
             "lint"
-          ],
-          "reads_secrets": false
+          ]
         }
       ]
     }
