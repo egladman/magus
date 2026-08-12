@@ -2,6 +2,7 @@ package tty
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/interactive/screen"
@@ -23,14 +24,27 @@ import (
 // TestPaintZoneSurvivesScrollingOutput is the property the whole design rests
 // on: ordinary output keeps scrolling, in real scrollback, while the leased
 // rows below it hold still.
+// toastRow is bandRow with the notification's accent bar taken off, so an
+// assertion about the MESSAGE does not restate its decoration.
+func toastRow(s *screen.Screen, row int) string {
+	return strings.TrimPrefix(bandRow(s, row), accentBar+" ")
+}
+
+// bandRow is the text of an absolute terminal row with the zone's box taken
+// off, so an assertion about what a lease drew does not have to know the region
+// frames it.
+func bandRow(s *screen.Screen, row int) string {
+	return strings.TrimRight(strings.Trim(s.Row(row), boxV), " ")
+}
+
 func TestPaintZoneSurvivesScrollingOutput(t *testing.T) {
 	t.Parallel()
 	s := screen.New(80, 24)
 	z := NewZone(s, terminal(80, 24))
 	failures := z.Acquire(6)
 	toasts := z.Acquire(3)
-	// 9 leased rows on a 24-row terminal: the zone is rows 16-24, and rows 1-15
-	// keep scrolling.
+	// 9 leased rows plus the zone's border on a 24-row terminal: the zone is
+	// rows 15-24, and rows 1-14 keep scrolling.
 	require.True(t, failures.Enabled())
 	require.True(t, toasts.Enabled())
 
@@ -47,13 +61,13 @@ func TestPaintZoneSurvivesScrollingOutput(t *testing.T) {
 	// The transcript scrolled...
 	assert.Greater(t, s.Scrolled(), before, "output must scroll normally")
 	// Line 40's own trailing newline scrolls it up one, so the last line of
-	// output sits on row 14 with the cursor waiting on row 15.
-	assert.Contains(t, s.Row(14), "compiling package 40")
-	assert.Equal(t, 15, cursorRowOf(s), "the cursor stays inside the scrolling area, never in the zone")
+	// output sits one row above the cursor, which waits on the last scrolling row.
+	assert.Contains(t, s.Row(14-borderRows), "compiling package 40")
+	assert.Equal(t, 15-borderRows, cursorRowOf(s), "the cursor stays inside the scrolling area, never in the zone")
 	// ...and the zone did not move with it.
-	assert.Equal(t, "pool 4/8 running", s.Row(16), "the status row held its place under 40 lines of output")
-	assert.Equal(t, "api built in 1.2s", s.Row(24), "the toast held its place too")
-	assert.Equal(t, string(SGRGreen), s.StyleAt(24, 1), "and kept its colour")
+	assert.Equal(t, "pool 4/8 running", bandRow(s, 16-borderRowsPerEdge), "the status row held its place under 40 lines of output")
+	assert.Equal(t, "api built in 1.2s", toastRow(s, 24-borderRowsPerEdge), "the toast held its place too")
+	assert.Equal(t, string(SGRGreen), s.StyleAt(24-borderRowsPerEdge, 1+borderCols), "and kept its colour")
 }
 
 // TestPaintLeavesTheCursorWhereTheCallerLeftIt is the second half of that
@@ -88,16 +102,17 @@ func TestPaintNotificationsExpireWithoutResidue(t *testing.T) {
 
 	require.NoError(t, n.Notify("lint failed in std/", SGRRed, 5*time.Second))
 	require.NoError(t, n.Notify("api built", SGRGreen, 30*time.Second))
-	assert.Equal(t, "lint failed in std/", s.Row(23))
-	assert.Equal(t, "api built", s.Row(24))
-	assert.Equal(t, string(SGRRed), s.StyleAt(23, 1))
+	assert.Equal(t, "lint failed in std/", toastRow(s, 23-borderRowsPerEdge))
+	assert.Equal(t, "api built", toastRow(s, 24-borderRowsPerEdge))
+	// Column 1 is the box's left edge now, so the text starts at column 2.
+	assert.Equal(t, string(SGRRed), s.StyleAt(23-borderRowsPerEdge, 1+borderCols))
 
 	clock.advance(6 * time.Second)
 	n.sweep()
 	// The expired toast is gone and the survivor slid down to sit closest to
 	// the reader. No fragment of the old text remains on either row.
-	assert.Equal(t, "", s.Row(23), "an expired notification leaves a clean row")
-	assert.Equal(t, "api built", s.Row(24))
+	assert.Equal(t, "", bandRow(s, 23-borderRowsPerEdge), "an expired notification leaves a clean row")
+	assert.Equal(t, "api built", toastRow(s, 24-borderRowsPerEdge))
 }
 
 // TestPaintReleaseHandsBackAWholeScreen pins teardown: the rows come back, the
@@ -110,12 +125,12 @@ func TestPaintReleaseHandsBackAWholeScreen(t *testing.T) {
 	fmt.Fprint(s, "transcript line\n")
 	_, err := l.Set([]Line{{Text: "pool 1/4 running"}})
 	require.NoError(t, err)
-	require.Equal(t, "pool 1/4 running", s.Row(19))
+	require.Equal(t, "pool 1/4 running", bandRow(s, 19-borderRowsPerEdge))
 
 	require.NoError(t, z.Close())
 	assert.Equal(t, 1, scrollTopOf(s), "margins reset, or the user's shell stays pinned")
 	assert.Equal(t, 24, scrollBotOf(s))
-	assert.Equal(t, "", s.Row(19), "the leased rows are cleared, not left as litter")
+	assert.Equal(t, "", bandRow(s, 19-borderRowsPerEdge), "the leased rows are cleared, not left as litter")
 	assert.Contains(t, s.String(), "transcript line", "and the transcript survives teardown")
 }
 
@@ -137,12 +152,16 @@ func TestPaintTwoConsumersShareOneTerminal(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, n.Notify("cache stampede on go-build", SGRYellow, time.Minute))
 
-	// One margin set, covering both bands. Seven rows, not nine: the failure
-	// band's six plus the ONE row the single notification actually needs.
+	// One margin set, covering both bands. Seven leased rows, not nine: the
+	// failure band's six plus the ONE row the single notification actually
+	// needs - and the zone's border above them.
 	assert.Equal(t, 1, scrollTopOf(s))
-	assert.Equal(t, 17, scrollBotOf(s))
+	assert.Equal(t, 17-borderRows, scrollBotOf(s))
+	// The border marks where the scrolling stops.
+	assert.Equal(t, boxTL+strings.Repeat(boxH, 77)+boxTR, s.Row(18-borderRows), "the top rule spans the region, corners included")
 	// Both consumers are visible at once, in acquisition order.
-	assert.Equal(t, "pool 6/8 running   2 ok  1 failed", s.Row(18))
-	assert.Equal(t, "[fail] test std (ran, 4.1s)", s.Row(19))
-	assert.Equal(t, "cache stampede on go-build", s.Row(24))
+	assert.Equal(t, "pool 6/8 running   2 ok  1 failed", bandRow(s, 18-borderRowsPerEdge))
+	assert.Equal(t, "[fail] test std (ran, 4.1s)", bandRow(s, 19-borderRowsPerEdge))
+	// A single notification rides the bottom rule rather than taking a row.
+	assert.Equal(t, "cache stampede on go-build", toastRow(s, 24-borderRowsPerEdge))
 }

@@ -3,17 +3,19 @@ package doctor
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/types"
 )
 
 // minInteractiveHeight is the shortest terminal the interactive surfaces still
-// work in: the reserved band plus a scrolling area worth reading above it.
+// work in: the reserved band, the rule the zone draws above it, and a scrolling
+// area worth reading above that.
 //
 // Named here rather than reaching into tty because it is a REPORTING threshold -
 // what to warn a reader about - and the zone enforces its own limit regardless.
-const minInteractiveHeight = 14
+const minInteractiveHeight = 15
 
 // checkTerminal reports what the terminal in front of magus can actually do.
 //
@@ -74,7 +76,7 @@ func (r *runner) checkTerminal() types.DoctorCheck {
 	details = append(details,
 		formatSource(format),
 		fmt.Sprintf("size: %dx%d", width, height),
-		fmt.Sprintf("colour: %s", yesNo(tty.WantsColor(os.Stderr, tty.SystemProbe))),
+		fmt.Sprintf("color: %s", yesNo(tty.WantsColor(os.Stderr, tty.SystemProbe))),
 		fmt.Sprintf("hyperlinks: %s", yesNo(tty.WantsHyperlinks(os.Stderr, tty.SystemProbe))),
 	)
 
@@ -90,7 +92,15 @@ func (r *runner) checkTerminal() types.DoctorCheck {
 		degraded = append(degraded, "no mouse (this terminal does not report the cursor position, so a click cannot be resolved against an inline view)")
 	}
 	if !tty.WantsColor(os.Stderr, tty.SystemProbe) {
-		degraded = append(degraded, "no colour")
+		degraded = append(degraded, "no color")
+	}
+	// magus draws the band's border in box-drawing runes on every terminal,
+	// rather than picking per locale, so that one look is the same everywhere
+	// and a committed picture does not depend on the shell that made it. The
+	// cost is that this is the one setting that can make it render wrong, so it
+	// is reported instead.
+	if !utf8Locale() {
+		degraded = append(degraded, "locale is not UTF-8 ("+localeSource()+"), so the band's border may render as stray characters; set LANG to a UTF-8 value")
 	}
 	if height > 0 && height < minInteractiveHeight {
 		degraded = append(degraded, fmt.Sprintf("only %d rows; the pinned band needs a scrolling area above it and stands down below about %d", height, minInteractiveHeight))
@@ -147,6 +157,29 @@ func formatSource(format string) string {
 		return fmt.Sprintf("log format: %q (from MAGUS_LOG_FORMAT, which overrides magus.yaml)", format)
 	}
 	return fmt.Sprintf("log format: %q (from config)", format)
+}
+
+// utf8Locale reports whether the environment claims a UTF-8 character set,
+// checked in the order POSIX resolves them.
+func utf8Locale() bool {
+	for _, k := range []string{"LC_ALL", "LC_CTYPE", "LANG"} {
+		if v := os.Getenv(k); v != "" {
+			u := strings.ToUpper(v)
+			return strings.Contains(u, "UTF-8") || strings.Contains(u, "UTF8")
+		}
+	}
+	return false
+}
+
+// localeSource names the variable that decided, so the remedy is unambiguous:
+// setting LANG changes nothing when LC_ALL is what is in force.
+func localeSource() string {
+	for _, k := range []string{"LC_ALL", "LC_CTYPE", "LANG"} {
+		if v := os.Getenv(k); v != "" {
+			return k + "=" + v
+		}
+	}
+	return "none of LC_ALL, LC_CTYPE or LANG is set"
 }
 
 func yesNo(b bool) string {

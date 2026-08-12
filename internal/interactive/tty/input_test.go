@@ -2,6 +2,7 @@ package tty
 
 import (
 	"bufio"
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -24,7 +25,7 @@ func drain(t *testing.T, in *Input) []Event {
 	var out []Event
 	for {
 		ev, err := in.Read()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return out
 		}
 		require.NoError(t, err)
@@ -184,26 +185,31 @@ func TestZoneHitTestResolvesAClickToItsLease(t *testing.T) {
 	_, err := failures.Set([]Line{{Text: "pool"}})
 	require.NoError(t, err)
 
-	// 9 leased rows on a 24-row terminal: the zone starts at row 16.
-	l, i, ok := z.HitTest(16)
+	// 9 leased rows plus the box on a 24-row terminal: the zone starts at row
+	// 14, its top rule occupies that row, and the first leased row is 15.
+	l, i, ok := z.HitTest(15)
 	require.True(t, ok)
 	assert.Same(t, failures, l)
 	assert.Equal(t, 0, i, "the first row of the first band")
 
-	l, i, ok = z.HitTest(18)
+	l, i, ok = z.HitTest(17)
 	require.True(t, ok)
 	assert.Same(t, failures, l)
 	assert.Equal(t, 2, i)
 
-	l, i, ok = z.HitTest(22)
+	l, i, ok = z.HitTest(21)
 	require.True(t, ok)
-	assert.Same(t, toasts, l, "row 22 is the second band")
+	assert.Same(t, toasts, l, "the second band")
 	assert.Equal(t, 0, i)
 
-	l, i, ok = z.HitTest(24)
+	// 23, not 24: the zone's bottom rule owns the last row and belongs to no
+	// lease, so a click there resolves to nothing.
+	l, i, ok = z.HitTest(23)
 	require.True(t, ok)
 	assert.Same(t, toasts, l)
-	assert.Equal(t, 2, i, "the last row of the zone")
+	assert.Equal(t, 2, i, "the last leased row")
+	_, _, ok = z.HitTest(24)
+	assert.False(t, ok, "the bottom rule is not part of any band")
 }
 
 func TestZoneHitTestRejectsScrollingRows(t *testing.T) {
@@ -216,14 +222,17 @@ func TestZoneHitTestRejectsScrollingRows(t *testing.T) {
 	_, err := l.Set([]Line{{Text: "pool"}})
 	require.NoError(t, err)
 
-	// One 6-row lease on a 24-row terminal reserves rows 19-24; everything
-	// above that scrolls.
-	for _, row := range []int{1, 15, 18} {
+	// One 6-row lease plus the box on a 24-row terminal reserves rows 17-24:
+	// the top rule on 17, the six leased rows, the bottom rule on 24.
+	// Everything above scrolls.
+	for _, row := range []int{1, 15, 16} {
 		_, _, ok := z.HitTest(row)
 		assert.False(t, ok, "row %d is scrolling output", row)
 	}
-	_, _, ok := z.HitTest(19)
-	assert.True(t, ok, "row 19 is the first reserved row")
+	_, _, ok := z.HitTest(17)
+	assert.False(t, ok, "the top rule is the boundary, not a clickable row")
+	_, _, ok = z.HitTest(18)
+	assert.True(t, ok, "the first leased row sits under the rule")
 }
 
 func TestZoneHitTestRejectsEverythingBeforeAnythingIsDrawn(t *testing.T) {
@@ -457,5 +466,38 @@ func TestCursorPositionDropsTheRemainsOfATimedOutReply(t *testing.T) {
 	in := &Input{r: bufio.NewReader(r), in: r, out: &out, now: time.Now}
 	_, _, ok := in.CursorPosition()
 	require.False(t, ok)
+	assert.Zero(t, in.r.Buffered(), "the partial reply is discarded, not left to be misread")
+}
+
+// TestCursorPositionQueuesNoPhantomOnTwoByteTruncation pins the one truncation
+// length that used to fabricate a keystroke.
+//
+// The sibling test above truncates at "\x1b[12;", which reaches decodeCSI and
+// correctly propagates the deadline. A reply truncated at EXACTLY "\x1b[" instead
+// stalls on the Peek right after the '[' - and that site used to answer a read
+// error with KeyEscape rather than the error. CursorPosition treats an event as a
+// real keystroke that overtook the reply, so the fabricated key was appended to
+// i.pending, where discardBuffered (which drops BYTES) could not reach it. The
+// picker read it, mapped KeyEscape to ErrAborted, and closed with the user having
+// pressed nothing.
+//
+// The queue is asserted, not just the buffer: the phantom's whole problem was
+// that it had already left the buffer.
+func TestCursorPositionQueuesNoPhantomOnTwoByteTruncation(t *testing.T) {
+	t.Parallel()
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = r.Close(); _ = w.Close() })
+
+	// A CSI introducer and nothing more: the terminal stalled after two bytes.
+	_, err = w.WriteString("\x1b[")
+	require.NoError(t, err)
+
+	var out ttyBuf
+	in := &Input{r: bufio.NewReader(r), in: r, out: &out, now: time.Now}
+	_, _, ok := in.CursorPosition()
+	require.False(t, ok, "a stalled terminal does not report a position")
+	assert.Empty(t, in.pending,
+		"a read deadline must not be queued as a keystroke; KeyEscape here quits the picker")
 	assert.Zero(t, in.r.Buffered(), "the partial reply is discarded, not left to be misread")
 }

@@ -15,11 +15,26 @@ A fast, cross-platform task orchestrator for polyglot monorepos. One statically 
 
 Change a file and magus works out which projects it reaches, rebuilds only those, and caches every result so the same work never runs twice.
 
-<!-- Recorded by `magus run tapes` from tapes/core-loop.tape; regenerate and commit to refresh. -->
+<!-- Rendered by `magus run termcast-generate` from tapes/core-loop.capture, the raw
+     bytes a real magus printed to a real terminal. Re-record with `magus run
+     termcast-record` when the CLI's output changes; both files commit together. -->
 
 <p align="center">
-  <img alt="Terminal recording: magus ls lists four projects, magus run ci runs lint, build and test across all of them reporting '0 cached, 4 ran', the same command run again reports '4 cached, 0 ran' and replays the captured test output from cache, and finally one file is edited and magus affected ci reports '4 cached, 1 ran' so only the edited project does work." src="./assets/gen/core-loop.gif" width="820">
+  <img alt="Terminal recording: magus ls lists five projects, magus run ci runs lint, build and test across all of them reporting '0 cached, 5 ran', the same command run again reports '5 cached, 0 ran' having replayed every result from cache, and finally one file is edited and magus affected ci narrows to three projects - the edited one and the project depending on it - reporting '2 cached, 1 ran'." src="./assets/gen/core-loop.svg" width="820">
 </p>
+
+<!-- Recorded by `magus run termcast-showcase` - a real interactive session driven
+     by real keystrokes - and rendered by `magus run termcast-generate`. Both files
+     commit together. -->
+
+<p align="center">
+  <img alt="Terminal recording of an interactive magus session: a run draws a pinned box at the bottom of the terminal showing pool slots and a live count while ordinary output scrolls above it; a failing run pins its failures as a tree grouped by project, with the selected failure's captured test output shown in a second column beside it; tab swaps which of the two views is larger; and magus x opens a picker that searches the knowledge graph as the filter is typed." src="./assets/gen/showcase.svg" width="1080">
+</p>
+
+The band at the bottom holds still while your output scrolls past it. Nothing is
+cleared, the alternate screen is never touched, and your scrollback survives -
+so selection, copy and paste keep working the way they always did. Every one of
+these surfaces degrades to plain text when there is no terminal to draw on.
 
 ## Why magus exists
 

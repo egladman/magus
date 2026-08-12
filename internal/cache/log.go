@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -90,6 +91,33 @@ type PrettyHandler struct {
 	// prompt that painted its own highlight would be drawing over rows this
 	// repaints from a timer.
 	selected int
+	// mintedRef records that this run printed at least one bare output ref, so
+	// the summary can say once what those ids are for.
+	//
+	// Per RUN rather than a constant line, because a run that minted none would
+	// otherwise explain a notation nothing on screen uses.
+	mintedRef bool
+	// rowFailure maps each band row to the index in the drawn failure list it
+	// shows, or -1 for a row that is not a failure (a project header). Written
+	// by band, read by HitFailure.
+	rowFailure []int
+	// focus is the view the keys drive, and so the one the golden ratio gives
+	// the major share of the width to. See splitAt.
+	focus PaneFocus
+	// preview is the selected failure's captured output, as the right-hand
+	// column of the band shows it. Empty means one column.
+	//
+	// PUSHED rather than read here: resolving it means opening a file, and the
+	// band repaints from a timer under this mutex. The prompt loads it when the
+	// selection moves, which is the only time it changes.
+	preview []string
+	// now reads the clock, so a caller rendering to a picture can hold it still.
+	//
+	// The status row carries elapsed time, which makes an otherwise pure
+	// function of the records a function of WHEN it ran - and the documentation
+	// renderer commits its output, where a live clock is drift on every run.
+	// Never nil: the constructors default it.
+	now func() time.Time
 }
 
 // statusLine accumulates what the sticky region's top row shows: pool
@@ -123,16 +151,23 @@ func (s statusLine) render(now time.Time) (left, elapsed string) {
 		elapsed = fmtDur(now.Sub(s.start))
 	}
 	var b strings.Builder
-	// Leads, because a blocked run is not making progress and the pool counters
-	// below it would otherwise read as a stall with no explanation.
-	if s.blocked != "" {
-		fmt.Fprintf(&b, "WAITING on lock: %s", s.blocked)
-		if s.blockedBy != "" {
-			fmt.Fprintf(&b, " (held by %s)", s.blockedBy)
-		}
-		b.WriteString("   ")
+	// The blocked state is NOT rendered here, though this type holds it.
+	//
+	// It used to lead this line, which meant a lock wait was announced twice
+	// for one event: once in shouty capitals on the status row, and again as
+	// the pinned notification - same project, same holder, same word. The
+	// notification is the better home. It is bold, coloured and carries the
+	// REMEDY ("wait, or stop it") that this line has no room for, while this
+	// line's job is a steady readout of pool and counts. An exception does not
+	// belong in a readout.
+	//
+	// The fields stay because blockedMessage composes the notification from
+	// them; see [PrettyHandler.blockedMessage].
+	if g := PoolGauge(s.running, s.capacity); g != "" {
+		b.WriteString(g)
+	} else {
+		fmt.Fprintf(&b, "pool %d/%d", s.running, s.capacity)
 	}
-	fmt.Fprintf(&b, "pool %d/%d running", s.running, s.capacity)
 	if s.queued > 0 {
 		fmt.Fprintf(&b, ", %d queued", s.queued)
 	}
@@ -148,6 +183,52 @@ func (s statusLine) render(now time.Time) (left, elapsed string) {
 	return b.String(), elapsed
 }
 
+// Pool slots, drawn as the console draws them: ONE mark per slot, filled when
+// that slot is working. A ratio is a shape before it is a number, and "6/8" made
+// the reader parse two integers to see something the eye can take in whole.
+const (
+	slotBusy = "\u25a0" // filled square
+	slotIdle = "\u25a1" // hollow square
+	// slotCap is where slot-for-slot stops being readable. Past it the gauge is
+	// dropped rather than SCALED: a scaled bar looks identical to a literal one
+	// while meaning something else entirely, and a reader who has learned that
+	// one mark is one slot would be quietly misled. The numbers still say it.
+	slotCap = 16
+
+	// The tree's branches. A target under its project, and the last one closing
+	// the group so the eye can see where a project's failures end.
+	treeTee = "\u251c\u2500 "
+	treeEnd = "\u2570\u2500 "
+)
+
+// PoolGauge renders the pool as filled and empty slots, or "" when there are too
+// many slots to draw honestly.
+// PoolGauge is exported for the documentation renderer, which draws the same
+// gauge a run draws rather than a copy of what it looks like.
+func PoolGauge(running, capacity int) string {
+	if capacity <= 0 || capacity > slotCap {
+		return ""
+	}
+	running = min(max(running, 0), capacity)
+	marks := make([]string, 0, capacity)
+	for i := range capacity {
+		if i < running {
+			marks = append(marks, slotBusy)
+			continue
+		}
+		marks = append(marks, slotIdle)
+	}
+	// SPACED, not butted together. Contiguous blocks read as one bar being
+	// filled - a proportion - and this is not a proportion: it is eight
+	// discrete slots, and a reader should be able to count them. The space is
+	// what makes them countable.
+	//
+	// The numbers ride along in parentheses because the gauge answers "how
+	// busy" at a glance and the digits answer "exactly how many" on a second
+	// look. Neither replaces the other.
+	return strings.Join(marks, " ") + fmt.Sprintf(" (%d/%d)", running, capacity)
+}
+
 // paintStatus repaints the region's status row. It is called after every
 // event that moves a counter, so the row tracks the run rather than only
 // the pool samples that first populated it. A disabled region drops it.
@@ -157,7 +238,7 @@ func (h *PrettyHandler) paintStatus() {
 		return
 	}
 	if h.status.start.IsZero() {
-		h.status.start = time.Now()
+		h.status.start = h.now()
 	}
 	h.repaint()
 }
@@ -186,30 +267,166 @@ func (h *PrettyHandler) band() []tty.Line {
 		dim = tty.SGRDim
 	}
 	rows := make([]tty.Line, 0, stickyRegionRows)
+	shown := 0
 	// The elapsed time goes to the right edge. It is the one clause that grows
 	// a character at a time, so left-aligned it shoved everything before it
 	// sideways once a second; pinned right, the counters hold still and the
 	// eye stops chasing them.
-	left, elapsed := h.status.render(time.Now())
-	status := tty.Line{Spans: []tty.Span{{Text: left, Style: dim}}}
-	if elapsed != "" {
-		status.Spans = append(status.Spans, tty.Span{Text: elapsed, Style: dim, Align: tty.AlignRight})
-	}
-	rows = append(rows, status)
-	for i, f := range h.failures {
-		// A blank entry still occupies its row: the ring's positions are fixed,
-		// so a failure does not move once painted.
-		row := tty.Line{Text: f.Heading}
-		if color {
-			row.Style = tty.SGRBoldRed
+	// The status goes in the box's TOP RULE, not in a row of its own. It
+	// describes the band, so the frame is where it belongs - and it stops
+	// costing a row, which on a run with nothing wrong was the difference
+	// between a two-row band and a three-row one.
+	left, elapsed := h.status.render(h.now())
+	_, _ = h.zone.SetTitle(left, elapsed)
+	// Grouped by project, drawn as a tree. A flat list repeated the project on
+	// every row and left the reader to notice that three of them were the same
+	// one; grouped, the shape of the failure is visible - one project in
+	// trouble reads differently from five, at a glance, without counting.
+	//
+	// Only projects that actually failed appear, and only while they have
+	// failures: the band is the tree PRUNED to what went wrong, not the graph
+	// with the healthy parts greyed out. That is what keeps it adaptive - a run
+	// with nothing wrong draws no tree at all.
+	//
+	// rowFailure is built here because only this loop knows which band rows are
+	// targets and which are headers. Hit-testing indexed by position without it
+	// once, and resolved a click one row off.
+	drawn := h.drawnLocked()
+	// BUDGETED before drawing, because a tree costs a header row as well as a
+	// row per failure and the band's ceiling did not move when it stopped being
+	// a flat list. Rows past the ceiling are dropped by Lease.Set, silently, and
+	// the "+N more" count was computed from rows DRAWN - so a band that had
+	// discarded two failures reported none hidden while the title said four
+	// failed. Deciding what fits here is what makes that count honest.
+	drawn = drawn[:fitsInBand(drawn, h.ceilingLocked())]
+	h.rowFailure = h.rowFailure[:0]
+	prev := ""
+	for i, f := range drawn {
+		if f.Project != prev {
+			prev = f.Project
+			// The glyph rides the HEADER, once per project, not once per
+			// target. It is the only thing saying these rows are failures on a
+			// terminal with no colour, and repeating it down every branch of a
+			// tree is noise the tree already carries structurally.
+			rows = append(rows, tty.Line{Spans: []tty.Span{
+				{Text: glyph(color, "fail", colRed) + " ", Style: dim},
+				{Text: f.Project, Style: dim},
+			}})
+			h.rowFailure = append(h.rowFailure, -1)
 		}
-		if i == h.selected && f.Target != "" {
-			row.Style = tty.SGRReverse
-			if color {
-				row.Style += ";" + tty.SGRBoldRed
+		shown++
+		branch := treeTee
+		if i == len(drawn)-1 || drawn[i+1].Project != f.Project {
+			branch = treeEnd
+		}
+		marker := " "
+		selected := i == h.selected
+		if selected {
+			marker = tty.SelectMark
+		}
+		weight := dim
+		if color {
+			weight = tty.SGRBoldRed
+		}
+		row := tty.Line{Spans: []tty.Span{
+			{Text: marker + branch, Style: dim},
+			{Text: f.Target, Style: weight},
+		}}
+		if f.Dur > 0 {
+			row.Spans = append(row.Spans, tty.Span{Text: fmtDur(f.Dur), Style: dim, Align: tty.AlignRight})
+		}
+		if selected {
+			for j := range row.Spans {
+				row.Spans[j].Style = tty.SGRReverse
+				if color {
+					row.Spans[j].Style += ";" + tty.SGRBoldRed
+				}
 			}
 		}
 		rows = append(rows, row)
+		h.rowFailure = append(h.rowFailure, i)
+	}
+	// Say what is NOT on screen. The ring holds five, and a run can fail fifty:
+	// without this the band shows the newest five under a status row reading
+	// "50 failed" and never states the relationship, so forty-five targets are
+	// missing with nothing to suggest they exist. The count comes from the
+	// status counters, which see every failure rather than only the ones that
+	// fit.
+	if hidden := h.status.failed - len(drawn); hidden > 0 {
+		rows = append(rows, tty.Line{
+			Text:  fmt.Sprintf("  +%d more above, in the transcript", hidden),
+			Style: dim,
+		})
+		// Kept in step. rowFailure is a parallel array, and its whole
+		// justification is that the code DRAWING a row records what it is - so
+		// a row appended without an entry silently shifts every index below it.
+		// Harmless today only because nothing clickable follows.
+		h.rowFailure = append(h.rowFailure, -1)
+	}
+	return h.withPreview(rows, dim)
+}
+
+// withPreview folds the selected failure's output into a second column.
+//
+// The divider and the right column are appended to each row as SPANS, so the
+// existing layout does the alignment and clipping - there is no second region,
+// no pty, and nothing here that could hold content the handler did not produce.
+// A vertical split drawn by the terminal would need DECSLRM, which is not
+// portable; composing the columns into rows magus already repaints is.
+//
+// The band grows to whichever column is taller, so the output is not truncated
+// to the number of failures that happen to be showing.
+func (h *PrettyHandler) withPreview(rows []tty.Line, dim tty.SGR) []tty.Line {
+	if len(h.preview) == 0 {
+		return rows
+	}
+	// The band is capped (see repaint), so the preview is windowed to what will
+	// actually be drawn - and the window is taken from the END.
+	//
+	// Assigning preview[i] to row i showed the FIRST lines of a tail that was
+	// collected precisely because the last ones matter: a reader saw
+	// "go: downloading ..." and never the assertion or the FAIL line. The tail
+	// of the tail is the part worth the rows.
+	// Recomputed per paint: the terminal can be resized under a running prompt,
+	// and a split cached from the old width puts the divider through the text.
+	split := splitAt(h.lease.Width(), h.focus)
+	preview := h.preview
+	if room := h.ceilingLocked() - len(rows); room > 0 && len(preview) > room {
+		preview = preview[len(preview)-room:]
+	}
+	for len(rows) < len(preview) {
+		rows = append(rows, tty.Line{})
+		h.rowFailure = append(h.rowFailure, -1)
+	}
+	for i := range rows {
+		// Anything the row aligned RIGHT was aligned against the whole terminal,
+		// which is no longer where its column ends: a duration would sail past
+		// the divider and land beyond the output. So the left column is
+		// flattened here - its right-aligned spans are padded into place inside
+		// the split column and then laid out left, which is the only way a
+		// row-global alignment can serve a column.
+		var left, tail []tty.Span
+		for _, sp := range rows[i].SpansCopy() {
+			if sp.Align == tty.AlignRight {
+				sp.Align = tty.AlignLeft
+				tail = append(tail, sp)
+				continue
+			}
+			left = append(left, sp)
+		}
+		pad := split - spansCols(left) - spansCols(tail)
+		if pad < 1 {
+			pad = 1
+		}
+		var right string
+		if i < len(preview) {
+			right = preview[i]
+		}
+		out := append(left, tty.Span{Text: strings.Repeat(" ", pad), Style: dim})
+		out = append(out, tail...)
+		out = append(out, tty.Span{Text: previewDivider, Style: dim}, tty.Span{Text: right, Style: dim})
+		rows[i].Spans = out
+		rows[i].Text, rows[i].Style = "", ""
 	}
 	return rows
 }
@@ -222,7 +439,20 @@ func (h *PrettyHandler) band() []tty.Line {
 // exactly the path where the terminal is already misbehaving - swallowing the
 // cause and reproduce lines a reader needs most.
 func (h *PrettyHandler) repaint() bool {
-	rendered, _ := h.lease.Set(h.band())
+	rows := h.band()
+	// The band is sized to what it HAS, not to what it might one day hold.
+	// It used to lease six rows from the first paint, so a run with nothing
+	// wrong reserved five blank rows for failures that never came - and once
+	// the zone drew a box around them, the emptiness became the most visible
+	// thing on screen. Growing on demand costs one Grow per new failure and
+	// gives the scrolling transcript back the rows nobody was using.
+	//
+	// It only ever grows. Shrinking mid-run would make the transcript jump
+	// upward as failures aged out, which is motion the reader did not cause.
+	if len(rows) > h.lease.Rows() {
+		_, _ = h.lease.Grow(min(len(rows), h.ceilingLocked()))
+	}
+	rendered, _ := h.lease.Set(rows)
 	return rendered
 }
 
@@ -312,13 +542,18 @@ func newPrettyHandler(w io.Writer, level slog.Level, p tty.Probe) *PrettyHandler
 // give two handlers the same one and watch them share the terminal.
 func newPrettyHandlerZone(w io.Writer, level slog.Level, p tty.Probe, z *tty.Zone, n *tty.Notifier) *PrettyHandler {
 	return &PrettyHandler{
-		w:        w,
-		probe:    p,
-		level:    level,
-		zone:     z,
-		lease:    z.Acquire(stickyRegionRows),
+		w:     w,
+		probe: p,
+		level: level,
+		zone:  z,
+		// ONE row to start: the live status line. The band grows from repaint as
+		// failures actually arrive (see repaint), so a run that never fails
+		// never reserves a row for one. stickyRegionRows is the ceiling now,
+		// not the opening claim.
+		lease:    z.Acquire(1),
 		notifier: n,
 		selected: -1,
+		now:      time.Now,
 	}
 }
 
@@ -481,14 +716,14 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		// low-signal next to work that actually ran. Cache state lives in the parens,
 		// mirroring the cross-tool convention (e.g. Bazel's "(cached) PASSED").
 		h.printf("%s %s (cached, %s%s)\n", glyph(colorize, "pass", colDimGreen), label, fmtDur(dur), remote)
-		h.printRepro(colorize, project, recordStr(r, "target"))
-		h.printRef(colorize, ref)
+		h.printRepro(project, recordStr(r, "target"))
+		h.printRef(ref)
 		h.status.cached++
 		h.paintStatus()
 	case "cache.miss":
 		h.printf("%s %s (ran, %s%s)\n", glyph(colorize, "pass", colGreen), label, fmtDur(dur), remote)
-		h.printRepro(colorize, project, recordStr(r, "target"))
-		h.printRef(colorize, ref)
+		h.printRepro(project, recordStr(r, "target"))
+		h.printRef(ref)
 		h.status.passed++
 		h.paintStatus()
 	case "cache.error":
@@ -533,6 +768,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 			h.printf("%s%d cached, %d ran, %d failed (%s)\n",
 				lead, recordInt(r, "hits"), recordInt(r, "misses"), recordInt(r, "errors"), fmtDur(elapsed))
 		}
+		h.printRefLegend(colorize)
 		// End of run: give the leased rows back so the user's shell prompt
 		// returns to a clean full-screen terminal. Safe to call when nothing
 		// was ever painted (idempotent), and ensureLease takes a fresh band if
@@ -558,7 +794,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		// line - including the repro command underneath - so a plan and a run read
 		// the same way and only the glyph and the footer say which one you got.
 		h.printf("%s %s\n", glyph(colorize, "dry", colDim), label)
-		h.printRepro(colorize, recordStr(r, "project"), recordStr(r, "target"))
+		h.printRepro(recordStr(r, "project"), recordStr(r, "target"))
 	case "cache.scope":
 		// Run start. Everything the band shows is per-RUN, and this handler is
 		// per-PROCESS, so the two have to be separated explicitly or a process
@@ -694,16 +930,11 @@ func formatAttrs(r slog.Record) string {
 }
 
 // printRepro prints the standalone `magus run <target> <project>` for a result.
-func (h *PrettyHandler) printRepro(colorize bool, project, target string) {
+func (h *PrettyHandler) printRepro(project, target string) {
 	if project == "" || target == "" {
 		return
 	}
-	repro := clihint.Run.With(target, project)
-	if colorize {
-		h.printf("  %s\n", repro)
-	} else {
-		h.printf("  %s\n", repro)
-	}
+	h.printf("  %s\n", clihint.Run.With(target, project))
 }
 
 // failureReport is one failure as printFailure needs it.
@@ -753,7 +984,7 @@ func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
 			Target:    target,
 			OutputRef: ref,
 			LogPath:   logPath,
-			Heading:   fmt.Sprintf("%s %s (ran, %s)", glyph(false, "fail", colRed), heading, fmtDur(dur)),
+			Dur:       dur,
 		}
 		h.failureAt = (h.failureAt + 1) % failureRows
 		pinned = h.repaint()
@@ -885,15 +1116,43 @@ func failureCauses(cause string) []string {
 }
 
 // printRef prints a successful target's output reference id on its own line.
-func (h *PrettyHandler) printRef(colorize bool, ref string) {
+//
+// Bare on purpose: a passing target prints one of these EACH, so spelling the
+// retrieval command out here would add a line per target to every run. The
+// summary carries that once instead - see the legend in cache.summary.
+func (h *PrettyHandler) printRef(ref string) {
 	if ref == "" {
 		return
 	}
-	if colorize {
-		h.printf("%s\n", ref)
-	} else {
-		h.printf("%s\n", ref)
+	h.mintedRef = true
+	h.printf("%s\n", ref)
+}
+
+// printRefLegend says once, at the end of a run, what the bare ids above are.
+//
+// Without it a passing run prints "out2f228a2cd116" and nothing else, and a
+// reader who has not met output refs has fourteen characters and no verb. That
+// reader is often an AGENT, in a fresh worktree, under a tool that installed no
+// magus skills - so the transcript is the only surface guaranteed to reach it,
+// and anything the transcript does not say is not knowable.
+//
+// One line per run, not per target, because refs are printed per target and the
+// failure path already spells the command out for the ones that matter. Only
+// when a ref was actually minted, so it never explains a notation nothing on
+// screen used.
+//
+// Deliberately vendor-neutral: the command retrieves the output, and what a
+// reader pipes it into is their business. Naming an agent here would age badly
+// and put a vendor in a build tool's output. The docs carry the worked examples.
+func (h *PrettyHandler) printRefLegend(colorize bool) {
+	if !h.mintedRef {
+		return
 	}
+	line := "  outputs: " + clihint.QueryOutput.With("<ref>")
+	if colorize {
+		line = tty.Colorize(line, colDim)
+	}
+	h.printf("%s\n", line)
 }
 
 func recordStr(r slog.Record, key string) string {
@@ -1043,10 +1302,18 @@ const lockNotifyKey = "lock.waiting"
 // watching a stalled run with nothing to do about it, and the whole reason
 // this one event is worth a notification is that there is something to do.
 func (h *PrettyHandler) blockedMessage() string {
-	if h.status.blockedBy == "" {
-		return "waiting on the workspace lock - another magus run holds it"
+	// The PROJECT is named here, and that is not decoration. It used to be
+	// stated on the status row; moving the status into the box's title dropped
+	// the clause, and with it the only thing on screen saying WHICH project was
+	// blocked - a reader saw a pid and had to guess what it was holding.
+	what := "the workspace lock"
+	if h.status.blocked != "" {
+		what = "the lock on " + h.status.blocked
 	}
-	return fmt.Sprintf("waiting on the workspace lock held by %s - wait, or stop it", h.status.blockedBy)
+	if h.status.blockedBy == "" {
+		return "waiting on " + what + " - another magus run holds it"
+	}
+	return fmt.Sprintf("waiting on %s held by %s - wait, or stop it", what, h.status.blockedBy)
 }
 
 // Failure is one failed target, as the pinned band holds it.
@@ -1066,9 +1333,106 @@ type Failure struct {
 	// LogPath is where the captured output was written. It is what makes the
 	// ref linkable: a file:// URL resolves with nothing running.
 	LogPath string
-	// Heading is the line drawn in the band.
-	Heading string
+	// Dur is how long the target ran before it failed, kept as a FIELD rather
+	// than only baked into Heading.
+	//
+	// A single pre-formatted string cannot be laid out. Durations are the one
+	// column a reader scans down - "which of these was slow" - and that only
+	// works if they share a right edge, which needs them separable from the
+	// text they follow. Heading stays for the plain-output path, where there
+	// is no column to align to.
+	Dur time.Duration
 }
+
+// SetFocus moves focus between the two views, which resizes them: the focused
+// one takes the golden ratio's major share.
+//
+// Resizing on focus rather than offering a drag handle is deliberate - there is
+// no pointer contract to invent, and the pane you are working in is the one
+// that should be big.
+func (h *PrettyHandler) SetFocus(f PaneFocus) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.focus == f {
+		return
+	}
+	h.focus = f
+	h.repaint()
+}
+
+// ToggleFocus swaps which view has the major share, and reports the new focus.
+func (h *PrettyHandler) ToggleFocus() PaneFocus {
+	h.mu.Lock()
+	f := FocusPreview
+	if h.focus == FocusPreview {
+		f = FocusTree
+	}
+	h.mu.Unlock()
+	h.SetFocus(f)
+	return f
+}
+
+// SetPreview gives the band a right-hand column: the captured output of
+// whatever is selected. Nil or empty returns it to a single column.
+//
+// This is the "two views, one run" surface. It is deliberately not two PANES -
+// nothing here manages a terminal, and a caller cannot put arbitrary content in
+// it. Both columns are things this handler already owns, which is the line
+// between showing a reader their run and becoming a multiplexer.
+func (h *PrettyHandler) SetPreview(lines []string) {
+	// The lock is held ACROSS the repaint, like every other caller: repaint
+	// composes the band, which reads the failure ring and writes rowFailure.
+	// Unlocking first raced the paint timer for both.
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.preview = lines
+	h.repaint()
+}
+
+// The GOLDEN RATIO governs the split: the focused view gets the major share,
+// the other the minor.
+//
+// phiMajor is 1/phi. The two shares sum to 1, so the divider lands at the same
+// place whichever view has focus - the panes trade sizes rather than the layout
+// reflowing around a third number.
+//
+// A ratio rather than a fixed column because a fixed one is only ever right at
+// one terminal width: 34 columns is a third of a 100-column window and nearly
+// half an 80-column one, so the same layout read as balanced on one machine and
+// cramped on another.
+const (
+	phiMajor = 0.6180339887
+	phiMinor = 1 - phiMajor
+	// previewMinCols keeps both views legible on a narrow terminal, where a
+	// share of a small number rounds to nothing useful.
+	previewMinCols = 12
+)
+
+// splitAt is the column the divider sits at, given the width available to both
+// views and which one has focus.
+func splitAt(inner int, focus PaneFocus) int {
+	usable := inner - len(previewDivider)
+	if usable < 2*previewMinCols {
+		return usable / 2
+	}
+	share := phiMinor
+	if focus == FocusTree {
+		share = phiMajor
+	}
+	at := int(float64(usable)*share + 0.5)
+	return min(max(at, previewMinCols), usable-previewMinCols)
+}
+
+// PaneFocus names the view the keys are driving, which is the one the golden
+
+// PaneFocus names the view the keys are driving, which is the one the golden
+
+type PaneFocus int
+
+const (
+	FocusTree PaneFocus = iota
+	FocusPreview
+)
 
 // HitFailure maps an absolute terminal row to the failure drawn on it.
 //
@@ -1084,14 +1448,104 @@ func (h *PrettyHandler) HitFailure(row int) (Failure, bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	lease, index, ok := h.zone.HitTest(row)
-	if !ok || lease != h.lease || index == 0 {
+	if !ok || lease != h.lease {
 		return Failure{}, false
 	}
-	f := h.failures[index-1]
-	if f.Target == "" {
+	// Indexed against the DRAWN list, not the ring.
+	//
+	// Two assumptions used to live here and both went stale the moment the band
+	// started sizing itself: that band row 0 was a status line (it is the top
+	// rule's caption now, and costs no row), and that band row N held ring slot
+	// N-1 (the band skips empty slots, so row N is the Nth OCCUPIED failure).
+	// Between them a click resolved one row off, which is worse than not
+	// resolving at all - it reruns a target the reader did not point at.
+	//
+	// Sharing drawnLocked with Failures is what keeps them honest: the list the
+	// keyboard walks and the rows a click lands on are now the same sequence by
+	// construction rather than by two functions agreeing to count alike.
+	// Indexed through rowFailure, which band builds as it draws.
+	//
+	// The band is a TREE now, so its rows are not all failures: a project header
+	// occupies a row and names no target. Counting rows as failures resolved a
+	// click one row off the moment grouping arrived - the same way it did when
+	// the status row was removed - so the mapping is recorded by the code that
+	// draws it rather than re-derived by the code that reads it.
+	if index < 0 || index >= len(h.rowFailure) {
 		return Failure{}, false
 	}
-	return f, true
+	at := h.rowFailure[index]
+	if at < 0 {
+		return Failure{}, false // a project header is not clickable
+	}
+	drawn := h.drawnLocked()
+	if at >= len(drawn) {
+		return Failure{}, false
+	}
+	return drawn[at], true
+}
+
+// previewBandRows is the band's ceiling while a second column is showing.
+//
+// Taller than the one-column ceiling on purpose: the tree and the output share
+// the rows, so at six the tree took five and left the log ONE line - of a tail
+// collected precisely because the last lines matter. This is a deliberate
+// interaction a reader opened, not a background band, so it may take the room;
+// it goes back to stickyRegionRows the moment the preview is cleared.
+const previewBandRows = 14
+
+// ceilingLocked is the band's row limit for the current mode. Callers hold h.mu.
+func (h *PrettyHandler) ceilingLocked() int {
+	if len(h.preview) > 0 {
+		return previewBandRows
+	}
+	return stickyRegionRows
+}
+
+// fitsInBand returns how many of drawn can be shown without the band silently
+// discarding rows.
+//
+// A grouped tree spends a row on each project as well as each failure, and one
+// more on the "+N more" line the moment anything is left over. The ceiling is
+// the lease's, so the arithmetic has to happen before the rows exist.
+func fitsInBand(drawn []Failure, ceiling int) int {
+	rows, prev, n := 0, "", 0
+	for _, f := range drawn {
+		cost := 1
+		if f.Project != prev {
+			cost = 2 // its header too
+		}
+		// Leave a row for the overflow line whenever this would not be the last.
+		if rows+cost > ceiling-1 {
+			break
+		}
+		rows += cost
+		prev = f.Project
+		n++
+	}
+	if n == len(drawn) && rows <= ceiling {
+		return n // everything fits, so no overflow row is needed
+	}
+	return n
+}
+
+// drawnLocked is the failures the band draws, in the order it draws them.
+// Callers hold h.mu.
+func (h *PrettyHandler) drawnLocked() []Failure {
+	out := make([]Failure, 0, failureRows)
+	for _, f := range h.failures {
+		if f.Target != "" {
+			out = append(out, f)
+		}
+	}
+	// SORTED by project, because the band draws a tree and a tree needs its
+	// children adjacent. Ring order is arrival order, and under a pool of eight
+	// failures interleave across projects by default - so "start a header when
+	// the project changes" was run-length encoding, not grouping: api, std, api
+	// drew TWO api headers and a five-failure band spent half its rows on
+	// repeated titles. Stable, so within a project the arrival order the ring
+	// recorded is preserved.
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Project < out[j].Project })
+	return out
 }
 
 // Failures returns the failures currently pinned in the band, in the order they
@@ -1105,13 +1559,7 @@ func (h *PrettyHandler) HitFailure(row int) (Failure, bool) {
 func (h *PrettyHandler) Failures() []Failure {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	out := make([]Failure, 0, failureRows)
-	for _, f := range h.failures {
-		if f.Target != "" {
-			out = append(out, f)
-		}
-	}
-	return out
+	return h.drawnLocked()
 }
 
 // SetSelection highlights the nth pinned failure, counting only the occupied
@@ -1212,4 +1660,117 @@ func (h *PrettyHandler) resetRun() {
 	h.failures = [failureRows]Failure{}
 	h.failureAt = 0
 	h.selected = -1
+	h.mintedRef = false
+	// The preview belongs to a failure from the run that just ended. Left set,
+	// a rerun drew rows of the PREVIOUS run's log beside an empty tree - stale
+	// content pinned on a surface whose whole promise is that it holds still.
+	h.preview = nil
+	h.rowFailure = h.rowFailure[:0]
+}
+
+// The failure prompt's instruction row: the text, and the click keys that name
+// each action.
+//
+// It lives beside the band rather than in the command that dispatches it, for
+// the reason the band itself does: a list of failures and the row saying what
+// you can do with one are a single presentation, drawn into adjacent leases of
+// the same zone, and useless apart. The command owns the VERBS - what rerunning
+// actually does - and this owns what a reader is told and what a click resolves
+// to.
+//
+// Splitting them was not free of consequence. The documentation renderer could
+// not import an unexported const from a main package, so it hand-copied the
+// strings; the drift gate then compared that copy against itself and stayed
+// green while the terminal said something else. A shipped picture of a prompt
+// nobody could actually get is the failure mode this prevents.
+const (
+	HintKeyRerun  = "rerun"
+	HintKeyFocus  = "focus"
+	HintKeyCopy   = "copy"
+	HintKeyOutput = "output"
+	HintKeyDone   = "done"
+
+	hintLead   = "[up/down] select   "
+	hintRerun  = "[enter] rerun"
+	hintFocus  = "[tab] focus"
+	hintCopy   = "[y] copy"
+	hintOutput = "[o] output"
+	hintDone   = "[esc] done"
+)
+
+// FailureHint composes the instruction row.
+//
+// The way out is aligned RIGHT so it is the last thing clipped rather than the
+// first: as one string this row was 86 columns, and an 80-column terminal cut
+// it to exactly "[esc] do".
+func FailureHint() []tty.Line {
+	return []tty.Line{{Spans: []tty.Span{
+		{Text: hintLead, Style: colDim},
+		{Text: hintRerun, Style: colDim, Key: HintKeyRerun},
+		{Text: "   ", Style: colDim},
+		{Text: hintFocus, Style: colDim, Key: HintKeyFocus},
+		{Text: "   ", Style: colDim},
+		{Text: hintCopy, Style: colDim, Key: HintKeyCopy},
+		{Text: "   ", Style: colDim},
+		{Text: hintOutput, Style: colDim, Key: HintKeyOutput},
+		{Text: hintDone, Style: colDim, Align: tty.AlignRight, Key: HintKeyDone},
+	}}}
+}
+
+// FailureHintPlain is the same instruction as one line, for a terminal with no
+// room to pin it. Printed rather than dropped: every other thing the prompt
+// draws is a view, but this is the only statement of how to leave.
+func FailureHintPlain() string {
+	return hintLead + hintRerun + "   " + hintFocus + "   " + hintCopy + "   " + hintOutput + "   " + hintDone
+}
+
+// NewPrettyHandlerFor returns a handler that draws into w, measured through p.
+//
+// Exported for a caller that is deliberately NOT the process terminal: the
+// documentation renderer, which drives a real handler against an in-memory
+// screen so the pictures it publishes are drawn by the code a reader will
+// actually meet. [NewPrettyHandler] is the production entry point and keys on
+// standard error to keep one handler per terminal; this one makes no such
+// claim, so two callers get two independent handlers and neither takes the
+// process band.
+// A nil now defaults to time.Now; pass a fixed one to render a picture whose
+// bytes do not depend on when it was rendered.
+func NewPrettyHandlerFor(w io.Writer, level slog.Level, p tty.Probe, now func() time.Time) *PrettyHandler {
+	h := newPrettyHandler(w, level, p)
+	if now != nil {
+		h.now = now
+	}
+	return h
+}
+
+// Zone returns the terminal owner this handler paints its band into.
+//
+// Exposed so a second consumer can lease rows from the SAME owner: the failure
+// prompt puts its instruction row directly beneath the band, and two zones over
+// one terminal each compute their margins from their own row arithmetic and
+// overwrite each other - the exact failure tty.Zone exists to prevent. In
+// production both sides reach the same singleton through standard error and the
+// sharing is invisible; for any other writer it has to be asked for.
+func (h *PrettyHandler) Zone() *tty.Zone { return h.zone }
+
+// previewDivider separates the band's two columns.
+// previewDivider separates the two views, with a column of air on BOTH sides.
+//
+// Without the leading space the left column ran straight into it - a duration
+// touching the rule reads as a rendering fault rather than as a boundary, and
+// the line stops looking like a line.
+const previewDivider = " │ "
+
+// spansCols is the display width a run of spans occupies, so the divider lands
+// in the same column on every row.
+//
+// Delegated to tty rather than counted here: this package composes rows for
+// tty's layout, and measuring them differently is precisely how the same
+// byte-for-column bug reached four copies.
+func spansCols(spans []tty.Span) int {
+	n := 0
+	for _, sp := range spans {
+		n += tty.Cols(sp.Text)
+	}
+	return n
 }

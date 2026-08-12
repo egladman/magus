@@ -20,6 +20,29 @@ import (
 	"strings"
 )
 
+// pickerRules is what the box costs in rows: one rule above, one below. The
+// prompt rides the top and the way out rides the bottom, so the list keeps
+// every line it had.
+const pickerRules = 2
+
+// SelectMark is the glyph every interactive surface uses to show which row a
+// keypress or a click will act on.
+//
+// One constant rather than one per surface: the picker and the run's failure
+// band are two lists a reader learns to drive the same way, and they were
+// marking the current row with different characters - so the same gesture
+// looked like a different affordance depending on which one was open. A ">" is
+// a keyboard character standing in for a pointer; a triangle IS one, and it
+// belongs to the same geometric family as the pool gauge's squares.
+//
+// The glyph only. Each surface pads it to whatever its own row shape needs.
+const SelectMark = "\u25b8"
+
+// pickerHint is the way out, drawn on the prompt line. Short enough to sit
+// beside a filter on a narrow terminal, and stating the two things a reader
+// cannot discover by looking: how to leave, and how to clear what they typed.
+const pickerHint = "[esc] cancel  [ctrl-u] clear"
+
 // ErrAborted is returned when the user presses ESC, Ctrl-C, or Ctrl-D.
 var ErrAborted = errors.New("picker: aborted")
 
@@ -35,6 +58,19 @@ type PickOptions struct {
 	Initial int
 	// MaxRows caps the visible window of matches. Defaults to 10.
 	MaxRows int
+	// Query replaces the built-in substring filter with a live lookup, called
+	// once per change to the filter text and expected to return the items to
+	// show, best first.
+	//
+	// It exists so a picker can search something larger than the list it was
+	// opened with - the knowledge graph, which knows about files, symbols and
+	// docs as well as the projects the caller could enumerate up front. The
+	// caller keeps the mapping from the returned label back to whatever it
+	// means; this type only draws strings.
+	//
+	// Nil keeps the substring filter, which is the right behaviour for a list
+	// that is already complete.
+	Query func(filter string) []string
 }
 
 // Pick blocks until the user selects an item or aborts. On success it returns
@@ -46,7 +82,7 @@ type PickOptions struct {
 // interactive surface a test could not redirect, which is exactly backwards for
 // the one that reads keys.
 func Pick(in *os.File, out io.Writer, p Probe, items []string, opts PickOptions) (int, error) {
-	if len(items) == 0 {
+	if len(items) == 0 && opts.Query == nil {
 		return -1, errors.New("picker: no items")
 	}
 	if opts.MaxRows <= 0 {
@@ -101,6 +137,11 @@ func Pick(in *os.File, out io.Writer, p Probe, items []string, opts PickOptions)
 				s.hover(i)
 				continue
 			}
+			// Left button only, which also means the WHEEL is left alone. The
+			// wheel is how a reader scrolls their own transcript, and magus
+			// does not take it on any surface - a picker that swallowed it
+			// would break scrollback for the seconds it is open, which is the
+			// behaviour that makes other tools unusable inside tmux.
 			if !ev.Press || ev.Button != MouseLeft {
 				continue
 			}
@@ -149,6 +190,26 @@ func Pick(in *os.File, out io.Writer, p Probe, items []string, opts PickOptions)
 		}
 		s.draw()
 	}
+}
+
+// RenderPick returns the block a picker WOULD draw for the given state, without
+// opening a terminal or running an input loop.
+//
+// For the documentation renderer, which publishes pictures of this surface: a
+// hand-written imitation drifts from the real thing silently, and the drift
+// gate cannot see it because it compares the renderer against itself. Driving
+// the real composition means a change to the picker's frame shows up in the
+// docs as a stale-SVG failure.
+func RenderPick(out io.Writer, p Probe, items []string, opts PickOptions, filter string, cursor int) string {
+	if opts.MaxRows <= 0 {
+		opts.MaxRows = 10
+	}
+	s := &session{items: items, opts: opts, filter: filter, out: out, probe: p}
+	s.refilter()
+	if cursor >= 0 && cursor < len(s.matches) {
+		s.cursor = cursor
+	}
+	return s.frame()
 }
 
 type session struct {
@@ -202,7 +263,19 @@ func filterIndices(items []string, filter string) []int {
 }
 
 func (s *session) refilter() {
-	s.matches = filterIndices(s.items, s.filter)
+	if s.opts.Query == nil {
+		s.matches = filterIndices(s.items, s.filter)
+		return
+	}
+	// A live query REPLACES the item list rather than narrowing it, so the
+	// indices the picker returns have to index the new list. Keeping items and
+	// matches in step here is what lets the rest of the session stay identical
+	// for both modes.
+	s.items = s.opts.Query(s.filter)
+	s.matches = make([]int, len(s.items))
+	for i := range s.items {
+		s.matches[i] = i
+	}
 }
 
 func (s *session) findInitial() int {
@@ -248,26 +321,53 @@ func (s *session) frame() string {
 	}
 	s.start, s.visible = start, visible
 
-	for i := start; i < end; i++ {
-		idx := s.matches[i]
-		marker := "  "
-		if i == s.cursor {
-			marker = "> "
-		}
-		b.WriteString(marker)
-		b.WriteString(s.items[idx])
-		b.WriteString("\n")
-	}
-	if len(s.matches) == 0 && maxRows > 0 {
-		b.WriteString("  (no matches)\n")
-		s.visible = 1
-	}
 	prompt := s.opts.Prompt
 	if prompt == "" {
 		prompt = "filter"
 	}
-	fmt.Fprintf(&b, "%s: %s_", prompt, s.filter)
+	// The SAME box the run's pinned band draws, from the same functions.
+	//
+	// The picker used to be a bare list with its hint jammed onto the prompt
+	// row, which made two surfaces a reader drives identically look like two
+	// different products. Position still differs on purpose - this is drawn
+	// where the cursor is, because `magus x` is a command you type and its list
+	// belongs where you typed it - but the LOOK does not.
+	//
+	// The prompt rides the top rule and the way out rides the bottom, so
+	// neither costs a row of the list.
+	inner := s.innerWidth()
+	dim := plain
+	if WantsColor(s.out, s.probe) {
+		dim = func(t string) string { return Colorize(t, SGRDim) }
+	}
+	b.WriteString(boxRule(inner, boxTL, boxTR, prompt+": "+s.filter+"_", "", dim))
+	b.WriteString("\n")
+	for i := start; i < end; i++ {
+		idx := s.matches[i]
+		marker := "  "
+		if i == s.cursor {
+			marker = SelectMark + " "
+		}
+		b.WriteString(boxWrap(ClipVisible(marker+s.items[idx], inner), inner, dim))
+		b.WriteString("\n")
+	}
+	if len(s.matches) == 0 && maxRows > 0 {
+		b.WriteString(boxWrap("  (no matches)", inner, dim))
+		b.WriteString("\n")
+		s.visible = 1
+	}
+	b.WriteString(boxRule(inner, boxBL, boxBR, pickerHint, "", dim))
 	return b.String()
+}
+
+// innerWidth is the columns a picker row has for its own text: the terminal
+// less the two vertical edges, and less the column held back from the wrap.
+func (s *session) innerWidth() int {
+	w, ok := s.width()
+	if !ok || w < minUsefulWidth {
+		w = minUsefulWidth
+	}
+	return w - 1 - 2*borderCols
 }
 
 // reposition keeps track of where the prompt line is after a redraw, asking the
@@ -335,7 +435,11 @@ func (s *session) maxRows() int {
 	if !ok {
 		return max
 	}
-	if limit := height - 2; max > limit {
+	// The box's two rules come out of the budget as well as the row the caller
+	// is standing on. Without that a short terminal drew a list that did not
+	// fit, pushing its own prompt off the top - which reads as the picker
+	// having hung rather than as a window being small.
+	if limit := height - 1 - pickerRules; max > limit {
 		max = limit
 	}
 	if max < 0 {
@@ -346,6 +450,23 @@ func (s *session) maxRows() int {
 
 // height reports the terminal's height. A local ioctl, not a round trip, so it
 // is safe to ask on every redraw.
+// width reports the terminal's column count, for deciding whether an optional
+// piece of the prompt line fits. Sibling of height.
+func (s *session) width() (int, bool) {
+	if s.probe == nil {
+		return 0, false
+	}
+	fd, ok := Fd(s.out)
+	if !ok {
+		return 0, false
+	}
+	w, _, err := s.probe.Size(fd)
+	if err != nil || w <= 0 {
+		return 0, false
+	}
+	return w, true
+}
+
 func (s *session) height() (int, bool) {
 	if s.probe == nil {
 		return 0, false

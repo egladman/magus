@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
+	"unicode/utf8"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive/tty"
@@ -48,6 +50,117 @@ type failureBand interface {
 	Failures() []cache.Failure
 	HitFailure(row int) (cache.Failure, bool)
 	SetSelection(n int)
+	SetPreview(lines []string)
+	ToggleFocus() cache.PaneFocus
+}
+
+// hintHitter resolves a click on the hint row to the action it names. Separate
+// from failureBand because the band owns the failure rows and the ZONE owns the
+// hint row's lease; a test drives them independently.
+type hintHitter interface {
+	HitSpan(row, col int) (string, bool)
+}
+
+// previewRows is how much of a failure's output the second column shows.
+//
+// The TAIL, not the head: a build that failed says why at the end. Ten lines is
+// what fits beside a failure list on an ordinary terminal without the band
+// eating the transcript it is supposed to sit under.
+const previewRows = 10
+
+// loadPreview reads the tail of a failure's captured output.
+//
+// Called when the selection MOVES, never from the paint path: resolving this
+// opens a file, and the band repaints from a timer. An unreadable log is not an
+// error - the column simply stays empty, and the ref is still printed in the
+// transcript for anyone who wants the whole thing.
+func loadPreview(f cache.Failure, width int) []string {
+	if f.LogPath == "" {
+		return nil
+	}
+	// The TAIL is read, not the whole file. This runs on every selection change,
+	// including mouse motion across the band, and a failed build's captured log
+	// is routinely tens of megabytes - so slurping it was a full read and a full
+	// line-split per pointer movement, synchronously under the handler's mutex.
+	fh, err := os.Open(f.LogPath)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = fh.Close() }()
+	info, err := fh.Stat()
+	if err != nil {
+		return nil
+	}
+	const tailBytes = 64 << 10 // enough for previewRows of any sane line length
+	at, size := int64(0), info.Size()
+	if size > tailBytes {
+		at = size - tailBytes
+	}
+	b := make([]byte, size-at)
+	if _, err := fh.ReadAt(b, at); err != nil {
+		return nil
+	}
+	lines := strings.Split(strings.TrimRight(string(b), "\n"), "\n")
+	if at > 0 && len(lines) > 0 {
+		lines = lines[1:] // the first line is a fragment of whatever we cut into
+	}
+	if len(lines) > previewRows {
+		lines = lines[len(lines)-previewRows:]
+	}
+	for i, l := range lines {
+		lines[i] = tty.ClipVisible(sanitizeLogLine(l), width)
+	}
+	return lines
+}
+
+// sanitizeLogLine makes one captured line safe to draw inside the band.
+//
+// The band is a BOX, and every character in it has to occupy the column the
+// layout thinks it does. Captured output honours neither assumption:
+//
+//   - A TAB advances the terminal to the next 8-column stop while the layout
+//     counts it as one, so the row overruns and loses its right border. This is
+//     the common case, not an edge case: `go test` output is tab-delimited.
+//   - A CARRIAGE RETURN returns the cursor to column 1 and the rest of the line
+//     overwrites the tree, the divider and both edges. Any tool drawing a
+//     progress bar emits them.
+//   - Other C0 controls and stray escape sequences move the cursor or change
+//     colour inside a region the band believes it owns.
+//
+// So the line is flattened to printable text before it is ever a span. The full
+// bytes remain reachable exactly where they always were: the captured log the
+// output ref names.
+func sanitizeLogLine(l string) string {
+	var b strings.Builder
+	b.Grow(len(l))
+	col := 0
+	for i := 0; i < len(l); {
+		switch c := l[i]; {
+		case c == '\t':
+			// Expanded to the SAME stops the terminal would use, so the text
+			// lines up as its author intended and the layout can count it.
+			n := 8 - col%8
+			b.WriteString(strings.Repeat(" ", n))
+			col += n
+			i++
+		case c == 0x1b:
+			// Skip an escape sequence whole rather than printing its letters.
+			i++
+			if i < len(l) && l[i] == '[' {
+				for i++; i < len(l) && l[i] >= 0x20 && l[i] <= 0x3f; i++ {
+				}
+			}
+			i++
+		case c < 0x20 || c == 0x7f:
+			i++ // CR, BS, BEL and friends: dropped, never forwarded
+		default:
+			r, size := utf8.DecodeRuneInString(l[i:])
+			b.WriteRune(r)
+			col++
+			i += size
+		}
+	}
+	return strings.TrimRight(b.String(), " ")
 }
 
 // hintRows is the always-visible way out. One row, and it is never given up
@@ -121,14 +234,9 @@ func runFailurePrompt(h failureBand, selected *int) (failureAction, cache.Failur
 	if err := showHint(hint, os.Stderr); err != nil {
 		return actionNone, cache.Failure{}, err
 	}
-	return dispatchFailureKeys(in.Read, h, selected)
+	action, item := dispatchFailureKeys(in.Read, h, tty.StderrZone(), selected)
+	return action, item, nil
 }
-
-// The instruction, in the two forms it may have to take.
-const (
-	hintLeft  = "click a failure, or [up/down] select   [enter] rerun stepped   [o] output"
-	hintRight = "[esc] done"
-)
 
 // showHint puts the way out where the reader can see it, pinning it when the
 // zone has room and printing it plainly when it does not.
@@ -146,45 +254,71 @@ const (
 // Printed to the scrolling transcript rather than skipped, because nothing else
 // writes there while the prompt is open, so it stays on screen regardless.
 func showHint(l *tty.Lease, w io.Writer) error {
-	// Pinned, the way out sits at the RIGHT edge so it is the last thing
-	// clipped rather than the first. As one string this row was 86 columns and
-	// an 80-column terminal cut it to exactly "[esc] do".
-	rendered, err := l.Set([]tty.Line{{Spans: []tty.Span{
-		{Text: hintLeft, Style: tty.SGRDim},
-		{Text: hintRight, Style: tty.SGRDim, Align: tty.AlignRight},
-	}}})
+	// Composed by the package that owns the band, not here, so the row the
+	// documentation renders and the row a reader sees are the same object.
+	rendered, err := l.Set(cache.FailureHint())
 	if err != nil {
 		return err
 	}
 	if rendered {
 		return nil
 	}
-	_, err = fmt.Fprintf(w, "%s   %s\n", hintLeft, hintRight)
+	_, err = fmt.Fprintln(w, cache.FailureHintPlain())
 	return err
 }
 
 // dispatchFailureKeys is the event loop, split from the terminal handling above
 // so a test can feed it events without a pty.
-func dispatchFailureKeys(next func() (tty.Event, error), h failureBand, selected *int) (failureAction, cache.Failure, error) {
+// It returns no error on purpose. Every way this loop can end - an exhausted
+// reader, a closed terminal, the user pressing escape - is an ANSWER, because
+// the prompt is an offer made after the run already succeeded or failed on its
+// own terms. An error return here would advertise a failure mode that cannot
+// happen and force every caller to handle it.
+func dispatchFailureKeys(next func() (tty.Event, error), h failureBand, hints hintHitter, selected *int) (failureAction, cache.Failure) {
 	items := h.Failures()
 	if len(items) == 0 {
-		return actionNone, cache.Failure{}, nil
+		return actionNone, cache.Failure{}
 	}
 	*selected = clampIndex(*selected, len(items))
 	h.SetSelection(*selected)
+	showPreview(h, items, *selected)
 
 	for {
 		ev, err := next()
 		if err != nil {
-			// A closed or exhausted terminal ends the prompt rather than
-			// failing the command: the run itself already succeeded or failed
-			// on its own terms, and this was an offer.
-			return actionNone, cache.Failure{}, nil
+			return actionNone, cache.Failure{} // see the doc comment: ending is an answer
 		}
 
 		if ev.Kind == tty.EventMouse {
+			// The wheel is deliberately NOT taken here, and that is not a gap in
+			// the mouse support. The whole band is on screen at once, so there
+			// is nothing to scroll WITHIN it - while the wheel is how a reader
+			// scrolls back through the build output above, which magus never
+			// takes. Binding it would trade the transcript for nothing.
+			// TestFailurePromptIgnoresReleasesAndTheWheel pins this.
 			if !ev.Motion && (!ev.Press || ev.Button != tty.MouseLeft) {
 				continue
+			}
+			// A click on the row that NAMES an action takes it. One click, not
+			// two: these are buttons, and the row-versus-button distinction is
+			// the same one every list makes - items select, buttons activate.
+			// Checked before the failure rows because the hint row is not one.
+			if !ev.Motion && hints != nil {
+				if key, ok := hints.HitSpan(ev.Row, ev.Col); ok {
+					switch key {
+					case cache.HintKeyDone:
+						return actionNone, cache.Failure{}
+					case cache.HintKeyRerun:
+						return actionRerun, items[*selected]
+					case cache.HintKeyFocus:
+						h.ToggleFocus()
+					case cache.HintKeyCopy:
+						copyFailure(items[*selected])
+					case cache.HintKeyOutput:
+						return actionOutput, items[*selected]
+					}
+					continue
+				}
 			}
 			hit, ok := h.HitFailure(ev.Row)
 			if !ok {
@@ -205,40 +339,90 @@ func dispatchFailureKeys(next func() (tty.Event, error), h failureBand, selected
 			if i != *selected {
 				*selected = i
 				h.SetSelection(i)
+				showPreview(h, items, i)
 			}
 			if !ev.Motion && ev.Clicks == 2 {
-				return actionRerun, hit, nil
+				return actionRerun, hit
 			}
 			continue
 		}
 
 		switch ev.Key {
 		case tty.KeyEscape, tty.KeyCtrlC, tty.KeyCtrlD:
-			return actionNone, cache.Failure{}, nil
+			return actionNone, cache.Failure{}
 		case tty.KeyUp:
 			*selected = clampIndex(*selected-1, len(items))
 			h.SetSelection(*selected)
+			showPreview(h, items, *selected)
 		case tty.KeyDown:
 			*selected = clampIndex(*selected+1, len(items))
 			h.SetSelection(*selected)
+			showPreview(h, items, *selected)
+		case tty.KeyTab:
+			// Focus resizes the two views: the one you are working in takes the
+			// golden ratio's major share.
+			h.ToggleFocus()
 		case tty.KeyEnter:
-			return actionRerun, items[*selected], nil
+			return actionRerun, items[*selected]
 		case tty.KeyRune:
 			switch ev.Rune {
 			case 'q':
-				return actionNone, cache.Failure{}, nil
+				return actionNone, cache.Failure{}
 			case 'k':
 				*selected = clampIndex(*selected-1, len(items))
 				h.SetSelection(*selected)
+				showPreview(h, items, *selected)
 			case 'j':
 				*selected = clampIndex(*selected+1, len(items))
 				h.SetSelection(*selected)
+				showPreview(h, items, *selected)
+			case 'y':
+				copyFailure(items[*selected])
 			case 'o':
-				return actionOutput, items[*selected], nil
+				return actionOutput, items[*selected]
 			}
 		}
 	}
 }
+
+// copyFailure puts the selected failure's captured output on the system
+// clipboard, and says so where the reader is looking.
+//
+// This is the answer to "the two columns cannot be drag-selected". They cannot,
+// and no arrangement of them can be - terminals select linearly. So nobody is
+// asked to select: the text goes to the clipboard exactly as the tool emitted
+// it, with no frame, no padding, no divider and no escape sequences, through a
+// sequence that survives ssh and tmux.
+//
+// A failure to copy is reported as a notification rather than an error, because
+// a terminal that refuses OSC 52 (some disable it) is not a broken run - and
+// `o` still prints the whole thing into the transcript, where it copies like
+// any other output.
+func copyFailure(f cache.Failure) {
+	text := strings.Join(loadPreview(f, previewWidth), "\n")
+	if raw, err := os.ReadFile(f.LogPath); err == nil {
+		text = string(raw) // the WHOLE log, not the tail the band happens to show
+	}
+	n, err := tty.Copy(os.Stderr, text)
+	msg := fmt.Sprintf("copied %d bytes of %s %s to the clipboard", n, f.Project, f.Target)
+	if err != nil || n == 0 {
+		msg = "could not reach the clipboard; press o to print the output instead"
+	}
+	_ = tty.StderrNotifier().Notify(msg, tty.SGRGreen, 4*time.Second)
+}
+
+// showPreview puts the selected failure's output in the band's second column.
+// A band that cannot take one (no previewSetter) simply keeps one column.
+func showPreview(h failureBand, items []cache.Failure, at int) {
+	if at < 0 || at >= len(items) {
+		return
+	}
+	h.SetPreview(loadPreview(items[at], previewWidth))
+}
+
+// previewWidth bounds a preview line before it reaches the band, so a log with
+// very long lines cannot push the column arithmetic around.
+const previewWidth = 120
 
 // indexOfFailure finds a hit in the list the loop is driving, or -1. Matched on
 // identity rather than position because the band's ring and this list are

@@ -6,6 +6,21 @@ import (
 	"sync"
 )
 
+// The box the zone draws around its pinned rows, marking where the scrolling
+// transcript ends and the rows that hold still begin.
+//
+// borderRowsPerEdge is the top rule and the bottom rule; borderRows is what the
+// pair costs in rows, and borderCols what the vertical edges cost in columns.
+//
+// Constants rather than options: a boundary that some runs draw and others do
+// not would make the one thing it communicates - which lines hold still -
+// depend on configuration.
+const (
+	borderRowsPerEdge = 1
+	borderRows        = 2 * borderRowsPerEdge
+	borderCols        = 1
+)
+
 // Zone is the process's single owner of a terminal's bottom rows, handing out
 // contiguous bands of them as leases.
 //
@@ -47,6 +62,10 @@ type Zone struct {
 	// Whether the terminal is big ENOUGH is a separate question, re-asked per
 	// grant and per paint, because the window can be resized.
 	isTTY bool
+	// titleL and titleR caption the top rule. Held here as well as on the
+	// region because the region is REBUILT whenever the leased total changes,
+	// and a caption must survive that.
+	titleL, titleR string
 }
 
 // NewZone returns a Zone over w, measured through p. Nothing is written here.
@@ -96,6 +115,10 @@ func ZoneFor(w io.Writer) *Zone {
 // the order they were acquired, top to bottom, so the last consumer to arrive
 // is the one closest to the reader's cursor.
 //
+// A NIL *Lease is disabled too, exactly like the zero one: a consumer that has
+// not needed rows yet holds nothing, and every method here answers for that
+// without the caller checking.
+//
 // The zero Lease is the DISABLED lease: it is what Acquire hands back when
 // there is no terminal or no room, and every method on it is a safe no-op. That
 // is what lets a caller write the same code for a TTY and a CI log.
@@ -131,7 +154,7 @@ func (z *Zone) Acquire(rows int) *Lease {
 		return &Lease{}
 	}
 	width, height, err := z.probe.Size(fd)
-	if err != nil || !fits(width, height, total) {
+	if err != nil || !fits(width, height, total+borderRows) {
 		return &Lease{}
 	}
 
@@ -149,7 +172,7 @@ func (z *Zone) Acquire(rows int) *Lease {
 // Zone.Close, and Close runs from the process exit path - including the
 // signal-driven one - while the run's own goroutines are still asking.
 func (l *Lease) Enabled() bool {
-	if l.zone == nil {
+	if l == nil || l.zone == nil {
 		return false
 	}
 	l.zone.mu.Lock()
@@ -170,7 +193,7 @@ func (l *Lease) Enabled() bool {
 // Fewer rows than the lease holds leaves the remainder blank, which is what
 // lets an entry disappear; more are dropped.
 func (l *Lease) Set(rows []Line) (rendered bool, err error) {
-	if l.zone == nil {
+	if l == nil || l.zone == nil {
 		return false, nil
 	}
 	l.zone.mu.Lock()
@@ -186,7 +209,7 @@ func (l *Lease) Set(rows []Line) (rendered bool, err error) {
 // and safe to defer. Releasing the last lease hands the terminal back
 // entirely: margins reset, rows returned.
 func (l *Lease) Release() error {
-	if l.zone == nil {
+	if l == nil || l.zone == nil {
 		return nil
 	}
 	z := l.zone
@@ -225,7 +248,9 @@ func (z *Zone) HitTest(row int) (lease *Lease, index int, ok bool) {
 	if z.region == nil || !z.region.isEnabled() || !z.region.open {
 		return nil, 0, false
 	}
-	offset := row - z.region.firstRow()
+	// The border occupies the region's first row and belongs to no lease, so a
+	// click on it resolves to nothing rather than to the top lease's first row.
+	offset := row - z.region.firstRow() - borderRowsPerEdge
 	if offset < 0 {
 		return nil, 0, false
 	}
@@ -236,6 +261,78 @@ func (z *Zone) HitTest(row int) (lease *Lease, index int, ok bool) {
 		offset -= l.rows
 	}
 	return nil, 0, false
+}
+
+// SetTitle captions the zone's top rule, costing no row.
+//
+// On the Zone rather than a Lease because the rule is the zone's - there is one
+// box however many leases stack inside it, so a caption is a property of the
+// whole, and two leases both claiming it would fight. The run's status line is
+// the intended caller: it describes the band, not any one band's rows.
+func (z *Zone) SetTitle(left, right string) (rendered bool, err error) {
+	z.mu.Lock()
+	defer z.mu.Unlock()
+	if z.titleL == left && z.titleR == right {
+		return z.region != nil && z.region.isEnabled(), nil
+	}
+	z.titleL, z.titleR = left, right
+	if z.region != nil {
+		z.region.setTitle(left, right)
+	}
+	return z.repaint()
+}
+
+// Width reports the columns a row of this lease can use, or 0 when it cannot
+// draw. It is what a caller needs to know whether its text FITS - the notifier
+// scrolls a message only when it does not.
+func (l *Lease) Width() int {
+	if l == nil || l.zone == nil {
+		return 0
+	}
+	l.zone.mu.Lock()
+	defer l.zone.mu.Unlock()
+	if l.released || l.zone.region == nil || !l.zone.region.isEnabled() {
+		return 0
+	}
+	return l.zone.region.innerWidth()
+}
+
+// HitSpan reports which keyed span a click at (row, col) landed on.
+//
+// Rows are selected by pointing at them; ACTIONS are taken by clicking the
+// words that name them. This is what makes the second half work, and it is
+// deliberately keyed rather than positional: the caller labels the span it
+// draws, and gets that label back. Nothing outside this file computes a column,
+// so a hint cannot be drawn in one place and hit-tested in another.
+//
+// The extents are recomputed from the stored line rather than cached at paint
+// time. A click is a human-speed event, so the arithmetic is free, and a cache
+// would need invalidating on every repaint and resize - which is exactly the
+// kind of staleness that puts a click on the wrong action.
+func (z *Zone) HitSpan(row, col int) (key string, ok bool) {
+	lease, index, ok := z.HitTest(row)
+	if !ok {
+		return "", false
+	}
+	z.mu.Lock()
+	defer z.mu.Unlock()
+	// Re-checked under THIS lock, not carried over from HitTest's: the two are
+	// separate acquisitions (the mutex is not reentrant, so they cannot be one),
+	// and the band can be released or repainted in between.
+	if z.region == nil || lease.released || index >= len(lease.band) {
+		return "", false
+	}
+	// Against the INNER width and shifted past the left edge: the row on screen
+	// is framed, so a column the reader clicked is that many columns further
+	// right than the same column in the caller's own line.
+	_, extents, _ := layoutExtents(lease.band[index].spans(), z.region.innerWidth())
+	col -= borderCols
+	for _, e := range extents {
+		if col >= e.from && col <= e.to {
+			return e.key, true
+		}
+	}
+	return "", false
 }
 
 // Grow enlarges this lease to rows, reporting whether it grew and whether the
@@ -252,7 +349,7 @@ func (z *Zone) HitTest(row int) (lease *Lease, index int, ok bool) {
 // Refused, like a fresh grant, when the larger total would leave too little
 // scrolling area. The lease keeps the size it had.
 func (l *Lease) Grow(rows int) (grown bool, err error) {
-	if l.zone == nil {
+	if l == nil || l.zone == nil {
 		return false, nil
 	}
 	z := l.zone
@@ -271,7 +368,7 @@ func (l *Lease) Grow(rows int) (grown bool, err error) {
 		return false, nil
 	}
 	width, height, sizeErr := z.probe.Size(fd)
-	if sizeErr != nil || !fits(width, height, total) {
+	if sizeErr != nil || !fits(width, height, total+borderRows) {
 		return false, nil
 	}
 	// Committed before the repaint, so a repaint error leaves the lease holding
@@ -288,7 +385,7 @@ func (l *Lease) Grow(rows int) (grown bool, err error) {
 // index it got from [Zone.HitTest] against its own content. A released lease
 // holds none.
 func (l *Lease) Rows() int {
-	if l.zone == nil {
+	if l == nil || l.zone == nil {
 		return 0
 	}
 	l.zone.mu.Lock()
@@ -334,12 +431,13 @@ func (z *Zone) repaint() (rendered bool, err error) {
 		z.region = nil
 		return false, err
 	}
-	if z.region == nil || z.region.height != total {
+	if z.region == nil || z.region.height != total+borderRows {
 		var relErr error
 		if z.region != nil {
 			relErr = z.region.release()
 		}
-		z.region = newRegion(z.w, total, z.probe)
+		z.region = newRegion(z.w, total+borderRows, z.probe)
+		z.region.setTitle(z.titleL, z.titleR)
 		if relErr != nil {
 			return false, relErr
 		}
@@ -348,6 +446,8 @@ func (z *Zone) repaint() (rendered bool, err error) {
 		return false, nil
 	}
 
+	// Content only: the region wraps these in its own box, because the width the
+	// edges have to fill is its geometry and not the zone's.
 	rows := make([]Line, 0, total)
 	for _, l := range z.leases {
 		for i := range l.rows {

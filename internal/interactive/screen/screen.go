@@ -20,6 +20,11 @@ import (
 	"unicode/utf8"
 )
 
+// tabWidth is the column interval between tab stops. Eight is the value every
+// terminal ships with and the one the tools being recorded assume; magus never
+// changes it, so it is a constant rather than a configurable stop table.
+const tabWidth = 8
+
 // Screen is a terminal: a grid of cells, a cursor, and a scroll region.
 //
 // It implements exactly the vocabulary magus emits and nothing else, so it is a
@@ -80,10 +85,10 @@ func (s *Screen) Write(p []byte) (int, error) {
 	src := string(p)
 	for i := 0; i < len(src); {
 		c := src[i]
-		switch {
-		case c == 0x1b:
+		switch c {
+		case 0x1b:
 			i += s.escape(src[i:])
-		case c == '\n':
+		case '\n':
 			// ONLCR: a cooked terminal turns a bare newline into carriage
 			// return plus line feed, which is what every Go program printing to
 			// one actually gets. Modelling the line feed alone would leave the
@@ -91,8 +96,21 @@ func (s *Screen) Write(p []byte) (int, error) {
 			s.col = 1
 			s.lineFeed()
 			i++
-		case c == '\r':
+		case '\r':
 			s.col = 1
+			i++
+		case '\t':
+			// HT advances to the next 8-column stop; it does not erase, so the
+			// cells it skips keep whatever is already in them.
+			//
+			// Modelling it as an ordinary character put ONE cell was wrong in a
+			// way only a picture shows: `go test` prints "ok  \tacme/admin\t0.531s",
+			// so the columns after each tab landed up to seven cells left of
+			// where the terminal actually put them - and the rendered SVG
+			// carried a literal tab into its <text>, which no renderer expands.
+			// The drift gate could not catch it, because it compares the
+			// renderer against itself rather than against a terminal.
+			s.col = min(((s.col-1)/tabWidth+1)*tabWidth+1, s.width)
 			i++
 		default:
 			r, size := decodeRune(src[i:])
@@ -154,11 +172,11 @@ func (s *Screen) escape(src string) int {
 		if a, b, ok := twoParams(params); ok {
 			r, c = a, b
 		}
-		s.row, s.col = clamp(r, 1, s.height), clamp(c, 1, s.width)
+		s.row, s.col = clamp(r, s.height), clamp(c, s.width)
 	case 'A': // CUU
-		s.row = clamp(s.row-oneParam(params, 1), 1, s.height)
+		s.row = clamp(s.row-oneParam(params, 1), s.height)
 	case 'B': // CUD
-		s.row = clamp(s.row+oneParam(params, 1), 1, s.height)
+		s.row = clamp(s.row+oneParam(params, 1), s.height)
 	case 'K': // EL
 		switch params {
 		case "2":
@@ -184,7 +202,7 @@ func (s *Screen) escape(src string) int {
 			break
 		}
 		if a, b, ok := twoParams(params); ok {
-			s.scrollTop, s.scrollBot = clamp(a, 1, s.height), clamp(b, 1, s.height)
+			s.scrollTop, s.scrollBot = clamp(a, s.height), clamp(b, s.height)
 		}
 	case 'm': // SGR
 		if params == "" || params == "0" {
@@ -201,7 +219,7 @@ func (s *Screen) escape(src string) int {
 // depends on.
 func (s *Screen) lineFeed() {
 	if s.row != s.scrollBot {
-		s.row = clamp(s.row+1, 1, s.height)
+		s.row = clamp(s.row+1, s.height)
 		return
 	}
 	copy(s.cells[s.scrollTop-1:s.scrollBot-1], s.cells[s.scrollTop:s.scrollBot])
@@ -278,7 +296,9 @@ func twoParams(p string) (int, int, bool) {
 	return x, y, err1 == nil && err2 == nil
 }
 
-func clamp(v, lo, hi int) int { return min(max(v, lo), hi) }
+// clamp bounds v to [1, hi]. Every caller is a 1-based terminal coordinate, so
+// the lower bound is not a parameter.
+func clamp(v, hi int) int { return min(max(v, 1), hi) }
 
 func decodeRune(s string) (rune, int) {
 	// Not a hand-rolled decode: the range-loop version reported the width of
@@ -309,6 +329,51 @@ func (s *Screen) Snapshot() *Screen {
 		c.cells[i] = make([]cell, len(row))
 		copy(c.cells[i], row)
 	}
+	return c
+}
+
+// LastUsedRow returns the 1-based row of the last row with any text on it, or 0
+// when the screen is blank.
+//
+// What it is for: a recording is taken at a terminal size the SESSION needs, and
+// the rows a reserved band occupied are blank again once the band is released.
+// Rendering those to a picture spends a sixth of the image on nothing.
+func (s *Screen) LastUsedRow() int {
+	for r := len(s.cells); r > 0; r-- {
+		for _, c := range s.cells[r-1] {
+			if c.r != 0 && c.r != ' ' {
+				return r
+			}
+		}
+	}
+	return 0
+}
+
+// Crop returns a copy holding only the first rows rows.
+//
+// Cropping rather than recording at the smaller size on purpose: the size drives
+// how the tools being recorded lay their output out and how many rows magus
+// reserves, so shrinking the terminal changes the session. This changes only the
+// picture of it. A rows outside 1..height is clamped.
+func (s *Screen) Crop(rows int) *Screen {
+	c := s.Snapshot()
+	if rows < 1 {
+		rows = 1
+	}
+	if rows >= c.height {
+		return c
+	}
+	c.cells = c.cells[:rows]
+	c.height = rows
+	// EVERY row coordinate, not just the obvious two. The result is a *Screen,
+	// which is an io.Writer like any other, so a caller may write to it - and a
+	// saved cursor past the new height indexes out of range on the ESC 8 that
+	// restores it, while scrollTop past scrollBot panics in lineFeed's copy on
+	// a low > high slice.
+	c.row = clamp(c.row, rows)
+	c.savedRow = clamp(c.savedRow, rows)
+	c.scrollBot = clamp(c.scrollBot, rows)
+	c.scrollTop = clamp(c.scrollTop, c.scrollBot)
 	return c
 }
 

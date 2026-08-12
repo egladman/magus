@@ -31,6 +31,9 @@ func runOnPTY(c *exec.Cmd, w io.Writer, capture *bytes.Buffer, opts ExecOptions)
 		return err
 	}
 	cols, rows := ptySize()
+	if opts.TTYCols > 0 && opts.TTYRows > 0 {
+		cols, rows = opts.TTYCols, opts.TTYRows
+	}
 	master, slave, err := openPTY(cols, rows)
 	if err != nil {
 		return err

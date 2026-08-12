@@ -126,6 +126,12 @@ magus\project({
         // drift-gates it, and a non-reproducible artifact under a drift gate fails
         // every CI run by construction. See the tapes target below.
         "tapes": {"skip_cache": "screen-records the CLI, so its bytes differ every run and a replay would show different code"},
+        // Same reasoning as tapes: it runs a real session, so real durations and
+        // output refs land in the capture and no two runs agree. Only the RENDER
+        // downstream of it (termcast-generate) is reproducible enough to cache
+        // and to gate.
+        "termcast-record": {"skip_cache": "records a real session, so its bytes differ every run and a replay would show different code"},
+        "termcast-showcase": {"skip_cache": "drives a live interactive session, so its bytes differ every run"},
     },
 });
 
@@ -1048,7 +1054,7 @@ export fun tapes(ctx: magus\Context, args: [str]) > void !> any {
     // Declared, or the tapes and the script that stages their workspace would be
     // unclaimed: `magus describe file tapes/core-loop.tape` reported no owner, so
     // editing a tape invalidated nothing and told a reader it affected no target.
-    ctx.readsFiles("tapes/*.tape", "tapes/demo-init.sh");
+    ctx.readsFiles("tapes/*.tape", "tapes/demo-init.sh", "tapes/demo.txtar");
     ctx.writesFiles("assets/gen/*.gif");
     // try/catch, not a sentinel: proc.which RAISES when the tool is absent, so the check
     // cannot be forgotten and the helpful message stays where it was.
@@ -1062,6 +1068,68 @@ export fun tapes(ctx: magus\Context, args: [str]) > void !> any {
         magus\log.info("recording {tape.value}");
         proc\exec("vhs", [tape.value], ".", {});
     }
+}
+
+// Re-records tapes/core-loop.capture: the raw bytes a real magus prints to a real
+// pseudo-terminal, driven by tapes/core-loop.session.sh.
+//
+// Opt-in and NOT named *_generate, for the same reason `tapes` is not: a session
+// is not byte-reproducible, so a drift gate over it would be red by construction.
+// The difference from `tapes` is where the unreproducible part stops. A GIF is
+// unreproducible all the way to the artifact a reader sees, so nothing about it
+// can be gated; a capture is unreproducible only up to the bytes, and RENDERING
+// those bytes is arithmetic - which is what termcast_generate gates.
+//
+// Run it when magus's output changes, commit the capture, and let the render
+// follow in the same commit.
+export fun termcast_record(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("tapes/core-loop.session.sh", "tapes/demo-init.sh",
+        "tapes/demo.txtar", "cmd/magus-termcast/*.go");
+    ctx.writesFiles("tapes/*.capture");
+    proc\exec("go", ["run", "./cmd/magus-termcast", "-record"]);
+}
+
+// Renders tapes/core-loop.capture into the README's animated SVG.
+//
+// Deterministic - it replays committed bytes through the terminal emulator and
+// emits text - so unlike the GIF it can be drift-gated, and is. That gate is the
+// point: the GIF it replaces went stale without anything noticing, to where the
+// README's alt text described a project count magus no longer reported.
+// Re-records tapes/showcase.capture: a real INTERACTIVE session, driven by real
+// keystrokes, showing the surfaces a transcript cannot - the pinned band, the
+// failure tree beside its captured output, the picker searching the graph.
+//
+// Opt-in and not named *_generate, for the reason termcast_record is not: it
+// runs a live session and no two runs agree byte for byte. Rendering the result
+// is deterministic and is gated with the rest.
+export fun termcast_showcase(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("tapes/demo.txtar", "cmd/magus-termcast/*.go");
+    ctx.writesFiles("tapes/*.capture");
+    proc\exec("go", ["run", "./cmd/magus-termcast", "-showcase"]);
+}
+
+export fun termcast_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("tapes/*.capture", "cmd/magus-termcast/*.go",
+        "internal/interactive/screen/*.go");
+    ctx.writesFiles("assets/gen/core-loop.svg", "assets/gen/showcase.svg");
+    proc\exec("go", ["run", "./cmd/magus-termcast"]);
+}
+
+// Renders the still SVGs of magus's interactive terminal surfaces for the docs.
+//
+// Recorded nothing: these are CONDITIONS - a run stalled on another process's
+// lock, a failed target awaiting a choice - and staging those in a live shell
+// reliably enough to record is painful. The frames come from driving the real
+// Zone, Notifier and picker through the terminal emulator, so the layout is what
+// a terminal would receive even though the scenario is staged.
+export fun termshots_generate(ctx: magus\Context, args: [str]) > void !> any {
+    // internal/cache too: the shots drive the REAL PrettyHandler, so its band
+    // is an input to the picture. Leaving it undeclared meant editing the band
+    // replayed a cached SVG of the band as it used to be.
+    ctx.readsFiles("cmd/magus-termshots/*.go", "internal/interactive/**/*.go",
+        "internal/cache/*.go");
+    ctx.writesFiles("assets/gen/terminal-*.svg");
+    proc\exec("go", ["run", "./cmd/magus-termshots"]);
 }
 
 // Builds one (goos, goarch) release binary and archives it into dist/, writing a

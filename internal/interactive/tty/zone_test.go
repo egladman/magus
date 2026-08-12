@@ -154,7 +154,7 @@ func TestZoneResizesTheRegionWhenALeaseArrives(t *testing.T) {
 	require.NoError(t, err)
 
 	z.mu.Lock()
-	assert.Equal(t, 2, z.region.height)
+	assert.Equal(t, 2+borderRows, z.region.height)
 	z.mu.Unlock()
 
 	second := z.Acquire(3)
@@ -162,7 +162,7 @@ func TestZoneResizesTheRegionWhenALeaseArrives(t *testing.T) {
 	require.NoError(t, err)
 
 	z.mu.Lock()
-	assert.Equal(t, 5, z.region.height, "the zone grows to the leased total rather than reserving up front")
+	assert.Equal(t, 5+borderRows, z.region.height, "the zone grows to the leased total rather than reserving up front")
 	z.mu.Unlock()
 }
 

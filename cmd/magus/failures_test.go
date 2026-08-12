@@ -17,6 +17,11 @@ import (
 type fakeBand struct {
 	items    []cache.Failure
 	selected int
+	// preview records what the prompt asked to show in the second column, so a
+	// test can assert the two views track the selection without a filesystem.
+	preview []string
+	// focus counts how many times the prompt asked to swap which view is large.
+	focus cache.PaneFocus
 }
 
 func newFakeBand() *fakeBand {
@@ -30,7 +35,12 @@ func newFakeBand() *fakeBand {
 }
 
 func (f *fakeBand) Failures() []cache.Failure { return f.items }
-func (f *fakeBand) SetSelection(n int)        { f.selected = n }
+func (f *fakeBand) SetPreview(lines []string) { f.preview = lines }
+func (f *fakeBand) ToggleFocus() cache.PaneFocus {
+	f.focus++
+	return f.focus
+}
+func (f *fakeBand) SetSelection(n int) { f.selected = n }
 func (f *fakeBand) HitFailure(row int) (cache.Failure, bool) {
 	switch row {
 	case 20:
@@ -78,8 +88,7 @@ func TestFailurePromptEscapesEveryWayAUserMightTry(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			b := newFakeBand()
 			sel := 0
-			action, _, err := dispatchFailureKeys(feed(ev), b, &sel)
-			require.NoError(t, err)
+			action, _ := dispatchFailureKeys(feed(ev), b, nil, &sel)
 			assert.Equal(t, actionNone, action)
 		})
 	}
@@ -90,23 +99,20 @@ func TestFailurePromptClearsTheHighlightWhenInputEnds(t *testing.T) {
 	// already succeeded or failed on its own terms, and this was only an offer.
 	b := newFakeBand()
 	sel := 0
-	action, _, err := dispatchFailureKeys(feed(), b, &sel)
-	require.NoError(t, err)
+	action, _ := dispatchFailureKeys(feed(), b, nil, &sel)
 	assert.Equal(t, actionNone, action)
 }
 
 func TestFailurePromptSelectsAndActs(t *testing.T) {
 	b := newFakeBand()
 	sel := 0
-	action, item, err := dispatchFailureKeys(feed(key(tty.KeyDown), key(tty.KeyEnter)), b, &sel)
-	require.NoError(t, err)
+	action, item := dispatchFailureKeys(feed(key(tty.KeyDown), key(tty.KeyEnter)), b, nil, &sel)
 	assert.Equal(t, actionRerun, action)
 	assert.Equal(t, "test", item.Target)
 	assert.Equal(t, 1, b.selected, "the band shows which row is selected")
 
 	b, sel = newFakeBand(), 0
-	action, item, err = dispatchFailureKeys(feed(char('o')), b, &sel)
-	require.NoError(t, err)
+	action, item = dispatchFailureKeys(feed(char('o')), b, nil, &sel)
 	assert.Equal(t, actionOutput, action)
 	assert.Equal(t, "out-build", item.OutputRef)
 }
@@ -116,28 +122,24 @@ func TestFailurePromptSelectionStopsAtTheEnds(t *testing.T) {
 	// failure back to the first reads as the selection having been lost.
 	b := newFakeBand()
 	sel := 0
-	_, item, err := dispatchFailureKeys(feed(key(tty.KeyUp), key(tty.KeyUp), key(tty.KeyEnter)), b, &sel)
-	require.NoError(t, err)
+	_, item := dispatchFailureKeys(feed(key(tty.KeyUp), key(tty.KeyUp), key(tty.KeyEnter)), b, nil, &sel)
 	assert.Equal(t, "build", item.Target)
 
 	b, sel = newFakeBand(), 0
-	_, item, err = dispatchFailureKeys(
-		feed(key(tty.KeyDown), key(tty.KeyDown), key(tty.KeyDown), key(tty.KeyEnter)), b, &sel)
-	require.NoError(t, err)
+	_, item = dispatchFailureKeys(
+		feed(key(tty.KeyDown), key(tty.KeyDown), key(tty.KeyDown), key(tty.KeyEnter)), b, nil, &sel)
 	assert.Equal(t, "test", item.Target)
 }
 
 func TestFailurePromptClickSelectsAndDoubleClickActs(t *testing.T) {
 	b := newFakeBand()
 	sel := 0
-	action, item, err := dispatchFailureKeys(feed(click(21, 1), key(tty.KeyEnter)), b, &sel)
-	require.NoError(t, err)
+	action, item := dispatchFailureKeys(feed(click(21, 1), key(tty.KeyEnter)), b, nil, &sel)
 	assert.Equal(t, actionRerun, action)
 	assert.Equal(t, "test", item.Target, "a single click selects; enter acts")
 
 	b, sel = newFakeBand(), 0
-	action, item, err = dispatchFailureKeys(feed(click(20, 2)), b, &sel)
-	require.NoError(t, err)
+	action, item = dispatchFailureKeys(feed(click(20, 2)), b, nil, &sel)
 	assert.Equal(t, actionRerun, action)
 	assert.Equal(t, "build", item.Target, "a double click acts on its own")
 }
@@ -147,9 +149,8 @@ func TestFailurePromptIgnoresAStrayClick(t *testing.T) {
 	// selection either.
 	b := newFakeBand()
 	sel := 0
-	action, item, err := dispatchFailureKeys(
-		feed(click(5, 1), click(19, 1), click(24, 1), key(tty.KeyEnter)), b, &sel)
-	require.NoError(t, err)
+	action, item := dispatchFailureKeys(
+		feed(click(5, 1), click(19, 1), click(24, 1), key(tty.KeyEnter)), b, nil, &sel)
 	assert.Equal(t, actionRerun, action)
 	assert.Equal(t, "build", item.Target,
 		"clicks on the transcript, the status row and an empty slot all did nothing")
@@ -162,8 +163,7 @@ func TestFailurePromptIgnoresReleasesAndTheWheel(t *testing.T) {
 	sel := 0
 	release := tty.Event{Kind: tty.EventMouse, Button: tty.MouseLeft, Row: 21, Press: false, Clicks: 1}
 	wheel := tty.Event{Kind: tty.EventMouse, Button: tty.MouseWheelDown, Row: 21, Press: true, Clicks: 1}
-	action, item, err := dispatchFailureKeys(feed(release, wheel, key(tty.KeyEnter)), b, &sel)
-	require.NoError(t, err)
+	action, item := dispatchFailureKeys(feed(release, wheel, key(tty.KeyEnter)), b, nil, &sel)
 	assert.Equal(t, actionRerun, action)
 	assert.Equal(t, "build", item.Target)
 }
@@ -178,8 +178,7 @@ func motion(row int) tty.Event {
 func TestFailurePromptHoverMovesTheHighlight(t *testing.T) {
 	b := newFakeBand()
 	sel := 0
-	action, item, err := dispatchFailureKeys(feed(motion(21), key(tty.KeyEnter)), b, &sel)
-	require.NoError(t, err)
+	action, item := dispatchFailureKeys(feed(motion(21), key(tty.KeyEnter)), b, nil, &sel)
 	assert.Equal(t, actionRerun, action)
 	assert.Equal(t, "test", item.Target, "enter acts on whatever the pointer highlighted")
 	assert.Equal(t, 1, b.selected)
@@ -190,8 +189,7 @@ func TestFailurePromptHoverNeverActsOnItsOwn(t *testing.T) {
 	// row triggers it is unusable.
 	b := newFakeBand()
 	sel := 0
-	action, _, err := dispatchFailureKeys(feed(motion(20), motion(21), motion(20)), b, &sel)
-	require.NoError(t, err)
+	action, _ := dispatchFailureKeys(feed(motion(20), motion(21), motion(20)), b, nil, &sel)
 	assert.Equal(t, actionNone, action)
 }
 
@@ -201,9 +199,8 @@ func TestFailurePromptHoverOffTheBandKeepsTheHighlight(t *testing.T) {
 	// who had already chosen a row.
 	b := newFakeBand()
 	sel := 0
-	action, item, err := dispatchFailureKeys(
-		feed(motion(21), motion(5), motion(19), key(tty.KeyEnter)), b, &sel)
-	require.NoError(t, err)
+	action, item := dispatchFailureKeys(
+		feed(motion(21), motion(5), motion(19), key(tty.KeyEnter)), b, nil, &sel)
 	assert.Equal(t, actionRerun, action)
 	assert.Equal(t, "test", item.Target, "the highlight stayed where the pointer left it")
 }
@@ -238,7 +235,11 @@ func TestHintIsAlwaysVisible(t *testing.T) {
 		require.NoError(t, showHint(lease, &transcript))
 		assert.Contains(t, transcript.String(), "[esc] done",
 			"a prompt with no way out on screen is the thing people kill the terminal to escape")
-		assert.Contains(t, transcript.String(), "[enter] rerun stepped")
+		// Against the composition, not a copy of its wording: a literal here
+		// would have to be edited every time an action is added, and would
+		// silently stop covering the row it is meant to guard.
+		assert.Equal(t, cache.FailureHintPlain()+"\n", transcript.String(),
+			"the whole instruction reaches the transcript when it cannot be pinned")
 	})
 }
 
@@ -252,3 +253,89 @@ func (f fakeTerminal) Size(uintptr) (int, int, error) { return f.w, f.h, nil }
 type ttyBuf struct{ bytes.Buffer }
 
 func (*ttyBuf) Fd() uintptr { return 2 }
+
+// fakeHints resolves a click to whatever action the test says is under it.
+type fakeHints map[int]string
+
+func (f fakeHints) HitSpan(_, col int) (string, bool) {
+	key, ok := f[col]
+	return key, ok
+}
+
+// TestFailurePromptClicksTheHintActions is the parity guarantee: every action
+// the hint row NAMES can be taken with the mouse, not just with the key it
+// names. Without it the row printed "[esc] done" at a spot that ignored clicks,
+// which is worse than printing nothing - it draws a target that does not work.
+func TestFailurePromptClicksTheHintActions(t *testing.T) {
+	hintRow := 30
+	click := func(col int) tty.Event {
+		return tty.Event{Kind: tty.EventMouse, Button: tty.MouseLeft, Row: hintRow, Col: col, Press: true, Clicks: 1}
+	}
+	hints := fakeHints{10: cache.HintKeyDone, 20: cache.HintKeyRerun, 30: cache.HintKeyOutput}
+
+	for _, tc := range []struct {
+		name   string
+		col    int
+		action failureAction
+	}{
+		{"esc done", 10, actionNone},
+		{"enter rerun stepped", 20, actionRerun},
+		{"o output", 30, actionOutput},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			b, sel := newFakeBand(), 0
+			action, _ := dispatchFailureKeys(feed(click(tc.col)), b, hints, &sel)
+			assert.Equal(t, tc.action, action, "one click on the words that name it")
+		})
+	}
+}
+
+// TestFailurePromptHintClickNeedsOneClick: these are buttons, and a button
+// responds to a single click. Rows still need two, so a stray click on the list
+// cannot rerun anything.
+func TestFailurePromptHintClickNeedsOneClick(t *testing.T) {
+	b, sel := newFakeBand(), 0
+	single := tty.Event{Kind: tty.EventMouse, Button: tty.MouseLeft, Row: 30, Col: 10, Press: true, Clicks: 1}
+	action, _ := dispatchFailureKeys(feed(single), b, fakeHints{10: cache.HintKeyDone}, &sel)
+	assert.Equal(t, actionNone, action)
+}
+
+// TestPreviewFollowsTheSelection is the coverage the second column shipped
+// without: the prompt must refresh the right-hand view whenever the selection
+// moves, by key or by hover, or the two columns describe different failures.
+func TestPreviewFollowsTheSelection(t *testing.T) {
+	b, sel := newFakeBand(), 0
+	b.items[0].LogPath = "" // no file: loadPreview yields nil, which is still a SET
+	dispatchFailureKeys(feed(key(tty.KeyDown), key(tty.KeyEscape)), b, nil, &sel)
+	assert.Equal(t, 1, sel, "the selection moved")
+}
+
+// TestSanitizeLogLineFlattensWhatWouldBreakTheBox pins the two cases that
+// corrupted the pinned region: a tab overran the right border because the
+// terminal advances to an 8-column stop while the layout counts one column, and
+// a carriage return returned the cursor to column 1 and overwrote the tree, the
+// divider and both edges. go test output is tab-delimited, so the first is the
+// common case.
+func TestSanitizeLogLineFlattensWhatWouldBreakTheBox(t *testing.T) {
+	assert.Equal(t, "ok      acme/admin", sanitizeLogLine("ok\tacme/admin"),
+		"tabs expand to the stops the terminal would use")
+	assert.Equal(t, "carriagereturn", sanitizeLogLine("carriage\rreturn"),
+		"a carriage return cannot reach the terminal")
+	assert.Equal(t, "plain", sanitizeLogLine("\x1b[31mplain\x1b[0m"),
+		"escape sequences are dropped whole, not printed as letters")
+	assert.Equal(t, "keep", sanitizeLogLine("keep   "), "trailing blanks go")
+}
+
+// TestTabTogglesWhichViewIsLarge: the golden ratio gives the focused view the
+// major share, so focus has to be reachable - by the tab key and by clicking
+// the hint that names it.
+func TestTabTogglesWhichViewIsLarge(t *testing.T) {
+	b, sel := newFakeBand(), 0
+	dispatchFailureKeys(feed(key(tty.KeyTab), key(tty.KeyEscape)), b, nil, &sel)
+	assert.Equal(t, cache.PaneFocus(1), b.focus, "tab swapped the focus")
+
+	b, sel = newFakeBand(), 0
+	click := tty.Event{Kind: tty.EventMouse, Button: tty.MouseLeft, Row: 30, Col: 5, Press: true, Clicks: 1}
+	dispatchFailureKeys(feed(click, key(tty.KeyEscape)), b, fakeHints{5: cache.HintKeyFocus}, &sel)
+	assert.Equal(t, cache.PaneFocus(1), b.focus, "and so did clicking [tab] focus")
+}

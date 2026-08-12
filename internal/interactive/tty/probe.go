@@ -42,6 +42,20 @@ func (systemProbe) Size(fd uintptr) (width, height int, err error) {
 // instead of replacing this.
 var SystemProbe Probe = systemProbe{}
 
+// FixedProbe answers as a terminal of the given size, whatever the descriptor.
+//
+// It exists for the same reason the screen emulator is a package rather than a
+// test file: something has to DRIVE the interactive surfaces outside a
+// terminal - a documentation renderer, a recording - and every one of them
+// stands down without a probe that says there is a terminal to draw on. Tests
+// have always had one; this is that, exported, so a generator can have it too.
+func FixedProbe(width, height int) Probe { return fixedProbe{width: width, height: height} }
+
+type fixedProbe struct{ width, height int }
+
+func (fixedProbe) IsTerminal(uintptr) bool          { return true }
+func (p fixedProbe) Size(uintptr) (int, int, error) { return p.width, p.height, nil }
+
 // Fd returns the file descriptor backing w, and whether w has one at
 // all. A bytes.Buffer, an io.Pipe writer, and a network connection all
 // report false.

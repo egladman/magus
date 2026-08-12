@@ -50,6 +50,47 @@ type Notifier struct {
 // toast is one notification and the moment it stops being shown. A zero
 // deadline means it never expires on its own: it stays until a newer toast
 // pushes it out of the band, or the notifier is closed.
+// The notification's decoration: accentBar is its colour stripe, accentCols the
+// width that stripe occupies, and marqueeHold how many ticks a scrolling
+// message rests at each end before moving on.
+const (
+	accentBar = "\u258c"
+	// accentCols is what the bar occupies on SCREEN. The rune is three bytes
+	// and one column, and every budget here is in columns - len() would spend
+	// three of them on a glyph that takes one, which is the same byte-for-column
+	// mistake that clipped the region's border to a third of its width.
+	accentCols  = 1
+	marqueeHold = 8
+)
+
+// marquee returns the window of text visible at offset off in width columns.
+//
+// Text that fits is returned whole and off is ignored, so the common case costs
+// nothing. Beyond that the window slides, resting at both ends: the offset
+// space is padded by marqueeHold at each end (see advance), and clamping into
+// the real range is what turns those ticks into a pause rather than a jump.
+func marquee(text string, off, width int) string {
+	// An unknown width means the band has not been built yet - Lease.Width has
+	// no region to measure until the first paint. Return the message WHOLE
+	// rather than nothing: scrolling is an enhancement, the layout clips to the
+	// real width anyway, and a toast that renders empty is strictly worse than
+	// one that renders long.
+	if width <= 0 {
+		return text
+	}
+	// COLUMNS, not bytes, and a rune-indexed window. Slicing a byte range out
+	// of a column budget splits a UTF-8 sequence and emits a replacement
+	// character the moment a message carries a non-ASCII project name.
+	r := []rune(text)
+	span := len(r) - width
+	if span <= 0 {
+		return text
+	}
+	at := off - marqueeHold
+	at = min(max(at, 0), span)
+	return string(r[at : at+width])
+}
+
 type toast struct {
 	text     string
 	style    SGR
@@ -59,6 +100,9 @@ type toast struct {
 	// notification, which nobody retracts because it is about a moment that has
 	// already passed.
 	key string
+	// off is how far a message too wide for the band has scrolled, in columns.
+	// Zero for anything that fits, which is almost everything.
+	off int
 }
 
 // NewNotifier returns a notifier that will draw into the bottom of z, holding
@@ -78,12 +122,19 @@ func NewNotifier(z *Zone, max int) *Notifier {
 
 // ensureLease claims the band on first use and starts the expiry sweeper.
 // Callers hold n.mu. Reports whether there is a band to draw in.
+// ensureLease starts the expiry sweeper, and claims a row only once one is
+// actually needed.
+//
+// Rows are claimed on first use and then KEPT: handing them back mid-run
+// reflows the whole screen, which TestNotifierHoldsItsRowsOnceClaimed pins.
 func (n *Notifier) ensureLease() bool {
-	if n.lease != nil {
-		return n.lease.Enabled()
+	if n.lease == nil {
+		n.lease = n.zone.Acquire(1)
 	}
-	n.lease = n.zone.Acquire(1)
 	if !n.lease.Enabled() {
+		// No band, so no sweeper. Starting one anyway parked a goroutine for
+		// the life of a process that has no terminal to draw on, which is every
+		// CI run - and NewNotifier promises it pays nothing at all there.
 		return false
 	}
 	if !n.started && !n.stopped {
@@ -206,9 +257,13 @@ func (n *Notifier) Pin(key, text string, style SGR) error {
 	}
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	if !n.ensureLease() {
-		return nil
-	}
+	// The lease is NOT a precondition for recording. A pin is a CONDITION - it
+	// is true until retracted - so the model has to hold it whether or not
+	// there is anywhere to draw it today; the band can gain rows later, when
+	// another lease releases or the window grows, and the pin must be there to
+	// appear. Returning early here dropped it outright, so a terminal too small
+	// at the moment of pinning lost the condition permanently.
+	n.ensureLease()
 	n.expire(n.now())
 	for i := range n.toasts {
 		if n.toasts[i].key == key {
@@ -231,9 +286,11 @@ func (n *Notifier) Clear(key string) error {
 	}
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	if n.lease == nil || !n.lease.Enabled() {
-		return nil
-	}
+	// Retraction is a MODEL operation, like pinning: a condition that became
+	// false has to stop being true whether or not it is currently on screen.
+	// Guarding on the lease meant a pin recorded when there was no room could
+	// never be cleared, so it would surface the moment the band gained a row -
+	// long after the thing it described had ended.
 	for i := range n.toasts {
 		if n.toasts[i].key != key {
 			continue
@@ -344,6 +401,20 @@ func (n *Notifier) untilNextDeadline() (time.Duration, bool) {
 			soonest = t.deadline
 		}
 	}
+	// A scrolling message needs a tick of its own. Deadlines are the only thing
+	// that used to arm this timer, and a PINNED condition has none - so the one
+	// message in magus long enough to need scrolling (the lock wait) woke the
+	// sweeper zero times and never moved a column. The feature was dead in
+	// production while its unit tests passed, because they called the scroller
+	// directly.
+	if n.overflowsLocked() {
+		if soonest.IsZero() {
+			return marqueeTick, true
+		}
+		if d := soonest.Sub(n.now()); d > marqueeTick {
+			return marqueeTick, true
+		}
+	}
 	if soonest.IsZero() {
 		return 0, false
 	}
@@ -368,10 +439,82 @@ func (n *Notifier) signal() {
 func (n *Notifier) sweep() {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	if !n.expire(n.now()) {
+	expired := n.expire(n.now())
+	// Advance any message too wide to fit, on the tick that is ALREADY running
+	// for expiry. A second timer for animation would double the wakeups on an
+	// idle terminal, which is the wrong trade for a row that scrolls.
+	scrolled := n.advance(n.lease.Width())
+	if !expired && !scrolled {
 		return
 	}
 	_ = n.paint()
+}
+
+// marqueeTick is how often a message too wide to fit moves a column. Slow
+// enough to read, and slow enough that an idle band with a long message is not
+// a repaint loop.
+const marqueeTick = 220 * time.Millisecond
+
+// overflowsLocked reports whether any message is too wide for the band, which
+// is the only reason to keep waking up. Callers hold n.mu.
+func (n *Notifier) overflowsLocked() bool {
+	body := n.lease.Width() - accentCols - 1
+	if body <= 0 {
+		return false
+	}
+	for _, t := range n.toasts {
+		if Cols(t.text) > body {
+			return true
+		}
+	}
+	return false
+}
+
+// bolden adds weight to a style without producing ";1" for an empty one, which
+// is a valid-looking escape that appendStyled would emit where it used to emit
+// nothing at all.
+func bolden(s SGR) SGR {
+	if s == "" {
+		return SGRBold
+	}
+	return s + ";" + SGRBold
+}
+
+// style drops colour when the terminal does not want it. The notifier draws
+// straight into the band rather than through the handler, so NO_COLOR has to
+// reach it here or the one row a reader is meant to act on is the only coloured
+// thing left on a monochrome terminal.
+func (n *Notifier) style(s SGR) SGR {
+	if n.zone == nil || !WantsColor(n.zone.w, n.zone.probe) {
+		return ""
+	}
+	return s
+}
+
+// advance moves every overflowing message one column, reporting whether any
+// did. Callers hold n.mu.
+//
+// Only what does not FIT moves. A toast that fits is static, which is nearly
+// all of them - so an idle band repaints not at all, and the motion appears
+// exactly where a reader would otherwise be unable to read the end of a line.
+func (n *Notifier) advance(width int) bool {
+	if width <= 0 {
+		return false
+	}
+	body := width - accentCols - 1
+	moved := false
+	for i := range n.toasts {
+		span := Cols(n.toasts[i].text) - body
+		if span <= 0 {
+			n.toasts[i].off = 0
+			continue
+		}
+		// The cycle runs one hold PAST each end so the start and the finish are
+		// both readable at rest. A continuous crawl never shows either whole.
+		n.toasts[i].off = (n.toasts[i].off + 1) % (span + 2*marqueeHold)
+		moved = true
+	}
+	return moved
 }
 
 // expire removes every toast whose deadline has passed, reporting whether any
@@ -398,14 +541,6 @@ func (n *Notifier) expire(now time.Time) bool {
 // cursor and the stack grows upward away from it. Filling from the top would
 // make a single toast look like it belonged to whatever band sits above.
 func (n *Notifier) paint() error {
-	// Claim another row if more notifications are showing than the band holds.
-	// A refusal is not an error: the stack simply stays as tall as the terminal
-	// allowed, and the oldest entry drops as usual.
-	if len(n.toasts) > n.lease.Rows() {
-		// A refused grow is not an error: the stack simply stays as tall as the
-		// terminal allowed. A failed repaint is reported by the Set below.
-		_, _ = n.lease.Grow(min(len(n.toasts), n.max))
-	}
 	height := n.lease.Rows()
 	rows := make([]Line, height)
 	// The band may hold fewer rows than the stack when a grow was refused.
@@ -417,9 +552,35 @@ func (n *Notifier) paint() error {
 		shown = trim(append([]toast(nil), shown...), height)
 	}
 	offset := height - len(shown)
+	width := n.lease.Width()
 	for i, t := range shown {
-		rows[offset+i] = Line{Text: t.text, Style: t.style}
+		// An accent bar in the toast's own colour, then the message in BOLD.
+		//
+		// The message used to be a single plain span, which put it at the same
+		// weight as the dim chrome around it - so the one row on screen that
+		// exists because a person has to act on it read like everything else.
+		// The bar is the affordance every toast UI uses, and it survives
+		// NO_COLOR as a shape even when the colour is dropped.
+		rows[offset+i] = Line{Spans: []Span{
+			{Text: accentBar + " ", Style: n.style(t.style)},
+			{Text: marquee(t.text, t.off, width-accentCols-1), Style: n.style(bolden(t.style))},
+		}}
 	}
-	_, err := n.lease.Set(rows)
-	return err
+	// Content FIRST, then the grow. Growing first repaints the band at its new
+	// height while it still holds the OLD rows, so a toast that was just
+	// dropped is drawn once more before being overwritten - a flash of stale
+	// content on a surface whose whole promise is that it holds still. Setting
+	// first means the worst case is a row briefly absent rather than a row
+	// briefly wrong.
+	if _, err := n.lease.Set(rows); err != nil {
+		return err
+	}
+	if len(n.toasts) > n.lease.Rows() {
+		// A refused grow is not an error: the stack simply stays as tall as the
+		// terminal allowed, and the oldest entry drops as usual.
+		if grown, _ := n.lease.Grow(min(len(n.toasts), n.max)); grown {
+			return n.paint() // now that there is room, draw what fits it
+		}
+	}
+	return nil
 }

@@ -2,6 +2,7 @@ package screen
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -156,4 +157,56 @@ func TestSnapshotCarriesTheWholeTerminal(t *testing.T) {
 	top, bottom := shot.ScrollRegion()
 	assert.Equal(t, 1, top)
 	assert.Equal(t, 7, bottom, "a snapshot is a terminal, not a picture of one")
+}
+
+// TestWriteExpandsTabs pins the emulator against a real terminal rather than
+// against itself.
+//
+// This shipped: `go test` prints "ok  \tacme/admin\t0.531s", the tab was put in
+// ONE cell, and the rendered SVG in the README carried a literal tab that no
+// renderer expands - so the columns after it sat up to seven cells left of where
+// the reader's terminal actually put them. The drift gate structurally cannot
+// catch this class, because it compares the renderer to the renderer.
+func TestWriteExpandsTabs(t *testing.T) {
+	s := New(40, 3)
+	fmt.Fprint(s, "ok\tacme/admin\t0.5s")
+	// Tab stops every 8 columns: "ok" ends at column 3, the tab moves to 9, and
+	// "acme/admin" (10 wide) ends at 19, so the second tab moves to 25.
+	if got, want := s.Row(1), "ok      acme/admin      0.5s"; strings.TrimRight(got, " ") != want {
+		t.Errorf("Row(1) = %q, want %q", strings.TrimRight(got, " "), want)
+	}
+}
+
+// TestWriteTabAtEndOfLineStaysOnScreen: a tab near the right margin advances to
+// the margin and stops. HT never wraps, so it must not push the cursor into the
+// pending-wrap column that put uses (see put: col may reach width+1, and the
+// NEXT character is what wraps).
+func TestWriteTabAtEndOfLineStaysOnScreen(t *testing.T) {
+	s := New(10, 2)
+	fmt.Fprint(s, "abcdefghi\t")
+	row, col := s.Cursor()
+	if row != 1 || col != 10 {
+		t.Errorf("cursor = row %d col %d, want row 1 col 10 (the right margin)", row, col)
+	}
+}
+
+// TestCropClampsEveryRowCoordinate guards the returned Screen against being
+// written to, which it exposes as an io.Writer.
+func TestCropClampsEveryRowCoordinate(t *testing.T) {
+	s := New(20, 20)
+	// Park the cursor and the saved cursor low, and pin a scroll region that
+	// lives entirely below the crop.
+	fmt.Fprint(s, "\x1b[15;1H\x1b7\x1b[12;18r")
+	c := s.Crop(5)
+	if _, err := c.Write([]byte("x\ny\n\x1b8z")); err != nil {
+		t.Fatalf("write to a cropped screen: %v", err)
+	}
+	row, col := c.Cursor()
+	if row < 1 || row > 5 || col < 1 || col > 20 {
+		t.Errorf("cursor outside the cropped screen: row=%d col=%d", row, col)
+	}
+	top, bot := c.ScrollRegion()
+	if top > bot || bot > 5 {
+		t.Errorf("scroll region outside the cropped screen: top=%d bot=%d", top, bot)
+	}
 }

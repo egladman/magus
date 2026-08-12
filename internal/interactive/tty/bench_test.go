@@ -37,7 +37,8 @@ func BenchmarkSessionDraw(b *testing.B) {
 	for _, n := range []int{100, 1000, 5000} {
 		items := benchItems(n)
 		b.Run(fmt.Sprintf("n=%d", n), func(b *testing.B) {
-			s := &session{items: items, opts: PickOptions{MaxRows: 10}, out: io.Discard}
+			p := terminal(120, 40)
+			s := &session{items: items, opts: PickOptions{MaxRows: 10}, out: io.Discard, probe: p, view: NewInlineView(io.Discard, p)}
 			s.refilter()
 			b.ReportAllocs()
 			b.ResetTimer()

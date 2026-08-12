@@ -1,6 +1,7 @@
 package tty
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -110,7 +111,12 @@ func TestNotifierDropsTheOldestOnOverflow(t *testing.T) {
 	got := []string{n.toasts[0].text, n.toasts[1].text}
 	n.mu.Unlock()
 	assert.Equal(t, []string{"two", "three"}, got)
-	assert.NotContains(t, buf.String(), "one")
+	// The band GROWS to make room for the second notification, and growing
+	// rebuilds the region - which redraws every row it holds. So the buffer
+	// carries the frame that was correct before the third arrived; what matters
+	// is the LAST frame, which is the one on screen.
+	last := buf.String()[strings.LastIndex(buf.String(), cursorSave):]
+	assert.NotContains(t, last, "one", "the dropped notification is not on screen")
 }
 
 func TestNotifierCloseGivesTheBandBack(t *testing.T) {
@@ -145,7 +151,7 @@ func TestNotifierSharesTheZoneWithAnotherLease(t *testing.T) {
 
 	out := buf.String()
 	assert.Less(t, strings.Index(out, "pool 2/8 running"), strings.Index(out, "api built"))
-	assert.Equal(t, 1, strings.Count(out, "\x1b[1;33r"),
+	assert.Equal(t, 1, strings.Count(out, fmt.Sprintf("\x1b[1;%dr", 33-borderRows)),
 		"one owner, one DECSTBM: 6 failure rows plus one notification leaves 33 scrolling")
 }
 
@@ -162,21 +168,21 @@ func TestNotifierClaimsNoRowsUntilItNotifies(t *testing.T) {
 	_, err := other.Set([]Line{{Text: "pool 1/8 running"}})
 	require.NoError(t, err)
 	// 6 leased rows on 24 means margins 1;18, not the 1;15 nine rows would give.
-	assert.Contains(t, buf.String(), "\x1b[1;18r", "the unused band must cost nothing")
+	assert.Contains(t, buf.String(), fmt.Sprintf("\x1b[1;%dr", 18-borderRows), "the unused band must cost nothing")
 
 	z.mu.Lock()
-	assert.Equal(t, 6, z.region.height)
+	assert.Equal(t, 6+borderRows, z.region.height)
 	z.mu.Unlock()
 
 	require.NoError(t, n.Notify("waiting on the lock", SGRYellow, 0))
 	z.mu.Lock()
-	assert.Equal(t, 7, z.region.height,
+	assert.Equal(t, 7+borderRows, z.region.height,
 		"one notification claims ONE row, not the band's worst case")
 	z.mu.Unlock()
 
 	require.NoError(t, n.Notify("second", "", time.Minute))
 	z.mu.Lock()
-	assert.Equal(t, 8, z.region.height, "and it grows only as more are actually showing")
+	assert.Equal(t, 8+borderRows, z.region.height, "and it grows only as more are actually showing")
 	z.mu.Unlock()
 }
 
@@ -335,4 +341,77 @@ func TestNotifierPaintNeverDropsAPinFromTheModel(t *testing.T) {
 	for _, tst := range n.toasts {
 		assert.NotEqual(t, "lock", tst.key)
 	}
+}
+
+// TestMarqueeHoldsAtBothEnds pins the property that makes a scrolling message
+// readable: it rests long enough at each end to be caught.
+func TestMarqueeHoldsAtBothEnds(t *testing.T) {
+	t.Parallel()
+	const text = "waiting on the workspace lock held by pid 4211"
+	const width = 20
+	span := len(text) - width
+
+	assert.Equal(t, text[:width], marquee(text, 0, width), "it starts at the beginning")
+	assert.Equal(t, text[:width], marquee(text, marqueeHold-1, width), "and stays there for the hold")
+	assert.Equal(t, text[1:1+width], marquee(text, marqueeHold+1, width), "then moves a column at a time")
+	assert.Equal(t, text[span:], marquee(text, marqueeHold+span, width), "reaching the end")
+	assert.Equal(t, text[span:], marquee(text, marqueeHold+span+marqueeHold-1, width),
+		"and resting there too, so the tail can be read")
+}
+
+// TestMarqueeLeavesShortMessagesAlone: the common case must not move.
+func TestMarqueeLeavesShortMessagesAlone(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "api built", marquee("api built", 0, 40))
+	assert.Equal(t, "api built", marquee("api built", 99, 40), "the offset is irrelevant when it fits")
+}
+
+// TestAdvanceOnlyMovesWhatDoesNotFit guards the repaint budget: a band whose
+// messages all fit must report no motion, so the sweep does not redraw it.
+func TestAdvanceOnlyMovesWhatDoesNotFit(t *testing.T) {
+	t.Parallel()
+	var buf ttyBuf
+	z := NewZone(&buf, terminal(80, 24))
+	n, _ := newTestNotifier(z, 3)
+	require.NoError(t, n.Notify("short", "", time.Minute))
+
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	assert.False(t, n.advance(80), "nothing overflows, so nothing repaints")
+}
+
+// TestSweeperWakesForAScrollingMessage is the test that was missing when the
+// marquee shipped dead.
+//
+// advance and marquee were covered as pure functions, which proved they could
+// scroll and nothing about whether anything ever CALLED them. The sweeper's
+// timer was armed only from expiry deadlines, and a pinned condition has none -
+// so the single message in magus long enough to need scrolling woke it zero
+// times. This asserts the wake-up, which is the part that was broken.
+func TestSweeperWakesForAScrollingMessage(t *testing.T) {
+	t.Parallel()
+	var buf ttyBuf
+	z := NewZone(&buf, terminal(40, 24))
+	n, _ := newTestNotifier(z, 3)
+
+	// Pinned: no deadline at all, which is the case that used to arm nothing.
+	require.NoError(t, n.Pin("lock",
+		"waiting on the workspace lock held by pid 4211 - wait, or stop it", SGRYellow))
+
+	d, ok := n.untilNextDeadline()
+	require.True(t, ok, "a message too wide to fit must schedule a wake-up")
+	assert.Equal(t, marqueeTick, d, "and it wakes on the scroll tick, not a deadline")
+}
+
+// TestSweeperSleepsWhenEverythingFits is the other half: a band with nothing to
+// scroll must not wake at all, or an idle terminal repaints forever.
+func TestSweeperSleepsWhenEverythingFits(t *testing.T) {
+	t.Parallel()
+	var buf ttyBuf
+	z := NewZone(&buf, terminal(80, 24))
+	n, _ := newTestNotifier(z, 3)
+	require.NoError(t, n.Pin("lock", "short", SGRYellow))
+
+	_, ok := n.untilNextDeadline()
+	assert.False(t, ok, "nothing overflows and nothing expires, so nothing wakes")
 }

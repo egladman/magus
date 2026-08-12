@@ -6,6 +6,9 @@
 MAGUS.md merge=magus linguist-generated
 assets/coverage.svg merge=magus linguist-generated
 assets/gen/*.gif merge=magus linguist-generated
+assets/gen/core-loop.svg merge=magus linguist-generated
+assets/gen/showcase.svg merge=magus linguist-generated
+assets/gen/terminal-*.svg merge=magus linguist-generated
 assets/textsearch-coverage.svg merge=magus linguist-generated
 cmd/magus/completions/* merge=magus linguist-generated
 cmd/magus/gen/*.go merge=magus linguist-generated
@@ -47,6 +50,7 @@ manpage/*.1 merge=magus linguist-generated
 proto/gen/** merge=magus linguist-generated
 schema/gen/*.go merge=magus linguist-generated
 spells/enum_gen.go merge=magus linguist-generated
+tapes/*.capture merge=magus linguist-generated
 types/buzzobject_gen.go merge=magus linguist-generated
 types/enum_gen.go merge=magus linguist-generated
 # END magus-generated

@@ -89,11 +89,11 @@ func TestSessionDrawMarksTheCursorRow(t *testing.T) {
 	s.cursor = 1
 	s.draw()
 
-	out := buf.String()
-	assert.Contains(t, out, "> beta", "the cursor row is marked")
+	out := unbox(stripANSI(buf.String()))
+	assert.Contains(t, out, SelectMark+" beta", "the cursor row is marked")
 	assert.Contains(t, out, "  alpha", "non-cursor rows are indented, not marked")
 	assert.Contains(t, out, "project: _", "the prompt and filter caret are drawn")
-	assert.Equal(t, 4, s.view.Lines(), "three matches plus the prompt line")
+	assert.Equal(t, 3+pickerChrome, s.view.Lines(), "three matches inside the box")
 }
 
 func TestSessionDrawUsesADefaultPrompt(t *testing.T) {
@@ -101,7 +101,7 @@ func TestSessionDrawUsesADefaultPrompt(t *testing.T) {
 	var buf ttyBuf
 	s := newTestSession(&buf, []string{"alpha"}, PickOptions{})
 	s.draw()
-	assert.Contains(t, buf.String(), "filter: _", "an unset prompt falls back to a generic label")
+	assert.Contains(t, unbox(stripANSI(buf.String())), "filter: _", "an unset prompt falls back to a generic label")
 }
 
 func TestSessionDrawReportsNoMatches(t *testing.T) {
@@ -110,8 +110,8 @@ func TestSessionDrawReportsNoMatches(t *testing.T) {
 	s := newTestSession(&buf, []string{"alpha"}, PickOptions{InitialFilter: "zzz"})
 	s.draw()
 
-	assert.Contains(t, buf.String(), "(no matches)")
-	assert.Equal(t, 2, s.view.Lines(), "the empty-state line plus the prompt line")
+	assert.Contains(t, unbox(stripANSI(buf.String())), "(no matches)")
+	assert.Equal(t, 1+pickerChrome, s.view.Lines(), "the empty-state line inside the box")
 }
 
 // TestSessionDrawErasesThePreviousRender is what keeps a shrinking list
@@ -123,7 +123,7 @@ func TestSessionDrawErasesThePreviousRender(t *testing.T) {
 	s := newTestSession(&buf, []string{"alpha", "beta", "gamma"}, PickOptions{})
 	s.draw()
 	drawn := s.view.Lines()
-	require.Equal(t, 4, drawn)
+	require.Equal(t, 3+pickerChrome, drawn)
 
 	buf.Reset()
 	s.filter = "alpha"
@@ -131,10 +131,10 @@ func TestSessionDrawErasesThePreviousRender(t *testing.T) {
 	s.cursor = 0
 	s.draw()
 
-	out := buf.String()
-	assert.Equal(t, drawn, strings.Count(out, el2),
+	// RAW, not unboxed: this counts escape sequences, which stripANSI removes.
+	assert.Equal(t, drawn, strings.Count(buf.String(), el2),
 		"every previously drawn line must be erased before the redraw")
-	assert.Equal(t, 2, s.view.Lines(), "one match plus the prompt line")
+	assert.Equal(t, 1+pickerChrome, s.view.Lines(), "one match inside the box")
 }
 
 func TestSessionDrawWindowsAroundTheCursor(t *testing.T) {
@@ -144,11 +144,11 @@ func TestSessionDrawWindowsAroundTheCursor(t *testing.T) {
 	s.cursor = 5 // past the window; the view must scroll to include it
 	s.draw()
 
-	out := buf.String()
-	assert.Contains(t, out, "> a5", "the cursor item must be visible")
+	out := unbox(stripANSI(buf.String()))
+	assert.Contains(t, out, SelectMark+" a5", "the cursor item must be visible")
 	assert.Contains(t, out, "a3", "the window ends at the cursor")
 	assert.NotContains(t, out, "a0", "items above the window are not drawn")
-	assert.Equal(t, 4, s.view.Lines(), "MaxRows rows plus the prompt line")
+	assert.Equal(t, 3+pickerChrome, s.view.Lines(), "MaxRows rows inside the box")
 }
 
 func TestSessionCleanupErasesEverythingItDrew(t *testing.T) {
@@ -337,27 +337,30 @@ func TestSessionKeepsTheScreenCorrectAcrossRedraws(t *testing.T) {
 	sess.refilter()
 	sess.draw()
 
-	assert.Equal(t, "> console", s.Row(2))
-	assert.Equal(t, "  docs", s.Row(3))
-	assert.Equal(t, "  libs/gopherbuzz", s.Row(4))
-	assert.Equal(t, "project: _", s.Row(5))
+	// Row 2 is the box's top rule, which carries the prompt; the list starts
+	// under it and the way out closes it.
+	assert.Contains(t, s.Row(2), "project: _", "the prompt rides the top rule")
+	assert.Equal(t, SelectMark+" console", unboxRow(s, 3))
+	assert.Equal(t, "  docs", unboxRow(s, 4))
+	assert.Equal(t, "  libs/gopherbuzz", unboxRow(s, 5))
+	assert.Contains(t, s.Row(6), "[esc] cancel", "and the way out closes the box")
 
 	// Moving the highlight rewrites two rows and must leave the rest alone.
 	sess.cursor = 1
 	sess.draw()
-	assert.Equal(t, "  console", s.Row(2))
-	assert.Equal(t, "> docs", s.Row(3))
-	assert.Equal(t, "  libs/gopherbuzz", s.Row(4))
+	assert.Equal(t, "  console", unboxRow(s, 3))
+	assert.Equal(t, SelectMark+" docs", unboxRow(s, 4))
+	assert.Equal(t, "  libs/gopherbuzz", unboxRow(s, 5))
 
 	// Filtering shrinks the block; the rows it gives up must come back clean.
 	sess.filter = "doc"
 	sess.refilter()
 	sess.cursor = 0
 	sess.draw()
-	assert.Equal(t, "> docs", s.Row(2))
-	assert.Equal(t, "project: doc_", s.Row(3))
-	assert.Equal(t, "", s.Row(4), "the vacated rows are erased, not left as litter")
-	assert.Equal(t, "", s.Row(5))
+	assert.Contains(t, s.Row(2), "project: doc_", "the filter is on the rule")
+	assert.Equal(t, SelectMark+" docs", unboxRow(s, 3))
+	assert.Equal(t, "", s.Row(5), "the vacated rows are erased, not left as litter")
+	assert.Equal(t, "", s.Row(6))
 
 	// And the transcript above is untouched throughout.
 	assert.Equal(t, "$ magus x", s.Row(1))
@@ -419,6 +422,89 @@ func TestSessionShowsAsManyItemsAsFit(t *testing.T) {
 		view: NewInlineView(short, sp)}
 	sess.refilter()
 	sess.draw()
-	assert.Equal(t, 6, sess.visible, "a short one shows what it can, and still shows the prompt")
+	assert.Equal(t, 8-pickerRules-1, sess.visible, "a short one shows what it can, and still shows the prompt")
 	assert.NotZero(t, short.FindRow("filter:"))
+}
+
+// TestPickerLiveQueryReplacesTheList covers the graph-aware mode: the candidates
+// come from a lookup per keystroke rather than from filtering what the picker
+// was opened with, so it can find things the caller could not enumerate.
+func TestPickerLiveQueryReplacesTheList(t *testing.T) {
+	t.Parallel()
+	var asked []string
+	s := &session{
+		items: []string{"seed"},
+		opts: PickOptions{Query: func(f string) []string {
+			asked = append(asked, f)
+			if f == "" {
+				return []string{"seed"}
+			}
+			return []string{"from-graph-" + f, "second"}
+		}},
+	}
+
+	s.filter = "hash"
+	s.refilter()
+
+	assert.Equal(t, []string{"from-graph-hash", "second"}, s.items,
+		"the query's results become the list, not a subset of the old one")
+	assert.Equal(t, []int{0, 1}, s.matches,
+		"and every result is a match, since the query already did the filtering")
+	assert.Equal(t, []string{"hash"}, asked, "asked once per filter change")
+}
+
+// TestPickerWithoutQueryStillFilters: a complete list must keep the substring
+// behaviour, which is right when the caller already knows every candidate.
+func TestPickerWithoutQueryStillFilters(t *testing.T) {
+	t.Parallel()
+	s := &session{items: []string{"apps/admin", "libs/authkit", "std"}}
+	s.filter = "a"
+	s.refilter()
+	assert.Equal(t, []int{0, 1}, s.matches, "substring filter over the fixed list")
+}
+
+// TestSelectMarkIsOneGlyphEverywhere guards the thing that made the two
+// surfaces feel like two products: the picker and the run's failure band are
+// lists a reader drives the same way, and they were marking the current row
+// with different characters.
+func TestSelectMarkIsOneGlyphEverywhere(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, 1, len([]rune(SelectMark)),
+		"one column, so a surface can pad it to its own row shape")
+	assert.NotContains(t, SelectMark, ">",
+		"a keyboard character standing in for a pointer is what this replaced")
+}
+
+// pickerChrome is what the box costs the picker in rows: a rule above and a
+// rule below. The prompt moved onto the top rule and the way out onto the
+// bottom, so the list itself keeps every line it had - the net cost is one row,
+// and the surface now looks like the run's band because it IS the same box.
+const pickerChrome = pickerRules
+
+// TestPickerDrawsTheSameBoxAsTheBand is the integration this closes: two lists a
+// reader drives identically must not look like two products. Position still
+// differs on purpose - the picker draws where the cursor is - but the frame,
+// the corners and the captions come from one place.
+func TestPickerDrawsTheSameBoxAsTheBand(t *testing.T) {
+	t.Parallel()
+	var buf ttyBuf
+	s := &session{
+		items: []string{"console", "docs"}, out: &buf, probe: terminal(60, 24),
+		view: NewInlineView(&buf, terminal(60, 24)),
+		opts: PickOptions{Prompt: "project", MaxRows: 10},
+	}
+	s.refilter()
+	s.draw()
+
+	out := stripANSI(buf.String())
+	assert.Contains(t, out, boxTL, "the same rounded corner the band draws")
+	assert.Contains(t, out, boxBR)
+	assert.Contains(t, out, "project", "the prompt rides the top rule")
+	assert.Contains(t, out, "[esc] cancel", "and the way out rides the bottom")
+}
+
+// unboxRow is one screen row with the picker's vertical edges taken off, so an
+// assertion about an item does not restate the frame around it.
+func unboxRow(s *screen.Screen, row int) string {
+	return strings.TrimRight(strings.Trim(s.Row(row), boxV), " ")
 }

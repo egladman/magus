@@ -58,6 +58,17 @@ type ExecOptions struct {
 	// Unsupported outside unix (see pty_other.go), where it is an error rather than
 	// a silent downgrade to pipes.
 	TTY bool
+
+	// TTYCols and TTYRows fix the pseudo-terminal's geometry. Zero inherits this
+	// process's terminal, or 80x24 when it has none.
+	//
+	// Set them when the captured bytes are an ARTIFACT rather than a means to an
+	// end. A tool lays its output out to the width it is told, so an inherited
+	// size makes the capture a function of whoever ran the recorder, and two
+	// machines produce two different files from the same command.
+	//
+	// Ignored unless TTY is set.
+	TTYCols, TTYRows int
 }
 
 // ExecResult is the outcome of Exec.

@@ -40,7 +40,7 @@ func TestRegionDisabledWhenHeightIsZero(t *testing.T) {
 func TestRegionDisabledWhenNotTerminal(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
-	r := newRegion(&buf, 5, notATerminal())
+	r := newRegion(&buf, 5+borderRows, notATerminal())
 	assert.False(t, r.isEnabled(), "non-TTY writer must yield a disabled region")
 }
 
@@ -49,14 +49,14 @@ func TestRegionDisabledWhenWriterHasNoDescriptor(t *testing.T) {
 	// A bytes.Buffer has no Fd(), so even a probe that calls everything a
 	// terminal must not enable the region.
 	var buf bytes.Buffer
-	r := newRegion(&buf, 5, terminal(80, 24))
+	r := newRegion(&buf, 5+borderRows, terminal(80, 24))
 	assert.False(t, r.isEnabled(), "a writer without a descriptor is never a terminal")
 }
 
 func TestRegionEnabledForLargeTerminal(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
-	r := newRegion(&buf, 5, terminal(80, 24))
+	r := newRegion(&buf, 5+borderRows, terminal(80, 24))
 	assert.True(t, r.isEnabled(), "80x24 terminal with a 5-row region must enable")
 }
 
@@ -64,14 +64,14 @@ func TestRegionDisabledWhenTerminalTooShort(t *testing.T) {
 	t.Parallel()
 	// minUsefulHeight is 8; 5 rows of region would leave only 2 to scroll.
 	var buf ttyBuf
-	r := newRegion(&buf, 5, terminal(80, 7))
+	r := newRegion(&buf, 5+borderRows, terminal(80, 7))
 	assert.False(t, r.isEnabled(), "terminal too short for a useful scrolling region")
 }
 
 func TestRegionDisabledWhenTerminalTooNarrow(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
-	r := newRegion(&buf, 5, terminal(10, 24))
+	r := newRegion(&buf, 5+borderRows, terminal(10, 24))
 	assert.False(t, r.isEnabled(), "terminal narrower than minUsefulWidth must disable")
 }
 
@@ -79,7 +79,7 @@ func TestRegionDisabledWhenSizeQueryFails(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
 	p := fakeProbe{isTTY: true, width: 80, height: 24, sizeErr: errors.New("ioctl failed")}
-	r := newRegion(&buf, 5, p)
+	r := newRegion(&buf, 5+borderRows, p)
 	assert.False(t, r.isEnabled(), "a failed size query must disable the region")
 
 	require.NoError(t, r.render([]Line{{Text: "still visible"}}))
@@ -89,7 +89,7 @@ func TestRegionDisabledWhenSizeQueryFails(t *testing.T) {
 func TestRegionReserveOnDisabledIsNoOp(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
-	r := newRegion(&buf, 5, notATerminal())
+	r := newRegion(&buf, 5+borderRows, notATerminal())
 	require.NoError(t, r.reserve(), "Reserve on disabled must not error")
 	assert.Empty(t, buf.String(), "Reserve on disabled must not write anything")
 }
@@ -97,23 +97,24 @@ func TestRegionReserveOnDisabledIsNoOp(t *testing.T) {
 func TestRegionReserveEmitsScrollMargins(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
-	r := newRegion(&buf, 5, terminal(80, 24))
+	r := newRegion(&buf, 5+borderRows, terminal(80, 24))
 	require.True(t, r.isEnabled())
 	require.NoError(t, r.reserve())
 	got := buf.String()
 	// firstRow = 24 - 5 + 1 = 20, so scrolling covers rows [1,19] and the
 	// region occupies rows [20,24].
-	assert.Contains(t, got, "\x1b[1;19r", "margins must confine scrolling to rows 1-19")
+	margins := fmt.Sprintf("\x1b[1;%dr", 24-5-borderRows)
+	assert.Contains(t, got, margins, "margins must confine scrolling to the rows above the box")
 	assert.Contains(t, got, cursorSave, "Reserve must save the cursor")
 	assert.Contains(t, got, "\x1b[J", "Reserve must clear the reserved region")
-	assert.Less(t, strings.Index(got, cursorSave), strings.Index(got, "\x1b[1;19r"),
+	assert.Less(t, strings.Index(got, cursorSave), strings.Index(got, margins),
 		"the cursor must be saved BEFORE the margins are set, since setting them homes it")
 }
 
 func TestRegionReserveIsIdempotent(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
-	r := newRegion(&buf, 5, terminal(80, 24))
+	r := newRegion(&buf, 5+borderRows, terminal(80, 24))
 	require.NoError(t, r.reserve())
 	first := buf.Len()
 	require.NoError(t, r.reserve())
@@ -123,7 +124,7 @@ func TestRegionReserveIsIdempotent(t *testing.T) {
 func TestRegionReleaseOnDisabledIsNoOp(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
-	r := newRegion(&buf, 5, notATerminal())
+	r := newRegion(&buf, 5+borderRows, notATerminal())
 	assert.NoError(t, r.release(), "Release on disabled must not error")
 	assert.Empty(t, buf.String(), "Release on disabled must not write anything")
 }
@@ -131,7 +132,7 @@ func TestRegionReleaseOnDisabledIsNoOp(t *testing.T) {
 func TestRegionReleaseRestoresTheTerminal(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
-	r := newRegion(&buf, 5, terminal(80, 24))
+	r := newRegion(&buf, 5+borderRows, terminal(80, 24))
 	require.NoError(t, r.reserve())
 	buf.Reset() // discard the Reserve bytes; assert against Release only
 	require.NoError(t, r.release())
@@ -147,7 +148,7 @@ func TestRegionReleaseRestoresTheTerminal(t *testing.T) {
 func TestRegionReleaseIsIdempotent(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
-	r := newRegion(&buf, 5, terminal(80, 24))
+	r := newRegion(&buf, 5+borderRows, terminal(80, 24))
 	require.NoError(t, r.reserve())
 	buf.Reset()
 	require.NoError(t, r.release())
@@ -165,7 +166,7 @@ func TestRegionReserveDisablesWhenTerminalShrank(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
 	p := &resizingProbe{width: 80, height: 24}
-	r := newRegion(&buf, 5, p)
+	r := newRegion(&buf, 5+borderRows, p)
 	require.True(t, r.isEnabled(), "the region starts out viable")
 
 	p.height = 6 // window shrank below minUsefulHeight + 5
@@ -295,16 +296,16 @@ func TestRegionReflowsAfterAGrowingResize(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
 	p := &resizingProbe{width: 80, height: 24}
-	r := newRegion(&buf, 6, p)
+	r := newRegion(&buf, 6+borderRows, p)
 	require.NoError(t, r.render([]Line{{Text: "before"}}))
-	require.Contains(t, buf.String(), "\x1b[1;18r", "margins for a 24-row terminal")
+	require.Contains(t, buf.String(), fmt.Sprintf("\x1b[1;%dr", 24-6-borderRows), "margins for a 24-row terminal")
 
 	p.height = 40
 	buf.Reset()
 	require.NoError(t, r.render([]Line{{Text: "after"}}))
 
 	out := buf.String()
-	assert.Contains(t, out, "\x1b[1;34r", "margins must be re-issued for the 40-row terminal")
+	assert.Contains(t, out, fmt.Sprintf("\x1b[1;%dr", 40-6-borderRows), "margins must be re-issued for the 40-row terminal")
 	assert.Contains(t, out, fmt.Sprintf(cupFmt, 35, 1), "the zone restarts at the new first row")
 	assert.Contains(t, out, "after")
 }
@@ -316,7 +317,7 @@ func TestRegionReleasesRowsWhenAResizeMakesItUnviable(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
 	p := &resizingProbe{width: 80, height: 24}
-	r := newRegion(&buf, 6, p)
+	r := newRegion(&buf, 6+borderRows, p)
 	require.NoError(t, r.render([]Line{{Text: "before"}}))
 
 	p.height = 9 // below minUsefulHeight + 6
@@ -486,7 +487,7 @@ func TestEveryRegionOperationLeavesTheCursorWhereItFoundIt(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf ttyBuf
-			r := newRegion(&buf, 3, terminal(80, 24))
+			r := newRegion(&buf, 3+borderRows, terminal(80, 24))
 			tc.run(t, r)
 
 			m := &cursorModel{row: startRow}
@@ -518,17 +519,19 @@ func TestEveryRegionOperationLeavesTheCursorWhereItFoundIt(t *testing.T) {
 // so nothing jumps and no written row is clobbered.
 func TestReserveMakesRoomWithoutMovingTheCallersCursor(t *testing.T) {
 	var buf ttyBuf
-	r := newRegion(&buf, 2, terminal(80, 24))
+	r := newRegion(&buf, 2+borderRows, terminal(80, 24))
 	require.NoError(t, r.reserve())
 
 	got := buf.String()
-	assert.Contains(t, got, ind+ind, "two index sequences make room for a 2-row region")
+	assert.Contains(t, got, strings.Repeat(ind, 2+borderRows),
+		"one index sequence per row, the box's included")
 	assert.NotContains(t, got, "\n",
 		"never a newline: ONLCR would return the carriage and lose the caller's column")
-	assert.Contains(t, got, "\x1b[2A", "and the cursor steps back up over exactly those rows")
-	assert.Less(t, strings.Index(got, "\x1b[2A"), strings.Index(got, cursorSave),
+	back := fmt.Sprintf("\x1b[%dA", 2+borderRows)
+	assert.Contains(t, got, back, "and the cursor steps back up over exactly those rows")
+	assert.Less(t, strings.Index(got, back), strings.Index(got, cursorSave),
 		"room is made before the cursor is saved, so the save records the real position")
-	assert.Less(t, strings.Index(got, cursorSave), strings.Index(got, "\x1b[1;22r"),
+	assert.Less(t, strings.Index(got, cursorSave), strings.Index(got, fmt.Sprintf("\x1b[1;%dr", 24-2-borderRows)),
 		"and the save precedes DECSTBM, which homes the cursor in some terminals")
 	assert.True(t, strings.HasSuffix(got, cursorRestore),
 		"the reservation ends by putting the caller's cursor back")
@@ -554,7 +557,7 @@ func TestPaintingIsCursorTransparent(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			var buf ttyBuf
-			r := newRegion(&buf, 2, terminal(80, 24))
+			r := newRegion(&buf, 2+borderRows, terminal(80, 24))
 			require.NoError(t, r.reserve())
 
 			buf.Reset()
@@ -576,7 +579,7 @@ func TestPaintingIsCursorTransparent(t *testing.T) {
 // (the old behaviour) put the prompt back into the middle of the transcript.
 func TestReleaseGivesTheRowsBackWithoutRepositioning(t *testing.T) {
 	var buf ttyBuf
-	r := newRegion(&buf, 2, terminal(80, 24))
+	r := newRegion(&buf, 2+borderRows, terminal(80, 24))
 	require.NoError(t, r.reserve())
 
 	buf.Reset()
@@ -598,7 +601,7 @@ func TestReleaseGivesTheRowsBackWithoutRepositioning(t *testing.T) {
 // step. This is what a byte-level assertion on any single method cannot show.
 func TestReserveThenPaintThenReleaseNeverNestsSaves(t *testing.T) {
 	var buf ttyBuf
-	r := newRegion(&buf, 3, terminal(80, 24))
+	r := newRegion(&buf, 3+borderRows, terminal(80, 24))
 
 	require.NoError(t, r.reserve())
 	require.NoError(t, r.render([]Line{{Text: "running", Style: SGRDim}}))
@@ -616,7 +619,7 @@ func TestRegionRenderOnDisabledDropsTheRows(t *testing.T) {
 	// A repainted view replayed into a pipe is noise, not information: unlike
 	// WriteLine, Render has no plain-text fallback.
 	var buf bytes.Buffer
-	r := newRegion(&buf, 3, notATerminal())
+	r := newRegion(&buf, 3+borderRows, notATerminal())
 	require.NoError(t, r.render([]Line{{Text: "toast"}}))
 	assert.Empty(t, buf.String())
 }
@@ -624,7 +627,7 @@ func TestRegionRenderOnDisabledDropsTheRows(t *testing.T) {
 func TestRegionRenderPaintsEveryRowInOneWrite(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
-	r := newRegion(&buf, 3, terminal(80, 24))
+	r := newRegion(&buf, 3+borderRows, terminal(80, 24))
 	require.NoError(t, r.reserve())
 	buf.Reset()
 
@@ -643,7 +646,7 @@ func TestRegionRenderPaintsEveryRowInOneWrite(t *testing.T) {
 func TestRegionRenderStylesPerRowAndClosesIt(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
-	r := newRegion(&buf, 2, terminal(80, 24))
+	r := newRegion(&buf, 2+borderRows, terminal(80, 24))
 	require.NoError(t, r.render([]Line{{Text: "warn", Style: SGRYellow}, {Text: "plain"}}))
 	out := buf.String()
 	assert.Contains(t, out, fmt.Sprintf(sgrFmt, SGRYellow)+"warn"+sgrReset,
@@ -657,7 +660,7 @@ func TestRegionRenderDropsRowsPastTheZone(t *testing.T) {
 	// Overflow is the caller's decision to make, because only it knows whether
 	// the newest or the oldest entry is the one worth keeping.
 	var buf ttyBuf
-	r := newRegion(&buf, 2, terminal(80, 24))
+	r := newRegion(&buf, 2+borderRows, terminal(80, 24))
 	require.NoError(t, r.render([]Line{{Text: "a"}, {Text: "b"}, {Text: "c"}}))
 	assert.NotContains(t, buf.String(), "c")
 }
@@ -667,7 +670,7 @@ func TestRegionRenderClipsToTheTerminalWidth(t *testing.T) {
 	// A row that overshot would wrap onto a second screen row and desynchronise
 	// the zone's one-row-per-entry arithmetic.
 	var buf ttyBuf
-	r := newRegion(&buf, 1, terminal(24, 24))
+	r := newRegion(&buf, 1+borderRows, terminal(24, 24))
 	require.NoError(t, r.render([]Line{{Text: strings.Repeat("x", 100)}}))
 	assert.Contains(t, buf.String(), ellipsis)
 	assert.NotContains(t, buf.String(), strings.Repeat("x", 24))
@@ -676,7 +679,7 @@ func TestRegionRenderClipsToTheTerminalWidth(t *testing.T) {
 func TestRegionRenderAlignsSpansToBothEdges(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
-	r := newRegion(&buf, 1, terminal(40, 24))
+	r := newRegion(&buf, 1+borderRows, terminal(40, 24))
 	require.NoError(t, r.render([]Line{{Spans: []Span{
 		{Text: "pool 6/8 running", Style: SGRDim},
 		{Text: "6.4s", Style: SGRDim, Align: AlignRight},
@@ -687,7 +690,7 @@ func TestRegionRenderAlignsSpansToBothEdges(t *testing.T) {
 	line := visibleText(t, buf.String())
 	assert.True(t, strings.HasPrefix(line, "pool 6/8 running"))
 	assert.True(t, strings.HasSuffix(line, "6.4s"))
-	assert.Len(t, line, 39, "the right span ends at the right edge")
+	assert.Len(t, line, 40-1-2*borderCols, "the right span ends at the inner right edge")
 }
 
 func TestRegionRenderKeepsTheRightSpanWhenNarrow(t *testing.T) {
@@ -696,7 +699,7 @@ func TestRegionRenderKeepsTheRightSpanWhenNarrow(t *testing.T) {
 	// 86 columns and an 80-column terminal clipped it to "...[esc] do" - the
 	// only key that closes the prompt, gone at the width most people have.
 	var buf ttyBuf
-	r := newRegion(&buf, 1, terminal(40, 24))
+	r := newRegion(&buf, 1+borderRows, terminal(40, 24))
 	require.NoError(t, r.render([]Line{{Spans: []Span{
 		{Text: "click a failure, or [up/down] select   [enter] rerun stepped   [o] output"},
 		{Text: "[esc] done", Align: AlignRight},
@@ -715,7 +718,7 @@ func TestRegionRenderWritesNoTrailingPadWithoutARightSpan(t *testing.T) {
 	// to the full width would be bytes on the wire every repaint, and would
 	// make an unchanged row look changed to a terminal doing its own diffing.
 	var buf ttyBuf
-	r := newRegion(&buf, 1, terminal(40, 24))
+	r := newRegion(&buf, 1+borderRows, terminal(40, 24))
 	require.NoError(t, r.render([]Line{{Text: "pool 6/8 running"}}))
 	assert.Equal(t, "pool 6/8 running", visibleText(t, buf.String()))
 }
@@ -723,7 +726,7 @@ func TestRegionRenderWritesNoTrailingPadWithoutARightSpan(t *testing.T) {
 func TestRegionRenderStylesEachSpanIndependently(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
-	r := newRegion(&buf, 1, terminal(40, 24))
+	r := newRegion(&buf, 1+borderRows, terminal(40, 24))
 	require.NoError(t, r.render([]Line{{Spans: []Span{
 		{Text: "waiting", Style: SGRYellow},
 		{Text: "esc", Style: SGRDim, Align: AlignRight},
@@ -739,7 +742,7 @@ func TestRegionRenderDiffsSpanRows(t *testing.T) {
 	// Line carries a slice now, so the frame diff cannot use ==. An unchanged
 	// span row must still cost zero bytes.
 	var buf ttyBuf
-	r := newRegion(&buf, 1, terminal(40, 24))
+	r := newRegion(&buf, 1+borderRows, terminal(40, 24))
 	row := Line{Spans: []Span{
 		{Text: "pool 6/8 running", Style: SGRDim},
 		{Text: "6.4s", Style: SGRDim, Align: AlignRight},
@@ -758,7 +761,25 @@ func TestRegionRenderDiffsSpanRows(t *testing.T) {
 
 // visibleText strips every escape sequence, leaving what a reader would see on
 // the row. The zone paints one row here, so the result is that row.
+// visibleText is the text a reader would see, with the region's box taken off.
+//
+// Unboxing here rather than in every assertion: the box is the region's own
+// framing, and a test about what a CALLER's row says should not have to know it
+// exists. A test that is about the box asserts on the raw buffer instead.
 func visibleText(t *testing.T, out string) string {
 	t.Helper()
-	return strings.TrimRight(stripANSI(out), " ")
+	return strings.TrimRight(unbox(stripANSI(out)), " ")
+}
+
+// unbox removes the border glyphs and the rules drawn from them.
+func unbox(s string) string {
+	var keep []string
+	for _, line := range strings.Split(s, "\n") {
+		trimmed := strings.Trim(line, boxH+boxTL+boxTR+boxBL+boxBR)
+		if trimmed == "" && line != "" {
+			continue // a rule row carries nothing else
+		}
+		keep = append(keep, strings.Trim(trimmed, boxV))
+	}
+	return strings.Join(keep, "\n")
 }

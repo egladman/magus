@@ -304,15 +304,64 @@ func (i *Input) decode() (Event, error) {
 	if i.r.Buffered() == 0 {
 		return Event{Kind: EventKey, Key: KeyEscape}, nil
 	}
-	rest, err := i.r.Peek(1)
-	if err != nil || len(rest) == 0 || rest[0] != '[' {
+	// The error is discarded rather than suppressed with a lint directive: the
+	// check above established Buffered() > 0, and bufio.Reader.Peek(1) with a
+	// byte already buffered returns it without filling, so it cannot fail here.
+	// The length guard stays as the cheap way to keep the index below safe if
+	// that precondition ever moves.
+	rest, _ := i.r.Peek(1)
+	if len(rest) == 0 {
 		return Event{Kind: EventKey, Key: KeyEscape}, nil
+	}
+	// SS3 - "ESC O <final>" - is how F1 to F4 and the application-mode arrows
+	// arrive. It has to be recognised even though magus binds none of them,
+	// because the alternative is not "the key does nothing": ESC followed by
+	// anything used to fall through to KeyEscape below, and KeyEscape is the
+	// key that QUITS. Pressing F1 in the picker closed it, then its "O" and "P"
+	// were read as two filter keystrokes.
+	if rest[0] == 'O' {
+		_, _ = i.r.ReadByte() // consume 'O'
+		// Consume the final byte too, or it becomes a stray keystroke.
+		if _, err := i.r.ReadByte(); err != nil {
+			return Event{}, err
+		}
+		return Event{Kind: EventKey, Key: KeyUnknown}, nil
+	}
+	if rest[0] != '[' {
+		// Alt-<key> is sent as ESC then the key. magus binds no Alt chord, so
+		// the keystroke is unknown - which callers IGNORE - rather than escape,
+		// which would QUIT.
+		//
+		// The key is consumed rather than left to decode as itself, because
+		// Alt-x is not x and typing an "x" into the picker's filter is a
+		// surprise the user cannot connect to what they pressed. That follows
+		// the assumption the Buffered() check above already makes: bytes
+		// sitting behind an ESC came from the terminal as one sequence.
+		if _, err := i.r.ReadByte(); err != nil {
+			return Event{}, err
+		}
+		return Event{Kind: EventKey, Key: KeyUnknown}, nil
 	}
 	_, _ = i.r.ReadByte() // consume '['
 
 	next, err := i.r.Peek(1)
 	if err != nil {
-		return Event{Kind: EventKey, Key: KeyEscape}, nil
+		// PROPAGATED, not decoded as a keystroke. Unlike the ESC above, this
+		// point is past the '[', so the buffer may be empty and this Peek can
+		// issue a real read - and CursorPosition puts a 250ms DEADLINE on the
+		// descriptor. A reply truncated at exactly "ESC [" therefore arrives
+		// here as os.ErrDeadlineExceeded.
+		//
+		// Returning KeyEscape for that was a bug with a user-visible symptom.
+		// CursorPosition treats an error as "abandon the query" but an EVENT as
+		// a keystroke that overtook the reply, so it queued the fabricated key
+		// in i.pending; discardBuffered drops bytes, not queued events, so the
+		// phantom outlived the query. The picker reads it, maps KeyEscape to
+		// ErrAborted, and closes itself with the user having pressed nothing.
+		//
+		// KeyEscape is never a safe default for "we do not know": callers
+		// IGNORE KeyUnknown and QUIT on KeyEscape.
+		return Event{}, err
 	}
 	if next[0] == '<' {
 		_, _ = i.r.ReadByte()
@@ -350,7 +399,13 @@ func (i *Input) decodeByte(b byte) (Event, error) {
 	// A multi-byte rune: put the lead byte back and let the reader decode it
 	// whole, so a non-ASCII filter keystroke is not split into mojibake.
 	if err := i.r.UnreadByte(); err != nil {
-		return Event{Kind: EventKey, Key: KeyUnknown}, nil
+		// Propagated. This cannot happen today - the only caller reaches here
+		// straight after a successful ReadByte with no intervening Peek - but
+		// if it ever does, the lead byte is already consumed and its
+		// continuation bytes are still in the stream, so the next decode reads
+		// them as fresh input. That is a parser desync, not a keystroke, and
+		// reporting it as one would hide it.
+		return Event{}, err
 	}
 	r, _, err := i.r.ReadRune()
 	if err != nil {
@@ -499,6 +554,7 @@ func (i *Input) decodeMouse() (Event, error) {
 	col, err2 := strconv.Atoi(parts[1])
 	row, err3 := strconv.Atoi(parts[2])
 	if err1 != nil || err2 != nil || err3 != nil {
+		//nolint:nilerr // a malformed mouse report is an unknown key; the stream is still fine
 		return Event{Kind: EventKey, Key: KeyUnknown}, nil
 	}
 
