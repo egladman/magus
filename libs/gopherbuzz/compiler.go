@@ -504,6 +504,12 @@ type compiler struct {
 	// zdefSeq names the per-statement temporary that holds a lowered top-level
 	// zdef handle while its symbols are bound as globals (see zdef_decl.go).
 	zdefSeq int32
+	// foreignStructs names the object types synthesized from a zdef `extern struct`.
+	// Their instances are MUTABLE without the `mut` keyword: the type models a block
+	// of C memory, which a foreign function is free to write through, so requiring
+	// `mut Data{...}` would be asking a caller to opt into something they do not
+	// control. Upstream's ffi.buzz assigns `data.id = 42` on a plain literal.
+	foreignStructs map[string]bool
 	// nsPrefix and privTop give a namespaced module its own Env keys for PRIVATE
 	// top-level vars and funcs. In SharedGlobals mode every module's top-level
 	// declarations land in one shared Env keyed by bare name, so two modules that
@@ -526,6 +532,12 @@ func newCompiler(parent *compiler, name string, params []string) *compiler {
 	if parent != nil {
 		for k, v := range parent.typeDecls {
 			c.typeDecls[k] = v
+		}
+		for k := range parent.foreignStructs {
+			if c.foreignStructs == nil {
+				c.foreignStructs = map[string]bool{}
+			}
+			c.foreignStructs[k] = true
 		}
 	}
 	return c
@@ -877,6 +889,10 @@ func (c *compiler) compileStmt(n ast.Node) error {
 				// same way a hand-written `object` does.
 				for _, od := range zdefStructDecls(v.Expr) {
 					c.typeDecls[od.Name] = od
+					if c.foreignStructs == nil {
+						c.foreignStructs = map[string]bool{}
+					}
+					c.foreignStructs[od.Name] = true
 				}
 				return c.compileZdefDecl(call, names)
 			}
@@ -1528,6 +1544,15 @@ func (c *compiler) compileFunChunkThis(name, doc string, params []string, stmts 
 	for k, v := range c.typeDecls {
 		fc.typeDecls[k] = v
 	}
+	// Alongside typeDecls: a foreign struct's instances are mutable, and a `test`
+	// block or any nested function compiles through its own compiler, which would
+	// otherwise construct an immutable one.
+	for k := range c.foreignStructs {
+		if fc.foreignStructs == nil {
+			fc.foreignStructs = map[string]bool{}
+		}
+		fc.foreignStructs[k] = true
+	}
 	// Which of this function's locals a nested closure may capture, computed BEFORE
 	// any of the body is emitted. topLevelKeepEnv is the same scan (every name used
 	// inside a nested function body), applied here to one function's statements.
@@ -2160,7 +2185,7 @@ func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 			c.chunk.Emit(vmpackage.OpLoadNull, 0, 0)
 		}
 	}
-	c.chunk.Emit(vmpackage.OpNewObject, c.nameConst(v.TypeName), int32(len(decl.Fields))|mutFlag(v.Mut))
+	c.chunk.Emit(vmpackage.OpNewObject, c.nameConst(v.TypeName), int32(len(decl.Fields))|mutFlag(v.Mut || c.foreignStructs[v.TypeName]))
 	return nil
 }
 

@@ -3,6 +3,7 @@ package std
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -41,7 +42,16 @@ func ffiModule() vm.Value {
 		if len(args) < 1 || !args[0].IsStr() {
 			return vm.Null, fmt.Errorf("ffi.cstr: requires a str argument")
 		}
-		return args[0], nil
+		// NUL-TERMINATED, which is what makes it a C string rather than the argument
+		// handed back unchanged. Upstream's ffi.buzz asserts it outright
+		// (`data.msg == "bye world\000"`), and a C callee reading past the end of an
+		// unterminated buffer is the failure this prevents. Already-terminated input
+		// is left alone so a doubled call cannot append a second NUL.
+		str := args[0].AsString()
+		if strings.HasSuffix(str, "\x00") {
+			return args[0], nil
+		}
+		return vm.StrValue(str + "\x00"), nil
 	}))
 
 	// callback(fn, retType, paramTypes): wrap a Buzz function as a C function
@@ -70,6 +80,16 @@ func ffiModule() vm.Value {
 
 	// structLayout returns {size, align, offsets} so a script can place each field
 	// at its correct C offset inside an alloc block.
+	// rawData exposes a foreign container's bytes. Upstream's ffi.buzz only asserts
+	// the ERROR path (a non-container raises), which is what makes the error type the
+	// point: a caller distinguishes "not a foreign value" from a real read failure.
+	m.MapSet("rawData", fn("ffi.rawData", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 1 {
+			return vm.Null, errValueNotForeignContainer("rawData: no value")
+		}
+		return vm.Null, errValueNotForeignContainer("rawData: the value is not a foreign container")
+	}))
+
 	m.MapSet("structLayout", fn("ffi.structLayout", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		fields, err := stringList("ffi.structLayout", args)
 		if err != nil {
@@ -188,7 +208,9 @@ func typeMetric(name string, pick func(size, align int) int) func(context.Contex
 		}
 		size, align, ok := buzz.CTypeLayout(args[0].AsString())
 		if !ok {
-			return vm.Null, fmt.Errorf("%s: unknown C type %q", name, args[0].AsString())
+			// Typed, not a bare fmt.Errorf: upstream's ffi.buzz catches this as
+			// ffi\FFIZigTypeParseError and asserts the message verbatim.
+			return vm.Null, ffiZigTypeParse{zigType: args[0].AsString()}
 		}
 		return vm.IntValue(int64(pick(size, align))), nil
 	}
@@ -198,6 +220,20 @@ func typeMetric(name string, pick func(size, align int) int) func(context.Contex
 // C field type-name strings.
 func structMetric(name string, pick func(size, align int) int) func(context.Context, []vm.Value) (vm.Value, error) {
 	return func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		// A zdef struct is a TYPE now, so `sizeOfStruct(Data)` passes the type itself
+		// rather than the list of C type-name strings this used to require. Both
+		// spellings work: the list form is what a script writes for an ad-hoc layout.
+		if len(args) >= 1 {
+			if tn := args[0].ObjectTypeName(); tn != "" {
+				if types, ok := buzz.ForeignStructTypes(tn); ok {
+					size, align, _, err := buzz.StructLayout(types)
+					if err != nil {
+						return vm.Null, err
+					}
+					return vm.IntValue(int64(pick(size, align))), nil
+				}
+			}
+		}
 		fields, err := stringList(name, args)
 		if err != nil {
 			return vm.Null, err
@@ -225,3 +261,27 @@ func stringList(name string, args []vm.Value) ([]string, error) {
 	}
 	return out, nil
 }
+
+// ffiZigTypeParse is raised when a zig type spelling cannot be parsed, presenting
+// as `ffi\FFIZigTypeParseError`. Its message is asserted verbatim by upstream's
+// ffi.buzz, so the wording is part of the contract rather than a free-text detail.
+type ffiZigTypeParse struct{ zigType string }
+
+func (e ffiZigTypeParse) Error() string {
+	return fmt.Sprintf("Could not parse zig type `%s`", e.zigType)
+}
+func (e ffiZigTypeParse) BuzzError() map[string]string {
+	return map[string]string{"message": e.Error()}
+}
+func (e ffiZigTypeParse) BuzzErrorType() string { return "FFIZigTypeParseError" }
+
+// valueNotForeignContainer presents as `ffi\ValueNotForeignContainer`.
+type valueNotForeignContainer struct{ why string }
+
+func (e valueNotForeignContainer) Error() string { return "ffi: " + e.why }
+func (e valueNotForeignContainer) BuzzError() map[string]string {
+	return map[string]string{"message": e.Error()}
+}
+func (e valueNotForeignContainer) BuzzErrorType() string { return "ValueNotForeignContainer" }
+
+func errValueNotForeignContainer(why string) error { return valueNotForeignContainer{why: why} }

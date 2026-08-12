@@ -30,6 +30,7 @@ debug.buzz
 default-arguments.buzz
 discarded-value.buzz
 enums.buzz
+ffi.buzz
 fibers.buzz
 for.buzz
 foreach.buzz

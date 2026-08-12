@@ -571,6 +571,56 @@ func (v Value) IsObjectDef() bool { return v.tag() == tagObjectDef }
 // IsObject reports whether v is an object instance.
 func (v Value) IsObject() bool { return v.tag() == tagObject }
 
+// ObjectTypeName returns the declared type name of an object DEF or an INSTANCE,
+// and "" for anything else. A host module needs it to recognize a foreign struct
+// passed as a type argument (`ffi\sizeOfStruct(Data)`) or as a value.
+func (v Value) ObjectTypeName() string {
+	switch v.tag() {
+	case tagObjectDef:
+		return v.asObjectDef().Name
+	case tagObject:
+		if d := v.asObject().Def; d != nil {
+			return d.Name
+		}
+	}
+	return ""
+}
+
+// ObjectFieldAt returns an instance's i-th field in DECLARATION order, and
+// ok=false when v is not an instance or i is past its fields. Declaration order is
+// what a host module needs: it is the order a foreign struct's layout is computed in.
+func (v Value) ObjectFieldAt(i int) (Value, bool) {
+	if v.tag() != tagObject {
+		return Null, false
+	}
+	inst := v.asObject()
+	if i < 0 || i >= len(inst.Fields) {
+		return Null, false
+	}
+	return inst.Fields[i], true
+}
+
+// NewInstance builds an instance of the object TYPE v, taking fields in
+// declaration order. It errors when v is not a type, so a host module cannot
+// silently produce something shaped like an object but belonging to nothing.
+func (v Value) NewInstance(fields []Value) (Value, error) {
+	if v.tag() != tagObjectDef {
+		return Null, fmt.Errorf("buzz: cannot instantiate %s: not an object type", v.buzzKind())
+	}
+	def := v.asObjectDef()
+	vals := make([]Value, len(def.Fields))
+	copy(vals, fields)
+	return heapValue(tagObject, &objectInst{Def: def, Fields: vals, Mut: true}), nil
+}
+
+// ForeignStructTypes returns the C field type spellings of a zdef-declared struct
+// or union, and ok=false when the name is not one. It is how a host module reads a
+// foreign layout without importing the FFI provider's internals.
+func ForeignStructTypes(name string) ([]string, bool) {
+	t, ok := declaredFieldTypes[name]
+	return t, ok
+}
+
 // Kind returns the Buzz type name for this value (e.g. "int", "str", "null").
 func (v Value) Kind() string { return v.buzzKind() }
 

@@ -169,6 +169,27 @@ func AllocFFI(n int) (uintptr, error) {
 	return addr, nil
 }
 
+// WriteFFIBytes copies b into a block previously returned by AllocFFI. It is how a
+// Buffer hands its accumulated contents to C in one step, rather than looping
+// through the per-scalar ffi.write path.
+//
+// The block is a pinned Go slice, so this is an ordinary copy - no unsafe write
+// through the address. A short block is an error rather than a truncating copy: the
+// caller sized the allocation and a mismatch means it got the size wrong.
+func WriteFFIBytes(addr uintptr, b []byte) error {
+	memMu.Lock()
+	defer memMu.Unlock()
+	pb, ok := memRegistry[addr]
+	if !ok {
+		return fmt.Errorf("buzz: ffi: write to unknown address %#x (not from ffi.alloc, or already freed)", addr)
+	}
+	if len(b) > len(pb.data) {
+		return fmt.Errorf("buzz: ffi: write of %d bytes into a %d-byte block", len(b), len(pb.data))
+	}
+	copy(pb.data, b)
+	return nil
+}
+
 // FreeFFI releases a block previously returned by AllocFFI, unpinning its memory.
 // Freeing an unknown address is an error (double free or a foreign pointer).
 func FreeFFI(addr uintptr) error {

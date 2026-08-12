@@ -64,3 +64,18 @@ type StructuredError interface {
 	// BuzzError returns the fields to expose on the caught value.
 	BuzzError() map[string]string
 }
+
+// TypedError is a StructuredError that also names the OBJECT TYPE its caught value
+// should present as, so `catch (e: ffi\FFITypeMismatchError)` matches it.
+//
+// A plain StructuredError becomes a map, and a map satisfies no named type -
+// `is` compares an object instance's definition name (see buzzIsType). Without
+// this a host module could raise a richly-shaped error that no typed catch could
+// ever select, which is the one thing typed errors exist for. The type is
+// synthesized per raise from the field names supplied; nothing has to declare it
+// in Buzz source first.
+type TypedError interface {
+	StructuredError
+	// BuzzErrorType is the object type name a typed catch will match.
+	BuzzErrorType() string
+}

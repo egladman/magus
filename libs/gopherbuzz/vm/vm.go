@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -2050,14 +2051,53 @@ func caughtValue(err error) Value {
 	if len(fields) == 0 {
 		return StrValue(err.Error())
 	}
+	if _, ok := fields["message"]; !ok {
+		fields = withMessage(fields, err.Error())
+	}
+	// A TypedError presents as a real object so a typed catch can select it; anything
+	// else stays a map, which is all `catch (e)` ever needed.
+	var te TypedError
+	if errors.As(err, &te) && te.BuzzErrorType() != "" {
+		return errorObjectValue(te.BuzzErrorType(), fields)
+	}
 	m := NewMap()
 	for k, v := range fields {
 		m.MapSet(k, StrValue(v))
 	}
-	if _, ok := m.MapGet("message"); !ok {
-		m.MapSet("message", StrValue(err.Error()))
-	}
 	return m
+}
+
+// withMessage returns fields plus a "message" entry, without mutating the map the
+// embedder handed back.
+func withMessage(fields map[string]string, msg string) map[string]string {
+	out := make(map[string]string, len(fields)+1)
+	for k, v := range fields {
+		out[k] = v
+	}
+	out["message"] = msg
+	return out
+}
+
+// errorObjectValue builds a one-off object instance of typeName carrying fields, so
+// `is typeName` holds for it. The definition is synthesized here rather than looked
+// up: a host error's type exists to be CAUGHT, and requiring the embedder to also
+// declare it in Buzz source would make a typed raise a two-place change.
+//
+// Field order is sorted so the instance is deterministic across runs (a Go map has
+// none), which keeps a debug rendering and a bytecode round-trip stable.
+func errorObjectValue(typeName string, fields map[string]string) Value {
+	names := make([]string, 0, len(fields))
+	for k := range fields {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	def := &objectDefObj{Name: typeName}
+	vals := make([]Value, len(names))
+	for i, n := range names {
+		def.Fields = append(def.Fields, ast.ObjField{Name: n})
+		vals[i] = StrValue(fields[n])
+	}
+	return heapValue(tagObject, &objectInst{Def: def, Fields: vals})
 }
 
 //go:noinline

@@ -22,7 +22,7 @@ rather than only the flattering one.
 
 | upstream suite          | files |      gopherbuzz | what it asks                                                     |
 | ----------------------- | ----: | --------------: | ---------------------------------------------------------------- |
-| `tests/behavior/`       |    83 |     **78 pass** | does correct source produce the right answer?                    |
+| `tests/behavior/`       |    83 |     **79 pass** | does correct source produce the right answer?                    |
 | `tests/compile_errors/` |    77 | **71 rejected** | does gopherbuzz REJECT what upstream rejects?                    |
 | `tests/fuzzed/`         |   644 |    **0 panics** | can malformed input crash the front end?                         |
 | `tests/bench/`          |    11 |         not run | upstream's benchmarks (ours are in [`benchmarks/`](benchmarks/)) |
@@ -151,17 +151,9 @@ evaluates its target twice, and generics are erased.
 property of the EMBEDDING rather than by unwritten code, so this list is not a
 backlog:
 
-- **Foreign STRUCT types.** `ffi` and `types-as-value` were long filed here as
-  needing a library upstream builds with Zig. They no longer do: `foreign.zig` is
-  plain C ABI, so the harness now compiles an ABI-compatible twin with `cc`
-  (testdata/upstream-foreign/foreign.c) and both files load it and call into it -
-  `acos`, `fprint` and `sum` all work through gopherbuzz's own FFI.
-  What actually blocks them is a real gap this exposed: a `zdef` struct declaration
-  binds only a `{size, align, offsets}` LAYOUT, so `Data` is not a type. `Data{...}`
-  fails to construct, and `typeof Data == <type>` has nothing to name. Making a
-  foreign struct a first-class type - constructible, field-addressable, passable by
-  pointer - is the remaining work, and it is FFI feature work rather than a property
-  of the embedding.
+- **`typeof` over a type.** `types-as-value` is down to `typeof C == <type>` for a
+  protocol and `typeof Data == <type>` for a foreign struct: naming a TYPE yields the
+  type itself, not `<type>`. (`ffi.buzz` now passes outright - see "What works".)
 - **buzz's own native-extension ABI.** `extern-library` and `c-buzz-api` are a
   different problem, and the failure mode hides it: `extern-library` looks like it
   only wants a shared library, and "null is not callable" is just its unbound
