@@ -1,38 +1,44 @@
-package tty
+// Package screen is a terminal emulator: it consumes an escape stream and
+// reconstructs the grid a reader would be looking at.
+//
+// It exists so a test can assert on the PICTURE rather than the bytes. The
+// difference is not cosmetic: a substring check proves a sequence was emitted
+// and says nothing about where the text landed, and every bug this codebase has
+// actually had in terminal rendering was of the second kind - a cursor left in
+// the wrong place, a repaint that ate the transcript, a downward move the
+// receiving end ignored.
+//
+// It lives in its own package rather than beside the code it checks because two
+// other packages need it: internal/cache, whose pinned band has to line up with
+// the coordinates a mouse click resolves against, and eventually a recorder
+// that replays a session for documentation.
+package screen
 
 import (
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
-// screen is a terminal emulator: it consumes the escape stream this package
-// writes and reconstructs the grid a user would actually be looking at.
+// Screen is a terminal: a grid of cells, a cursor, and a scroll region.
 //
-// It exists because every assertion here used to be a substring check against
-// raw bytes - "the output contains \x1b[23;1H" - which proves a sequence was
-// emitted and says nothing about where the text LANDED. The bugs this package
-// has actually had were all of the second kind: a cursor left in the wrong
-// place, a repaint that scrolled the transcript, margins that survived
-// teardown. None of them are visible to a substring check, and all of them are
-// obvious in a rendered grid.
+// It implements exactly the vocabulary magus emits and nothing else, so it is a
+// complete model of what magus does to a terminal rather than a partial model
+// of terminals in general. An unrecognised sequence is dropped rather than
+// guessed at.
 //
-// It implements exactly the vocabulary ansi.go emits and nothing else, so it
-// is a complete model of what magus does to a terminal rather than a partial
-// model of terminals in general. An unrecognised sequence is dropped rather
-// than guessed at.
-//
-// That last rule cuts both ways, and it has already bitten once: a sequence
-// this does not know is SILENTLY IGNORED, so adding one to the production code
-// without adding it here makes the emulator quietly model a different terminal
-// than the one users have. Anything new in ansi.go belongs here in the same
-// change.
+// That rule cuts both ways, and it has already bitten once: a sequence this
+// does not know is SILENTLY IGNORED, so adding one to the production code
+// without adding it here makes this quietly model a different terminal than the
+// one users have. Anything new in the emitted vocabulary belongs here in the
+// same change.
 //
 // The scroll-region behaviour is the part that carries its weight: a newline on
 // the last row of the scroll region scrolls only rows [top, bottom], leaving
 // the reserved zone below untouched. That single rule is what the whole Region
 // design rests on, and emulating it is what lets a test prove the zone survives
 // output rather than assuming it.
-type screen struct {
+type Screen struct {
 	width, height int
 	cells         [][]cell
 	// row and col are 1-based, matching the CUP coordinates the terminal takes.
@@ -51,8 +57,10 @@ type cell struct {
 	style string
 }
 
-func newScreen(width, height int) *screen {
-	s := &screen{width: width, height: height, row: 1, col: 1, scrollTop: 1, scrollBot: height}
+// New returns a Screen of the given size, cursor at the top left and the whole
+// grid scrollable.
+func New(width, height int) *Screen {
+	s := &Screen{width: width, height: height, row: 1, col: 1, scrollTop: 1, scrollBot: height}
 	s.cells = make([][]cell, height)
 	for i := range s.cells {
 		s.cells[i] = make([]cell, width)
@@ -63,11 +71,12 @@ func newScreen(width, height int) *screen {
 	return s
 }
 
-// Fd and Write make a screen usable directly as a Region's writer, so a test
-// drives the real code path rather than a transcript of it.
-func (*screen) Fd() uintptr { return 2 }
+// Fd and Write make a Screen usable directly as a writer wherever production
+// code expects a terminal, so a test drives the real code path rather than a
+// transcript of it.
+func (*Screen) Fd() uintptr { return 2 }
 
-func (s *screen) Write(p []byte) (int, error) {
+func (s *Screen) Write(p []byte) (int, error) {
 	src := string(p)
 	for i := 0; i < len(src); {
 		c := src[i]
@@ -95,7 +104,7 @@ func (s *screen) Write(p []byte) (int, error) {
 }
 
 // escape consumes one escape sequence and returns its length in bytes.
-func (s *screen) escape(src string) int {
+func (s *Screen) escape(src string) int {
 	if len(src) < 2 {
 		return len(src)
 	}
@@ -110,6 +119,19 @@ func (s *screen) escape(src string) int {
 	case 'D': // IND - line feed, column untouched.
 		s.lineFeed()
 		return 2
+	case ']':
+		// OSC: ESC ] ... terminated by BEL or ST. Hyperlinks carry a URI that
+		// must not land in the grid as text. Consumed and dropped - the model
+		// has no notion of a link, only of what occupies a cell.
+		for i := 2; i < len(src); i++ {
+			if src[i] == 0x07 {
+				return i + 1
+			}
+			if src[i] == 0x1b && i+1 < len(src) && src[i+1] == '\\' {
+				return i + 2
+			}
+		}
+		return len(src)
 	case '[':
 	default:
 		return 2
@@ -177,7 +199,7 @@ func (s *screen) escape(src string) int {
 // lineFeed advances a row, scrolling the SCROLL REGION - not the screen - when
 // the cursor is already on its last row. This is the rule the reserved zone
 // depends on.
-func (s *screen) lineFeed() {
+func (s *Screen) lineFeed() {
 	if s.row != s.scrollBot {
 		s.row = clamp(s.row+1, 1, s.height)
 		return
@@ -191,7 +213,7 @@ func (s *screen) lineFeed() {
 	s.scrolled++
 }
 
-func (s *screen) put(r rune) {
+func (s *Screen) put(r rune) {
 	if s.col > s.width {
 		// Wrap, which for this package is a bug rather than a feature: Clip
 		// exists so a zone row never reaches here.
@@ -202,7 +224,7 @@ func (s *screen) put(r rune) {
 	s.col++
 }
 
-func (s *screen) eraseCols(row, from, to int) {
+func (s *Screen) eraseCols(row, from, to int) {
 	if row < 1 || row > s.height {
 		return
 	}
@@ -211,8 +233,8 @@ func (s *screen) eraseCols(row, from, to int) {
 	}
 }
 
-// rows renders the grid as right-trimmed text, one string per terminal row.
-func (s *screen) rows() []string {
+// Rows renders the grid as right-trimmed text, one string per terminal row.
+func (s *Screen) Rows() []string {
 	out := make([]string, s.height)
 	for i, row := range s.cells {
 		var b strings.Builder
@@ -226,14 +248,14 @@ func (s *screen) rows() []string {
 
 // String renders the whole screen, for a failure message that shows what the
 // user would have been looking at.
-func (s *screen) String() string { return strings.Join(s.rows(), "\n") }
+func (s *Screen) String() string { return strings.Join(s.Rows(), "\n") }
 
-// row1 returns one 1-based row's text.
-func (s *screen) row1(n int) string { return s.rows()[n-1] }
+// Row returns one 1-based row's text.
+func (s *Screen) Row(n int) string { return s.Rows()[n-1] }
 
-// styleAt reports the SGR parameters in force at a cell, so a test can assert
+// StyleAt reports the SGR parameters in force at a cell, so a test can assert
 // that a warning is yellow without matching escape bytes.
-func (s *screen) styleAt(row, col int) string { return s.cells[row-1][col-1].style }
+func (s *Screen) StyleAt(row, col int) string { return s.cells[row-1][col-1].style }
 
 func oneParam(p string, def int) int {
 	if p == "" {
@@ -256,21 +278,34 @@ func twoParams(p string) (int, int, bool) {
 	return x, y, err1 == nil && err2 == nil
 }
 
-func clamp(v, lo, hi int) int {
-	if v < lo {
-		return lo
-	}
-	if v > hi {
-		return hi
-	}
-	return v
-}
+func clamp(v, lo, hi int) int { return min(max(v, lo), hi) }
 
 func decodeRune(s string) (rune, int) {
-	for i, r := range s {
-		if i == 0 {
-			return r, len(string(r))
+	// Not a hand-rolled decode: the range-loop version reported the width of
+	// RuneError as 3, so an invalid byte made the model skip two valid ones.
+	return utf8.DecodeRuneInString(s)
+}
+
+// Cursor reports where the cursor is, in 1-based terminal coordinates.
+func (s *Screen) Cursor() (row, col int) { return s.row, s.col }
+
+// ScrollRegion reports the rows the terminal will scroll, 1-based inclusive.
+// Rows outside it are pinned.
+func (s *Screen) ScrollRegion() (top, bottom int) { return s.scrollTop, s.scrollBot }
+
+// Scrolled reports how many lines have been pushed off the top of the scroll
+// region, so a test can assert a repaint did not disturb the transcript.
+func (s *Screen) Scrolled() int { return s.scrolled }
+
+// FindRow returns the 1-based row whose text contains substr, or 0.
+//
+// It is how a test asks "where did this actually end up" without hard-coding
+// the arithmetic it is trying to check.
+func (s *Screen) FindRow(substr string) int {
+	for i, row := range s.Rows() {
+		if strings.Contains(row, substr) {
+			return i + 1
 		}
 	}
-	return ' ', 1
+	return 0
 }

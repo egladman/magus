@@ -2,7 +2,9 @@ package tty
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,7 +18,7 @@ func TestZoneLeaseIsDisabledWithoutATerminal(t *testing.T) {
 	l := z.Acquire(3)
 	assert.False(t, l.Enabled())
 
-	rendered, err := l.Set([]Row{{Text: "hello"}})
+	rendered, err := l.Set([]Line{{Text: "hello"}})
 	require.NoError(t, err)
 	assert.False(t, rendered, "a caller must be told its rows did not land, so it can fall back")
 	assert.Empty(t, buf.String(), "nothing may reach a writer that is not a terminal")
@@ -46,11 +48,11 @@ func TestZoneCompositesLeasesTopToBottom(t *testing.T) {
 	top := z.Acquire(2)
 	bottom := z.Acquire(1)
 
-	rendered, err := top.Set([]Row{{Text: "status"}, {Text: "failure"}})
+	rendered, err := top.Set([]Line{{Text: "status"}, {Text: "failure"}})
 	require.NoError(t, err)
 	assert.True(t, rendered)
 
-	rendered, err = bottom.Set([]Row{{Text: "toast"}})
+	rendered, err = bottom.Set([]Line{{Text: "toast"}})
 	require.NoError(t, err)
 	assert.True(t, rendered)
 
@@ -72,13 +74,13 @@ func TestZoneBlanksRowsALeaseNoLongerFills(t *testing.T) {
 	z := NewZone(&buf, terminal(80, 24))
 	l := z.Acquire(3)
 
-	_, err := l.Set([]Row{{Text: "first"}, {Text: "second"}, {Text: "third"}})
+	_, err := l.Set([]Line{{Text: "first"}, {Text: "second"}, {Text: "third"}})
 	require.NoError(t, err)
 	buf.Reset()
 
 	// The band shrank: the vanished entries must leave no residue, which is the
 	// property an expiring notification depends on.
-	_, err = l.Set([]Row{{Text: "first"}})
+	_, err = l.Set([]Line{{Text: "first"}})
 	require.NoError(t, err)
 	out := buf.String()
 	assert.NotContains(t, out, "second")
@@ -94,11 +96,11 @@ func TestZoneWritesNothingWhenTheFrameIsUnchanged(t *testing.T) {
 	var buf ttyBuf
 	z := NewZone(&buf, terminal(80, 24))
 	l := z.Acquire(2)
-	_, err := l.Set([]Row{{Text: "pool 3/8 running"}})
+	_, err := l.Set([]Line{{Text: "pool 3/8 running"}})
 	require.NoError(t, err)
 	buf.Reset()
 
-	rendered, err := l.Set([]Row{{Text: "pool 3/8 running"}})
+	rendered, err := l.Set([]Line{{Text: "pool 3/8 running"}})
 	require.NoError(t, err)
 	assert.True(t, rendered, "an unchanged frame still counts as rendered")
 	assert.Empty(t, buf.String())
@@ -112,12 +114,12 @@ func TestZoneRedrawsInFullAfterAResize(t *testing.T) {
 	p := &shrinkingProbe{fakeProbe: fakeProbe{isTTY: true, width: 80, height: 40}}
 	z := NewZone(&buf, p)
 	l := z.Acquire(2)
-	_, err := l.Set([]Row{{Text: "keep me"}})
+	_, err := l.Set([]Line{{Text: "keep me"}})
 	require.NoError(t, err)
 	buf.Reset()
 
 	p.height = 39
-	_, err = l.Set([]Row{{Text: "keep me"}})
+	_, err = l.Set([]Line{{Text: "keep me"}})
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "keep me",
 		"an unchanged row must be redrawn when the zone underneath it was erased")
@@ -137,7 +139,7 @@ func TestZoneRefusesAGrantThatWouldStarveTheIncumbent(t *testing.T) {
 
 	// The incumbent must be untouched by the refusal: that asymmetry is the
 	// arbitration rule.
-	rendered, err := incumbent.Set([]Row{{Text: "still working"}})
+	rendered, err := incumbent.Set([]Line{{Text: "still working"}})
 	require.NoError(t, err)
 	assert.True(t, rendered)
 	assert.Contains(t, buf.String(), "still working")
@@ -148,7 +150,7 @@ func TestZoneResizesTheRegionWhenALeaseArrives(t *testing.T) {
 	var buf ttyBuf
 	z := NewZone(&buf, terminal(80, 40))
 	first := z.Acquire(2)
-	_, err := first.Set([]Row{{Text: "a"}})
+	_, err := first.Set([]Line{{Text: "a"}})
 	require.NoError(t, err)
 
 	z.mu.Lock()
@@ -156,7 +158,7 @@ func TestZoneResizesTheRegionWhenALeaseArrives(t *testing.T) {
 	z.mu.Unlock()
 
 	second := z.Acquire(3)
-	_, err = second.Set([]Row{{Text: "b"}})
+	_, err = second.Set([]Line{{Text: "b"}})
 	require.NoError(t, err)
 
 	z.mu.Lock()
@@ -169,7 +171,7 @@ func TestZoneReleasingTheLastLeaseHandsTheTerminalBack(t *testing.T) {
 	var buf ttyBuf
 	z := NewZone(&buf, terminal(80, 24))
 	l := z.Acquire(3)
-	_, err := l.Set([]Row{{Text: "toast"}})
+	_, err := l.Set([]Line{{Text: "toast"}})
 	require.NoError(t, err)
 	buf.Reset()
 
@@ -182,7 +184,7 @@ func TestZoneReleasingTheLastLeaseHandsTheTerminalBack(t *testing.T) {
 
 	// Released leases are inert rather than a panic: teardown ordering is not
 	// something every caller can control.
-	rendered, err := l.Set([]Row{{Text: "late"}})
+	rendered, err := l.Set([]Line{{Text: "late"}})
 	require.NoError(t, err)
 	assert.False(t, rendered)
 	assert.NoError(t, l.Release())
@@ -194,7 +196,7 @@ func TestZoneCloseReleasesEveryLease(t *testing.T) {
 	z := NewZone(&buf, terminal(80, 24))
 	a := z.Acquire(2)
 	b := z.Acquire(2)
-	_, err := a.Set([]Row{{Text: "a"}})
+	_, err := a.Set([]Line{{Text: "a"}})
 	require.NoError(t, err)
 	buf.Reset()
 
@@ -207,7 +209,7 @@ func TestZoneCloseReleasesEveryLease(t *testing.T) {
 func TestZoneReportsNotRenderedWhenTheWindowShrinks(t *testing.T) {
 	t.Parallel()
 	// The window is measurable at grant time but too small by the time the
-	// Region is built, which is what a resize mid-run looks like.
+	// region is built, which is what a resize mid-run looks like.
 	var buf ttyBuf
 	p := &shrinkingProbe{fakeProbe: fakeProbe{isTTY: true, width: 80, height: 40}}
 	z := NewZone(&buf, p)
@@ -215,7 +217,7 @@ func TestZoneReportsNotRenderedWhenTheWindowShrinks(t *testing.T) {
 	require.True(t, l.Enabled())
 
 	p.height = 10 // 6 leased rows leaves 4 to scroll; minUsefulHeight is 8.
-	rendered, err := l.Set([]Row{{Text: "failure"}})
+	rendered, err := l.Set([]Line{{Text: "failure"}})
 	require.NoError(t, err)
 	assert.False(t, rendered, "a caller whose rows cannot be pinned must be told, so a failure still reaches the user")
 }
@@ -225,4 +227,47 @@ type shrinkingProbe struct{ fakeProbe }
 
 func (p *shrinkingProbe) Size(uintptr) (int, int, error) {
 	return p.width, p.height, p.sizeErr
+}
+
+// TestZoneCloseRacesTheRun reproduces the shape the exit path actually has:
+// Zone.Close runs from the signal handler while the run's own goroutines are
+// still painting and asking their leases whether they are alive.
+//
+// Every Lease field is written under the zone's lock, so every read has to take
+// it too. Reading `released` or `rows` unlocked passed every sequential test in
+// this package and is a live race the moment somebody presses Ctrl-C.
+func TestZoneCloseRacesTheRun(t *testing.T) {
+	t.Parallel()
+	var buf ttyBuf
+	z := NewZone(&buf, terminal(120, 60))
+	leases := []*Lease{z.Acquire(4), z.Acquire(3), z.Acquire(2)}
+
+	var wg sync.WaitGroup
+	for i, l := range leases {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for n := range 200 {
+				if !l.Enabled() {
+					continue
+				}
+				_, _ = l.Set([]Line{{Text: fmt.Sprintf("lease %d frame %d", i, n)}})
+				_ = l.Rows()
+				_, _ = l.Grow(l.Rows() + 1)
+			}
+		}()
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		// The exit path, arriving mid-run.
+		_ = z.Close()
+	}()
+	wg.Wait()
+
+	// Whatever the interleaving, teardown wins: nothing is left leased.
+	for _, l := range leases {
+		assert.False(t, l.Enabled())
+		assert.Zero(t, l.Rows(), "a released lease holds no rows")
+	}
 }

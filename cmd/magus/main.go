@@ -130,7 +130,7 @@ func runCLI() int {
 	//
 	// HERE rather than inside the run commands, so that rerunning a failure
 	// cannot re-enter the prompt from inside itself.
-	if err := promptFailures(res.rootCtx, res.root, cache.StderrDisplay()); err != nil {
+	if err := promptFailures(res.rootCtx, res.root, cache.StderrHandler()); err != nil {
 		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
 	}
 	cleanup()

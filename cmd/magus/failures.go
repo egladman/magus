@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -117,17 +118,49 @@ func runFailurePrompt(h failureBand, selected *int) (failureAction, cache.Failur
 		_ = in.Close()
 	}()
 
-	// The way out is pinned to the RIGHT edge, so it is the last thing clipped
-	// rather than the first. As one string this row was 86 columns wide, which
-	// on a standard 80-column terminal truncated it to exactly "[esc] do" - the
-	// only key that closes the prompt, lost on the width most people have.
-	if _, err := hint.Set([]tty.Row{{Spans: []tty.Span{
-		{Text: "click a failure, or [up/down] select   [enter] rerun stepped   [o] output", Style: tty.SGRDim},
-		{Text: "[esc] done", Style: tty.SGRDim, Align: tty.AlignRight},
-	}}}); err != nil {
+	if err := showHint(hint, os.Stderr); err != nil {
 		return actionNone, cache.Failure{}, err
 	}
 	return dispatchFailureKeys(in.Read, h, selected)
+}
+
+// The instruction, in the two forms it may have to take.
+const (
+	hintLeft  = "click a failure, or [up/down] select   [enter] rerun stepped   [o] output"
+	hintRight = "[esc] done"
+)
+
+// showHint puts the way out where the reader can see it, pinning it when the
+// zone has room and printing it plainly when it does not.
+//
+// The fallback is the whole point, and its absence was a bug. Every other thing
+// this package draws is a VIEW, and a view that cannot be pinned is correctly
+// dropped - replaying it into a pipe would be noise. This is not a view. It is
+// the only statement of how to leave, and a prompt that opens without it is the
+// exact situation people describe killing the terminal to escape.
+//
+// A refused grant is not rare or theoretical: the zone reserves rows only while
+// a useful scrolling area remains, so a short window, or a run that already
+// pinned failures and a notification, is enough to leave nothing for this.
+//
+// Printed to the scrolling transcript rather than skipped, because nothing else
+// writes there while the prompt is open, so it stays on screen regardless.
+func showHint(l *tty.Lease, w io.Writer) error {
+	// Pinned, the way out sits at the RIGHT edge so it is the last thing
+	// clipped rather than the first. As one string this row was 86 columns and
+	// an 80-column terminal cut it to exactly "[esc] do".
+	rendered, err := l.Set([]tty.Line{{Spans: []tty.Span{
+		{Text: hintLeft, Style: tty.SGRDim},
+		{Text: hintRight, Style: tty.SGRDim, Align: tty.AlignRight},
+	}}})
+	if err != nil {
+		return err
+	}
+	if rendered {
+		return nil
+	}
+	_, err = fmt.Fprintf(w, "%s   %s\n", hintLeft, hintRight)
+	return err
 }
 
 // dispatchFailureKeys is the event loop, split from the terminal handling above
@@ -202,8 +235,6 @@ func dispatchFailureKeys(next func() (tty.Event, error), h failureBand, selected
 				h.SetSelection(*selected)
 			case 'o':
 				return actionOutput, items[*selected], nil
-			case '\r':
-				return actionRerun, items[*selected], nil
 			}
 		}
 	}
@@ -263,8 +294,8 @@ func rerunStepped(ctx context.Context, root string, f cache.Failure) error {
 // The pinned band stays where it was the entire time, so the run's failures are
 // still on screen underneath it.
 func showOutput(ctx context.Context, root string, f cache.Failure) error {
-	if f.Ref == "" {
+	if f.OutputRef == "" {
 		return fmt.Errorf("no captured output for %s", f.Target)
 	}
-	return queryOutputRef(ctx, root, f.Ref, outputRefOpts{})
+	return queryOutputRef(ctx, root, f.OutputRef, outputRefOpts{})
 }

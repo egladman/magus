@@ -89,14 +89,13 @@ var Term = Module{
 		},
 		{
 			Name: "notify",
-			Doc:  "Raise a notification into the band magus pins at the bottom of the terminal, where it shows for a few seconds and then disappears on its own. Unlike log.info it does not join the scrolling transcript: it is for something worth GLANCING at during a long run, not for the record. Returns immediately - the message expires on its own clock - and is DROPPED when there is no terminal to show it on, so a piped or CI run is never given a repainted view it cannot use; log the same fact if it also needs recording. ttl_ms defaults to 5000; a negative ttl_ms pins the notification until newer ones push it out.",
+			Doc:  "Raise a notification into the band magus pins at the bottom of the terminal, where it shows for a few seconds and then disappears on its own. Unlike log.info it does not join the scrolling transcript: it is for something worth GLANCING at during a long run, not for the record. Returns immediately - the message expires on its own clock - and never raises: it is DROPPED when there is no terminal to show it on, or when the band has no room, so a piped or CI run is never given a repainted view it cannot use and no caller has to guard a notification. Log the same fact if it also needs recording. ttl_ms defaults to 5000; a negative ttl_ms pins the notification until newer ones push it out.",
 			Args: []Arg{
 				{Name: "message", Type: TypeString},
 				{Name: "level", Type: TypeString, Enum: "LogLevel", Optional: true},
 				{Name: "ttl_ms", Type: TypeInt, Optional: true},
 			},
 			Returns: nil,
-			Raises:  true,
 			Impl:    TermNotify,
 		},
 		{
@@ -144,7 +143,7 @@ func TermColorize(_ context.Context, s, style string) (string, error) {
 	if !tty.WantsColor(os.Stderr, tty.SystemProbe) {
 		return s, nil
 	}
-	return tty.Colorize(s, style), nil
+	return tty.Colorize(s, tty.SGR(style)), nil
 }
 
 // TermPick prompts for a choice among items and returns the chosen index.
@@ -165,7 +164,7 @@ func TermPick(ctx context.Context, items []string, prompt, initialFilter string,
 		return -1, fmt.Errorf("term.pick: nothing to prompt on (standard input and standard error are not both terminals). " +
 			"Guard the call with term.isInteractive() and choose a default for unattended runs")
 	}
-	idx, err := tty.Pick(items, tty.Options{
+	idx, err := tty.Pick(os.Stdin, os.Stderr, tty.SystemProbe, items, tty.PickOptions{
 		Prompt:        prompt,
 		InitialFilter: initialFilter,
 		Initial:       initial,
@@ -195,7 +194,7 @@ const defaultNotifyTTL = 5 * time.Second
 // which read well in a standalone script and was wrong for the case that
 // matters: a magusfile target notifying in the middle of a run does not own the
 // run, cannot wrap it, and would be nesting its scope inside magus's own. The
-// band is owned by the process and released on the way out (tty.CloseStderr),
+// band is owned by the process and released on the way out (tty.ReleaseStderr),
 // so a caller just says the thing.
 func TermNotify(ctx context.Context, message, level string, ttlMs int) error {
 	if types.Tracing(ctx) {
@@ -205,7 +204,10 @@ func TermNotify(ctx context.Context, message, level string, ttlMs int) error {
 		return nil
 	}
 	if message == "" {
-		return errors.New("term.notify: message must not be empty")
+		// A no-op rather than a raise. Everything else about this call is
+		// best-effort - no terminal, no room, both silently drop - so failing
+		// on one input would be the only way it could ever interrupt a run.
+		return nil
 	}
 	// 0 is "the caller omitted it", because that is what the generated binding
 	// passes for an absent optional int - so "pin this until something displaces
@@ -223,7 +225,14 @@ func TermNotify(ctx context.Context, message, level string, ttlMs int) error {
 		// Severity still reads from the message; it just is not coloured.
 		style = ""
 	}
-	return tty.StderrNotifier().Notify(message, style, ttl)
+	// The write error is deliberately dropped, which is what lets this method
+	// declare no raise. A notification is a VIEW: the same rule that discards
+	// it on a pipe or a full band discards it when the terminal refuses the
+	// bytes. Making every magusfile wrap a notification in try/catch to handle
+	// "stderr write failed" would be a tax paid on every call site for a
+	// condition no author can act on.
+	_ = tty.StderrNotifier().Notify(message, style, ttl)
+	return nil
 }
 
 // notifyStyle maps a severity to the palette magus already renders with.
@@ -231,7 +240,7 @@ func TermNotify(ctx context.Context, message, level string, ttlMs int) error {
 // LogLevel rather than a TermNotifyLevel of its own: a notification's severity
 // is the same question log.at asks, and answering it twice with two enums would
 // mean a magusfile author choosing between two spellings of "warn".
-func notifyStyle(level types.LogLevel) string {
+func notifyStyle(level types.LogLevel) tty.SGR {
 	switch level {
 	case types.LogError:
 		return tty.SGRRed

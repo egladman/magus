@@ -2,8 +2,11 @@ package tty
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
+
+	"github.com/egladman/magus/internal/interactive/screen"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,25 +21,25 @@ func TestFilter_AND(t *testing.T) {
 	}
 
 	t.Run("empty matches all", func(t *testing.T) {
-		assert.Equal(t, []int{0, 1, 2, 3}, Filter(items, ""))
+		assert.Equal(t, []int{0, 1, 2, 3}, filterIndices(items, ""))
 	})
 	t.Run("single token substring", func(t *testing.T) {
-		assert.Equal(t, []int{0, 1}, Filter(items, "dash"))
+		assert.Equal(t, []int{0, 1}, filterIndices(items, "dash"))
 	})
 	t.Run("AND narrows", func(t *testing.T) {
-		assert.Equal(t, []int{1}, Filter(items, "dash mobile"))
+		assert.Equal(t, []int{1}, filterIndices(items, "dash mobile"))
 	})
 	t.Run("AND no match", func(t *testing.T) {
-		assert.Empty(t, Filter(items, "dash api"))
+		assert.Empty(t, filterIndices(items, "dash api"))
 	})
 	t.Run("case insensitive", func(t *testing.T) {
-		assert.Equal(t, []int{0}, Filter(items, "DASH WEB"))
+		assert.Equal(t, []int{0}, filterIndices(items, "DASH WEB"))
 	})
 	t.Run("order independent", func(t *testing.T) {
-		assert.Equal(t, []int{1}, Filter(items, "mobile dash"))
+		assert.Equal(t, []int{1}, filterIndices(items, "mobile dash"))
 	})
 	t.Run("surrounding whitespace is split, not matched", func(t *testing.T) {
-		assert.Equal(t, []int{1}, Filter(items, "   mobile   dash   "))
+		assert.Equal(t, []int{1}, filterIndices(items, "   mobile   dash   "))
 	})
 }
 
@@ -44,7 +47,7 @@ func TestFilter_AND(t *testing.T) {
 // cursor, windowing and redraw logic can be driven without raw mode or a pty.
 // Pick itself needs a real terminal; every decision it delegates is covered
 // here, and key decoding now belongs to Input, which has its own tests.
-func newTestSession(buf *ttyBuf, items []string, opts Options) *session {
+func newTestSession(buf *ttyBuf, items []string, opts PickOptions) *session {
 	if opts.MaxRows <= 0 {
 		opts.MaxRows = 10
 	}
@@ -65,7 +68,7 @@ func newTestSession(buf *ttyBuf, items []string, opts Options) *session {
 func TestSessionFindInitialLocatesTheRequestedItem(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
-	s := newTestSession(&buf, []string{"alpha", "beta", "gamma"}, Options{Initial: 2})
+	s := newTestSession(&buf, []string{"alpha", "beta", "gamma"}, PickOptions{Initial: 2})
 	assert.Equal(t, 2, s.cursor, "with no filter the initial index is its own match index")
 }
 
@@ -75,14 +78,14 @@ func TestSessionFindInitialLocatesTheRequestedItem(t *testing.T) {
 func TestSessionFindInitialFallsBackToFirst(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
-	s := newTestSession(&buf, []string{"alpha", "beta"}, Options{Initial: 1, InitialFilter: "alpha"})
+	s := newTestSession(&buf, []string{"alpha", "beta"}, PickOptions{Initial: 1, InitialFilter: "alpha"})
 	assert.Equal(t, 0, s.cursor, "an initial item that no longer matches falls back to the first")
 }
 
 func TestSessionDrawMarksTheCursorRow(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
-	s := newTestSession(&buf, []string{"alpha", "beta", "gamma"}, Options{Prompt: "project"})
+	s := newTestSession(&buf, []string{"alpha", "beta", "gamma"}, PickOptions{Prompt: "project"})
 	s.cursor = 1
 	s.draw()
 
@@ -96,7 +99,7 @@ func TestSessionDrawMarksTheCursorRow(t *testing.T) {
 func TestSessionDrawUsesADefaultPrompt(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
-	s := newTestSession(&buf, []string{"alpha"}, Options{})
+	s := newTestSession(&buf, []string{"alpha"}, PickOptions{})
 	s.draw()
 	assert.Contains(t, buf.String(), "filter: _", "an unset prompt falls back to a generic label")
 }
@@ -104,7 +107,7 @@ func TestSessionDrawUsesADefaultPrompt(t *testing.T) {
 func TestSessionDrawReportsNoMatches(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
-	s := newTestSession(&buf, []string{"alpha"}, Options{InitialFilter: "zzz"})
+	s := newTestSession(&buf, []string{"alpha"}, PickOptions{InitialFilter: "zzz"})
 	s.draw()
 
 	assert.Contains(t, buf.String(), "(no matches)")
@@ -117,7 +120,7 @@ func TestSessionDrawReportsNoMatches(t *testing.T) {
 func TestSessionDrawErasesThePreviousRender(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
-	s := newTestSession(&buf, []string{"alpha", "beta", "gamma"}, Options{})
+	s := newTestSession(&buf, []string{"alpha", "beta", "gamma"}, PickOptions{})
 	s.draw()
 	drawn := s.view.Lines()
 	require.Equal(t, 4, drawn)
@@ -137,7 +140,7 @@ func TestSessionDrawErasesThePreviousRender(t *testing.T) {
 func TestSessionDrawWindowsAroundTheCursor(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
-	s := newTestSession(&buf, []string{"a0", "a1", "a2", "a3", "a4", "a5"}, Options{MaxRows: 3})
+	s := newTestSession(&buf, []string{"a0", "a1", "a2", "a3", "a4", "a5"}, PickOptions{MaxRows: 3})
 	s.cursor = 5 // past the window; the view must scroll to include it
 	s.draw()
 
@@ -151,7 +154,7 @@ func TestSessionDrawWindowsAroundTheCursor(t *testing.T) {
 func TestSessionCleanupErasesEverythingItDrew(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
-	s := newTestSession(&buf, []string{"alpha", "beta"}, Options{})
+	s := newTestSession(&buf, []string{"alpha", "beta"}, PickOptions{})
 	s.draw()
 	drawn := s.view.Lines()
 
@@ -165,7 +168,7 @@ func TestSessionCleanupErasesEverythingItDrew(t *testing.T) {
 
 func TestPickRejectsAnEmptyItemList(t *testing.T) {
 	t.Parallel()
-	idx, err := Pick(nil, Options{})
+	idx, err := Pick(os.Stdin, os.Stderr, notATerminal(), nil, PickOptions{})
 	assert.Equal(t, -1, idx)
 	assert.Error(t, err, "there is nothing to pick from")
 }
@@ -176,7 +179,7 @@ func TestSessionMatchAtResolvesAClickToAnItem(t *testing.T) {
 	// from it. Without this the picker knows its own shape but not where it is,
 	// and a click coordinate cannot be resolved against it at all.
 	var buf ttyBuf
-	s := newTestSession(&buf, []string{"alpha", "beta", "gamma"}, Options{})
+	s := newTestSession(&buf, []string{"alpha", "beta", "gamma"}, PickOptions{})
 	s.draw()
 	s.mouseOK, s.promptRow = true, 20 // three items on rows 17-19, prompt on 20
 
@@ -201,7 +204,7 @@ func TestSessionMatchAtFollowsTheScrolledWindow(t *testing.T) {
 	// would select the wrong item as soon as the user typed.
 	var buf ttyBuf
 	items := []string{"a1", "a2", "a3", "a4", "a5", "a6"}
-	s := newTestSession(&buf, items, Options{MaxRows: 3})
+	s := newTestSession(&buf, items, PickOptions{MaxRows: 3})
 	s.cursor = 5
 	s.draw()
 	s.mouseOK, s.promptRow = true, 20
@@ -217,7 +220,7 @@ func TestSessionMatchAtIsInertWithoutAKnownPosition(t *testing.T) {
 	// A terminal that will not report the cursor leaves the picker keyboard
 	// only, which is exactly what it was before. It must not guess.
 	var buf ttyBuf
-	s := newTestSession(&buf, []string{"alpha", "beta"}, Options{})
+	s := newTestSession(&buf, []string{"alpha", "beta"}, PickOptions{})
 	s.draw()
 	s.mouseOK = false
 	s.promptRow = 20
@@ -235,7 +238,7 @@ func TestSessionAsksTheTerminalOnlyOnce(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
 	items := []string{"alpha", "beta", "gamma", "delta", "epsilon"}
-	s := &session{items: items, opts: Options{MaxRows: 10}, out: &buf,
+	s := &session{items: items, opts: PickOptions{MaxRows: 10}, out: &buf,
 		probe: terminal(80, 24), view: NewInlineView(&buf, terminal(80, 24)), mouseOK: true}
 	queries := 0
 	s.queryRow = func() (int, bool) { queries++; return 20, true }
@@ -259,7 +262,7 @@ func TestSessionTracksThePromptRowThroughHeightChanges(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
 	items := []string{"alpha", "beta", "gamma", "delta", "epsilon"}
-	s := &session{items: items, opts: Options{MaxRows: 10}, out: &buf,
+	s := &session{items: items, opts: PickOptions{MaxRows: 10}, out: &buf,
 		probe: terminal(80, 24), view: NewInlineView(&buf, terminal(80, 24)), mouseOK: true}
 	s.queryRow = func() (int, bool) { return 10, true }
 	s.refilter()
@@ -285,7 +288,7 @@ func TestSessionClampsThePromptRowToTheLastLine(t *testing.T) {
 	// prompt stays on the last row rather than running off it.
 	var buf ttyBuf
 	items := []string{"a", "b", "c", "d", "e", "f", "g", "h"}
-	s := &session{items: items, opts: Options{MaxRows: 10}, out: &buf,
+	s := &session{items: items, opts: PickOptions{MaxRows: 10}, out: &buf,
 		probe: terminal(80, 24), view: NewInlineView(&buf, terminal(80, 24)), mouseOK: true}
 	s.queryRow = func() (int, bool) { return 24, true }
 	s.filter = "a"
@@ -304,7 +307,7 @@ func TestSessionReanchorsAfterAResize(t *testing.T) {
 	// another round trip does.
 	var buf ttyBuf
 	p := &resizingProbe{width: 80, height: 24}
-	s := &session{items: []string{"a", "b"}, opts: Options{MaxRows: 10}, out: &buf,
+	s := &session{items: []string{"a", "b"}, opts: PickOptions{MaxRows: 10}, out: &buf,
 		probe: p, view: NewInlineView(&buf, p), mouseOK: true}
 	queries := 0
 	s.queryRow = func() (int, bool) { queries++; return 20, true }
@@ -323,43 +326,99 @@ func TestSessionReanchorsAfterAResize(t *testing.T) {
 // redraw that lands in the wrong place.
 func TestSessionKeepsTheScreenCorrectAcrossRedraws(t *testing.T) {
 	t.Parallel()
-	s := newScreen(40, 24)
+	s := screen.New(40, 24)
 	fmt.Fprint(s, "$ magus x\n")
 	p := terminal(40, 24)
 	sess := &session{
 		items: []string{"console", "docs", "libs/gopherbuzz"},
-		opts:  Options{MaxRows: 10, Prompt: "project"},
+		opts:  PickOptions{MaxRows: 10, Prompt: "project"},
 		out:   s, probe: p, view: NewInlineView(s, p),
 	}
 	sess.refilter()
 	sess.draw()
 
-	assert.Equal(t, "> console", s.row1(2))
-	assert.Equal(t, "  docs", s.row1(3))
-	assert.Equal(t, "  libs/gopherbuzz", s.row1(4))
-	assert.Equal(t, "project: _", s.row1(5))
+	assert.Equal(t, "> console", s.Row(2))
+	assert.Equal(t, "  docs", s.Row(3))
+	assert.Equal(t, "  libs/gopherbuzz", s.Row(4))
+	assert.Equal(t, "project: _", s.Row(5))
 
 	// Moving the highlight rewrites two rows and must leave the rest alone.
 	sess.cursor = 1
 	sess.draw()
-	assert.Equal(t, "  console", s.row1(2))
-	assert.Equal(t, "> docs", s.row1(3))
-	assert.Equal(t, "  libs/gopherbuzz", s.row1(4))
+	assert.Equal(t, "  console", s.Row(2))
+	assert.Equal(t, "> docs", s.Row(3))
+	assert.Equal(t, "  libs/gopherbuzz", s.Row(4))
 
 	// Filtering shrinks the block; the rows it gives up must come back clean.
 	sess.filter = "doc"
 	sess.refilter()
 	sess.cursor = 0
 	sess.draw()
-	assert.Equal(t, "> docs", s.row1(2))
-	assert.Equal(t, "project: doc_", s.row1(3))
-	assert.Equal(t, "", s.row1(4), "the vacated rows are erased, not left as litter")
-	assert.Equal(t, "", s.row1(5))
+	assert.Equal(t, "> docs", s.Row(2))
+	assert.Equal(t, "project: doc_", s.Row(3))
+	assert.Equal(t, "", s.Row(4), "the vacated rows are erased, not left as litter")
+	assert.Equal(t, "", s.Row(5))
 
 	// And the transcript above is untouched throughout.
-	assert.Equal(t, "$ magus x", s.row1(1))
+	assert.Equal(t, "$ magus x", s.Row(1))
 
 	sess.cleanup()
-	assert.Equal(t, "", s.row1(2), "cleanup leaves the terminal as though the picker never ran")
-	assert.Equal(t, "$ magus x", s.row1(1))
+	assert.Equal(t, "", s.Row(2), "cleanup leaves the terminal as though the picker never ran")
+	assert.Equal(t, "$ magus x", s.Row(1))
+}
+
+// TestSessionAlwaysDrawsSomethingOnAShortTerminal is the frozen-terminal bug.
+//
+// The picker asks for ten rows plus a prompt. On a terminal shorter than that,
+// the inline view refuses the block - erasing it would walk off the top of the
+// screen - and before the window was bounded the picker drew nothing at all,
+// while still reading keys in raw mode. A blank terminal with no echo and no
+// prompt is indistinguishable from a hung process, and an eleven-row window is
+// an ordinary split pane.
+func TestSessionAlwaysDrawsSomethingOnAShortTerminal(t *testing.T) {
+	t.Parallel()
+	for _, height := range []int{24, 12, 11, 8, 4, 3} {
+		t.Run(fmt.Sprintf("height=%d", height), func(t *testing.T) {
+			t.Parallel()
+			sc := screen.New(40, height)
+			p := terminal(40, height)
+			// Enough items that the window genuinely wants all ten rows, so
+			// the block is eleven lines and short terminals actually bite.
+			sess := &session{
+				items: benchItems(30),
+				opts:  PickOptions{MaxRows: 10, Prompt: "project"},
+				out:   sc, probe: p, view: NewInlineView(sc, p),
+			}
+			sess.refilter()
+			sess.draw()
+
+			require.NotZero(t, sc.FindRow("project:"),
+				"the prompt must be on screen at %d rows, or the picker looks hung", height)
+			assert.LessOrEqual(t, sess.view.Lines(), height-1,
+				"the block has to stay shorter than the screen to be redrawable")
+		})
+	}
+}
+
+func TestSessionShowsAsManyItemsAsFit(t *testing.T) {
+	t.Parallel()
+	// The bound is on what the terminal can show, not a blanket reduction: a
+	// roomy terminal still gets the configured window.
+	sc := screen.New(40, 24)
+	p := terminal(40, 24)
+	items := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"}
+	sess := &session{items: items, opts: PickOptions{MaxRows: 10}, out: sc, probe: p,
+		view: NewInlineView(sc, p)}
+	sess.refilter()
+	sess.draw()
+	assert.Equal(t, 10, sess.visible, "a tall terminal shows the configured window")
+
+	short := screen.New(40, 8)
+	sp := terminal(40, 8)
+	sess = &session{items: items, opts: PickOptions{MaxRows: 10}, out: short, probe: sp,
+		view: NewInlineView(short, sp)}
+	sess.refilter()
+	sess.draw()
+	assert.Equal(t, 6, sess.visible, "a short one shows what it can, and still shows the prompt")
+	assert.NotZero(t, short.FindRow("filter:"))
 }

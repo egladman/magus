@@ -311,7 +311,7 @@ func (f *replFooter) paint(state string) {
 	// decoration on an interactive session: a terminal that refuses the escape
 	// sequence should cost the reader a status line, never an aborted REPL or a
 	// diagnostic interleaved with their own typing.
-	_, _ = f.lease.Set([]tty.Row{{Text: state, Style: tty.SGRDim}})
+	_, _ = f.lease.Set([]tty.Line{{Text: state, Style: tty.SGRDim}})
 }
 
 func (f *replFooter) release() {

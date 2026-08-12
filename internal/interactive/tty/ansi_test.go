@@ -123,3 +123,55 @@ func TestWantsHyperlinksRefusesOverSSH(t *testing.T) {
 	t.Setenv("SSH_CONNECTION", "10.0.0.2 55380 10.0.0.9 22")
 	assert.False(t, WantsHyperlinks(&buf, terminal(80, 24)))
 }
+
+func TestClipVisibleCountsColumnsNotBytes(t *testing.T) {
+	t.Parallel()
+	// The bug this exists for: a coloured cell is ONE column and about fifteen
+	// bytes, so a byte budget cuts a styled row long before it is too wide -
+	// inside an escape - and the terminal then eats the following text as
+	// parameters.
+	cell := Colorize("*", SGRGreen)
+	row := strings.Repeat(cell, 8)
+	require.Greater(t, len(row), 8*4, "the premise: eight visible columns, far more than eight bytes")
+
+	got := ClipVisible(row, 8)
+	assert.Equal(t, row, got, "eight columns fit in eight columns, whatever they cost in bytes")
+
+	got = ClipVisible(row, 3)
+	assert.Equal(t, strings.Repeat(cell, 3), got, "three columns, styles intact and closed")
+}
+
+func TestClipVisibleNeverSplitsAnEscape(t *testing.T) {
+	t.Parallel()
+	// Every prefix budget must leave a stream whose escapes are all complete.
+	row := Colorize("abc", SGRYellow) + Colorize("def", SGRRed)
+	for cols := range 8 {
+		got := ClipVisible(row, cols)
+		for i := 0; i < len(got); {
+			if n := escapeLen(got[i:]); n > 0 {
+				assert.LessOrEqual(t, i+n, len(got), "escape truncated at cols=%d", cols)
+				i += n
+				continue
+			}
+			i++
+		}
+	}
+}
+
+func TestClipVisibleKeepsHyperlinksWhole(t *testing.T) {
+	t.Parallel()
+	// OSC carries a URI, which must never be counted as visible text nor cut in
+	// half - a severed OSC leaves the terminal waiting for a terminator.
+	link := Hyperlink("out-42", "file:///tmp/a.log")
+	got := ClipVisible(link+"tail", 6)
+	assert.Contains(t, got, "file:///tmp/a.log", "the URI is not visible text and is not budgeted")
+	assert.Contains(t, got, osc8End, "the link is closed")
+	assert.NotContains(t, got, "tail")
+}
+
+func TestClipVisibleOnPlainTextMatchesColumns(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "abc", ClipVisible("abcdef", 3))
+	assert.Equal(t, "", ClipVisible("abc", 0))
+	assert.Equal(t, "abc", ClipVisible("abc", 10))
+}

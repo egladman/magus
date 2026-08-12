@@ -25,7 +25,7 @@ func BenchmarkFilter(b *testing.B) {
 		b.Run(fmt.Sprintf("n=%d", n), func(b *testing.B) {
 			b.ReportAllocs()
 			for range b.N {
-				_ = Filter(items, "service comp")
+				_ = filterIndices(items, "service comp")
 			}
 		})
 	}
@@ -37,7 +37,7 @@ func BenchmarkSessionDraw(b *testing.B) {
 	for _, n := range []int{100, 1000, 5000} {
 		items := benchItems(n)
 		b.Run(fmt.Sprintf("n=%d", n), func(b *testing.B) {
-			s := &session{items: items, opts: Options{MaxRows: 10}, out: io.Discard}
+			s := &session{items: items, opts: PickOptions{MaxRows: 10}, out: io.Discard}
 			s.refilter()
 			b.ReportAllocs()
 			b.ResetTimer()
@@ -69,7 +69,7 @@ func BenchmarkInputDecodeMouseMotion(b *testing.B) {
 // changed, and one that did not. The unchanged case is the steady state of any
 // view repainted on a timer.
 func BenchmarkRegionRender(b *testing.B) {
-	rows := []Row{
+	rows := []Line{
 		{Spans: []Span{{Text: "pool 6/8 running   9 ok  1 failed", Style: SGRDim}, {Text: "6.4s", Style: SGRDim, Align: AlignRight}}},
 		{Text: "[fail] test internal/sandbox (ran, 4.1s)", Style: SGRBoldRed},
 		{Text: "[fail] lint std (ran, 2.3s)", Style: SGRBoldRed},
@@ -77,32 +77,32 @@ func BenchmarkRegionRender(b *testing.B) {
 	}
 	b.Run("unchanged", func(b *testing.B) {
 		r := newBenchRegion()
-		_ = r.Render(rows)
+		_ = r.render(rows)
 		b.ReportAllocs()
 		b.ResetTimer()
 		for range b.N {
-			_ = r.Render(rows)
+			_ = r.render(rows)
 		}
 	})
 	b.Run("changed", func(b *testing.B) {
 		r := newBenchRegion()
-		alt := append([]Row(nil), rows...)
-		alt[1] = Row{Text: "[fail] test internal/proc (ran, 9.9s)", Style: SGRBoldRed}
+		alt := append([]Line(nil), rows...)
+		alt[1] = Line{Text: "[fail] test internal/proc (ran, 9.9s)", Style: SGRBoldRed}
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := range b.N {
 			if i%2 == 0 {
-				_ = r.Render(alt)
+				_ = r.render(alt)
 				continue
 			}
-			_ = r.Render(rows)
+			_ = r.render(rows)
 		}
 	})
 }
 
-func newBenchRegion() *Region {
-	r := NewRegion(discardTTY{}, 6, terminal(120, 40))
-	_ = r.Reserve()
+func newBenchRegion() *region {
+	r := newRegion(discardTTY{}, 6, terminal(120, 40))
+	_ = r.reserve()
 	return r
 }
 
@@ -149,7 +149,7 @@ func BenchmarkPickerMouseSweep(b *testing.B) {
 		for range b.N {
 			c := &countingTTY{}
 			p := terminal(120, 40)
-			s := &session{items: items, opts: Options{MaxRows: 10}, out: c, probe: p,
+			s := &session{items: items, opts: PickOptions{MaxRows: 10}, out: c, probe: p,
 				view: NewInlineView(c, p), mouseOK: true, promptRow: 20}
 			s.refilter()
 			s.draw()
@@ -178,7 +178,7 @@ func BenchmarkPickerArrowNavigation(b *testing.B) {
 		for range b.N {
 			c := &countingTTY{}
 			p := terminal(120, 40)
-			s := &session{items: items, opts: Options{MaxRows: 10}, out: c, probe: p,
+			s := &session{items: items, opts: PickOptions{MaxRows: 10}, out: c, probe: p,
 				view: NewInlineView(c, p)}
 			s.refilter()
 			s.draw()

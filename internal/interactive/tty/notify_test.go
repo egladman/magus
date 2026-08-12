@@ -138,7 +138,7 @@ func TestNotifierSharesTheZoneWithAnotherLease(t *testing.T) {
 	failures := z.Acquire(6)
 	n, _ := newTestNotifier(z, 3)
 
-	rendered, err := failures.Set([]Row{{Text: "pool 2/8 running", Style: SGRDim}})
+	rendered, err := failures.Set([]Line{{Text: "pool 2/8 running", Style: SGRDim}})
 	require.NoError(t, err)
 	require.True(t, rendered)
 	require.NoError(t, n.Notify("api built", SGRGreen, time.Minute))
@@ -159,7 +159,7 @@ func TestNotifierClaimsNoRowsUntilItNotifies(t *testing.T) {
 	other := z.Acquire(6)
 	n := NewNotifier(z, 3)
 
-	_, err := other.Set([]Row{{Text: "pool 1/8 running"}})
+	_, err := other.Set([]Line{{Text: "pool 1/8 running"}})
 	require.NoError(t, err)
 	// 6 leased rows on 24 means margins 1;18, not the 1;15 nine rows would give.
 	assert.Contains(t, buf.String(), "\x1b[1;18r", "the unused band must cost nothing")
@@ -299,5 +299,40 @@ func TestNotifierCloseStopsTheSweeper(t *testing.T) {
 	case <-n.stop:
 	default:
 		t.Fatal("Close must stop the sweeper")
+	}
+}
+
+// TestNotifierPaintNeverDropsAPinFromTheModel is the second half of the
+// eviction rule, on the path that used to have its own contradictory copy.
+//
+// When a grow is refused the band holds fewer rows than the stack, and paint
+// used to truncate the STACK from the front to fit. A pin dropped that way is
+// gone from the model, so Clear can never retract it and the condition it
+// reports stays true with nothing on screen saying so.
+func TestNotifierPaintNeverDropsAPinFromTheModel(t *testing.T) {
+	t.Parallel()
+	var buf ttyBuf
+	// Room for the band to be claimed, but not to grow past one row.
+	z := NewZone(&buf, terminal(80, 10))
+	n, _ := newTestNotifier(z, 3)
+
+	require.NoError(t, n.Pin("lock", "waiting on the workspace lock", SGRYellow))
+	require.NoError(t, n.Notify("one", "", time.Minute))
+	require.NoError(t, n.Notify("two", "", time.Minute))
+
+	n.mu.Lock()
+	keys := make([]string, 0, len(n.toasts))
+	for _, tst := range n.toasts {
+		keys = append(keys, tst.key)
+	}
+	n.mu.Unlock()
+	assert.Contains(t, keys, "lock", "the pin survives in the model however few rows are painted")
+
+	// And it is still retractable, which is the point of keeping it.
+	require.NoError(t, n.Clear("lock"))
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	for _, tst := range n.toasts {
+		assert.NotEqual(t, "lock", tst.key)
 	}
 }

@@ -166,7 +166,7 @@ func (c *Cache) logPool(ctx context.Context, lim *Limiter) {
 	// stdout, where machine consumers read results) and into CI logs,
 	// where they would bury the actual results.
 	ph, ok := c.log.Handler().(*PrettyHandler)
-	if !ok || !ph.rendersStatus() {
+	if !ok || !ph.RendersBand() {
 		return
 	}
 	s := lim.Snapshot()

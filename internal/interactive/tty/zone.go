@@ -9,9 +9,14 @@ import (
 // Zone is the process's single owner of a terminal's bottom rows, handing out
 // contiguous bands of them as leases.
 //
+// EVERY field of a Lease is guarded by this type's mutex, including the ones a
+// Lease method reads about itself. The exit path calls Zone.Close from a signal
+// handler while the run's own goroutines are still painting, so an unlocked
+// read of `released` or `rows` is a live race rather than a theoretical one.
+//
 // It exists because the terminal's scroll margins are ONE GLOBAL SETTING and
 // magus had more than one component setting them. A run could hold two
-// [Region]s at once - the CLI's pretty handler and the one the cache opens for
+// [region]s at once - the CLI's pretty handler and the one the cache opens for
 // its own events - each computing row arithmetic from a different height, and
 // the only thing keeping the user's shell usable was an unconditional
 // ResetScrollMargins on the way out. That is a mop, not an owner: it cleans up
@@ -22,10 +27,10 @@ import (
 // consumer asks for rows instead of taking the terminal. One DECSTBM, one
 // Release, one composited repaint per change.
 //
-// The corollary is that Zone is the concurrency boundary a Region deliberately
-// is not. A Region is single-threaded by contract; its consumers here are not
+// The corollary is that Zone is the concurrency boundary a region deliberately
+// is not. A region is single-threaded by contract; its consumers here are not
 // (a cache handler paints from the run's pool, a notifier from an expiry
-// sweeper, the daemon from a background job), so every Region access goes
+// sweeper, the daemon from a background job), so every region access goes
 // through z.mu.
 type Zone struct {
 	mu     sync.Mutex
@@ -33,9 +38,9 @@ type Zone struct {
 	probe  Probe
 	leases []*Lease
 	// region is built on demand and REBUILT whenever the leased total changes,
-	// because a Region's height is fixed at construction. Nil until something
+	// because a region's height is fixed at construction. Nil until something
 	// actually draws, so a run that never paints never touches the terminal.
-	region *Region
+	region *region
 	// isTTY is settled once, at construction: a writer either has a terminal
 	// that can be drawn on or it does not, and re-probing per paint would buy
 	// nothing.
@@ -97,7 +102,7 @@ func ZoneFor(w io.Writer) *Zone {
 type Lease struct {
 	zone     *Zone
 	rows     int
-	band     []Row
+	band     []Line
 	released bool
 }
 
@@ -139,7 +144,18 @@ func (z *Zone) Acquire(rows int) *Lease {
 // pre-check for a caller deciding whether to COMPUTE something it would only
 // display - the cache asks before sampling pool occupancy - and not the
 // authority on whether a given paint landed. [Lease.Set] answers that.
-func (l *Lease) Enabled() bool { return l.zone != nil && !l.released }
+//
+// Takes the zone's lock because `released` is written under it by Release and
+// Zone.Close, and Close runs from the process exit path - including the
+// signal-driven one - while the run's own goroutines are still asking.
+func (l *Lease) Enabled() bool {
+	if l.zone == nil {
+		return false
+	}
+	l.zone.mu.Lock()
+	defer l.zone.mu.Unlock()
+	return !l.released
+}
 
 // Set replaces this lease's band and repaints the zone, reporting whether the
 // rows actually reached the terminal.
@@ -153,12 +169,15 @@ func (l *Lease) Enabled() bool { return l.zone != nil && !l.released }
 //
 // Fewer rows than the lease holds leaves the remainder blank, which is what
 // lets an entry disappear; more are dropped.
-func (l *Lease) Set(rows []Row) (rendered bool, err error) {
-	if l.zone == nil || l.released {
+func (l *Lease) Set(rows []Line) (rendered bool, err error) {
+	if l.zone == nil {
 		return false, nil
 	}
 	l.zone.mu.Lock()
 	defer l.zone.mu.Unlock()
+	if l.released {
+		return false, nil
+	}
 	l.band = rows
 	return l.zone.repaint()
 }
@@ -167,12 +186,15 @@ func (l *Lease) Set(rows []Row) (rendered bool, err error) {
 // and safe to defer. Releasing the last lease hands the terminal back
 // entirely: margins reset, rows returned.
 func (l *Lease) Release() error {
-	if l.zone == nil || l.released {
+	if l.zone == nil {
 		return nil
 	}
 	z := l.zone
 	z.mu.Lock()
 	defer z.mu.Unlock()
+	if l.released {
+		return nil
+	}
 	l.released = true
 	for i, other := range z.leases {
 		if other == l {
@@ -200,7 +222,7 @@ func (l *Lease) Release() error {
 func (z *Zone) HitTest(row int) (lease *Lease, index int, ok bool) {
 	z.mu.Lock()
 	defer z.mu.Unlock()
-	if z.region == nil || !z.region.Enabled() || !z.region.open {
+	if z.region == nil || !z.region.isEnabled() || !z.region.open {
 		return nil, 0, false
 	}
 	offset := row - z.region.firstRow()
@@ -216,7 +238,10 @@ func (z *Zone) HitTest(row int) (lease *Lease, index int, ok bool) {
 	return nil, 0, false
 }
 
-// Grow enlarges this lease to rows, reporting whether it could.
+// Grow enlarges this lease to rows, reporting whether it grew and whether the
+// repaint that followed reached the terminal. The two are separate: a lease can
+// grow and still fail to paint, and a caller that treated a write error as "did
+// not grow" would keep asking.
 //
 // Growth ONLY: a band that shrank again would make the zone reflow every time
 // its content came and went, and a reflow is a visible movement of the whole
@@ -226,13 +251,16 @@ func (z *Zone) HitTest(row int) (lease *Lease, index int, ok bool) {
 //
 // Refused, like a fresh grant, when the larger total would leave too little
 // scrolling area. The lease keeps the size it had.
-func (l *Lease) Grow(rows int) bool {
-	if l.zone == nil || l.released || rows <= l.rows {
-		return false
+func (l *Lease) Grow(rows int) (grown bool, err error) {
+	if l.zone == nil {
+		return false, nil
 	}
 	z := l.zone
 	z.mu.Lock()
 	defer z.mu.Unlock()
+	if l.released || rows <= l.rows {
+		return false, nil
+	}
 
 	total := rows - l.rows
 	for _, other := range z.leases {
@@ -240,21 +268,32 @@ func (l *Lease) Grow(rows int) bool {
 	}
 	fd, ok := Fd(z.w)
 	if !ok {
-		return false
+		return false, nil
 	}
-	width, height, err := z.probe.Size(fd)
-	if err != nil || !fits(width, height, total) {
-		return false
+	width, height, sizeErr := z.probe.Size(fd)
+	if sizeErr != nil || !fits(width, height, total) {
+		return false, nil
 	}
+	// Committed before the repaint, so a repaint error leaves the lease holding
+	// rows the zone never painted. Reported rather than swallowed: the caller
+	// decides whether a terminal that refused the write is worth acting on.
 	l.rows = rows
-	_, err = z.repaint()
-	return err == nil
+	if _, err := z.repaint(); err != nil {
+		return true, err
+	}
+	return true, nil
 }
 
 // Rows reports how many rows this lease holds, for a caller bounds-checking an
-// index it got from [Zone.HitTest] against its own content.
+// index it got from [Zone.HitTest] against its own content. A released lease
+// holds none.
 func (l *Lease) Rows() int {
 	if l.zone == nil {
+		return 0
+	}
+	l.zone.mu.Lock()
+	defer l.zone.mu.Unlock()
+	if l.released {
 		return 0
 	}
 	return l.rows
@@ -270,17 +309,14 @@ func (z *Zone) Close() error {
 		l.released = true
 	}
 	z.leases = nil
-	return mustRepaintErr(z.repaint())
+	_, err := z.repaint()
+	return err
 }
 
-// mustRepaintErr drops repaint's rendered flag, for callers that only care
-// whether the terminal write failed.
-func mustRepaintErr(_ bool, err error) error { return err }
-
-// repaint composites every lease's band into one slice and drives the Region.
+// repaint composites every lease's band into one slice and drives the region.
 // The caller holds z.mu.
 //
-// The Region is rebuilt whenever the leased total changes because its height is
+// The region is rebuilt whenever the leased total changes because its height is
 // fixed at construction. That costs one visible reflow when a second consumer
 // arrives mid-run, which is the price of NOT permanently reserving rows for a
 // feature that may never be used: a run with no toasts pins exactly the rows
@@ -294,39 +330,39 @@ func (z *Zone) repaint() (rendered bool, err error) {
 		if z.region == nil {
 			return false, nil
 		}
-		err := z.region.Release()
+		err := z.region.release()
 		z.region = nil
 		return false, err
 	}
 	if z.region == nil || z.region.height != total {
 		var relErr error
 		if z.region != nil {
-			relErr = z.region.Release()
+			relErr = z.region.release()
 		}
-		z.region = NewRegion(z.w, total, z.probe)
+		z.region = newRegion(z.w, total, z.probe)
 		if relErr != nil {
 			return false, relErr
 		}
 	}
-	if !z.region.Enabled() {
+	if !z.region.isEnabled() {
 		return false, nil
 	}
 
-	rows := make([]Row, 0, total)
+	rows := make([]Line, 0, total)
 	for _, l := range z.leases {
 		for i := range l.rows {
 			if i < len(l.band) {
 				rows = append(rows, l.band[i])
 				continue
 			}
-			rows = append(rows, Row{})
+			rows = append(rows, Line{})
 		}
 	}
-	if err := z.region.Render(rows); err != nil {
+	if err := z.region.render(rows); err != nil {
 		return false, err
 	}
 	// Render can disable the region on the way through when the window has
 	// shrunk past what the leases need, so the answer is read AFTER the paint,
 	// not before it.
-	return z.region.Enabled(), nil
+	return z.region.isEnabled(), nil
 }

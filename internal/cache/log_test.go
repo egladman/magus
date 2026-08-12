@@ -3,12 +3,14 @@ package cache
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/interactive/screen"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -647,11 +649,11 @@ func TestPrettyHandlerRendersStatusGatesEmission(t *testing.T) {
 	t.Parallel()
 
 	var plain bytes.Buffer
-	assert.False(t, newTestHandler(&plain).rendersStatus(),
+	assert.False(t, newTestHandler(&plain).RendersBand(),
 		"a buffer-backed handler has no region to paint into")
 
 	var term ttyBuf
-	assert.True(t, newTerminalHandler(&term).rendersStatus(),
+	assert.True(t, newTerminalHandler(&term).RendersBand(),
 		"a terminal-backed handler does")
 }
 
@@ -859,7 +861,7 @@ func TestHitFailureResolvesAClickToTheTargetThatFailed(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "build", got.Target)
 	assert.Equal(t, "api", got.Project)
-	assert.Equal(t, "out-build", got.Ref, "the ref travels with the row, so the output is one click away")
+	assert.Equal(t, "out-build", got.OutputRef, "the ref travels with the row, so the output is one click away")
 
 	got, ok = h.HitFailure(21)
 	require.True(t, ok)
@@ -995,4 +997,84 @@ func TestBandHonoursNoColor(t *testing.T) {
 	buf.Reset()
 	h.SetSelection(0)
 	assert.Contains(t, buf.String(), "\x1b[7m", "the selection must stay legible under NO_COLOR")
+}
+
+// TestClickCoordinatesMatchWhereTheBandActuallyDrew closes a loop that spans
+// two packages and had never been checked end to end.
+//
+// A click resolves through tty.Zone's row arithmetic into this handler's band
+// layout. If those two ever disagree by one row, clicking a failure reruns a
+// DIFFERENT target than the one under the pointer - silently, and destructively,
+// since rerunning is an action. Both sides were tested against their own idea of
+// where the rows are; neither was tested against where the text actually landed.
+//
+// So this asks the terminal. It renders through the emulator, FINDS the row the
+// failure was really drawn on, and requires hit-testing to agree.
+func TestClickCoordinatesMatchWhereTheBandActuallyDrew(t *testing.T) {
+	t.Parallel()
+	s := screen.New(80, 24)
+	fmt.Fprint(s, "$ magus affected ci\n")
+	h := newPrettyHandler(s, slog.LevelInfo, terminalProbe{})
+	ctx := context.Background()
+
+	targets := []string{"build", "test", "lint"}
+	for _, target := range targets {
+		require.NoError(t, h.Handle(ctx, buildRecord("cache.error",
+			slog.String("project", "api"),
+			slog.String("target", target),
+			slog.Int64("duration", int64(time.Second)),
+			slog.String("error", "exit status 1"),
+			slog.String("ref", "out-"+target))))
+	}
+
+	for _, target := range targets {
+		// Where the terminal actually put it, not where anyone computed it
+		// should go.
+		drawn := s.FindRow("api " + target)
+		require.NotZero(t, drawn, "the failure for %q must be visible somewhere", target)
+
+		got, ok := h.HitFailure(drawn)
+		require.True(t, ok, "row %d shows %q but hit-testing claims nothing is there", drawn, target)
+		assert.Equal(t, target, got.Target,
+			"clicking the row that displays %q must rerun %q, not %q", target, target, got.Target)
+		assert.Equal(t, "out-"+target, got.OutputRef)
+	}
+
+	// And the rows above the band, where the transcript lives, belong to the
+	// terminal's own selection rather than to magus.
+	transcript := s.FindRow("$ magus affected ci")
+	require.NotZero(t, transcript)
+	_, ok := h.HitFailure(transcript)
+	assert.False(t, ok, "a click on the transcript must not resolve to a failure")
+}
+
+// TestRecordBoolSurvivesAWrongType guards the logging path against a panic.
+// slog.Value.Bool panics on a kind mismatch, and this runs inside the handler,
+// so a record carrying the wrong type for "dry" would take the process down
+// from the one place that is supposed to be reporting problems.
+func TestRecordBoolSurvivesAWrongType(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	h := NewPrettyHandler(&buf, slog.LevelInfo)
+	assert.NotPanics(t, func() {
+		_ = h.Handle(context.Background(), buildRecord("cache.summary",
+			slog.String("dry", "not a bool"),
+			slog.Int("hits", 1), slog.Int("misses", 0), slog.Int("errors", 0),
+			slog.Int64("elapsed", int64(time.Second))))
+	})
+	assert.Contains(t, buf.String(), "1 cached", "and still reports the run")
+}
+
+// TestRecordDurAcceptsBothSpellings guards the silent zero. A caller reaching
+// for slog.Duration - the obvious constructor - used to get 0 back, because
+// only the Int64 spelling was accepted.
+func TestRecordDurAcceptsBothSpellings(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, 250*time.Millisecond,
+		recordDur(buildRecord("x", slog.Int64("duration", int64(250*time.Millisecond))), "duration"))
+	assert.Equal(t, 250*time.Millisecond,
+		recordDur(buildRecord("x", slog.Duration("duration", 250*time.Millisecond)), "duration"))
+	assert.Zero(t, recordDur(buildRecord("x", slog.String("duration", "nope")), "duration"),
+		"a wrong type is still zero, not a panic")
+	assert.Zero(t, recordDur(buildRecord("x"), "duration"))
 }

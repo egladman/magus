@@ -58,11 +58,19 @@ func Fd(w io.Writer) (uintptr, bool) {
 	return f.Fd(), true
 }
 
-// StdinIsTerminal reports whether standard input is a terminal the user
-// is typing at, rather than a pipe, a file, or /dev/null. Callers use it
-// to fail fast with a clear message instead of blocking on a read of
-// stdin that will never see input.
-func StdinIsTerminal() bool { return SystemProbe.IsTerminal(os.Stdin.Fd()) }
+// IsTerminalReader reports whether r is a terminal the user is typing at,
+// rather than a pipe, a file, or /dev/null. Callers use it to fail fast with a
+// clear message instead of blocking on a read that will never see input.
+//
+// Takes a Probe like every other predicate here, so a test can answer it
+// without a pty. It was the only one that could not be redirected.
+func IsTerminalReader(r *os.File, p Probe) bool {
+	fd, ok := Fd(r)
+	return ok && p.IsTerminal(fd)
+}
+
+// StdinIsTerminal is [IsTerminalReader] for the process's own standard input.
+func StdinIsTerminal() bool { return IsTerminalReader(os.Stdin, SystemProbe) }
 
 // IsTerminalWriter reports whether w is a terminal according to p. It is
 // the writer-shaped form of Probe.IsTerminal: a writer with no descriptor

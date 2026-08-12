@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode/utf8"
 )
 
 // ANSI control sequences. Every escape magus emits is named here rather
@@ -43,7 +44,7 @@ const (
 	//
 	// This is what reserves rows, rather than the "\n" it used to be. A cooked
 	// terminal has ONLCR set, so a newline is carriage-return-plus-line-feed
-	// and silently returns the caller's cursor to column 1. Region promises the
+	// and silently returns the caller's cursor to column 1. region promises the
 	// caller's cursor never moves, and for a caller mid-line - a REPL holding a
 	// prompt, anything writing a partial line - that promise was broken by the
 	// one sequence meant to be invisible. IND is the VT100 original with
@@ -53,24 +54,33 @@ const (
 	sgrReset = "\x1b[0m"
 )
 
+// SGR is a set of Select Graphic Rendition parameters - the part of
+// "\x1b[1;31m" between the bracket and the m.
+//
+// A named type rather than a bare string because the calls that carry one also
+// carry message text: Notify(text, style, ttl) and Pin(key, text, style) put
+// two same-typed strings in different positions, so a transposition used to
+// compile and paint a message that read as a style code. It cannot now.
+type SGR string
+
 // SGR parameter codes. These name the colour, not the meaning: a caller
 // decides that "a cache hit is dim green", because what reads as low
 // signal differs per surface. Shared so the codes themselves are written
 // once.
 const (
-	SGRBold    = "1"
-	SGRDim     = "2"
-	SGRRed     = "31"
-	SGRGreen   = "32"
-	SGRYellow  = "33"
-	SGRBoldRed = "1;31"
+	SGRBold    SGR = "1"
+	SGRDim     SGR = "2"
+	SGRRed     SGR = "31"
+	SGRGreen   SGR = "32"
+	SGRYellow  SGR = "33"
+	SGRBoldRed SGR = "1;31"
 	// SGRReverse swaps foreground and background. It marks the selected row of
 	// an interactive band, and is used instead of a colour because it composes:
 	// "7;1;31" is the same red the row already had, highlighted.
-	SGRReverse     = "7"
-	SGRDimGreen    = "2;32"
-	SGRDimGrey     = "2;37"
-	SGRBrightGreen = "1;32"
+	SGRReverse     SGR = "7"
+	SGRDimGreen    SGR = "2;32"
+	SGRDimGrey     SGR = "2;37"
+	SGRBrightGreen SGR = "1;32"
 )
 
 // Colorize wraps s in an SGR sequence and closes it again, so no caller
@@ -80,17 +90,18 @@ const (
 //
 // Callers that already know output is not a terminal should skip this
 // entirely rather than pass an empty code; see [WantsColor].
-func Colorize(s, sgr string) string {
+func Colorize(s string, sgr SGR) string {
 	if sgr == "" {
 		return s
 	}
-	return fmt.Sprintf(sgrFmt, sgr) + s + sgrReset
+	return fmt.Sprintf(sgrFmt, string(sgr)) + s + sgrReset
 }
 
 // OSC 8 hyperlink framing: ESC ] 8 ; params ; URI ST ... ESC ] 8 ; ; ST.
 const (
-	osc8Fmt = "\x1b]8;;%s\x1b\\"
-	osc8End = "\x1b]8;;\x1b\\"
+	osc8Prefix = "\x1b]8;;"
+	osc8Fmt    = "\x1b]8;;%s\x1b\\"
+	osc8End    = "\x1b]8;;\x1b\\"
 )
 
 // Hyperlink makes text a real clickable link to uri, for terminals that
@@ -113,13 +124,112 @@ func Hyperlink(text, uri string) string {
 	return fmt.Sprintf(osc8Fmt, uri) + text + osc8End
 }
 
+// ClipVisible shortens s to cols DISPLAY COLUMNS, counting only what the
+// reader can see and never cutting inside an escape sequence.
+//
+// [Clip] counts bytes, which is exact for the plain text it was written for and
+// catastrophic for text that is already styled. A single coloured cell is one
+// column and about fifteen bytes, so a byte budget cuts a coloured row long
+// before it is actually too wide - in the middle of an escape - after which the
+// terminal reads the following text as parameters and swallows it. That is a
+// corrupted screen, repainted several times a second.
+//
+// Escape sequences are copied through whole and cost nothing against the
+// budget, so the styling of the part that survives is preserved along with any
+// reset that closes it.
+func ClipVisible(s string, cols int) string {
+	if cols <= 0 {
+		return ""
+	}
+	var b strings.Builder
+	used, i := 0, 0
+	for i < len(s) && used < cols {
+		if n := escapeLen(s[i:]); n > 0 {
+			b.WriteString(s[i : i+n])
+			i += n
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(s[i:])
+		b.WriteRune(r)
+		used++
+		i += size
+	}
+	// Sequences sitting immediately after the last visible column are the ones
+	// that CLOSE it, so they come along: stopping at the budget would otherwise
+	// cut before the reset and bleed the last style into whatever is written
+	// next. Only closers - copying whatever escape happens to be next would
+	// pick up the OPENING of the cell that did not fit.
+	for i < len(s) {
+		n := escapeLen(s[i:])
+		if n == 0 || !closesStyle(s[i:i+n]) {
+			break
+		}
+		b.WriteString(s[i : i+n])
+		i += n
+	}
+	out := b.String()
+	if i >= len(s) {
+		return out
+	}
+	// Truncated. Anything still open has to be closed here, because the text
+	// that would have closed it is exactly what was dropped. A redundant
+	// terminator is harmless; a missing one leaves the terminal styled, or
+	// waiting for the end of a hyperlink.
+	if strings.Count(out, osc8Prefix)-strings.Count(out, osc8End) > 0 {
+		out += osc8End
+	}
+	if strings.Contains(out, "\x1b[") && !strings.HasSuffix(out, sgrReset) {
+		out += sgrReset
+	}
+	return out
+}
+
+// closesStyle reports whether seq ends a style or a hyperlink rather than
+// starting one.
+func closesStyle(seq string) bool {
+	return seq == sgrReset || seq == "\x1b[m" || seq == osc8End
+}
+
+// escapeLen reports the length of the escape sequence starting at s, or 0 when
+// s does not start with one.
+//
+// It recognises the two shapes magus emits: CSI (ESC [ ... final byte) and OSC
+// (ESC ] ... ST or BEL), the latter because hyperlinks carry a URI that must
+// never be counted as visible text or cut in half.
+func escapeLen(s string) int {
+	if len(s) < 2 || s[0] != 0x1b {
+		return 0
+	}
+	switch s[1] {
+	case '[':
+		for i := 2; i < len(s); i++ {
+			if s[i] >= 0x40 && s[i] <= 0x7e {
+				return i + 1
+			}
+		}
+		return len(s)
+	case ']':
+		for i := 2; i < len(s); i++ {
+			if s[i] == 0x07 {
+				return i + 1
+			}
+			if s[i] == 0x1b && i+1 < len(s) && s[i+1] == '\\' {
+				return i + 2
+			}
+		}
+		return len(s)
+	}
+	// A two-byte escape (ESC 7, ESC 8, ESC D).
+	return 2
+}
+
 // ClearScreen erases the screen and homes the cursor, the repaint a
 // full-screen refresh loop issues before redrawing (`magus status
 // --watch`).
 //
 // This is not the alternate screen buffer: scrollback is preserved, so a
 // user who scrolls up after quitting still sees what came before. That
-// restraint is deliberate and is the same rule [Region] follows.
+// restraint is deliberate and is the same rule [region] follows.
 func ClearScreen(w io.Writer) error {
 	_, err := io.WriteString(w, home+ed2)
 	return err

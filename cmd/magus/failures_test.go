@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"testing"
 
@@ -21,8 +22,8 @@ type fakeBand struct {
 func newFakeBand() *fakeBand {
 	return &fakeBand{
 		items: []cache.Failure{
-			{Project: "api", Target: "build", Ref: "out-build"},
-			{Project: "api", Target: "test", Ref: "out-test"},
+			{Project: "api", Target: "build", OutputRef: "out-build"},
+			{Project: "api", Target: "test", OutputRef: "out-test"},
 		},
 		selected: -1,
 	}
@@ -107,7 +108,7 @@ func TestFailurePromptSelectsAndActs(t *testing.T) {
 	action, item, err = dispatchFailureKeys(feed(char('o')), b, &sel)
 	require.NoError(t, err)
 	assert.Equal(t, actionOutput, action)
-	assert.Equal(t, "out-build", item.Ref)
+	assert.Equal(t, "out-build", item.OutputRef)
 }
 
 func TestFailurePromptSelectionStopsAtTheEnds(t *testing.T) {
@@ -206,3 +207,48 @@ func TestFailurePromptHoverOffTheBandKeepsTheHighlight(t *testing.T) {
 	assert.Equal(t, actionRerun, action)
 	assert.Equal(t, "test", item.Target, "the highlight stayed where the pointer left it")
 }
+
+// TestHintIsAlwaysVisible is the rule the whole prompt is built around: nobody
+// may be left in it without being told how to leave.
+//
+// The interesting case is the one that was broken. Every other thing this
+// package draws is a view, and a view that cannot be pinned is correctly
+// dropped; this is not a view, it is the only statement of how to get out, and
+// a refused grant is ordinary - a short window, or a run that already pinned
+// failures and a notification, leaves nothing for it.
+func TestHintIsAlwaysVisible(t *testing.T) {
+	t.Run("pinned when the zone has room", func(t *testing.T) {
+		var band ttyBuf
+		var transcript bytes.Buffer
+		z := tty.NewZone(&band, fakeTerminal{w: 80, h: 40})
+		require.NoError(t, showHint(z.Acquire(1), &transcript))
+
+		assert.Contains(t, band.String(), "[esc] done", "it goes in the band")
+		assert.Empty(t, transcript.String(), "and does not also clutter the transcript")
+	})
+
+	t.Run("printed plainly when the grant is refused", func(t *testing.T) {
+		var band ttyBuf
+		var transcript bytes.Buffer
+		// A window with no room to reserve anything.
+		z := tty.NewZone(&band, fakeTerminal{w: 80, h: 6})
+		lease := z.Acquire(1)
+		require.False(t, lease.Enabled(), "the premise: this grant is refused")
+
+		require.NoError(t, showHint(lease, &transcript))
+		assert.Contains(t, transcript.String(), "[esc] done",
+			"a prompt with no way out on screen is the thing people kill the terminal to escape")
+		assert.Contains(t, transcript.String(), "[enter] rerun stepped")
+	})
+}
+
+// fakeTerminal answers as a terminal of a fixed size.
+type fakeTerminal struct{ w, h int }
+
+func (fakeTerminal) IsTerminal(uintptr) bool          { return true }
+func (f fakeTerminal) Size(uintptr) (int, int, error) { return f.w, f.h, nil }
+
+// ttyBuf is a buffer with a descriptor, so a zone treats it as a terminal.
+type ttyBuf struct{ bytes.Buffer }
+
+func (*ttyBuf) Fd() uintptr { return 2 }

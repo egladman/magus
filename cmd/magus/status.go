@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"flag"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -88,10 +90,14 @@ func status(ctx context.Context, args []string) error {
 	useGrid := gridEnabled(opts, isTTY) && !f.compact
 
 	// In watch+grid mode, animate at 150ms ticks (fluid spinner rotation)
-	// while retaining the last snapshot until the next real poll.
-	// Compact mode has no animation: only the queryTick drives reprints.
-	animTick := time.NewTicker(150 * time.Millisecond)
-	defer animTick.Stop()
+	// while retaining the last snapshot until the next real poll. Every other
+	// mode has no animation - only queryTick drives reprints - so it does not
+	// start a ticker it will never select on.
+	var animTick *time.Ticker
+	if useGrid {
+		animTick = time.NewTicker(150 * time.Millisecond)
+		defer animTick.Stop()
+	}
 	queryTick := time.NewTicker(f.watchInterval)
 	defer queryTick.Stop()
 
@@ -141,6 +147,9 @@ func printStatus(r types.StatusReport, opts OutputOptions, animFrame int, compac
 // printing straight at the terminal and having to erase the whole screen to
 // get rid of it.
 func writeStatus(w io.Writer, r types.StatusReport, opts OutputOptions, animFrame int, compact bool) error {
+	// TTY-ness is measured on os.Stdout, not on w, and that is deliberate: in
+	// watch mode w is a buffer this renders into before redrawing it in place,
+	// so the terminal being rendered FOR is still standard output.
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, r)
@@ -415,7 +424,7 @@ func printServiceStatus(w io.Writer, services []types.StatusService) {
 		if state == "" {
 			state = "unknown"
 		}
-		fmt.Fprintf(w, "  %-10s  %-12s  %d dependent(s)", state, label, s.Dependents)
+		fmt.Fprintf(w, "  %-10s  %-12s  %s", state, label, fmt.Sprintf("%d dependent%s", s.Dependents, pluralSuffix(s.Dependents, "", "s")))
 		if len(s.Ports) > 0 {
 			fmt.Fprintf(w, "  ports %s", strings.Join(s.Ports, ","))
 		}
@@ -531,7 +540,7 @@ func compactServiceToken(services []types.StatusService) string {
 		}
 		dependents += s.Dependents
 	}
-	return fmt.Sprintf("services %d/%d active, %d dependent(s)", running, len(services), dependents)
+	return fmt.Sprintf("services %d/%d active, %s", running, len(services), fmt.Sprintf("%d dependent%s", dependents, pluralSuffix(dependents, "", "s")))
 }
 
 // compactMCPToken renders the MCP endpoint as one sidebar-friendly token, or "" when
@@ -768,7 +777,7 @@ func drawRunningTree(w io.Writer, running []types.StatusRunningTarget, now time.
 	for k := range wsGroups {
 		wsKeys = append(wsKeys, k)
 	}
-	sort.Strings(wsKeys)
+	slices.Sort(wsKeys)
 
 	showWorkspace := len(wsKeys) > 1
 
@@ -790,7 +799,7 @@ func drawProjectTree(w io.Writer, indent string, projects map[string][]leafEntry
 	for k := range projects {
 		projKeys = append(projKeys, k)
 	}
-	sort.Strings(projKeys)
+	slices.Sort(projKeys)
 
 	for i, p := range projKeys {
 		pLast := i == len(projKeys)-1
@@ -803,11 +812,11 @@ func drawProjectTree(w io.Writer, indent string, projects map[string][]leafEntry
 
 		leaves := projects[p]
 		// Stable order: oldest first, then target name.
-		sort.SliceStable(leaves, func(a, b int) bool {
-			if leaves[a].duration != leaves[b].duration {
-				return leaves[a].duration > leaves[b].duration
+		slices.SortStableFunc(leaves, func(a, b leafEntry) int {
+			if a.duration != b.duration {
+				return cmp.Compare(b.duration, a.duration) // oldest first
 			}
-			return leaves[a].target < leaves[b].target
+			return cmp.Compare(a.target, b.target)
 		})
 		for j, lf := range leaves {
 			vLast := j == len(leaves)-1
@@ -827,6 +836,13 @@ func drawProjectTree(w io.Writer, indent string, projects map[string][]leafEntry
 
 // formatDur renders a wall-clock running duration. Returns "" for zero
 // or negative durations (unset upstream / clock skew).
+//
+// Deliberately NOT internal/cache.fmtDur, which they otherwise resemble enough
+// to invite a merge. That one measures how long a target TOOK and resolves to
+// nanoseconds, because the difference between 2ms and 200ms is the answer
+// somebody is looking for. This one is a clock a reader watches tick, so
+// sub-second precision would be unreadable noise, and an unset value has to
+// render as nothing rather than as zero.
 func formatDur(d time.Duration) string {
 	if d <= 0 {
 		return ""
@@ -906,8 +922,12 @@ func parseRunning(args []string) (project, target string) {
 //
 // It delegates to tty.Clip rather than slicing: a raw s[:n-1] splits a
 // multi-byte rune, so a project or target name with a non-ASCII
-// character rendered as a replacement glyph. The ellipsis is ASCII for
-// the same reason every other magus-authored string is.
+// character rendered as a replacement glyph.
+//
+// The ellipsis is ASCII. The rest of this file is deliberately not: the pool
+// grid, the spinner and the tree rules are GLYPHS, chosen for shape, and there
+// is no ASCII substitute that draws them. That is a different question from
+// prose typography, which the repo does keep to ASCII.
 func truncate(s string, n int) string {
 	return tty.Clip(s, n)
 }

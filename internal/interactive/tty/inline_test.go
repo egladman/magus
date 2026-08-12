@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/interactive/screen"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -177,7 +179,7 @@ func TestInlineViewRewritesOnlyWhatChanged(t *testing.T) {
 // wrong screen. Only rendering it catches that.
 func TestInlineViewKeepsTheGridCorrectAcrossFrames(t *testing.T) {
 	t.Parallel()
-	s := newScreen(40, 24)
+	s := screen.New(40, 24)
 	fmt.Fprint(s, "a previous command\nand its output\n")
 	p := &InlineView{w: s, probe: sizedProbe{w: 40, h: 24}}
 
@@ -185,15 +187,15 @@ func TestInlineViewKeepsTheGridCorrectAcrossFrames(t *testing.T) {
 	require.True(t, p.Paint("spinner /\nalpha\nbravo\n"))
 	require.True(t, p.Paint("spinner -\nalpha\nCHARLIE\n"))
 
-	assert.Equal(t, "spinner -", s.row1(3))
-	assert.Equal(t, "alpha", s.row1(4))
-	assert.Equal(t, "CHARLIE", s.row1(5))
-	assert.Equal(t, 5, s.row, "the cursor ends on the last line of the block, every time")
+	assert.Equal(t, "spinner -", s.Row(3))
+	assert.Equal(t, "alpha", s.Row(4))
+	assert.Equal(t, "CHARLIE", s.Row(5))
+	assert.Equal(t, 5, cursorRowOf(s), "the cursor ends on the last line of the block, every time")
 
 	// The transcript above is untouched, which is the whole point of redrawing
 	// in place rather than clearing.
-	assert.Equal(t, "a previous command", s.row1(1))
-	assert.Equal(t, "and its output", s.row1(2))
+	assert.Equal(t, "a previous command", s.Row(1))
+	assert.Equal(t, "and its output", s.Row(2))
 }
 
 // TestInlineViewSurvivesAHeightChangeThenDiffs pins the handover between the
@@ -201,16 +203,16 @@ func TestInlineViewKeepsTheGridCorrectAcrossFrames(t *testing.T) {
 // frame must still diff correctly against it.
 func TestInlineViewSurvivesAHeightChangeThenDiffs(t *testing.T) {
 	t.Parallel()
-	s := newScreen(40, 24)
+	s := screen.New(40, 24)
 	p := &InlineView{w: s, probe: sizedProbe{w: 40, h: 24}}
 
 	require.True(t, p.Paint("one\ntwo\nthree\nfour\n"))
 	require.True(t, p.Paint("one\ntwo\n"))
 	require.True(t, p.Paint("one\nCHANGED\n"))
 
-	assert.Equal(t, "one", s.row1(1))
-	assert.Equal(t, "CHANGED", s.row1(2))
-	assert.Equal(t, "", s.row1(3), "the rows the shorter block gave up are clean")
-	assert.Equal(t, "", s.row1(4))
-	assert.Equal(t, 2, s.row)
+	assert.Equal(t, "one", s.Row(1))
+	assert.Equal(t, "CHANGED", s.Row(2))
+	assert.Equal(t, "", s.Row(3), "the rows the shorter block gave up are clean")
+	assert.Equal(t, "", s.Row(4))
+	assert.Equal(t, 2, cursorRowOf(s))
 }

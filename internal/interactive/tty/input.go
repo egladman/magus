@@ -248,10 +248,13 @@ func (i *Input) Close() error {
 
 // Read blocks until the user does something, and reports it.
 //
-// It blocks, rather than offering a channel or a deadline, because every
-// caller so far is a prompt waiting on a person. A caller that needs to do
-// something else meanwhile runs this in its own goroutine and closes the Input
-// to release it.
+// It blocks, rather than offering a channel or a deadline, because every caller
+// so far is a prompt waiting on a person.
+//
+// There is no way to interrupt it. Close restores the terminal and disables
+// mouse reporting; it does not close the descriptor, so a goroutine already
+// parked in Read stays parked until a key arrives. A caller that needs
+// cancellation cannot get it here yet.
 func (i *Input) Read() (Event, error) {
 	for {
 		ev, err := i.read()
@@ -292,9 +295,15 @@ func (i *Input) decode() (Event, error) {
 		return i.decodeByte(b)
 	}
 
-	// An ESC that is not followed by anything is the Escape key. Everything
-	// else is a sequence; peeking avoids blocking forever on a bare ESC only
-	// when the rest has already arrived, which for a real terminal it has.
+	// An ESC with nothing behind it is the Escape key. The check is on what has
+	// ALREADY ARRIVED, because Peek on an empty buffer issues a read and blocks
+	// - so a lone ESC would sit there doing nothing until the user pressed
+	// another key, which is the one keypress a reader tries when they want out.
+	// A real escape sequence arrives from the terminal in a single write, so
+	// its remainder is buffered by the time the ESC is decoded.
+	if i.r.Buffered() == 0 {
+		return Event{Kind: EventKey, Key: KeyEscape}, nil
+	}
 	rest, err := i.r.Peek(1)
 	if err != nil || len(rest) == 0 || rest[0] != '[' {
 		return Event{Kind: EventKey, Key: KeyEscape}, nil
@@ -387,6 +396,17 @@ func (i *Input) decodeCSI() (Event, error) {
 	return Event{Kind: EventKey, Key: KeyUnknown}, nil
 }
 
+// discardBuffered drops whatever has already arrived but not been decoded.
+//
+// Only correct after abandoning a query: the bytes in flight are the reply that
+// timed out, or the remains of one, and interpreting them later is worse than
+// losing them. Never call it while ordinary input is expected.
+func (i *Input) discardBuffered() {
+	if n := i.r.Buffered(); n > 0 {
+		_, _ = i.r.Discard(n)
+	}
+}
+
 // twoInts parses "a;b".
 func twoInts(s string) (int, int, bool) {
 	a, b, ok := strings.Cut(s, ";")
@@ -435,6 +455,11 @@ func (i *Input) CursorPosition() (row, col int, ok bool) {
 		// would consume its own output and never terminate.
 		ev, err := i.decode()
 		if err != nil {
+			// The deadline can fire part-way through a sequence, leaving its
+			// tail in the buffer for the next decode to read as fresh
+			// keystrokes - an arrow key arriving as a stray bracket. Whatever
+			// is buffered belongs to a reply nobody is waiting for any more.
+			i.discardBuffered()
 			return 0, 0, false
 		}
 		if ev.Kind == eventCursor {

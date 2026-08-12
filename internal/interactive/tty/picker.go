@@ -23,8 +23,8 @@ import (
 // ErrAborted is returned when the user presses ESC, Ctrl-C, or Ctrl-D.
 var ErrAborted = errors.New("picker: aborted")
 
-// Options configures a single Pick call.
-type Options struct {
+// PickOptions configures a single Pick call.
+type PickOptions struct {
 	// Prompt is the label drawn before the filter input (e.g. "project").
 	Prompt string
 	// InitialFilter pre-populates the filter string. The picker filters
@@ -37,10 +37,15 @@ type Options struct {
 	MaxRows int
 }
 
-// Pick blocks until the user selects an item or aborts. On success it
-// returns the index into the original items slice. On abort it returns
-// -1 and ErrAborted.
-func Pick(items []string, opts Options) (int, error) {
+// Pick blocks until the user selects an item or aborts. On success it returns
+// the index into the original items slice. On abort it returns -1 and
+// ErrAborted.
+//
+// Takes its descriptors and probe like every other entry point in this package
+// rather than reaching for os.Stdin and os.Stderr itself. It was the one
+// interactive surface a test could not redirect, which is exactly backwards for
+// the one that reads keys.
+func Pick(in *os.File, out io.Writer, p Probe, items []string, opts PickOptions) (int, error) {
 	if len(items) == 0 {
 		return -1, errors.New("picker: no items")
 	}
@@ -52,23 +57,23 @@ func Pick(items []string, opts Options) (int, error) {
 	// itself, which meant two decoders in one package disagreeing about which
 	// control bytes exist - Ctrl-N and Ctrl-P were documented here and dropped
 	// on the floor, because they are below 0x20 and fell through to "printable".
-	in, err := OpenInput(os.Stdin, os.Stderr, SystemProbe)
+	input, err := OpenInput(in, out, p)
 	if err != nil {
 		return -1, fmt.Errorf("picker: %w", err)
 	}
-	defer func() { _ = in.Close() }()
+	defer func() { _ = input.Close() }()
 
 	s := &session{
 		items:   items,
 		opts:    opts,
 		filter:  opts.InitialFilter,
-		out:     os.Stderr,
-		probe:   SystemProbe,
-		view:    NewInlineView(os.Stderr, SystemProbe),
+		out:     out,
+		probe:   p,
+		view:    NewInlineView(out, p),
 		mouseOK: true,
 	}
 	s.queryRow = func() (int, bool) {
-		row, _, ok := in.CursorPosition()
+		row, _, ok := input.CursorPosition()
 		return row, ok
 	}
 	s.refilter()
@@ -77,7 +82,7 @@ func Pick(items []string, opts Options) (int, error) {
 	defer s.cleanup()
 
 	for {
-		ev, err := in.Read()
+		ev, err := input.Read()
 		if err != nil {
 			return -1, ErrAborted
 		}
@@ -148,7 +153,7 @@ func Pick(items []string, opts Options) (int, error) {
 
 type session struct {
 	items   []string
-	opts    Options
+	opts    PickOptions
 	filter  string
 	matches []int // indices into items, post-filter
 	cursor  int   // index into matches
@@ -175,9 +180,9 @@ type session struct {
 	lastHeight int
 }
 
-// Filter is exposed for tests: it returns the indices of items that
-// match the given filter string under the AND-substring rule.
-func Filter(items []string, filter string) []int {
+// filterIndices returns the indices of items matching filter under the
+// AND-substring rule.
+func filterIndices(items []string, filter string) []int {
 	tokens := strings.Fields(strings.ToLower(filter))
 	out := make([]int, 0, len(items))
 	for i, it := range items {
@@ -197,7 +202,7 @@ func Filter(items []string, filter string) []int {
 }
 
 func (s *session) refilter() {
-	s.matches = Filter(s.items, s.filter)
+	s.matches = filterIndices(s.items, s.filter)
 }
 
 func (s *session) findInitial() int {
@@ -223,14 +228,15 @@ func (s *session) draw() {
 // changes two rows, and now costs two.
 func (s *session) frame() string {
 	var b strings.Builder
-	visible := s.opts.MaxRows
+	maxRows := s.maxRows()
+	visible := maxRows
 	if visible > len(s.matches) {
 		visible = len(s.matches)
 	}
 	// Window the visible slice around the cursor.
 	start := 0
-	if s.cursor >= s.opts.MaxRows {
-		start = s.cursor - s.opts.MaxRows + 1
+	if s.cursor >= maxRows {
+		start = s.cursor - maxRows + 1
 	}
 	end := start + visible
 	if end > len(s.matches) {
@@ -252,7 +258,7 @@ func (s *session) frame() string {
 		b.WriteString(s.items[idx])
 		b.WriteString("\n")
 	}
-	if len(s.matches) == 0 {
+	if len(s.matches) == 0 && maxRows > 0 {
 		b.WriteString("  (no matches)\n")
 		s.visible = 1
 	}
@@ -308,6 +314,34 @@ func (s *session) reposition(oldLines, newLines int) {
 		row = height
 	}
 	s.promptRow = row
+}
+
+// maxRows is how many items the window may show, bounded by what the terminal
+// can actually display.
+//
+// Without the bound the picker asks for its configured ten rows plus a prompt
+// on a terminal that may be shorter, [InlineView.Paint] refuses the block
+// because erasing it would walk off the top of the screen, and the picker draws
+// NOTHING - while still sitting in a raw-mode read loop. A blank terminal with
+// no echo and no prompt is indistinguishable from a hung process, and an
+// eleven-row window is an ordinary split pane rather than an exotic case.
+//
+// Two rows are held back: one for the prompt line, and one so the block stays
+// strictly shorter than the screen, which is what makes redrawing it in place
+// possible at all.
+func (s *session) maxRows() int {
+	max := s.opts.MaxRows
+	height, ok := s.height()
+	if !ok {
+		return max
+	}
+	if limit := height - 2; max > limit {
+		max = limit
+	}
+	if max < 0 {
+		max = 0
+	}
+	return max
 }
 
 // height reports the terminal's height. A local ioctl, not a round trip, so it

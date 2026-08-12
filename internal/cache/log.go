@@ -66,8 +66,14 @@ type PrettyHandler struct {
 	// handler's band within it. The handler no longer sets scroll margins
 	// itself: it used to, and so did the CLI's own handler, and two components
 	// driving one global DECSTBM setting is what tty.Zone exists to end.
-	zone     *tty.Zone
-	lease    *tty.Lease
+	zone  *tty.Zone
+	lease *tty.Lease
+	// notifier is nil for the handler on standard error, which reaches the
+	// process band through tty.StderrNotifier instead. Caching that one here
+	// was a bug: applyDisplay runs several times per invocation and each run
+	// tears the process band down, so a handler holding a pointer from before
+	// the teardown kept a CLOSED notifier forever and every magus-raised
+	// notification silently vanished.
 	notifier *tty.Notifier
 	status   statusLine // live counters painted into the band's first row
 	// failures is the pinned failure ring, one entry per row beneath the status
@@ -164,7 +170,7 @@ func (h *PrettyHandler) paintStatus() {
 // not pay a blank row for the option, but a run reports pool occupancy as soon
 // as work starts, so the row was claimed in every case that mattered - and
 // latching cost the oldest visible failure whenever it happened late.
-func (h *PrettyHandler) band() []tty.Row {
+func (h *PrettyHandler) band() []tty.Line {
 	// NO_COLOR applies here too. It is easy to miss, because the band only
 	// exists on a terminal and colour is what makes it readable - but the
 	// variable says any non-empty value disables colour, without an exception
@@ -175,17 +181,17 @@ func (h *PrettyHandler) band() []tty.Row {
 	// decoration - it says which row a keypress will act on, and without it the
 	// prompt is unusable. Reverse video is not a colour, so it stays.
 	color := h.wantsColor()
-	dim := ""
+	var dim tty.SGR
 	if color {
 		dim = tty.SGRDim
 	}
-	rows := make([]tty.Row, 0, stickyRegionRows)
+	rows := make([]tty.Line, 0, stickyRegionRows)
 	// The elapsed time goes to the right edge. It is the one clause that grows
 	// a character at a time, so left-aligned it shoved everything before it
 	// sideways once a second; pinned right, the counters hold still and the
 	// eye stops chasing them.
 	left, elapsed := h.status.render(time.Now())
-	status := tty.Row{Spans: []tty.Span{{Text: left, Style: dim}}}
+	status := tty.Line{Spans: []tty.Span{{Text: left, Style: dim}}}
 	if elapsed != "" {
 		status.Spans = append(status.Spans, tty.Span{Text: elapsed, Style: dim, Align: tty.AlignRight})
 	}
@@ -193,7 +199,7 @@ func (h *PrettyHandler) band() []tty.Row {
 	for i, f := range h.failures {
 		// A blank entry still occupies its row: the ring's positions are fixed,
 		// so a failure does not move once painted.
-		row := tty.Row{Text: f.Heading}
+		row := tty.Line{Text: f.Heading}
 		if color {
 			row.Style = tty.SGRBoldRed
 		}
@@ -278,11 +284,11 @@ var (
 	stderrPretty   *PrettyHandler
 )
 
-// StderrDisplay returns the process's display handler if one was built, or nil.
+// StderrHandler returns the process's display handler if one was built, or nil.
 // It is how a caller that did not construct the handler - the CLI's exit path,
 // offering an interactive prompt over the run's pinned failures - reaches the
 // one holding them.
-func StderrDisplay() *PrettyHandler {
+func StderrHandler() *PrettyHandler {
 	stderrPrettyMu.Lock()
 	defer stderrPrettyMu.Unlock()
 	return stderrPretty
@@ -325,10 +331,14 @@ const stickyRegionRows = 6
 // failureRows is the ring beneath the status line.
 const failureRows = stickyRegionRows - 1
 
-// rendersStatus reports whether this handler has a live region to paint
-// a status line into. The cache asks before emitting pool samples, so a
-// piped, JSON, or CI run pays nothing for a feature it cannot show.
-func (h *PrettyHandler) rendersStatus() bool {
+// RendersBand reports whether this handler has a live band to paint into. The
+// cache asks before emitting pool samples, so a piped, JSON, or CI run pays
+// nothing for a feature it cannot show, and the CLI asks before offering an
+// interactive prompt over failures it may not have drawn.
+//
+// Not named Enabled: that one belongs to slog.Handler and answers an entirely
+// different question (whether a level is worth handling).
+func (h *PrettyHandler) RendersBand() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.lease.Enabled()
@@ -341,7 +351,7 @@ func (h *PrettyHandler) rendersStatus() bool {
 func (h *PrettyHandler) Close() error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return h.lease.Release()
+	return h.releaseBand()
 }
 
 // wantsColor reports whether output to this writer should carry ANSI
@@ -390,9 +400,16 @@ func (h *PrettyHandler) printf(format string, args ...any) {
 	h.fail(err)
 }
 
-func (h *PrettyHandler) Enabled(_ context.Context, lvl slog.Level) bool { return lvl >= h.level }
-func (h *PrettyHandler) WithAttrs(_ []slog.Attr) slog.Handler           { return h }
-func (h *PrettyHandler) WithGroup(_ string) slog.Handler                { return h }
+// Enabled reports whether a level is worth handling. slog calls it from every
+// logging goroutine, and setLevel writes h.level under the mutex, so this reads
+// it under the mutex too.
+func (h *PrettyHandler) Enabled(_ context.Context, lvl slog.Level) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return lvl >= h.level
+}
+func (h *PrettyHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
+func (h *PrettyHandler) WithGroup(_ string) slog.Handler      { return h }
 
 // Handle renders one record. It deliberately does NOT skip on ctx.Err(): a handler must
 // not treat cancellation as permission to drop output. The check that used to live here
@@ -452,34 +469,42 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		//
 		// Pinned rather than expiring, because it reports a CONDITION: the wait
 		// does not end when a timer says so.
-		h.fail(h.notifier.Pin(lockNotifyKey, h.blockedMessage(), tty.SGRYellow))
+		h.fail(h.notify().Pin(lockNotifyKey, h.blockedMessage(), tty.SGRYellow))
 		return h.err
 	case "lock.acquired":
 		h.status.blocked, h.status.blockedBy = "", ""
 		h.paintStatus()
-		h.fail(h.notifier.Clear(lockNotifyKey))
+		h.fail(h.notify().Clear(lockNotifyKey))
 		return h.err
 	case "cache.hit":
 		// Cached: passed without running. Dimmed green so a cache hit reads as
 		// low-signal next to work that actually ran. Cache state lives in the parens,
 		// mirroring the cross-tool convention (e.g. Bazel's "(cached) PASSED").
-		h.printf("%s %s (cached, %s%s)\n", h.glyph(colorize, "pass", colDimGreen), label, fmtDur(dur), remote)
+		h.printf("%s %s (cached, %s%s)\n", glyph(colorize, "pass", colDimGreen), label, fmtDur(dur), remote)
 		h.printRepro(colorize, project, recordStr(r, "target"))
 		h.printRef(colorize, ref)
 		h.status.cached++
 		h.paintStatus()
 	case "cache.miss":
-		h.printf("%s %s (ran, %s%s)\n", h.glyph(colorize, "pass", colGreen), label, fmtDur(dur), remote)
+		h.printf("%s %s (ran, %s%s)\n", glyph(colorize, "pass", colGreen), label, fmtDur(dur), remote)
 		h.printRepro(colorize, project, recordStr(r, "target"))
 		h.printRef(colorize, ref)
 		h.status.passed++
 		h.paintStatus()
 	case "cache.error":
-		h.printFailure(colorize, label, project, recordStr(r, "target"), dur, recordStr(r, "error"), ref, recordStr(r, "log"))
+		h.printFailure(colorize, failureReport{
+			label:   label,
+			project: project,
+			target:  recordStr(r, "target"),
+			dur:     dur,
+			cause:   recordStr(r, "error"),
+			ref:     ref,
+			logPath: recordStr(r, "log"),
+		})
 		h.status.failed++
 		h.paintStatus()
 	case "cache.warn":
-		h.printf("%s %s\n", h.glyph(colorize, "warn", colYellow), recordStr(r, "msg"))
+		h.printf("%s %s\n", glyph(colorize, "warn", colYellow), recordStr(r, "msg"))
 	case "cache.pool":
 		// A live occupancy sample, folded into the row pinned at the top of
 		// the sticky region. Deliberately not printed on a non-TTY: this
@@ -523,7 +548,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		}
 	case "cache.dry.banner":
 		if colorize {
-			h.printf("\x1b[2mdry run - commands shown, not executed\x1b[0m\n")
+			h.printf("%s\n", tty.Colorize("dry run - commands shown, not executed", colDim))
 		} else {
 			h.printf("dry run - commands shown, not executed\n")
 		}
@@ -532,7 +557,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		// no duration for the same reason. Everything else matches the executed
 		// line - including the repro command underneath - so a plan and a run read
 		// the same way and only the glyph and the footer say which one you got.
-		h.printf("%s %s\n", h.glyph(colorize, "dry", colDim), label)
+		h.printf("%s %s\n", glyph(colorize, "dry", colDim), label)
 		h.printRepro(colorize, recordStr(r, "project"), recordStr(r, "target"))
 	case "cache.scope":
 		// Run start. Everything the band shows is per-RUN, and this handler is
@@ -572,7 +597,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 			cmd += " " + strings.Join(args, " ")
 		}
 		if colorize {
-			h.printf("  \x1b[2m$ %s\x1b[0m\n", cmd)
+			h.printf("  %s\n", tty.Colorize("$ "+cmd, colDim))
 		} else {
 			h.printf("  $ %s\n", cmd)
 		}
@@ -585,7 +610,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		if recordStr(r, "error") != "" {
 			name, color = "fail", colRed
 		}
-		h.printf("  %s %s %s (%s)\n", h.glyph(colorize, name, color), label, target, fmtDur(dur))
+		h.printf("  %s %s %s (%s)\n", glyph(colorize, name, color), label, target, fmtDur(dur))
 	default:
 		h.handleGeneric(colorize, r)
 	}
@@ -609,11 +634,14 @@ func displayProjectLabel(label, project string) string {
 // ANSI colour codes used by the status glyphs. Cache state is conveyed by colour as
 // well as by the parenthetical: a cached pass is dim, a fresh run is bright green.
 const (
-	colDimGreen = "2;32" // cached (passed without running) — low signal
-	colGreen    = "32"   // ran and passed
-	colRed      = "31"   // failed
-	colYellow   = "33"   // warning
-	colDim      = "2"    // info/debug
+	// These name the palette tty already defines rather than restating the
+	// codes, so a wrong sequence stays a compile error in one place. The file
+	// used both spellings before, which is how they were free to drift.
+	colDimGreen = tty.SGRDimGreen // cached (passed without running) - low signal
+	colGreen    = tty.SGRGreen    // ran and passed
+	colRed      = tty.SGRRed      // failed
+	colYellow   = tty.SGRYellow   // warning
+	colDim      = tty.SGRDim      // info/debug
 )
 
 // glyph renders a bracketed status glyph like "[pass]" or "[fail]", ASCII only (no
@@ -621,12 +649,12 @@ const (
 // outcome words; cache state (cached vs ran) is shown separately in the line's
 // parenthetical, the orthogonal split every major build tool uses (e.g. Bazel's
 // "(cached) PASSED"). Named to match the doctor command's statusGlyph.
-func (h *PrettyHandler) glyph(colorize bool, label, color string) string {
+func glyph(colorize bool, label string, color tty.SGR) string {
 	s := "[" + label + "]"
-	if colorize {
-		return "\x1b[" + color + "m" + s + "\x1b[0m"
+	if !colorize {
+		return s
 	}
-	return s
+	return tty.Colorize(s, color)
 }
 
 // handleGeneric renders any non-cache slog record (the 76-odd general diagnostics
@@ -646,9 +674,9 @@ func (h *PrettyHandler) handleGeneric(colorize bool, r slog.Record) {
 	}
 	attrs := formatAttrs(r)
 	if colorize && attrs != "" {
-		attrs = "\x1b[2m" + attrs + "\x1b[0m"
+		attrs = tty.Colorize(attrs, colDim)
 	}
-	h.printf("%s %s%s\n", h.glyph(colorize, label, color), r.Message, attrs)
+	h.printf("%s %s%s\n", glyph(colorize, label, color), r.Message, attrs)
 }
 
 // formatAttrs renders a record's attrs as " key=value" pairs, skipping the noisy
@@ -672,10 +700,26 @@ func (h *PrettyHandler) printRepro(colorize bool, project, target string) {
 	}
 	repro := clihint.Run.With(target, project)
 	if colorize {
-		h.printf("  \x1b[2m%s\x1b[0m\n", repro)
+		h.printf("  %s\n", repro)
 	} else {
 		h.printf("  %s\n", repro)
 	}
+}
+
+// failureReport is one failure as printFailure needs it.
+//
+// A struct rather than a parameter list because the list had five adjacent
+// strings - label, project, target, cause, ref, logPath - and any two of them
+// transposed compiles cleanly and prints a plausible, wrong failure. Named
+// fields make the same mistake unwriteable.
+type failureReport struct {
+	label   string
+	project string
+	target  string
+	dur     time.Duration
+	cause   string
+	ref     string
+	logPath string
 }
 
 // printFailure keeps the failure and every useful next step together so a reader
@@ -686,7 +730,9 @@ func (h *PrettyHandler) printRepro(colorize bool, project, target string) {
 // lines stay in the scrolling region so the user can copy them with
 // normal terminal selection. Non-TTY writers and disabled regions fall
 // through to plain output unchanged.
-func (h *PrettyHandler) printFailure(colorize bool, label, project, target string, dur time.Duration, cause, ref, logPath string) {
+func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
+	label, project, target := f.label, f.project, f.target
+	dur, cause, ref, logPath := f.dur, f.cause, f.ref, f.logPath
 	heading := label
 	if target != "" {
 		heading += " " + target
@@ -703,11 +749,11 @@ func (h *PrettyHandler) printFailure(colorize bool, label, project, target strin
 		// close that with its own reset, leaving the project and target after
 		// it in the default colour.
 		h.failures[h.failureAt] = Failure{
-			Project: project,
-			Target:  target,
-			Ref:     ref,
-			LogPath: logPath,
-			Heading: fmt.Sprintf("%s %s (ran, %s)", h.glyph(false, "fail", colRed), heading, fmtDur(dur)),
+			Project:   project,
+			Target:    target,
+			OutputRef: ref,
+			LogPath:   logPath,
+			Heading:   fmt.Sprintf("%s %s (ran, %s)", glyph(false, "fail", colRed), heading, fmtDur(dur)),
 		}
 		h.failureAt = (h.failureAt + 1) % failureRows
 		pinned = h.repaint()
@@ -722,7 +768,7 @@ func (h *PrettyHandler) printFailure(colorize bool, label, project, target strin
 		// short-circuit printf and swallow the cause, output ref, and reproduce
 		// command below, which is the detail the user most needs on the one
 		// path where the terminal is already misbehaving.
-		h.printf("%s %s (ran, %s)\n", h.glyph(colorize, "fail", colRed), heading, fmtDur(dur))
+		h.printf("%s %s (ran, %s)\n", glyph(colorize, "fail", colRed), heading, fmtDur(dur))
 	}
 	if cause != "" {
 		causes := failureCauses(cause)
@@ -752,7 +798,7 @@ func (h *PrettyHandler) printFailure(colorize bool, label, project, target strin
 			// so magus cannot hit-test a click on them - they belong to the
 			// terminal's own selection. Terminals without OSC 8 get the plain
 			// command, which is what a reader copies anyway.
-			h.printf("  \x1b[2minspect: %s\x1b[0m\n", h.linkify(full, logPath))
+			h.printf("  %s\n", tty.Colorize("inspect: "+h.linkify(full, logPath), colDim))
 		} else {
 			h.printf("  inspect: %s\n", full)
 		}
@@ -764,7 +810,7 @@ func (h *PrettyHandler) printFailure(colorize bool, label, project, target strin
 	}
 	repro := clihint.Run.With(target, project)
 	if colorize {
-		h.printf("  \x1b[2mreproduce: %s\x1b[0m\n", repro)
+		h.printf("  %s\n", tty.Colorize("reproduce: "+repro, colDim))
 	} else {
 		h.printf("  reproduce: %s\n", repro)
 	}
@@ -776,7 +822,7 @@ func failureCauseExcerpt(cause string) string {
 	if len([]rune(cause)) <= maxRunes {
 		return cause
 	}
-	return string([]rune(cause)[:maxRunes-1]) + "…"
+	return string([]rune(cause)[:maxRunes-3]) + "..."
 }
 
 // hopChain rewrites a cause's dependency hops as a path and drops the plumbing
@@ -800,11 +846,10 @@ func hopChain(cause string) string {
 	pending := false // the previous segment was a marker, so this one is a hop
 	for i, seg := range segs {
 		switch {
-		case seg == marker && len(rest) == 0:
+		case seg == marker:
+			// rest is empty at the top of every iteration - the loop breaks the
+			// moment it is not - so there is nothing to guard against here.
 			pending = true
-			if i == 0 {
-				continue
-			}
 		case pending || (i == 0 && len(segs) > 1 && segs[1] == marker):
 			hops = append(hops, seg)
 			pending = false
@@ -845,7 +890,7 @@ func (h *PrettyHandler) printRef(colorize bool, ref string) {
 		return
 	}
 	if colorize {
-		h.printf("\x1b[2m%s\x1b[0m\n", ref)
+		h.printf("%s\n", ref)
 	} else {
 		h.printf("%s\n", ref)
 	}
@@ -878,16 +923,26 @@ func recordStrs(r slog.Record, key string) []string {
 	return out
 }
 
+// recordDur reads a duration attr, accepting both spellings callers use.
+//
+// slog.Int64("duration", int64(d)) arrives as KindInt64 and slog.Duration(...)
+// as KindDuration, and this used to accept only the first - so a caller using
+// the obvious constructor got a silent zero. internal/handler/mcp logs exactly
+// that shape. Harmless today only because the one reader of those records
+// ignores the field, which is not a property worth relying on.
 func recordDur(r slog.Record, key string) time.Duration {
 	var d time.Duration
 	r.Attrs(func(a slog.Attr) bool {
-		if a.Key == key {
-			if a.Value.Kind() == slog.KindInt64 {
-				d = time.Duration(a.Value.Int64())
-			}
-			return false
+		if a.Key != key {
+			return true
 		}
-		return true
+		switch a.Value.Kind() {
+		case slog.KindInt64:
+			d = time.Duration(a.Value.Int64())
+		case slog.KindDuration:
+			d = a.Value.Duration()
+		}
+		return false
 	})
 	return d
 }
@@ -897,7 +952,7 @@ func fmtDur(d time.Duration) string {
 	case d < time.Microsecond:
 		return fmt.Sprintf("%dns", d.Nanoseconds())
 	case d < time.Millisecond:
-		return fmt.Sprintf("%.0fµs", float64(d.Nanoseconds())/1000)
+		return fmt.Sprintf("%.0fus", float64(d.Nanoseconds())/1000)
 	case d < time.Second:
 		return fmt.Sprintf("%dms", d.Milliseconds())
 	case d < time.Second*10:
@@ -917,11 +972,18 @@ func plural(n int, noun string) string {
 	return fmt.Sprintf("%d %ss", n, noun)
 }
 
+// recordBool reads a bool attr, defaulting to false when it is absent or not a
+// bool. The kind check is not defensive padding: slog.Value.Bool PANICS on a
+// mismatch, and this runs inside a log handler, so a record carrying the wrong
+// type for a key would take down the process from the logging path. Its
+// siblings recordInt and recordDur already guard the same way.
 func recordBool(r slog.Record, key string) bool {
 	var v bool
 	r.Attrs(func(a slog.Attr) bool {
 		if a.Key == key {
-			v = a.Value.Bool()
+			if a.Value.Kind() == slog.KindBool {
+				v = a.Value.Bool()
+			}
 			return false
 		}
 		return true
@@ -958,6 +1020,20 @@ func remoteSuffix(remote, total time.Duration) string {
 	return ", " + fmtDur(remote) + " remote"
 }
 
+// notify resolves the band this handler raises notifications into.
+//
+// Resolved per call rather than held, because the process band is torn down and
+// rebuilt between runs (applyDisplay -> restoreTerminal -> CloseStderr) and a
+// cached pointer survives that teardown pointing at a closed notifier. A
+// handler that is not on standard error keeps its own, which nothing else
+// closes.
+func (h *PrettyHandler) notify() *tty.Notifier {
+	if h.notifier != nil {
+		return h.notifier
+	}
+	return tty.StderrNotifier()
+}
+
 // lockNotifyKey names the pinned notification raised while a run is queued
 // behind another process's workspace lock.
 const lockNotifyKey = "lock.waiting"
@@ -983,10 +1059,10 @@ func (h *PrettyHandler) blockedMessage() string {
 type Failure struct {
 	Project string
 	Target  string
-	// Ref is the output reference for the captured log, the same one the
+	// OutputRef is the reference for the captured log, the same one the
 	// scrolling `inspect:` line names. Deterministic, so it stays valid for as
 	// long as the entry is in the cache.
-	Ref string
+	OutputRef string
 	// LogPath is where the captured output was written. It is what makes the
 	// ref linkable: a file:// URL resolves with nothing running.
 	LogPath string
@@ -1018,9 +1094,14 @@ func (h *PrettyHandler) HitFailure(row int) (Failure, bool) {
 	return f, true
 }
 
-// Failures returns the failures currently pinned in the band, oldest row
-// first, skipping empty slots. It is the keyboard counterpart to HitFailure:
-// a caller offering "select with the arrow keys" needs the list, not a row.
+// Failures returns the failures currently pinned in the band, in the order they
+// are DRAWN, skipping empty slots. It is the keyboard counterpart to
+// HitFailure: a caller offering "select with the arrow keys" needs the list,
+// not a row.
+//
+// Drawn order, not arrival order. The ring keeps a failure in the row it was
+// painted into, so once it has wrapped the oldest entry sits in the middle -
+// and the list has to match the screen, because a reader picks by position.
 func (h *PrettyHandler) Failures() []Failure {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -1061,13 +1142,6 @@ func (h *PrettyHandler) SetSelection(n int) {
 	}
 }
 
-// RendersBand reports whether this handler is driving a terminal band, so a
-// caller can skip an interactive step that would have nothing to act on.
-//
-// Not named Enabled: that one belongs to slog.Handler and answers an entirely
-// different question (whether a level is worth handling).
-func (h *PrettyHandler) RendersBand() bool { return h.rendersStatus() }
-
 // hasPinnedFailures reports whether any ring slot is occupied. Callers hold h.mu.
 func (h *PrettyHandler) hasPinnedFailures() bool {
 	for _, f := range h.failures {
@@ -1083,6 +1157,17 @@ func (h *PrettyHandler) hasPinnedFailures() bool {
 func (h *PrettyHandler) ReleaseBand() error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	return h.releaseBand()
+}
+
+// releaseBand hands the rows back and forgets any selection. Callers hold h.mu.
+//
+// One body under two exported names, which is deliberate rather than sloppy:
+// Close is the io.Closer a caller defers, ReleaseBand is what an interactive
+// prompt calls when it is done with rows it asked to keep past the summary.
+// They mean different things to their callers and the same thing to the
+// terminal.
+func (h *PrettyHandler) releaseBand() error {
 	h.selected = -1
 	return h.lease.Release()
 }

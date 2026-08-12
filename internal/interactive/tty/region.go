@@ -16,14 +16,14 @@ const (
 	minUsefulWidth  = 20
 )
 
-// Region pins the bottom rows of a terminal as a zone that does not
+// region pins the bottom rows of a terminal as a zone that does not
 // scroll, so what is drawn there stays on screen while ordinary output
 // continues to scroll above. The zone is established with DECSTBM scroll
 // margins.
 //
 // Callers do not build one directly: [Zone] owns the terminal's bottom rows
 // for the whole process and hands out bands of them as leases. A second
-// Region on the same terminal would set its own margins from its own row
+// region on the same terminal would set its own margins from its own row
 // arithmetic, and the two would overwrite each other.
 //
 // The contract is additive, never destructive:
@@ -59,11 +59,11 @@ const (
 // difference between a useful status area and the full-screen takeovers
 // some build tools use.
 //
-// A Region is not safe for concurrent use. [Zone] is the boundary that makes
-// it so: every access to the Region it owns goes through the zone's mutex,
+// A region is not safe for concurrent use. [Zone] is the boundary that makes
+// it so: every access to the region it owns goes through the zone's mutex,
 // because the consumers leasing from it (a run's pool, a notification
 // sweeper, a daemon job) are on different threads.
-type Region struct {
+type region struct {
 	w      io.Writer
 	probe  Probe
 	fd     uintptr
@@ -83,14 +83,14 @@ type Region struct {
 	// buf composes one line so it reaches the terminal as a single
 	// Write. Keeps cursor positioning atomic and avoids per-byte flicker.
 	buf []byte
-	// painted is the last frame [Region.Render] drew, so the next one can skip
+	// painted is the last frame [region.render] drew, so the next one can skip
 	// rows that did not change. Nil means "nothing on screen is known", which
 	// is the state after any repaint of the zone by other means (Reserve
 	// clears it, a resize re-reserves), and forces a full redraw.
-	painted []Row
+	painted []Line
 }
 
-// NewRegion returns a Region that will pin height rows at the bottom of
+// newRegion returns a region that will pin height rows at the bottom of
 // the terminal behind w, measured through p.
 //
 // Nothing is written to w here. The reservation happens on Reserve, or on
@@ -99,11 +99,11 @@ type Region struct {
 // attempted at all: it is false when w has no descriptor, when p says
 // the descriptor is not a terminal, when the terminal is too small to
 // host height rows alongside a useful scrolling area, or when the size
-// query fails. A disabled Region is safe to use and writes plain lines.
+// query fails. A disabled region is safe to use and writes plain lines.
 //
 // Pass [SystemProbe] in production; tests pass their own Probe.
-func NewRegion(w io.Writer, height int, p Probe) *Region {
-	r := &Region{w: w, probe: p, height: height, buf: make([]byte, 0, 256)}
+func newRegion(w io.Writer, height int, p Probe) *region {
+	r := &region{w: w, probe: p, height: height, buf: make([]byte, 0, 256)}
 	if height <= 0 {
 		return r
 	}
@@ -127,30 +127,30 @@ func fits(width, termHeight, height int) bool {
 	return width >= minUsefulWidth && termHeight >= minUsefulHeight+height
 }
 
-// Enabled reports whether this Region will drive the terminal. When false,
+// Enabled reports whether this region will drive the terminal. When false,
 // Render drops its rows and Reserve and Release do nothing.
-func (r *Region) Enabled() bool { return r.enabled }
+func (r *region) isEnabled() bool { return r.enabled }
 
 // Reserve sets the scroll margins so the bottom rows stop scrolling.
-// Idempotent, and Render calls it for you, so callers do not have to pair
+// Idempotent, and render calls it for you, so callers do not have to pair
 // them.
 //
 // The terminal is re-measured here rather than trusting the dimensions
 // from NewRegion: the window may have been resized in between, and
 // applying stale margins would put the cursor outside the scroll region.
-// If the terminal has since become too small, the Region disables itself
+// If the terminal has since become too small, the region disables itself
 // and the caller falls back to plain output.
 //
 // It leaves the caller's cursor exactly where it found it, relative to the
 // caller's own output. That is the whole contract this type keeps (see
-// [Region]), and it is what the opening index sequences are for: moving down
+// [region]), and it is what the opening index sequences are for: moving down
 // height rows and stepping back up over them guarantees height rows exist
 // below the cursor without moving the cursor relative to the text. When the
 // cursor was already at the bottom, the screen scrolls and the transcript
 // slides up out of the way; when it was mid-screen, nothing scrolls and the
 // step back is exact. One sequence, correct either way, and it never
 // destroys a row the caller had written.
-func (r *Region) Reserve() error {
+func (r *region) reserve() error {
 	if !r.enabled || r.open {
 		return nil
 	}
@@ -203,7 +203,7 @@ func (r *Region) Reserve() error {
 // held across calls, because it is a single global slot - the terminal has
 // exactly one - and treating it as ownable for the life of the region is
 // what previously made a repaint and a teardown fight over it.
-func (r *Region) paint(row int, body func()) error {
+func (r *region) paint(row int, body func()) error {
 	r.buf = r.buf[:0]
 	r.buf = append(r.buf, cursorSave...)
 	r.buf = append(r.buf, fmt.Sprintf(cupFmt, row, 1)...)
@@ -234,25 +234,25 @@ const (
 // first resize.
 type Span struct {
 	Text  string
-	Style string
+	Style SGR
 	Align Align
 }
 
-// Row is one line of a whole-zone repaint.
+// Line is one line of a whole-zone repaint.
 //
 // Text and Style are shorthand for the overwhelmingly common single-span row;
 // Spans is the general form and wins when both are set. They are not two code
-// paths - [Row.spans] normalises the shorthand into a one-element list and the
+// paths - [Line.spans] normalises the shorthand into a one-element list and the
 // renderer only ever sees spans - so the convenience cannot drift from the
 // general case.
-type Row struct {
+type Line struct {
 	Text  string
-	Style string
+	Style SGR
 	Spans []Span
 }
 
-// spans normalises a Row into the form the renderer works with.
-func (r Row) spans() []Span {
+// spans normalises a Line into the form the renderer works with.
+func (r Line) spans() []Span {
 	if len(r.Spans) > 0 {
 		return r.Spans
 	}
@@ -263,8 +263,8 @@ func (r Row) spans() []Span {
 }
 
 // equal reports whether two rows would paint identically. Row carries a slice,
-// so the frame diff in [Region.Render] cannot use ==.
-func (r Row) equal(o Row) bool {
+// so the frame diff in [region.render] cannot use ==.
+func (r Line) equal(o Line) bool {
 	a, b := r.spans(), o.spans()
 	if len(a) != len(b) {
 		return false
@@ -340,41 +340,35 @@ func layout(spans []Span, width int) []byte {
 
 // appendStyled writes text wrapped in sgr, closing it so the next span cannot
 // inherit it. An empty sgr writes the text bare rather than an empty sequence.
-func appendStyled(b []byte, text, sgr string) []byte {
+func appendStyled(b []byte, text string, sgr SGR) []byte {
 	if sgr == "" {
 		return append(b, text...)
 	}
-	b = append(b, fmt.Sprintf(sgrFmt, sgr)...)
+	b = append(b, fmt.Sprintf(sgrFmt, string(sgr))...)
 	b = append(b, text...)
 	return append(b, sgrReset...)
 }
 
 // Render repaints the ENTIRE reserved zone from rows, in a single write.
 //
-// It is the counterpart to [Region.WriteLine], for content that is a VIEW
-// rather than a record. WriteLine appends into a ring, so a line, once
-// written, stays until something newer displaces it; that is right for
-// failures and wrong for anything that can disappear on its own. Render draws
-// the whole zone every time, which is what lets an entry vanish: rows past the
-// end of the slice are erased, so a list that shrank leaves no residue behind
-// it.
+// The whole zone is drawn every time, which is what lets an entry VANISH: rows
+// past the end of the slice are erased, so a list that shrank leaves no residue
+// behind it. An append-only surface could not express that - a line, once
+// written, would stay until something newer displaced it.
 //
 // Rows beyond the zone's height are DROPPED rather than scrolled. The caller
 // owns the choice of which entries fit, because only it knows whether the
 // newest or the oldest is the one worth keeping.
 //
-// A disabled Region drops the call entirely rather than printing the rows, for
-// the reason [Region.SetStatus] gives: a repainted view replayed line by line
-// into a pipe or a CI log is noise, not information.
-//
-// A Region is driven EITHER by WriteLine/SetStatus or by Render, not both:
-// they keep separate ideas of which rows are spoken for, and interleaving them
-// makes each overwrite the other's.
-func (r *Region) Render(rows []Row) error {
+// A disabled region drops the call entirely rather than printing the rows: a
+// repainted view replayed line by line into a pipe or a CI log is noise, not
+// information. The caller decides what to print instead, because only it knows
+// whether its content is a record or a view.
+func (r *region) render(rows []Line) error {
 	if !r.enabled {
 		return nil
 	}
-	if err := r.Reserve(); err != nil {
+	if err := r.reserve(); err != nil {
 		return err
 	}
 	if !r.enabled {
@@ -401,7 +395,7 @@ func (r *Region) Render(rows []Row) error {
 	r.buf = append(r.buf, cursorSave...)
 	changed := 0
 	for i := range r.height {
-		var row Row
+		var row Line
 		if i < len(rows) {
 			row = rows[i]
 		}
@@ -430,15 +424,23 @@ func (r *Region) Render(rows []Row) error {
 	// zone still records the blanks it drew and the next frame does not
 	// needlessly rewrite them.
 	if cap(r.painted) < r.height {
-		r.painted = make([]Row, r.height)
+		r.painted = make([]Line, r.height)
 	}
 	r.painted = r.painted[:r.height]
 	for i := range r.height {
-		if i < len(rows) {
-			r.painted[i] = rows[i]
+		if i >= len(rows) {
+			r.painted[i] = Line{}
 			continue
 		}
-		r.painted[i] = Row{}
+		// The Spans slice is COPIED, not aliased. Storing the caller's slice
+		// would let a caller that reuses one across frames mutate what this
+		// believes is on screen, so equal would compare a frame against itself
+		// and the diff would skip a row that really changed.
+		row := rows[i]
+		if len(row.Spans) > 0 {
+			row.Spans = append([]Span(nil), row.Spans...)
+		}
+		r.painted[i] = row
 	}
 	return nil
 }
@@ -461,7 +463,7 @@ func (r *Region) Render(rows []Row) error {
 // draws its prompt at the top of the screen and its first redraw erases
 // everything below, wiping the transcript the run had just produced. It looks
 // like the output flashed up and vanished.
-func (r *Region) Release() error {
+func (r *region) release() error {
 	if !r.enabled || !r.open {
 		return nil
 	}
@@ -478,7 +480,7 @@ func (r *Region) Release() error {
 
 // firstRow is the top of the reserved zone, in absolute terminal rows, using
 // the dimensions cached at Reserve.
-func (r *Region) firstRow() int { return r.termHeight - r.height + 1 }
+func (r *region) firstRow() int { return r.termHeight - r.height + 1 }
 
 // reflow re-measures the terminal and re-applies the scroll margins when
 // the window has been resized since the region was reserved.
@@ -491,7 +493,7 @@ func (r *Region) firstRow() int { return r.termHeight - r.height + 1 }
 //
 // A window that has shrunk below what the region needs disables it, and
 // the caller falls back to plain output for the rest of the run.
-func (r *Region) reflow() error {
+func (r *region) reflow() error {
 	width, termHeight, err := r.probe.Size(r.fd)
 	if err != nil {
 		return err
@@ -502,7 +504,7 @@ func (r *Region) reflow() error {
 	if !fits(width, termHeight, r.height) {
 		// Give the rows back before standing down, or the shell keeps the
 		// old margins after the run ends.
-		if relErr := r.Release(); relErr != nil {
+		if relErr := r.release(); relErr != nil {
 			return relErr
 		}
 		r.enabled = false
@@ -513,7 +515,7 @@ func (r *Region) reflow() error {
 	// zone; the previous contents scrolled or clipped with the resize and
 	// cannot be located reliably.
 	r.open = false
-	if err := r.Reserve(); err != nil {
+	if err := r.reserve(); err != nil {
 		return err
 	}
 	return nil
@@ -526,26 +528,28 @@ const ellipsis = "..."
 // Clip returns msg shortened to fit n bytes, ending in an ellipsis when
 // truncation happened.
 //
-// n bounds the whole result, ellipsis included. Callers size n from the
-// terminal width, so a result that overshot would wrap onto a second
-// screen row and desynchronise the one-row-per-line cursor accounting.
+// nBytes bounds the whole result, ellipsis included, and is a BYTE budget -
+// the name says so because both in-package callers size it from a column count,
+// which is exact for ASCII and conservative for anything else. Text that is
+// already styled needs [ClipVisible] instead: escape bytes would eat this
+// budget and the cut would land inside a sequence.
 // Truncation never splits a UTF-8 sequence: a multi-byte rune straddling
 // the cut is dropped whole.
 //
 // Counting bytes rather than display cells is exact for the ASCII this
 // package emits, and conservative (never over-wide) for anything else.
-func Clip(msg string, n int) string {
-	if n <= 0 {
+func Clip(msg string, nBytes int) string {
+	if nBytes <= 0 {
 		return ""
 	}
-	if len(msg) <= n {
+	if len(msg) <= nBytes {
 		return msg
 	}
-	if n <= len(ellipsis) {
+	if nBytes <= len(ellipsis) {
 		// Too narrow to carry both content and a truncation mark.
-		return ellipsis[:n]
+		return ellipsis[:nBytes]
 	}
-	cut := n - len(ellipsis)
+	cut := nBytes - len(ellipsis)
 	// Walk back until the cut lands on a rune boundary. Testing the byte
 	// AT the cut (rather than before it) is what drops a straddling rune
 	// whole: stopping on its lead byte would keep half a sequence and the
@@ -558,7 +562,7 @@ func Clip(msg string, n int) string {
 
 // ResetScrollMargins clears any DECSTBM margins on w unconditionally.
 //
-// Region.Release restores a region this process knows it opened. This is
+// region.Release restores a region this process knows it opened. This is
 // the process-exit counterpart, for the case where a run may have
 // reserved a region somewhere that the exiting code does not hold a
 // handle to. Margins belong to the terminal rather than to whoever set
@@ -571,7 +575,7 @@ func Clip(msg string, n int) string {
 // help` it was the only escape the whole command emitted, and it left the
 // cursor at row 1 for the shell to draw its prompt over the help text. Hence
 // the save/restore bracket - taken and released inside this one write, per the
-// register rule in [Region].
+// register rule in [region].
 //
 // No-op when w is not a terminal, so callers do not have to branch.
 func ResetScrollMargins(w io.Writer, p Probe) error {

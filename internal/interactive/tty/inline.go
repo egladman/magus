@@ -13,7 +13,8 @@ func NewInlineView(w io.Writer, p Probe) *InlineView {
 }
 
 // Reset forgets what is on screen, for a caller that cleared the terminal
-// underneath this view and is starting again.
+// underneath this view and is starting again - the watch loop does this when a
+// frame is too tall to redraw in place and it falls back to erasing the screen.
 func (v *InlineView) Reset() { v.painted = nil }
 
 // Lines reports how many rows the block currently occupies.
@@ -45,10 +46,10 @@ func (v *InlineView) Clear() error {
 // blank frame to composite in between.
 //
 // Erasing only the block leaves the transcript above it untouched and visible,
-// which is the same restraint [Region] keeps and the same thing the picker
+// which is the same restraint [region] keeps and the same thing the picker
 // has always done - this is that redraw, factored out.
 //
-// It is NOT a [Region]: there are no scroll margins and no reserved rows,
+// It is NOT a [region]: there are no scroll margins and no reserved rows,
 // because a watch view does not need to survive other output scrolling past. It
 // needs to sit in the transcript and be redrawn in place, which is cheaper and
 // works at any terminal height.
@@ -61,7 +62,7 @@ type InlineView struct {
 	painted []string
 }
 
-// paint draws frame in place of the previous one, reporting whether it could.
+// Paint draws frame in place of the previous one, reporting whether it could.
 //
 // A false return means the frame does not fit the redraw model and the caller
 // should fall back: erasing in place walks the cursor UPWARD, so a block as
@@ -81,9 +82,14 @@ func (v *InlineView) Paint(frame string) bool {
 	// two rows while the accounting counted one, and every erase after it would
 	// be off by one - which shows up as the view slowly eating the transcript
 	// above it.
+	//
+	// ClipVisible, not Clip: a frame handed to this may already be styled, and
+	// counting its escape bytes against a column budget cuts a coloured row in
+	// the middle of a sequence. The terminal then reads what follows as
+	// parameters and eats it.
 	lines := strings.Split(strings.TrimRight(frame, "\n"), "\n")
 	for i, line := range lines {
-		lines[i] = Clip(line, width)
+		lines[i] = ClipVisible(line, width)
 	}
 	if len(lines) >= height {
 		return false
@@ -163,7 +169,7 @@ func moveRows(n int) string {
 	return ""
 }
 
-// finish moves off the block so a shell prompt does not land on its last line.
+// Finish moves off the block so a shell prompt does not land on its last line.
 // The frame is deliberately LEFT on screen: it is the answer the reader asked
 // for, and erasing it on the way out would be the takeover this type avoids.
 func (v *InlineView) Finish() {

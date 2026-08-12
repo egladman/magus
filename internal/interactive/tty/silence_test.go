@@ -10,6 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// No same-named source file, deliberately: this asserts one property across
+// every type in the package at once, which is the point - a new entry point
+// that forgets its gate fails here rather than in somebody's CI log.
+//
 // TestNothingIsWrittenToANonTerminal is the backstop for this whole package.
 //
 // Every type here exists to drive a terminal, and every one of them is supposed
@@ -27,7 +31,7 @@ func TestNothingIsWrittenToANonTerminal(t *testing.T) {
 		"Zone lease": func(t *testing.T, w *bytes.Buffer) {
 			z := NewZone(w, terminal(80, 24))
 			l := z.Acquire(4)
-			_, err := l.Set([]Row{{Text: "status", Style: SGRDim}})
+			_, err := l.Set([]Line{{Text: "status", Style: SGRDim}})
 			require.NoError(t, err)
 			require.NoError(t, l.Release())
 			require.NoError(t, z.Close())
@@ -36,7 +40,7 @@ func TestNothingIsWrittenToANonTerminal(t *testing.T) {
 			// Even an all-terminals probe cannot conjure a descriptor.
 			z := NewZone(w, terminal(200, 60))
 			l := z.Acquire(6)
-			_, err := l.Set([]Row{{Text: "x"}})
+			_, err := l.Set([]Line{{Text: "x"}})
 			require.NoError(t, err)
 		},
 		"Notifier": func(t *testing.T, w *bytes.Buffer) {
@@ -46,11 +50,11 @@ func TestNothingIsWrittenToANonTerminal(t *testing.T) {
 			require.NoError(t, n.Clear("lock"))
 			require.NoError(t, n.Close())
 		},
-		"Region": func(t *testing.T, w *bytes.Buffer) {
-			r := NewRegion(w, 5, terminal(80, 24))
-			require.NoError(t, r.Reserve())
-			require.NoError(t, r.Render([]Row{{Text: "boom", Style: SGRBoldRed}}))
-			require.NoError(t, r.Release())
+		"region": func(t *testing.T, w *bytes.Buffer) {
+			r := newRegion(w, 5, terminal(80, 24))
+			require.NoError(t, r.reserve())
+			require.NoError(t, r.render([]Line{{Text: "boom", Style: SGRBoldRed}}))
+			require.NoError(t, r.release())
 		},
 		"ClearScreen and margin reset": func(t *testing.T, w *bytes.Buffer) {
 			require.NoError(t, ResetScrollMargins(w, terminal(80, 24)))
@@ -118,12 +122,12 @@ func TestNothingIsRenderedOnADumbTerminal(t *testing.T) {
 	assert.False(t, WantsColor(&buf, terminal(80, 24)), "this is what the docs always claimed")
 	assert.False(t, WantsHyperlinks(&buf, terminal(80, 24)))
 
-	assert.False(t, NewRegion(&buf, 5, terminal(80, 24)).Enabled())
+	assert.False(t, newRegion(&buf, 5, terminal(80, 24)).isEnabled())
 
 	z := NewZone(&buf, terminal(80, 24))
 	l := z.Acquire(5)
 	assert.False(t, l.Enabled())
-	_, err := l.Set([]Row{{Text: "status"}})
+	_, err := l.Set([]Line{{Text: "status"}})
 	require.NoError(t, err)
 
 	n := NewNotifier(z, 3)
@@ -146,7 +150,7 @@ func TestACapableTerminalStillRenders(t *testing.T) {
 	z := NewZone(&buf, terminal(80, 24))
 	l := z.Acquire(5)
 	require.True(t, l.Enabled())
-	rendered, err := l.Set([]Row{{Text: "status", Style: SGRDim}})
+	rendered, err := l.Set([]Line{{Text: "status", Style: SGRDim}})
 	require.NoError(t, err)
 	assert.True(t, rendered)
 	assert.Contains(t, buf.String(), "status")

@@ -10,11 +10,11 @@ import (
 // Notifier renders a stack of expiring notifications - toasts - into a band of
 // a [Zone].
 //
-// It is the piece a Region alone cannot be. A Region's WriteLine is a RECORD:
-// once written, a line stays until something newer displaces it, which is right
-// for a failure and wrong for anything that should disappear on its own. A
-// toast has to vanish with nothing to replace it, so the whole band is
-// re-composited on every change and expiry simply produces a shorter frame.
+// A toast has to VANISH with nothing to replace it, which an append-only
+// surface cannot express: a line written into one stays until something newer
+// displaces it, and that is right for a failure and wrong here. So the whole
+// band is re-composited on every change, and expiry simply produces a shorter
+// frame.
 //
 // Expiry is driven by a sweeper goroutine, because a toast that only expired
 // when the next one arrived would not be a toast - it would be a log that
@@ -52,7 +52,7 @@ type Notifier struct {
 // pushes it out of the band, or the notifier is closed.
 type toast struct {
 	text     string
-	style    string
+	style    SGR
 	deadline time.Time
 	// key names a CONDITION this toast reports, for one raised by [Notifier.Pin]
 	// and retracted by [Notifier.Clear]. Empty for an ordinary transient
@@ -99,7 +99,7 @@ func (n *Notifier) ensureLease() bool {
 // terminal (6 + 3 leased leaves 15 scrolling, over the 8-row minimum).
 const notifyRows = 3
 
-// A mutex rather than a sync.Once, because CloseStderr reads this from the
+// A mutex rather than a sync.Once, because ReleaseStderr reads this from the
 // exit path - including the signal-driven one - while another goroutine may
 // still be reaching for the notifier. A Once orders its own callers and says
 // nothing about a reader outside it.
@@ -138,10 +138,10 @@ func NotifierFor(w io.Writer) *Notifier {
 	return NewNotifier(NewZone(w, SystemProbe), notifyRows)
 }
 
-// CloseStderr stops the process's notification band and hands back every
+// ReleaseStderr stops the process's notification band and hands back every
 // leased row on standard error. It is the exit-path counterpart to the lazy
 // singletons above, and is safe to call when neither was ever used.
-func CloseStderr() error {
+func ReleaseStderr() error {
 	stderrNotifierMu.Lock()
 	n := stderrNotifierVal
 	stderrNotifierVal = nil
@@ -167,7 +167,7 @@ func CloseStderr() error {
 // the stack overflows its rows the OLDEST is dropped: a notification the reader
 // has already had time to see is the right one to lose, and silently discarding
 // the newest would make a burst look like nothing happened.
-func (n *Notifier) Notify(text, style string, ttl time.Duration) error {
+func (n *Notifier) Notify(text string, style SGR, ttl time.Duration) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	if !n.ensureLease() {
@@ -200,7 +200,7 @@ func (n *Notifier) Notify(text, style string, ttl time.Duration) error {
 //
 // A pinned notification never expires on a clock and is evicted only when the
 // band is full of other pins. Transient notifications lose their row first.
-func (n *Notifier) Pin(key, text, style string) error {
+func (n *Notifier) Pin(key, text string, style SGR) error {
 	if key == "" {
 		return nil
 	}
@@ -252,11 +252,20 @@ func (n *Notifier) Clear(key string) error {
 // Without that preference a burst of ordinary notifications would push out the
 // standing report of a condition, which is the one message that cannot be
 // re-sent: it was raised once, when the condition began.
-func (n *Notifier) evict() {
-	for len(n.toasts) > n.max {
+func (n *Notifier) evict() { n.toasts = trim(n.toasts, n.max) }
+
+// trim reduces toasts to at most n entries, dropping the oldest TRANSIENT
+// first and only falling back to pins when there is nothing else to give up.
+//
+// Shared with the paint path, which used to truncate from the front instead.
+// That was a second, contradictory copy of this rule: a band that could not
+// grow silently discarded a pinned condition, and a pin dropped that way is
+// unreachable by Clear, which then no-ops forever on a condition still true.
+func trim(toasts []toast, n int) []toast {
+	for len(toasts) > n {
 		victim := -1
-		for i := range n.toasts {
-			if n.toasts[i].key == "" {
+		for i := range toasts {
+			if toasts[i].key == "" {
 				victim = i
 				break
 			}
@@ -264,8 +273,9 @@ func (n *Notifier) evict() {
 		if victim < 0 {
 			victim = 0
 		}
-		n.toasts = append(n.toasts[:victim], n.toasts[victim+1:]...)
+		toasts = append(toasts[:victim], toasts[victim+1:]...)
 	}
+	return toasts
 }
 
 // Close stops the sweeper and gives the band back. Idempotent and safe to
@@ -392,18 +402,23 @@ func (n *Notifier) paint() error {
 	// A refusal is not an error: the stack simply stays as tall as the terminal
 	// allowed, and the oldest entry drops as usual.
 	if len(n.toasts) > n.lease.Rows() {
-		n.lease.Grow(min(len(n.toasts), n.max))
+		// A refused grow is not an error: the stack simply stays as tall as the
+		// terminal allowed. A failed repaint is reported by the Set below.
+		_, _ = n.lease.Grow(min(len(n.toasts), n.max))
 	}
 	height := n.lease.Rows()
-	rows := make([]Row, height)
-	offset := height - len(n.toasts)
-	if offset < 0 {
-		// More toasts than rows: show the newest that fit.
-		n.toasts = n.toasts[len(n.toasts)-height:]
-		offset = 0
+	rows := make([]Line, height)
+	// The band may hold fewer rows than the stack when a grow was refused.
+	// Choose what to SHOW by the same rule eviction uses, on a copy - the model
+	// is not the view, and rendering must not destroy a pin the reader still
+	// needs.
+	shown := n.toasts
+	if len(shown) > height {
+		shown = trim(append([]toast(nil), shown...), height)
 	}
-	for i, t := range n.toasts {
-		rows[offset+i] = Row{Text: t.text, Style: t.style}
+	offset := height - len(shown)
+	for i, t := range shown {
+		rows[offset+i] = Line{Text: t.text, Style: t.style}
 	}
 	_, err := n.lease.Set(rows)
 	return err

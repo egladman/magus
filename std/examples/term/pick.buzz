@@ -2,12 +2,20 @@ import "std";
 import "term";
 
 // pick RAISES when there is no terminal, so an interactive step that also has to
-// run unattended guards on isInteractive and declares its own default.
+// run unattended guards on isInteractive and declares its own default. It raises
+// again when the reader aborts with ESC or Ctrl-C, which is why the call is
+// caught rather than merely guarded: a cancel is not a choice.
 final projects = ["console", "docs", "libs/gopherbuzz"];
 
-final chosen = if (term\isInteractive())
-    projects[term\pick(projects, prompt: "project")]
-else
-    projects[0];
+fun choose() > str {
+    if (!term\isInteractive()) {
+        return projects[0];
+    }
+    try {
+        return projects[term\pick(projects, prompt: "project")];
+    } catch (e) {
+        return projects[0];
+    }
+}
 
-std\print(term\colorize(chosen, term\TermStyle.brightGreen));
+std\print(term\colorize(choose(), style: term\TermStyle.brightGreen));

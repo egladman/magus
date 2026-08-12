@@ -181,7 +181,7 @@ func TestZoneHitTestResolvesAClickToItsLease(t *testing.T) {
 	z := NewZone(&buf, terminal(80, 24))
 	failures := z.Acquire(6)
 	toasts := z.Acquire(3)
-	_, err := failures.Set([]Row{{Text: "pool"}})
+	_, err := failures.Set([]Line{{Text: "pool"}})
 	require.NoError(t, err)
 
 	// 9 leased rows on a 24-row terminal: the zone starts at row 16.
@@ -213,7 +213,7 @@ func TestZoneHitTestRejectsScrollingRows(t *testing.T) {
 	var buf ttyBuf
 	z := NewZone(&buf, terminal(80, 24))
 	l := z.Acquire(6)
-	_, err := l.Set([]Row{{Text: "pool"}})
+	_, err := l.Set([]Line{{Text: "pool"}})
 	require.NoError(t, err)
 
 	// One 6-row lease on a 24-row terminal reserves rows 19-24; everything
@@ -409,4 +409,53 @@ func TestCursorPositionReadsARealReply(t *testing.T) {
 	ev, err := in.Read()
 	require.NoError(t, err)
 	assert.Equal(t, 'k', ev.Rune, "the keystroke that overtook the reply survived")
+}
+
+func TestInputDecodesABareEscapeWithoutWaiting(t *testing.T) {
+	t.Parallel()
+	// Escape is the key a reader presses when they want out, so it must not
+	// wait for a second keypress. Peek on an empty buffer issues a read and
+	// blocks; the decision has to be made on what has already arrived.
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = r.Close(); _ = w.Close() })
+
+	_, err = w.WriteString("\x1b")
+	require.NoError(t, err)
+
+	in := &Input{r: bufio.NewReader(r), in: r, now: time.Now}
+	done := make(chan Event, 1)
+	go func() {
+		ev, readErr := in.Read()
+		if readErr == nil {
+			done <- ev
+		}
+	}()
+
+	select {
+	case ev := <-done:
+		assert.Equal(t, KeyEscape, ev.Key)
+	case <-time.After(2 * time.Second):
+		t.Fatal("a bare escape must decode immediately, not wait for the next key")
+	}
+}
+
+func TestCursorPositionDropsTheRemainsOfATimedOutReply(t *testing.T) {
+	t.Parallel()
+	// The deadline can fire part-way through a sequence. Its tail must not be
+	// left for the next decode to read as fresh keystrokes - a half-arrived
+	// reply would surface as a stray bracket or letter the user never typed.
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = r.Close(); _ = w.Close() })
+
+	// The front of a CPR reply, and nothing more: the terminal stalled.
+	_, err = w.WriteString("\x1b[12;")
+	require.NoError(t, err)
+
+	var out ttyBuf
+	in := &Input{r: bufio.NewReader(r), in: r, out: &out, now: time.Now}
+	_, _, ok := in.CursorPosition()
+	require.False(t, ok)
+	assert.Zero(t, in.r.Buffered(), "the partial reply is discarded, not left to be misread")
 }

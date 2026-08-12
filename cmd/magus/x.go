@@ -140,7 +140,7 @@ func pickProject(all []*types.Project, filters []string) (*types.Project, error)
 	for i, s := range scored {
 		items[i] = s.P.Path
 	}
-	idx, err := tty.Pick(items, tty.Options{
+	idx, err := tty.Pick(os.Stdin, os.Stderr, tty.SystemProbe, items, tty.PickOptions{
 		Prompt:        "project",
 		InitialFilter: "",
 	})
@@ -159,7 +159,7 @@ func pickTarget(last string) (string, error) {
 			break
 		}
 	}
-	idx, err := tty.Pick(xTargets, tty.Options{
+	idx, err := tty.Pick(os.Stdin, os.Stderr, tty.SystemProbe, xTargets, tty.PickOptions{
 		Prompt:  "target",
 		Initial: initial,
 		MaxRows: len(xTargets),

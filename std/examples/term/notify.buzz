@@ -5,11 +5,11 @@ import "term";
 // must survive the run goes through log as well.
 term\notify("docs regenerated");
 
-// Severity picks the colour; the default ttl is 5 seconds.
+// Severity picks the color; the default ttl is 5 seconds.
 term\notify("cache stampede on go-build", level: term\LogLevel.warn);
 
 // A longer ttl for something worth reading twice.
 term\notify("deploy skipped: no credentials", level: term\LogLevel.error, ttl_ms: 15000);
 
-// A negative ttl pins it until newer notifications push it out of the band.
+// A negative ttl keeps it until newer notifications push it out of the band.
 term\notify("daemon unreachable", level: term\LogLevel.error, ttl_ms: -1);
