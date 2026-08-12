@@ -232,23 +232,11 @@
           "dependencies": [
             "bindings-generate"
           ],
-          "spells": [
-            {
-              "spell": "go",
-              "ops": [
-                "go-test"
-              ]
-            }
-          ],
           "reads_secrets": false,
           "writes_files": [
             {
               "glob": "internal/interp/bindings/testdata/magus-api.lock"
             }
-          ],
-          "exec_overrides": [
-            "env:UPDATE_MAGUS_API_LOCK=1",
-            "env:GOEXPERIMENT=jsonv2"
           ]
         },
         {

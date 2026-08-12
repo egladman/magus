@@ -56,11 +56,16 @@ export fun mgs_getName() > str { return "github-actions"; }
 // and invokes via magus\cache.remote(github). It declares no mgs_listTargets - a
 // cache backend contributes no operations a target could compose.
 
+// in_actions is the one condition the whole backend gates on. A private predicate
+// rather than a call to enabled() because enabled is a spell OP - it takes the op
+// signature - so the internal guards below cannot reuse it directly.
+fun in_actions() > bool { return getenv("GITHUB_ACTIONS") == "true"; }
+
 // enabled gates the whole backend on running under GitHub Actions. The cache
 // probes this once and skips fetch/push entirely when false, so wiring this spell
-// in a magusfile is a no-op everywhere except GHA — no remote calls, no exports.
+// in a magusfile is a no-op everywhere except GHA - no remote calls, no exports.
 export fun enabled(target: Target, cb: fun(any)) > bool {
-    return getenv("GITHUB_ACTIONS") == "true";
+    return in_actions();
 }
 
 // getenv reads one environment variable, returning "" when unset (os.env returns
@@ -122,7 +127,7 @@ fun rpc(method: str, payload: any) > any !> any {
 // get_artifact downloads the cache artifact for payload.hash into payload.dest. Returns
 // true on a hit (dest written), false on a miss or when not running under Actions.
 export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
-    if (base() == "" or !has_token()) { return false; }
+    if (!in_actions() or base() == "" or !has_token()) { return false; }
     final io = {};
     cb(io);
     final hash = "" + io["hash"];
@@ -140,7 +145,7 @@ export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
 // put_artifact uploads the artifact at payload.src for payload.hash. Returns true on
 // success or when another runner already stored the same key, else false.
 export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
-    if (base() == "" or !has_token()) { return false; }
+    if (!in_actions() or base() == "" or !has_token()) { return false; }
     final io = {};
     cb(io);
     final hash = "" + io["hash"];

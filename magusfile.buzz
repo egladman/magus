@@ -832,11 +832,21 @@ export fun bindings_generate(ctx: magus\Context, args: [str]) > void !> any {
 // unclaimed. Its CLI sibling is claimed only because man_generate happens to list it.
 //
 // -count=1 is load-bearing: go caches a passing test, and a replayed pass writes no file.
+//
+// proc\exec rather than the go-test OP, which is the opposite of the usual advice and
+// is measured, not stylistic: `go-test` hardcodes `./...` (spells/golang/spell.buzz)
+// and appends extra args after it, so the op form compiles every test binary in the
+// module to run one test. Inside `generate` that lands beside `ci`'s real `test` run -
+// which carries -race and declares memory_mb for exactly this reason - and the two
+// together are what a shard has to survive. GOEXPERIMENT matches the test target so
+// both share one build fingerprint instead of splitting the cache.
 export fun magusfile_api_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(bindings_generate);
     ctx.writesFiles("internal/interp/bindings/testdata/magus-api.lock");
-    go["go-test"](ctx.withEnv({"UPDATE_MAGUS_API_LOCK": "1", "GOEXPERIMENT": "jsonv2"}),
-        {"args": ["-count=1", "-run", "TestMagusSurfaceLocked", "./internal/interp/bindings/"]});
+    os\withEnv({"UPDATE_MAGUS_API_LOCK": "1", "GOEXPERIMENT": "jsonv2"}, fun () > void !> any {
+        proc\exec("go", ["test", "-count=1", "-run", "TestMagusSurfaceLocked",
+            "./internal/interp/bindings/"]);
+    });
 }
 
 // Regenerates the host-module snapshot the browser playground's completion and hover
