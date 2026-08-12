@@ -45,11 +45,11 @@ export fun loadReleases(site: Site) > void !> any {
     // Phase 1: read every manifest, keyed by version. manifestOrder preserves the
     // semver-descending order for the no-tags fallback (v0.10.0 before v0.2.0; a
     // lexicographic reversal gets that wrong).
-    var manifests: {str: Release} = mut {};
-    var manifestOrder: [str] = mut [<str>];
+    var manifests: mut {str: Release} = mut {};
+    var manifestOrder: mut [str] = mut [<str>];
     final relDir = site.root + "/releases";
     if (fs\isDir(relDir)) {
-        var names: [str] = mut [<str>];
+        var names: mut [str] = mut [<str>];
         foreach (name in fs\list(relDir)) {
             if (name.endsWith(".yaml")) { names.append(name); }
         }
@@ -64,10 +64,10 @@ export fun loadReleases(site: Site) > void !> any {
             final body = doc.q("body").stringValue();
             if (ver == "") { continue; } // skip malformed files
             // Notes sections. .list() returns null when the field is absent; guard first.
-            var notesAdded: [str] = mut [<str>];
-            var notesChanged: [str] = mut [<str>];
-            var notesFixed: [str] = mut [<str>];
-            var notesRemoved: [str] = mut [<str>];
+            var notesAdded: mut [str] = mut [<str>];
+            var notesChanged: mut [str] = mut [<str>];
+            var notesFixed: mut [str] = mut [<str>];
+            var notesRemoved: mut [str] = mut [<str>];
             final _addedList = doc.q("notes").q("added").list();
             if (_addedList != null) {
                 foreach (item in _addedList) { notesAdded.append(item.stringValue()); }
@@ -86,7 +86,7 @@ export fun loadReleases(site: Site) > void !> any {
             }
             final yanked = doc.q("yanked").booleanValue();
             // Artifacts, each name/platform/size/sha256.
-            var arts: [{str: str}] = mut [<{str: str}>];
+            var arts: mut [{str: str}] = mut [<{str: str}>];
             final artList = doc.q("artifacts").list();
             foreach (a in artList) {
                 arts.append(mut {
@@ -170,7 +170,7 @@ export fun renderPublic(site: Site) > void !> any {
     // Releases stay newest-first (loadReleases sorts by semver); each card is a
     // deep link to that version's GitHub release page rather than to any asset,
     // so there is one place that lists what a release actually contains.
-    var releases: [{str: any}] = mut [<{str: any}>];
+    var releases: mut [{str: any}] = mut [<{str: any}>];
     foreach (rel in site.releases) {
         releases.append(mut {
             "version": rel.version,
@@ -180,7 +180,7 @@ export fun renderPublic(site: Site) > void !> any {
         });
     }
 
-    var feeds: [{str: str}] = mut [<{str: str}>];
+    var feeds: mut [{str: str}] = mut [<{str: str}>];
     if (site.blogPosts.len() > 0) {
         feeds.append(mut {"name": "blog.atom.xml", "href": "atom/blog.atom.xml", "desc": "Blog posts, Atom 1.0"});
     }

@@ -69,7 +69,7 @@ fun fetchAll(dir: str) > int !> any {
 // productSlugs lists the cached responses, sorted, so the output does not depend on
 // what order the filesystem hands them back.
 fun productSlugs(dir: str) > [str] {
-    var names: [str] = mut [<str>];
+    var names: mut [str] = mut [<str>];
     foreach (name in fs\list(dir)) {
         if (name.endsWith(".json")) { names.append(name); }
     }
@@ -79,8 +79,8 @@ fun productSlugs(dir: str) > [str] {
 // buildDoc is the pure transform: files in, one document out. It reads no clock and
 // sends no request, so two runs over the same inputs produce identical bytes.
 fun buildDoc(upstreamDir: str, releasesDir: str, expiresAt: str) > {str: any} !> any {
-    var eol: {str: any} = mut {};
-    var inputs: [{str: any}] = mut [<{str: any}>];
+    var eol: mut {str: any} = mut {};
+    var inputs: mut [{str: any}] = mut [<{str: any}>];
     var newest = "";
 
     foreach (name in productSlugs(upstreamDir)) {
@@ -91,7 +91,7 @@ fun buildDoc(upstreamDir: str, releasesDir: str, expiresAt: str) > {str: any} !>
         var slug = result.q("name").stringValue();
         if (slug == "") { slug = name.replace(".json", with: ""); }
 
-        var cycles: [{str: any}] = mut [<{str: any}>];
+        var cycles: mut [{str: any}] = mut [<{str: any}>];
         final releases = result.q("releases").list();
         if (releases != null) {
             foreach (r in releases) {
@@ -120,7 +120,7 @@ fun buildDoc(upstreamDir: str, releasesDir: str, expiresAt: str) > {str: any} !>
     // generated_at is DERIVED from the newest input, never read from the clock:
     // rebuilding an old snapshot has to reproduce the old file exactly, and now()
     // would make that impossible.
-    var doc: {str: any} = mut {
+    var doc: mut {str: any} = mut {
         "schema_version": SCHEMA_VERSION,
         "generated_at": newest,
         "expires_at": expiresAt,
@@ -136,19 +136,19 @@ fun buildDoc(upstreamDir: str, releasesDir: str, expiresAt: str) > {str: any} !>
 // list public/release/index.json serves, carried here so a new binary needs one
 // file rather than two half-synced ones.
 fun loadReleases(dir: str) > [{str: any}] !> any {
-    var names: [str] = mut [<str>];
+    var names: mut [str] = mut [<str>];
     foreach (name in fs\list(dir)) {
         if (name.endsWith(".yaml")) { names.append(name); }
     }
     // Newest first, which for v0.N.M filenames is a reverse sort.
     final ordered = names.sort(fun (a: str, b: str) > bool { return a > b; });
 
-    var entries: [{str: any}] = mut [<{str: any}>];
+    var entries: mut [{str: any}] = mut [<{str: any}>];
     foreach (name in ordered) {
         final doc = serialize\Boxed.init(yaml\parse(fs\readFile(dir + "/" + name)));
         final version = doc.q("version").stringValue();
         if (version == "") { continue; }
-        var artifacts: [{str: any}] = mut [<{str: any}>];
+        var artifacts: mut [{str: any}] = mut [<{str: any}>];
         final list = doc.q("artifacts").list();
         if (list != null) {
             foreach (a in list) {
@@ -160,7 +160,7 @@ fun loadReleases(dir: str) > [{str: any}] !> any {
                 });
             }
         }
-        var entry: {str: any} = mut {"version": version, "artifacts": artifacts};
+        var entry: mut {str: any} = mut {"version": version, "artifacts": artifacts};
         if (doc.q("yanked").booleanValue()) { entry["yanked"] = true; }
         entries.append(entry);
     }

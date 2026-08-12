@@ -70,7 +70,7 @@ export fun renderPlayground(site: Site) > void !> any {
 // then take the first several real lines - so the card shows code, not the header comment.
 fun codeTeaser(src: str) > str {
     var started = false;
-    final kept: [str] = mut [<str>];
+    final kept: mut [str] = mut [<str>];
     foreach (line in src.split("\n")) {
         if (started == false) {
             final t = line.trim();
@@ -110,7 +110,7 @@ fun playgroundLink(root: str, src: str) > str {
 // tourSteps is the ordered curriculum, shared by the tour page and collectDemos (which
 // inverts each step's docSlug into a "see the demo" callout on the matching concept page).
 export fun tourSteps() > [TourStep] !> any {
-    final steps: [TourStep] = mut [<TourStep>];
+    final steps: mut [TourStep] = mut [<TourStep>];
     // Discovered from the directory, not from a list kept here. A hand-maintained
     // registry silently omitted steps 19 through 22 for as long as they existed: the
     // files were on disk, linted and shipped in sources, and simply never appeared on
@@ -121,7 +121,7 @@ export fun tourSteps() > [TourStep] !> any {
     // lets a step reference "step 8" in its prose and stay right.
     // glob returns Paths, and an immutable list that sort cannot mutate in place, so
     // take the relative value of each into a list this can order.
-    final files: [str] = mut [<str>];
+    final files: mut [str] = mut [<str>];
     foreach (f in fs\glob("tour/*.buzz")) { files.append(f.value); }
     final ordered = files.sort(fun (a: str, b: str) > bool { return a < b; });
     foreach (f in ordered) {

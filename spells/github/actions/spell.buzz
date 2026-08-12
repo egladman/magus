@@ -109,7 +109,7 @@ fun rpc(method: str, payload: any) > any !> any {
 // true on a hit (dest written), false on a miss or when not running under Actions.
 export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
     if (base() == "" or token() == "") { return false; }
-    var io = {};
+    final io = {};
     cb(io);
     final hash = "" + io["hash"];
     final dest = "" + io["dest"];
@@ -127,7 +127,7 @@ export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
 // success or when another runner already stored the same key, else false.
 export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
     if (base() == "" or token() == "") { return false; }
-    var io = {};
+    final io = {};
     cb(io);
     final hash = "" + io["hash"];
     final src = "" + io["src"];

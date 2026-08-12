@@ -49,7 +49,7 @@ export fun loadMeta(site: Site) > void {
 // people to reach for an escape hatch. Print the shortfall, let it be burned down, and promote
 // it to a throw once the number is at zero and staying there.
 export fun axisReport(site: Site) > void {
-    var thin: [str] = mut [<str>];
+    var thin: mut [str] = mut [<str>];
     foreach (p in site.docPages) {
         final n = site.pageAxes[p.url];
         if (n == null) { continue; }
@@ -70,7 +70,7 @@ export fun axisReport(site: Site) > void {
 // assetIntegrityCheck throws on any dangling href/src in the written output, so a
 // renamed bundle or forgotten alias fails the build instead of shipping a 404.
 export fun assetIntegrityCheck(site: Site) > void !> any {
-    var files: [str] = mut [<str>];
+    var files: mut [str] = mut [<str>];
     walkGen("", files, site);
     foreach (f in files) {
         if (f.endsWith(".html") == false and f.endsWith(".xml") == false and f.endsWith(".txt") == false) {
@@ -96,16 +96,16 @@ export fun assetIntegrityCheck(site: Site) > void !> any {
 export fun orphanCheck(site: Site) > void !> any {
     // Every written page, keyed the way pageKey() yields, so BFS can tell a page
     // link from an asset link.
-    var files: [str] = mut [<str>];
+    var files: mut [str] = mut [<str>];
     walkGen("", files, site);
-    var isPage: {str: bool} = mut {};
+    var isPage: mut {str: bool} = mut {};
     foreach (f in files) {
         if (f == "index.html") { isPage[""] = true; }
         else { if (f.endsWith("/index.html")) { isPage[f.sub(0, f.len() - 11)] = true; } }
     }
 
-    var visited: {str: bool} = mut {};
-    var queue: [str] = mut [<str>];
+    var visited: mut {str: bool} = mut {};
+    var queue: mut [str] = mut [<str>];
     foreach (r in ["", "documentation", "blog", "download", "tour", "playground", "search", "public", "development"]) {
         if (isPage[r] != null and visited[r] == null) { visited[r] = true; queue.append(r); }
     }
@@ -127,7 +127,7 @@ export fun orphanCheck(site: Site) > void !> any {
         }
     }
 
-    var orphans: [str] = mut [<str>];
+    var orphans: mut [str] = mut [<str>];
     foreach (p in site.docPages) {
         var dk = p.url;
         if (dk.endsWith("/")) { dk = dk.sub(0, dk.len() - 1); }
@@ -171,7 +171,7 @@ final HISTORY_MAX = 8;
 // The log prints "SUBJ:<subject>" after each ">>>" header so both fields ride together
 // without a second git spawn.
 export fun buildCommits(site: Site) > {str: str} {
-    var m: {str: str} = mut {};
+    var m: mut {str: str} = mut {};
     site.metaHistory = mut {};
     final log = capture("TZ=UTC git -C " + site.root + " log --first-parent --diff-merges=first-parent --name-only "
         + "--date=format-local:'%Y-%m-%dT%H:%M:%SZ' "
@@ -227,8 +227,8 @@ export fun checkPathExists(target: str, site: Site) > bool !> any {
 // external URLs, mailto:, javascript:, data:, and pure fragments. Each reference
 // is returned as a gen-root-relative path (resolved against pageDir).
 export fun scanReferencesInHTML(html: str, pageDir: str) > [str] {
-    var refs: [str] = mut [<str>];
-    var seen: {str: bool} = mut {};
+    var refs: mut [str] = mut [<str>];
+    var seen: mut {str: bool} = mut {};
     var rest = html;
     while (true) {
         final iHref = rest.indexOf("href=\"");
@@ -303,7 +303,7 @@ export fun pruneStaleOutputs(site: Site) > void !> any {
     // of docs/blog content, plus the playground's committed WASM/editor bundle, which this
     // render never touches (build-playground / build-playground-editor refresh it out of
     // band).
-    final alwaysKeep: {str: bool} = mut {
+    final alwaysKeep: mut {str: bool} = mut {
         "index.html": true, "index.md": true, "404.html": true,
         // The tracked files that live inside the output tree. gen/install is the POSIX
         // sh installer; public/release/index.json and its Ed25519 signature are the
@@ -322,9 +322,9 @@ export fun pruneStaleOutputs(site: Site) > void !> any {
         // docs render only emits a redirect stub there via the reference/console alias, which
         // writeAliases already registers in writtenPaths - so no alwaysKeep entry needed.
     };
-    final acc: [str] = mut [<str>];
+    final acc: mut [str] = mut [<str>];
     walkGen("", acc, site);
-    final staleDirs: {str: bool} = mut {};
+    final staleDirs: mut {str: bool} = mut {};
     foreach (path in acc) {
         if (alwaysKeep[path] != null) { continue; }
         if (path.startsWith("assets/")) { continue; }   // scoped delete+recopy above already keeps this clean
@@ -353,7 +353,7 @@ export fun pruneStaleOutputs(site: Site) > void !> any {
 // (served assets) only after site_render() returns - computing the manifest earlier would
 // omit them. Excludes its own output path (a file cannot hash itself).
 export fun writeSiteManifest(site: Site) > void !> any {
-    final acc: [str] = mut [<str>];
+    final acc: mut [str] = mut [<str>];
     walkGen("", acc, site);
     final sorted = acc.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
     var body = "";
@@ -386,7 +386,7 @@ final RETIRED_URLS = "retired.urls.lock";
 // readURLSet reads a newline-delimited URL file into a set, skipping blanks and
 // "#" comments. Missing file -> empty set (the bootstrap case for URL_LOCK).
 export fun readURLSet(path: str) > {str: bool} !> any {
-    var set: {str: bool} = mut {};
+    var set: mut {str: bool} = mut {};
     if (fs\isFile(path) == false) { return set; }
     final f = io\File.open(path, io\FileMode.read);
     final content = f.readAll();
@@ -407,7 +407,7 @@ export fun readURLSet(path: str) > {str: bool} !> any {
 export fun abandonedLinkCheck(site: Site) > void !> any {
     final locked = readURLSet(URL_LOCK);
     final retired = readURLSet(RETIRED_URLS);
-    var abandoned: [str] = mut [<str>];
+    var abandoned: mut [str] = mut [<str>];
     foreach (url in locked.keys()) {
         if (retired[url] == null and checkPathExists(url, site) == false) {
             abandoned.append(url);
@@ -426,7 +426,7 @@ export fun abandonedLinkCheck(site: Site) > void !> any {
 export fun updateUrlLock(site: Site) > void !> any {
     var set = readURLSet(URL_LOCK);
     foreach (u in site.pageUrls.keys()) { set[u] = true; }
-    var lines: [str] = mut [<str>];
+    var lines: mut [str] = mut [<str>];
     foreach (u in set.keys()) { lines.append(u); }
     final sorted = lines.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
     var body = "";
@@ -487,12 +487,12 @@ fun pathExists(p: str) > bool !> any {
 // Every violation is collected before either happens. Failing on the first would turn a
 // three-minute fix into three round trips.
 export fun conventionsCheck(root: str, docs: str) > void !> any {
-    var files: [str] = mut [<str>];
+    var files: mut [str] = mut [<str>];
     collectMarkdown(root + "/" + docs, "", files);
     final sorted = files.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
 
-    var broken: [str] = mut [<str>];
-    var violations: [str] = mut [<str>];
+    var broken: mut [str] = mut [<str>];
+    var violations: mut [str] = mut [<str>];
     var checked = 0;
 
     // The docs corpus, addressed as docs/<rel> so a finding names a path you can open.

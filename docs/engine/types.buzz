@@ -498,8 +498,8 @@ export object Site {
 
         // picks is the final ordered card list; used dedups by URL (a page never links
         // to itself or lists the same neighbor twice).
-        var picks: [{str: any}] = mut [<{str: any}>];
-        var used: {str: bool} = mut {};
+        var picks: mut [{str: any}] = mut [<{str: any}>];
+        var used: mut {str: bool} = mut {};
         used[curUrl] = true;
 
         // Stage 1: lead with the nearest-ancestor overview - the overview page whose
@@ -529,7 +529,7 @@ export object Site {
         // the shared-term overlap in the high digits and the tag/section signal in the low
         // digits, so a lexical compare ranks by shared vocabulary first and falls back to
         // the tag signal, then to URL. A page qualifies when either signal is positive.
-        var scored: [{str: str}] = mut [<{str: str}>];
+        var scored: mut [{str: str}] = mut [<{str: str}>];
         foreach (p in this.docPages) {
             if (used[p.url] == null) {
                 var tagSignal = 3 * sharedTagCount(curTags, p.tags);
@@ -605,7 +605,7 @@ export object Site {
 
         // Direct children: pages whose clean URL is exactly one path segment deeper than
         // the section root (so a grandchild does not surface in a parent's list).
-        var kids: [{str: str}] = mut [<{str: str}>];
+        var kids: mut [{str: str}] = mut [<{str: str}>];
         foreach (p in this.docPages) {
             if (p.url != rootUrl and p.url.startsWith(rootUrl)) {
                 final rest = p.url.sub(rootUrl.len());
@@ -619,7 +619,7 @@ export object Site {
 
         // Render through Mustache so {{title}} is HTML-escaped in both the link text and the
         // title attribute.
-        var picks: [{str: any}] = mut [<{str: any}>];
+        var picks: mut [{str: any}] = mut [<{str: any}>];
         foreach (k in ordered) {
             picks.append(mut {"url": k["url"], "title": k["title"], "current": k["url"] == curUrl});
         }
@@ -648,7 +648,7 @@ export object Site {
         if (curUrl == "") { return ""; }
 
         // Every descendant, with its depth relative to this page.
-        var rows: [{str: any}] = mut [<{str: any}>];
+        var rows: mut [{str: any}] = mut [<{str: any}>];
         var deepest = 0;
         foreach (p in this.docPages) {
             if (p.url == curUrl or p.url.startsWith(curUrl) == false) { continue; }
@@ -667,7 +667,7 @@ export object Site {
         final ordered = rows.sort(fun (a: {str: any}, b: {str: any}) > bool {
             return strLess("" + a["url"], "" + b["url"]);
         });
-        var picks: [{str: any}] = mut [<{str: any}>];
+        var picks: mut [{str: any}] = mut [<{str: any}>];
         foreach (r in ordered) {
             picks.append(mut {"url": r["url"], "title": r["title"], "depth": "" + r["depth"]});
         }
@@ -716,7 +716,7 @@ export object Site {
             // Which glossary terms this page MENTIONS - a native indexOf sweep over the raw
             // markdown (no second markdown render), so it stays fast over the whole corpus.
             // Any mention counts; this feeds relatedness ranking, not the on-page links.
-            final hits: [str] = mut [<str>];
+            final hits: mut [str] = mut [<str>];
             foreach (t in this.glossaryTerms) {
                 if (md.indexOf(t.term.lower()) != null) { hits.append(t.anchor); }
             }
@@ -745,7 +745,7 @@ export object Site {
     // in inline code, url = its clean page, summary = its frontmatter description. Sorted
     // longest-match-first so "magus affected ci" wins over "magus affected".
     fun collectEntities() > void !> any {
-        final ents: [Entity] = mut [<Entity>];
+        final ents: mut [Entity] = mut [<Entity>];
 
         final codesBase = this.root + "/" + this.docs + "/reference/codes";
         if (isDirectory(codesBase)) {
@@ -884,7 +884,7 @@ export object Site {
             // an anchor with no text, unclickable and silent to a screen reader.
             // Dropping the untitled spelling both fixes that and de-duplicates the
             // home page, which would otherwise be listed twice under one term.
-            var seen: {str: bool} = mut {};
+            var seen: mut {str: bool} = mut {};
             final bySection = mut {<str: [{str: str}]>};
             var count = 0;
             foreach (u in urls!) {

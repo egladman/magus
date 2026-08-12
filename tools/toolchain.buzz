@@ -179,7 +179,7 @@ fun observe(name: str, bin: str, args: [str]) > void {
         final line = semver\majorMinor(current);
         var listed = false;
         var ahead = 0;
-        var otherLines: {str: bool} = mut {};
+        var otherLines: mut {str: bool} = mut {};
 
         foreach (v in tags) {
             if (semver\compare(v, b: current) == 0) {

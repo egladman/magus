@@ -37,7 +37,7 @@ fun sectionTitle(seg: str) > str {
 // trailing slash: "a/b/c/" -> ["a/", "a/b/"]. The page's own URL is excluded; a
 // page is not its own parent.
 fun parentPrefixes(url: str) > [str] {
-    var dirs: [str] = mut [<str>];
+    var dirs: mut [str] = mut [<str>];
     final segs = splitPath(url);
     var acc = "";
     var i = 0;
@@ -59,11 +59,11 @@ fun parentPrefixes(url: str) > [str] {
 // synthesized for concepts/.
 export fun collectSectionIndexes(site: Site) > void {
     // Every URL that already has a page, so an authored overview is never shadowed.
-    var have: {str: bool} = mut {};
+    var have: mut {str: bool} = mut {};
     foreach (p in site.docPages) { have[p.url] = true; }
 
     // Directories implied by the corpus, and how many pages sit beneath each.
-    var implied: {str: bool} = mut {};
+    var implied: mut {str: bool} = mut {};
     foreach (p in site.docPages) {
         foreach (dir in parentPrefixes(p.url)) {
             if (have[dir] == null) { implied[dir] = true; }
@@ -97,7 +97,7 @@ export fun renderSectionIndexes(site: Site) > void !> any {
     foreach (p in site.docPages) {
         if (p.srcRel.endsWith("/_index.md") == false) { continue; }
 
-        var cards: [{str: any}] = mut [<{str: any}>];
+        var cards: mut [{str: any}] = mut [<{str: any}>];
         foreach (c in site.docPages) {
             if (c.url == p.url or c.url.startsWith(p.url) == false) { continue; }
             if (splitPath(c.url.sub(p.url.len())).len() != 1) { continue; }

@@ -16,7 +16,7 @@ import "lib/feed" as _;
 // site can ship dark until the host is confirmed. robots points crawlers at the sitemap.
 export fun writeSEOFiles(site: Site) > void !> any {
     if (site.config.baseURL == "") { return; }
-    var urls: [str] = mut [<str>];
+    var urls: mut [str] = mut [<str>];
     foreach (u in site.pageUrls.keys()) { urls.append(u); }
     final sorted = urls.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
     var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"

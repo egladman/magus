@@ -14,7 +14,7 @@ export fun resolvePath(fromDir: str, link: str) > str {
         if (part != "" and part != ".") {
             if (part == "..") {
                 if (segs.len() > 0) {
-                    var nw: [str] = mut [<str>];
+                    var nw: mut [str] = mut [<str>];
                     var i = 0;
                     while (i < segs.len() - 1) { nw.append(segs[i]); i = i + 1; }
                     segs = nw;
@@ -32,7 +32,7 @@ export fun resolvePath(fromDir: str, link: str) > str {
 export fun cleanTarget(oldPath: str) > str {
     final segs = splitPath(oldPath);
     if (segs.len() == 0) { return ""; }
-    var keep: [str] = mut [<str>];
+    var keep: mut [str] = mut [<str>];
     var i = 0;
     while (i < segs.len()) {
         var p = segs[i];
@@ -241,7 +241,7 @@ export fun cleanBody(md: str) > str {
     buf = buf.split("*").join(" ");
     buf = buf.split("|").join(" ");
     buf = buf.split("`").join(" ");
-    final words: [str] = mut [<str>];
+    final words: mut [str] = mut [<str>];
     foreach (w in buf.split(" ")) { if (w != "") { words.append(w); } }
     return words.join(" ");
 }

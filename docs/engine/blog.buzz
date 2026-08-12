@@ -108,7 +108,7 @@ export fun renderBlogPost(base: str, site: Site) > void !> any {
 fun renderBlogPager(base: str, site: Site) > str !> any {
     // Rebuild the ordering deterministically from disk (site.blogPosts may be partial
     // during the walk). Newest first.
-    var posts: [BlogPost] = mut [<BlogPost>];
+    var posts: mut [BlogPost] = mut [<BlogPost>];
     foreach (name in fs\list(site.root + "/" + site.blog)) {
         if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
             final f = io\File.open(site.root + "/" + site.blog + "/" + name, io\FileMode.read);
@@ -172,7 +172,7 @@ export fun renderBlogIndex(site: Site) > void !> any {
     });
 
     // View-model per post; date/description are optional (gated by hasDate/hasDesc).
-    var posts: [{str: any}] = mut [<{str: any}>];
+    var posts: mut [{str: any}] = mut [<{str: any}>];
     foreach (p in sorted) {
         final rec = mut {<str: any>};
         rec["urlPath"] = p.urlPath;

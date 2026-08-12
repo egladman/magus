@@ -11,7 +11,7 @@ export fun escapeAttr(s: str) > str {
 
 // splitPath splits a gen-root-relative path into non-empty segments, dropping ".".
 export fun splitPath(p: str) > [str] {
-    var segs: [str] = mut [<str>];
+    var segs: mut [str] = mut [<str>];
     foreach (s in p.split("/")) {
         if (s != "" and s != ".") { segs.append(s); }
     }

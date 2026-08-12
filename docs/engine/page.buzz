@@ -185,7 +185,7 @@ fun renderPager(rel: str, site: Site) > str !> any {
     var srcDir = site.root + "/" + site.docs;
     if (parts.len() > 1) { srcDir = srcDir + "/" + parts.sub(0, parts.len() - 1).join("/"); }
 
-    var sibs: [str] = mut [<str>];
+    var sibs: mut [str] = mut [<str>];
     foreach (name in fs\list(srcDir)) {
         // README.md/index.md are the directory's landing page (reached via breadcrumb and
         // nav, not a prev/next peer), and their clean URL is the parent dir, which a sibling
@@ -199,7 +199,7 @@ fun renderPager(rel: str, site: Site) > str !> any {
     if (sibs.len() < 2) { return ""; }
     // Precomputed, not read inside the comparator: a comparator runs O(n log n) times, and
     // each call would otherwise open and parse a file.
-    var orders: {str: int} = mut {<str: int>};
+    var orders: mut {str: int} = mut {<str: int>};
     foreach (name in sibs) { orders[name] = pageOrder(srcDir, name); }
     final ordered = sibs.sort(fun (a: str, b: str) > bool {
         // Force-unwrap is safe: orders is populated from sibs, and the comparator only ever

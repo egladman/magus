@@ -60,7 +60,7 @@ export fun renderCommitFooter(path: str, site: Site) > str !> any {
     final histKey = site.metaPrefix + path;
     final hist = site.metaHistory[histKey];
     if (hist != null and hist.len() > 0) {
-        var earlier: [{str: any}] = mut [<{str: any}>];
+        var earlier: mut [{str: any}] = mut [<{str: any}>];
         foreach (row in hist) {
             final parts = row.split("|");
             if (parts.len() >= 3 and parts[0] != cFull) {
@@ -294,7 +294,7 @@ export fun keepConventionSections(html: str, keep: {str: bool}) > str {
 // keeps the two from drifting: whatever the hints link to is exactly what the drawer
 // carries, by construction, so adding a fourth hint kind needs no change here.
 export fun conventionAnchorsIn(html: str) > {str: bool} {
-    var found: {str: bool} = mut {};
+    var found: mut {str: bool} = mut {};
     final marker = "class=\"convention-hint\" href=\"";
     var rest = html;
     var idx = rest.indexOf(marker);
@@ -326,7 +326,7 @@ export fun renderReferenceDrawer(root: str, canonUrl: str, content: str, site: S
     var glossary = _refGlossary;
     final joined = site.pageTerms[canonUrl];
     if (joined != null and joined! != "") {
-        var keep: {str: bool} = mut {};
+        var keep: mut {str: bool} = mut {};
         foreach (a in joined!.split("||")) { keep[a] = true; }
         final scoped = keepGlossarySections(_refGlossary, keep);
         if (scoped != "") { glossary = scoped; }
@@ -433,7 +433,7 @@ test "keepConventionSections keeps the named H2 sections and drops the rest" {
         + "<h2 id=\"placeholders\">Placeholders</h2>\n<p>a</p>\n"
         + "<h2 id=\"diffs\">Diffs</h2>\n<p>b</p>\n"
         + "<h2 id=\"admonitions\">Admonitions</h2>\n<p>c</p>\n";
-    var keep: {str: bool} = mut {};
+    var keep: mut {str: bool} = mut {};
     keep["admonitions"] = true;
     final got = keepConventionSections(doc, keep);
     assert\equal(got.indexOf("Admonitions") != null, true, "the wanted section survives");

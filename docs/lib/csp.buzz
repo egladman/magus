@@ -34,7 +34,7 @@ export fun scriptHash(js: str) > str !> any {
 // `<script src=...>` is an external load already covered by script-src 'self', not a
 // hash-source candidate.
 export fun extractInlineScripts(html: str) > [str] {
-    var scripts: [str] = mut [<str>];
+    var scripts: mut [str] = mut [<str>];
     var rest = html;
     while (true) {
         final start = rest.indexOf("<script>");

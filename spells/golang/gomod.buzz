@@ -31,7 +31,7 @@ fun same_replace_path(dir: str, got: str, want: str) > bool !> any {
 }
 
 fun sorted_keys(values: {str: any}) > [str] {
-    var keys: [str] = mut [<str>];
+    var keys: mut [str] = mut [<str>];
     foreach (key, _ in values) { keys.append(key); }
     return keys.sort(fun (a: str, b: str) > bool { return a < b; });
 }
@@ -43,7 +43,7 @@ fun sorted_keys(values: {str: any}) > [str] {
 export fun replaceArgs(currentJSON: str, modules: [any]) > [str] !> any {
 	final currentName = serialize\jsonDecode(currentJSON).q(["Module", "Path"]).stringValue();
     var current: any = null;
-    var byPath: {str: any} = mut {};
+    var byPath: mut {str: any} = mut {};
     foreach (mod in modules) {
         final name = module_path(mod);
         if (name == "") { continue; }
@@ -53,7 +53,7 @@ export fun replaceArgs(currentJSON: str, modules: [any]) > [str] !> any {
     if (current == null) { throw "gomod.replaceArgs: no workspace Go module named " + currentName; }
 
     final parsed = serialize\jsonDecode(module_json(current));
-    var desired: {str: str} = mut {};
+    var desired: mut {str: str} = mut {};
     foreach (require in parsed.q("Require").listValue()) {
         final name = require.q("Path").stringValue();
         final provider = byPath[name];
@@ -62,7 +62,7 @@ export fun replaceArgs(currentJSON: str, modules: [any]) > [str] !> any {
         }
     }
 
-    var existing: {str: [str]} = mut {};
+    var existing: mut {str: mut [str]} = mut {};
     foreach (replace in parsed.q("Replace").listValue()) {
         final oldPath = replace.q(["Old", "Path"]).stringValue();
         if (byPath[oldPath] == null) { continue; }
@@ -72,12 +72,12 @@ export fun replaceArgs(currentJSON: str, modules: [any]) > [str] !> any {
         existing[oldPath] = paths;
     }
 
-    var all: {str: bool} = mut {};
+    var all: mut {str: bool} = mut {};
     foreach (name, _ in desired) { all[name] = true; }
     foreach (name, _ in existing) { all[name] = true; }
 
-    var drops: [str] = mut [<str>];
-    var replacements: [str] = mut [<str>];
+    var drops: mut [str] = mut [<str>];
+    var replacements: mut [str] = mut [<str>];
     foreach (name in sorted_keys(all)) {
         final wanted = desired[name];
         final found = existing[name];
@@ -94,7 +94,7 @@ export fun replaceArgs(currentJSON: str, modules: [any]) > [str] !> any {
 // says the caller supplies the two ops it needs.
 fun workspace_go_mods(ctx: magus\Context, go: any) > [any] !> any {
     final projects: Projects = magus\ls();
-    var modules: [any] = mut [<any>];
+    var modules: mut [any] = mut [<any>];
     foreach (project in projects.projects) {
         if (fs\exists(project.dir + "/go.mod")) {
             final result = go["go-mod-json"](ctx.withCwd(project.dir));

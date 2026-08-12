@@ -25,9 +25,9 @@ export fun semverSortKey(name: str) > str {
 // sortNamesSemverDesc sorts release filenames newest-first. Selection sort; O(n^2)
 // fine for ~10-20 releases. Mirrors Go's compareSemver in cmd/magus-utils/release.go.
 export fun sortNamesSemverDesc(names: [str]) > [str] {
-    var remaining: [str] = mut [<str>];
+    var remaining: mut [str] = mut [<str>];
     foreach (n in names) { remaining.append(n); }
-    var sorted: [str] = mut [<str>];
+    var sorted: mut [str] = mut [<str>];
     while (remaining.len() > 0) {
         var maxIdx = 0;
         var maxKey = semverSortKey(remaining[0]);
@@ -41,7 +41,7 @@ export fun sortNamesSemverDesc(names: [str]) > [str] {
             k = k + 1;
         }
         sorted.append(remaining[maxIdx]);
-        var next: [str] = mut [<str>];
+        var next: mut [str] = mut [<str>];
         var m = 0;
         while (m < remaining.len()) {
             if (m != maxIdx) { next.append(remaining[m]); }

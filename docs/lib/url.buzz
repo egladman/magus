@@ -67,7 +67,7 @@ export fun cleanURL(rel: str, blogDir: str) > str {
     var base = rel;
     if (base.endsWith(".md")) { base = base.sub(0, base.len() - 3); }
     final parts = base.split("/");
-    var segs: [str] = mut [<str>];
+    var segs: mut [str] = mut [<str>];
     var i = 0;
     while (i < parts.len()) {
         final p = parts[i];
