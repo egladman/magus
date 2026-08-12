@@ -271,7 +271,7 @@ var modules = []Module{
 		Name: "os",
 		Doc:  "The machine and this process: platform triple, CPU count, hostname, the running magus binary, and the two members that shadow Buzz's own (exit, sleep). Running OTHER processes lives in the proc module.",
 		Methods: []Method{
-			{Name: "with_env", Doc: "Add env vars to subprocesses os.exec/os.exec_sh start inside callback. Never touches the process's own environment - a lookup like os.env inside callback does not see them.", Sig: "os\\withEnv(env, callback)"},
+			{Name: "with_env", Doc: "Add env vars to subprocesses `proc\\exec` / `proc\\shell` start inside callback. Never touches the process's own environment - a lookup like os.env inside callback does not see them.", Sig: "os\\withEnv(env, callback)"},
 			{Name: "platform", Doc: "Return the Docker/OCI platform triple: (os, arch, variant).", Sig: "os\\platform() → string, string, string"},
 			{Name: "exit", Doc: "Abort the current run with the given exit code - typically after logging an error. Does NOT call os.Exit (that would kill a shared daemon); it raises, ending the target, and the code becomes magus's process exit status.", Sig: "os\\exit(code)"},
 			{Name: "sleep", Doc: "Pause for the given number of milliseconds (fractional allowed), matching Buzz's os.sleep. Cancellable: if the run is interrupted it returns early with the cancellation error rather than blocking.", Sig: "os\\sleep(ms)"},

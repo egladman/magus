@@ -1,4 +1,5 @@
 import "magus";
+import "proc";
 // The shared advisory gate. See tools/audit.buzz for why an exit code is the wrong
 // question and what this asks instead.
 import "../tools/audit" as audit;
@@ -74,7 +75,7 @@ export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
 // through preflight, which every target below already needs, so the unconditional
 // --frozen-lockfile costs about a second on a warm tree and never races itself.
 fun install() > void {
-    os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
+    proc\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
 }
 
 // test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests)
@@ -123,7 +124,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("coverage.svg");
     final before = drift.hashes(["coverage.svg"]);
     install();
-    os\exec("pnpm", ["run", "test"], ".", {});
+    proc\exec("pnpm", ["run", "test"], ".", {});
 
     final pct = lcov\mergePercent(
         [fs\readFile("coverage.plain.lcov"), fs\readFile("coverage.dom.lcov")],
@@ -150,7 +151,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
     // clean, which is why this gate has never fired. It is inert, and the comment above
     // claiming gen/ is committed is wrong - left as-is here rather than changed blind.
     final clean_before = vcs\isDirty(["gen"]) == false;
-    os\exec("pnpm", ["run", "build"], ".", {});
+    proc\exec("pnpm", ["run", "build"], ".", {});
     if (ctx.hasCharm("rw")) {
         return;
     }
@@ -165,9 +166,9 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     // The Reference drawer imports the search grammar from the shared libs/textsearch
     // source, so gate its type-check + biome here: a lib edit fails console lint too.
     ctx.needs(textsearch\lint);
-    os\exec("pnpm", ["run", "typecheck"], ".", {});
-    os\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
-    os\exec("pnpm", ["run", "stylelint"], ".", {});
+    proc\exec("pnpm", ["run", "typecheck"], ".", {});
+    proc\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
+    proc\exec("pnpm", ["run", "stylelint"], ".", {});
 }
 
 // security audits the dependency tree against the npm advisory database.

@@ -15,7 +15,7 @@ The machine and this process: platform triple, CPU count, hostname, the running 
 
 ### withEnv
 
-Add env vars to subprocesses os.exec/os.exec_sh start inside callback. Never touches the process's own environment - a lookup like os.env inside callback does not see them.
+Add env vars to subprocesses `proc\exec` / `proc\shell` start inside callback. Never touches the process's own environment - a lookup like os.env inside callback does not see them.
 
 **Signature:** `os\withEnv(env, callback)` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L420)
 

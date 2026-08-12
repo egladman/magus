@@ -586,7 +586,7 @@ func buzzCause(v any) (string, error) {
 func MagusGraph(ctx context.Context) (types.GraphView, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return types.GraphView{}, errNoWorkspace("graph")
+		return types.GraphView{}, errNoWorkspace("projectGraph")
 	}
 	g, err := ws.Graph()
 	if err != nil {

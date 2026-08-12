@@ -1,4 +1,5 @@
 import "magus";
+import "proc";
 // The shared advisory gate; see tools/audit.buzz for why an exit code is the wrong question.
 import "../tools/audit" as audit;
 import "fs";
@@ -32,11 +33,11 @@ export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install();
 // valid readiness check.
 fun install() > void !> any {
     if (fs\isFile("pnpm-lock.yaml")) {
-        os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
+        proc\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
     } else {
         // The first bootstrap establishes the committed lock. Every later
         // install is frozen, so CI cannot resolve a newer dependency graph.
-        os\exec("pnpm", ["install"], ".", {});
+        proc\exec("pnpm", ["install"], ".", {});
     }
 }
 
@@ -44,7 +45,7 @@ fun install() > void !> any {
 // constraint predicate exists. No network, no API key.
 export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
-    os\exec("pnpm", ["run", "lint"], ".", {});
+    proc\exec("pnpm", ["run", "lint"], ".", {});
 }
 
 // MUTED 2026-08-03. smoke and grid are the only targets that call promptfoo and
@@ -55,14 +56,14 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 // // smoke is the PR gate: one trial, a subset of tasks, one model. Needs an API key.
 // export fun smoke(ctx: magus\Context, args: [str]) > void {
 //     ctx.needs(preflight);
-//     os\exec("pnpm", ["run", "smoke"], ".", {});
+//     proc\exec("pnpm", ["run", "smoke"], ".", {});
 // }
 //
 // // grid is the full run: every skill, both permutations, every model, 5 trials.
 // // Minutes-to-hours and real money. Never on the PR path.
 // export fun grid(ctx: magus\Context, args: [str]) > void {
 //     ctx.needs(preflight);
-//     os\exec("pnpm", ["run", "grid"], ".", {});
+//     proc\exec("pnpm", ["run", "grid"], ".", {});
 // }
 
 // security audits what actually ships against the npm advisory database. See

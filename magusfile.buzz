@@ -1752,7 +1752,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // root file - so the error pointed at generated output while the fix belonged here.
     final prose = ["README.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md", "TODO.md"];
     ctx.readsFiles("_typos.toml", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md", "TODO.md");
-    os\exec("typos", ["--format", "brief"] + prose);
+    proc\exec("typos", ["--format", "brief"] + prose);
     bash["shellcheck"](ctx);
 }
 // Regenerates, then formats Go, tidies `go.mod`, and formats Markdown. dprint rather than
