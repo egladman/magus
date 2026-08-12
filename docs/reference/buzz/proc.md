@@ -7,7 +7,7 @@ tags: [proc, module, stdlib, magusfile]
 
 # proc
 
-Run other processes. proc.exec is the one verb that runs anything: it streams output live, captures it, honours the sandbox, and raises on failure instead of handing back a code to check. Needing a shell is not a second verb - proc.shell builds the {bin, args} to hand it, so which shell ran stays visible at the call site instead of hidden inside it. Distinct from Buzz's own os.execute, which returns an exit code and stays silent when you do not read it.
+Run other processes. proc.exec is the one verb that runs anything: it streams output live, captures it, honors the sandbox, and raises on failure instead of handing back a code to check. Needing a shell is not a second verb - proc.shell builds the {bin, args} to hand it, so which shell ran stays visible at the call site instead of hidden inside it. Distinct from Buzz's own os.execute, which returns an exit code and stays silent when you do not read it.
 
 > **Naming convention:** import the module under its bare name (`import "proc"`), reach members with a backslash, and call methods in `camelCase`: `proc\someMethod`.
 
@@ -15,7 +15,7 @@ Run other processes. proc.exec is the one verb that runs anything: it streams ou
 
 ### exec
 
-Run cmd directly (no shell; args are never shell-interpolated). Output streams live and is captured. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. Optional dir runs cmd there (relative to the target's cwd). opts.stdin is fed to the process as standard input - pipe by passing a prior call's stdout. opts.quiet captures the output without echoing it to the console. opts.tty runs cmd on a pseudo-terminal so it behaves as it would for a person: tools that check isatty keep their colour and progress output instead of the plain form they emit to a pipe. A terminal is a single stream, so stderr arrives merged into stdout and the captured text carries ANSI escapes. Unix only.
+Run cmd directly (no shell; args are never shell-interpolated). Output streams live and is captured. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. Optional dir runs cmd there (relative to the target's cwd). opts.stdin is fed to the process as standard input - pipe by passing a prior call's stdout. opts.quiet captures the output without echoing it to the console. opts.tty runs cmd on a pseudo-terminal so it behaves as it would for a person: tools that check isatty keep their color and progress output instead of the plain form they emit to a pipe. A terminal is a single stream, so stderr arrives merged into stdout and the captured text carries ANSI escapes. Unix only.
 
 **Signature:** `proc\exec(cmd, [args], [dir], [opts]) → ExecResult` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L358)
 

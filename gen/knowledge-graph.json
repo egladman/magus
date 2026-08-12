@@ -3,7 +3,7 @@
   "schema_version": 8,
   "directed": true,
   "multigraph": false,
-  "node_count": 2074,
+  "node_count": 2075,
   "edge_count": 4969,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
@@ -9343,7 +9343,7 @@
       "id": "function:docs/magusfile.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "docs/magusfile.buzz:367",
+      "source": "docs/magusfile.buzz:366",
       "attrs": {
         "exported": "true"
       }
@@ -9353,7 +9353,7 @@
       "kind": "function",
       "label": "build_hljs",
       "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js. syntax-highlight.js imports it same-origin so syntax highlighting works offline without any CDN. Bump the version in package.json and the next generate picks it up; gen/ is not committed, so generate runs this as one of its stages.",
-      "source": "docs/magusfile.buzz:447",
+      "source": "docs/magusfile.buzz:446",
       "attrs": {
         "exported": "true"
       }
@@ -9363,7 +9363,7 @@
       "kind": "function",
       "label": "build_mermaid",
       "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into gen/assets/mermaid.js. mermaid.js (the runtime init script) imports it same-origin so diagrams and page styling work offline without any CDN. Bump the mermaid version in package.json and the next generate picks it up; gen/ is not committed, so there is no artifact to commit and generate runs this as one of its stages.",
-      "source": "docs/magusfile.buzz:434",
+      "source": "docs/magusfile.buzz:433",
       "attrs": {
         "exported": "true"
       }
@@ -9373,7 +9373,7 @@
       "kind": "function",
       "label": "build_playground",
       "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: the stock Go toolchain compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and Go's own wasm_exec.js glue is copied beside it. The glue must come from the SAME Go that built the wasm - it is a matched pair.  gen/, not vendor/. Those bytes were committed for one reason: CI had no TinyGo, so it could not reproduce them and they had to be inputs rather than output. CI has Go. So this is ordinary render output now, r",
-      "source": "docs/magusfile.buzz:411",
+      "source": "docs/magusfile.buzz:410",
       "attrs": {
         "exported": "true"
       }
@@ -9383,7 +9383,7 @@
       "kind": "function",
       "label": "build_playground_editor",
       "doc": "build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js. It existed only as a pnpm script before, because the artifact was committed and a human ran it after a version bump. gen/ is no longer committed, so every published byte needs a target CI can run - a script nothing invokes would have shipped a playground with no editor.",
-      "source": "docs/magusfile.buzz:460",
+      "source": "docs/magusfile.buzz:459",
       "attrs": {
         "exported": "true"
       }
@@ -9393,7 +9393,7 @@
       "kind": "function",
       "label": "buzz_test",
       "doc": "buzz-test runs render's in-file `test \"...\" {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve. magus.cmd raises on a non-zero exit, so a failing assertion fails this target.",
-      "source": "docs/magusfile.buzz:372",
+      "source": "docs/magusfile.buzz:371",
       "attrs": {
         "exported": "true"
       }
@@ -9402,7 +9402,7 @@
       "id": "function:docs/magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
-      "source": "docs/magusfile.buzz:388",
+      "source": "docs/magusfile.buzz:387",
       "attrs": {
         "exported": "true"
       }
@@ -9412,7 +9412,7 @@
       "kind": "function",
       "label": "content_generate",
       "doc": "content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). The generator tools live at the repo root, so they run from here (the docs cwd) through the g",
-      "source": "docs/magusfile.buzz:201",
+      "source": "docs/magusfile.buzz:200",
       "attrs": {
         "exported": "true"
       }
@@ -9422,7 +9422,7 @@
       "kind": "function",
       "label": "conventions",
       "doc": "conventions holds the prose corpus to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved. See docs/conventions.md for what each rule means.  Its OWN target, not a line inside lint, and it deliberately depends on nothing. A prose nit should name the thing that is wrong; folding it into lint would report a stale path in the README as \"docs lint failed\", and a target that fails for reasons unrelated to",
-      "source": "docs/magusfile.buzz:340",
+      "source": "docs/magusfile.buzz:339",
       "attrs": {
         "exported": "true"
       }
@@ -9431,7 +9431,7 @@
       "id": "function:docs/magusfile.buzz:format",
       "kind": "function",
       "label": "format",
-      "source": "docs/magusfile.buzz:326",
+      "source": "docs/magusfile.buzz:325",
       "attrs": {
         "exported": "true"
       }
@@ -9441,7 +9441,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "generate is the one public docs publication target. Its small drift gate always runs; its content, catalog, changelog, and site stages replay independently when unchanged.",
-      "source": "docs/magusfile.buzz:271",
+      "source": "docs/magusfile.buzz:270",
       "attrs": {
         "exported": "true"
       }
@@ -9451,7 +9451,7 @@
       "kind": "function",
       "label": "index_generate",
       "doc": "index-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets. generate calls it; run standalone after editing targets: `magus run index-generate docs`.",
-      "source": "docs/magusfile.buzz:183",
+      "source": "docs/magusfile.buzz:182",
       "attrs": {
         "exported": "true"
       }
@@ -9461,14 +9461,14 @@
       "kind": "function",
       "label": "install",
       "doc": "pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason. Always let pnpm validate the install. A canceled or interrupted install leaves a node_modules directory that EXISTS but is incomplete, so the `if (!fs.isDir(...))` guard this replaced read that tree as ready and handed the missing packages to esbuild instead - surfacing as `Could not resolve \"@codemirror/view\"` from build-playground-editor, which reads like a source bug rather than a half-installed tree. On a warm tree --frozen-loc",
-      "source": "docs/magusfile.buzz:176"
+      "source": "docs/magusfile.buzz:175"
     },
     {
       "id": "function:docs/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "lint runs the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). Both need node_modules, which it reaches through format -> generate -> preflight; proc.exec raises on a non-zero exit, so either gate fails lint.  Markdown formatting is dprint, run once from the root project (its scope is dprint.json at the workspace root), so `format` here is a dependency edge and nothing else. This project only lints prose; see docs/concep",
-      "source": "docs/magusfile.buzz:353",
+      "source": "docs/magusfile.buzz:352",
       "attrs": {
         "exported": "true"
       }
@@ -9477,7 +9477,7 @@
       "id": "function:docs/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "docs/magusfile.buzz:165",
+      "source": "docs/magusfile.buzz:164",
       "attrs": {
         "exported": "true"
       }
@@ -9487,7 +9487,7 @@
       "kind": "function",
       "label": "render",
       "doc": "render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.",
-      "source": "docs/magusfile.buzz:468",
+      "source": "docs/magusfile.buzz:467",
       "attrs": {
         "exported": "true"
       }
@@ -9497,7 +9497,7 @@
       "kind": "function",
       "label": "security",
       "doc": "security audits what actually ships against the npm advisory database. See console/magusfile.buzz for why it is --prod, why it is not folded into lint, and why the .npmrc cooling period is the stronger half of this.",
-      "source": "docs/magusfile.buzz:383",
+      "source": "docs/magusfile.buzz:382",
       "attrs": {
         "exported": "true"
       }
@@ -9507,7 +9507,7 @@
       "kind": "function",
       "label": "site_generate",
       "doc": "site-generate owns publication. It cannot replay while it reads VCS state; the public generate target still lets the independent content stages fan out first.",
-      "source": "docs/magusfile.buzz:257",
+      "source": "docs/magusfile.buzz:256",
       "attrs": {
         "exported": "true"
       }
@@ -9516,7 +9516,7 @@
       "id": "function:docs/magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "docs/magusfile.buzz:376",
+      "source": "docs/magusfile.buzz:375",
       "attrs": {
         "exported": "true"
       }
@@ -9533,14 +9533,23 @@
       "kind": "function",
       "label": "generateJsBundles",
       "doc": "generateJsBundles builds the committed browser bundles that import npm packages. pnpm is pinned by package.json and pnpm-lock.yaml, and --frozen-lockfile runs every time rather than behind an isDir check: an interrupted install leaves a node_modules that exists but is incomplete, and the guard read that as ready and fed esbuild a half tree. See the install() note in magusfile.buzz.",
-      "source": "docs/render.buzz:407"
+      "source": "docs/render.buzz:414"
+    },
+    {
+      "id": "function:docs/render.buzz:site_conventions",
+      "kind": "function",
+      "label": "site_conventions",
+      "doc": "site_publish is the cacheable publication unit used by docs:site-generate. Keep every output that belongs to the completed site in this one phase: the page tree, pnpm-backed vendor bundles, the integrity manifest, and (only for rw) the URL ledger. site_conventions re-exports the gates check for the magusfile. engine/gates is flat-imported here, and a flat import does not RE-export, so the magusfile cannot reach conventionsCheck through this module without a wrapper.",
+      "source": "docs/render.buzz:398",
+      "attrs": {
+        "exported": "true"
+      }
     },
     {
       "id": "function:docs/render.buzz:site_publish",
       "kind": "function",
       "label": "site_publish",
-      "doc": "site_publish is the cacheable publication unit used by docs:site-generate. Keep every output that belongs to the completed site in this one phase: the page tree, pnpm-backed vendor bundles, the integrity manifest, and (only for rw) the URL ledger.",
-      "source": "docs/render.buzz:395",
+      "source": "docs/render.buzz:402",
       "attrs": {
         "exported": "true"
       }
@@ -17046,7 +17055,7 @@
       "id": "module:proc",
       "kind": "module",
       "label": "proc",
-      "doc": "Run other processes. proc.exec is the one verb that runs anything: it streams output live, captures it, honours the sandbox, and raises on failure instead of handing back a code to check. Needing a shell is not a second verb - proc.shell builds the {bin, args} to hand it, so which shell ran stays visible at the call site instead of hidden inside it. Distinct from Buzz's own os.execute, which returns an exit code and stays silent when you do not read it."
+      "doc": "Run other processes. proc.exec is the one verb that runs anything: it streams output live, captures it, honors the sandbox, and raises on failure instead of handing back a code to check. Needing a shell is not a second verb - proc.shell builds the {bin, args} to hand it, so which shell ran stays visible at the call site instead of hidden inside it. Distinct from Buzz's own os.execute, which returns an exit code and stays silent when you do not read it."
     },
     {
       "id": "module:semver",
@@ -40604,14 +40613,6 @@
     },
     {
       "source": "file:docs/magusfile.buzz",
-      "target": "import:engine/gates",
-      "relation": "imports",
-      "confidence": "inferred",
-      "score": 0.7,
-      "provenance": "docs/magusfile.buzz"
-    },
-    {
-      "source": "file:docs/magusfile.buzz",
       "target": "import:fs",
       "relation": "imports",
       "confidence": "inferred",
@@ -40733,6 +40734,14 @@
     {
       "source": "file:docs/render.buzz",
       "target": "function:docs/render.buzz:generateJsBundles",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/render.buzz"
+    },
+    {
+      "source": "file:docs/render.buzz",
+      "target": "function:docs/render.buzz:site_conventions",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

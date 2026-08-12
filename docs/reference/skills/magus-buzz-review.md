@@ -2,8 +2,8 @@
 title: magus-buzz-review
 description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance."
 tags: [agents, skills, magus-buzz-review]
-skill_full_bytes: 18320
-skill_simple_bytes: 14135
+skill_full_bytes: 20090
+skill_simple_bytes: 14965
 ---
 
 # magus-buzz-review
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `31` |
+| `agent-skill-version` | `33` |
 | `knowledge-schema-version` | `8` |
-| `skill-content` | `36de22dd8c77` |
+| `skill-content` | `26f270bc4a34` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -127,6 +127,25 @@ What reads as Buzz house style versus what merely parses.
   ordinary member access, not a namespace-access mistake, even though `path`
   is also an importable module name. Only flag the dot when the receiver is
   the actual imported module identifier itself.
+- **A flat import (`import "x" as _`) is a finding.** The `_` alias binds no
+  name and merges every export of `x` into the importing scope, so a call site
+  reads `escapeAttr(s)` with nothing on the line, or anywhere in the file, saying
+  where `escapeAttr` came from. The reader's only recourse is to grep each
+  candidate module in turn, and that cost is paid per call site rather than per
+  import. It also makes the module boundary unenforceable in the direction that
+  matters: adding an export to a flat-imported module can silently shadow or
+  collide with a name in every importer, and nothing at the import line records
+  which names were claimed.
+  Prefer a named import and namespaced calls (`import "lib/text" as text;` then
+  `text\escapeAttr(s)`). Where a specific unprefixed name is genuinely wanted,
+  the selective form `import escapeAttr, slugify from "lib/text";` states exactly
+  what enters the scope, which is the part `as _` throws away.
+  Note the flat and selective forms are BOTH excluded from
+  unused-import tracking (BZZ3001) - a flat import has no bound name to mark
+  unused - so an `as _` that has stopped being needed will never be reported.
+  Weigh the finding by blast radius, not by count: a leaf module flat-importing
+  one helper is a nit, while a tree where every file flat-imports every other is
+  a single structural finding, not one per line.
 - **`export fun test(...)` is not a naming smell.** `test` is a contextual
   soft keyword rather than a reserved one, specifically so magus's canonical
   test-target name stays usable. Authority: GOPHERBUZZ - it is the one
@@ -228,12 +247,17 @@ were the language.
   postfix member operator on VALUES. gopherbuzz's parser accepts both forms
   identically for a module reference, which is a superset, not a mirror:
   `fs\readFile(...)` parses in both; `fs.readFile(...)` parses only here.
-- **`str.len()` counts runes in gopherbuzz; upstream documents it as byte
-  length.** Authority: GOPHERBUZZ. They agree on pure ASCII and can quietly
-  disagree the moment a string holds anything else - e.g. a binary digest
-  whose bytes happen to form fewer runes than bytes reports a shorter length
-  than its byte size would suggest. Do not use `.len()` as a byte count for
-  anything hashed, encoded, or otherwise non-textual.
+- **A string is indexed by BYTES, and `utf8Len()` is the rune count.**
+  Authority: UPSTREAM. `len()`, `sub()`, `indexOf()`, `byte()` and `foreach`
+  all work in bytes, matching upstream's own builtins; `utf8Len()` is the only
+  codepoint-counting member. So `"h\u00e9llo".len()` is 6, not 5.
+  This is worth knowing because gopherbuzz USED to index runes, and
+  code written against that reads plausibly either way. A loop slicing with
+  `sub()` and bounding with `len()` was consistent under both models, so it will
+  not announce the change; what moves is any index arithmetic that assumed one
+  character was one position. Reach for `utf8Len()` only when the question is
+  genuinely "how many characters", which is rarer than it looks - a byte count
+  is what a digest, an encoding, or a wire format wants.
 - **A bare `as` cast coerces in gopherbuzz; upstream statically checks it.**
   Authority: GOPHERBUZZ. `3.9 as int` silently truncates to `3` here; upstream
   rejects a cast that cannot hold statically. `as?` is the real type test in
@@ -307,7 +331,7 @@ it needs the section text, not the skill's name.
 
 Prompt template per subagent:
 
-```
+```text
 Read the "Lens: <idiom and style|skeptic and correctness|upstream conformance>"
 section of the installed magus-buzz-review skill (.claude/skills/magus-buzz-review/SKILL.md,
 or wherever this workspace installed it) and apply it to <target file/dir>.
@@ -426,6 +450,20 @@ That is the fixture doing its job.
   reads as a value method call to anyone who has not memorized which name is
   a module.
 
+- **A flat import (`import "x" as _`) is a finding.** The `_` alias binds no
+  name and merges every export of `x` into the importing scope, so a call site
+  reads `escapeAttr(s)` with nothing on the line, or anywhere in the file, saying
+  where `escapeAttr` came from. The reader's only recourse is to grep each
+  candidate module in turn, and that cost is paid per call site rather than per
+  import. It also makes the module boundary unenforceable in the direction that
+  matters: adding an export to a flat-imported module can silently shadow or
+  collide with a name in every importer, and nothing at the import line records
+  which names were claimed.
+  Prefer a named import and namespaced calls (`import "lib/text" as text;` then
+  `text\escapeAttr(s)`). Where a specific unprefixed name is genuinely wanted,
+  the selective form `import escapeAttr, slugify from "lib/text";` states exactly
+  what enters the scope, which is the part `as _` throws away.
+
 - **`export fun test(...)` is not a naming smell.** `test` is a contextual
   soft keyword rather than a reserved one, specifically so magus's canonical
   test-target name stays usable. Authority: GOPHERBUZZ - it is the one
@@ -500,12 +538,11 @@ That is the fixture doing its job.
   postfix member operator on VALUES. gopherbuzz's parser accepts both forms
   identically for a module reference, which is a superset, not a mirror:
   `fs\readFile(...)` parses in both; `fs.readFile(...)` parses only here.
-- **`str.len()` counts runes in gopherbuzz; upstream documents it as byte
-  length.** Authority: GOPHERBUZZ. They agree on pure ASCII and can quietly
-  disagree the moment a string holds anything else - e.g. a binary digest
-  whose bytes happen to form fewer runes than bytes reports a shorter length
-  than its byte size would suggest. Do not use `.len()` as a byte count for
-  anything hashed, encoded, or otherwise non-textual.
+- **A string is indexed by BYTES, and `utf8Len()` is the rune count.**
+  Authority: UPSTREAM. `len()`, `sub()`, `indexOf()`, `byte()` and `foreach`
+  all work in bytes, matching upstream's own builtins; `utf8Len()` is the only
+  codepoint-counting member. So `"h\u00e9llo".len()` is 6, not 5.
+
 - **A bare `as` cast coerces in gopherbuzz; upstream statically checks it.**
   Authority: GOPHERBUZZ. `3.9 as int` silently truncates to `3` here; upstream
   rejects a cast that cannot hold statically. `as?` is the real type test in
@@ -563,7 +600,7 @@ it needs the section text, not the skill's name.
 
 Prompt template per subagent:
 
-```
+```text
 Read the "Lens: <idiom and style|skeptic and correctness|upstream conformance>"
 section of the installed magus-buzz-review skill (.claude/skills/magus-buzz-review/SKILL.md,
 or wherever this workspace installed it) and apply it to <target file/dir>.

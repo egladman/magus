@@ -56,6 +56,57 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   produced an identifier inconsistent with `fs\readFile`, `fs\removeAll`, `fs\copyFile`,
   `fs\listDir`, and `fs\appendFile`. There is no alias: a magusfile calling
   `fs\mkdirall(...)` must be updated to `fs\mkdirAll(...)`.
+- **`has_charm` is now `hasCharm`, on both receivers.** `magus\hasCharm(...)` and
+  `ctx.hasCharm(...)`. It was the ONLY snake_case member on either surface, sitting
+  beside camelCase neighbors (`ctx.needs`, `ctx.readsFiles`, `magus\bustCache`); the
+  lock file now has no underscore in it at all. The name was pinned because the static
+  charm extractor in `internal/describe` matches it literally to build the charm
+  inventory - that matcher moved with it, and the existing tests for both receivers and
+  both arms of a charm branch are what make the rename safe rather than silent.
+- **`magus\graph` is now `magus\projectGraph`.** It returns the PROJECT dependency DAG,
+  and sat beside `magus\targetGraph`, which returns a different graph entirely. Named
+  `graph` and `targetGraph`, the second read as a variant of the first; they are
+  siblings, so each is now named for what it contains. It also settles the surface's one
+  inconsistent qualifier: every other pair suffixes (`describe`/`describeFile`,
+  `affected`/`affectedImpact`, `insight`/`insightReport`) while this one prefixed.
+- **`magus\modules()` and `magus\module(name)` are now one `magus\describeModule(name?)`.**
+  Omit the name for every module; pass one to detail it. Either way the return is a
+  `[Module]`, so detailing one reads `magus\describeModule("fs")[0]`.
+  The pair was a list/get CRUD split this surface uses nowhere else. `magus describe
+  <noun> [<name>]` is ONE command - its own usage says "singular and plural are
+  interchangeable; pass a name to detail one entity" - and the Go API underneath
+  (`hostmodules.Describe`) already took an optional name and returned a slice. The
+  Buzz surface now mirrors the CLI one method per command form, the way
+  `magus\describeFile` mirrors `magus describe file`.
+- **Logging moved to `magus\log`, and `magus\normalize` is now `magus\canonicalName`.**
+  `magus\info(...)` becomes `magus\log.info(...)`, and the same for `debug`, `warn`,
+  `error` and `hint`. `magus\fatal` and `magus\raise` deliberately did NOT move.
+  The line is what a member DOES, not what it looks like: everything in `log` emits a
+  message and returns, while `fatal` and `raise` end the run. Grouping the two together
+  would let `magus\log.fatal(...)` read as one more level, which is the confusion the
+  split exists to prevent. It also settles the surface's odd asymmetry - `magus\secret`
+  and `magus\cache` were grouped while five logging members sat loose beside them.
+  `normalize` was renamed because it named neither its input nor its output. It
+  canonicalizes a magus ENTITY NAME - a target, charm, or spell op - and the doc's own
+  word for the result was already "canonical": `build2` gains a `-` you did not type,
+  `HTTPServer` breaks before its last letter.
+  Both fail at LOAD, not at run time, because host-module members are typed to the
+  checker. See `internal/interp/bindings/testdata/magus-api.lock` for the full surface
+  before and after.
+- **`os\exec`, `os\shell` and `os\which` moved to a new `proc` module.** Import `proc` and
+  call `proc\exec(...)`, `proc\shell(...)`, `proc\which(...)`; there is no alias in `os`.
+  The three were the only members of `os` that start a CHILD PROCESS, and everything left
+  behind (`env`, `platform`, `exit`, `sleep`, `hostname`, `executable`, `retry`) reads or
+  affects the CURRENT one. That is two different capabilities under one import, and the
+  split is what lets a reader see which magusfiles spawn anything at all.
+  `proc\shell` is also where the Windows branch belongs: it picks `cmd /c` over `sh -c`
+  per platform, which is a fact about running a shell, not about the operating system a
+  script is asking questions of.
+  A magusfile still calling the old spelling fails at LOAD, because host-module members
+  are typed to the checker - but note the error names the missing member rather than
+  pointing at `proc`, since nothing maps retired members to their new home outside the
+  `removed` table in `internal/interp/bindings/modules_test.go`. If a third such rename
+  lands, that table is the thing to promote into a real migration diagnostic.
 
 ### Added
 
@@ -338,7 +389,7 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   probe forks a process, so the daemon caches each reading for a minute and every row
   carries its age instead of implying it is live. magus still never learns which versions
   exist upstream, never selects one, and carries no end-of-life data.
-- **`opts.quiet` on `os\exec`, `os\exec_sh`, and `vcs\cmd`.** Captures output without
+- **`opts.quiet` on `proc\exec`, `proc\shell`, and `vcs\cmd`.** Captures output without
   echoing it, matching what `magus\cmd` and friends already accepted. Read in the one
   path all three share, so they cannot drift into different option sets.
 - **A doctor check that the declared `required_version` covers the magusfile keys in
@@ -365,6 +416,46 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   burden to carry: `LocalSkillName`, the `magus-adapt` skill body, the `.gitignore`
   exception, and this workspace's own `.claude/skills/magus-local-development/` moved
   together, outright, with no alias. Skill contract v27.
+- **A `magus-buzz-review` skill**, three lenses over a magusfile, spell, or standalone
+  `.buzz` script - idiom/style, skeptic/correctness, and upstream-Buzz conformance -
+  fanned out in parallel and merged, the same shape go-review-ultra already uses for
+  Go. magus-buzz teaches how to write Buzz; nothing taught how to review it, so a
+  gopherbuzz-only behavior (namespace access accepting a dot as well as a backslash,
+  a bare `as` cast coercing instead of statically checking, a compound assignment
+  double-evaluating its target) had no home to be flagged from, and a strict-mode rule
+  applied to a magusfile - which is always parsed embedded, unconditionally - read as a
+  real finding when it was a false one. Every finding carries one of three authority
+  labels (UPSTREAM, GOPHERBUZZ, PORTABILITY) naming which of those three questions it
+  answers. It does not cover magusfile/target/spell contracts; magus-buzz still owns
+  those. Skill contract v28.
+- **`magus-buzz` no longer tells an agent that `test` is a reserved word.** The
+  shipped skill's "reserved words" table conflated parse-time reservation with
+  runtime shadowing, and was wrong on two entries: `test` is not in gopherbuzz's
+  `reservedIdents`, deliberately, because every magus target set defines
+  `export fun test(...)`, the canonical test target - the old text told an agent
+  that target was illegal. `map` was never reserved either; naming a local or a
+  field `map` shadows the builtin `.map()` method, which is a runtime hazard, not
+  a parse error, and is why it fails later with a confusing `null is not
+  callable`. The passage now states the real reserved list, states plainly that
+  `test` is usable, and moves the shadowing hazard to its own line. Skill
+  contract v29.
+- **`magus-buzz` and `magus-buzz-review` now teach the magusfile testing
+  boundary.** `docs/guides/testing.md` already said not to write tests for a
+  magusfile - it is declarative configuration, and wanting one is the signal
+  to move that logic into a spell or a sibling module - but the shipped skill
+  never said so, so an agent following it would happily test a magusfile.
+  magus-buzz now states the boundary and the `--embedded` flag a magusfile's
+  own imported module needs when tested (its imports parse embedded, not
+  strict); the review skill's idiom lens adds the one-line finding and points
+  back rather than restating it. Skill contract v30.
+- **`magus-buzz-review` now records that a declared `!>` error set is
+  unenforced.** Upstream Buzz treats `!> ErrType` as a real error set;
+  gopherbuzz's parser consumes the annotation and calls skipType, and no AST
+  node stores it, so a function declaring a raise that throws compiles clean
+  when called with no try/catch from a function declaring none. The
+  upstream-conformance lens now says to read a `!>` as documentation rather than
+  a checked contract, and not to take its absence as proof a call cannot raise.
+  Skill contract v31.
 - **Host parity is now a build gate rather than a table nobody re-reads.** Each guard
   template declares, per guard surface, how much of a verdict it can carry
   (`magus-guard-coverage`), and the guard's own vocabulary moved into an importable
@@ -463,7 +554,7 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 - A magusfile can read a credential through a declared provider.
   `magus\secret.provider("<spell>")` selects the backend and `magus\secret.read("<ref>")`
   reads one reference. Where a secret comes from is a spell's problem, so 1Password, Vault,
-  or AWS Secrets Manager are an `os\exec` away and magus grows no per-provider code; with no
+  or AWS Secrets Manager are an `proc\exec` away and magus grows no per-provider code; with no
   provider declared, the built-in one treats a reference as an environment variable name.
   A value is a secret because it was read through the resolver, never because its name
   looked credential-shaped, so magus can keep it out of what it persists: the captured

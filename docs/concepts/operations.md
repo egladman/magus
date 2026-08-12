@@ -73,11 +73,11 @@ Operation's argv (_in what manner_ it runs), it is not a layer of its own.
 
 ## Results: what each layer produces
 
-| Result              | Layer     | Shape                                               | Returned or emitted                                                                      | Status          |
-| ------------------- | --------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------- | --------------- |
+| Result              | Layer     | Shape                                               | Returned or emitted                                                                        | Status          |
+| ------------------- | --------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------ | --------------- |
 | **`ExecResult`**    | Process   | `{stdout, stderr, code, ok}`                        | **returned** by `proc\exec`, `magus\cmd`/`run`/`describe`/`insight`/`doctor`, a Capture op | exists          |
-| `OpResult`          | Operation | `ExecResult` + op identity (`spell`, `op`)          | would be returned by the op handler                                                      | **(not built)** |
-| **`target.result`** | Target    | `{project, target, status, cache_hit, duration_ms}` | **emitted** by the dispatcher (`internal/report`)                                        | exists          |
+| `OpResult`          | Operation | `ExecResult` + op identity (`spell`, `op`)          | would be returned by the op handler                                                        | **(not built)** |
+| **`target.result`** | Target    | `{project, target, status, cache_hit, duration_ms}` | **emitted** by the dispatcher (`internal/report`)                                          | exists          |
 
 - **`ExecResult` exists in both worlds.** It is the Go `run.ExecResult` and the
   spell-op **capture record** a `Capture: true` op returns "instead of void": the

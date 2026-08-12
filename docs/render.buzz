@@ -392,6 +392,13 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
 // site_publish is the cacheable publication unit used by docs:site-generate. Keep every
 // output that belongs to the completed site in this one phase: the page tree, pnpm-backed
 // vendor bundles, the integrity manifest, and (only for rw) the URL ledger.
+// site_conventions re-exports the gates check for the magusfile. engine/gates is
+// flat-imported here, and a flat import does not RE-export, so the magusfile cannot
+// reach conventionsCheck through this module without a wrapper.
+export fun site_conventions(root: str, docs: str) > void !> any {
+    conventionsCheck(root, docs);
+}
+
 export fun site_publish(root: str, docs: str, blog: str, outDir: str, targets: TargetGraph, graph: Graph, updateUrls: bool) > void !> any {
     final site = site_render(root, docs, blog, outDir, targets, graph);
     generateJsBundles();

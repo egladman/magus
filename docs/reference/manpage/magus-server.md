@@ -30,20 +30,31 @@ The socket file acts as the lock: present means a daemon is running, absent
 means none. Shell init hooks (e.g. Nix-injected .profile lines) typically
 check for the file with [ -S "$socket" ] before starting one.
 
+## Options
+
+**--foreground**
+: Run in the foreground and block, instead of auto-backgrounding (server start)
+
 ## Subcommands
 
 **start**
-: Start a persistent daemon (foreground; use & or a supervisor to background)
+: Start a persistent daemon (auto-backgrounds by default; --foreground blocks)
 
 **stop**
 : Send a graceful shutdown request to a running daemon
 
 ## Examples
 
-*Start daemon in the background*
+*Start the daemon (auto-backgrounds)*
 
 ```sh
-magus server start &
+magus server start
+```
+
+*Run the daemon in the foreground (supervisor or debugging)*
+
+```sh
+magus server start --foreground
 ```
 
 *Stop the running daemon*

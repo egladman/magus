@@ -252,7 +252,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 $XDG_CONFIG_HOME/magus/ in ascending priority order. Both plain and
 dot-prefixed names are accepted; having both in the same directory is an error.
 
-**.magus-cache/**
+**.magus/**
 : Content-addressed build cache in the workspace root. Override with
 MAGUS_CACHE_DIR.
 
