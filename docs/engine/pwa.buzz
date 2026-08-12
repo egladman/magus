@@ -73,7 +73,7 @@ export fun buildServiceWorker(site: Site) > void !> any {
     foreach (asset in site.config.precacheAssets) {
         var rel = asset;
         if (rel.endsWith("/")) { rel = rel + "index.html"; }  // a dir URL caches its index.html
-        final p = site.outDir + "/" + rel;
+        final p = fs\join(site.outDir, rel);
         if (fs\isFile(p)) {
             manifest = manifest + rel + ":" + fileSha256(p) + "\n";
         }

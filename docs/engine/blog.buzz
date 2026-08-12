@@ -88,7 +88,7 @@ export fun renderBlogPost(base: str, site: Site) > void !> any {
     final of = io\File.open(site.outDir + "/" + site.blog + "/" + urlPath + "/index.html", io\FileMode.write);
     of.write(doc);
     of.close();
-    fs\writeFile(site.outDir + "/" + site.blog + "/" + urlPath + "/index.md", md);
+    fs\writeFile(fs\join(site.outDir, site.blog, urlPath, "index.md"), md);
 
     site.addRecord(url, title, desc, md);
     foreach (a in fm.q("aliases").listValue()) { site.collectAlias(a.stringValue(), url); }
@@ -109,7 +109,7 @@ fun renderBlogPager(base: str, site: Site) > str !> any {
     // Rebuild the ordering deterministically from disk (site.blogPosts may be partial
     // during the walk). Newest first.
     var posts: mut [BlogPost] = mut [<BlogPost>];
-    foreach (name in fs\listDir(site.root + "/" + site.blog)) {
+    foreach (name in fs\listDir(fs\join(site.root, site.blog))) {
         if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
             final f = io\File.open(site.root + "/" + site.blog + "/" + name, io\FileMode.read);
             final md = f.readAll();
@@ -211,7 +211,7 @@ export fun renderBlogIndex(site: Site) > void !> any {
         if (rec != null) { site.metaCommits[site.metaPrefix + site.blog + "/index.md"] = rec; }
     }
     final doc = renderPage(title, desc, body, site.blog + "/index.md", "", url, "", mut [], site);
-    fs\mkdirAll(site.outDir + "/" + site.blog);
+    fs\mkdirAll(fs\join(site.outDir, site.blog));
     final of = io\File.open(site.outDir + "/" + site.blog + "/index.html", io\FileMode.write);
     of.write(doc);
     of.close();

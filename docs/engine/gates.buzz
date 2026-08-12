@@ -213,12 +213,12 @@ export fun checkPathExists(target: str, site: Site) > bool !> any {
     // when a page links to "../" (Parent Directory in an autoindex root) and the
     // resolver pops back to the root.
     if (target == "") { return fs\isFile(site.outDir + "/index.html"); }
-    if (fs\isFile(site.outDir + "/" + target)) { return true; }
-    if (fs\isDir(site.outDir + "/" + target)) {
-        return fs\isFile(site.outDir + "/" + target + "/index.html");
+    if (fs\isFile(fs\join(site.outDir, target))) { return true; }
+    if (fs\isDir(fs\join(site.outDir, target))) {
+        return fs\isFile(fs\join(site.outDir, target, "index.html"));
     }
     if (target.endsWith("/")) {
-        return fs\isFile(site.outDir + "/" + target + "index.html");
+        return fs\isFile(fs\join(site.outDir, target + "index.html"));
     }
     return false;
 }
@@ -285,7 +285,7 @@ export fun walkGen(rel: str, acc: mut [str], site: Site) > void !> any {
     foreach (name in fs\listDir(dir)) {
         var childRel = name;
         if (rel != "") { childRel = rel + "/" + name; }
-        if (fs\isDir(site.outDir + "/" + childRel)) {
+        if (fs\isDir(fs\join(site.outDir, childRel))) {
             walkGen(childRel, acc, site);
         } else {
             acc.append(childRel);
@@ -343,7 +343,7 @@ export fun pruneStaleOutputs(site: Site) > void !> any {
         }
         if (produced) { continue; }
         std\print("  pruning stale " + dir + "/ (no longer produced)");
-        fs\removeAll(site.outDir + "/" + dir);
+        fs\removeAll(fs\join(site.outDir, dir));
     }
 }
 

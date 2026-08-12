@@ -44,7 +44,7 @@ fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str,
     registerDevPage(title, desc, url, srcRel, site);
     final html = renderContentHTML(markdown\toHtml(md), "", "");
     final doc = renderPage(title, desc, html, srcRel, "", url, "", mut [], site);
-    final dir = site.outDir + "/" + url.sub(0, url.len() - 1);
+    final dir = fs\join(site.outDir, url.sub(0, url.len() - 1));
     fs\mkdirAll(dir);
     fs\writeFile(dir + "/index.html", doc);
     site.addRecord(url, title, desc, md);
@@ -60,7 +60,7 @@ fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str,
 fun renderDevelopmentPageRaw(title: str, desc: str, html: str, searchText: str, url: str, srcRel: str, site: Site) > void !> any {
     registerDevPage(title, desc, url, srcRel, site);
     final doc = renderPage(title, desc, html, srcRel, "", url, "", mut [], site);
-    final dir = site.outDir + "/" + url.sub(0, url.len() - 1);
+    final dir = fs\join(site.outDir, url.sub(0, url.len() - 1));
     fs\mkdirAll(dir);
     fs\writeFile(dir + "/index.html", doc);
     site.addRecord(url, title, desc, searchText);

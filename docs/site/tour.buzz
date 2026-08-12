@@ -61,8 +61,8 @@ export fun renderPlayground(site: Site) > void !> any {
     // placeholder is also what CSP_INLINE_SCRIPT_SOURCES reads to compute site.csp, so
     // this file is both the hash's source and its sink.
     html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
-    fs\mkdirAll(site.outDir + "/" + outDir);
-    fs\writeFile(site.outDir + "/" + outDir + "/index.html", html);
+    fs\mkdirAll(fs\join(site.outDir, outDir));
+    fs\writeFile(fs\join(site.outDir, outDir, "index.html"), html);
 }
 
 

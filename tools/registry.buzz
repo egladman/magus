@@ -60,7 +60,7 @@ fun fetchAll(dir: str) > int !> any {
         final slug = entry.q("name").stringValue();
         if (slug == "") { continue; }
         final body = http\get(UPSTREAM + "/" + slug, opts: {"fail": true}).body;
-        fs\writeFile(dir + "/" + slug + ".json", content: body);
+        fs\writeFile(fs\join(dir, slug + ".json"), content: body);
         count = count + 1;
     }
     return count;
@@ -145,7 +145,7 @@ fun loadReleases(dir: str) > [{str: any}] !> any {
 
     var entries: mut [{str: any}] = mut [<{str: any}>];
     foreach (name in ordered) {
-        final doc = serialize\Boxed.init(yaml\parse(fs\readFile(dir + "/" + name)));
+        final doc = serialize\Boxed.init(yaml\parse(fs\readFile(fs\join(dir, name))));
         final version = doc.q("version").stringValue();
         if (version == "") { continue; }
         var artifacts: mut [{str: any}] = mut [<{str: any}>];

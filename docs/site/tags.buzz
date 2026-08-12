@@ -26,7 +26,7 @@ import "engine/path" as _;
 // source to view or edit, and so rootPrefix climbs the right number of levels.
 fun writeTagPage(url: str, srcRel: str, title: str, desc: str, body: str, searchText: str, site: Site) > void !> any {
     final doc = renderPage(title, desc, body, srcRel, "", url, "", mut [], site);
-    final dir = site.outDir + "/" + url.sub(0, url.len() - 1);
+    final dir = fs\join(site.outDir, url.sub(0, url.len() - 1));
     fs\mkdirAll(dir);
     fs\writeFile(dir + "/index.html", doc);
     site.addRecord(url, title, desc, searchText);

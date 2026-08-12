@@ -101,7 +101,7 @@ fun esbuild(args: [str]) > void !> any {
 // under blog/.
 fun walkBlog(site: Site) > void !> any {
     if (isDirectory(site.root + "/" + site.blog) == false) { return; }
-    foreach (name in fs\listDir(site.root + "/" + site.blog)) {
+    foreach (name in fs\listDir(fs\join(site.root, site.blog))) {
         if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
             renderBlogPost(name, site);
         }
@@ -112,7 +112,7 @@ fun walkBlog(site: Site) > void !> any {
 // Recursively walk docs/ (the render reads its co-located markdown; the SSG's own
 // root children - gen/, src/, tour/, node_modules/, MAGUS.md - are skipped at the root).
 fun walk(rel: str, site: Site) > void !> any {
-    var dir = site.root + "/" + site.docs;
+    var dir = fs\join(site.root, site.docs);
     if (rel != "") { dir = site.root + "/" + site.docs + "/" + rel; }
 
     foreach (name in fs\listDir(dir)) {
@@ -183,7 +183,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     site.blogPosts = mut [<BlogPost>];
     site.hasBlogPosts = false;
     if (isDirectory(site.root + "/" + site.blog)) {
-        foreach (name in fs\listDir(site.root + "/" + site.blog)) {
+        foreach (name in fs\listDir(fs\join(site.root, site.blog))) {
             if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
                 site.hasBlogPosts = true;
             }

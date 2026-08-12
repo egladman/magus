@@ -313,7 +313,7 @@ export object Site {
             makeOutputDir(this.outDir + "/" + a, "alias \"" + a + "\"", a + "/");
             final rel = relativePath(a, this.aliasTarget[a]);
             final csp = cspForRedirectStub(redirectScript(rel));
-            fs\writeFile(this.outDir + "/" + a + "/index.html", aliasStub(rel, csp));
+            fs\writeFile(fs\join(this.outDir, a, "index.html"), aliasStub(rel, csp));
             this.writtenPaths[a + "/index.html"] = true;
         }
     }
