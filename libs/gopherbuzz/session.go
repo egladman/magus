@@ -24,7 +24,18 @@ type Session struct {
 	env           *vmpackage.Env
 	targets       map[string]vmpackage.Callable
 	tests         []TestEntry
+	// exportedNames is every name exported by any chunk this session ran, imported
+	// modules included. It answers a VISIBILITY question: a name some flat import
+	// made private stays visible to the checker if another module exported it.
 	exportedNames map[string]bool
+	// rootExportedNames is the subset exported by chunks run OUTSIDE an import -
+	// the file the caller actually executed. Exports() answers with this one,
+	// because its callers ask an OWNERSHIP question ("what does this magusfile
+	// declare?"), not a visibility one. Conflating the two made every member of an
+	// imported module look like the importer's own export: `import "lcov"` in
+	// console/magusfile.buzz turned lcov's percent and mergePercent into targets of
+	// the console project, which then failed MGS1008 for taking no magus\Context.
+	rootExportedNames map[string]bool
 	// embedded relaxes the script-conformance rules upstream Buzz enforces (no
 	// top-level control flow, labeled args). Default false (strict, like upstream);
 	// the embedding hosts — REPL, magus eval, magusfile loading, the eval test
@@ -231,6 +242,7 @@ func newSession(ctx context.Context) *Session {
 		embedded:           true,
 		targets:            make(map[string]vmpackage.Callable),
 		exportedNames:      make(map[string]bool),
+		rootExportedNames:  make(map[string]bool),
 		loadedPaths:        make(map[string]bool),
 		declaredNamespaces: make(map[string]string),
 	}
@@ -510,6 +522,11 @@ func (s *Session) exec(ctx context.Context, code string) ([]string, error) {
 	}
 	for _, name := range chunk.Exports {
 		s.exportedNames[name] = true
+		// collectImportPrivate is on for exactly the duration of an import (see
+		// execImport), so it is what separates a module's exports from the caller's.
+		if !s.collectImportPrivate {
+			s.rootExportedNames[name] = true
+		}
 	}
 	if s.collectImportPrivate {
 		if s.importPrivate == nil {
@@ -598,12 +615,12 @@ func (s *Session) Globals() map[string]vmpackage.Value {
 // export in a file executed via Exec or ExecChunk. The map is a fresh snapshot;
 // mutations don't affect the session.
 func (s *Session) Exports() map[string]vmpackage.Value {
-	if len(s.exportedNames) == 0 {
+	if len(s.rootExportedNames) == 0 {
 		return nil
 	}
 	all := s.Globals()
-	out := make(map[string]vmpackage.Value, len(s.exportedNames))
-	for name := range s.exportedNames {
+	out := make(map[string]vmpackage.Value, len(s.rootExportedNames))
+	for name := range s.rootExportedNames {
 		if v, ok := all[name]; ok {
 			out[name] = v
 		}
@@ -1580,6 +1597,9 @@ func (s *Session) ExecChunk(ctx context.Context, chunk *vmpackage.Chunk) error {
 	if err == nil {
 		for _, name := range chunk.Exports {
 			s.exportedNames[name] = true
+			if !s.collectImportPrivate {
+				s.rootExportedNames[name] = true
+			}
 		}
 	}
 	return err

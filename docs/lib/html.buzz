@@ -9,7 +9,9 @@ import "lib/dom" as _;
 // resolvePath resolves a relative link against a gen-root-relative dir, normalizing
 // ".." and dropping "." / empty segments ("" for the root).
 export fun resolvePath(fromDir: str, link: str) > str {
-    var segs = splitPath(fromDir);
+    // splitPath returns an immutable [str] and eight of its nine callers only read
+    // it, so this one takes its own copy rather than widening that contract.
+    var segs: mut [str] = splitPath(fromDir).cloneMutable();
     foreach (part in link.split("/")) {
         if (part != "" and part != ".") {
             if (part == "..") {
@@ -368,13 +370,14 @@ export fun tagAdmonition(html: str) > str {
             if (inner.startsWith(prefix)) {
                 inner = "\n<p>" + inner.sub(prefix.len());
             }
-            var label = typ.sub(0, 1) + typ.sub(1).lower();
+            final label = typ.sub(0, 1) + typ.sub(1).lower();
             buf = buf + el("div", attr("class", "admonition admonition-" + kind),
                 el("p", attr("class", "admonition-title"), label) + inner);
             rest = rest.sub(closeBq + 13);   // 13 = len("</blockquote>")
         }
     }
-    return buf + rest;
+    // No trailing return: the loop is `while (true)` with no break, so every exit
+    // is one of the returns above and anything here is unreachable.
 }
 
 // stripMdFromLinkText drops a trailing ".md" from LINK TEXT (between > and </a>).

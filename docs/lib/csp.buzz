@@ -45,7 +45,8 @@ export fun extractInlineScripts(html: str) > [str] {
         scripts.append(rest.sub(0, end));
         rest = rest.sub(end + 9);   // len("</script>") == 9
     }
-    return scripts;
+    // No trailing return: the loop is `while (true)` with no break, so every exit
+    // is one of the returns above and anything here is unreachable.
 }
 
 // CSP_INLINE_SCRIPT_SOURCES lists the source HTML files scanned for inline <script>

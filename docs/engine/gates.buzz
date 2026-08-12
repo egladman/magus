@@ -273,7 +273,8 @@ export fun scanReferencesInHTML(html: str, pageDir: str) > [str] {
             refs.append(resolved);
         }
     }
-    return refs;
+    // No trailing return: the loop is `while (true)` with no break, so every exit
+    // is one of the returns above and anything here is unreachable.
 }
 
 // walkGen recursively enumerates every written file under gen/ so the integrity check
