@@ -66,7 +66,7 @@ jobs:
     permissions:
       contents: read  # publish is the only job that creates the Release/uploads assets
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history + tags so the release-build target's version() (git describe
           # --tags) resolves the tag and build_date() reads the commit date. Both walk the
@@ -100,7 +100,7 @@ jobs:
       - name: Build release artifacts (dynamic)
         if: ${{ inputs.include_dynamic_builds }}
         run: magus run release-build:dynamic --no-default-charms
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-linux-amd64
           path: |
@@ -114,7 +114,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history + tags for git describe; blob:none because none of it is read.
           fetch-depth: 0
@@ -132,7 +132,7 @@ jobs:
       - name: Build release artifacts (dynamic)
         if: ${{ inputs.include_dynamic_builds }}
         run: magus run release-build:dynamic --no-default-charms
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-linux-arm64
           path: |
@@ -148,7 +148,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history + tags for git describe; blob:none because none of it is read.
           fetch-depth: 0
@@ -166,7 +166,7 @@ jobs:
       - name: Build release artifacts (dynamic)
         if: ${{ inputs.include_dynamic_builds }}
         run: magus run release-build:dynamic --no-default-charms
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-darwin-arm64
           path: |
@@ -192,7 +192,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history + tags for git describe; blob:none because none of it is read.
           fetch-depth: 0
@@ -210,7 +210,7 @@ jobs:
       - name: Build release artifacts (dynamic)
         if: ${{ inputs.include_dynamic_builds }}
         run: magus run release-build:dynamic --no-default-charms
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-darwin-amd64
           path: |
@@ -232,7 +232,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history + tags for git describe; blob:none because none of it is read.
           fetch-depth: 0
@@ -279,7 +279,7 @@ jobs:
         shell: msys2 {0}
         run: magus run release-build:dynamic --no-default-charms
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-windows
           path: |
@@ -300,9 +300,8 @@ jobs:
       contents: write        # create the GitHub Release, upload assets, push the index branch
       pull-requests: write   # open the pull request carrying the signed release index
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Full history + tags so generate_release_notes below has commit history.
           fetch-depth: 0
           filter: blob:none
 
@@ -311,7 +310,7 @@ jobs:
           installation-strategy: source
           git-ref: ${{ github.ref_name }}
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: dist
           merge-multiple: true
@@ -414,7 +413,7 @@ jobs:
     # step - a second buildx invocation on this runner starts from an empty BuildKit
     # cache and rebuilds every layer.
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history + tags so version()/commit()/build_date() resolve.
           fetch-depth: 0
@@ -425,10 +424,14 @@ jobs:
           installation-strategy: source
           git-ref: ${{ github.ref_name }}
 
-      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          # v3+ defaults this true, which would export mise.toml's GOEXPERIMENT here. ci,
+          # cd and audit set it at workflow level; this is the one job that does not.
+          env: false
 
-      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       # WHICH registries to authenticate against is not written here, and neither is
       # any parsing of them. image-login reads the same registry table image-build
