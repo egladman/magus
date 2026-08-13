@@ -1,6 +1,7 @@
 package tty
 
 import (
+	"errors"
 	"io"
 	"os"
 	"sync"
@@ -120,15 +121,24 @@ func NewNotifier(z *Zone, max int) *Notifier {
 		stop: make(chan struct{}), wake: make(chan struct{}, 1)}
 }
 
-// ensureLease claims the band on first use and starts the expiry sweeper.
-// Callers hold n.mu. Reports whether there is a band to draw in.
-// ensureLease starts the expiry sweeper, and claims a row only once one is
-// actually needed.
+// ensureLease claims the band on first use and starts the expiry sweeper,
+// reporting whether there is a band to draw in. Callers hold n.mu.
 //
 // Rows are claimed on first use and then KEPT: handing them back mid-run
 // reflows the whole screen, which TestNotifierHoldsItsRowsOnceClaimed pins.
 func (n *Notifier) ensureLease() bool {
-	if n.lease == nil {
+	// A closed notifier takes no rows. Without this, a Notify after Close
+	// acquired a band that the (suppressed) sweeper would never release, and
+	// held toasts whose deadlines nobody was left to enforce.
+	if n.stopped {
+		return false
+	}
+	// Retried on a DISABLED lease, not just a nil one: Acquire refuses by
+	// handing back a disabled Lease rather than nil, so keying on nil alone
+	// left the notifier dark forever after a single refusal - the opposite of
+	// what Pin promises for a condition recorded when there was no room. An
+	// enabled lease is kept, which is what the hold-its-rows test pins.
+	if n.lease == nil || !n.lease.Enabled() {
 		n.lease = n.zone.Acquire(1)
 	}
 	if !n.lease.Enabled() {
@@ -198,17 +208,17 @@ func ReleaseStderr() error {
 	stderrNotifierVal = nil
 	stderrNotifierMu.Unlock()
 
+	// Both are closed and the errors joined: returning on the notifier's error
+	// left the zone's scroll margins set on the way out, which is the one thing
+	// this function exists to prevent.
+	var errs []error
 	if n != nil {
-		if err := n.Close(); err != nil {
-			return err
-		}
+		errs = append(errs, n.Close())
 	}
-	// StderrZone is not re-read through its own accessor: creating the zone
-	// here just to close it would set margins nothing ever asked for.
-	if stderrZoneVal != nil {
-		return stderrZoneVal.Close()
+	if z := takeStderrZone(); z != nil {
+		errs = append(errs, z.Close())
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // Notify pushes a notification onto the stack, to be shown for ttl. A ttl of

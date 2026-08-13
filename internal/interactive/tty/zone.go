@@ -70,9 +70,13 @@ func NewZone(w io.Writer, p Probe) *Zone {
 	return &Zone{w: w, probe: p, isTTY: CanRender(w, p)}
 }
 
+// Guarded by a mutex rather than published through a Once, for the reason
+// stated on stderrNotifierMu: ReleaseStderr reads this from the signal path
+// while a worker may still be inside the constructor. A Once orders its own
+// callers and says nothing about a reader outside it.
 var (
-	stderrZoneOnce sync.Once
-	stderrZoneVal  *Zone
+	stderrZoneMu  sync.Mutex
+	stderrZoneVal *Zone
 )
 
 // StderrZone returns the process-wide owner of standard error's bottom rows.
@@ -86,8 +90,23 @@ var (
 //
 // Tests build their own with [NewZone] instead of reaching for this.
 func StderrZone() *Zone {
-	stderrZoneOnce.Do(func() { stderrZoneVal = NewZone(os.Stderr, SystemProbe) })
+	stderrZoneMu.Lock()
+	defer stderrZoneMu.Unlock()
+	if stderrZoneVal == nil {
+		stderrZoneVal = NewZone(os.Stderr, SystemProbe)
+	}
 	return stderrZoneVal
+}
+
+// takeStderrZone hands the process-wide zone to an exit path and forgets it,
+// reporting nil when none was ever created. Separate from [StderrZone] because
+// creating a zone in order to close it would set margins nothing asked for.
+func takeStderrZone() *Zone {
+	stderrZoneMu.Lock()
+	defer stderrZoneMu.Unlock()
+	z := stderrZoneVal
+	stderrZoneVal = nil
+	return z
 }
 
 // ZoneFor returns the Zone that owns w's bottom rows: the process-wide

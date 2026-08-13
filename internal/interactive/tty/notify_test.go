@@ -415,3 +415,33 @@ func TestSweeperSleepsWhenEverythingFits(t *testing.T) {
 	_, ok := n.untilNextDeadline()
 	assert.False(t, ok, "nothing overflows and nothing expires, so nothing wakes")
 }
+
+// TestNotifierRetriesAfterARefusedGrant pins Pin's promise that a condition
+// recorded when there was no room appears once the band can gain rows. Acquire
+// refuses by returning a DISABLED lease rather than nil, so keying the retry on
+// nil alone left the notifier dark for the rest of the process.
+func TestNotifierRetriesAfterARefusedGrant(t *testing.T) {
+	t.Parallel()
+
+	// A terminal too short to host a band alongside a useful scrolling area:
+	// the first grant is refused.
+	var short ttyBuf
+	n := NewNotifier(NewZone(&short, terminal(80, 1)), 3)
+	require.False(t, n.ensureLease(), "a refused grant reports no band")
+
+	// Given room, it answers on the very next call rather than staying dark.
+	var roomy ttyBuf
+	n.zone = NewZone(&roomy, terminal(80, 24))
+	assert.True(t, n.ensureLease(), "the notifier retries once rows are available")
+}
+
+// TestNotifierTakesNoRowsAfterClose keeps a Notify that arrives after teardown
+// from acquiring a band the (suppressed) sweeper would never hand back.
+func TestNotifierTakesNoRowsAfterClose(t *testing.T) {
+	t.Parallel()
+
+	var buf ttyBuf
+	n := NewNotifier(NewZone(&buf, terminal(80, 24)), 3)
+	require.NoError(t, n.Close())
+	assert.False(t, n.ensureLease(), "a closed notifier claims no rows")
+}
