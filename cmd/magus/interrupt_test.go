@@ -35,7 +35,7 @@ func runConfirmRecording(t *testing.T, interactive bool, window time.Duration, s
 	go func() {
 		defer close(done)
 		confirmInterrupts(ctx, sigs, cancel, &buf, interactive, window,
-			func(s syscall.Signal) { got.Store(int32(s)) })
+			func(s syscall.Signal) { got.Store(int32(s)) }, nil)
 	}()
 
 	for _, s := range send {
@@ -83,7 +83,7 @@ func TestInterruptRearmsAfterTheWindow(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		confirmInterrupts(ctx, sigs, cancel, &buf, true, 20*time.Millisecond, nil)
+		confirmInterrupts(ctx, sigs, cancel, &buf, true, 20*time.Millisecond, nil, nil)
 	}()
 
 	sigs <- syscall.SIGINT

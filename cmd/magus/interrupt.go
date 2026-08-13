@@ -57,7 +57,8 @@ func watchInterrupts(parent context.Context) (context.Context, func(), func() (s
 		defer close(done)
 		confirmInterrupts(ctx, sigs, cancel, os.Stderr,
 			tty.IsTerminalWriter(os.Stderr, tty.SystemProbe), confirmWindow,
-			func(sig syscall.Signal) { stopped.Store(int32(sig)) })
+			func(sig syscall.Signal) { stopped.Store(int32(sig)) },
+			func() { signal.Stop(sigs) })
 	}()
 
 	interrupted := func() (syscall.Signal, bool) {
@@ -88,7 +89,11 @@ func confirmInterrupts(
 	interactive bool,
 	window time.Duration,
 	record func(syscall.Signal),
+	release func(),
 ) {
+	if release == nil {
+		release = func() {}
+	}
 	var timer *time.Timer
 	var armed <-chan time.Time
 	stopTimer := func() {
@@ -116,6 +121,14 @@ func confirmInterrupts(
 					record(s)
 				}
 				cancel()
+				// Hand the NEXT signal back to the runtime's default
+				// disposition before returning. Nothing drains sigs once this
+				// goroutine is gone, so every later SIGINT/SIGTERM was
+				// swallowed: a supervisor's second SIGTERM did nothing, and a
+				// user hammering Ctrl+C through a slow teardown - or through
+				// the end-of-run failure prompt, which blocks on a read that
+				// cannot be interrupted - had no escape at all.
+				release()
 				return
 			}
 			_, _ = fmt.Fprintf(out, "\n%s\n", interruptMessage)

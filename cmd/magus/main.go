@@ -131,8 +131,13 @@ func runCLI() int {
 	//
 	// HERE rather than inside the run commands, so that rerunning a failure
 	// cannot re-enter the prompt from inside itself.
-	if err := promptFailures(res.rootCtx, res.root, cache.StderrHandler()); err != nil {
-		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
+	// Not after an abort. The prompt blocks on a read that cannot be
+	// interrupted, so opening one over the partial failures of a run the user
+	// just told magus to stop is both unwanted and the way to get stuck there.
+	if res.rootCtx.Err() == nil {
+		if err := promptFailures(res.rootCtx, res.root, cache.StderrHandler()); err != nil {
+			fmt.Fprintf(os.Stderr, "magus: %v\n", err)
+		}
 	}
 	cleanup()
 	return withInterrupt(code, interrupted)
