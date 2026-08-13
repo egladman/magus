@@ -201,12 +201,21 @@ import "spells/github/actions" as github;
 magus\cache.remote(github);
 ```
 
-The spell reads `ACTIONS_RESULTS_URL` and `ACTIONS_RUNTIME_TOKEN`, which the runner does
-not export to a plain `run:` step. Add the step that exports them to any job that should
-share the cache:
+The spell reads `ACTIONS_RESULTS_URL` and `ACTIONS_RUNTIME_TOKEN`. The runner injects both
+into an action's process but not into a plain `run:` step, so re-export them through
+`$GITHUB_ENV` in any job that should share the cache. It has to be a JS action that does
+it - a composite action's `run:` steps do not see them either:
 
 ```yaml
-- uses: crazy-max/ghaction-github-runtime@v3
+- uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+  with:
+    script: |
+      for (const name of ['ACTIONS_RESULTS_URL', 'ACTIONS_RUNTIME_TOKEN']) {
+        const value = process.env[name]
+        if (!value) continue
+        if (name.endsWith('_TOKEN')) core.setSecret(value)
+        core.exportVariable(name, value)
+      }
 ```
 
 Everywhere else the spell reports itself disabled: it probes `GITHUB_ACTIONS` first and

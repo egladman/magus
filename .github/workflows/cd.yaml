@@ -55,7 +55,7 @@ jobs:
       # source, so a shallow checkout would publish a site with no provenance at all.
       # filter: blob:none keeps that affordable: the footers walk the commit graph and
       # never read a historical blob. See docs/guides/integrations/ci.md.
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           filter: blob:none
@@ -65,9 +65,10 @@ jobs:
       # later `mise install` step put pnpm and node somewhere no subsequent step could
       # see - `os.exec pnpm: exit -1`, the child never launching. Letting the action do
       # the install also re-enables its cache: it only saves when it installed.
-      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           version: '2026.4.8'
+          env: false
 
       # The docs render drives its generators through `go run`, which compiles
       # internal/codec with cgo and needs liblzma/libzstd.
@@ -134,15 +135,16 @@ jobs:
     steps:
       # Full history + tags: the image bakes version()/commit()/build_date() in via
       # ldflags, and git describe has to be able to reach the nearest tag.
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           filter: blob:none
 
       # mise also brings cosign for the signing step inside image-build.
-      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           version: '2026.4.8'
+          env: false
 
       - uses: ./.github/actions/setup-magus
         with:
@@ -154,8 +156,8 @@ jobs:
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
-      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       # Same magusfile-driven login as release.yaml, minus the stable charm -
       # which lists GHCR alone, so no Docker Hub secret is needed or read here.
