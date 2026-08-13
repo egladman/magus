@@ -730,15 +730,11 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 	// exclusive step takes the write lock (runs alone); every other step takes the
 	// read lock (runs in parallel with peers but never alongside an exclusive step).
 	//
-	// Ordering is load-bearing: take the lock *after* waitForDeps (so an exclusive
-	// step's own deps aren't blocked by its own writer intent) and *before* the
-	// limiter slot (so a pending writer never holds a slot and starves a dependent
-	// of the slot it needs). That ordering is also why the lock spans the *whole*
-	// c.Run below, not just fn: moving it inside c.Run would put it after the slot
-	// and reintroduce the starvation it avoids. The cost is that an exclusive
-	// *cache hit* also serializes its replay, which is fine: exclusive targets are
-	// rare and typically NoCache. A batch with no exclusive steps only ever takes
-	// uncontended read locks.
+	// Ordering is load-bearing: take the lock AFTER waitForDeps (so a step's own
+	// deps aren't blocked by its writer intent) and BEFORE the limiter slot (so a
+	// pending writer never holds a slot and starves a dependent). That is also why
+	// the lock spans the whole c.Run rather than just fn - moving it inside would
+	// put it after the slot and reintroduce the starvation.
 	var isolationMu sync.RWMutex
 	acquireIsolation := func(exclusive bool) func() {
 		if exclusive {
@@ -1232,14 +1228,13 @@ func (c *Cache) logPath(projectPath, hash string) string {
 // Silent mode (WithSilent) bubbles up only target-marked notice lines, and on
 // failure dumps just the log's tail.
 //
-// The log file is retained in every mode (pass or fail): Run persists it to the
-// output store under a target-output ref, so a failing target's exact output stays
-// retrievable via `magus query ref...`. It is overwritten on the next run of the key.
+// The log file is retained in every mode: Run persists it to the output store
+// under a ref, so a failing target's exact output stays retrievable. It is
+// overwritten on the next run of the key.
 //
-// Alongside the raw logF (which drives the terminal replay/dumps below, unchanged),
-// output is line-tapped into structured journal events tagged with project/target/
-// stream. The records are returned for the output store and streamed to the run's
-// sink; the raw paths are untouched so the live view and failure dumps stay verbatim.
+// Output is also line-tapped into structured journal events for the output store
+// and the run's sink. The raw paths are untouched so the live view and failure
+// dumps stay verbatim.
 func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target string, fn func(context.Context) error) ([]byte, error) {
 	quiet := c.logLevel >= slog.LevelError
 	// Collapse withholds live output the same way quiet does, but at default
@@ -1378,6 +1373,13 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 				_, _ = io.WriteString(os.Stderr, ann.Quote(string(data)))
 				_, _ = fmt.Fprintln(os.Stderr)
 			}
+		default:
+			// The structured formats (text, json) stream target output live and
+			// carry project, target, error and ref on the cache.error record, so
+			// there is nothing to replay and no header to add. Spelled out rather
+			// than left implicit: an unvalidated log.format used to land here and
+			// print nothing at all, which is why config is re-validated after the
+			// environment is applied.
 		}
 		// The failed log is retained (not removed): Run persists it to the output
 		// store under a ref so the exact failing output stays retrievable via

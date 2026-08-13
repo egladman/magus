@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -16,16 +17,25 @@ import (
 // whether the context was cancelled within a short grace period.
 func runConfirm(t *testing.T, interactive bool, window time.Duration, send ...os.Signal) (cancelled bool, out string) {
 	t.Helper()
+	cancelled, out, _ = runConfirmRecording(t, interactive, window, send...)
+	return cancelled, out
+}
+
+// runConfirmRecording is runConfirm plus the recorded signal.
+func runConfirmRecording(t *testing.T, interactive bool, window time.Duration, send ...os.Signal) (cancelled bool, out string, recorded syscall.Signal) {
+	t.Helper()
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	sigs := make(chan os.Signal, len(send))
 	var buf bytes.Buffer
+	var got atomic.Int32
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		confirmInterrupts(ctx, sigs, cancel, &buf, interactive, window)
+		confirmInterrupts(ctx, sigs, cancel, &buf, interactive, window,
+			func(s syscall.Signal) { got.Store(int32(s)) })
 	}()
 
 	for _, s := range send {
@@ -35,11 +45,11 @@ func runConfirm(t *testing.T, interactive bool, window time.Duration, send ...os
 	select {
 	case <-ctx.Done():
 		<-done
-		return true, buf.String()
+		return true, buf.String(), syscall.Signal(got.Load())
 	case <-time.After(200 * time.Millisecond):
 		cancel()
 		<-done
-		return false, buf.String()
+		return false, buf.String(), syscall.Signal(got.Load())
 	}
 }
 
@@ -73,7 +83,7 @@ func TestInterruptRearmsAfterTheWindow(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		confirmInterrupts(ctx, sigs, cancel, &buf, true, 20*time.Millisecond)
+		confirmInterrupts(ctx, sigs, cancel, &buf, true, 20*time.Millisecond, nil)
 	}()
 
 	sigs <- syscall.SIGINT
@@ -112,8 +122,64 @@ func TestNonInteractiveStopsImmediately(t *testing.T) {
 
 func TestWatchInterruptsStopReleasesTheHandler(t *testing.T) {
 	t.Parallel()
-	ctx, stop := watchInterrupts(t.Context())
+	ctx, stop, interrupted := watchInterrupts(t.Context())
 	stop()
+	_, wasInterrupted := interrupted()
+	assert.False(t, wasInterrupted, "stop() is not an interrupt")
 	require.Error(t, ctx.Err(), "stop cancels the returned context")
 	assert.NotPanics(t, stop, "stop is safe to call twice")
+}
+
+// TestInterruptIsRecordedForTheExitCode is the regression for a run that
+// printed [fail] and exited 0, which made `magus run test . && deploy` deploy
+// after a Ctrl+C.
+func TestInterruptIsRecordedForTheExitCode(t *testing.T) {
+	t.Parallel()
+
+	t.Run("sigterm", func(t *testing.T) {
+		t.Parallel()
+		cancelled, _, got := runConfirmRecording(t, true, time.Minute, syscall.SIGTERM)
+		require.True(t, cancelled)
+		assert.Equal(t, syscall.SIGTERM, got, "the signal that stopped the run is recorded")
+	})
+
+	// Off a terminal is the case that matters: CI and agents read the exit code
+	// and never see [fail] on a screen.
+	t.Run("sigint off a terminal", func(t *testing.T) {
+		t.Parallel()
+		cancelled, _, got := runConfirmRecording(t, false, time.Minute, syscall.SIGINT)
+		require.True(t, cancelled)
+		assert.Equal(t, syscall.SIGINT, got)
+	})
+
+	t.Run("confirmed sigint at a terminal", func(t *testing.T) {
+		t.Parallel()
+		cancelled, _, got := runConfirmRecording(t, true, time.Minute, syscall.SIGINT, syscall.SIGINT)
+		require.True(t, cancelled)
+		assert.Equal(t, syscall.SIGINT, got)
+	})
+
+	t.Run("unconfirmed first press records nothing", func(t *testing.T) {
+		t.Parallel()
+		cancelled, _, got := runConfirmRecording(t, true, time.Minute, syscall.SIGINT)
+		require.False(t, cancelled)
+		assert.Zero(t, got, "a warned-but-continuing run is not interrupted")
+	})
+}
+
+// TestWithInterruptPrefersASpecificCode keeps 128+N from flattening a code the
+// command already chose.
+func TestWithInterruptPrefersASpecificCode(t *testing.T) {
+	t.Parallel()
+
+	none := func() (syscall.Signal, bool) { return 0, false }
+	term := func() (syscall.Signal, bool) { return syscall.SIGTERM, true }
+	intr := func() (syscall.Signal, bool) { return syscall.SIGINT, true }
+
+	assert.Equal(t, 0, withInterrupt(0, none), "an uninterrupted success stays 0")
+	assert.Equal(t, 1, withInterrupt(1, none), "an ordinary failure is untouched")
+	assert.Equal(t, 130, withInterrupt(0, intr), "SIGINT reports 128+2")
+	assert.Equal(t, 143, withInterrupt(0, term), "SIGTERM reports 128+15")
+	assert.Equal(t, exitUsage, withInterrupt(exitUsage, term),
+		"a usage error keeps its own code rather than being flattened to 143")
 }
