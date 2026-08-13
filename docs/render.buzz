@@ -11,6 +11,7 @@ import "proc";
 import "fs";
 import "io";
 import "os";
+import "proc";
 import "std";
 import "serialize";
 import "time";
@@ -69,6 +70,8 @@ import "site/sections" as _;
 import "site/tags" as _;
 import "site/tour" as _;
 import "site/development" as _;
+import "site/landing" as _;
+import "site/download" as _;
 // The concrete site configuration (base URL, title, nav, generated-tree names) - the only
 // site/-specific value the composition root injects so the engine stays generic.
 import "site/config" as _;
@@ -190,9 +193,9 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
         }
     }
     // Computed once so every page threads a stable string instead of recomputing per
-    // page. See Site.csp/Site.cspHome and computeCSP for which pages get which.
+    // page. See Site.csp/Site.cspBadges and computeCSP for which pages get which.
     site.csp = computeCSP(CSP_IMG_SRC_DEFAULT);
-    site.cspHome = computeCSP(CSP_IMG_SRC_HOME);
+    site.cspBadges = computeCSP(CSP_IMG_SRC_BADGES);
     // gen/ is NOT wiped and rebuilt: outDir is created if missing, every render below
     // overwrites in place, and pruneStaleOutputs() (near the end, once every write is
     // known) deletes only the leftovers whose source is gone - a renamed page, a deleted
@@ -295,6 +298,11 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // the collect* passes above: those read each page's markdown off disk, and a
     // synthesized page has no file behind its srcRel marker.
     collectSectionIndexes(site);
+    // Same contract for the /development/ section, and it needs its own pass because that
+    // section's navigation points both ways: the landing (README.md) lists its children and
+    // each child links back to the landing, so neither can be registered at render time
+    // without the other having rendered first. See collectDevelopmentPages.
+    collectDevelopmentPages(site);
     // Pre-walk, and after the synthesized overviews join docPages: a tag chip renders during the
     // walk and has to know whether its /tags/<slug>/ destination will be written.
     collectTagIndex(site);
@@ -307,6 +315,10 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // only at release-cut time (cmd/magus-utils cut), not here.
     loadReleases(site);
 
+    // The front door, then the README as the /development/ landing. renderLanding writes
+    // gen/index.html; renderRoot writes gen/development/index.html. Both stay ahead of the
+    // glossary render below, which aggregates the term references every page contributes.
+    renderLanding(site);
     renderRoot(site);
     walk("", site);
     // glossary.md last: it aggregates the cross-references collected across the whole walk
@@ -343,6 +355,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     writeOffline(site);
     renderSearchPage(site);
     renderTourPage(site);
+    renderDownloadPage(site);
     writeManifest(site);
 
     // llms.txt: the index an AI agent reads to discover pages and fetch each one's Markdown

@@ -3,6 +3,7 @@
 // it imports engine/types and stays out of the leaf engine/path.buzz.
 namespace route;
 
+import "assert";
 import "lib/url" as _;
 import "engine/types" as _;
 
@@ -17,6 +18,26 @@ export fun isGenerated(srcRel: str, site: Site) > bool {
         or srcRel == site.docs + "/reference/config.md";
 }
 
+
+// LANDING_SRC is the srcRel of the hand-built home page (site/landing.buzz). It names no
+// file on disk - like "tour/index.md" and "search/index.md" it is a synthetic source path,
+// here chosen so cleanURL maps it to "" and the chrome resolves at gen's root. Every "is
+// this the home page" test keys off this rather than off README.md, which no longer
+// renders there.
+export final LANDING_SRC = "index.md";
+
+// DOWNLOAD_SRC is the srcRel of the hand-built install page (site/download.buzz), synthetic
+// in the same way as "tour/index.md". It used to be docs/download.md, a real Markdown file
+// rendered through the docs template, which wrapped one command in a breadcrumb, a search
+// box, a reading time, a pager and a tag row. The page is a call to action, not a document,
+// so it is built by hand and carries the landing's chrome instead.
+export final DOWNLOAD_SRC = "download/index.md";
+
+// README_URL is where the repository's README renders: the /development/ contributor
+// landing, NOT gen's root. Named because it is one routing fact three places must agree
+// on - renderRoot's write path, the canonical URL it reports, and the "../" depth
+// rootPrefix hands the shared chrome.
+export final README_URL = "development/";
 
 export fun outputName(base: str) > str {
     if (base == "README.md") { return "index.html"; }
@@ -68,7 +89,19 @@ export fun newCleanDirectory(rel: str, site: Site) > str {
 // spells.html, "../../" for codes/sandbox/X.html), so shared nav and theme.js resolve
 // at any page depth and the site works under a project subpath.
 export fun rootPrefix(srcRel: str, site: Site) > str {
+    // README.md is the one source whose path says nothing about where it renders: a
+    // repo-root file that lands at README_URL. Its depth is that URL's segment count -
+    // the same arithmetic cleanDepth does - because there is no path to derive it from.
+    if (srcRel == "README.md") { return climb(README_URL.split("/").len() - 1); }
     var rel = srcRel;
     if (rel.startsWith(site.docs + "/")) { rel = rel.sub((site.docs + "/").len()); }
     return climb(cleanDepth(rel, site.blog));
+}
+
+test "rootPrefix climbs out of the README's /development/ home" {
+    final s = mut Site{};
+    s.docs = "docs";
+    s.blog = "blog";
+    assert\equal(rootPrefix("README.md", s), "../", "README renders one level deep");
+    assert\equal(rootPrefix(LANDING_SRC, s), "", "the landing sits at gen's root");
 }

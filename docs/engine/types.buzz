@@ -265,7 +265,7 @@ export object Site {
     // status badges load from. Only renderPage() uses it, only for README.md - every other
     // page keeps the tighter default so an img-src GET (which connect-src can't restrict)
     // stays closed on pages holding the reader's own graph or source.
-    cspHome: str = "",
+    cspBadges: str = "",
 
     // --- Methods that manage this state (pure helpers stay free functions below) ---
 
@@ -372,8 +372,10 @@ export object Site {
     // /public/, and /development/ get their own flat trails; docs pages hang off the
     // documentation index, each intermediate crumb showing the linked page's real
     // title (looked up in docPages via lookupTitle).
+    //
+    // The page at gen's root has nowhere to climb to and is never asked for one - see the
+    // caller in renderPage, which gates on the empty canonical URL.
     fun renderBreadcrumb(srcRel: str, title: str, root: str) > str !> any {
-        if (srcRel == "README.md") { return ""; }
         // Each branch below builds its own crumb <li>s; this template wraps whichever list.
         // li injects raw - it is assembled markup, not a value to escape.
         final bcTmpl = `    <nav class="breadcrumb" aria-label="Breadcrumb">
@@ -414,11 +416,12 @@ export object Site {
             return template\render(bcTmpl, {"li": li});
         }
 
-        // /development/ contributor surface. Home / Development for the landing; Home /
-        // Development / <page> for a direct child (Contributing or a per-project target
-        // catalog). Its own root, not the documentation index.
-        if (srcRel.startsWith("development/")) {
-            if (srcRel == "development/_index.md") {
+        // /development/ contributor surface. Home / Development for the landing (which is
+        // README.md - see renderRoot); Home / Development / <page> for a direct child
+        // (Contributing, Projects, or a per-project target catalog). Its own root, not the
+        // documentation index.
+        if (srcRel.startsWith("development/") or srcRel == "README.md") {
+            if (srcRel == "README.md") {
                 li = li + "<li aria-current=\"page\">Development</li>";
             } else {
                 li = li + "<li><a href=\"" + root + "development/\">Development</a></li>"
@@ -787,11 +790,22 @@ export object Site {
             }
         }
 
+        // The filename is one token. Without it the linkers only knew "magusfile" and
+        // "buzz", so "magusfile.buzz" came out as two adjacent popovers over one word.
+        // sortEntitiesLongestFirst puts this ahead of both halves.
+        ents.append(Entity{ token = "magusfile.buzz", kind = "file", url = "concepts/targets/", summary = "The file that declares a project's targets and binds its spells." });
         ents.append(Entity{ token = "magus query", kind = "command", url = "concepts/knowledge/", summary = "Search the knowledge graph." });
         ents.append(Entity{ token = "magus explain", kind = "command", url = "concepts/knowledge/", summary = "Explain one knowledge-graph node." });
         ents.append(Entity{ token = "magus path", kind = "command", url = "concepts/knowledge/", summary = "Show the shortest path between knowledge-graph nodes." });
         ents.append(Entity{ token = "magus refs", kind = "command", url = "concepts/knowledge/", summary = "Find a symbol's definition and references." });
         ents.append(Entity{ token = "magus graph export --open", kind = "command", url = "reference/manpage/magus-graph/", summary = "Open a graph explorer for the workspace graph." });
+        // vcs has no manpage (nor do refs, clean, memory, buzz, agent, hook, notify), and
+        // the command tokens are derived from reference/manpage/magus-*.md, so the whole
+        // family was unlinkable. Registered against the guide that documents them, the
+        // way the knowledge verbs above are.
+        ents.append(Entity{ token = "magus vcs resolve", kind = "command", url = "guides/integrations/git/", summary = "Settle conflicted generated files by regenerating them." });
+        ents.append(Entity{ token = "magus vcs add", kind = "command", url = "guides/integrations/git/", summary = "Stage a change the way the workspace declares it should be staged." });
+        ents.append(Entity{ token = "magus vcs", kind = "command", url = "guides/integrations/git/", summary = "Staging and conflict resolution that knows what is generated." });
         ents.append(Entity{ token = "query", kind = "command", url = "concepts/knowledge/", summary = "magus query: search the knowledge graph." });
         ents.append(Entity{ token = "explain", kind = "command", url = "concepts/knowledge/", summary = "magus explain: explain one knowledge-graph node." });
         ents.append(Entity{ token = "path", kind = "command", url = "concepts/knowledge/", summary = "magus path: show the shortest path between knowledge-graph nodes." });

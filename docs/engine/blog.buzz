@@ -186,13 +186,18 @@ export fun renderBlogIndex(site: Site) > void !> any {
         rec["description"] = p.description;
         posts.append(rec);
     }
+    // Same card component the home page uses for "Recent writing", so the two read as
+    // one system rather than a styled front door and a bare <ul> behind it. The date
+    // takes .landing-card-mark, the slot the home page's 01/02/03 numerals sit in - it
+    // is the small muted monospace label, and a date is exactly that.
     final body = template\render(`<h1>Blog</h1>
+<p class="landing-section-lede">Why things are the way they are, at more length than a documentation page should go to.</p>
 {{#hasPosts}}
-<ul class="blog-index">
+<div class="landing-cards landing-cards-compact">
 {{#posts}}
-  <li><a href="{{urlPath}}/"><span class="blog-index-title">{{title}}</span></a>{{#hasDate}} <time class="blog-index-date" datetime="{{dateAttr}}">{{dateDisplay}}</time>{{/hasDate}}{{#hasDesc}}<p class="blog-index-desc">{{description}}</p>{{/hasDesc}}</li>
+  <a class="landing-card" href="{{urlPath}}/">{{#hasDate}}<time class="landing-card-mark" datetime="{{dateAttr}}">{{dateDisplay}}</time>{{/hasDate}}<span class="landing-card-title">{{title}}</span>{{#hasDesc}}<span class="landing-card-body">{{description}}</span>{{/hasDesc}}</a>
 {{/posts}}
-</ul>
+</div>
 {{/hasPosts}}
 {{^hasPosts}}
 <p>No posts yet.</p>

@@ -11,7 +11,7 @@
 
 <a href="https://github.com/egladman/magus/actions/workflows/ci.yaml"><img alt="CI" src="https://github.com/egladman/magus/actions/workflows/ci.yaml/badge.svg"></a> <img alt="Go coverage" src="./assets/coverage.svg"> <img alt="textsearch coverage" src="./assets/textsearch-coverage.svg"> <a href="https://pkg.go.dev/github.com/egladman/magus"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/egladman/magus.svg"></a>
 
-A fast, cross-platform task orchestrator for polyglot monorepos. One statically linked binary, config as code, no second toolchain to install.
+A fast, cross-platform task orchestrator for polyglot monorepos. One binary, config as code, no second toolchain to install.
 
 Change a file and magus works out which projects it reaches, rebuilds only those, and caches every result so the same work never runs twice.
 
@@ -113,7 +113,7 @@ So the install runs every time and lets the package manager be the judge. That
 costs about a second on a warm tree and fails loudly when the lockfile and the
 manifest disagree.
 
-**The bootstrap loop.** magus is one statically linked binary and installs
+**The bootstrap loop.** magus is one binary and installs
 through none of the toolchains it drives. A task orchestrator that arrives
 through the package manager it orchestrates has put itself downstream of the
 thing it is meant to control: the failures arrive oblique, there is rarely

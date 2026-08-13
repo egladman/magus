@@ -20,10 +20,11 @@ import { initAnchors } from "./anchors.js";
 import { initCodeCopy } from "./code-copy.js";
 import { initSyntaxHighlight } from "./syntax-highlight.js";
 import { initMermaid } from "./mermaid.js";
-import { initHomeHeading } from "./home-heading.js";
 import { initBackToTop } from "./back-to-top.js";
 import { initPrefetch } from "./prefetch.js";
 import { initRunExample } from "./run-example.js";
+import { initHeroTerminal } from "./hero-terminal.js";
+import { initInstallPlatform } from "./install-platform.js";
 import { initGlossaryTerms } from "./glossary-terms.js";
 import { initKeyboardHelp } from "./keyboard-help.js";
 import { initAnnouncement } from "./announcement.js";
@@ -42,10 +43,11 @@ initAnchors();
 initCodeCopy();
 initSyntaxHighlight();
 initMermaid();
-initHomeHeading();
 initBackToTop();
 initPrefetch();
 initRunExample();
+initHeroTerminal(); // landing page only; no-op elsewhere
+initInstallPlatform(); // install page only; no-op elsewhere
 initGlossaryTerms();
 initKeyboardHelp();
 initAnnouncement();

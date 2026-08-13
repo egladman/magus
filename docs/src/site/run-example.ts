@@ -10,98 +10,14 @@
 // (never on page load - the ~1.9 MB artifact would regress the perf work). Subsequent
 // runs on the page reuse the cached module.
 import { copyFeedback } from "../lib/clipboard.js";
-
-// The playground WASM exposes window.buzz.* inside its Go main(), and wasm_exec.js
-// defines window.Go; declare just the surface this module touches.
-interface BuzzOp {
-  target?: string;
-  name: string;
-  detail?: string;
-  kind: string;
-}
-interface BuzzResult {
-  ok: boolean;
-  output?: string;
-  trace?: BuzzOp[];
-}
-interface BuzzRuntime {
-  evalBuzz(src: string): BuzzResult;
-  evalBuzzWithRecorder(src: string): BuzzResult;
-}
-interface GoInstance {
-  run(instance: WebAssembly.Instance): void;
-  importObject: WebAssembly.Imports;
-}
-declare global {
-  interface Window {
-    buzz?: BuzzRuntime;
-    Go: { new (): GoInstance };
-  }
-}
+// The WASM bootstrap is shared with the landing page's hero terminal - see
+// buzz-runtime.ts for why it cannot be duplicated per consumer.
+import { ROOT, ensureBuzz } from "./buzz-runtime.js";
+import type { BuzzResult } from "./buzz-runtime.js";
 
 export function initRunExample(): void {
   const blocks = document.querySelectorAll("pre[data-magus-run]");
   if (!blocks.length) return;
-
-  // Resolve the playground/ folder relative to this bundle so links work under
-  // the /magus/ subpath and local preview alike.
-  const ROOT = import.meta.url.replace(/main\.js(\?.*)?$/, "");
-
-  // Lazy WASM loader. Returns a Promise that resolves once window.buzz is ready.
-  let wasmPromise: Promise<void> | null = null;
-  function ensureBuzz(): Promise<void> {
-    if (window.buzz && typeof window.buzz.evalBuzz === "function") return Promise.resolve();
-    if (wasmPromise) return wasmPromise;
-    wasmPromise = new Promise<void>(function (resolve, reject) {
-      // wasm_exec.js is a classic script that defines globalThis.Go; append it,
-      // wait for load, then instantiate buzz.wasm exactly like playground.html.
-      const s = document.createElement("script");
-      s.src = ROOT + "playground/wasm_exec.js";
-      s.onload = function () {
-        try {
-          const go = new window.Go();
-          const loader = fetch(ROOT + "playground/buzz.wasm");
-          const startWith = function (mod: WebAssembly.WebAssemblyInstantiatedSource): void {
-            go.run(mod.instance);
-            // The playground exposes window.buzz.evalBuzz inside main(); poll
-            // briefly for it to appear before resolving (Go's main is async under
-            // asyncify).
-            const deadline = Date.now() + 5000;
-            (function wait() {
-              if (window.buzz && typeof window.buzz.evalBuzz === "function") return resolve();
-              if (Date.now() > deadline) return reject(new Error("buzz.evalBuzz not ready"));
-              setTimeout(wait, 30);
-            })();
-          };
-          if (WebAssembly.instantiateStreaming) {
-            WebAssembly.instantiateStreaming(loader, go.importObject).then(startWith).catch(reject);
-          } else {
-            loader
-              .then(function (r) {
-                return r.arrayBuffer();
-              })
-              .then(function (bs) {
-                return WebAssembly.instantiate(bs, go.importObject);
-              })
-              .then(startWith)
-              .catch(reject);
-          }
-        } catch (e) {
-          reject(e);
-        }
-      };
-      s.onerror = function () {
-        reject(new Error("wasm_exec.js failed to load"));
-      };
-      document.head.appendChild(s);
-    });
-    // A transient load failure must not poison every later Run; drop the cache so the
-    // next click retries. The caller still sees this attempt's rejection.
-    wasmPromise.catch(() => {
-      wasmPromise = null;
-    });
-    return wasmPromise;
-  }
 
   const PLAY =
     '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
@@ -122,27 +38,51 @@ export function initRunExample(): void {
       .replace(/=+$/, "");
   }
 
-  // formatTrace renders an evalBuzzWithRecorder result as text lines, matching the
-  // playground console's dry-run output: any printed output first, then one line
-  // per planned op ("[target] name detail  kind · would run"), then a summary. On
-  // failure it shows the diagnostic; with no ops it says nothing would run. The
-  // "would run" / "planned, nothing executed" wording mirrors magus's own dry-run
-  // idiom ("dry run - commands shown, not executed") so the playground reads as
-  // genuine magus, not a bespoke format.
+  // formatTrace renders an evalBuzzWithRecorder result to match magus's OWN dry-run
+  // output, because a reader comparing this panel against their terminal should not
+  // find two different formats for the same thing.
+  //
+  // The real CLI prints a standalone "dry run: ..." notice, then a "[dry] <scope>"
+  // line per unit with its steps indented beneath, then a "summary: dry run - N
+  // target(s) would run" line. The dry-run fact lives in the notice and the summary,
+  // NOT inside the bracketed tag - the brackets are a status column ([pass], [fail],
+  // [dry]) and stuffing a sentence in there breaks the alignment they exist for.
+  //
+  // What the recorder can give us is target and op name, not the resolved command
+  // line, so the steps are op names rather than "$ go build". The shape matches; the
+  // panel does not invent argv it was never handed.
   function formatTrace(r: BuzzResult | null): string {
     if (!r) return "(no result)";
-    if (!r.ok) return (r.output ? r.output + "\n" : "") + "dry run failed";
+    if (!r.ok) {
+      const d = r.diag;
+      const why = d && d.msg ? (d.line > 0 ? d.line + ":" + d.col + ": " + d.msg : d.msg) : "dry run failed";
+      return (r.output ? r.output + "\n" : "") + why;
+    }
     const lines: string[] = [];
     if (r.output) lines.push(r.output);
     const trace = r.trace || [];
+    if (!trace.length) {
+      lines.push("dry run: nothing to run");
+      lines.push("summary: dry run, 0 targets would run");
+      return lines.join("\n");
+    }
+    lines.push("dry run: ops shown, not executed");
+    // Group consecutive ops under their target, mirroring how the CLI groups steps
+    // under the unit that owns them.
+    let current: string | null = null;
+    const targets: string[] = [];
     for (let i = 0; i < trace.length; i++) {
       const op = trace[i];
-      const tag = op.target ? "[" + op.target + "] " : "";
-      const detail = op.detail ? " " + op.detail : "";
-      lines.push(tag + op.name + detail + "  " + op.kind + " · would run");
+      const t = op.target || "";
+      if (t !== current) {
+        current = t;
+        if (targets.indexOf(t) === -1) targets.push(t);
+        lines.push("[dry] " + (t || "magusfile"));
+      }
+      lines.push("  " + op.name + (op.detail ? " " + op.detail : ""));
     }
-    const n = trace.length;
-    lines.push("[dry] " + n + " step" + (n === 1 ? "" : "s") + " planned, nothing executed");
+    const n = targets.length;
+    lines.push("summary: dry run, " + n + " target" + (n === 1 ? "" : "s") + " would run");
     return lines.join("\n");
   }
 

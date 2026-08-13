@@ -16,7 +16,7 @@ Package `magus.insight.v1`, defined in `proto/magus/insight/v1/insight.proto`. P
 
 GetInsight returns every lens in one message.
 
-`POST /magus.insight.v1.InsightService/GetInsight` - unary.
+`POST /magus.insight.v1.InsightService/GetInsight`: unary.
 
 Takes `GetInsightRequest`, returns `GetInsightResponse`.
 

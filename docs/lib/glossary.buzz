@@ -116,6 +116,15 @@ fun isSkipContainer(name: str, skipInlineCode: bool) > bool {
         or name == "h4" or name == "h5" or name == "h6";
 }
 
+// Both maskers key off the tag NAME, so a <span> reads as prose no matter what it
+// holds. That split "magusfile.buzz" in a code panel's title bar into two popovers,
+// one on "magusfile" and one on "buzz", because neither linker has a term for the
+// filename and both had a term for its halves. data-nolink marks an element whose
+// text is a literal - a filename, a command line - rather than prose to be read.
+fun hasNoLinkAttr(html: str, start: int, tagEnd: int) > bool {
+    return html.sub(start, len: tagEnd - start).indexOf("data-nolink") != null;
+}
+
 // linkIns is one pending link insertion: wrap html[pos : pos+len) in `open` ... </a>.
 object linkIns {
     pos: int = 0,
@@ -150,10 +159,12 @@ fun maskLinkable(html: str, skipInlineCode: bool) > str {
             } else {
                 final isClose = (i + 1 < total and html.byte(i + 1) == 47);
                 final name = tagNameLower(html, i);
-                if (isClose == false and isSkipContainer(name, skipInlineCode)) {
+                final tagEnd = scanPastByte(html, i + 1, 62);
+                if (isClose == false and (isSkipContainer(name, skipInlineCode)
+                        or hasNoLinkAttr(html, i, tagEnd))) {
                     end = scanPast(html, i + 1, "</" + name + ">");
                 } else {
-                    end = scanPastByte(html, i + 1, 62);
+                    end = tagEnd;
                 }
             }
             pieces.append(spaces(end - i));

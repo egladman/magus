@@ -241,7 +241,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     // Which top-nav item to mark current. Docs pages hang off the documentation index,
     // except the setup section; the home page (README) highlights nothing.
     var active = "documentation";
-    if (srcRel == "README.md") { active = "home"; }
+    if (srcRel == LANDING_SRC) { active = "home"; }
     if (srcRel == site.docs + "/setup.md" or srcRel.startsWith(site.docs + "/setup/")) { active = "setup"; }
     // Blog posts and the blog index live under the "Blog" nav item.
     if (srcRel.startsWith(site.blog + "/") or srcRel == site.blog + "/index.md") { active = "blog"; }
@@ -249,10 +249,14 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     if (srcRel.startsWith("public/")) { active = ""; }
     // The search page is a tool surface with no nav home of its own.
     if (srcRel == "search/index.md") { active = ""; }
+    // The install page is reached from the hero's call to action and the footer, not from a
+    // top-nav item, so nothing is marked current.
+    if (srcRel == DOWNLOAD_SRC) { active = ""; }
     // The tour page is its own top-nav item.
     if (srcRel == "tour/index.md") { active = "tour"; }
     // /development/ is a contributor surface reached from the footer, not the top nav.
-    if (srcRel.startsWith("development/")) { active = "development"; }
+    // README.md renders as that section's landing, so it belongs here too.
+    if (srcRel.startsWith("development/") or srcRel == "README.md") { active = "development"; }
     // View-model flags for the head's optional blocks. hasDescription gates the
     // description + og:description meta. hasSiteUrl gates the canonical + og:* block
     // (og:url/og:image must be absolute), so the site can ship dark until the host is
@@ -263,14 +267,17 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     // ships, blog on home + blog pages once a post exists. Advertising a missing file would
     // trip the asset-integrity check.
     final hasReleasesFeed = hasSiteUrl and site.releases.len() > 0;
-    final hasBlogFeed = hasSiteUrl and site.hasBlogPosts and (srcRel == "README.md" or srcRel.startsWith(site.blog + "/"));
-    // Preload the LCP hero image on the home page only (README's gopher), so the
-    // browser fetches it in parallel with the CSS.
-    final isHome = srcRel == "README.md";
-    // The home page is the only one whose CSP img-src reaches past same-origin (its two
-    // status badges); every other page keeps site.csp's tighter default.
+    final hasBlogFeed = hasSiteUrl and site.hasBlogPosts and (srcRel == LANDING_SRC or srcRel.startsWith(site.blog + "/"));
+    // Preload the LCP hero image on the two pages that open with the gopher - the landing
+    // and the README - so the browser fetches it in parallel with the CSS.
+    final isHome = srcRel == LANDING_SRC;
+    final isReadme = srcRel == "README.md";
+    final preloadHero = isHome or isReadme;
+    // The README page is the only one whose CSP img-src reaches past same-origin (its two
+    // status badges); every other page keeps site.csp's tighter default. It follows the
+    // BADGES, not the front door - the badges moved to /development/ with the README.
     var pageCsp = site.csp;
-    if (isHome) { pageCsp = site.cspHome; }
+    if (isReadme) { pageCsp = site.cspBadges; }
     // Reading-time chip, passed in per call (reading; "" for none). Rendered above the
     // <article> card but inside its column, aligned with the card's left edge - not
     // floating far-left above the TOC sidebar.
@@ -347,7 +354,8 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     // right depth, not to name a file, so there is nothing to view or edit.
     final hasSource = srcRel.endsWith(".md") and srcRel.endsWith("/_index.md") == false
         and srcRel.startsWith("public/") == false
-        and srcRel != site.blog + "/index.md" and srcRel != "search/index.md" and srcRel != "tour/index.md";
+        and srcRel != site.blog + "/index.md" and srcRel != "search/index.md" and srcRel != "tour/index.md"
+        and srcRel != LANDING_SRC;
     var edit = "<small class=\"page-tools-edit\">";
     if (hasSource) {
         edit = edit + "<a href=\"index.md\" data-tooltip=\"View this page's Markdown source\" title=\"View this page's Markdown source\">&#182; View markdown source</a> &middot; ";
@@ -356,11 +364,12 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     // Second row under the search box: "Suggest an edit" hugging the right edge. The search
     // page has no editable source, so it skips the row (the link would 404 on GitHub).
     var secondaryRow = "    <div class=\"page-tools-secondary\">" + edit + "</div>\n";
-    if (srcRel == "search/index.md" or srcRel == "tour/index.md" or srcRel.startsWith("development/")) { secondaryRow = ""; }
-    // Consistent "<page title> - magus" suffix everywhere; home is just "magus" (its
-    // H1-derived title is the wordmark).
+    if (srcRel == "search/index.md" or srcRel == "tour/index.md" or srcRel == LANDING_SRC
+        or srcRel == DOWNLOAD_SRC or srcRel.startsWith("development/")) { secondaryRow = ""; }
+    // Consistent "<page title> - magus" suffix everywhere; the landing is just "magus"
+    // (its title is the wordmark, and "magus - magus" is not a title).
     var fullTitle = title + " - magus";
-    if (srcRel == "README.md") { fullTitle = "magus"; }
+    if (srcRel == LANDING_SRC) { fullTitle = "magus"; }
     // OpenGraph + Twitter Card meta so a shared link renders a card, not a bare URL. The
     // og:* block lives in the template (gated on hasSiteUrl); here we only pick og:type
     // ("website" for home, else "article").
@@ -372,6 +381,12 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     var bodyClass = "";
     if (srcRel.startsWith("public/")) { bodyClass = "site-public"; }
     if (srcRel == "search/index.md") { bodyClass = "site-search"; }
+    // The landing drops the article card and its reading measure so the hero can run the
+    // full container width; .site-landing is what site.css hangs that on.
+    if (srcRel == LANDING_SRC) { bodyClass = "site-landing"; }
+    // The install page is a call to action built from the same section primitives, so it
+    // takes the landing body class rather than growing a near-duplicate of it.
+    if (srcRel == DOWNLOAD_SRC) { bodyClass = "site-landing"; }
     // Per-page provenance strip (footer tags + "Last updated" commit line). The search
     // page has no source commit, so renderCommitFooter would fall back to HEAD and drift
     // every commit, tripping the drift gate - omit the strip there.
@@ -379,7 +394,8 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
         + tagsHtml
         + "    " + renderCommitFooter(srcRel, site) + "\n"
         + "  </div>\n";
-    if (srcRel == "search/index.md" or srcRel == "tour/index.md" or srcRel.startsWith("development/")) { provenance = ""; }
+    if (srcRel == "search/index.md" or srcRel == "tour/index.md" or srcRel == LANDING_SRC
+        or srcRel == DOWNLOAD_SRC or srcRel.startsWith("development/")) { provenance = ""; }
     // The page skeleton as one Mustache template. The head's optional blocks are logic-
     // less sections keyed off the view-model flags above; {{value}} HTML-escapes, while the
     // pre-rendered fragments (announcement, nav, breadcrumb, contentBlock, related,
@@ -416,9 +432,9 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
 {{#hasBlogFeed}}
   <link rel="alternate" type="application/atom+xml" title="magus blog" href="{{root}}public/atom/blog.atom.xml">
 {{/hasBlogFeed}}
-{{#isHome}}
+{{#preloadHero}}
   <link rel="preload" as="image" href="{{root}}assets/gopher.webp" type="image/webp" fetchpriority="high">
-{{/isHome}}
+{{/preloadHero}}
   <link rel="icon" type="image/png" sizes="32x32" href="{{root}}assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="{{root}}assets/apple-touch-icon.png">
   <link rel="manifest" href="{{root}}manifest.webmanifest">
@@ -453,13 +469,17 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
         "ogType": ogType,
         "hasReleasesFeed": hasReleasesFeed,
         "hasBlogFeed": hasBlogFeed,
-        "isHome": isHome,
+        "preloadHero": preloadHero,
         "bodyClass": bodyClass,
         "root": root,
         "gh": site.config.repoURL,
         "announcement": renderAnnouncementBar(site),
         "nav": renderSiteNav(root, active, true, site.config),
-        "breadcrumb": site.renderBreadcrumb(srcRel, title, root),
+        // The landing's canonical URL is gen's root, so a breadcrumb there would be a trail
+        // back to itself. The install page is excluded by name instead: it keeps a real
+        // canonical URL for sharing, and a "Home / Documentation / Download" trail above a
+        // single command is the documentation chrome this page exists to shed.
+        "breadcrumb": if (canonUrl == "" or srcRel == DOWNLOAD_SRC) "" else site.renderBreadcrumb(srcRel, title, root),
         "secondaryRow": secondaryRow,
         "contentBlock": contentBlock,
         "pager": pager,
@@ -471,40 +491,63 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
 }
 
 
-// Render the repo's top-level README.md as the landing page (index.html). Links like
-// href="docs/X" (repo-root-relative) resolve from gen/index.html as href="X", so strip
-// the docs/ prefix.
+// Render the repo's top-level README.md as the /development/ landing (README_URL). It is
+// the same document GitHub shows on the repository front page - the full pitch, the
+// architecture, and how to build and test the tree - so it is the contributor section's
+// overview rather than the site's front door; site/landing.buzz owns gen/index.html.
+//
+// Links like href="docs/X" are repo-root-relative, which is what GitHub needs. From
+// gen/development/index.html the docs tree is one level up, so the prefix is rewritten to
+// "../" rather than stripped.
 export fun renderRoot(site: Site) > void !> any {
     final f = io\File.open(site.root + "/README.md", io\FileMode.read);
     final rawMd = f.readAll();
     f.close();
 
     // The committed README carries no frontmatter (GitHub would render a leading YAML block
-    // as an ugly metadata table), so a minimal one is synthesized in memory here. Title and
-    // description are left out - they derive fine from the content (H1, then first
-    // paragraph); only tag classification has nothing to derive from, so it gets one basic tag.
-    final md = "---\ntags: [readme]\n---\n\n" + rawMd;
+    // as an ugly metadata table), so a minimal one is synthesized in memory here. The title
+    // is set rather than derived: the README's H1 is the wordmark ("magus"), which reads as
+    // the site title and not as this page, so the breadcrumb, the tab, the search hit and
+    // the section nav would all say "magus" where they mean "Development".
+    final md = "---\ntitle: Development\ntags: [readme]\n---\n\n" + rawMd;
 
+    final root = rootPrefix("README.md", site);
     var html = markdown\toHtml(md);
     // split().join() replaces every occurrence in one pass. The loop form this
     // replaced copied the whole rendered page once per link, and each copy is a
     // distinct string the VM interns and never frees - across the whole site that
     // was a dominant share of the render's peak memory.
-    html = html.split("href=\"./docs/").join("href=\"");
-    html = html.split("href=\"docs/").join("href=\"");
-    // The home page sits at gen root, so its in-content links are rewritten root-to-root.
-    html = renderContentHTML(html, "", "");
+    html = html.split("href=\"./docs/").join("href=\"" + root);
+    html = html.split("href=\"docs/").join("href=\"" + root);
+    // The mascot, the badges and the recorded terminal GIF are written "./assets/..." so
+    // GitHub resolves them from the repo root. rewriteLinks below only touches href, so
+    // src and srcset are climbed here. Quote-anchored, so a mention of "./assets/" in
+    // prose is not an attribute and is left alone.
+    html = html.split("\"./assets/").join("\"" + root + "assets/");
+    // The README opens with "# magus" - the wordmark, which is the right heading for a
+    // repository front page and the wrong one for a page whose tab, breadcrumb and section
+    // nav all read "Development".
+    //
+    // This was a client-side patch (src/site/home-heading.ts) for as long as the README was
+    // the site root: it rewrote the heading's textContent after load. That left the heading
+    // wrong with JavaScript off and wrong for anything reading the HTML rather than the DOM
+    // - a crawler, a feed reader, the llms.txt corpus. renderRoot already synthesizes this
+    // page's frontmatter, so the rename belongs in the same pass, in the bytes.
+    html = html.split("<h1 id=\"magus\">magus</h1>").join("<h1 id=\"development\">Development</h1>");
+    // The page's own clean directory is README_URL minus its trailing slash, which is what
+    // the link rewriter re-relativizes the in-content links against.
+    final pageDir = README_URL.sub(0, README_URL.len() - 1);
+    html = renderContentHTML(html, pageDir, pageDir);
 
     // Same cross-linking every other docs page gets (glossary.md is exempt there since it
     // defines the terms; the README doesn't, so it always gets linked): auto-link the first
     // occurrence of each glossary term, link inline-code domain references, and hint rendered
-    // convention markers back to their conventions section. Root-relative, so "" is both the
-    // page's own clean directory and the base relativePath resolves from.
-    final linkRes = linkGlossaryTerms(html, site.glossaryTerms, relativePath("", "glossary/"));
+    // convention markers back to their conventions section.
+    final linkRes = linkGlossaryTerms(html, site.glossaryTerms, relativePath(pageDir, "glossary/"));
     html = linkRes.html;
-    site.addTermRefs(linkRes.linked, "index.html");
-    html = linkCodeEntities(html, site.codeEntities, "");
-    html = injectConventionHints(html, site.conventions, relativePath("", "conventions/"));
+    site.addTermRefs(linkRes.linked, README_URL);
+    html = linkCodeEntities(html, site.codeEntities, pageDir);
+    html = injectConventionHints(html, site.conventions, relativePath(pageDir, "conventions/"));
 
     final fm = serialize\jsonDecode(markdown\frontmatter(md));
     var title = fm.q("title").stringValue();
@@ -515,16 +558,16 @@ export fun renderRoot(site: Site) > void !> any {
     if (desc == "") { desc = deriveDescription(html); }
     if (desc == "") { desc = site.config.description; }
 
-    final doc = renderPage(title, desc, html, "README.md", "", "", readingTime(md), parseTags(md), site);
-    final of = io\File.open(site.outDir + "/index.html", io\FileMode.write);
-    of.write(doc);
-    of.close();
+    final doc = renderPage(title, desc, html, "README.md", "", README_URL, readingTime(md), parseTags(md), site);
+    final dir = site.outDir + "/" + pageDir;
+    fs\makeDirectory(dir);
+    fs\writeFile(dir + "/index.html", doc);
     // "View source" targets this file directly - write the original, unamended README so it
-    // matches the committed source byte for byte (the synthesized tags are build-only).
-    fs\writeFile(site.outDir + "/index.md", rawMd);
-    site.addRecord("index.html", title, desc, md);
-    foreach (a in fm.q("aliases").listValue()) { site.collectAlias(a.stringValue(), "index.html"); }
-    std\print("  README.md -> " + site.outDir + "/index.html");
+    // matches the committed source byte for byte (the synthesized frontmatter is build-only).
+    fs\writeFile(dir + "/index.md", rawMd);
+    site.addRecord(README_URL, title, desc, md);
+    foreach (a in fm.q("aliases").listValue()) { site.collectAlias(a.stringValue(), README_URL); }
+    std\print("  README.md -> " + dir + "/index.html");
 }
 
 

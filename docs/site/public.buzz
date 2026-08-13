@@ -113,7 +113,16 @@ export fun loadReleases(site: Site) > void !> any {
 
     // Phase 2: tags decide which releases exist and in what order. vcs\tags already
     // returns them newest-first by creation date, so no re-sort is needed here.
-    final tags = vcs\tags("v*");
+    //
+    // The "v*" refspec is a coarse prefilter, not a version test - it happily matches
+    // "vendor-bump" or "verified-refinements" - so every tag is checked against
+    // isVersionTag before it can claim to be a release. Without that, one stray tag
+    // newer than the last real one silently becomes the announced version AND the
+    // expansion of __MAGUS_VERSION__ across the install docs.
+    var tags: [{str: str}] = mut [<{str: str}>];
+    foreach (t in vcs\tags("v*")) {
+        if (isVersionTag(t["name"])) { tags.append(t); }
+    }
     if (tags.len() == 0) {
         // No tags visible - a shallow clone, or a genuinely untagged repository. The
         // binding cannot tell those apart, so trust the manifests rather than publish

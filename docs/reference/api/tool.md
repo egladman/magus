@@ -16,7 +16,7 @@ Package `magus.tool.v1`, defined in `proto/magus/tool/v1/tool.proto`. Part of th
 
 ListTools returns every project's tools with their windows and verdicts.
 
-`POST /magus.tool.v1.ToolService/ListTools` - unary.
+`POST /magus.tool.v1.ToolService/ListTools`: unary.
 
 Takes `ListToolsRequest`, returns `ListToolsResponse`.
 

@@ -47,6 +47,17 @@ export function initRefDrawer(): void {
   docview.append(docBar, docBody);
   drawer.appendChild(docview);
 
+  // Both bars were sticky at top: 0, so scrolling a browsed doc slid the back bar up over
+  // "Reference" and its pin/close buttons - two bars claiming one spot, with the winner
+  // decided by z-index. The back bar parks directly below the head instead. Measured, not
+  // guessed at in rem: the head's height moves with font size, zoom and the pin button.
+  const headEl = drawer.querySelector<HTMLElement>(".ref-drawer-head");
+  const syncHeadHeight = (): void => {
+    if (headEl) drawer.style.setProperty("--ref-head-h", headEl.offsetHeight + "px");
+  };
+  syncHeadHeight();
+  window.addEventListener("resize", syncHeadHeight);
+
   const trail: string[] = [];
 
   const showReference = (): void => {
@@ -105,8 +116,17 @@ export function initRefDrawer(): void {
         } // ids are percent-decoded
       }
       const target = hash ? docBody.querySelector('[id="' + CSS.escape(hash) + '"]') : null;
-      if (target) target.scrollIntoView();
-      else drawer.scrollTop = 0;
+      if (target) {
+        // Measured against the drawer rather than scrollIntoView(): the panel is mid
+        // transform when a term is clicked from the page, and scrolling an element that
+        // is still animating in lands a few pixels down instead of on the definition.
+        // Deferred a frame so the freshly inserted article has been laid out.
+        requestAnimationFrame(() => {
+          drawer.scrollTop += target.getBoundingClientRect().top - drawer.getBoundingClientRect().top;
+        });
+      } else {
+        drawer.scrollTop = 0;
+      }
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return; // superseded by a newer open
       location.href = url; // network/parse failure: just navigate there
@@ -187,12 +207,22 @@ export function initRefDrawer(): void {
 
   // A glossary/reference link clicked ANYWHERE on the page (not just inside the drawer) opens its
   // target INLINE in the reference panel instead of navigating away - so looking up a term keeps you
-  // on the surface. Opt-in by class (.gloss-link) or data-ref-open, and only for same-origin doc
-  // links; a fetch failure (e.g. a daemon that does not serve the page) falls back to navigation.
+  // on the surface. Opt-in by class or data-ref-open, and only for same-origin doc links; a fetch
+  // failure (e.g. a daemon that does not serve the page) falls back to navigation.
+  //
+  // The auto-linked classes are listed because they ARE the reference links on the docs site:
+  // .glossary-term (a glossary word), .code-xref (a command, diagnostic or method), and
+  // .convention-hint. Without them every term navigated away and the reader lost their place
+  // mid-paragraph, which is the one thing a definition lookup must not cost.
   document.addEventListener("click", (e) => {
+    // glossary-terms.ts claims the click on a touch device to part the page open inline; that
+    // reveal and this panel are two answers to the same question, so whoever got there first wins.
+    if (e.defaultPrevented) return;
     const t = e.target;
     if (!(t instanceof Element)) return;
-    const a = t.closest("a.gloss-link, a[data-ref-open]");
+    const a = t.closest(
+      "a.gloss-link, a[data-ref-open], a.glossary-term, a.code-xref, a.convention-hint",
+    );
     if (!(a instanceof HTMLAnchorElement) || !isDocLink(a)) return;
     e.preventDefault();
     if (!isOpen) setOpen(true);

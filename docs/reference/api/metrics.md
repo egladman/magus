@@ -16,7 +16,7 @@ Package `magus.metrics.v1`, defined in `proto/magus/metrics/v1/metrics.proto`. P
 
 GetMetrics returns the current derived snapshot.
 
-`POST /magus.metrics.v1.MetricsService/GetMetrics` - unary.
+`POST /magus.metrics.v1.MetricsService/GetMetrics`: unary.
 
 Takes `GetMetricsRequest`, returns `GetMetricsResponse`.
 
@@ -24,7 +24,7 @@ Takes `GetMetricsRequest`, returns `GetMetricsResponse`.
 
 StreamMetrics pushes the rolling history first (one Backfill), then a fresh Snapshot on each tick, so the dashboard's charts and utilization grid start populated and stay live.
 
-`POST /magus.metrics.v1.MetricsService/StreamMetrics` - server streaming.
+`POST /magus.metrics.v1.MetricsService/StreamMetrics`: server streaming.
 
 Takes `StreamMetricsRequest`, returns `StreamMetricsResponse`.
 
