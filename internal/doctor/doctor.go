@@ -164,6 +164,7 @@ func (r *runner) run(wsErr error) types.DoctorReport {
 		r.checkSpellContract(),
 		r.checkGraphCycles(),
 		r.checkGuardBinary(),
+		r.checkGuardWiring(),
 		r.checkReleaseIndexExpiry(),
 		r.checkRegistryFreshness(),
 		r.checkSymlinks(),

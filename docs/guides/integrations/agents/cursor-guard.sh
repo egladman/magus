@@ -28,7 +28,7 @@
 #     the intended behavior everywhere, not a Cursor concession. What Cursor
 #     shaped is only the CHANNEL - stderr prose here, injected context elsewhere.
 #
-# Both calls pass --host cursor so the observation magus records says which host
+# Both calls pass --agent-name cursor so the observation magus records says which host
 # produced it. Neither Cursor event carries a session id, so none is sent; that
 # is attribution missing, not a verdict changing.
 #
@@ -37,7 +37,7 @@
 # the two lines say exactly where: an advise on a shell command is delivered
 # nowhere (Cursor sends nothing on an allow), and an advise on a file write
 # reaches the person via stderr but never the model.
-# magus-guard-template: 1
+# magus-guard-template: 3
 # magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=none pass=none
 # magus-guard-coverage: schema=1 host=cursor surface=path deny=none advise=human pass=none
 
@@ -53,7 +53,7 @@ case "$event" in
 	fi
 	# -o name prints the bare decision word, which is all this needs. magus
 	# re-roots the absolute path Cursor sends onto the workspace itself.
-    verdict=$(printf '%s' "$event" | jq -r '.file_path' | "$GUARD_MAGUS_BIN" hook --path --host cursor -o name 2>/dev/null)
+    verdict=$(printf '%s' "$event" | jq -r '.file_path' | "$GUARD_MAGUS_BIN" hook --path --agent-name cursor -o name 2>/dev/null)
 	[ "$verdict" = "advise" ] || exit 0
 	# Cursor surfaces a non-blocking hook's stderr, so the message goes there as
 	# prose rather than as a verdict it would not read.
@@ -80,7 +80,7 @@ fi
 # unless failClosed is set. Letting that status escape would turn every block into an
 # allow, silently, which is the one outcome worse than not installing the guard. Cursor's
 # channel is the JSON on stdout; this exits 0 so that JSON is what it acts on.
-verdict=$(printf '%s' "$event" | jq -r '.command' | "$GUARD_MAGUS_BIN" hook --host cursor \
+verdict=$(printf '%s' "$event" | jq -r '.command' | "$GUARD_MAGUS_BIN" hook --agent-name cursor \
 	-o 'template={{if eq .decision "deny"}}{"permission":"deny","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}' 2>/dev/null)
 [ -n "$verdict" ] || verdict='{"permission":"allow"}'
 printf '%s' "$verdict"

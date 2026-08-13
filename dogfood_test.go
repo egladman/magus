@@ -119,6 +119,11 @@ var templateDirScaffolding = map[string]bool{
 	"pnpm-lock.yaml":          true,
 	"magusfile.buzz":          true,
 	"opencode-plugin.test.ts": true,
+	// The binary-interface twin: proves the recorded shim's argv shape still gets
+	// a real verdict from a real magus, but is not itself something a reader
+	// copies into a host - see the note at its top for the split with the file
+	// above.
+	"opencode-plugin.live.test.ts": true,
 }
 
 // TestEveryShippedTemplateIsRegistered closes the gate the other parity tests

@@ -24,7 +24,7 @@
 [!exec:jq] skip 'the guard templates pipe events through jq, which is not installed'
 [windows] skip 'POSIX sh templates; Windows hosts wire the same verdict differently'
 
-env GUARD_HOST=testscript
+env GUARD_AGENT_NAME=testscript
 
 # --- magus-guard-command.sh: the Claude Code and Codex shape ------------------
 

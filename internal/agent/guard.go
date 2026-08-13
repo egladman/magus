@@ -50,7 +50,20 @@ var guardSurfaces = []string{"command", "path"}
 // Bump it whenever a template's BEHAVIOR changes - not for a comment or a
 // rewording. TestShippedTemplatesCarryTheCurrentVersion makes the bump total:
 // every template must be re-stamped or the build fails.
-const GuardTemplateVersion = 1
+//
+// 2: docs/guides/integrations/agents/opencode-plugin.ts unconditionally passed
+// the attribution flag, which no released binary accepts (v0.3.0 predates it) -
+// an older binary rejected it, the plugin's judge() got unparseable stdout, and
+// every verdict silently allowed. The sh templates already retried without
+// attribution on exactly this failure (magus-guard-command.sh's guard()); the
+// plugin now does the same.
+//
+// 3: that flag is now --agent-name (was --host, which read as a network host)
+// and the templates' variable is GUARD_AGENT_NAME (was GUARD_HOST). A copy
+// still passing the old spelling degrades rather than breaks - the retry that
+// version 2 added drops attribution and keeps the verdict - so an unbumped
+// copy loses the activity trail's host label, not its guard.
+const GuardTemplateVersion = 3
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

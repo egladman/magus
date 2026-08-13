@@ -7,7 +7,7 @@
 //
 // It encodes no magus rule. Every decision comes from `magus hook`, so
 // this stays host-only glue rather than a second rule set that drifts out of
-// step with the other hosts' templates. `--host opencode` only labels the
+// step with the other hosts' templates. `--agent-name opencode` only labels the
 // observation magus records; it cannot change a verdict.
 //
 // Covers BOTH guard surfaces, so OpenCode gets the same rules Claude Code does:
@@ -20,7 +20,7 @@
 // context-injection arm. That is what the two declarations below record, and
 // they are machine-read by the host-parity gate - see the longer note in
 // magus-guard-command.sh.
-// magus-guard-template: 1
+// magus-guard-template: 3
 // magus-guard-coverage: schema=1 host=opencode surface=command deny=model advise=human pass=none
 // magus-guard-coverage: schema=1 host=opencode surface=path deny=model advise=human pass=none
 //
@@ -79,6 +79,27 @@ export const MagusGuard: Plugin = async () => {
   const magus = process.env.GUARD_MAGUS_BIN ?? "magus";
 
   /**
+   * Runs one `magus hook` invocation and returns its raw stdout, or null when the
+   * binary could not be run at all (missing, not executable). An older binary that
+   * rejects a flag still runs and exits, so that case comes back as "" here, not
+   * null - the caller distinguishes them.
+   */
+  const runOnce = async (args: readonly string[], input: string): Promise<string | null> => {
+    try {
+      const proc = Bun.spawn([magus, ...args], {
+        stdin: new TextEncoder().encode(input),
+        stdout: "pipe",
+        stderr: "ignore",
+      });
+      const stdout = await new Response(proc.stdout).text();
+      await proc.exited;
+      return stdout;
+    } catch {
+      return null;
+    }
+  };
+
+  /**
    * Runs one guard query. Returns null when no verdict could be obtained, which
    * every caller treats as allow.
    *
@@ -93,23 +114,40 @@ export const MagusGuard: Plugin = async () => {
    * one quoting mistake away from being re-parsed. Passing it in argv does not
    * misjudge the command, it gets NO verdict - which fails open, quietly, on
    * every call.
+   *
+   * `--agent-name` in `args` is ATTRIBUTION, not policy (see the header comment), and
+   * postdates the current release this plugin is downloaded and run against.
+   * Passing it unconditionally does not degrade the guard, it BREAKS it - an older
+   * binary rejects the unknown flag and prints its usage, so `-o json` comes back
+   * empty and every verdict silently disappears. So: try as called, and on an
+   * empty reply - which under `-o json` only happens when the call itself failed,
+   * since even a pass renders `{"decision":"pass",...}` - retry with `--agent-name` and
+   * its value stripped out. Same shape as magus-guard-command.sh's `guard()`
+   * fallback, fixed there after the same gap (memory:
+   * agent-host-attribution-not-captured) and ported here so this plugin degrades
+   * the same way.
    */
   const judge = async (args: readonly string[], input: string): Promise<Verdict | null> => {
-    let stdout: string;
-    try {
-      const proc = Bun.spawn([magus, ...args], {
-        stdin: new TextEncoder().encode(input),
-        stdout: "pipe",
-        stderr: "ignore",
-      });
-      stdout = await new Response(proc.stdout).text();
-      await proc.exited;
-    } catch {
+    const unguarded = () =>
       console.warn(
         `[magus guard] could not run ${magus}; this call is UNGUARDED. ` +
           "Install magus, or set GUARD_MAGUS_BIN to its path.",
       );
+
+    let stdout = await runOnce(args, input);
+    if (stdout === null) {
+      unguarded();
       return null;
+    }
+    if (stdout.trim() === "") {
+      const nameIndex = args.indexOf("--agent-name");
+      const withoutName =
+        nameIndex === -1 ? args : [...args.slice(0, nameIndex), ...args.slice(nameIndex + 2)];
+      stdout = await runOnce(withoutName, input);
+      if (stdout === null) {
+        unguarded();
+        return null;
+      }
     }
 
     let parsed: unknown;
@@ -156,7 +194,7 @@ export const MagusGuard: Plugin = async () => {
       if (input.tool === "bash") {
         const command = argString(output.args, ["command"]);
         if (command === "") return;
-        apply(await judge(["hook", "--host", "opencode", "-o", "json"], command));
+        apply(await judge(["hook", "--agent-name", "opencode", "-o", "json"], command));
         return;
       }
 
@@ -165,7 +203,7 @@ export const MagusGuard: Plugin = async () => {
         // plugin working if a future tool spells it differently.
         const path = argString(output.args, ["filePath", "file_path", "path"]);
         if (path === "") return;
-        apply(await judge(["hook", "--path", "--host", "opencode", "-o", "json"], path));
+        apply(await judge(["hook", "--path", "--agent-name", "opencode", "-o", "json"], path));
       }
     },
   };

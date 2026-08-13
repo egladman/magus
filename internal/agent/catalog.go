@@ -25,7 +25,12 @@ import (
 
 // SkillVersion changes when the installed skill contract changes. It is part
 // of the generated provenance and lets verification explain stale installs.
-const SkillVersion = 36
+//
+// 37: a --simple install also writes each skill's always-full <name>-full twin
+// (see fullTwinSuffix), and both entries carry a cross-reference in their
+// description. The content digest cannot catch this on its own - it hashes the
+// SOURCE bodies, which did not change, while what an install writes did.
+const SkillVersion = 37
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -56,6 +61,13 @@ type AgentSkill struct {
 	Name        string
 	Description string
 	Body        string
+	// Variant is what THIS entry was actually rendered as, independent of the
+	// Variant requested from RenderedSkills. A simple request also returns
+	// each skill's always-full twin (see fullTwinSuffix), and the twin's own
+	// stamp must say "full", never "simple" - StampSkill and friends key off
+	// this field, not the request. Meaningless on an unrendered definition
+	// from EmbeddedSkills.
+	Variant Variant
 }
 
 // Variant selects which permutation of a skill body to render.
@@ -91,16 +103,38 @@ type AgentSkill struct {
 type Variant int
 
 const (
-	// VariantFull is the default: the imperative steps plus the rationale that
-	// says why each one is the right move and what goes wrong otherwise.
+	// VariantFull is the default: every mechanical step spelled out, plus the
+	// rationale that says why each one is the right move and what goes wrong
+	// otherwise.
 	VariantFull Variant = iota
-	// VariantSimple keeps the imperative steps and withholds the rationale, for a
-	// capable reader that would rather spend the context on the task. It is a bet
-	// ON the reader, not a lossy compression - which is why the split is a
-	// judgement an author records, and why anything a step cannot survive losing
-	// belongs in the unmarked core instead.
+	// VariantSimple sheds ENUMERATION and keeps JUDGMENT, for the most capable
+	// readers - not the least. A capable reader can re-derive the mechanical
+	// steps from the tool surface on its own; what it cannot re-derive is
+	// which failures are silent, what is load-bearing, and where a judgment
+	// call is being asked of it. So simple is a bet ON the reader, not a
+	// lossy compression - which is why the split is a judgement an author
+	// records, and why anything a step cannot survive losing belongs in the
+	// unmarked core instead.
 	VariantSimple
 )
+
+// fullTwinSuffix names the always-full twin a VariantSimple install writes
+// alongside each skill's primary entry: <name>-full. Simple is a bet that the
+// INSTALLING reader can re-derive what it drops - but a session that installs
+// simple can still delegate to a smaller or less-briefed reader who cannot,
+// and that reader inherits whatever the top-level install picked with no say
+// in it. The twin gives it a stable name to ask for instead, independent of
+// what tier the primary install happened to choose.
+const fullTwinSuffix = "-full"
+
+// FullTwinName returns the always-full twin's name for a base skill name.
+func FullTwinName(base string) string { return base + fullTwinSuffix }
+
+// IsFullTwinName reports whether name is a full twin rather than a primary
+// skill entry. Callers that enumerate an INSTALLED tree need this: a simple
+// install writes both, so a name-by-name comparison against the canonical
+// skill list sees twins it would otherwise call unrecognized.
+func IsFullTwinName(name string) bool { return strings.HasSuffix(name, fullTwinSuffix) }
 
 func (v Variant) String() string {
 	if v == VariantSimple {
@@ -220,8 +254,12 @@ func NewCatalog(sourceFS fs.FS, agentsSection string, schemaVersion int) *Catalo
 	return c
 }
 
-// EmbeddedSkills returns every embedded skill rendered for v, in name order.
-func (c *Catalog) EmbeddedSkills(v Variant) ([]AgentSkill, error) {
+// EmbeddedSkills returns every embedded skill's canonical, unrendered
+// definition, in name order: Body carries the raw template source, exactly as
+// checked in. Variant is meaningless on these entries - render one for a
+// specific permutation with Render, or get the full install-ready list
+// (twins included) with RenderedSkills.
+func (c *Catalog) EmbeddedSkills() ([]AgentSkill, error) {
 	sources := append([]skillSource(nil), skillSources...)
 	sort.Slice(sources, func(i, j int) bool { return sources[i].name < sources[j].name })
 	skills := make([]AgentSkill, 0, len(sources))
@@ -230,11 +268,61 @@ func (c *Catalog) EmbeddedSkills(v Variant) ([]AgentSkill, error) {
 		if err != nil {
 			return nil, err
 		}
-		rendered, err := applyVariant(source.name, strings.TrimSpace(string(body)), v)
+		skills = append(skills, AgentSkill{Name: source.name, Description: source.description, Body: strings.TrimSpace(string(body))})
+	}
+	return skills, nil
+}
+
+// Render renders def's raw template Body for v, returning a new AgentSkill
+// whose Body is the final Markdown and whose Variant records which
+// permutation produced it - RenderSkill and StampSkill key off that field on
+// the RESULT, never off an ambient caller-supplied variant, so a mixed batch
+// (see RenderedSkills) stamps every entry correctly regardless of what was
+// requested. def is not mutated.
+func (c *Catalog) Render(def AgentSkill, v Variant) (AgentSkill, error) {
+	rendered, err := applyVariant(def.Name, def.Body, v)
+	if err != nil {
+		return AgentSkill{}, err
+	}
+	return AgentSkill{Name: def.Name, Description: def.Description, Body: rendered, Variant: v}, nil
+}
+
+// RenderedSkills returns every embedded skill rendered for v, in name order -
+// the install-ready list SkillBytes, SkillTar, and WriteSkillTree all write.
+// When v is VariantSimple, each skill is followed immediately by its
+// always-full <name>-full twin (see fullTwinSuffix), so every one of those
+// callers gets the dual install for free. VariantFull adds no twins: the
+// primary entry already IS the full form, so a twin would only duplicate it
+// under a second name.
+func (c *Catalog) RenderedSkills(v Variant) ([]AgentSkill, error) {
+	defs, err := c.EmbeddedSkills()
+	if err != nil {
+		return nil, err
+	}
+	skills := make([]AgentSkill, 0, len(defs))
+	for _, def := range defs {
+		primary, err := c.Render(def, v)
 		if err != nil {
 			return nil, err
 		}
-		skills = append(skills, AgentSkill{Name: source.name, Description: source.description, Body: rendered})
+		// Deliberately NOT cross-referenced from the primary's description. The
+		// twin's own description already announces itself in the host's skill
+		// listing, where a delegated model browsing for a skill sees it; adding a
+		// pointer here would spend context on every simple skill to say something
+		// the twin's own entry already says, and simple exists to spend less.
+		skills = append(skills, primary)
+
+		if v != VariantSimple {
+			continue
+		}
+		full, err := c.Render(def, VariantFull)
+		if err != nil {
+			return nil, err
+		}
+		full.Name = FullTwinName(def.Name)
+		full.Description = def.Description + " This is the full reference copy of " + def.Name +
+			" - prefer it over " + def.Name + " if you are a smaller or delegated model."
+		skills = append(skills, full)
 	}
 	return skills, nil
 }
@@ -249,13 +337,13 @@ func (c *Catalog) RenderSkill(skill AgentSkill) []byte {
 // Pure rendering: callers decide what to do with the bytes (write to a
 // file, embed in a tar, hash, log).
 func (c *Catalog) SkillBytes(name string, v Variant) ([]byte, error) {
-	skills, err := c.EmbeddedSkills(v)
+	skills, err := c.RenderedSkills(v)
 	if err != nil {
 		return nil, err
 	}
 	for _, skill := range skills {
 		if skill.Name == name {
-			return c.StampSkill(c.RenderSkill(skill), v), nil
+			return c.StampSkill(c.RenderSkill(skill), skill.Variant), nil
 		}
 	}
 	return nil, fmt.Errorf("unknown skill %q", name)
@@ -263,7 +351,7 @@ func (c *Catalog) SkillBytes(name string, v Variant) ([]byte, error) {
 
 // SkillNames returns the embedded skill names in deterministic order.
 func (c *Catalog) SkillNames() ([]string, error) {
-	skills, err := c.EmbeddedSkills(VariantFull)
+	skills, err := c.EmbeddedSkills()
 	if err != nil {
 		return nil, err
 	}
@@ -283,7 +371,7 @@ func (c *Catalog) SkillNames() ([]string, error) {
 // outside the workspace root - the shell sees the command, the sandbox sees
 // it, and the user gets to choose the destination.
 func (c *Catalog) SkillTar(dest string, v Variant) ([]byte, error) {
-	skills, err := c.EmbeddedSkills(v)
+	skills, err := c.RenderedSkills(v)
 	if err != nil {
 		return nil, err
 	}
@@ -294,7 +382,7 @@ func (c *Catalog) SkillTar(dest string, v Variant) ([]byte, error) {
 	tw := tar.NewWriter(&buf)
 	epoch := time.Unix(0, 0).UTC()
 	for _, skill := range skills {
-		body := c.StampSkill(c.RenderSkill(skill), v)
+		body := c.StampSkill(c.RenderSkill(skill), skill.Variant)
 		hdr := &tar.Header{
 			Name:    filepath.ToSlash(filepath.Join(dest, skill.Name, "SKILL.md")),
 			Mode:    0o644,
@@ -332,7 +420,7 @@ func (c *Catalog) WriteSkillTree(dir, dest string, force bool, v Variant) ([]str
 	if rel, err := filepath.Rel(dir, joined); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return nil, fmt.Errorf("agent install: destination %q escapes the working tree", dest)
 	}
-	skills, err := c.EmbeddedSkills(v)
+	skills, err := c.RenderedSkills(v)
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +438,7 @@ func (c *Catalog) WriteSkillTree(dir, dest string, force bool, v Variant) ([]str
 		if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
 			return nil, err
 		}
-		if err := os.WriteFile(outPath, c.StampSkill(c.RenderSkill(skill), v), 0o644); err != nil {
+		if err := os.WriteFile(outPath, c.StampSkill(c.RenderSkill(skill), skill.Variant), 0o644); err != nil {
 			return nil, fmt.Errorf("agent install: write %s: %w", outPath, err)
 		}
 		written = append(written, filepath.Join(dest, rel))
@@ -522,17 +610,26 @@ func (c *Catalog) gradeStamp(location, reinstall, body string) Status {
 // Section returns the provider-neutral always-on AGENTS.md guidance.
 func (c *Catalog) Section() string { return c.agentsSection }
 
-// VariantSize returns the total rendered size of every skill in v, stamp
-// included, so a caller can state the context cost of an install without
-// performing one.
+// VariantSize returns the total rendered size of every skill's PRIMARY entry
+// in v, stamp included, so a caller can state the context cost of an install
+// without performing one. Deliberately excludes RenderedSkills' full twins -
+// reportContextCost uses this to compare "what you have" against "what the
+// other variant would be", and a twin-inclusive total would make VariantSize
+// (VariantSimple) larger than VariantSize(VariantFull) precisely because
+// simple installs more files, silently inverting the comparison it exists to
+// answer ("would --simple cost less").
 func (c *Catalog) VariantSize(v Variant) (int64, error) {
-	skills, err := c.EmbeddedSkills(v)
+	defs, err := c.EmbeddedSkills()
 	if err != nil {
 		return 0, err
 	}
 	var total int64
-	for _, s := range skills {
-		total += int64(len(c.StampSkill(c.RenderSkill(s), v)))
+	for _, def := range defs {
+		rendered, err := c.Render(def, v)
+		if err != nil {
+			return 0, err
+		}
+		total += int64(len(c.StampSkill(c.RenderSkill(rendered), v)))
 	}
 	return total, nil
 }

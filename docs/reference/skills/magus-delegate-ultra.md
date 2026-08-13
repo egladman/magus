@@ -28,7 +28,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `36` |
+| `agent-skill-version` | `37` |
 | `knowledge-schema-version` | `9` |
 | `skill-content` | `e6100e60aac2` |
 | `skill-variant` | `full` |
@@ -37,7 +37,7 @@ The `skill-content` digest is shared by both permutations below, so they version
 
 ## Full form
 
-The default: the steps plus the rationale for each.
+The default: every mechanical step spelled out, plus the rationale for each.
 
 ````markdown
 # Cost-aware graph delegation
@@ -226,7 +226,7 @@ spawn every possible worker.
 
 ## Short form (`--simple`)
 
-The same steps with the rationale withheld; the bar under the heading above shows by how much. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for when to prefer which.
+The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for when to prefer which.
 
 <details>
 <summary>Show the short form</summary>
