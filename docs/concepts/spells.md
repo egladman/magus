@@ -8,7 +8,7 @@ tags: [spells, operations, toolchain, cache, targets, go, rust, magusfile]
 
 # Spells
 
-A **Spell** is a _library of tool-native operations_ for one toolchain, plus the cache and affected-set metadata that toolchain needs. The `go` spell exposes `go-build`/`go-test`/`go-vet`/`go-fmt`/`golangci-lint`/...; the `rust` spell exposes `cargo-build`/`cargo-test`/`cargo-clippy`/`cargo-fmt`/.... Each op is named after the CLI command it runs (see [Naming operations](#naming-operations)). A spell is **bound to a project** and **runs nothing on its own**: it contributes operations your magusfile composes into [targets](targets.md), and it tells the cache which files are inputs and outputs.
+A **Spell** is a _library of tool-native operations_ for one toolchain, plus the cache metadata that toolchain needs. The `go` spell exposes `go-build`/`go-test`/`go-vet`/`go-fmt`/`golangci-lint`/...; the `rust` spell exposes `cargo-build`/`cargo-test`/`cargo-clippy`/`cargo-fmt`/.... Each op is named after the CLI command it runs (see [Naming operations](#naming-operations)). A spell is **bound to a project** and **runs nothing on its own**: it contributes operations your magusfile composes into [targets](targets.md), and it tells the cache which files are inputs and outputs.
 
 A spell is _how_ a tool does something (the `go-vet`, `cargo-clippy` ops); a target is _what_ you run (`magus run lint`). You **bind** spells and **invoke** targets. See [Spells vs Targets](#spells-vs-targets).
 
@@ -45,7 +45,7 @@ These are the two core nouns in magus, on orthogonal axes. Confusing them is the
 | **How it enters a run** | **bound** to a project via `magus\project.register`                                  | **invoked** via `magus run <name>`                                                      |
 | **Runs on its own?**    | **No**: it only contributes ops + cache inputs                                       | **Yes**: it is the entry point                                                          |
 | **Cardinality**         | many ops per spell; many spells per project                                          | one function per target name per project                                                |
-| **Cache role**          | declares `needs`/`provides`/`claims` (the inputs/outputs)                            | the unit a cache key is computed and replayed for                                       |
+| **Cache role**          | declares `needs`/`provides`/`claims` (inputs, outputs, ownership)                            | the unit a cache key is computed and replayed for                                       |
 | **Identity**            | a `name` + its ops                                                                   | `Path + Name` (see [targets.md](targets.md))                                            |
 
 The relationship is **compositional**: a target's body calls spell ops.
@@ -77,16 +77,16 @@ magus deliberately does **not** decide what "lint" or "format" means. A spell su
 
 ## What a spell provides
 
-A bound spell contributes three things to its project. Only operations are "runnable"; the other two are metadata that make caching and the affected set correct.
+A bound spell contributes three things to its project. Only operations are "runnable"; the other two are metadata that make caching correct.
 
-| Contribution   | Source                                  | Purpose                                                        |
-| -------------- | --------------------------------------- | -------------------------------------------------------------- |
-| **Operations** | `mgs_listTargets` (or `ops`)            | the tool-native actions a target can call                      |
-| **`needs`**    | `mgs_listRequiredGlobs` (or `needs`)    | input globs hashed into the cache key; also affected-set seeds |
-| **`provides`** | `mgs_listProvidedGlobs` (or `provides`) | output globs the cache snapshots and replays                   |
-| **`claims`**   | `mgs_listClaimedGlobs` (or `claims`)    | files this spell owns for affected-set attribution             |
+| Contribution   | Source                                  | Purpose                                        |
+| -------------- | --------------------------------------- | ---------------------------------------------- |
+| **Operations** | `mgs_listTargets` (or `ops`)            | the tool-native actions a target can call      |
+| **`needs`**    | `mgs_listRequiredGlobs` (or `needs`)    | input globs hashed into the cache key          |
+| **`provides`** | `mgs_listProvidedGlobs` (or `provides`) | output globs the cache snapshots and replays   |
+| **`claims`**   | `mgs_listClaimedGlobs` (or `claims`)    | files this spell owns; ownership metadata only |
 
-Binding a spell contributes its `needs`/`claims`/`provides` to that project's cache key and affected set even before you wire any target; it executes nothing until a target calls one of its ops.
+Binding a spell contributes its `needs`/`provides` to that project's cache key even before you wire any target; it executes nothing until a target calls one of its ops. `claims` never enter the key: they declare which files the spell owns, surfaced by `magus describe`; nothing else consumes them yet (the affected set attributes files by project directory, not by any glob).
 
 ### An operation is a command or a service
 
@@ -158,7 +158,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
-The go/docker relationship is exactly this **co-binding**, not an import: both are bound to a project and their ops are composed in target bodies. The cache sees the union of every bound spell's `needs`/`provides`/`claims`.
+The go/docker relationship is exactly this **co-binding**, not an import: both are bound to a project and their ops are composed in target bodies. The cache sees the union of every bound spell's `needs`/`provides`.
 
 Three magus APIs take a spell handle as an argument, and each is a magus call consuming a spell rather than a spell importing a spell:
 
@@ -332,8 +332,8 @@ import "magus/spell/<name>" or "spells/<name>"  → a Spell handle (registers no
       │
       ▼
 register(fun(p, cb){ cb({spells}) })   → the spell is bound to the project;
-      │                                   its needs/provides/claims now feed the
-      │                                   project's cache key and affected set
+      │                                   its needs/provides now feed the
+      │                                   project's cache key
       ▼
 export fun <name>(...) > void {}        → a target whose body calls spell ops
       │                                   (spell.op(ctx, {"cwd": ...})); this is the
@@ -349,12 +349,12 @@ Key invariant: **binding is not running.** A bound spell with no target wired is
 
 | Term               | Definition                                                                                                                                                                                                                                                    |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Spell**          | A library of tool-native operations for one toolchain, plus its cache/affected metadata. Bound to a project; runs nothing on its own.                                                                                                                         |
+| **Spell**          | A library of tool-native operations for one toolchain, plus its cache metadata. Bound to a project; runs nothing on its own.                                                                                                                         |
 | **Op (operation)** | One tool-native action a spell exposes, named after its CLI command (`go-vet`, `golangci-lint`). Reached by subscript on the handle (`go["go-vet"](ctx)`) or via `spell::op` on the CLI. See [Naming operations](#naming-operations).                         |
 | **Handle**         | The value bound by importing a spell (`import "magus/spell/<name>"` for a built-in, `import "spells/<name>"` for a workspace-local one). Inert until passed to `magus\project.register`.                                                                      |
-| **`needs`**        | Input globs (`mgs_listRequiredGlobs`). Hashed into the cache key; also seed the affected set.                                                                                                                                                                 |
+| **`needs`**        | Input globs (`mgs_listRequiredGlobs`). Hashed into the cache key.                                                                                                                                                                 |
 | **`provides`**     | Output globs (`mgs_listProvidedGlobs`). What the cache snapshots and replays on a hit.                                                                                                                                                                        |
-| **`claims`**       | Files a spell owns (`mgs_listClaimedGlobs`), for affected-set attribution.                                                                                                                                                                                    |
+| **`claims`**       | Files a spell owns (`mgs_listClaimedGlobs`); ownership metadata surfaced by `magus describe`, consumed by nothing else yet.                                                                                                                                                                                    |
 | **Op**             | A command op forks a `Command` (`{bin, args, charms}`) to completion; a service op is a long-running `Service` (`{command, readiness?, stop?, distinct?, idle?}`): foregrounded when run directly, supervised in the background when reached as a dependency. |
 | **Op kind**        | Whether an op is a `command` (returns a `Command`, run to completion, the default) or a `service` (returns a `Service`, a long-running process). Inferred from the return type; lives on the op, so one spell mixes both.                                     |
 | **Target**         | The runnable unit a spell op is composed into. A separate concept; see [targets.md](targets.md).                                                                                                                                                              |
