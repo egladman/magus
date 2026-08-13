@@ -5,7 +5,7 @@
 
 # A dry run reports the command without executing it.
 exec magus run acme::lint --dry-run
-stderr 'dry run - commands shown, not executed'
+stderr 'dry run: commands shown, not executed'
 stderr '\$ acme lint \.'
 
 # Forwarded args appear in the reported command, so dry-run and a real run agree
@@ -15,7 +15,7 @@ stderr '\$ acme lint \. --flag one'
 
 # A dry run stays a dry run with args forwarded: still nothing executed.
 exec magus run acme::lint --dry-run -- --flag one
-stderr 'dry run - commands shown, not executed'
+stderr 'dry run: commands shown, not executed'
 
 -- magus.yaml --
 concurrency: 4

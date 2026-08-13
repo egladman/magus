@@ -752,7 +752,7 @@ func reportStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool
 		}
 	} else {
 		if len(v.Undeclared) > 0 {
-			fmt.Printf("skipped %d undeclared file(s) - no target claims them:\n", len(v.Undeclared))
+			fmt.Printf("skipped %d undeclared file(s); no target claims them:\n", len(v.Undeclared))
 			printPaths(v.Undeclared)
 			fmt.Println("  if one is a new source file, name it explicitly or pass --untracked;")
 			fmt.Println("  if it is build residue, add it to your VCS ignore rules")

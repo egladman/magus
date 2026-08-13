@@ -99,7 +99,7 @@ func TestBuzzFamiliesCollect(t *testing.T) {
 	p.RecordMCPCall(ctx, observability.MCPCall{Tool: "graph", Outcome: "success", InputBytes: 100, OutputBytes: 200, Duration: 0.03})
 	p.RecordSandboxRules(ctx, observability.SandboxRules{Read: 3, Write: 2, Exec: 1, EnvExact: 4, EnvGlob: 5, Scope: "target"})
 	p.RecordSandboxCheck(ctx, "read", "allow", "//app")
-	p.RecordBuzzHostCall(ctx, observability.BuzzHostCall{Callable: "os.exec", Outcome: "success", Duration: 0.01})
+	p.RecordBuzzHostCall(ctx, observability.BuzzHostCall{Callable: "proc.exec", Outcome: "success", Duration: 0.01})
 	p.RecordBuzzSpellBuiltinsWarm(ctx, 0.05, "build")
 	p.RecordBuzzJITRun(ctx)
 

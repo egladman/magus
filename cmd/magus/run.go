@@ -205,6 +205,11 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// state ("here's what's in effect") is visible before any work - and so a missing
 	// default charm (e.g. rw not applied) is obvious rather than silent.
 	charms := withDefaultCharms(parsedTarget.Charms, globalCfg.DefaultCharms, rf.NoDefaultCharms)
+	// ci dispatches through RunCI, which drops the write-granting charms. Report what
+	// runs, not what was asked for, or the header contradicts the run it introduces.
+	if targetName == "ci" {
+		charms = magus.CharmsForCI(charms)
+	}
 	m.LogCharms(ctx, strings.Join(charms, ","))
 	m.LogCache(ctx)
 	if len(targets) == 0 {

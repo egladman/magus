@@ -199,7 +199,7 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 	fmt.Printf("definition: %s\n\n", out.Definition)
 	for _, p := range out.Projects {
 		if p.Engine != "buzz" {
-			fmt.Printf("project: %s  (engine %s - graph extraction not yet supported)\n\n", p.Label(), p.Engine)
+			fmt.Printf("project: %s  (engine %s: graph extraction not yet supported)\n\n", p.Label(), p.Engine)
 			continue
 		}
 		fmt.Printf("project: %s  (%d targets)\n", p.Label(), len(p.Nodes))
@@ -655,7 +655,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		return errSilent{exitCode: 2}
 	}
 	if against != "" && len(evaluated) > 1 {
-		fmt.Fprintf(os.Stderr, "magus describe target --cache: %q resolves to %d projects; --against compares ONE step - name the project (e.g. `magus describe target %s %s --cache --against %s`)\n",
+		fmt.Fprintf(os.Stderr, "magus describe target --cache: %q resolves to %d projects; --against compares ONE step; name the project (e.g. `magus describe target %s %s --cache --against %s`)\n",
 			pos[0], len(evaluated), pos[0], evaluated[0].Project, against)
 		return errSilent{exitCode: 2}
 	}
@@ -768,7 +768,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 			continue
 		}
 		if r.Against.Matches {
-			fmt.Printf("  against %s: keys MATCH - a run here mints the same ref\n\n", r.Against.Ref)
+			fmt.Printf("  against %s: keys MATCH: a run here mints the same ref\n\n", r.Against.Ref)
 			continue
 		}
 		fmt.Printf("  against %s: keys DIFFER\n", r.Against.Ref)

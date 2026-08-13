@@ -190,7 +190,7 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 
 	t.Run("cache.dry.banner", func(t *testing.T) {
 		t.Parallel()
-		assertPlain(t, buildRecord("cache.dry.banner"), "dry run - commands shown, not executed")
+		assertPlain(t, buildRecord("cache.dry.banner"), "dry run: commands shown, not executed")
 	})
 
 	// A planned target renders like an executed one: the label on the glyph line,
@@ -218,7 +218,7 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 			slog.Bool("dry", true),
 			slog.Int("planned", 3),
 			slog.Int64("elapsed", int64(2*time.Millisecond)),
-		), "summary: dry run - 3 targets would run")
+		), "summary: dry run, 3 targets would run")
 	})
 
 	// Pluralization is real rather than "target(s)".
