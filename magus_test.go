@@ -200,33 +200,6 @@ func TestForEachSpell_NoBudgetUnchanged(t *testing.T) {
 	assert.Len(t, ran, 3)
 }
 
-// TestRunTarget_InjectsEffectiveClaims verifies that runTarget injects
-// effective claims into the spell context for every target, not just "build".
-func TestRunTarget_InjectsEffectiveClaims(t *testing.T) {
-	t.Parallel()
-
-	var gotClaims []string
-
-	spell := spells.NewSpell(
-		"s",
-		spells.WithClaims("**/*.go"),
-		spells.WithInvoker(func(ctx context.Context, _ spells.InvokeRequest) (any, error) {
-			gotClaims = types.EffectiveClaimsFromContext(ctx)
-			return nil, nil
-		}),
-	)
-
-	p := &types.Project{
-		Path:           "p",
-		Spells:         []string{"s"},
-		Bindings:       []*types.Binding{{Name: "s"}},
-		ResolvedSpells: []*spells.Spell{spell},
-	}
-
-	require.NoError(t, runTarget(context.Background(), p, "ci"))
-	assert.NotEmpty(t, gotClaims, "runTarget did not inject effective claims into the spell context")
-}
-
 // TestCacheOps_InspectReturnErrNoCache asserts the cache-operation methods
 // report ErrNoCache on an Inspect-constructed (cache-free) workspace rather
 // than panicking on a nil cache.

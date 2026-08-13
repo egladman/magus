@@ -173,30 +173,6 @@ func IgnoreLiteral(pattern string) types.IgnorePattern {
 	return types.IgnorePattern{Type: types.PatternLiteral, Pattern: pattern}
 }
 
-// WithClaim extends the spell's declared claims with additional globs.
-func WithClaim(globs ...string) BindingOption {
-	return func(b *types.Binding) error {
-		b.AddedClaims = append(b.AddedClaims, globs...)
-		return nil
-	}
-}
-
-// WithoutClaim removes globs from a spell's effective claims.
-func WithoutClaim(globs ...string) BindingOption {
-	return func(b *types.Binding) error {
-		b.RemovedClaims = append(b.RemovedClaims, globs...)
-		return nil
-	}
-}
-
-// WithClaimWeight sets the binding's claim weight.
-func WithClaimWeight(weight int) BindingOption {
-	return func(b *types.Binding) error {
-		b.ClaimWeight = weight
-		return nil
-	}
-}
-
 // FailOnDrift enables the drift gate: fail the run if the working tree is dirty
 // after the target runs.
 func FailOnDrift() TargetOption {

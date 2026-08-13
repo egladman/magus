@@ -99,24 +99,3 @@ func TestIgnorePatternConstructors(t *testing.T) {
 	lit := IgnoreLiteral("node_modules")
 	assert.Equal(t, "node_modules", lit.Pattern)
 }
-
-func TestWithClaim(t *testing.T) {
-	b := &types.Binding{Name: "myspell"}
-	opt := WithClaim("**/*.ts", "**/*.tsx")
-	require.NoError(t, opt(b))
-	assert.Len(t, b.AddedClaims, 2)
-}
-
-func TestWithoutClaim(t *testing.T) {
-	b := &types.Binding{Name: "myspell"}
-	opt := WithoutClaim("**/*.json")
-	require.NoError(t, opt(b))
-	assert.Len(t, b.RemovedClaims, 1)
-}
-
-func TestWithClaimWeight(t *testing.T) {
-	b := &types.Binding{Name: "myspell"}
-	opt := WithClaimWeight(10)
-	require.NoError(t, opt(b))
-	assert.Equal(t, 10, b.ClaimWeight)
-}

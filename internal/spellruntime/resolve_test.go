@@ -393,7 +393,6 @@ func TestOptionalContract_PathEntriesAreSelfDescribing(t *testing.T) {
 	pathFns := map[string]bool{
 		"mgs_listRequiredGlobs": true,
 		"mgs_listProvidedGlobs": true,
-		"mgs_listClaimedGlobs":  true,
 		"mgs_listIgnoreDirs":    true,
 		"mgs_listManifests":     true,
 	}

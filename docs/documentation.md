@@ -66,7 +66,7 @@ Start here to understand the model magus is built on.
 - [Spells](concepts/spells.md) - language/toolchain adapters that provide tool-native operations (`go-build`, `go-test`, ...) for your targets to compose. See [Spells vs Targets](concepts/spells.md#spells-vs-targets) for where the line falls.
 - [Charms](concepts/charms.md) - execution modifiers attached with `:` (for example `lint:rw` to let a read-only target write).
 - [Operations and the work hierarchy](concepts/operations.md) - how a run is scheduled and parallelized across projects.
-- [Cache model](concepts/cache.md) - needs/provides/claims, the content-addressed cache key, invalidation, and replay.
+- [Cache model](concepts/cache.md) - needs/provides, the content-addressed cache key, invalidation, and replay.
 - [Sandbox model](concepts/sandbox.md) - the threat model and allowlist semantics that confine spell execution.
 - [Services](concepts/services.md) - long-running service ops, shared one instance across dependents and invocations, with sprawl and misuse guards.
 - [Wards](concepts/wards.md) - coded guardrails that reject a resolved op whose argv contradicts its kind (a detached service, a watching command).

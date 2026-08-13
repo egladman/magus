@@ -69,7 +69,6 @@ func ValidatePatch(ops []PatchOp) error {
 type Descriptor struct {
 	Name     string   `json:"name"`
 	Needs    []string `json:"needs,omitempty"`
-	Claims   []string `json:"claims,omitempty"`
 	Provides []string `json:"provides,omitempty"`
 	// IgnoreDirs names non-source directories this spell's ecosystem generates
 	// (vendor, node_modules, target, __pycache__) so the input-hashing walk prunes

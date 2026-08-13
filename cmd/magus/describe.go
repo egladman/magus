@@ -923,14 +923,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 				fmt.Printf("  exclusive: true\n")
 			}
 			for _, s := range p.ResolvedSpells {
-				fmt.Printf("  spell: %s", s.Name)
-				if s.ClaimWeight != 0 {
-					fmt.Printf("  weight=%d", s.ClaimWeight)
-				}
-				if len(s.EffectiveClaims) > 0 {
-					fmt.Printf("  claims=%v", s.EffectiveClaims)
-				}
-				fmt.Println()
+				fmt.Printf("  spell: %s\n", s.Name)
 			}
 			for targetName, pol := range p.TargetPolicies {
 				fmt.Printf("  policy: %s", targetName)
@@ -1080,14 +1073,8 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 		}
 		for _, s := range e.Spells {
 			fmt.Printf("  spell: %s", s.Name)
-			if s.ClaimWeight != 0 {
-				fmt.Printf("  weight=%d", s.ClaimWeight)
-			}
 			if len(s.TargetSources) > 0 {
 				fmt.Printf("  target_sources=%v", s.TargetSources)
-			}
-			if len(s.EffectiveClaims) > 0 {
-				fmt.Printf("  claims=%v", s.EffectiveClaims)
 			}
 			fmt.Println()
 			if len(s.Command) > 0 {

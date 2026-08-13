@@ -45,7 +45,7 @@ These are the two core nouns in magus, on orthogonal axes. Confusing them is the
 | **How it enters a run** | **bound** to a project via `magus\project.register`                                  | **invoked** via `magus run <name>`                                                      |
 | **Runs on its own?**    | **No**: it only contributes ops + cache inputs                                       | **Yes**: it is the entry point                                                          |
 | **Cardinality**         | many ops per spell; many spells per project                                          | one function per target name per project                                                |
-| **Cache role**          | declares `needs`/`provides`/`claims` (inputs, outputs, ownership)                            | the unit a cache key is computed and replayed for                                       |
+| **Cache role**          | declares `needs`/`provides` (the inputs and outputs)                            | the unit a cache key is computed and replayed for                                       |
 | **Identity**            | a `name` + its ops                                                                   | `Path + Name` (see [targets.md](targets.md))                                            |
 
 The relationship is **compositional**: a target's body calls spell ops.
@@ -84,9 +84,8 @@ A bound spell contributes three things to its project. Only operations are "runn
 | **Operations** | `mgs_listTargets` (or `ops`)            | the tool-native actions a target can call      |
 | **`needs`**    | `mgs_listRequiredGlobs` (or `needs`)    | input globs hashed into the cache key          |
 | **`provides`** | `mgs_listProvidedGlobs` (or `provides`) | output globs the cache snapshots and replays   |
-| **`claims`**   | `mgs_listClaimedGlobs` (or `claims`)    | files this spell owns; ownership metadata only |
 
-Binding a spell contributes its `needs`/`provides` to that project's cache key even before you wire any target; it executes nothing until a target calls one of its ops. `claims` never enter the key: they declare which files the spell owns, surfaced by `magus describe`; nothing else consumes them yet (the affected set attributes files by project directory, not by any glob).
+Binding a spell contributes its `needs`/`provides` to that project's cache key even before you wire any target; it executes nothing until a target calls one of its ops.
 
 ### An operation is a command or a service
 
@@ -215,7 +214,7 @@ The full-command convention is enforced even for streamlined toolchains like Go,
 > For the full contract - every `mgs_` function, the built-in versus workspace-local
 > constraint, and the provider variants - see [Writing a spell](../guides/authoring-spells.md).
 
-A spell file exposes the spell contract as `mgs_`-prefixed functions: the required `mgs_getName`, plus optional `mgs_listRequiredGlobs`, `mgs_listProvidedGlobs`, `mgs_listClaimedGlobs`, `mgs_listIgnoreDirs`, `mgs_getVersionProbe`, `mgs_isOpaque`, and `mgs_listTargets`.
+A spell file exposes the spell contract as `mgs_`-prefixed functions: the required `mgs_getName`, plus optional `mgs_listRequiredGlobs`, `mgs_listProvidedGlobs`, `mgs_listIgnoreDirs`, `mgs_getVersionProbe`, `mgs_isOpaque`, and `mgs_listTargets`.
 
 MGS functions are discovery-time declarations: they take no arguments and must be
 pure, because Magus calls them before it has selected a target or started an
@@ -354,7 +353,6 @@ Key invariant: **binding is not running.** A bound spell with no target wired is
 | **Handle**         | The value bound by importing a spell (`import "magus/spell/<name>"` for a built-in, `import "spells/<name>"` for a workspace-local one). Inert until passed to `magus\project.register`.                                                                      |
 | **`needs`**        | Input globs (`mgs_listRequiredGlobs`). Hashed into the cache key.                                                                                                                                                                 |
 | **`provides`**     | Output globs (`mgs_listProvidedGlobs`). What the cache snapshots and replays on a hit.                                                                                                                                                                        |
-| **`claims`**       | Files a spell owns (`mgs_listClaimedGlobs`); ownership metadata surfaced by `magus describe`, consumed by nothing else yet.                                                                                                                                                                                    |
 | **Op**             | A command op forks a `Command` (`{bin, args, charms}`) to completion; a service op is a long-running `Service` (`{command, readiness?, stop?, distinct?, idle?}`): foregrounded when run directly, supervised in the background when reached as a dependency. |
 | **Op kind**        | Whether an op is a `command` (returns a `Command`, run to completion, the default) or a `service` (returns a `Service`, a long-running process). Inferred from the return type; lives on the op, so one spell mixes both.                                     |
 | **Target**         | The runnable unit a spell op is composed into. A separate concept; see [targets.md](targets.md).                                                                                                                                                              |

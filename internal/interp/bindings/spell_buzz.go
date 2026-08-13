@@ -39,7 +39,6 @@ func loadBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells
 	}
 	sp := spells.NewSpell(spec.Name,
 		spells.WithSources(spec.Needs...),
-		spells.WithClaims(spec.Claims...),
 		spells.WithIgnoreDirs(spec.IgnoreDirs...),
 		spells.WithManifests(spec.Manifests...),
 		spells.WithOutputs(spec.Provides...),

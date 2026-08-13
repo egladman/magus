@@ -102,10 +102,7 @@ func ProjectDisplayName(path, name, dir string) string {
 // Binding is the per-spell registration state attached to a project.
 // One Binding is created per WithSpell call.
 type Binding struct {
-	Name          string // spell identifier
-	ClaimWeight   int    // higher wins on glob collision; ties fall back to last-wins
-	AddedClaims   []string
-	RemovedClaims []string
+	Name string // spell identifier
 }
 
 // ProjectOrigin is what put a project in the workspace. It is a named type rather

@@ -184,27 +184,3 @@ func bindSpell(p *types.Project, spell *spells.Spell, name string, opts ...Bindi
 	p.Outputs = append(p.Outputs, spell.Outputs()...)
 	return nil
 }
-
-// WithClaim extends the spell's declared claims with additional globs.
-func WithClaim(globs ...string) BindingOption {
-	return func(b *types.Binding) error {
-		b.AddedClaims = append(b.AddedClaims, globs...)
-		return nil
-	}
-}
-
-// WithoutClaim removes globs from a spell's effective claims.
-func WithoutClaim(globs ...string) BindingOption {
-	return func(b *types.Binding) error {
-		b.RemovedClaims = append(b.RemovedClaims, globs...)
-		return nil
-	}
-}
-
-// WithClaimWeight sets the binding's claim weight; higher weight wins on overlap, ties go last-wins.
-func WithClaimWeight(weight int) BindingOption {
-	return func(b *types.Binding) error {
-		b.ClaimWeight = weight
-		return nil
-	}
-}

@@ -232,11 +232,9 @@ func newProjectIndex(w *types.Workspace) *projectIndex {
 
 // projectForFile returns the innermost project for a repo-relative file path.
 //
-// TODO: attribution is directory-prefix only. Spell `claims` globs
-// (project.EffectiveClaims) declare file ownership but are not consulted here
-// or anywhere else behavioral yet. docs/concepts/cache.md said claims drive
-// affected-set attribution; that was never true, and the docs now state the
-// directory rule. If claims-based attribution lands, this lookup is the seam.
+// TODO: attribution is directory-prefix only; no declared glob (a project's
+// source globs included) narrows or redirects it. If glob-aware attribution
+// ever lands, this lookup is the seam.
 func (idx *projectIndex) projectForFile(file string) (string, bool) {
 	file = filepath.ToSlash(file)
 	for _, path := range idx.paths {

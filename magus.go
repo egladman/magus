@@ -972,39 +972,28 @@ func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(
 	if len(resolved) == 0 {
 		return nil
 	}
-	dispatch := func(ctx context.Context, i int, s *spells.Spell) error {
-		effective := project.EffectiveClaims(p, i)
-		pctx := ctx
-		if effective != nil {
-			pctx = types.WithEffectiveClaims(ctx, effective)
-		}
-		return fn(pctx, s)
-	}
 	// A magusfile target SHADOWS a spell op of the same name and runs alone. Without
 	// this both ran: this repo exports go_build while the go spell provides an op
 	// normalizing to the same name, so `magus run go-build` compiled the module twice -
 	// once bare from the spell, once stamped from the magusfile - and the bare one was
 	// waste, built with no -o, no ldflags, no trimpath. The magusfile is the workspace's
 	// own definition, so it decides what the name means there.
-	//
-	// Dispatched by INDEX rather than by narrowing the slice: EffectiveClaims is
-	// positional, so a filtered slice would hand a spell another spell's claims.
 	if only := magusfileOverride(p, resolved, target); only >= 0 {
-		if err := dispatch(ctx, only, resolved[only]); err != nil {
+		if err := fn(ctx, resolved[only]); err != nil {
 			return spellErr(p, target, types.SpellFailure{Spell: resolved[only].Name(), Err: err})
 		}
 		return nil
 	}
 	if len(resolved) == 1 {
-		if err := dispatch(ctx, 0, resolved[0]); err != nil {
+		if err := fn(ctx, resolved[0]); err != nil {
 			return spellErr(p, target, types.SpellFailure{Spell: resolved[0].Name(), Err: err})
 		}
 		return nil
 	}
 	if p.Exclusive {
 		var failed []types.SpellFailure
-		for i, s := range resolved {
-			if err := dispatch(ctx, i, s); err != nil {
+		for _, s := range resolved {
+			if err := fn(ctx, s); err != nil {
 				failed = append(failed, types.SpellFailure{Spell: s.Name(), Err: err})
 			}
 		}
@@ -1039,7 +1028,7 @@ func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(
 					spellCtx = cache.WithSlotHeld(ctx)
 					defer lim.Release()
 				}
-				results[i] = result{name: s.Name(), err: dispatch(spellCtx, i, s)}
+				results[i] = result{name: s.Name(), err: fn(spellCtx, s)}
 			}(i, s)
 		}
 		wg.Wait()
@@ -1080,16 +1069,11 @@ func spellErr(p *types.Project, target string, failed ...types.SpellFailure) *ty
 // forSpellNamed is like forEachSpell but targets only the spell whose Name
 // equals name. If no matching spell is registered the call is a no-op.
 func forSpellNamed(ctx context.Context, p *types.Project, target, name string, fn func(context.Context, *spells.Spell) error) error {
-	for i, s := range p.ResolvedSpells {
+	for _, s := range p.ResolvedSpells {
 		if s.Name() != name {
 			continue
 		}
-		effective := project.EffectiveClaims(p, i)
-		pctx := ctx
-		if effective != nil {
-			pctx = types.WithEffectiveClaims(ctx, effective)
-		}
-		if err := fn(pctx, s); err != nil {
+		if err := fn(ctx, s); err != nil {
 			return spellErr(p, target, types.SpellFailure{Spell: s.Name(), Err: err})
 		}
 		return nil

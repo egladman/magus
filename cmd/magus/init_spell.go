@@ -113,11 +113,6 @@ export fun mgs_listRequiredGlobs() > [Path] {
 // read-only tool - a linter or formatter check - that writes nothing.
 // export fun mgs_listProvidedGlobs() > [Path] { return [Path{value = "dist/**"}]; }
 
-// mgs_listClaimedGlobs declares files this spell OWNS, for affected-set
-// attribution (which project a changed file belongs to). Unlike needs, claims are
-// never hashed or snapshotted. Omit it when needs already covers your files.
-// export fun mgs_listClaimedGlobs() > [Path] { return [Path{value = "**/*.SPELLNAME"}]; }
-
 // An op is a function returning a Command: the bin and argv magus forks directly
 // (no shell, one process). It receives a Target but must NOT read or branch on it
 // - the argv has to be static so magus can cache, charm-patch, and preview it

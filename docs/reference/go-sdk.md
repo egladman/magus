@@ -140,7 +140,7 @@ calls `Root()` and `All()`.
 
 This is the organizing idea of the `Inspector` interface. `List*` enumerates
 a declaration - cheap, no resolution. `Evaluate*` resolves one - spells
-bound, claims applied, charms patched in - and costs more. `ClassifyFiles`
+bound, charms patched in - and costs more. `ClassifyFiles`
 and `TargetGraph` are their own verbs because neither is a natural fit for
 either half.
 
@@ -224,7 +224,7 @@ know this limitation going in.
 
 The escape hatch: build the workspace programmatically instead of authoring
 a magusfile, using the exported wire API in the root package -
-`WithRegisteredSpell`, `WithTarget`, `WithClaim`, and friends, composed via
+`WithRegisteredSpell`, `WithTarget`, `WithDependsOn`, and friends, composed via
 a `WorkspaceRegistry` passed to `Open`/`Inspect` as an `Option`. Built-in
 spells (`go`, `ts`, `rust`, ...) decode from embedded bytecode through
 `internal/spellruntime`, which the exported wrapper functions can reach on your

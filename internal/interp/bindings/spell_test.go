@@ -363,15 +363,13 @@ export fun check(ctx: magus\Context, args: [str]) > void {
 
 // TestEngineDescriptorParity locks the engine-agnostic mgs_ contract: a Buzz spell
 // declaring every optional mgs_ function with record-shaped ops resolves to the
-// expected Descriptor. It guards the resolver (internal/spellruntime/resolve.go) against
-// dropping fields — claims is asserted explicitly because that is the field that
-// previously regressed.
+// expected Descriptor. It guards the resolver (internal/spellruntime/resolve.go)
+// against dropping fields.
 func TestEngineDescriptorParity(t *testing.T) {
 	buzzSrc := `import "magus/spell";
 export fun mgs_getName() > str { return "parity_buzz"; }
 export fun mgs_listRequiredGlobs() > [Path] { return [Path{value = "**/*.rb"}, Path{value = "Gemfile.lock"}]; }
 export fun mgs_listProvidedGlobs() > [Path] { return [Path{value = "vendor/bundle/**"}]; }
-export fun mgs_listClaimedGlobs() > [Path] { return [Path{value = ".rubocop.yml"}, Path{value = "Gemfile"}]; }
 export fun mgs_getVersionProbe() > [str] { return ["ruby", "--version"]; }
 export fun mgs_isOpaque() > bool { return false; }
 export fun mgs_listTargets() > any {
@@ -398,8 +396,6 @@ magus.project(".", {"spells": [parity]});`)
 	assert.Equal(t, []string{"**/*.rb", "Gemfile.lock"}, buzzSp.Sources())
 	assert.Equal(t, []string{"vendor/bundle/**"}, buzzSp.Outputs())
 	assert.Equal(t, []string{"rspec"}, buzzSp.Targets())
-	// claims is the field the resolver previously dropped — assert it directly.
-	assert.Equal(t, []string{".rubocop.yml", "Gemfile"}, buzzSp.Claims(), "mgs_listClaimedGlobs must be carried")
 	assert.False(t, buzzSp.Opaque(), "opaque should be false")
 }
 

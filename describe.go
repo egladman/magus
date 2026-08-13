@@ -76,7 +76,6 @@ func ListSpells(ctx context.Context) ([]types.Spell, error) {
 			BuzzImport:   spells.ModulePath(p.Name()),
 			Sources:      p.Sources(),
 			Outputs:      p.Outputs(),
-			Claims:       p.Claims(),
 			Targets:      p.Targets(),
 			Opaque:       p.Opaque(),
 			Language:     p.Language(),
@@ -840,14 +839,10 @@ func (m *Magus) EvaluateTarget(ctx context.Context, t types.Target) ([]types.Eva
 
 		spellEntries := make([]types.EvaluatedSpell, 0, len(p.ResolvedSpells))
 		charmSet := map[string]struct{}{}
-		for i, s := range p.ResolvedSpells {
+		for _, s := range p.ResolvedSpells {
 			se := types.EvaluatedSpell{
-				Name:            s.Name(),
-				TargetSources:   s.TargetSources()[et.Name],
-				EffectiveClaims: project.EffectiveClaims(p, i),
-			}
-			if i < len(p.Bindings) {
-				se.ClaimWeight = p.Bindings[i].ClaimWeight
+				Name:          s.Name(),
+				TargetSources: s.TargetSources()[et.Name],
 			}
 			for _, c := range s.Charms(et.Name) {
 				charmSet[c] = struct{}{}
@@ -927,15 +922,8 @@ func (m *Magus) EvaluateProjects(ctx context.Context) (types.EvaluatedProjectsOu
 		step := m.baseStep(p)
 
 		spellEntries := make([]types.EvaluatedSpell, 0, len(p.ResolvedSpells))
-		for i, s := range p.ResolvedSpells {
-			se := types.EvaluatedSpell{
-				Name:            s.Name(),
-				EffectiveClaims: project.EffectiveClaims(p, i),
-			}
-			if i < len(p.Bindings) {
-				se.ClaimWeight = p.Bindings[i].ClaimWeight
-			}
-			spellEntries = append(spellEntries, se)
+		for _, s := range p.ResolvedSpells {
+			spellEntries = append(spellEntries, types.EvaluatedSpell{Name: s.Name()})
 		}
 
 		// The embedded ProjectEntry carries the same declared facts ListProjects

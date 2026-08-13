@@ -138,7 +138,6 @@ func TestListSpells_DescribesTypedSpell(t *testing.T) {
 	const name = "zzz-spell-inventory-test"
 	spell := spells.NewSpell(name,
 		spells.WithSources("**/*.demo"),
-		spells.WithClaims("demo.config"),
 		spells.WithOutputs("out/**"),
 		spells.WithTargets("build", "check", "dynamic"),
 		spells.WithLanguage("demo"),
@@ -173,7 +172,6 @@ func TestListSpells_DescribesTypedSpell(t *testing.T) {
 	require.NotNil(t, got, "registered spell missing from inventory")
 	assert.Equal(t, "magus/spell/"+name, got.BuzzImport)
 	assert.Equal(t, []string{"**/*.demo"}, got.Sources)
-	assert.Equal(t, []string{"demo.config"}, got.Claims)
 	assert.Equal(t, []string{"out/**"}, got.Outputs)
 	assert.Equal(t, []string{"build", "check", "dynamic"}, got.Targets)
 	assert.Equal(t, "demo", got.Language)
@@ -434,7 +432,6 @@ func TestEvaluateTarget_WithSpellAndPolicy(t *testing.T) {
 		spellName,
 		spells.WithTargets("my-target"),
 		spells.WithSources("**/*.zzz"),
-		spells.WithClaims("**/*.zzz"),
 	)
 	project.DefaultSpellRegistry().RegisterSpell(spell)
 	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
@@ -455,9 +452,6 @@ func TestEvaluateTarget_WithSpellAndPolicy(t *testing.T) {
 	// Spell entry must be present.
 	require.NotEmpty(t, e.Spells, "EvaluateTarget: Spells is empty, expected at least one entry")
 	assert.Equal(t, spellName, e.Spells[0].Name, "EvaluateTarget: Spells[0].Name")
-
-	// EffectiveClaims must be non-empty (spell declared claims).
-	assert.NotEmpty(t, e.Spells[0].EffectiveClaims, "EvaluateTarget: Spells[0].EffectiveClaims is empty, expected \"**/*.zzz\"")
 
 	// Policy must be present with the volatility-retry flag set.
 	require.NotNil(t, e.Policy, "EvaluateTarget: Policy is nil, want TrackVolatile=true")

@@ -64,7 +64,6 @@ type Spell struct {
 	BuiltIn bool     `json:"built_in"          yaml:"built_in"`
 	Sources []string `json:"sources,omitempty" yaml:"sources,omitempty"`
 	Outputs []string `json:"outputs,omitempty" yaml:"outputs,omitempty"`
-	Claims  []string `json:"claims,omitempty"  yaml:"claims,omitempty"`
 	Targets []string `json:"targets,omitempty" yaml:"targets,omitempty"`
 	Opaque  bool     `json:"opaque,omitempty" yaml:"opaque,omitempty"`
 	// Language is the canonical source language the spell adapts (e.g. "go",
@@ -472,15 +471,13 @@ type ModuleEntry struct {
 const EvaluatedTargetDefinition = "An evaluated target shows the fully-resolved " +
 	"dispatch plan for a specific path:target pair: the workspace-rooted source and " +
 	"output globs that feed the cache key, the spells that will fire (with " +
-	"target-specific sources and effective claims after weight/add/remove resolution), " +
+	"target-specific sources), " +
 	"and any behavioural policy (CheckClean, TrackVolatile, Exclusive)."
 
 // EvaluatedSpell is one spell's contribution to an evaluated target.
 type EvaluatedSpell struct {
-	Name            string   `json:"name"                        yaml:"name"`
-	TargetSources   []string `json:"target_sources,omitempty"    yaml:"target_sources,omitempty"`
-	EffectiveClaims []string `json:"effective_claims,omitempty"  yaml:"effective_claims,omitempty"`
-	ClaimWeight     int      `json:"claim_weight,omitempty"      yaml:"claim_weight,omitempty"`
+	Name          string   `json:"name"                        yaml:"name"`
+	TargetSources []string `json:"target_sources,omitempty"    yaml:"target_sources,omitempty"`
 	// Command is the fork command this spell's op would run for the target, with
 	// the requested charms applied (cmd as element 0). Empty for function-op or
 	// no-op targets, whose argv isn't statically knowable. Preview only: `magus
@@ -561,10 +558,8 @@ func (p EvaluatedProject) BuzzObject() BuzzObject {
 	spells := make([]any, len(p.ResolvedSpells))
 	for i, s := range p.ResolvedSpells {
 		spells[i] = map[string]any{
-			"name":            s.Name,
-			"targetSources":   s.TargetSources,
-			"effectiveClaims": s.EffectiveClaims,
-			"claimWeight":     s.ClaimWeight,
+			"name":          s.Name,
+			"targetSources": s.TargetSources,
 		}
 	}
 	policies := make(map[string]any, len(p.TargetPolicies))

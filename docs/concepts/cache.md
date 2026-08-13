@@ -7,7 +7,6 @@ tags:
     cache,
     needs,
     provides,
-    claims,
     cache-key,
     invalidation,
     replay,
@@ -44,10 +43,10 @@ it once here and link there for the distributed story.
   path. You can `ls` it, `cat` a manifest, and reason about a hit or miss with
   ordinary tools.
 
-## needs, provides, claims: a target's cache footprint
+## needs and provides: a target's cache footprint
 
-A bound [spell](spells.md) contributes three glob sets to its project. Only
-operations are runnable; these three are metadata that make caching correct
+A bound [spell](spells.md) contributes two glob sets to its project. Only
+operations are runnable; these two are metadata that make caching correct
 (see [What a spell provides](spells.md#what-a-spell-provides)). Binding a spell
 contributes its `needs`/`provides` to a project's cache key even before you
 wire a target.
@@ -56,16 +55,9 @@ wire a target.
 | -------------- | ------------------------- | ---------------------------------------------------------- |
 | **`needs`**    | input globs (the sources) | hashed into the cache key                                  |
 | **`provides`** | output globs              | snapshotted into the cache on a miss and replayed on a hit |
-| **`claims`**   | files the spell owns      | declared ownership; **not** hashed, **not** snapshotted    |
 
 Internally these map to a `Step` the cache hashes and replays: `needs` become
-`Step.Sources`, `provides` become `Step.Outputs`. `claims` do not appear in the
-`Step` at all and never touch the cache key or the snapshot: they declare which
-files a spell owns, and `magus describe` surfaces the per-binding resolved set.
-No other machinery consumes claims yet; in particular the affected set does
-not. Affected attributes a changed file to its innermost project by directory
-prefix and expands through project dependency edges, so no glob (`claims`
-included) takes part in that attribution. Two rules follow directly:
+`Step.Sources`, `provides` become `Step.Outputs`. Two rules follow directly:
 
 - **Declare every input in `needs`.** A source file that isn't matched by a `needs`
   glob doesn't enter the key, so editing it produces no miss and you replay a stale
@@ -221,8 +213,8 @@ hashed line above yields a new key, and thus a new (empty) slot:
 - applying or dropping a charm;
 - renaming the project or target.
 
-What does **not** invalidate: a file's mtime alone (content is what's hashed), a
-`claims`-only file, or anything outside the declared `needs`.
+What does **not** invalidate: a file's mtime alone (content is what's hashed), or
+anything outside the declared `needs`.
 
 Old keys are never mutated - a miss writes a _new_ entry beside the old one - so
 invalidation is additive. Reverting a change restores the earlier key and replays
@@ -728,7 +720,6 @@ on.
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | **needs**             | A spell's declared input globs. Hashed into the cache key (`Step.Sources`).                                                       |
 | **provides**          | A spell's declared output globs. Snapshotted on a miss and replayed on a hit (`Step.Outputs`).                                    |
-| **claims**            | Files a spell owns; ownership metadata surfaced by `magus describe`. Never hashed, never snapshotted.                             |
 | **Cache key**         | The hex SHA-256 of the serialized `Step`: sources, env, deps, tool versions, spell version, charms, project, and target.          |
 | **Content-addressed** | Stored by content hash: identical output bytes are stored once, and a blob's name is its own SHA-256.                             |
 | **Manifest**          | The JSON record of one cache entry: project, key, target, and one record (path, blob, mode, size, symlink) per output.            |
@@ -740,7 +731,7 @@ on.
 
 ## See also
 
-- [spells.md](spells.md): where `needs`/`provides`/`claims` are declared, and what a bound spell contributes.
+- [spells.md](spells.md): where `needs`/`provides` are declared, and what a bound spell contributes.
 - [dependencies.md](dependencies.md): how `depends_on`'s `dep:` propagation and a `magus\needs` call each interact with this cache key.
 - [operations.md](operations.md): the run hierarchy and the `target.result` event that fires on a hit.
 - [targets.md](targets.md): what a Target is - the unit a cache key is computed and replayed for.
