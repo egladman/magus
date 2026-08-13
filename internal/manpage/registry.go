@@ -19,14 +19,22 @@ var All = []Command{
 	queryCommand,
 	explainCommand,
 	pathCommand,
+	refsCommand,
 	watchCommand,
 	statusCommand,
+	cleanCommand,
+	vcsCommand,
 	doctorCommand,
 	configCommand,
+	memoryCommand,
 	serverCommand,
+	buzzCommand,
 	completionCommand,
 	manCommand,
 	initCommand,
+	agentCommand,
+	hookCommand,
+	notifyCommand,
 	selfCommand,
 	versionCommand,
 }
@@ -624,7 +632,7 @@ and the rest of the layout is yours. No flag promotes advice to failure.`,
 var configCommand = Command{
 	Name:        "config",
 	Short:       "View or update magus configuration",
-	Description: "Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.",
+	Description: "Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, history, cache, and mcp.",
 	Tags:        []string{"cli", "magus config", "configuration", "magus.yaml", "settings", "cache"},
 	Long: `Inspect or modify the magus configuration. Configuration is loaded in
 priority order: built-in defaults → user-global file → workspace file →
@@ -637,18 +645,19 @@ they can be edited by hand.
 
 Configuration is stored in magus.yaml (or .magus.yaml). The canonical
 locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
-	Usage: "magus config <view|set|init> [flags]",
+	Usage: "magus config <view|set|history|cache|mcp> [flags]",
 	Children: []Command{
 		{Name: "view", Short: "Print the effective configuration (defaults + file + env)"},
 		{Name: "set", Short: "Write a key to the local (or global) config file"},
-		{Name: "init", Short: "Materialize built-in defaults to magus.yaml"},
-		{Name: "cache", Short: "Manage the build cache (prune --older-than)"},
+		{Name: "history", Short: "Manage forecaster runtime history"},
+		{Name: "cache", Short: "Manage the build cache (prune)"},
+		{Name: "mcp", Short: "Manage the MCP server auth token"},
 	},
 	Examples: []Example{
 		{"Show effective config", "magus config view"},
 		{"Show config as JSON", "magus config view -o json"},
-		{"Set cache to read-only", "magus config set cache.immutable true"},
-		{"Initialize magus.yaml from defaults", "magus config init"},
+		{"Set cache to read-only", "magus config set key=cache.immutable,value=true"},
+		{"Prune local cache entries older than a week", "magus config cache prune --older-than 168h"},
 	},
 }
 
@@ -784,4 +793,293 @@ var versionCommand = Command{
 	Tags:        []string{"cli", "magus version", "version", "build info", "commit"},
 	Long:        `Print the magus version string, git commit hash, and build date.`,
 	Usage:       "magus version",
+}
+
+// A subcommand that reaches the dispatcher but not All is documented nowhere on the machine.
+// These eight were in that state; TestManpageCoversEverySubcommand now keeps them from being.
+
+var refsCommand = Command{
+	Name:        "refs",
+	Short:       "List where an ingested code symbol is defined and referenced",
+	Description: "List a symbol's definition and every file that references it as file:line rows, read from the declared SCIP index rather than found by text search.",
+	Tags:        []string{"cli", "magus refs", "symbols", "scip", "references", "knowledge graph"},
+	Long: `List where an ingested code symbol is defined and every file that
+references it, as file:line rows drawn from the SCIP index.
+
+This is the occurrence-shaped view a symbol's fan-in needs: a flat list,
+which is what you want when the question is "who calls this". The
+node-link neighborhood that magus query renders is the wrong shape for
+that question, which is why this is its own command rather than a flag.
+
+The argument is a symbol node ID (symbol:...) or a name that resolves to
+one. Symbols come from a declared SCIP index; see knowledge.symbols in
+the configuration. A workspace with no index has no symbols to report,
+and says so rather than falling back to a text search - a grep result
+and an index result answer different questions, and quietly substituting
+one for the other is how a wrong answer looks right.`,
+	BuildFlags: func(fs *flag.FlagSet) {
+		fs.Bool("refresh", false, "Re-ingest the SCIP index before answering")
+	},
+	Usage: "magus refs <symbol> [flags]",
+	Examples: []Example{
+		{"Every reference to a symbol", "magus refs Open"},
+		{"By fully-qualified node ID", "magus refs symbol:github.com/egladman/magus/Open"},
+		{"As JSON", "magus refs Open -o json"},
+	},
+}
+
+var cleanCommand = Command{
+	Name:        "clean",
+	Short:       "Remove declared Outputs (regenerable build artifacts)",
+	Description: "Delete the files each selected project declares as Outputs, optionally dropping the matching cache entries so the next run rebuilds from scratch.",
+	Tags:        []string{"cli", "magus clean", "outputs", "cache", "artifacts", "rebuild"},
+	Long: `Remove the declared Outputs of the selected projects. With no project
+arguments the cwd project (or the whole workspace, from the root) is selected.
+
+These are the same files the cache snapshots and replays on a hit. Whether
+each one is regenerable is the declaration's claim, not something clean
+verifies - so a file magus only modifies rather than produces belongs in
+ctx.modifiesExistingFiles, which clean never removes. Preview with the global
+--dry-run flag before trusting a declaration you have not read.
+
+--cache additionally invalidates the magus cache entries for those projects,
+which is what forces a genuinely full rebuild: removing the files alone
+leaves the entries that would replay them.`,
+	Usage: "magus clean [flags] [project...]",
+	BuildFlags: func(fs *flag.FlagSet) {
+		fs.Bool("cache", false, "Also invalidate magus cache entries for the selected projects")
+	},
+	Examples: []Example{
+		{"Preview what would be removed", "magus clean --dry-run"},
+		{"Clean one project", "magus clean web"},
+		{"Clean and force a full rebuild", "magus clean --cache"},
+	},
+}
+
+var vcsCommand = Command{
+	Name:        "vcs",
+	Short:       "Staging and conflict resolution that knows what is generated",
+	Description: "Stage a change the way the workspace's declarations say it should be staged, and settle an in-progress merge's conflicted generated files by regenerating them once.",
+	Tags:        []string{"cli", "magus vcs", "git", "merge", "conflicts", "generated files", "staging"},
+	Long: `Version-control operations that read the workspace's output declarations,
+so generated files and hand-written sources are treated differently.
+
+add stages what the workspace declares: sources, and the generated outputs a
+source change in the same commit accounts for. Anything undeclared is reported
+rather than swept in, which is the difference between it and git add -A.
+
+resolve settles an in-progress merge, rebase, or cherry-pick. It classifies
+every conflicted path at once, regenerates once instead of once per file,
+settles the files one side deleted (which no VCS invokes a merge driver for),
+and stages everything the regeneration touched so a following commit or
+rebase --continue does not refuse on a dirty tree. Conflicts in files magus
+does not generate are reported and left alone. Pass --against <ref> to merge
+that ref first and settle what it conflicts with; add --dry-run to see the
+classification and have the merge backed out again.
+
+merge-driver is the per-file driver git and hg invoke during a merge. You do
+not run it by hand; it is wired per clone, because a driver registration
+cannot be committed. That is also why a forge reports conflicts your own
+clone would settle silently, and why resolve exists as the bulk counterpart.
+
+resolve works on git, Mercurial and Jujutsu. Only --against is git-only: merge the
+base in yourself on the others, then run resolve.`,
+	BuildFlags: func(fs *flag.FlagSet) {
+		fs.String("against", "", "Merge this ref first, then settle what it conflicts with (vcs resolve)")
+		fs.Bool("untracked", false, "Also stage undeclared files (vcs add)")
+	},
+	Usage: "magus vcs <add|resolve|merge-driver> [flags]",
+	Children: []Command{
+		{Name: "add", Short: "Stage a change the way this workspace's declarations say it should be staged"},
+		{Name: "resolve", Short: "Settle an in-progress merge's conflicted generated files, then regenerate once"},
+		{Name: "merge-driver", Short: "The per-file merge driver git and hg invoke; you do not run this by hand"},
+	},
+	Examples: []Example{
+		{"Stage a change without sweeping in build residue", "magus vcs add"},
+		{"Classify the dirty tree, stage nothing", "magus vcs add --dry-run"},
+		{"Settle a conflicted merge", "magus vcs resolve"},
+		{"Merge the base in and settle it in one step", "magus vcs resolve --against origin/main"},
+	},
+}
+
+var memoryCommand = Command{
+	Name:        "memory",
+	Short:       "Durable cross-session project memory",
+	Description: "Manage the per-repository handoff journal that lives outside the checkout: named entries people and agents can read across sessions and worktrees.",
+	Tags:        []string{"cli", "magus memory", "handoff", "journal", "notes", "agents"},
+	Long: `Manage the per-repository handoff journal, which is stored outside the
+checkout so it survives worktrees and branch switches.
+
+Entries are visible to people and to agents across sessions. They are NOT
+automatic model memory: nothing writes one for you, and nothing is recalled
+implicitly. An entry earns its place when a later reader needs to reopen the
+evidence behind a decision - the run, the query, the output reference, the
+document - rather than to be told a conclusion.
+
+verify is the maintenance verb: it reports entries that are malformed, stale,
+or that link to something no longer there. The same entries are reachable
+through the magus_memory MCP tool and the console, so a journal written from
+the CLI is readable by an agent without either side learning a new format.`,
+	BuildFlags: func(fs *flag.FlagSet) {
+		fs.String("type", "", "Entry type: pointer, decision, or plan (memory put)")
+		fs.String("status", "", "Lifecycle label, e.g. accepted, active, done, stale (memory put)")
+		fs.String("body", "", "Short why/caption, decision and plan only (memory put)")
+	},
+	Usage: "magus memory <ls|get|put|delete|verify> [flags]",
+	Children: []Command{
+		{Name: "ls", Short: "Show entries and any repair warnings"},
+		{Name: "get", Short: "Show one entry"},
+		{Name: "put", Short: "Create or replace a named entry"},
+		{Name: "delete", Short: "Remove one entry"},
+		{Name: "verify", Short: "Check malformed, stale, and broken-linked entries"},
+	},
+	Examples: []Example{
+		{"List entries and warnings", "magus memory ls"},
+		{"Read one entry", "magus memory get release-checklist"},
+		{"Check the journal's health", "magus memory verify"},
+	},
+}
+
+var buzzCommand = Command{
+	Name:        "buzz",
+	Short:       "Run a Buzz script",
+	Description: "Run Buzz from a REPL, a file, stdin, or an inline snippet, with the Buzz stdlib, every magus host module, and the magus namespace available.",
+	Tags:        []string{"cli", "magus buzz", "buzz", "scripting", "repl", "lsp"},
+	Long: `Run Buzz source from a REPL, a file, stdin, or an inline snippet.
+
+With no argument on a terminal it opens a REPL with the magusfile at the
+current directory loaded, its targets and bindings ready. A piped or
+redirected stdin runs as a script instead. In both, the Buzz stdlib, every
+magus host module (fs, os, http, markdown, and the rest), and the magus
+namespace are available, so a one-off script needs no dependency install.
+
+Parsing is upstream-strict by default: a file written for the magusfile
+engine needs --embedded, or it fails on rules upstream Buzz enforces and
+magus does not. The most common one is "argument N must be labeled".
+
+-t runs a file's test blocks and reports pass or fail, which is how Buzz
+code in this ecosystem is tested. The lsp subcommand speaks the Language
+Server Protocol over stdio for an editor integration.`,
+	BuildFlags: func(fs *flag.FlagSet) {
+		fs.String("e", "", "Execute code given on the command line instead of a file")
+		fs.Bool("t", false, `Run the file's test "..." {} blocks and report pass/fail`)
+		fs.Bool("test", false, "Alias for -t")
+		fs.Bool("embedded", false, "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine")
+		fs.Bool("no-autoload", false, "Start the REPL without executing the magusfile")
+		fs.String("C", "", "Working directory for the REPL's import resolution (default: cwd)")
+	},
+	Usage: "magus buzz [file|-|lsp] [flags]",
+	Children: []Command{
+		{Name: "lsp", Short: "Language server over stdio (LSP)"},
+	},
+	Examples: []Example{
+		{"Open a REPL with the magusfile loaded", "magus buzz"},
+		{"Run a script", "magus buzz scripts/report.buzz"},
+		{"Run an inline snippet", `magus buzz -e 'import "std"; fun main() > void { std\print("hi"); } main();'`},
+		{"Run a file's test blocks", "magus buzz -t scripts/report.buzz"},
+		{"Run a magusfile-style file", "magus buzz --embedded scripts/target.buzz"},
+	},
+}
+
+var agentCommand = Command{
+	Name:        "agent",
+	Short:       "Install the knowledge-graph agent skills into a repo",
+	Description: "Render the embedded agent skills into a repository's skill directories, or print a starter AGENTS.md; it never writes the AGENTS.md you own.",
+	Tags:        []string{"cli", "magus agent", "skills", "agents", "AGENTS.md", "install"},
+	Long: `Render the agent skills embedded in this binary and write or stream them
+into named destinations (.claude/skills, .agents/skills, .opencode/skills,
+and so on).
+
+magus never writes your AGENTS.md. That file is yours, and an installer that
+edits a file you own leaves bytes you did not write and cannot audit. So
+install PRINTS the managed magus block for you to paste, and only when your
+AGENTS.md is missing it or is carrying a stale one. sample prints a starter
+AGENTS.md to stdout for you to own and tweak, and never writes a file.
+
+agent is a pure data generator, which is what makes --tar the general
+answer: it streams a tar archive to stdout, so skills can be installed
+anywhere a shell can reach. The write-to-disk form exists for the in-repo,
+paths-relative-to-<dir> case. Absolute destinations are refused unless
+--global is set, so magus cannot silently write outside the working tree.`,
+	Usage: "magus agent <install|sample> [flags]",
+	Children: []Command{
+		{Name: "install", Short: "Render the embedded skills and write or stream them into named destinations"},
+		{Name: "sample", Short: "Print a starter AGENTS.md to stdout; never writes a file"},
+	},
+	BuildFlags: func(fs *flag.FlagSet) {
+		fs.String("dir", ".", "Repo directory to install into (agent install)")
+		fs.Bool("force", false, "Overwrite existing installed skill files (agent install)")
+		fs.Bool("simple", false, "Install the shorter curated permutation of each skill (agent install)")
+		fs.Bool("tar", false, "Stream a tar archive to stdout instead of writing files (agent install)")
+		fs.Bool("global", false, "Allow absolute destination paths in write mode (agent install)")
+	},
+	Examples: []Example{
+		{"Install into a repo's Claude skills", "magus agent install .claude/skills"},
+		{"Refresh installed skills", "magus agent install .claude/skills --force"},
+		{"Install anywhere via tar", "magus agent install --tar | tar -xf - -C ~/.config/opencode/skills"},
+		{"Print a starter AGENTS.md", "magus agent sample"},
+	},
+}
+
+var hookCommand = Command{
+	Name:        "hook",
+	Short:       "Evaluate one shell command or file path against the magus guard rules",
+	Description: "Read one shell command, or one path an edit is about to write, and report a deny, advise, or pass verdict for an agent host's pre-tool-use hook.",
+	Tags:        []string{"cli", "magus hook", "guard", "agents", "policy", "pre-tool-use"},
+	Long: `Evaluate ONE shell command, or one file path an edit is about to write,
+against this workspace's guard rules, and report a deny, advise, or pass
+verdict.
+
+It is built for an agent host's pre-tool-use hook. The input arrives on
+stdin, so nothing has to survive being quoted through a shell twice.
+
+Two input shapes are accepted. Plain text is the command (or the path)
+itself. A JSON envelope from a host that writes one needs neither --path nor
+a JSON tool to unwrap it: the envelope already says what is about to run and
+whether it is a write. An explicit flag still wins, because a wrapper that
+passed one meant it.
+
+--host, --session, and --event are attribution, not policy. They record who
+produced the observation on the activity event, and the verdict never reads
+them. All three are optional and unvalidated, including the host name, which
+is an opaque label the caller chooses rather than a set magus knows: a magus
+that enumerated hosts would need a release per host, and a wrapper that
+cannot extract a session id must still be able to get a verdict.`,
+	Usage: "magus hook [--path] [flags]",
+	BuildFlags: func(fs *flag.FlagSet) {
+		fs.Bool("path", false, "Judge the input as a file path an edit is about to write, not as a shell command")
+		fs.String("host", "", "Name of the agent host this invocation came from (attribution only)")
+		fs.String("session", "", "The host's own session id for this invocation")
+		fs.String("event", "", "The host's hook event name (e.g. PreToolUse)")
+	},
+	Examples: []Example{
+		{"Judge a shell command", "printf '%s' 'go build ./...' | magus hook"},
+		{"Judge a path an edit is about to write", "printf '%s' 'MAGUS.md' | magus hook --path"},
+		{"Machine-readable verdict", "printf '%s' 'rm -rf /' | magus hook -o json"},
+	},
+}
+
+var notifyCommand = Command{
+	Name:        "notify",
+	Short:       "Normalize an attention event and optionally notify the local desktop",
+	Description: "Raise one canonical attention event from plain text or a JSON envelope, and optionally surface it as an operating-system notification.",
+	Tags:        []string{"cli", "magus notify", "notifications", "events", "attention", "desktop"},
+	Long: `Raise one canonical attention event.
+
+The input is read from stdin and may be plain text or a complete event JSON
+envelope. Either way the result is one normalized event, so a caller that
+knows nothing about magus's event schema can still raise a well-formed one.
+
+--outcome names the event's outcome vocabulary. --desktop additionally
+raises an operating-system notification, which is the part a human notices;
+without it the event is recorded and nothing pops up.`,
+	Usage: "magus notify [--outcome <vocab>] [--desktop]",
+	BuildFlags: func(fs *flag.FlagSet) {
+		fs.String("outcome", "", "Outcome vocabulary for the event")
+		fs.Bool("desktop", false, "Also raise an OS notification")
+	},
+	Examples: []Example{
+		{"Raise a permission prompt on the desktop", "printf '%s\\n' 'needs approval' | magus notify --outcome permission --desktop"},
+		{"Raise a pre-built event envelope", `printf '%s\n' '{"outcome":"permission","source":{"kind":"agent"},"message":"needs approval"}' | magus notify --desktop`},
+	},
 }

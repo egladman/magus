@@ -1,1 +1,9 @@
-*.bo binary
+# Compiled Buzz bytecode: no diff, no eol translation - but NOT `binary`.
+#
+# `binary` is a macro for `-diff -text -merge`, and a deeper .gitattributes wins over a
+# shallower one per attribute, so the `-merge` in it silently overrode the root's
+# `internal/spellruntime/gen/*.bo merge=magus` and took magus's driver out of the path for
+# these files. They are the largest class of generated-file conflict in this repo (11 of 19
+# on one measured pull request), and the one where a content merge is most obviously
+# meaningless, so they are the last files that should have been opted out.
+*.bo -diff -text

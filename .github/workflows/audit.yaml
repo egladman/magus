@@ -100,8 +100,17 @@ jobs:
 
   determinism:
     # Byte-stability is an invariant drift gating, cache replay, and regenerate-to-resolve
-    # merges all rest on; see docs/concepts/generated-files.md. Here rather than on the PR
-    # path because replay roughly doubles the run and cannot use the cache.
+    # merges all rest on; see docs/concepts/generated-files.md.
+    #
+    # The WHOLE-TREE sweep, which is the half of the question this file's charter covers: a
+    # generator that stopped being deterministic because a TOOL moved, in a project no diff
+    # touched. No pull request can be expected to find that, which is what makes a schedule
+    # the right trigger.
+    #
+    # The other half - a generator the diff destabilised - lives in ci.yaml's `plan` job,
+    # which replays the project set its drift gate covers. Do not fold them back together:
+    # this job ran red for two days in its first outing with nobody assigned, which is what a
+    # check on the wrong side of that line looks like.
     name: generator determinism
     runs-on: ubuntu-latest
     timeout-minutes: 45

@@ -649,7 +649,7 @@ func (v gitVCS) EnsureMergeDriver(ctx context.Context, root string, outputGlobs 
 	registered := v.registeredDriver(ctx, root)
 	attrsPresent := v.attrsSectionPresent(root)
 	if attrsCurrent == attrsWanted && registered != "" && attrsPresent &&
-		driverExecutable(registered) && driverCurrent(registered) {
+		driverExeExists(registered) && driverUsable(ctx, registered) {
 		return false, nil
 	}
 	return true, v.InstallMergeDriver(ctx, root, outputGlobs)
@@ -668,18 +668,102 @@ func (v gitVCS) attrsSectionPresent(root string) bool {
 	return strings.Contains(string(data), gitAttrsBegin)
 }
 
-// driverCurrent reports whether a registered command still names the subcommand this
+// driverArgsCurrent reports whether a registered command still names the subcommand this
 // binary answers to. The driver moved from `magus merge-driver` to `magus vcs
 // merge-driver`, and the registration lives in each clone's .git/config, which no commit
 // can update. Without this an old clone invokes a spelling that no longer dispatches, git
 // reads the failure as a conflict, and every generated file falls back to markers with
 // nothing naming the cause. Rewriting the registration is what lets us carry no alias.
 //
-// The probe derives from gitDriverArgs, so changing the argument string cannot leave it
-// matching the old spelling.
-func driverCurrent(registered string) bool {
-	verb, _, _ := strings.Cut(strings.TrimSpace(gitDriverArgs), " %")
-	return strings.Contains(registered, " "+verb+" ")
+// The comparison is EXACT, against everything after the executable, because a substring or
+// suffix test is only sound in one direction: a binary whose own verb is `merge-driver` finds
+// " merge-driver " inside `vcs merge-driver %O ...`, calls the registration current, and
+// never rewrites - while git invokes a spelling it cannot dispatch.
+//
+// The wanted string derives from gitDriverArgs, so changing the arguments cannot leave this
+// matching a spelling the binary no longer answers to.
+// It checks the ARGUMENTS ONLY - exactly the spelling this binary writes. driverUsable is
+// what decides whether a registration that does NOT match may still be left alone.
+func driverArgsCurrent(registered string) bool {
+	return driverArgsMatch(registered, gitDriverArgs)
+}
+
+// driverArgsMatch takes the wanted argument string explicitly so a test can pose as a magus
+// whose subcommand path differs from this one's. That direction - an OLDER binary reading a
+// NEWER registration - is the one a suffix comparison gets wrong, and with gitDriverArgs
+// hard-coded it could not be exercised at all: every assertion written against this binary's
+// own spelling passes under both the correct rule and the broken one.
+func driverArgsMatch(registered, wanted string) bool {
+	_, args := splitDriver(registered)
+	return args == strings.TrimSpace(wanted)
+}
+
+// driverUsable reports whether a registration can be left as it is.
+//
+// Two registrations differ from the spelling this binary writes, and they need opposite
+// treatment. A WRAPPER - `env FOO=1 magus vcs merge-driver %O ...`, a shape splitVCSVerb's doc
+// says is supported - works and must be preserved; rewriting it silently drops the wrapper
+// someone added on purpose. A STALE VERB, written by a magus whose subcommand path has since
+// moved, does not dispatch at all, and leaving it makes git read every generated file as
+// conflicted. String comparison cannot separate them: `vcs merge-driver %O ...` ends with
+// `merge-driver %O ...`, so a suffix test calls the stale one current and an exact test calls
+// the wrapper stale.
+//
+// So ask the registration itself, and only when it is about to be overwritten. A matching
+// spelling short-circuits, which is the overwhelmingly common case and keeps the steady state
+// free of subprocesses - the cost lands only on the rare path that was going to rewrite
+// anyway, where being right is worth one exec.
+func driverUsable(ctx context.Context, registered string) bool {
+	return driverUsableFor(ctx, registered, gitDriverArgs)
+}
+
+func driverUsableFor(ctx context.Context, registered, wanted string) bool {
+	if driverArgsMatch(registered, wanted) {
+		return true
+	}
+	return driverRegistrationAnswers(ctx, registered)
+}
+
+// driverRegistrationAnswers runs the registered command's own verb with -h and reads the exit
+// status: a command that cannot dispatch what it was registered with exits non-zero.
+//
+// The git placeholders are dropped rather than substituted. `-h` returns before the child
+// opens a workspace or touches an index, so this cannot mutate anything, and it works in a
+// tree no released magus can load.
+func driverRegistrationAnswers(ctx context.Context, registered string) bool {
+	exe, args := splitDriver(registered)
+	if exe == "" {
+		return false
+	}
+	verb, _, _ := strings.Cut(args, " %")
+	fields := strings.Fields(verb)
+	if len(fields) == 0 {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	// nil Stdout/Stderr: usage text goes to /dev/null, not to whoever loaded the workspace.
+	return exec.CommandContext(ctx, exe, append(fields, "-h")...).Run() == nil
+}
+
+// splitDriver splits a registered driver command into its executable and everything after
+// it, unwrapping the quotes quoteDriverExe adds. Shared so driverArgsCurrent and
+// driverExeExists cannot disagree about where the executable ends.
+func splitDriver(registered string) (exe, args string) {
+	rest := strings.TrimSpace(registered)
+	if rest == "" {
+		return "", ""
+	}
+	if strings.HasPrefix(rest, `"`) {
+		if end := strings.Index(rest[1:], `"`); end >= 0 {
+			return rest[1 : end+1], strings.TrimSpace(rest[end+2:])
+		}
+		return rest, ""
+	}
+	if i := strings.Index(rest, " "); i >= 0 {
+		return rest[:i], strings.TrimSpace(rest[i+1:])
+	}
+	return rest, ""
 }
 
 // CheckMergeDriver reports whether both .gitattributes and git config driver registration are present.
@@ -718,36 +802,56 @@ func (v gitVCS) writeGitAttrs(root string, outputGlobs []string) error {
 // from having no driver at all. Prefer PATH so the registration survives an
 // upgrade-in-place, and fall back to this binary's own absolute path so a
 // source checkout with no installed magus still merges cleanly.
-func gitMergeDriverCommand() string {
-	exe, err := exec.LookPath("magus")
-	if err != nil {
-		if exe, err = os.Executable(); err != nil {
-			return "magus" + gitDriverArgs
-		}
+//
+// PATH is preferred only if that binary answers the spelling being registered. Existing on
+// PATH is not enough: a source checkout finds an INSTALLED RELEASE there, and pairing that
+// path with this binary's spelling registers something nothing can dispatch. One release plus
+// one source tree is enough to hit it - the ordinary development setup.
+func gitMergeDriverCommand(ctx context.Context) string {
+	if exe, err := exec.LookPath("magus"); err == nil && driverExeAnswers(ctx, exe) {
+		return quoteDriverExe(exe) + gitDriverArgs
 	}
-	if strings.ContainsAny(exe, " \t") {
-		exe = `"` + exe + `"`
+	if exe, err := os.Executable(); err == nil {
+		return quoteDriverExe(exe) + gitDriverArgs
 	}
-	return exe + gitDriverArgs
+	return "magus" + gitDriverArgs
 }
 
-// driverExecutable reports whether the command currently registered still resolves to a
+// quoteDriverExe quotes a path git would otherwise split on whitespace. splitDriver
+// unwraps the same quoting.
+func quoteDriverExe(exe string) string {
+	if strings.ContainsAny(exe, " \t") {
+		return `"` + exe + `"`
+	}
+	return exe
+}
+
+// driverExeAnswers reports whether exe dispatches the subcommand gitDriverArgs names, by asking
+// it for help: a binary that does not know the subcommand exits non-zero.
+//
+// It spawns a subprocess, so it belongs on the repair path only - EnsureMergeDriver returns
+// early in the steady state and reaches InstallMergeDriver when something is already wrong.
+// `-h` returns before the child opens a workspace, so it also works in a tree no released
+// magus can load, which is when the answer matters most.
+func driverExeAnswers(ctx context.Context, exe string) bool {
+	verb, _, _ := strings.Cut(strings.TrimSpace(gitDriverArgs), " %")
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	// nil Stdout/Stderr: the child's usage text goes to /dev/null, not to whoever happened
+	// to load the workspace.
+	return exec.CommandContext(ctx, exe, append(strings.Fields(verb), "-h")...).Run() == nil
+}
+
+// driverExeExists reports whether the command currently registered still resolves to a
 // runnable binary. A registration can rot without anyone touching git config: an absolute
 // path recorded from a `go run` build points into a temp dir that is gone next run, and a
 // path into a since-removed install is no better. git treats a driver it cannot execute
 // as a conflict, so a rotted registration behaves exactly like no driver - the failure it
 // causes never mentions the driver, so nothing points at the cause.
-func driverExecutable(registered string) bool {
-	if registered == "" {
+func driverExeExists(registered string) bool {
+	exe, _ := splitDriver(registered)
+	if exe == "" {
 		return false
-	}
-	exe := registered
-	if strings.HasPrefix(exe, `"`) {
-		if end := strings.Index(exe[1:], `"`); end >= 0 {
-			exe = exe[1 : end+1]
-		}
-	} else if i := strings.Index(exe, " "); i >= 0 {
-		exe = exe[:i]
 	}
 	if strings.ContainsRune(exe, filepath.Separator) {
 		_, err := os.Stat(exe)
@@ -758,7 +862,7 @@ func driverExecutable(registered string) bool {
 }
 
 func (v gitVCS) writeGitConfig(ctx context.Context, root string) error {
-	cmd := gitExec(ctx, "-C", root, "config", "merge.magus.driver", gitMergeDriverCommand())
+	cmd := gitExec(ctx, "-C", root, "config", "merge.magus.driver", gitMergeDriverCommand(ctx))
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git config merge.magus.driver: %w\n%s", err, out)
 	}

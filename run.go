@@ -542,43 +542,77 @@ func applyRunKeying(step *cache.Step, toolVersions, charms []string) {
 	step.Charms = slices.Compact(ck)
 }
 
-// outputWatchDirs are the base directories the race detector and the race-replay
-// snapshots must watch for one target: the project-wide Outputs plus every per-target
-// glob declared via ctx.writesFiles, each already resolved to an absolute directory. It keeps
-// those diagnostics consistent with the cache, which sees the same union via buildStep's
-// step.Outputs.
+// outputWatchDirs are the base directories the race detector watches for one target: the
+// same declared outputs outputGlobsByRoot resolves, widened to the directories containing
+// them.
 //
-// It returns directories rather than globs deliberately. Every caller used to join the
-// globs to p.Dir itself, which silently assumed one root per target - true until a target
-// could declare an output into another project's tree, and the assumption then had to be
-// paid for by dropping those globs entirely. Resolving here is what lets one target's
-// outputs span two roots.
+// A projection of that function rather than a second resolution. Both used to walk
+// p.TargetOutputs themselves, including the same owner-root branch, which is exactly the
+// duplication that lets two views disagree about which root a cross-project glob belongs to.
 //
-// There is no sources twin: the sources union has a single consumer (buildStep, which
-// folds it inline into the cache key), whereas outputs need it in three places (the race
-// detector plus the pre/post replay snapshots), so only outputs earn a named helper.
+// Wide is right HERE and only here: the race detector asks "what got written", so it must see
+// paths no glob claimed. The replay asks "did the declared outputs change", so it filters -
+// see diff.HashContent.
 func outputWatchDirs(ws *types.Workspace, p *types.Project, target string) []string {
-	dirs := diff.GlobBaseDirs(p.Dir, p.Outputs)
-	for _, ref := range p.TargetOutputs[target] {
-		// Resolve each glob against the dir of the project that OWNS it. A
-		// cross-project glob is relative to the tree it writes into, so joining it to
-		// p.Dir would watch a path that does not exist - but dropping it is worse: it
-		// leaves the one file two projects can now both write as the only output no
-		// race (MGS4001), overlap (MGS4002), replay (MGS4003), or missing-dependency
-		// (MGS4004) check ever looks at. The feature widens the race surface, so the
-		// detector widens with it.
-		root := p.Dir
-		if ref.Project != "" && ref.Project != p.Path {
-			owner := ws.Get(ref.Project)
-			if owner == nil {
-				continue
-			}
-			root = owner.Dir
-		}
-		dirs = append(dirs, diff.GlobBaseDirs(root, []string{ref.Glob})...)
+	sets := outputGlobsByRoot(ws, p, target)
+	dirs := make([]string, 0, len(sets))
+	for _, set := range sets {
+		dirs = append(dirs, diff.GlobBaseDirs(set.Root, set.Globs)...)
 	}
 	slices.Sort(dirs)
 	return slices.Compact(dirs)
+}
+
+// outputGlobsByRoot groups a target's declared outputs by the root each glob is relative to.
+// Globs stay relative - see diff.OutputGlobs.
+//
+// It REPLACES rather than unions, mirroring buildStep: a target that named its own artifacts
+// does not inherit the project or spell baseline, because an unrelated target can otherwise
+// restore a stale tree merely because it shares the project. Unioning here made the replay
+// compare a wider set than the cache snapshots, for exactly the targets that did the work of
+// declaring ctx.writesFiles.
+func outputGlobsByRoot(ws *types.Workspace, p *types.Project, target string) []diff.OutputGlobs {
+	byRoot := map[string][]string{}
+	if refs := p.TargetOutputs[target]; len(refs) > 0 {
+		for _, ref := range refs {
+			// A cross-project glob is relative to the tree it writes into.
+			root := p.Dir
+			if ref.Project != "" && ref.Project != p.Path {
+				owner := ws.Get(ref.Project)
+				if owner == nil {
+					continue
+				}
+				root = owner.Dir
+			}
+			byRoot[root] = append(byRoot[root], ref.Glob)
+		}
+	} else if len(p.Outputs) > 0 {
+		byRoot[p.Dir] = append(byRoot[p.Dir], p.Outputs...)
+	}
+	sets := make([]diff.OutputGlobs, 0, len(byRoot))
+	for root, globs := range byRoot {
+		slices.Sort(globs)
+		sets = append(sets, diff.OutputGlobs{Root: root, Globs: slices.Compact(globs)})
+	}
+	slices.SortFunc(sets, func(a, b diff.OutputGlobs) int { return strings.Compare(a.Root, b.Root) })
+	return sets
+}
+
+// formatOutputGlobs renders the declared globs for an error message. Root-qualified only
+// when more than one root is involved, since the single-root case is the project the error
+// already names.
+func formatOutputGlobs(sets []diff.OutputGlobs) string {
+	var parts []string
+	for _, s := range sets {
+		for _, g := range s.Globs {
+			if len(sets) == 1 {
+				parts = append(parts, g)
+				continue
+			}
+			parts = append(parts, filepath.Join(s.Root, g))
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 // servesTarget reports whether target is backed by a service op in any of the
@@ -1265,19 +1299,48 @@ func runReplay(ctx context.Context, ws *types.Workspace, projects []*types.Proje
 	byPath map[string]*types.Project, handler TargetHandler,
 	w *report.Writer,
 ) error {
+	// One resolution per project, reused for admission and both snapshots, so the selection
+	// loop and the comparison loops cannot disagree about what the outputs are.
+	sets := make(map[string][]diff.OutputGlobs, len(projects))
 	var replayable []*types.Project
 	for _, p := range projects {
-		if len(outputWatchDirs(ws, p, target)) > 0 {
-			replayable = append(replayable, p)
+		s := outputGlobsByRoot(ws, p, target)
+		if len(s) == 0 {
+			continue
 		}
+		sets[p.Path] = s
+		replayable = append(replayable, p)
 	}
 	if len(replayable) == 0 {
 		return nil
 	}
 
+	var offenders []string
 	snapsA := make(map[string]diff.ContentSnap, len(replayable))
 	for _, p := range replayable {
-		snapsA[p.Path] = diff.HashContent(outputWatchDirs(ws, p, target))
+		snap, err := diff.HashContent(ctx, sets[p.Path])
+		if err != nil {
+			// Report and keep going: returning here would skip byte-stability for every
+			// remaining project, which is the "gate that checked nothing" this exists to stop.
+			fmt.Fprintln(os.Stderr, types.FormatDiagnostic(types.NondeterministicOutput,
+				fmt.Sprintf("cannot check byte-stability\n  project=%s target=%s err=%v", p.Path, target, err)))
+			offenders = append(offenders, p.Path)
+			continue
+		}
+		// A target that named its own outputs and produced none broke its promise, so an empty
+		// snapshot means the comparison verified nothing. Gated on TargetOutputs for the reason
+		// cache.OutputsDeclared documents: an inherited project or spell glob - the typescript
+		// spell contributes dist/** to every target - routinely matches nothing, and a
+		// check-only target like test would fail for a glob it never claimed.
+		if len(snap) == 0 && len(p.TargetOutputs[target]) > 0 {
+			fmt.Fprintln(os.Stderr, types.FormatDiagnostic(types.NondeterministicOutput,
+				fmt.Sprintf("declared outputs matched nothing, so byte-stability was not checked\n  project=%s target=%s globs=%s",
+					p.Path, target, formatOutputGlobs(sets[p.Path]))))
+			_ = report.Record(w, report.DeterminismMismatch{Project: p.Path, Target: target})
+			offenders = append(offenders, p.Path)
+			continue
+		}
+		snapsA[p.Path] = snap
 	}
 
 	for _, p := range replayable {
@@ -1286,9 +1349,17 @@ func runReplay(ctx context.Context, ws *types.Workspace, projects []*types.Proje
 		}
 	}
 
-	var offenders []string
 	for _, p := range replayable {
-		postSnap := diff.HashContent(outputWatchDirs(ws, p, target))
+		if _, ok := snapsA[p.Path]; !ok {
+			continue // already reported above; its pre-snapshot is not comparable
+		}
+		postSnap, err := diff.HashContent(ctx, sets[p.Path])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, types.FormatDiagnostic(types.NondeterministicOutput,
+				fmt.Sprintf("cannot check byte-stability\n  project=%s target=%s err=%v", p.Path, target, err)))
+			offenders = append(offenders, p.Path)
+			continue
+		}
 		changed := diff.DiffContent(snapsA[p.Path], postSnap)
 		if len(changed) == 0 {
 			continue

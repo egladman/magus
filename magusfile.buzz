@@ -1308,9 +1308,13 @@ fun release_target_platform(goos: str, goarch: str) > [str] !> any {
 // which made `goos + "-"` a list+str concatenation and failed EVERY release-build, on
 // every platform, before it reached the compiler.
 export fun release_build(ctx: magus\Context, args: [str]) > void !> any {
-    // dist/* is skip_cache (never snapshotted), but declaring it keeps
-    // `magus clean --outputs` aware of the release artifacts via AllOutputs.
-    ctx.writesFiles("dist/*");
+    // Never snapshotted (skip_cache), but declaring it keeps `magus clean --outputs` aware of
+    // the release artifacts via AllOutputs.
+    //
+    // `**`, not `*`: this target stages into dist/<goos>-<goarch>/ (fs\mkdirAll below), and a
+    // single `*` does not cross a separator, so it matched the flat archives while missing
+    // every staged binary - leaving the declaration failing at the job above.
+    ctx.writesFiles("dist/**");
     var goos = "";
     var goarch = "";
     if (args.len() == 1) {

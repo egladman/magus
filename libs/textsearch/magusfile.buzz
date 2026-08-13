@@ -59,11 +59,11 @@ magus\project({
     // minimum-release-age gate is the reason.
     "sources": ["src/**/*.ts", "package.json", "pnpm-lock.yaml",
                 "tsconfig.json", "biome.json"],
-    // Generated target catalog; the only output this pure-source library declares. It is
-    // also what the cacheable lint/test targets snapshot: the ts spell contributes a
-    // dist/** provided-glob that a source-only lib never fills, so without a real output
-    // to record the cache snapshot would find nothing to match. MAGUS.md is that output.
-    "outputs": ["MAGUS.md"],
+    // MAGUS.md is declared per-target on index_generate, not here: see the root magusfile.
+    // It used to be declared project-wide so the cacheable lint/test targets had a real
+    // output to snapshot - the ts spell contributes a dist/** provided-glob a source-only
+    // lib never fills, and an empty snapshot was an error. It no longer is for a glob the
+    // target did not name itself; see cache.Step.OutputsDeclared.
     "targets": {
         // Drift-gates MAGUS.md via git status: run alone, every time.
         "generate": {"skip_cache": "drift-gates MAGUS.md via git status; a replay would skip the check", "exclusive": true},
@@ -108,6 +108,9 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 
 // Renders MAGUS.md (target catalog plus graph) from this magusfile.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
+    // Declared so `magus vcs resolve` can find the target that settles a conflict here:
+    // it matches per-TARGET outputs, and the project-level outputs list is not enough.
+    ctx.writesFiles("MAGUS.md");
     final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs\writeFile("MAGUS.md", doc + "\n");
 }

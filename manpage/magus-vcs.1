@@ -1,0 +1,107 @@
+.TH MAGUS-VCS 1 "" "magus" "magus Manual"
+.SH NAME
+magus\-vcs \- Staging and conflict resolution that knows what is generated
+.SH SYNOPSIS
+.B magus
+.RI "vcs <add|resolve|merge\-driver> [flags]"
+.SH DESCRIPTION
+Version\-control operations that read the workspace's output declarations,
+so generated files and hand\-written sources are treated differently.
+.PP
+add stages what the workspace declares: sources, and the generated outputs a
+source change in the same commit accounts for. Anything undeclared is reported
+rather than swept in, which is the difference between it and git add \-A.
+.PP
+resolve settles an in\-progress merge, rebase, or cherry\-pick. It classifies
+every conflicted path at once, regenerates once instead of once per file,
+settles the files one side deleted (which no VCS invokes a merge driver for),
+and stages everything the regeneration touched so a following commit or
+rebase \-\-continue does not refuse on a dirty tree. Conflicts in files magus
+does not generate are reported and left alone. Pass \-\-against <ref> to merge
+that ref first and settle what it conflicts with; add \-\-dry\-run to see the
+classification and have the merge backed out again.
+.PP
+merge\-driver is the per\-file driver git and hg invoke during a merge. You do
+not run it by hand; it is wired per clone, because a driver registration
+cannot be committed. That is also why a forge reports conflicts your own
+clone would settle silently, and why resolve exists as the bulk counterpart.
+.PP
+resolve works on git, Mercurial and Jujutsu. Only \-\-against is git\-only: merge the
+base in yourself on the others, then run resolve.
+.SH OPTIONS
+.RS
+.TP
+\fB\-\-against\fR \fIstring\fR
+Merge this ref first, then settle what it conflicts with (vcs resolve)
+.TP
+\fB\-\-untracked\fR
+Also stage undeclared files (vcs add)
+.RE
+.SH SUBCOMMANDS
+.RS
+.TP
+\fBadd\fR
+Stage a change the way this workspace's declarations say it should be staged
+.TP
+\fBresolve\fR
+Settle an in\-progress merge's conflicted generated files, then regenerate once
+.TP
+\fBmerge\-driver\fR
+The per\-file merge driver git and hg invoke; you do not run this by hand
+.RE
+.SH EXAMPLES
+\fIStage a change without sweeping in build residue\fR
+.PP
+.EX
+magus vcs add
+.EE
+.PP
+\fIClassify the dirty tree, stage nothing\fR
+.PP
+.EX
+magus vcs add --dry-run
+.EE
+.PP
+\fISettle a conflicted merge\fR
+.PP
+.EX
+magus vcs resolve
+.EE
+.PP
+\fIMerge the base in and settle it in one step\fR
+.PP
+.EX
+magus vcs resolve --against origin/main
+.EE
+.PP
+.SH SEE ALSO
+\fBmagus\fR(1),
+\fBmagus\-ls\fR(1),
+\fBmagus\-describe\fR(1),
+\fBmagus\-run\fR(1),
+\fBmagus\-x\fR(1),
+\fBmagus\-where\fR(1),
+\fBmagus\-affected\fR(1),
+\fBmagus\-insight\fR(1),
+\fBmagus\-graph\fR(1),
+\fBmagus\-query\fR(1),
+\fBmagus\-explain\fR(1),
+\fBmagus\-path\fR(1),
+\fBmagus\-refs\fR(1),
+\fBmagus\-watch\fR(1),
+\fBmagus\-status\fR(1),
+\fBmagus\-clean\fR(1),
+\fBmagus\-doctor\fR(1),
+\fBmagus\-config\fR(1),
+\fBmagus\-memory\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-buzz\fR(1),
+\fBmagus\-completion\fR(1),
+\fBmagus\-man\fR(1),
+\fBmagus\-init\fR(1),
+\fBmagus\-agent\fR(1),
+\fBmagus\-hook\fR(1),
+\fBmagus\-notify\fR(1),
+\fBmagus\-self\fR(1),
+\fBmagus\-version\fR(1)
+.br

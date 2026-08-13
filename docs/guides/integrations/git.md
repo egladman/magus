@@ -1,6 +1,6 @@
 ---
 title: Git integration
-description: What magus writes into your repository - the generated-file merge driver, the .gitattributes section behind it, and the refresh hooks - plus the rule every magus hook obeys, which is that a hook hands off work and never does work.
+description: What magus writes into your repository - the generated-file merge driver, the .gitattributes section behind it, and the refresh hooks - plus the rule every magus hook obeys, which is that a hook hands off work and never does work, and how to settle a conflict in generated output without a rebase, a force-push, or a broken stack.
 tags: [git, vcs, hooks, gitattributes, merge-driver, generated-files, conflicts]
 aliases: [guides/git]
 ---
@@ -139,6 +139,99 @@ magus vcs resolve --against origin/main
 That merges, resolves, and leaves the merge in progress for you to commit. It needs a
 clean tree, so backing the merge out cannot lose uncommitted work. Add `--dry-run` to see
 the classification and have the merge backed out again.
+
+`magus vcs resolve` works on git, Mercurial and Jujutsu - all three implement conflict
+reporting. Only `--against` is git-only, because only git has a merge-starting implementation;
+on the others, merge the base in yourself and then run `magus vcs resolve`.
+
+## Merge, do not rebase
+
+Reach for `git merge origin/main`, not `git rebase origin/main`. This is not a style
+preference. The rebase costs you three things the merge does not:
+
+- **A force-push.** A rebase rewrites your commits, so the branch can only move with
+  `--force-with-lease`. A merge only adds a commit, so a plain `git push` works.
+- **Everything stacked on you.** A force-push moves the commits every dependent branch was
+  built on, so each branch above yours needs the same treatment, in order, every time the
+  base moves. A merge leaves them all valid.
+- **The conflict, repeatedly.** A rebase replays each of your commits against the new base,
+  so a generated file can conflict once per commit. A merge settles it once.
+
+The usual reason to prefer a rebase is a linear history on the trunk, and a squash merge
+already gives you that: it collapses the branch to a single commit, so merge commits inside
+your branch never reach the trunk at all. If your project squash-merges, merging the base
+into your own branch is free.
+
+## Stacked pull requests
+
+A stack is a chain of branches, each based on the one below it. Generated files are the
+usual reason one falls apart, and the mechanism is worth knowing.
+
+When the bottom pull request is squash-merged, the trunk gains a **new** commit that is not
+an ancestor of the branch above, while that branch still carries its own copy of the commits
+that were just squashed. For hand-written files git copes: both sides made the same change,
+and a three-way merge recognizes that. For generated output it cannot. The trunk's output was
+regenerated from the bottom branch's sources alone, and the branch above holds output
+regenerated from both, so both sides changed the same region differently. That is a real
+conflict, in a file neither author edited.
+
+Settle a stack from the bottom up, one branch at a time, each against its own base:
+
+```sh
+git switch feature-b          # the branch directly above what just merged
+git merge origin/main
+magus vcs resolve
+git push
+
+git switch feature-c          # then the next one up, against ITS base
+git merge origin/feature-b
+magus vcs resolve
+git push
+```
+
+Every step is a merge, so nothing is force-pushed and settling one layer does not invalidate
+the layers above it. The same walk with rebases means redoing every branch above whichever
+one you touch.
+
+## Whose conflict is it
+
+`magus vcs resolve` reports the paths it deliberately left alone. To answer the same question
+before you start a merge, ask the workspace - `magus describe file` reads the declarations
+rather than guessing from a path convention:
+
+```sh
+magus describe file MAGUS.md internal/describe/extract.go
+```
+
+`role: output` is generated: regenerate it, never hand-merge it, and do not bother reading
+its diff. `role: source` is yours, and an ordinary conflict.
+
+## When the driver is doing nothing
+
+The driver's failure mode is quiet, and it looks like the opposite of a failure - git reports
+a conflict in a generated file it should have settled by itself. A file that both sides
+changed to the same bytes is the clearest tell, because that is the easiest merge there is.
+
+The registration is a command line, held in one clone's config:
+
+```sh
+git config --get merge.magus.driver
+```
+
+It names a magus binary and a subcommand. If that command cannot run - the binary moved, or
+it predates the subcommand the registration names - the driver exits non-zero, and git reads
+a non-zero driver as _conflict_. Every file routed to it is then reported as conflicted
+whether it is or not, which inflates the count rather than raising an error.
+
+magus rewrites the registration whenever it opens a workspace, so running a command that
+loads one repairs it; `magus ls` is enough. Two things stop that happening on their own: a
+magus that cannot load this workspace never reaches the refresh, and the `vcs` verbs skip it
+on purpose, because the refresh writes the tracked `.gitattributes` and those verbs run while
+that file may itself be unmerged.
+
+`magus vcs resolve` does not depend on the driver - it reads the conflicted paths from git
+and regenerates - so it settles the inflated list too. A broken driver makes a conflict look
+worse than it is; it does not stop you fixing it.
 
 ## Staging
 

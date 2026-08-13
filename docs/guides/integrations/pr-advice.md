@@ -93,6 +93,8 @@ request before it will.
 
 ## See also
 
+- [Git integration](git.md): what the `merge-conflicts` advisor is telling you to do, and
+  why settling a stack takes merges rather than rebases.
 - [CI integration](ci.md): wiring magus into a pipeline.
 - [Cache model](../../concepts/cache.md): why a target without declared outputs never
   replays.
