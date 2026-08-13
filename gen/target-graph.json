@@ -366,6 +366,8 @@
             "mocks-generate",
             "skills-generate",
             "spells-generate",
+            "termcast-generate",
+            "termshots-generate",
             "types-generate"
           ],
           "charms": [
@@ -392,12 +394,118 @@
             {
               "project": ".",
               "glob": "tapes/demo-init.sh"
+            },
+            {
+              "project": ".",
+              "glob": "tapes/demo.txtar"
             }
           ],
           "reads_secrets": false,
           "writes_files": [
             {
               "glob": "assets/gen/*.gif"
+            }
+          ]
+        },
+        {
+          "name": "termcast-record",
+          "declared": "termcast_record",
+          "doc": "Re-records tapes/core-loop.capture: the raw bytes a real magus prints to a real pseudo-terminal, driven by tapes/core-loop.session.sh.",
+          "reads_files": [
+            {
+              "project": ".",
+              "glob": "tapes/core-loop.session.sh"
+            },
+            {
+              "project": ".",
+              "glob": "tapes/demo-init.sh"
+            },
+            {
+              "project": ".",
+              "glob": "tapes/demo.txtar"
+            },
+            {
+              "project": ".",
+              "glob": "cmd/magus-termcast/*.go"
+            }
+          ],
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "tapes/*.capture"
+            }
+          ]
+        },
+        {
+          "name": "termcast-showcase",
+          "declared": "termcast_showcase",
+          "doc": "Renders tapes/core-loop.capture into the README's animated SVG.",
+          "reads_files": [
+            {
+              "project": ".",
+              "glob": "tapes/demo.txtar"
+            },
+            {
+              "project": ".",
+              "glob": "cmd/magus-termcast/*.go"
+            }
+          ],
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "tapes/*.capture"
+            }
+          ]
+        },
+        {
+          "name": "termcast-generate",
+          "declared": "termcast_generate",
+          "reads_files": [
+            {
+              "project": ".",
+              "glob": "tapes/*.capture"
+            },
+            {
+              "project": ".",
+              "glob": "cmd/magus-termcast/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "internal/interactive/screen/*.go"
+            }
+          ],
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "assets/gen/core-loop.svg"
+            },
+            {
+              "glob": "assets/gen/showcase.svg"
+            }
+          ]
+        },
+        {
+          "name": "termshots-generate",
+          "declared": "termshots_generate",
+          "doc": "Renders the still SVGs of magus's interactive terminal surfaces for the docs.",
+          "reads_files": [
+            {
+              "project": ".",
+              "glob": "cmd/magus-termshots/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "internal/interactive/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "internal/cache/*.go"
+            }
+          ],
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "assets/gen/terminal-*.svg"
             }
           ]
         },
@@ -571,19 +679,19 @@
           "reads_files": [
             {
               "project": ".",
-              "glob": "libs/testlayout/.custom-gcl.yml"
+              "glob": "libs/testsprawl/.custom-gcl.yml"
             },
             {
               "project": ".",
-              "glob": "libs/testlayout/go.mod"
+              "glob": "libs/testsprawl/go.mod"
             },
             {
               "project": ".",
-              "glob": "libs/testlayout/go.sum"
+              "glob": "libs/testsprawl/go.sum"
             },
             {
               "project": ".",
-              "glob": "libs/testlayout/**/*.go"
+              "glob": "libs/testsprawl/**/*.go"
             }
           ],
           "reads_secrets": false
@@ -618,11 +726,11 @@
           "reads_files": [
             {
               "project": ".",
-              "glob": "libs/testlayout/.custom-gcl.yml"
+              "glob": "libs/testsprawl/.custom-gcl.yml"
             },
             {
               "project": ".",
-              "glob": "libs/testlayout/**/*.go"
+              "glob": "libs/testsprawl/**/*.go"
             },
             {
               "project": ".",
@@ -1628,8 +1736,8 @@
       ]
     },
     {
-      "path": "libs/testlayout",
-      "name": "libs/testlayout",
+      "path": "libs/testsprawl",
+      "name": "libs/testsprawl",
       "engine": "buzz",
       "nodes": [
         {
@@ -1681,7 +1789,7 @@
           ],
           "reads_files": [
             {
-              "project": "libs/testlayout",
+              "project": "libs/testsprawl",
               "glob": "**/*.md"
             }
           ],

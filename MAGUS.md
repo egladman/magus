@@ -63,14 +63,14 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 40 | `magus query project:.` | `buzz-test`, `generate`, `lint` |
+| . | 44 | `magus query project:.` | `buzz-test`, `generate`, `lint` |
 | console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 4 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
 | evals | 4 | `magus query project:evals` | `lint`, `preflight`, `ci` |
 | libs/diagnostics | 8 | `magus query project:libs/diagnostics` | `format`, `build`, `generate` |
 | libs/gopherbuzz | 10 | `magus query project:libs/gopherbuzz` | `format`, `build`, `generate` |
-| libs/testlayout | 8 | `magus query project:libs/testlayout` | `format`, `build`, `generate` |
+| libs/testsprawl | 8 | `magus query project:libs/testsprawl` | `format`, `build`, `generate` |
 | libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `generate`, `preflight` |
 | proto | 3 | `magus query project:proto` | `generate`, `lint`, `ci` |
 
@@ -91,6 +91,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `postflight` | Renders the insight report (hotspots, affinity, ownership, trend) to stdout. |
 | `generate` | Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd). |
 | `tapes` | Records every VHS tape in tapes/ into assets/gen/. |
+| `termcast-record` | Re-records tapes/core-loop.capture: the raw bytes a real magus prints to a real pseudo-terminal, driven by tapes/core-loop.session.sh. |
+| `termcast-showcase` | Renders tapes/core-loop.capture into the README's animated SVG. |
 | `release-build` | Builds one release binary for one platform. |
 | `release-sign` | Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos). |
 | `release` |  |
@@ -113,6 +115,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `skills-generate` | Reinstalls the agent skills from their embedded sources in cmd/magus/skills. |
 | `index-generate` | Renders MAGUS.md via `magus describe graph`. |
 | `graph-generate` | Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects. |
+| `termcast-generate` |  |
+| `termshots-generate` | Renders the still SVGs of magus's interactive terminal surfaces for the docs. |
 | `advice-test` | Runs the PR advisors' `test "..." {}` blocks. |
 | `buzz-test` | Runs the in-file `test "..." {}` blocks in this repo's own root Buzz modules, through magus's embedded engine. |
 | `lint-build` | Builds ./custom-gcl, the golangci-lint carrying this repo's own linters. |
@@ -199,7 +203,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `preflight` |  |
 | `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
 
-## Project: libs/testlayout
+## Project: libs/testsprawl
 
 | Target | What it does |
 |---|---|
