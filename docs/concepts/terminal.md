@@ -25,11 +25,27 @@ not move with it.
 
 ![A magus run: build output scrolling above a dim status row pinned at the bottom of the terminal](../../assets/gen/terminal-run-band.svg)
 
-A dim rule marks the top of the band, so it is obvious at a glance which lines
-will scroll away and which are being repainted in place. It is drawn in ASCII
-rather than a box-drawing rune, because this row reaches every terminal magus
-meets - including ones over ssh with a mismatched locale, where a multi-byte
-rune is as likely to arrive as mojibake as it is a line.
+A dim box encloses the band, so it is obvious at a glance which lines will
+scroll away and which are being repainted in place. It is drawn with
+box-drawing runes, and the same box is drawn by every interactive surface -
+the band, the failure list, the `magus x` picker - because two surfaces that
+frame themselves differently read as two different products.
+
+Those runes are multi-byte, so a terminal whose locale is not UTF-8 renders
+them as mojibake. That is a deliberate trade rather than an oversight: the
+border is only ever drawn when there is an interactive terminal to draw it on,
+and the environments that still run non-UTF-8 locales - CI, cron, minimal
+containers, `LANG=C` scripts - are the ones where output is piped and no border
+is drawn at all. Choosing per locale would also make a committed screenshot a
+function of whichever shell recorded it.
+
+So magus draws one box everywhere and reports the locale instead of silently
+changing what it draws. If yours is not UTF-8, `magus doctor` says so:
+
+```text
+locale is not UTF-8 (none of LC_ALL, LC_CTYPE or LANG is set), so the band's
+border may render as stray characters; set LANG to a UTF-8 value
+```
 
 The top row of the band is a live status line: pool occupancy, how many targets
 have passed, how long the run has been going. It repaints in place rather than

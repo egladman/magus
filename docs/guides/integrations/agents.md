@@ -63,10 +63,11 @@ host-specific step:
 | `.opencode/skills/` | OpenCode                               |
 | `AGENTS.md`         | Codex and other instruction-file hosts |
 
-`--agents-md` maintains a marker-delimited magus section inside `AGENTS.md`
-(created if absent, replaced in place on re-install, other content untouched).
-For Codex, `AGENTS.md` and `.agents/skills/` are complementary: the first is
-always-on repository guidance; the second exposes focused workflows on demand.
+`AGENTS.md` is the second surface, and magus never writes it: install PRINTS a
+marker-delimited magus block for you to paste, and only when your copy is missing
+or stale (see below). For Codex, `AGENTS.md` and `.agents/skills/` are
+complementary: the first is always-on repository guidance; the second exposes
+focused workflows on demand.
 There are no per-model skill bodies anywhere - supporting a new host means
 naming a destination, not writing new instructions.
 
@@ -1463,10 +1464,10 @@ that branches on exit status alone would never block anything.
 #### Cursor
 
 Cursor does not read Agent Skills directories; it reads an `AGENTS.md` at the
-repo root. Install the managed section there:
+repo root. Run install and paste the block it prints into that file:
 
 ```sh
-magus agent install --agents-md
+magus agent install .agents/skills   # prints the AGENTS.md block; paste it yourself
 ```
 
 The guard is a `beforeShellExecution` hook in `.cursor/hooks.json`. Cursor runs
