@@ -166,9 +166,9 @@ straight from the graph and edit surgically instead of loading the whole file.
 **Where does risk concentrate?**
 
 ```sh
-magus insight hotspots    # churn x complexity per project, with blast radius
-magus insight affinity    # projects that change together: hidden coupling
-magus insight ownership   # author concentration and bus factor
+magus_insight lens=hotspots   # churn x complexity per project, with blast radius (MCP)
+magus_insight lens=affinity   # projects that change together: hidden coupling
+magus_insight lens=ownership  # author concentration and bus factor
 magus explain <node>      # a node's edges and how many nodes reach it (blast radius)
 magus path <a> <b>        # the shortest edge chain between two nodes
 ```

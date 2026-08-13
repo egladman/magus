@@ -15,12 +15,6 @@ snapshot on its own line for log capture.
 .SH OPTIONS
 .RS
 .TP
-\fB\-W\fR \fIduration\fR
-Short for \-\-watch
-.TP
-\fB\-c\fR
-Short for \-\-compact
-.TP
 \fB\-\-compact\fR
 Single\-line, densely\-packed snapshot for sidebar/multiplexer use (text output only)
 .TP
@@ -29,9 +23,6 @@ Exec\-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores \-
 .TP
 \fB\-\-socket\fR \fIstring\fR
 Adopt server address as unix:// URL or bare path; default: auto\-detect from MAGUS_DAEMON_SOCKET or scan sock dir
-.TP
-\fB\-\-symbols\fR
-Include the expensive symbol\-index freshness scan
 .TP
 \fB\-\-watch\fR \fIduration\fR
 Poll and reprint at this interval (minimum 15s; 0 means one\-shot)
@@ -83,7 +74,6 @@ magus status --socket=unix:///run/user/1000/magus/daemon.sock
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),
 \fBmagus\-memory\fR(1),
-\fBmagus\-notes\fR(1),
 \fBmagus\-server\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-completion\fR(1),

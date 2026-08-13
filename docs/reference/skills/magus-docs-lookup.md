@@ -1,21 +1,20 @@
 ---
-title: magus-docs-lookup
+title: magus-docs
 description: "Traverse magus's own documentation to answer a \"how does magus do X / what does Y mean / where is Z documented\" question, instead of guessing an answer or a URL."
-tags: [agents, skills, magus-docs-lookup]
-aliases:
-  - reference/skills/magus-docs
+tags: [agents, skills, magus-docs]
 skill_full_bytes: 3670
 skill_simple_bytes: 2956
 ---
 
-# magus-docs-lookup
+# magus-docs
 
 Traverse magus's own documentation to answer a "how does magus do X / what does Y mean / where is Z documented" question, instead of guessing an answer or a URL. Use when you need authoritative magus behavior (a CLI flag, a spell op, a diagnostic code, a config key, a stdlib module) and the workspace graph cannot give it. Do NOT use for facts about THIS workspace (use magus-query) or to run work (use magus-run).
 
 Install it, rather than copying from this page:
 
 ```sh
-magus agent install .claude/skills   # writes both forms below
+magus agent install .claude/skills            # the full form below
+magus agent install .claude/skills --simple   # the short form below
 ```
 
 An installed copy carries a provenance stamp, so `magus graph verify` can tell you when a magus upgrade has made it stale. Text copied from this page carries none.
@@ -31,14 +30,14 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `37` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `99f5ac7ac873` |
+| `skill-content` | `4a69fc6d84e4` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
 
 ## Full form
 
-Every mechanical step spelled out, plus the rationale for each. Installed as the `<name>-full` twin: loaded by name rather than always, so a reader who needs the long form can ask for it without every session carrying it.
+The default: every mechanical step spelled out, plus the rationale for each.
 
 ```markdown
 # Navigating the magus docs
@@ -115,9 +114,9 @@ carries every page as a `doc` node, so `magus query "kind:doc"` (see the
 magus-query skill) lists them from the graph.
 ```
 
-## Short form
+## Short form (`--simple`)
 
-The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. This is the always-loaded primary. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for the difference.
+The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for when to prefer which.
 
 <details>
 <summary>Show the short form</summary>

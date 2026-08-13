@@ -13,7 +13,8 @@ Audit the instructions an agent was given - the repo instruction file, installed
 Install it, rather than copying from this page:
 
 ```sh
-magus agent install .claude/skills   # writes both forms below
+magus agent install .claude/skills            # the full form below
+magus agent install .claude/skills --simple   # the short form below
 ```
 
 An installed copy carries a provenance stamp, so `magus graph verify` can tell you when a magus upgrade has made it stale. Text copied from this page carries none.
@@ -29,19 +30,19 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `37` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `99f5ac7ac873` |
+| `skill-content` | `4a69fc6d84e4` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
 
 ## Full form
 
-Every mechanical step spelled out, plus the rationale for each. Installed as the `<name>-full` twin: loaded by name rather than always, so a reader who needs the long form can ask for it without every session carrying it.
+The default: every mechanical step spelled out, plus the rationale for each.
 
 ````markdown
 # Auditing the instructions an agent was given
 
-This is a LENS, like `magus insight`: it observes and ranks, it does not gate.
+This is a LENS, like `magus_insight`: it observes and ranks, it does not gate.
 The output is a findings list a human decides on, never an automatic edit.
 
 What it looks at is not code. It is everything loaded into an agent's context as
@@ -152,9 +153,9 @@ contradict itself. When a rule genuinely must appear twice, make one the source
 and have the other name it rather than restate it.
 ````
 
-## Short form
+## Short form (`--simple`)
 
-The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. This is the always-loaded primary. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for the difference.
+The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for when to prefer which.
 
 <details>
 <summary>Show the short form</summary>
@@ -162,7 +163,7 @@ The enumeration dropped, the judgment kept - for the most capable readers, not t
 ````markdown
 # Auditing the instructions an agent was given
 
-This is a LENS, like `magus insight`: it observes and ranks, it does not gate.
+This is a LENS, like `magus_insight`: it observes and ranks, it does not gate.
 The output is a findings list a human decides on, never an automatic edit.
 
 What it looks at is not code. It is everything loaded into an agent's context as

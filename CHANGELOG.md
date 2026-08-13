@@ -11,6 +11,34 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Breaking
 
+- **`magus insight` is removed.** The lenses were never a daily verb - they are a
+  reporting surface, reached from CI and from a magusfile - and a subcommand is the
+  one place they cost every reader of `magus --help`. They are now
+  `magus\insightReport()` (typed) and `magus\insightMarkdown()` (the document), both
+  computed IN-PROCESS from the workspace magus already has open, and `magus_insight`
+  over MCP for agents, which never went through the subcommand at all.
+
+  What this costs, in full:
+
+  - The report can no longer be computed from a bare `magus buzz` script with no
+    workspace on the context: there is no longer a nested magus to fall back to.
+  - The **volatility** lens has no standalone surface any more. It is a field of the
+    whole report, but `magus_insight` never carried it, so an agent cannot ask for it
+    alone.
+  - **Per-project scoping is gone.** The subcommand defaulted to the cwd's project and
+    widened with `--workspace`; both survivors are workspace-wide only.
+  - The standalone Mermaid renders (`-o mermaid` for hotspots and affinity, and the
+    quadrant chart) are gone with the flags that selected them. The combined report
+    now always emits the PORTABLE Mermaid subset - what is left writes INSIGHT.md into
+    a repository or a CI step summary, and those are the renderers that subset targets.
+  - `InsightReport.graphStats` is **removed**. The CLI populated it from the knowledge
+    graph it loaded for itself; nothing else ever did, so keeping the field would have
+    shipped a documented axis that is structurally always empty. `magus graph stats`
+    is the structural axis and is unaffected.
+  - `magus\insightReport` takes an options map (`{commits, since}`) rather than a list
+    of CLI flag strings, which is the shape the subcommand imposed on it. An unknown
+    key is now an error rather than a silent default.
+
 - **`magus\diagnoseDrift` now returns a `DriftResult` object, not `DriftVerdict`.** A
   magusfile annotating the return type has to follow. The rename settles what the word
   means across the codebase: a VERDICT is the scalar judgment, and the thing carrying one

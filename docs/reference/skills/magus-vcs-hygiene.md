@@ -1,21 +1,20 @@
 ---
-title: magus-vcs-hygiene
+title: magus-vcs
 description: "Safe git operations in a magus workspace (any repo with magusfile.buzz at the root)."
-tags: [agents, skills, magus-vcs-hygiene]
-aliases:
-  - reference/skills/magus-vcs
+tags: [agents, skills, magus-vcs]
 skill_full_bytes: 7222
 skill_simple_bytes: 5265
 ---
 
-# magus-vcs-hygiene
+# magus-vcs
 
 Safe git operations in a magus workspace (any repo with magusfile.buzz at the root). Use IMMEDIATELY before git commit, git add, git stash, git reset, git checkout, or git clean, and when reading git status or a diff - especially one touching MAGUS.md, gen/ trees, lockfiles, or other generated files. Classifies every changed path as generated output vs source (magus describe file), gives the commit checklist, and settles merge conflicts in generated files by regenerating. Do NOT stash or reset the whole tree to verify a build; load this skill first.
 
 Install it, rather than copying from this page:
 
 ```sh
-magus agent install .claude/skills   # writes both forms below
+magus agent install .claude/skills            # the full form below
+magus agent install .claude/skills --simple   # the short form below
 ```
 
 An installed copy carries a provenance stamp, so `magus graph verify` can tell you when a magus upgrade has made it stale. Text copied from this page carries none.
@@ -31,14 +30,14 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `37` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `99f5ac7ac873` |
+| `skill-content` | `4a69fc6d84e4` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
 
 ## Full form
 
-Every mechanical step spelled out, plus the rationale for each. Installed as the `<name>-full` twin: loaded by name rather than always, so a reader who needs the long form can ask for it without every session carrying it.
+The default: every mechanical step spelled out, plus the rationale for each.
 
 ````markdown
 # VCS hygiene in a magus workspace
@@ -176,9 +175,9 @@ affected set (the changed files and dependency chains that pulled it in) when
 the result surprises you.
 ````
 
-## Short form
+## Short form (`--simple`)
 
-The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. This is the always-loaded primary. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for the difference.
+The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for when to prefer which.
 
 <details>
 <summary>Show the short form</summary>

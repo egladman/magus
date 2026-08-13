@@ -1,8 +1,11 @@
 package types
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
-// InsightDefinition is the umbrella description shown by `magus insight`.
+// InsightDefinition is the umbrella description of the insight lenses.
 const InsightDefinition = "Insight shows where a codebase's attention and risk concentrate. " +
 	"Four lenses read VCS history: hotspots (churn x complexity, the prime refactoring targets), " +
 	"affinity (projects that change together, and whether a dependency edge explains it), " +
@@ -161,7 +164,6 @@ func (t TrendEntry) Label() string { return ProjectDisplayName(t.Path, t.Name, "
 // the same per-lens outputs the CLI produces. The four git lenses come from one bounded
 // git-log scan (cached by the service); Volatility is a fresh runtime-history file read
 // folded into the same response, so the dashboard reads one endpoint for every lens.
-// GraphStats is omitted deliberately - the console read never touches the knowledge graph.
 type InsightView struct {
 	Hotspots  HotspotOutput   `json:"hotspots"   yaml:"hotspots"`
 	Affinity  AffinityOutput  `json:"affinity"   yaml:"affinity"`
@@ -178,9 +180,9 @@ type InsightView struct {
 	Volatility *VolatilityReport `json:"volatility" yaml:"volatility"`
 }
 
-// InsightReport bundles every lens for the combined `magus insight report` (the
-// committable Markdown doc and its -o json form). GraphStats is the knowledge-
-// graph axis (`magus graph stats`), embedded so the report spans both axes.
+// InsightReport bundles every lens for the combined report (the committable
+// Markdown doc and its -o json form). The VCS axis only: `magus graph stats` is
+// the structural one, and nothing here reads the knowledge graph.
 //
 // Volatility is a VALUE, not a pointer, so the Buzz mirror declares it non-optional and
 // a caller reads report.volatility.targets without a nil guard. An empty Targets list is
@@ -197,5 +199,26 @@ type InsightReport struct {
 	// pointer: the report always renders the section, and an empty list with a verdict
 	// says more than an omitted section would.
 	Unreferenced UnreferencedOutput `json:"unreferenced" yaml:"unreferenced"`
-	GraphStats   KnowledgeStats     `json:"graph_stats"  yaml:"graph_stats"`
+}
+
+// InsightAnalyzer is the optional capability a workspace implements to answer the
+// insight lenses. It is the sibling of [IgnoredFileReporter] and [ConflictResolver]:
+// callers type-assert for it and degrade when it is absent rather than requiring
+// every WorkspaceRepository to carry analytics it may have no history to compute.
+//
+// It exists so both entry points agree on ONE vocabulary. The CLI declared this
+// shape privately and the Buzz surface could not see it, so `magus\insight_report`
+// forked a whole magus - a process spawn, a second workspace load, a JSON encode and
+// a Buzz-side parse - to reach methods the calling process already had.
+//
+// Volatility and Unreferenced take no options because they read their whole source
+// workspace-wide: the run-history file and the symbol index have no commit window to
+// narrow, which is the distinction the lens docs draw for a reader too.
+type InsightAnalyzer interface {
+	Hotspots(ctx context.Context, opts InsightOptions) (HotspotOutput, error)
+	Affinity(ctx context.Context, opts InsightOptions) (AffinityOutput, error)
+	Ownership(ctx context.Context, opts InsightOptions) (OwnershipOutput, error)
+	Trend(ctx context.Context, opts InsightOptions) (TrendOutput, error)
+	Volatility(ctx context.Context) (VolatilityReport, error)
+	Unreferenced(ctx context.Context) (UnreferencedOutput, error)
 }

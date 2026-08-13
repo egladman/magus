@@ -29,38 +29,14 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 **--depth** *int*
 : With --graph: cap displayed depth (0 = unlimited)
 
-**--detach**
-: Hand the run to the daemon and return immediately; follow it with magus status --watch
+**--dry-run**
+: Print what would run without executing
 
 **--graph**
 : Render the dependency graph for the selected scope instead of executing
 
-**--n-shards** *int*
-: Total shard count for this CI matrix run; paired with --shard
-
 **--no-cache**
 : Force a fresh run even on a cache hit; still refreshes the entry
-
-**--no-default-charms**
-: Ignore magus.yaml default_charms for this run
-
-**--no-volatility-retry**
-: Disable volatility auto-retry for this run
-
-**--open**
-: Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)
-
-**--race** *string*
-: Run the same target repeatedly to surface order-dependent failures
-
-**--shard** *int*
-: This run's shard index within a CI matrix; paired with --n-shards
-
-**--step**
-: Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)
-
-**--timeout** *duration*
-: Abort if the run has not finished within this duration (e.g. 5m, 1h30m)
 
 **--upstream**
 : With --graph: show dependents instead of dependencies
@@ -155,5 +131,5 @@ magus run build -o jsonl --tee build.jsonl
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-memory**(1)](magus-memory.md), [**magus-notes**(1)](magus-notes.md), [**magus-server**(1)](magus-server.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-hook**(1)](magus-hook.md), [**magus-notify**(1)](magus-notify.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-memory**(1)](magus-memory.md), [**magus-server**(1)](magus-server.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-hook**(1)](magus-hook.md), [**magus-notify**(1)](magus-notify.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

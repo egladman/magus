@@ -19,7 +19,7 @@ import (
 //
 // Three provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\cache.remote(<spell>)` selects a remote cache backend, `magus\ci.provider(<spell>)` a CI provider, and `magus\secret.provider(<spell>)` / `magus\secret.read(<ref>)` a secret backend and the credentials read through it. Each takes an imported spell handle. `magus\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback base URL a CHILD PROCESS is pointed at instead of the real API, so magus attaches the credential on the way upstream and the child never holds it. It takes an object with ref/host/header/prefix fields, declared in your own magusfile. For your own code, `read` is the ordinary choice. See [Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) and [CI integration](../../guides/integrations/ci.md).
 //
-// `import "magus"` resolves in a `magus buzz` script as well as in a magusfile, and a script run inside a workspace reads that workspace: `ls`, `affected`, `projectGraph`, `where` and `insight` all answer in-process. Only the members that DECLARE into the workspace being loaded (`magus\project`, the provider selections above) raise [MGS1022](../codes/magusfile/MGS1022.md) in a script - there is nothing for them to declare into. Run a script outside any workspace and the reading members raise it too, since there is no workspace to read.
+// `import "magus"` resolves in a `magus buzz` script as well as in a magusfile. The members that declare into the workspace magus is loading (`magus\project`, the provider selections above) and the ones served in-process from a loaded workspace (`ls`, `affected`, `projectGraph`, `where`) raise [MGS1022](../codes/magusfile/MGS1022.md) in a script; the nested-command methods (`cmd`, `run`, `describe`, `doctor`) work there and discover the workspace themselves. `targets` works in both: it serves the workspace on the context when there is one and forks a nested magus when there is not.
 func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
@@ -99,14 +99,21 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return buzzValueMagusExecResult(ret0), nil
 	}))
-	m.MapSet("insight", vm.DirectValue("magus.insight", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		args := StrSlice(bzArgs, 0)
-		opts := AnyMap(bzArgs, 1)
-		ret0, err := std.MagusInsight(ctx, args, opts)
+	m.MapSet("insightReport", vm.DirectValue("magus.insightReport", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		opts := AnyMap(bzArgs, 0)
+		ret0, err := std.MagusInsightReport(ctx, opts)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
 		return buzzValueMagusInsightReport(ret0), nil
+	}))
+	m.MapSet("insightMarkdown", vm.DirectValue("magus.insightMarkdown", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		opts := AnyMap(bzArgs, 0)
+		ret0, err := std.MagusInsightMarkdown(ctx, opts)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return StrVal(ret0), nil
 	}))
 	m.MapSet("affectedImpact", vm.DirectValue("magus.affectedImpact", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		base := Str(bzArgs, 0)
@@ -621,66 +628,6 @@ func buzzValueMagusUnreferencedOutput(v types.UnreferencedOutput) vm.Value {
 	return out
 }
 
-func buzzValueMagusKnowledgeGodNode(v types.KnowledgeGodNode) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("id", vm.StrValue(v.ID))
-	out.MapSet("kind", vm.StrValue(v.Kind))
-	out.MapSet("label", vm.StrValue(v.Label))
-	out.MapSet("degree", vm.IntValue(int64(v.Degree)))
-	out.MapSet("in", vm.IntValue(int64(v.In)))
-	out.MapSet("out", vm.IntValue(int64(v.Out)))
-	return out
-}
-
-func buzzValueMagusKnowledgeOrphan(v types.KnowledgeOrphan) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("id", vm.StrValue(v.ID))
-	out.MapSet("kind", vm.StrValue(v.Kind))
-	out.MapSet("label", vm.StrValue(v.Label))
-	out.MapSet("reason", vm.StrValue(v.Reason))
-	return out
-}
-
-func buzzValueMagusKnowledgeDocCoverage(v types.KnowledgeDocCoverage) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("kind", vm.StrValue(v.Kind))
-	out.MapSet("total", vm.IntValue(int64(v.Total)))
-	out.MapSet("documented", vm.IntValue(int64(v.Documented)))
-	out.MapSet("percent", vm.IntValue(int64(v.Percent)))
-	itemsUndocumented := make([]vm.Value, len(v.Undocumented))
-	for indexUndocumented := range v.Undocumented {
-		itemsUndocumented[indexUndocumented] = vm.StrValue(v.Undocumented[indexUndocumented])
-	}
-	out.MapSet("undocumented", vm.ListValue(itemsUndocumented))
-	return out
-}
-
-func buzzValueMagusKnowledgeStats(v types.KnowledgeStats) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("definition", vm.StrValue(v.Definition))
-	out.MapSet("nodeCount", vm.IntValue(int64(v.NodeCount)))
-	out.MapSet("edgeCount", vm.IntValue(int64(v.EdgeCount)))
-	itemsGods := make([]vm.Value, len(v.Gods))
-	for indexGods := range v.Gods {
-		itemsGods[indexGods] = buzzValueMagusKnowledgeGodNode(v.Gods[indexGods])
-	}
-	out.MapSet("gods", vm.ListValue(itemsGods))
-	itemsOrphans := make([]vm.Value, len(v.Orphans))
-	for indexOrphans := range v.Orphans {
-		itemsOrphans[indexOrphans] = buzzValueMagusKnowledgeOrphan(v.Orphans[indexOrphans])
-	}
-	out.MapSet("orphans", vm.ListValue(itemsOrphans))
-	itemsCoverage := make([]vm.Value, len(v.Coverage))
-	for indexCoverage := range v.Coverage {
-		itemsCoverage[indexCoverage] = buzzValueMagusKnowledgeDocCoverage(v.Coverage[indexCoverage])
-	}
-	out.MapSet("coverage", vm.ListValue(itemsCoverage))
-	out.MapSet("isolatedCount", vm.IntValue(int64(v.IsolatedCount)))
-	out.MapSet("componentCount", vm.IntValue(int64(v.ComponentCount)))
-	out.MapSet("largestComponentSize", vm.IntValue(int64(v.LargestComponentSize)))
-	return out
-}
-
 func buzzValueMagusInsightReport(v types.InsightReport) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("hotspots", buzzValueMagusHotspotOutput(v.Hotspots))
@@ -689,7 +636,6 @@ func buzzValueMagusInsightReport(v types.InsightReport) vm.Value {
 	out.MapSet("trend", buzzValueMagusTrendOutput(v.Trend))
 	out.MapSet("volatility", buzzValueMagusVolatilityReport(v.Volatility))
 	out.MapSet("unreferenced", buzzValueMagusUnreferencedOutput(v.Unreferenced))
-	out.MapSet("graphStats", buzzValueMagusKnowledgeStats(v.GraphStats))
 	return out
 }
 

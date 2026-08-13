@@ -1,21 +1,20 @@
 ---
-title: magus-handoff-journal
+title: magus-memory
 description: "Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, and pointers that survive worktrees and sessions."
-tags: [agents, skills, magus-handoff-journal]
-aliases:
-  - reference/skills/magus-memory
-skill_full_bytes: 4178
-skill_simple_bytes: 3506
+tags: [agents, skills, magus-memory]
+skill_full_bytes: 3831
+skill_simple_bytes: 3156
 ---
 
-# magus-handoff-journal
+# magus-memory
 
 Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, and pointers that survive worktrees and sessions. It is not automatic agent memory; add an entry only when a later person needs to reopen the linked graph/query/output/doc evidence. Verify malformed, stale, and broken-linked entries before relying on them.
 
 Install it, rather than copying from this page:
 
 ```sh
-magus agent install .claude/skills   # writes both forms below
+magus agent install .claude/skills            # the full form below
+magus agent install .claude/skills --simple   # the short form below
 ```
 
 An installed copy carries a provenance stamp, so `magus graph verify` can tell you when a magus upgrade has made it stale. Text copied from this page carries none.
@@ -31,14 +30,14 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `37` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `99f5ac7ac873` |
+| `skill-content` | `4a69fc6d84e4` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
 
 ## Full form
 
-Every mechanical step spelled out, plus the rationale for each. Installed as the `<name>-full` twin: loaded by name rather than always, so a reader who needs the long form can ask for it without every session carrying it.
+The default: every mechanical step spelled out, plus the rationale for each.
 
 ````markdown
 # Handoff journal
@@ -69,13 +68,8 @@ Record types (the subject axis):
 | `decision` | a choice, its refs, and the WHY the graph can't derive | yes (a one-line caption) |
 | `plan`     | forward intent, its refs, and the why               | yes    |
 
-Every type is ref-anchored; none of them is free prose. A claim that is true about
-the code is a `pointer` of kind `query` (fetch it live) or `output`, never stored prose.
-
-Prose a PERSON wrote about the code belongs in the workspace's notes store instead - a
-different store with a different rule, read with `magus notes`. Agents read notes and never
-write them, so nothing here routes you there: if what you have is a human's judgment rather
-than a ref you can anchor, it is theirs to record, not yours.
+There is no free-text/`note` type. A claim that is true about the code is a
+`pointer` of kind `query` (fetch it live) or `output`, never stored prose.
 
 ## Read and write deliberately
 
@@ -111,8 +105,8 @@ than a ref you can anchor, it is theirs to record, not yours.
 
 ## Scope boundaries
 
-- Intra-session scratch (checklists, partial findings) stays in the
-  session - it is disposable by definition, not here.
+- Intra-session working notes (checklists, partial findings) stay in the
+  session - they are disposable by definition, not here.
 - Facts the repo already records (code structure, git history, MAGUS.md) do not
   belong in memory; record the `magus_query` that surfaces them instead.
 - Records live outside the repo, keyed by repository identity. The console,
@@ -121,9 +115,9 @@ than a ref you can anchor, it is theirs to record, not yours.
   session erase another's handoff.
 ````
 
-## Short form
+## Short form (`--simple`)
 
-The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. This is the always-loaded primary. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for the difference.
+The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for when to prefer which.
 
 <details>
 <summary>Show the short form</summary>
@@ -155,13 +149,8 @@ Record types (the subject axis):
 | `decision` | a choice, its refs, and the WHY the graph can't derive | yes (a one-line caption) |
 | `plan`     | forward intent, its refs, and the why               | yes    |
 
-Every type is ref-anchored; none of them is free prose.
-A claim true about the code is a `query` or `output` pointer, never stored prose.
-
-Prose a PERSON wrote about the code belongs in the workspace's notes store instead - a
-different store with a different rule, read with `magus notes`. Agents read notes and never
-write them, so nothing here routes you there: if what you have is a human's judgment rather
-than a ref you can anchor, it is theirs to record, not yours.
+There is no free-text/`note` type. A claim true
+about the code is a `query` or `output` pointer, never stored prose.
 
 ## Read and write deliberately
 
@@ -196,7 +185,7 @@ than a ref you can anchor, it is theirs to record, not yours.
 
 ## Scope boundaries
 
-- Intra-session scratch (checklists, partial findings) stays in the
+- Intra-session working notes (checklists, partial findings) stay in the
   session, not here.
 - Facts the repo already records (code structure, git history, MAGUS.md) do not
   belong in memory; record the `magus_query` that surfaces them instead.

@@ -55,38 +55,14 @@ Show dependents instead of dependencies
 \fB\-\-budget\fR \fIint\fR (default: 50)
 Node budget for \-\-select (how many nodes the neighborhood may collect)
 .TP
-\fB\-\-follow\fR
-With \-\-open: keep the explorer updating from the running daemon instead of showing a snapshot (needs magus server start)
-.TP
 \fB\-\-global\fR
 Union the workspaces registered in config (knowledge.workspaces); node IDs are namespaced by workspace
-.TP
-\fB\-\-open\fR
-Deliver the graph to the hosted Graph Explorer instead of stdout; it never leaves your machine
-.TP
-\fB\-\-print\fR
-With \-\-open: print the explorer URL to stdout instead of launching a browser
 .TP
 \fB\-\-refresh\fR
 Force a full graph rebuild before exporting
 .TP
-\fB\-\-reproducible\fR
-Omit everything that is not a function of the source tree (locally observed runtime attrs, git history), so two checkouts of one commit export identical bytes
-.TP
 \fB\-\-select\fR \fIstring\fR
 Export only the neighborhood of a query (same grammar as magus query); required for \-o dot and \-o mermaid
-.TP
-\fB\-\-serve\fR
-With \-\-open: hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with \-\-targets)
-.TP
-\fB\-\-static\fR
-Deprecated alias for \-\-reproducible
-.TP
-\fB\-\-targets\fR
-With \-\-open: open the target dependency graph instead of the knowledge graph; pass a project path to scope it
-.TP
-\fB\-\-url\fR \fIstring\fR (default: https://eli.gladman.cc/magus/console/graph/)
-With \-\-open: base URL of the Graph Explorer page (override for a self\-hosted mirror)
 .RE
 .SS graph stats options
 .RS
@@ -99,9 +75,24 @@ Scope every section to one node kind (spell, target, doc, ...)
 .TP
 \fB\-\-refresh\fR
 Force a full graph rebuild first
+.RE
+.SS graph open options
+.RS
 .TP
-\fB\-\-symbols\fR
-Include the lazily\-loaded symbol shards in the stats; excluded by default because they can dwarf the domain graph
+\fB\-\-print\fR
+Print the explorer URL to stdout instead of opening a browser
+.TP
+\fB\-\-refresh\fR
+Force a full graph rebuild before opening (knowledge graph only)
+.TP
+\fB\-\-serve\fR
+Hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with \-\-targets)
+.TP
+\fB\-\-targets\fR
+Open the target dependency graph instead of the knowledge graph; pass a project path as a positional argument to scope to one project
+.TP
+\fB\-\-url\fR \fIstring\fR (default: https://eli.gladman.cc/magus/console/graph/)
+Base URL of the Graph Explorer page (override for a self\-hosted mirror)
 .RE
 .SH SUBCOMMANDS
 .RS
@@ -114,6 +105,9 @@ Export the merged knowledge graph (json node\-link or graphml)
 .TP
 \fBstats\fR
 Report the knowledge graph's shape: god nodes, orphans, doc coverage
+.TP
+\fBopen\fR
+Open the workspace graph in the hosted Graph Explorer (data never leaves your machine)
 .RE
 .SH EXAMPLES
 \fIProject DAG as Mermaid\fR
@@ -161,25 +155,25 @@ magus graph stats --kind spell
 \fIOpen knowledge graph in browser\fR
 .PP
 .EX
-magus graph export --open
+magus graph open
 .EE
 .PP
 \fIOpen target dependency graph\fR
 .PP
 .EX
-magus graph export --open --targets
+magus graph open --targets
 .EE
 .PP
 \fIScope target graph to one project\fR
 .PP
 .EX
-magus graph export --open --targets docs
+magus graph open --targets docs
 .EE
 .PP
 \fIPrint the URL instead of opening\fR
 .PP
 .EX
-magus graph export --open --targets --print
+magus graph open --targets --print
 .EE
 .PP
 .SH SEE ALSO
@@ -201,7 +195,6 @@ magus graph export --open --targets --print
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),
 \fBmagus\-memory\fR(1),
-\fBmagus\-notes\fR(1),
 \fBmagus\-server\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-completion\fR(1),

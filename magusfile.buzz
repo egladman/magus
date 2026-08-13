@@ -972,11 +972,12 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void !> any {
 // under the `gha` charm; that branch was unreachable (nothing set
 // MAGUS_INSIGHT_OUTPUT_PATH or ran this target in CI) and was removed.
 export fun postflight(ctx: magus\Context, args: [str]) > void !> any {
-    // A summary built from the typed report rather than the Markdown `magus insight report
-    // --workspace` used to render. This target only ever logged that document locally, so
-    // the counts are what a reader was actually skimming for; the full rendering lives in
-    // the console and the MCP tool, which read the same values.
-    final r = magus\insight([]);
+    // A summary built from the typed report rather than the whole Markdown document:
+    // this target only ever logged that document locally, so the counts are what a
+    // reader was actually skimming for. Both come from the workspace magus already
+    // has open, rather than by shelling a subcommand back into itself; the full
+    // rendering lives in the console and the MCP tool, which read the same values.
+    final r = magus\insight({});
     magus\log.info("hotspots: {r.hotspots.files.len()} file(s) ranked by churn against complexity");
     magus\log.info("ownership: {r.ownership.projects.len()} project(s) attributed");
     magus\log.info("affinity: {r.affinity.pairs.len()} coupled project pair(s)");

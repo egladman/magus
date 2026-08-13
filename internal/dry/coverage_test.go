@@ -229,7 +229,7 @@ export fun work(ctx: magus\Context, args: [str]) > void !> any {
     magus.bustCache();
     magus.affectedImpact("main");
     magus.describeFile(["magusfile.buzz"]);
-    magus.insight([]);
+    magus.insightReport({});
 }
 `
 	r := Run(context.Background(), src, "work", nil)
@@ -446,19 +446,19 @@ export fun image_build(ctx: magus\Context, args: [str]) > void {
 	assert.Contains(t, traceDetail(on), "--push")
 }
 
-// TestRun_insightLensesAreShaped guards a failure that reports success. Field
+// TestRun_insightReportLensesAreShaped guards a failure that reports success. Field
 // access on a Buzz null returns null, and the member call after it aborts the target
 // body - but the dry run still comes back OK with a truncated trace, so a stub that
 // hands back null for a lens the mirror declares non-optional silently swallows every
 // op after the first read of it. The trailing marker is the assertion: it is only
 // traced if the body survived the whole chain.
-func TestRun_insightLensesAreShaped(t *testing.T) {
+func TestRun_insightReportLensesAreShaped(t *testing.T) {
 	for _, lens := range []string{"hotspots.nodes", "affinity.pairs", "ownership.projects", "trend.projects", "volatility.targets"} {
 		t.Run(lens, func(t *testing.T) {
 			src := `
 import "magus";
 export fun work(ctx: magus\Context, args: [str]) > void !> any {
-    magus.log.info("{magus.insight([]).` + lens + `.len()}");
+    magus.log.info("{magus.insightReport({}).` + lens + `.len()}");
     magus.log.info("reached-the-end");
 }
 `

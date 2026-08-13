@@ -13,7 +13,8 @@ Query the magus knowledge graph to find and relate entities (projects, targets, 
 Install it, rather than copying from this page:
 
 ```sh
-magus agent install .claude/skills   # writes both forms below
+magus agent install .claude/skills            # the full form below
+magus agent install .claude/skills --simple   # the short form below
 ```
 
 An installed copy carries a provenance stamp, so `magus graph verify` can tell you when a magus upgrade has made it stale. Text copied from this page carries none.
@@ -29,14 +30,14 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `37` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `99f5ac7ac873` |
+| `skill-content` | `4a69fc6d84e4` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
 
 ## Full form
 
-Every mechanical step spelled out, plus the rationale for each. Installed as the `<name>-full` twin: loaded by name rather than always, so a reader who needs the long form can ask for it without every session carrying it.
+The default: every mechanical step spelled out, plus the rationale for each.
 
 ````markdown
 # magus knowledge graph
@@ -198,7 +199,7 @@ declared CODEOWNERS ownership appears - it is not blame-inferred.
 
 - `--global` unions every workspace registered in config
   (`knowledge.workspaces`); IDs are namespaced per workspace (`web//spell:go`).
-- `magus affected`, `magus insight`, and `magus describe` sit alongside the graph;
+- `magus affected`, `magus_insight`, and `magus describe` sit alongside the graph;
   `magus graph export -o json` dumps the whole graph for bulk analysis.
 - To show a PR's domain impact, run `magus graph diff --rev main -o markdown` for a CI
   comment (nodes/edges added, removed, or changed); `--rev` builds the base graph from
@@ -217,9 +218,9 @@ For flags and behavior this skill does not cover, run any verb with `-h`, and re
 the magus documentation site. Prefer the tools' own output over assumptions.
 ````
 
-## Short form
+## Short form (`--simple`)
 
-The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. This is the always-loaded primary. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for the difference.
+The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for when to prefer which.
 
 <details>
 <summary>Show the short form</summary>
@@ -360,7 +361,7 @@ ownership only, never blame-inferred.
 
 - `--global` unions every workspace registered in config
   (`knowledge.workspaces`); IDs are namespaced per workspace (`web//spell:go`).
-- `magus affected`, `magus insight`, and `magus describe` sit alongside the graph;
+- `magus affected`, `magus_insight`, and `magus describe` sit alongside the graph;
   `magus graph export -o json` dumps the whole graph for bulk analysis.
 - To show a PR's domain impact, run `magus graph diff --rev main -o markdown` for a CI
   comment.

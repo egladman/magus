@@ -12,8 +12,8 @@ $__magus_scriptblock = {
     $subcommands = 'ls', 'describe', 'run', 'x', 'where', 'affected',
                    'query', 'explain', 'path', 'refs', 'graph', 'watch',
                    'status', 'clean', 'vcs', 'doctor', 'config', 'memory',
-                   'notes', 'server', 'buzz', 'completion', 'man', 'init',
-                   'agent', 'hook', 'notify', 'self', 'version', 'help'
+                   'server', 'buzz', 'completion', 'man', 'init', 'agent',
+                   'hook', 'notify', 'self', 'version', 'help'
     # magus-utils:subcommands:end
     $describeNouns = 'spell', 'charm', 'target', 'project', 'workspace', 'module', 'mcp-tool'
     $lenses        = 'hotspots', 'affinity', 'ownership', 'trend', 'unreferenced', 'report'

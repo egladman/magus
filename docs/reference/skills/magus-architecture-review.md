@@ -1,21 +1,20 @@
 ---
-title: magus-architecture-review
+title: magus-architecture
 description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition."
-tags: [agents, skills, magus-architecture-review]
-aliases:
-  - reference/skills/magus-architecture
+tags: [agents, skills, magus-architecture]
 skill_full_bytes: 6322
 skill_simple_bytes: 5123
 ---
 
-# magus-architecture-review
+# magus-architecture
 
 Ground refactoring and structure proposals in the magus knowledge graph instead of intuition. Use when suggesting directory structure, package layout, or module boundaries, when deciding where new code belongs, when assessing the blast radius or risk of a refactor, or when asked where a magus workspace's coupling and churn concentrate.
 
 Install it, rather than copying from this page:
 
 ```sh
-magus agent install .claude/skills   # writes both forms below
+magus agent install .claude/skills            # the full form below
+magus agent install .claude/skills --simple   # the short form below
 ```
 
 An installed copy carries a provenance stamp, so `magus graph verify` can tell you when a magus upgrade has made it stale. Text copied from this page carries none.
@@ -31,14 +30,14 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `37` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `99f5ac7ac873` |
+| `skill-content` | `4a69fc6d84e4` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
 
 ## Full form
 
-Every mechanical step spelled out, plus the rationale for each. Installed as the `<name>-full` twin: loaded by name rather than always, so a reader who needs the long form can ask for it without every session carrying it.
+The default: every mechanical step spelled out, plus the rationale for each.
 
 ````markdown
 # Architecture decisions from the graph
@@ -54,9 +53,9 @@ Run these and read them together:
 
 ```sh
 magus graph stats            # god nodes (structural risk), orphans, doc coverage
-magus insight hotspots       # churn x complexity per project, with blast radius
-magus insight affinity       # projects that change together: hidden coupling
-magus insight ownership      # author concentration, bus factor, abandonment
+magus_insight lens=hotspots  # churn x complexity per project, with blast radius
+magus_insight lens=affinity  # projects that change together: hidden coupling
+magus_insight lens=ownership # author concentration, bus factor, abandonment
 magus graph deps -o tree     # the declared project DAG
 ```
 
@@ -168,9 +167,9 @@ magus emits; it does not render. To look at structure, offer an export
 browser graph tool - do not hand-draw diagrams of what the graph already knows.
 ````
 
-## Short form
+## Short form (`--simple`)
 
-The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. This is the always-loaded primary. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for the difference.
+The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for when to prefer which.
 
 <details>
 <summary>Show the short form</summary>
@@ -189,9 +188,9 @@ Run these and read them together:
 
 ```sh
 magus graph stats            # god nodes (structural risk), orphans, doc coverage
-magus insight hotspots       # churn x complexity per project, with blast radius
-magus insight affinity       # projects that change together: hidden coupling
-magus insight ownership      # author concentration, bus factor, abandonment
+magus_insight lens=hotspots  # churn x complexity per project, with blast radius
+magus_insight lens=affinity  # projects that change together: hidden coupling
+magus_insight lens=ownership # author concentration, bus factor, abandonment
 magus graph deps -o tree     # the declared project DAG
 ```
 

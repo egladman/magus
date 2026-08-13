@@ -9,13 +9,13 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/types"
 )
@@ -54,7 +54,8 @@ var Magus = Module{
 		"the workspace being loaded (`magus\\project`, the provider selections above) raise " +
 		"[MGS1022](../codes/magusfile/MGS1022.md) in a script - there is nothing for them to " +
 		"declare into. Run a script outside any workspace and the reading members raise it too, " +
-		"since there is no workspace to read.",
+		"since there is no workspace to read. The nested-command methods (`cmd`, `run`, " +
+		"`describe`, `doctor`) work there either way and discover the workspace themselves.",
 	Methods: []Method{
 		{
 			Name: "cmd",
@@ -150,9 +151,8 @@ var Magus = Module{
 		},
 		{
 			Name: "insight",
-			Doc:  "Every VCS-history lens plus the knowledge-graph axis, as one typed report: {hotspots, affinity, ownership, trend, volatility, graphStats}. Annotate the result `> InsightReport` for compile-checked field access - `r.ownership.projects` gives each project's primary author and bus-factor flag, `r.hotspots.files` the churn-by-complexity ranking, `r.volatility` the targets that flapped. This is the same data `magus insight report` renders as Markdown, handed over as values instead of a document to scrape. Read straight off the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip. Works from a magusfile target and from a `magus buzz` script run inside a workspace; raises MGS1022 only when there is no workspace to read.",
+			Doc:  "Every VCS-history lens as one typed report: {hotspots, affinity, ownership, trend, volatility, unreferenced}. Annotate the result `> InsightReport` for compile-checked field access - `r.ownership.projects` gives each project's primary author and bus-factor flag, `r.hotspots.files` the churn-by-complexity ranking, `r.volatility` the targets that flapped. Takes the window as `{commits, since}` and renders nothing; `insightMarkdown` is the same report as a document. Read straight off the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip. Works from a magusfile target and from a `magus buzz` script run inside a workspace; raises MGS1022 only when there is no workspace to read.",
 			Args: []Arg{
-				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "InsightReport"}},
@@ -160,8 +160,18 @@ var Magus = Module{
 			Impl:    MagusInsight,
 		},
 		{
+			Name: "insight_markdown",
+			Doc:  "The same report as `magus\\insight`, rendered as the Markdown document (commit it as INSIGHT.md). Returns the document as a string. Takes the same flags: opts.commits caps the commits scanned, opts.since bounds the window (90d, 12w, 6mo, 1y). Computed in-process from the workspace on the context, so it needs a magusfile target rather than a bare `magus buzz` script.",
+			Args: []Arg{
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
+			Impl:    MagusInsightMarkdown,
+		},
+		{
 			Name: "affected_impact",
-			Doc:  "The VCS-affected set and WHY each project is in it: {base, changedFileCount, changedFiles, seedProjects, affectedProjects, notes}, each affected project carrying whether it was a seed and the files that pulled it in. Annotate the result `> Impact`. This is `magus affected --impact`, a forensic mode that reports the set without running a target - unlike `magus affected list`, which dispatches a target across every affected project to answer the same question. Runs a nested magus, so it works from a `magus buzz` script with no workspace on the context.",
+			Doc:  "The VCS-affected set and WHY each project is in it: {base, changedFileCount, changedFiles, seedProjects, affectedProjects, notes}, each affected project carrying whether it was a seed and the files that pulled it in. Annotate the result `> Impact`. This is `magus affected --impact`, a forensic mode that reports the set without running a target - unlike `magus affected list`, which dispatches a target across every affected project to answer the same question. Computed in-process from the workspace on the context, so it needs a magusfile target rather than a bare `magus buzz` script. opts.commits caps the commits scanned; opts.since bounds the window (90d, 12w, 6mo, 1y).",
 			Args: []Arg{
 				{Name: "base", Type: TypeString, Optional: true},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -422,7 +432,7 @@ func MagusBustCache(ctx context.Context, projectPath string) error {
 // typed magus.<name>(...) method. magus.cmd warns when its first arg names one,
 // nudging authors toward the clearer, signature-stable wrapper.
 var typedMagusSubcommands = map[string]bool{
-	"run": true, "describe": true, "insight": true, "doctor": true,
+	"run": true, "describe": true, "doctor": true,
 }
 
 // errNoWorkspace is the MGS1022 error a magus.* member raises when it is called
@@ -647,49 +657,143 @@ func MagusAffectedImpact(ctx context.Context, base string, opts map[string]any) 
 }
 
 // MagusInsight returns every insight lens as one typed report, read straight off
-// the loaded workspace.
+// the loaded workspace. Whole-report only: a single lens is the MCP tool's job,
+// which is where an agent asks for one.
 //
 // This is the one magus\* method that does NOT fork a nested magus, and the difference is
 // the point: analytics are a pure read of a workspace magus has already loaded, so paying
 // a process, a second workspace load, and a JSON round trip to ask it a question about
 // itself was cost with nothing bought. See std/workspace.go for how it reaches the API
 // across an import cycle that used to make forking the only option.
-//
-// An absent analyzer is reported rather than fallen back on. Silently forking here would
-// reintroduce exactly what this replaced, and would make a `magus buzz` script outside a
-// workspace look like it had one.
-func MagusInsight(ctx context.Context, args []string, opts map[string]any) (types.InsightReport, error) {
-	a, ok := AnalyzerFromContext(ctx)
-	if !ok {
-		return types.InsightReport{}, errNoWorkspace("insight")
+func MagusInsight(ctx context.Context, opts map[string]any) (types.InsightReport, error) {
+	a, err := insightAnalyzer(ctx, "insight")
+	if err != nil {
+		return types.InsightReport{}, err
 	}
+	iopts, err := insightOptions(opts)
+	if err != nil {
+		return types.InsightReport{}, err
+	}
+	return buildInsightReport(ctx, a, iopts)
+}
 
-	iopts := types.InsightOptions{
-		Dir:     resolveRunDir(ctx, opts),
-		Commits: insightCommits(args),
-		Since:   insightSince(args),
-		// --files ranks individual files instead of projects, and the hotspot lens leaves
-		// its file list empty without it. Carried through rather than forced on: a caller
-		// that wants the per-file ranking asks for it, exactly as on the CLI.
-		Files: hasFlag(args, "--files"),
+// MagusInsightMarkdown renders the report as a document, for a target that writes
+// INSIGHT.md or a CI step summary.
+//
+// The rendering lives here rather than behind a subcommand because that is the only
+// thing the subcommand still did that this module could not: the analysis was always
+// the workspace's, and the CLI only turned it into a page.
+func MagusInsightMarkdown(ctx context.Context, opts map[string]any) (string, error) {
+	a, err := insightAnalyzer(ctx, "insightMarkdown")
+	if err != nil {
+		return "", err
 	}
-	report := types.InsightReport{}
-	var err error
-	if report.Hotspots, err = a.Hotspots(ctx, iopts); err != nil {
-		return types.InsightReport{}, fmt.Errorf("magus.insight: hotspots: %w", err)
+	iopts, err := insightOptions(opts)
+	if err != nil {
+		return "", err
 	}
-	if report.Affinity, err = a.Affinity(ctx, iopts); err != nil {
-		return types.InsightReport{}, fmt.Errorf("magus.insight: affinity: %w", err)
+	report, err := buildInsightReport(ctx, a, iopts)
+	if err != nil {
+		return "", err
 	}
-	if report.Ownership, err = a.Ownership(ctx, iopts); err != nil {
-		return types.InsightReport{}, fmt.Errorf("magus.insight: ownership: %w", err)
+	var b strings.Builder
+	if err := render.WriteInsightMarkdown(&b, report); err != nil {
+		return "", err
 	}
-	if report.Trend, err = a.Trend(ctx, iopts); err != nil {
-		return types.InsightReport{}, fmt.Errorf("magus.insight: trend: %w", err)
+	return b.String(), nil
+}
+
+// insightAnalyzer resolves the workspace that will answer the lenses.
+//
+// It ERRORS rather than forking. The `magus insight` subcommand it used to fall back
+// to is gone: the analysis was always the workspace's own, the CLI only rendered it,
+// and keeping a subcommand alive as an implementation detail of a host method is the
+// sprawl this removal is about. The cost is that a bare `magus buzz` script with no
+// workspace cannot ask - the same limit every other in-process verb here has.
+//
+// member names the caller so MGS1022 points at the method the author actually wrote;
+// both insight and insightMarkdown land here.
+//
+// AnalyzerFromContext first: it is the seam a `magus buzz` script run inside a
+// workspace arrives through, so checking only the workspace value would raise
+// MGS1022 on a script that does have one to read.
+func insightAnalyzer(ctx context.Context, member string) (types.InsightAnalyzer, error) {
+	if a, ok := AnalyzerFromContext(ctx); ok {
+		return a, nil
 	}
-	// The last two axes are best-effort, matching what `magus insight report` renders: a
-	// history read that fails or a workspace with no symbol index omits the section rather
-	// than failing a report the other four lenses already answered.
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return nil, errNoWorkspace(member)
+	}
+	a, ok := ws.(types.InsightAnalyzer)
+	if !ok {
+		return nil, errors.New("insight: this workspace cannot analyze history")
+	}
+	return a, nil
+}
+
+// insightOptions decodes the window a Buzz caller asked for.
+//
+// An unknown key is an ERROR, not a default: dropping `{comits = 50}` would silently
+// scan 500 commits and answer a different question than the one asked, with nothing
+// to tell the author their typo did not take.
+func insightOptions(opts map[string]any) (types.InsightOptions, error) {
+	// The window the CLI defaulted to, so a report asked for with no options is the
+	// report that command produced.
+	out := types.InsightOptions{Commits: 500, Files: true}
+	for k, v := range opts {
+		switch k {
+		case "commits":
+			// A Buzz integer arrives as int64 (Value.AsInt) and a Buzz float as float64;
+			// int is what a Go caller passes. Missing int64 rejected `{commits = 50}`,
+			// which is the documented call.
+			switch n := v.(type) {
+			case int64:
+				out.Commits = int(n)
+			case float64:
+				out.Commits = int(n)
+			case int:
+				out.Commits = n
+			default:
+				return types.InsightOptions{}, fmt.Errorf("insight: commits must be a number, got %T", v)
+			}
+		case "since":
+			s, ok := v.(string)
+			if !ok {
+				return types.InsightOptions{}, fmt.Errorf("insight: since must be a string like \"90d\", got %T", v)
+			}
+			out.Since = s
+		default:
+			return types.InsightOptions{}, fmt.Errorf("insight: unknown option %q (want commits, since)", k)
+		}
+	}
+	return out, nil
+}
+
+// buildInsightReport assembles the whole report from the six lenses.
+//
+// The four VCS lenses are required; volatility and unreferenced are best-effort: a
+// history read that fails should omit a section rather than fail the whole report,
+// and a workspace with no symbol index yields an empty list carrying an unknown
+// verdict, which is a useful section rather than an error.
+func buildInsightReport(ctx context.Context, a types.InsightAnalyzer, iopts types.InsightOptions) (types.InsightReport, error) {
+	hot, err := a.Hotspots(ctx, iopts)
+	if err != nil {
+		return types.InsightReport{}, err
+	}
+	aff, err := a.Affinity(ctx, iopts)
+	if err != nil {
+		return types.InsightReport{}, err
+	}
+	own, err := a.Ownership(ctx, iopts)
+	if err != nil {
+		return types.InsightReport{}, err
+	}
+	tr, err := a.Trend(ctx, iopts)
+	if err != nil {
+		return types.InsightReport{}, err
+	}
+	report := types.InsightReport{Hotspots: hot, Affinity: aff, Ownership: own, Trend: tr}
 	if vr, verr := a.Volatility(ctx); verr == nil {
 		report.Volatility = vr
 	}
@@ -697,49 +801,6 @@ func MagusInsight(ctx context.Context, args []string, opts map[string]any) (type
 		report.Unreferenced = ur
 	}
 	return report, nil
-}
-
-// insightCommits and insightSince read the two options the lenses accept out of the
-// free-form argv the Buzz signature still takes, so a caller that passed `--commits 200`
-// to the forking version keeps getting 200. Anything else in args is ignored rather than
-// rejected: this is a report, and an unknown flag is not worth failing it over.
-func insightCommits(args []string) int {
-	if v := flagValue(args, "--commits"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return n
-		}
-	}
-	return insightDefaultCommits
-}
-
-func insightSince(args []string) string { return flagValue(args, "--since") }
-
-// hasFlag reports whether a bare boolean flag appears in args.
-func hasFlag(args []string, name string) bool {
-	for _, a := range args {
-		if a == name {
-			return true
-		}
-	}
-	return false
-}
-
-// insightDefaultCommits matches the CLI lens default, so the same call returns the same
-// report whichever surface asked.
-const insightDefaultCommits = 500
-
-// flagValue returns the value following name in args, supporting both `--flag value` and
-// `--flag=value`. Empty when absent.
-func flagValue(args []string, name string) string {
-	for i, a := range args {
-		if a == name && i+1 < len(args) {
-			return args[i+1]
-		}
-		if v, ok := strings.CutPrefix(a, name+"="); ok {
-			return v
-		}
-	}
-	return ""
 }
 
 // MagusDescribeFile classifies paths as generated output, declared source, or

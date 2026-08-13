@@ -14,7 +14,8 @@ diagnoseDrift
 doctor
 fatal
 hasCharm
-insight
+insightMarkdown
+insightReport
 log
 log.debug
 log.error

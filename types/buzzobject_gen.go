@@ -689,7 +689,6 @@ func (v InsightReport) BuzzObject() BuzzObject {
 		"trend":        v.Trend.BuzzObject(),
 		"volatility":   v.Volatility.BuzzObject(),
 		"unreferenced": v.Unreferenced.BuzzObject(),
-		"graphStats":   v.GraphStats.BuzzObject(),
 	}
 }
 

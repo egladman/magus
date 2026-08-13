@@ -159,7 +159,7 @@ A high-degree node is a structural risk: everything depends on it, so changing
 it touches everything. Isolated nodes are the opposite problem - something the
 builder never linked up.
 
-`magus insight` answers the same questions from VCS history instead of
+The insight lenses answer the same questions from VCS history instead of
 structure: hotspots, change affinity, ownership, trend, volatility.
 
 ## Is my setup sane?

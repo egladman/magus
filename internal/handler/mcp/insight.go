@@ -8,16 +8,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// insightAnalyzer is the workspace capability the insight tool needs; the real
-// *magus.Magus passed as opts.Magus satisfies it.
-type insightAnalyzer interface {
-	Hotspots(ctx context.Context, opts types.InsightOptions) (types.HotspotOutput, error)
-	Affinity(ctx context.Context, opts types.InsightOptions) (types.AffinityOutput, error)
-	Ownership(ctx context.Context, opts types.InsightOptions) (types.OwnershipOutput, error)
-	Trend(ctx context.Context, opts types.InsightOptions) (types.TrendOutput, error)
-	Unreferenced(ctx context.Context) (types.UnreferencedOutput, error)
-}
-
 type insightTool struct {
 	ws types.WorkspaceRepository
 }
@@ -25,7 +15,7 @@ type insightTool struct {
 func (t *insightTool) Name() string { return "magus_insight" }
 
 func (t *insightTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
-	analyzer, ok := t.ws.(insightAnalyzer)
+	analyzer, ok := t.ws.(types.InsightAnalyzer)
 	if !ok {
 		return spells.InvokeResponse{}, fmt.Errorf("mcp: workspace does not support insight analysis")
 	}

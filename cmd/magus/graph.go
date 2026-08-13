@@ -81,7 +81,7 @@ func graphUsage() {
 	fmt.Fprintln(os.Stderr, "  diff     nodes/edges added/removed/changed vs a baseline export or --rev; PR blast-radius")
 	fmt.Fprintln(os.Stderr, "  verify   check derived artifacts for drift (installed agent skill vs this binary); CI guard")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "See also: magus query/explain/path (read the graph), magus insight (git-history analytics).")
+	fmt.Fprintln(os.Stderr, "See also: magus query/explain/path (read the graph).")
 }
 
 // graphBuild is the explicit "build the graph now" subcommand: it reindexes code symbols

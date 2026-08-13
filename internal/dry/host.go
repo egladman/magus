@@ -229,9 +229,9 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		return emptyExecResult(), nil
 	}))
 
-	// magus.cmd/describe/insight return a captured-command result on the real
-	// module; stub each as an empty success so `magus.describe(...).stdout` and the
-	// like don't blow up in a dry run.
+	// magus.cmd/describe return a captured-command result on the real module; stub
+	// each as an empty success so `magus.describe(...).stdout` and the like don't
+	// blow up in a dry run.
 	for _, name := range []string{"cmd", "describe"} {
 		m.MapSet(name, fn("magus."+name, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 			return emptyExecResult(), nil
@@ -258,7 +258,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("affected", vm.ListValue(nil))
 		return res, nil
 	}))
-	// The reports magus returns as domain types (doctor, describeFile, insight,
+	// The reports magus returns as domain types (doctor, describeFile, insightReport,
 	// affectedImpact) fork a real magus in the live host. Same rule as
 	// ls/affected: stub each with its result shape so `magus.doctor().summary.fail`
 	// and friends resolve. Field names track the Buzz mirrors in
@@ -305,9 +305,14 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("files", vm.ListValue(nil))
 		return res, nil
 	}))
-	// insight nests a record per lens rather than a list, so each one is shaped
+	// A document, so there is no shape to preserve: the empty string is the string
+	// analogue of the empty lists above.
+	m.MapSet("insightMarkdown", fn("magus.insightMarkdown", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.StrValue(""), nil
+	}))
+	// insightReport nests a record per lens rather than a list, so each one is shaped
 	// too: a null lens would break `.ownership.projects` where an empty list does not.
-	m.MapSet("insight", fn("magus.insight", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("insightReport", fn("magus.insightReport", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		stats := vm.NewMap()
 		stats.MapSet("definition", vm.StrValue(""))
 		stats.MapSet("nodeCount", vm.IntValue(0))
@@ -393,7 +398,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 
 func retNull(context.Context, []vm.Value) (vm.Value, error) { return vm.Null, nil }
 
-// insightLens shapes one VCS-history lens of magus.insight. All four share a
+// insightLens shapes one VCS-history lens of magus.insightReport. All four share a
 // definition/commits/since header and differ only in which lists they carry.
 func insightLens(listKeys ...string) vm.Value {
 	v := vm.NewMap()
