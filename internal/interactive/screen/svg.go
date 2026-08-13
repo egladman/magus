@@ -56,7 +56,18 @@ func (s *Screen) svgBody(opts SVGOptions) string {
 			if opacity != "" {
 				fmt.Fprintf(&b, ` opacity="%s"`, opacity)
 			}
-			fmt.Fprintf(&b, ` xml:space="preserve">%s</text>`, escapeXML(run.text))
+			// textLength pins the run to the same cell grid the rect above is sized
+			// from. Without it the run is laid out at whatever advance the viewer's
+			// font happens to have, and a rune the font draws wider than CellWidth
+			// pushes the tail of the run past its own highlight - where a reversed
+			// run, drawn in the background colour, becomes invisible. The box-drawing
+			// and arrow runes this package uses are East Asian AMBIGUOUS width, so
+			// that is the common case rather than the exotic one.
+			//
+			// A terminal gets this for free: the cell grid IS the advance. An SVG has
+			// to say so.
+			fmt.Fprintf(&b, ` textLength="%d" xml:space="preserve">%s</text>`,
+				opts.CellWidth*len([]rune(run.text)), escapeXML(run.text))
 		}
 	}
 	return b.String()
