@@ -724,7 +724,7 @@ func (r *region) reflow() error {
 // because this lands in user-facing terminal output.
 const ellipsis = "..."
 
-// Clip returns msg shortened to fit n bytes, ending in an ellipsis when
+// ClipBytes returns msg shortened to fit nBytes, ending in an ellipsis when
 // truncation happened.
 //
 // nBytes bounds the whole result, ellipsis included, and is a BYTE budget: exact

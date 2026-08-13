@@ -301,8 +301,12 @@ func (i *Input) waitForInput(ctx context.Context) error {
 			return nil
 		}
 		if err := i.in.SetReadDeadline(time.Now().Add(readPoll)); err != nil {
+			// The descriptor stopped accepting deadlines. Record it and take
+			// the no-deadline path on the next turn rather than failing a
+			// prompt over a capability probe - losing cancellation is the
+			// documented degradation here, and it is not this caller's error.
 			i.deadlines = false
-			return nil
+			continue
 		}
 		_, err := i.r.Peek(1)
 		_ = i.in.SetReadDeadline(time.Time{})
