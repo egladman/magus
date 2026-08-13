@@ -682,8 +682,10 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
           startedAt: timestampFromMs(now - 88_000),
         },
       ],
-      magusVersion: "0.2.0",
-      daemonVersion: "0.2.0",
+      // 0.0.0, matching the status bar: the demo has no daemon, so any real-looking
+      // version here is a fact the showcase invented, and one that goes stale.
+      magusVersion: "0.0.0",
+      daemonVersion: "0.0.0",
     };
   }
 

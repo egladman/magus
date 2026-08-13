@@ -243,7 +243,12 @@ function setBuild(version: string, fingerprint: string): void {
 function loadBuildInfo(): void {
   const params = parseHash();
   if (wantsDemo(params)) {
-    setBuild("v0.2.0", "magus v0.2.0 (a1b2c3d) built 2026-07-16T00:00:00Z");
+    // v0.0.0 on purpose. There is no daemon in the demo, so there is no build to report,
+    // and the previous literal (v0.2.0, commit a1b2c3d, a fixed 2026 date) invented all
+    // three - then drifted a minor version behind the real binary, so the showcase read
+    // as an abandoned project. A zero version cannot go stale and does not claim a commit
+    // that never existed.
+    setBuild("v0.0.0", "synthesized demo data; no daemon is connected");
     return;
   }
   const host = resolveDaemonHost(params);

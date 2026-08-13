@@ -3,7 +3,7 @@
 <p align="center">
   <picture>
     <source srcset="./assets/gopher.webp" type="image/webp">
-    <img alt="magus gopher mascot" width="400" height="267" fetchpriority="high" src="./assets/gopher.png">
+    <img alt="magus gopher mascot" width="360" height="338" fetchpriority="high" src="./assets/gopher.png">
   </picture>
 </p>
 
@@ -226,9 +226,13 @@ export fun test(ctx: magus\Context, args: [str])  > void { go["go-test"](ctx); }
 export fun lint(ctx: magus\Context, args: [str])  > void { go["golangci-lint"](ctx); }
 
 // format is read-only by default: go-fmt reports files that need formatting, and
-// go-mod-tidy runs with --diff so it fails if go.mod/go.sum have drifted. The `rw`
-// (read-write) charm flips both to apply: `magus run format:rw` formats the code
-// and tidies the modules in place.
+// go-mod-tidy runs with --diff so it fails if go.mod/go.sum have drifted. They take
+// DIFFERENT write charms, because they are not the same risk. gofmt is offline, so
+// the same tree always yields the same bytes - `magus run format:rw` rewrites the
+// code. Tidy resolves against the module proxy, so what it writes depends on what
+// upstream serves today; that is a second, deliberate ask:
+//   magus run format:rw          formatting only; go mod tidy still just reports
+//   magus run format:rw,relock   also let go mod tidy amend go.mod and go.sum
 export fun format(ctx: magus\Context, args: [str]) > void {
     go["go-fmt"](ctx);
     go["go-mod-tidy"](ctx);
@@ -488,12 +492,10 @@ never hand-edit.
 
 ## Development
 
-**[eli.gladman.cc/magus/development/](https://eli.gladman.cc/magus/development/)** is the contributor reference: everything below, plus the parts that are generated rather than written.
+magus is built and tested by magus, so this repository is a magus workspace like any other. That means parts of the contributor reference are generated from the workspace's own graph rather than written, and can show things a hand-maintained page cannot:
 
-magus is built and tested by magus, so this repository is a magus workspace like any other. The Development page is rendered from that workspace's own graph, which is why it can show things a hand-written page cannot:
-
-- **[Per-project target catalogs](https://eli.gladman.cc/magus/development/)** - one page per project: every runnable target, what it depends on, which toolchains it drives, and a run-order diagram built from the real `ctx.needs` edges.
-- **Workspace dependencies** - the projects in dependency order, with each one's blast radius: how many projects a change there can reach. Read it before you touch `libs/gopherbuzz`.
+- **[Project catalogs](https://eli.gladman.cc/magus/development/projects/)** - one page per project: every runnable target, what it depends on, which toolchains it drives, and a run-order diagram built from the real `ctx.needs` edges.
+- **[Workspace dependencies](https://eli.gladman.cc/magus/development/projects/)** - the projects in dependency order, with each one's blast radius: how many projects a change there can reach. Read it before you touch `libs/gopherbuzz`.
 - **[Contributing guide](https://eli.gladman.cc/magus/development/contributing/)** - the conventions worth knowing before opening a pull request, including the benchmark-evidence rule for performance changes.
 - **[Configuration reference](https://eli.gladman.cc/magus/reference/config/)** - the `magus.yaml` keys and the `MAGUS_*` environment inventory.
 
