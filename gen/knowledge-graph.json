@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2168,
-  "edge_count": 5617,
+  "edge_count": 5620,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -27230,6 +27230,14 @@
     },
     {
       "source": "doc:docs/concepts/concurrency.md",
+      "target": "doc:docs/concepts/terminal.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/concurrency.md"
+    },
+    {
+      "source": "doc:docs/concepts/concurrency.md",
       "target": "doc:docs/reference/manpage/magus-affected.md",
       "relation": "references",
       "confidence": "inferred",
@@ -29878,6 +29886,14 @@
     },
     {
       "source": "doc:docs/guides/debugging.md",
+      "target": "doc:docs/concepts/terminal.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/debugging.md"
+    },
+    {
+      "source": "doc:docs/guides/debugging.md",
       "target": "doc:docs/reference/manpage/magus-buzz.md",
       "relation": "references",
       "confidence": "inferred",
@@ -31903,6 +31919,14 @@
     {
       "source": "doc:docs/reference/cli.md",
       "target": "doc:docs/concepts/cache/output-refs.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/cli.md"
+    },
+    {
+      "source": "doc:docs/reference/cli.md",
+      "target": "doc:docs/concepts/terminal.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,

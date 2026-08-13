@@ -104,6 +104,17 @@ Color output is enabled when stdout is a TTY; set `NO_COLOR=1` to disable. The c
 
 The REPL detects incomplete input and reprompts with `>>` until the expression closes: it reinvokes the Buzz parser on each newline, treats anything that does not yet parse to a complete statement as incomplete, and surfaces type errors immediately.
 
+## Acting on a failed run
+
+When a run ends with failures they stay pinned on screen rather than scrolling
+away, next to the captured output that explains them:
+
+![The end of a failed run: the failure tree pinned on the left with one target highlighted, its captured test output beside it, and a hint row offering rerun, copy, output and the way out](../../assets/gen/terminal-failure-prompt.svg)
+
+Select a failure and **enter** reruns just that target with `--step` below,
+**o** prints its captured output into the transcript, and **y** copies it. See
+[Terminal](../concepts/terminal.md) for the full surface.
+
 ## `--step`
 
 Pause before every subprocess and prompt for a keystroke. Concurrency is forced to 1 so commands execute one at a time.

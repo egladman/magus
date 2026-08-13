@@ -95,6 +95,12 @@ magus watch | magus affected --stdin build
 `magus x` is the interactive shorthand - pick a project and target from a
 picker. It requires a TTY and will not work in a pipeline.
 
+![The magus x picker: a filter line narrowing the project list as it is typed, the highlighted row a click or Enter would take, and the way out on the bottom rule](../../assets/gen/terminal-picker.svg)
+
+Typing filters, arrow keys and the mouse both move the highlight, and `[esc]`
+cancels. Off a TTY it refuses with a non-zero exit and names the non-interactive
+form instead of hanging. See [Terminal](../concepts/terminal.md).
+
 ## Why did that happen?
 
 Every run prints an output reference, on success and failure alike:

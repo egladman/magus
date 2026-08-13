@@ -84,6 +84,15 @@ fast instead.
 magus: lock on project web released; starting.
 ```
 
+On a terminal the wait is also pinned as a notification, so it stays visible
+instead of scrolling away behind the run it is queued behind:
+
+![A magus run queued on the workspace lock, with a yellow notification naming the process that holds it and the two ways out](../../assets/gen/terminal-lock-waiting.svg)
+
+It is a condition rather than an event - true until the lock clears - so it is
+pinned rather than given a countdown, and it is retracted once the lock is
+acquired. See [Terminal](terminal.md).
+
 Set `MAGUS_NO_WAIT=1` to make a contended run **fail fast** instead of blocking -
 useful in CI or a script that would rather error than queue behind another process.
 

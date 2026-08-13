@@ -51,6 +51,12 @@ magus knows each target's declared inputs and outputs, so it caches results and
 can compute which projects a change actually affects. That is the whole value
 proposition, and it is also why running the raw tool underneath defeats it.
 
+Which looks like this: a cold run does the work, the same command again replays
+every result from cache, and after one file changes only the project that file
+reaches runs at all.
+
+![A terminal recording: magus ls lists the projects, magus run ci reports 0 cached and 4 ran, the same command again reports 4 cached and 0 ran, then one edited file makes magus affected ci report 4 cached and 1 ran](../../assets/gen/core-loop.svg)
+
 Deeper: [Targets](../concepts/targets.md), [Workspace](../concepts/workspace.md),
 [Spells](../concepts/spells.md), [Cache](../concepts/cache.md).
 
