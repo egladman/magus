@@ -439,16 +439,12 @@ func errNoWorkspace(member string) error {
 
 // MagusLs lists the workspace's projects from the workspace already open on ctx.
 //
-// It is the first of the read-only verbs served IN-PROCESS. The typed methods below it
-// (run, describe, insight, doctor) and magus.cmd all fork a full magus subprocess via
-// runMagus: a process spawn, a second workspace discovery and load, a JSON encode, and a
-// Buzz-side parse - to answer a question this process already has the answer to. A read
-// that mutates nothing has no reason to pay that, and the domain method it needs is
-// already typed (types.WorkspaceRepository.ListProjects).
+// The first of the read-only verbs served IN-PROCESS. The typed methods below it fork a
+// full magus subprocess via runMagus - a spawn, a second workspace load, a JSON encode
+// and a Buzz-side parse - to answer a question this process already holds.
 //
 // The workspace reaches ctx via types.WithWorkspace in magus.Open's load, so it is
-// present for every magusfile target. A caller outside that path (a bare Buzz script
-// run through `magus buzz`) has none, hence the guard.
+// present for every magusfile target. A bare Buzz script has none, hence the guard.
 func MagusLs(ctx context.Context) (types.ProjectsOutput, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
@@ -511,24 +507,20 @@ func MagusWhere(ctx context.Context, dir string) (string, error) {
 
 // MagusRaise fails with a caller-defined coded diagnostic.
 //
-// magus already gives a Buzz `catch` the code, message and url of its OWN failures
-// (diagnostics.Error.BuzzError), so a magusfile can branch on MGS2001 without matching
-// prose. Authoring one was the missing half: a magusfile could only `throw` a string,
-// which leaves its own callers doing the substring matching that mechanism exists to
-// avoid. Workspaces build things magus cannot anticipate, and their failures deserve the
-// same stable identifier magus gives its own.
+// magus already gives a Buzz `catch` the code, message and url of its OWN failures, so a
+// magusfile can branch on MGS2001 without matching prose. Authoring one was the missing
+// half: a magusfile could only `throw` a string, leaving its callers doing the substring
+// matching that mechanism exists to avoid.
 //
-// The MGS prefix is refused rather than merely discouraged. MGS codes are a closed
-// catalog that `magus explain`, the knowledge graph and the docs URL map all resolve
-// against, so a workspace minting MGS9999 would produce a diagnostic that renders like
-// magus's own and documents nothing.
+// The MGS prefix is REFUSED, not discouraged: MGS codes are a closed catalog that
+// `magus explain`, the knowledge graph and the docs URL map resolve against, so a
+// workspace minting MGS9999 would render like magus's own and document nothing.
 //
-// `raise` rather than `throw`, which would match the Buzz keyword: throw is reserved, so
-// a member cannot be named it. error and fatal are taken by the logging members above.
+// `raise` rather than `throw` because throw is a reserved Buzz keyword; error and fatal
+// are taken by the logging members above.
 //
-// cause and url live in an opts map, not as trailing positionals. The generated trampoline
-// binds by index, so a fourth positional url was unreachable without also passing a cause -
-// and every other optional in this module is already an opts map.
+// cause and url live in an opts map: the generated trampoline binds by index, so a fourth
+// positional url was unreachable without also passing a cause.
 func MagusRaise(_ context.Context, code, message string, opts map[string]any) error {
 	if code == "" {
 		return errors.New("magus.raise: needs a code, e.g. \"ACME1001\" - it is the stable identifier a caller branches on")
@@ -820,10 +812,9 @@ func resolveRunDir(ctx context.Context, opts map[string]any) string {
 // object) when the child can't launch or exits non-zero, mirroring proc.exec. label
 // names the calling method for error messages.
 //
-// The child runs in the working directory carried by ctx (WithCwd), so a nested
-// project describes/insights its own project rather than the root workspace (the
-// contextual-cwd contract every magus stdlib primitive honors). opts may carry
-// "root" (string), emitted as the global --root flag (which precedes the subcommand).
+// The child runs in the working directory carried by ctx (WithCwd), so a nested project
+// describes its own project rather than the root workspace. opts may carry "root",
+// emitted as the global --root flag, which precedes the subcommand.
 func runMagus(ctx context.Context, label string, args []string, opts map[string]any) (types.ExecResult, error) {
 	self, err := os.Executable()
 	if err != nil {
@@ -922,18 +913,16 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 //     NondeterministicOutput: same inputs and generator version, yet output differs - a
 //     reproducibility bug.
 //
-// It RETURNS the classification as a verdict record rather than throwing, so the gate
-// owns the response - fail on a clean-tree drift, warn on a mid-edit dirty tree (the
-// plan's local-warn / CI-fail split). The record is a plain map:
+// It RETURNS the classification rather than throwing, so the gate owns the response -
+// fail on a clean-tree drift, warn on a mid-edit dirty one. The record is a plain map:
 //
 //	{ drifted: bool, code: str, message: str, url: str, files: []str }
 //
-// drifted is false (and code/message/url empty, files empty) when the outputs are not
-// actually dirty. files carries the backend's status lines for the drifted outputs, so a
-// gate can say WHICH files moved without shelling out to the VCS itself.
-// It composes vcs.isDirty (called on outputs and inputs) rather than replacing it:
-// isDirty stays the general "is this path dirty" primitive; diagnoseDrift is the
-// drift-specific reading on top of it plus the version signal.
+// drifted is false when the outputs are not actually dirty. files carries the backend's
+// status lines, so a gate can say WHICH files moved without shelling out to the VCS.
+//
+// It composes vcs.isDirty rather than replacing it: isDirty stays the general primitive,
+// and this is the drift-specific reading on top plus the version signal.
 func MagusDiagnoseDrift(ctx context.Context, outputs, inputs []string) (types.DriftResult, error) {
 	// Same keys as the drifted verdict, so a caller can read .files unconditionally
 	// rather than discovering the key is absent only on the clean path.

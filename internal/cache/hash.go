@@ -81,22 +81,18 @@ func (c *Cache) hashStepInputsMemo(ctx context.Context, s *Step, lines *[]string
 		*lines = append(*lines, string(buf[:len(buf)-1]))
 	}
 
-	// The host keys every entry by default, and it has to be stated HERE rather than
-	// arrive through a spell. Several toolchains print their platform as part of their
-	// version (`go version go1.26.0 linux/amd64`), so before extraction magus was
-	// keying on it by accident, for the subset of projects that happened to bind such
-	// a spell. Extraction strips that deliberately - a tool's build host is not its
-	// version - which would leave a darwin/arm64 machine free to replay a linux/amd64
-	// artifact from a shared cache.
+	// Stated HERE rather than arriving through a spell. Several toolchains print their
+	// platform inside their version (`go version go1.26.0 linux/amd64`), so magus was
+	// keying on it by accident for whichever projects bound such a spell; extraction
+	// strips that deliberately, which would leave a darwin/arm64 machine free to replay
+	// a linux/amd64 artifact from a shared cache.
 	//
-	// OS and arch are SEPARATE lines because they vary independently: an image built
-	// on linux/amd64 differs from linux/arm64 by arch alone, a shell suite differs
-	// between macOS and linux by OS alone. Omitting one is a claim the caller makes
-	// (cache.include.*.enabled), never something magus infers - being wrong that way
-	// replays a foreign artifact, where being wrong the other way only costs hits.
+	// OS and arch are SEPARATE lines because they vary independently. Omitting one is a
+	// claim the caller makes (cache.include.*.enabled), never something magus infers:
+	// wrong that way replays a foreign artifact, wrong the other way only costs hits.
 	//
-	// These are HOST facts. The platform an artifact is built FOR travels as
-	// GOOS/GOARCH through the environment allowlist and keys via the env lines below.
+	// These are HOST facts. The platform an artifact is built FOR travels as GOOS/GOARCH
+	// through the environment allowlist.
 	if s.IncludeOS {
 		writeLine("os:", runtime.GOOS)
 	}
@@ -194,31 +190,22 @@ func (c *Cache) StepKeyMemo(ctx context.Context, s *Step, memo *SourceMemo) (key
 	return key, lines, err
 }
 
-// SourceMemo memoizes the expandSources+hashFiles result for one sweep of steps that
-// share a WorkspaceRoot, keyed by the exact (Sources, Outputs, IgnoreDirs) tuple that
-// determines it. It exists ONLY for prediction: profiling IdentifyRef's full sweep
-// (every candidate target under every charm variant, none executed) showed
-// expandSources' WalkDir re-walking the whole workspace root as the dominant cost -
-// 57% of a 355ms sweep in the benchmark fixture, and dozens of those walks were
-// over an IDENTICAL Sources set, because buildStep gives most targets in a project
-// the same baseline absent a per-target TargetInputs override (run.go's buildStep
-// doc). A memo scoped to one sweep collapses those into one walk per distinct
-// source set.
+// SourceMemo memoizes the expandSources+hashFiles result for one sweep of steps sharing
+// a WorkspaceRoot, keyed by the (Sources, Outputs, IgnoreDirs) tuple that determines it.
 //
-// It must NEVER reach a path that executes a target: the memo assumes nothing on
-// disk changes between calls, which holds for a read-only sweep and nothing else. A
-// real Run/RunAll handed one could replay a source hash observed before that very
-// step's build wrote to its own inputs. Callers own that invariant - construct one
-// per sweep with NewSourceMemo, thread it explicitly, and let it fall out of scope
-// when the sweep ends. Nothing here makes it long-lived, global, or safe to share
-// with an executing Cache.
+// ONLY for prediction: profiling IdentifyRef's sweep showed expandSources' WalkDir
+// re-walking the workspace root as the dominant cost - 57% of a 355ms sweep - with
+// dozens of walks over an IDENTICAL Sources set, because buildStep gives most targets in
+// a project the same baseline.
 //
-// This is the same kind of per-invocation dedup cache as gopherbuzz's TargetMemo,
-// but threaded as an explicit parameter instead of TargetMemo's context.Context
-// idiom (WithTargetMemo/TargetMemoFromContext), deliberately: a memo that leaked
-// via ctx into an executing target would be a correctness bug here (see the
-// paragraph above), and an explicit parameter is what makes "prediction only, never
-// on an execution path" provable by grep instead of by trusting ctx plumbing.
+// It must NEVER reach a path that executes a target: the memo assumes nothing on disk
+// changes between calls, which holds for a read-only sweep and nothing else. A real
+// Run/RunAll handed one could replay a source hash observed before that step's build
+// wrote to its own inputs. Construct one per sweep with NewSourceMemo, thread it
+// explicitly, and let it fall out of scope.
+//
+// Threaded as an explicit parameter rather than through ctx like gopherbuzz's TargetMemo,
+// deliberately: an explicit parameter is what makes "prediction only" provable by grep.
 type SourceMemo struct {
 	mu      sync.Mutex
 	entries map[string]sourceMemoEntry
@@ -461,18 +448,13 @@ func hashFile(path string) (string, error) {
 // relAbs pairs a workspace-relative file path with its absolute form.
 type relAbs struct{ rel, abs string }
 
-// ExpandSources is expandSources exported for a caller outside this package that
-// needs the SAME source walk the cache key is built from - today, a spell op's
-// Sources placeholder (spells.Command.Sources): the engine-side replacement for a
-// spell shelling out to `find | xargs` to build its own file list at execution
-// time (see the field's doc). Reusing this walk, rather than a second one, is
-// what makes that op inherit root's declared ignore dirs instead of drifting from
-// the set the cache key itself was built from.
+// ExpandSources is expandSources exported for a caller needing the SAME source walk the
+// cache key is built from - today a spell op's Sources placeholder. Reusing this walk
+// rather than a second one is what makes that op inherit root's declared ignore dirs
+// instead of drifting from the set the key was built from.
 //
-// Returns root-relative paths only, sorted (see expandSources): a caller building
-// argv for a subprocess that runs IN root wants paths relative to it, and handing
-// back relAbs's unexported pair would leak an internal type for no reason a
-// caller here needs.
+// Returns root-relative paths only, sorted: a caller building argv for a subprocess that
+// runs IN root wants paths relative to it.
 func ExpandSources(globs []string, root string, outputGlobs, ignoreDirs []string) ([]string, error) {
 	files, err := expandSources(globs, root, outputGlobs, ignoreDirs)
 	if err != nil {

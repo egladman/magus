@@ -24,26 +24,18 @@
 // be added to the allowlist in TestHistorySchemaLock (history_test.go) with an
 // explanation of why it is safe to store in a shared cache.
 //
-// COMMIT IDS AND REF NAMES are permitted, in Runs and nowhere else. This notice
-// forbade both outright until v5 added the run log, and that was the right default
-// while every field was a timing: the rule cost nothing, so it was worth keeping
-// absolute. It is a considered exception now, not an erosion:
+// COMMIT IDS AND REF NAMES are permitted, in Runs and nowhere else. A considered
+// exception, not an erosion:
 //
-//   - There is no content-free substitute. "The commit this branch last passed at"
-//     is a commit reference by definition. Withholding it does not make the store
-//     safer, it makes the feature impossible - and the feature is what stops a CI
-//     run from silently gating nothing.
-//   - Neither is content. A commit id NAMES a revision without revealing anything
-//     in it; a ref name is a label the same reader already sees on every ref.
-//     That is categorically different from the file contents, secrets, and captured
-//     output the list still refuses, all of which disclose what a repository holds.
-//   - The blast radius is one repository. This file rides a CI cache, and those are
-//     repository-scoped: GitHub Actions restores only from the same repo and its
-//     base branch. It is NOT written to magus's content-addressed remote cache,
-//     which is the store that can be shared across workspaces.
+//   - There is no content-free substitute: "the commit this branch last passed at"
+//     is a commit reference by definition.
+//   - Neither is content. A commit id NAMES a revision without revealing anything in
+//     it, unlike the file contents, secrets and captured output still refused.
+//   - The blast radius is one repository: a CI cache is repository-scoped, and this
+//     is NOT written to magus's shared content-addressed remote cache.
 //
-// Read that as a boundary, not a precedent. A field naming WHAT changed rather than
-// WHICH revision is the thing this notice exists to stop, and it still does.
+// A boundary, not a precedent. A field naming WHAT changed rather than WHICH revision
+// is the thing this notice exists to stop.
 //
 // ci.record_runs turns the run log off for a workspace that will not accept even
 // this; see internal/config.CI.RecordRuns.
@@ -111,21 +103,15 @@ type History struct {
 // Run is one recorded end-to-end run of a target on a branch: what it ran at, how it
 // came out, and when.
 //
-// A LOG rather than counters, and deliberately not more of the PassCount/FailCount
-// pair on Stats below. Those are per (project, target) tallies - they answer "how
-// often does this target flap", which is a volatility question, and a tally cannot
-// answer any question about a PARTICULAR run. This does: which commit was verified,
-// which one broke it, how far back the last passing one is, whether a branch has been
-// red for one run or twenty. "Anything merged by a run that did not pass" is not
-// derivable from two integers, and it is exactly what an affected diff has to know.
+// A LOG rather than counters. PassCount/FailCount answer "how often does this target
+// flap", a volatility question; a tally cannot answer anything about a PARTICULAR run.
+// This can: which commit was verified, which broke it, how far back the last passing
+// one is. "Anything merged by a run that did not pass" is not derivable from two
+// integers, and it is what an affected diff has to know.
 //
-// Ref and Target are ON the run rather than being keys above it, so a Run handed to
-// a caller says what it is without the caller also carrying the key it was filed
-// under. Both are read back as filters, and one flat window is enough because the
-// only caller that records is a run's aggregation step - a workspace recording every
-// ref at high volume could evict a quiet one's last pass and widen its next diff,
-// which is a reason to raise RunWindow if it ever happens, not to nest a map today
-// for a write pattern nothing here has.
+// Ref and Target are ON the run rather than keys above it, so a Run says what it is
+// without the caller carrying the key it was filed under. One flat window is enough
+// because the only recording caller is a run's aggregation step.
 //
 // Ref, not Branch: it is types.VCSMeta.Ref, the movable name a backend points at the
 // current revision (git branch, hg named branch, jj bookmark), and it is what
@@ -547,14 +533,13 @@ func (h *History) Merge(other *History) {
 // run that is the aggregation job, never an individual shard, since no shard can see
 // its siblings' results.
 //
-// Failures are recorded, not just passes. A log with only passes cannot distinguish
-// "nothing has run on this ref" from "everything since has failed", and those want
-// opposite responses.
+// Failures are recorded, not just passes: a pass-only log cannot distinguish "nothing
+// has run on this ref" from "everything since has failed", and those want opposite
+// responses.
 //
-// Recording a passing run whose affected set was empty is deliberate: a run with
-// nothing to do is trivially passing, and skipping it would pin the last passing
-// commit at whichever one last touched something and grow every later diff without
-// bound.
+// Recording a passing run whose affected set was empty is deliberate - skipping it
+// would pin the last passing commit at whichever one last touched something and grow
+// every later diff without bound.
 func (h *History) RecordRun(run Run, now time.Time) {
 	if run.Ref == "" || run.Commit == "" {
 		return
@@ -666,17 +651,14 @@ func (h *History) Save(ctx context.Context, path string) error {
 // PredictPeakRSS returns the highest peak resident memory recorded for
 // (project, target), and whether anything was recorded at all.
 //
-// The MAXIMUM of the samples, not a percentile. A p75 answers "how long does
-// this usually take", which is the right question for scheduling time, because
-// a slow run costs you the difference. Memory is not like that: a run that
-// exceeds what the machine has does not cost you the difference, it takes the
-// machine down. The only figure that protects a runner is the worst this target
-// has actually been seen to need.
+// The MAXIMUM, not a percentile. A slow run costs you the difference, so p75 is right
+// for scheduling time; a run that exceeds what the machine has takes the machine down,
+// so the only figure that protects a runner is the worst seen.
 //
-// The bool is load-bearing. Every history written before peaks were recorded,
-// every platform that cannot report them, and every target that has never run
-// all decode to zero, and a planner that reads zero as "needs nothing" would
-// pack precisely the targets it knows least about onto one machine.
+// The bool is load-bearing: every history written before peaks were recorded, every
+// platform that cannot report them, and every target that has never run all decode to
+// zero, and a planner reading zero as "needs nothing" would pack precisely the targets
+// it knows least about onto one machine.
 func (h *History) PredictPeakRSS(project, target string) (int64, bool) {
 	targets, ok := h.Projects[project]
 	if !ok {

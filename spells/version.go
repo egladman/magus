@@ -18,15 +18,13 @@ import (
 //	docker --version              Docker version 29.3.1, build c2be9cc
 //	bash --version                GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)
 //
-// Mixing those strings into the cache key verbatim - which is what magus did before
-// this file existed - makes the key depend on things that are not the tool's version:
-// the commit golangci-lint was built from, the timestamp it was built at, the Go
-// version it was built WITH, docker's build hash, and the host's OS/arch. Two machines
-// running the identical tool version therefore compute different keys and share no
-// cache, and a distro rebuild moves the key with no version change at all.
+// Mixing those into the cache key verbatim makes it depend on things that are not the
+// tool's version - the commit golangci-lint was built from, the Go version it was built
+// WITH, docker's build hash, the host's OS/arch - so two machines running the identical
+// version compute different keys and share no cache.
 //
-// So a probe result is EXTRACTED before it is used, and then narrowed to the component
-// the spell says matters.
+// So a probe result is EXTRACTED before use, then narrowed to the component the spell
+// says matters.
 
 // versionPattern finds the first semver-shaped token in a probe's output.
 //
@@ -128,17 +126,14 @@ type VersionKeyFunc func(version string) string
 
 // VersionKey declares what a probed tool contributes to the cache key.
 //
-// The zero value keys on the probe's WHOLE output, which is what magus has always
-// done and what it keeps doing unless a spell asks for something else. Extraction is
-// opt-in for a reason: finding the version inside a tool's output means guessing which
-// number is the version, and that guess is wrong often enough to matter. govulncheck
-// prints the Go version first and the vulnerability database's date last, so guessing
-// picks the wrong number AND discards the field that decides whether its verdict still
-// holds. A spell author knows their tool's output; magus does not.
+// The zero value keys on the probe's WHOLE output. Extraction is opt-in because finding
+// the version means guessing which number is the version, and that guess is wrong often
+// enough to matter: govulncheck prints the Go version first and its vulnerability
+// database's date last, so guessing picks the wrong number AND discards the field that
+// decides whether the verdict holds.
 //
-// Declaring UpTo is therefore two requests at once: extract a semver, and keep this
-// much of it. UpTo patch narrows nothing anyone reasons about and exists to shed the
-// commit hashes and build timestamps tools pad their version lines with.
+// Declaring UpTo is two requests at once: extract a semver, and keep this much of it.
+// UpTo patch exists to shed the commit hashes and build timestamps tools pad with.
 type VersionKey struct {
 	// Const is an author-supplied constant used as the token verbatim, for a tool that
 	// cannot report its own version at all. No process is spawned; the author edits the
@@ -187,22 +182,16 @@ func VersionToken(output string, key VersionKey) (token string, note string) {
 // VersionBounds is the window of versions a binary is allowed to report: an
 // inclusive floor and an exclusive ceiling, each a plain version.
 //
-// Two named bounds rather than one constraint string, and that is a deliberate
-// narrowing. A range language - ">= 22, < 25" - is a mini-language in a field: the
-// comma means AND here and `||` means OR, neither is guessable, and `^` and `~` mean
-// materially different things in npm, Composer, and the library this package parses
-// with. A toolchain window needs a floor and sometimes a ceiling. It does not need
-// disjunction, and the cost of offering it is that every author has to know a syntax
-// to write the two cases that matter.
+// Two named bounds rather than one constraint string, deliberately: a range language is
+// a mini-language in a field, where the comma means AND and `^` and `~` mean materially
+// different things across npm, Composer and the library this parses with. A toolchain
+// window needs a floor and sometimes a ceiling, not disjunction.
 //
-// The shape also makes a defect unrepresentable. The single-constraint form had
-// exactly one consumer and it reported every failure as ToolTooOld, so a too-NEW
-// binary was told it was too old. Two bounds are two comparisons, so which one failed
-// is structural rather than something the caller has to reconstruct.
+// The shape also makes a defect unrepresentable: the single-constraint form reported
+// every failure as ToolTooOld, so a too-NEW binary was told it was too old.
 //
-// Below is exclusive because that is the bound people actually mean. "Not the 25 line"
-// written as an inclusive max is `<= 24`, which rejects 24.19.0 - the classic
-// off-by-one. Below 25 cannot be misread.
+// Below is EXCLUSIVE because that is the bound people mean. "Not the 25 line" written as
+// an inclusive `<= 24` rejects 24.19.0.
 //
 // Declared by two owners with different authority, and intersected before use: a spell
 // states what its ops need to function at all, and a workspace states policy. Neither

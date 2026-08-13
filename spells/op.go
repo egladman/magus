@@ -39,12 +39,10 @@ type Charm struct {
 // returns, and the resolved spell Op embeds it. An empty Command (no Bin) is the
 // no-op marker.
 //
-// Bin or any Args entry may be a bare $NAME token (e.g. "$MAGUS") to reference a
-// value the RUNNER computes for this invocation - the engine-side replacement
-// for a spell shelling out to `sh -c` just to let the shell expand a variable
-// magus itself set. See internal/interp/bindings' resolveRunnerRefs for the
-// resolution rule and, importantly, its scope: it is NOT the process
-// environment.
+// Bin or any Args entry may be a bare $NAME token (e.g. "$MAGUS") referencing a value
+// the RUNNER computes for this invocation, replacing a spell shelling out to `sh -c` to
+// expand a variable magus itself set. See internal/interp/bindings' resolveRunnerRefs
+// for the resolution rule and its scope: it is NOT the process environment.
 type Command struct {
 	Bin    string           `json:"bin,omitempty"`
 	Args   []string         `json:"args,omitempty"`
@@ -56,23 +54,17 @@ type Command struct {
 	// declared ignore dirs (the core project.IgnoreDirs plus the issuing spell's
 	// own mgs_listIgnoreDirs) instead of hardcoding directory names.
 	//
-	// This exists because an op handler runs ONCE with a null Target and is
-	// reduced to a static {bin, args} record (see recordOp in
-	// internal/spellruntime/resolve.go) - it cannot walk a project directory
-	// itself, which is why a spell used to shell out to `find | xargs` to build
-	// its own file list. Declaring Sources here defers that walk to the runner,
-	// per project, at run time, with no shell involved.
+	// An op handler runs ONCE with a null Target and is reduced to a static
+	// {bin, args} record, so it cannot walk a project directory itself - which is
+	// why a spell used to shell out to `find | xargs`. Declaring Sources defers
+	// that walk to the runner, per project, with no shell involved.
 	//
-	// The expanded files are appended to Args (after charm-patching and any
-	// caller-supplied extra args) in one of two shapes, chosen by SourcesEach:
-	// batched (the default: every match on as few invocations as fit under the
-	// runner's ARG_MAX-safe limit) or one invocation per file. A glob set that
-	// matches nothing runs the command ZERO times and reports success - the
-	// engine-side equivalent of `xargs -r` - rather than invoking Bin with an
-	// empty file list or failing outright.
+	// Expanded files are appended to Args in one of two shapes, chosen by
+	// SourcesEach: batched (the default, under an ARG_MAX-safe limit) or one
+	// invocation per file. A glob set matching nothing runs the command ZERO times
+	// and reports success, the equivalent of `xargs -r`.
 	//
-	// Empty (the default) leaves Args exactly as declared: no behavior change
-	// for a Command that does not use this.
+	// Empty (the default) leaves Args exactly as declared.
 	Sources []string `json:"sources,omitempty"`
 	// SourcesEach runs Bin once PER file Sources matches (xargs -n1: one file,
 	// one invocation), each invocation appending that single file to Args. False
@@ -84,38 +76,31 @@ type Command struct {
 	// Op carries the resolved copy that dispatch reads.
 	Capture bool `json:"capture,omitempty"`
 	// Secrets declares the environment this command needs, as env var name -> provider
-	// reference: {"NPM_TOKEN": "NPM_TOKEN"} means "set $NPM_TOKEN in this child from
-	// whatever the workspace's secret provider resolves that reference to". A command
-	// op's argv is static (see the type doc above), so it is the one op shape that can
-	// never read magus\secret.read from a magusfile body - and a "provided" project (a
-	// workspace provider, no magusfile at all) cannot reach a magusfile body either.
-	// This is the declarative escape hatch for both: the refs are resolved through the
-	// same secret.Resolver a magusfile uses, at spawn, and injected into ONLY this one
-	// child process's environment - never into Args, never logged, never returned by
-	// `magus describe`. Resolver.Read registers every value it hands back for
-	// redaction (internal/secret), so a secret that reaches a child via this field is
-	// masked out of captured output exactly as one read in a magusfile body is. Charms
-	// cannot patch this field; they patch Args only. Refs are static data (never a
-	// value), so the op stays hashable and describable without ever holding a secret.
+	// reference: {"NPM_TOKEN": "NPM_TOKEN"} sets $NPM_TOKEN in the child from whatever
+	// the workspace's secret provider resolves that reference to.
+	//
+	// It is the declarative escape hatch for the two shapes that cannot reach a
+	// magusfile body: a command op (static argv) and a provided project (no magusfile).
+	// Refs resolve through the same secret.Resolver at spawn and are injected into ONLY
+	// this child's environment - never into Args, never logged, never returned by
+	// `magus describe` - and Resolver.Read registers each value for redaction. Charms
+	// patch Args only. Refs are static data, so the op stays hashable and describable
+	// without ever holding a secret.
 	Secrets map[string]string `json:"secrets,omitempty"`
 	// Hints classify a FAILURE of this command into a next step. Each entry pairs a
 	// substring of the tool's output with the advice magus prints when the command
 	// exits non-zero and that substring appeared. The first declared match wins; a
 	// command that succeeds never consults them.
 	//
-	// This exists so a tool's own error can teach its fix. `docker buildx build --push`
-	// failing with "authentication required" is a complete diagnosis to anyone who
-	// already knows docker, and an exit code to everyone else - and the alternative
-	// magus used to document (a separate `-login` target you must remember) is a mode
-	// switch the user has to know about in advance, which is the thing advice removes.
+	// This lets a tool's own error teach its fix: "authentication required" from
+	// `docker buildx build --push` is a complete diagnosis to anyone who knows docker
+	// and an exit code to everyone else.
 	//
-	// `json:"-"` is load-bearing, not tidiness. BuiltinsHash marshals the whole
-	// resolved registry into every project's SpellDefVersion, so a field serialized
-	// here puts its CONTENTS in every cache key: rewording a sentence of advice would
-	// invalidate every target in every project, for a string that cannot change what
-	// any command does. Doc is excluded from the key for the same reason (see below);
-	// this is the same property, and JSON is not used to transport an Op - the only
-	// marshal of the registry is the hash itself.
+	// `json:"-"` is LOAD-BEARING. BuiltinsHash marshals the resolved registry into
+	// every project's SpellDefVersion, so a serialized field puts its contents in every
+	// cache key - rewording a sentence of advice would invalidate every target in every
+	// project. Doc is excluded for the same reason. JSON is not used to transport an
+	// Op; the only marshal of the registry is the hash itself.
 	Hints []Hint `json:"-"`
 }
 
@@ -144,14 +129,10 @@ func (c Command) SourcesPlaceholder() []string {
 //
 //	Hint{contains = "authentication required", advise = "run `docker login <registry>`"}
 //
-// Contains rather than the more obvious "match" for two reasons that point the same way.
-// It names the actual operation - this is strings.Contains, not a pattern - so the type
-// no longer needs a paragraph insisting it is not a regex. And `match` is a RESERVED word
-// in Buzz (libs/gopherbuzz parser reservedIdents), so a field called match can only be
-// written `@"match" = ...` by every author forever. PatchOp.From above hit the same wall
-// and solved it with a differing Buzz name, which then drifted from the Go name and
-// silently produced empty fields; keeping one name in all three places is what avoids
-// repeating that.
+// Contains rather than "match": it names the actual operation (strings.Contains, not a
+// pattern), and `match` is RESERVED in Buzz, so such a field could only ever be written
+// `@"match" = ...`. PatchOp.From hit the same wall and solved it with a differing Buzz
+// name, which then drifted from the Go name and silently produced empty fields.
 type Hint struct {
 	// Contains is matched against the failed command's stdout and stderr SEPARATELY,
 	// never against the two joined: a substring spanning the seam of two independent
@@ -209,18 +190,16 @@ type Service struct {
 // describes a long-running process `magus run` blocks on. Either way the form is declarative,
 // so the argv is charm-patched and rendered by `magus describe` without executing.
 //
-// For a service op the embedded Command mirrors Service.Command (the process), so
-// every fork/render/cache path reads the op uniformly; `magus run` forks it in the
-// foreground and blocks. Command.Bin may be empty, for a no-op marker op.
+// For a service op the embedded Command mirrors Service.Command, so every
+// fork/render/cache path reads the op uniformly. Command.Bin may be empty, for a no-op
+// marker op.
 //
-// (In-VM spell logic — API calls, a cache backend's get/put — is not an op kind: a
-// remote cache backend is a separate contract magus's core invokes by name, and
-// other custom logic belongs in a magusfile target body, not the operation model.)
+// In-VM spell logic is not an op kind: a remote cache backend is a separate contract
+// magus invokes by name, and other custom logic belongs in a magusfile target body.
 //
-// Capture makes the op's magusfile method return the {stdout, stderr, code, ok}
-// record (the same shape proc.exec returns) instead of void — for ops whose output
-// is the point (a hash, a revision date) rather than a build action whose exit code
-// is all that matters. It is Go-internal (the resolved op), not mirrored to Buzz.
+// Capture makes the op's magusfile method return the {stdout, stderr, code, ok} record
+// instead of void, for ops whose output is the point rather than the exit code. It is
+// Go-internal, not mirrored to Buzz.
 type Op struct {
 	// Kind is the op's lifecycle kind (OpKind*); empty means OpKindCommand.
 	Kind string `json:"kind,omitempty"`

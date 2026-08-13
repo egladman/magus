@@ -151,15 +151,10 @@ func (s statusLine) render(now time.Time) (left, elapsed string) {
 		elapsed = fmtDur(now.Sub(s.start))
 	}
 	var b strings.Builder
-	// The blocked state is NOT rendered here, though this type holds it.
-	//
-	// It used to lead this line, which meant a lock wait was announced twice
-	// for one event: once in shouty capitals on the status row, and again as
-	// the pinned notification - same project, same holder, same word. The
-	// notification is the better home. It is bold, coloured and carries the
-	// REMEDY ("wait, or stop it") that this line has no room for, while this
-	// line's job is a steady readout of pool and counts. An exception does not
-	// belong in a readout.
+	// The blocked state is NOT rendered here, though this type holds it: the
+	// pinned notification is the better home, since it carries the remedy and
+	// this line's job is a steady readout of pool and counts. Rendering both
+	// announced one lock wait twice.
 	//
 	// The fields stay because blockedMessage composes the notification from
 	// them; see [PrettyHandler.blockedMessage].
@@ -278,19 +273,13 @@ func (h *PrettyHandler) band() []tty.Line {
 	// between a two-row band and a three-row one.
 	left, elapsed := h.status.render(h.now())
 	_, _ = h.zone.SetTitle(left, elapsed)
-	// Grouped by project, drawn as a tree. A flat list repeated the project on
-	// every row and left the reader to notice that three of them were the same
-	// one; grouped, the shape of the failure is visible - one project in
-	// trouble reads differently from five, at a glance, without counting.
+	// Grouped by project, drawn as a tree: one project in trouble reads
+	// differently from five at a glance, without counting. The band is the tree
+	// PRUNED to what went wrong, so a run with nothing wrong draws no tree.
 	//
-	// Only projects that actually failed appear, and only while they have
-	// failures: the band is the tree PRUNED to what went wrong, not the graph
-	// with the healthy parts greyed out. That is what keeps it adaptive - a run
-	// with nothing wrong draws no tree at all.
-	//
-	// rowFailure is built here because only this loop knows which band rows are
-	// targets and which are headers. Hit-testing indexed by position without it
-	// once, and resolved a click one row off.
+	// rowFailure is built here because only this loop knows which rows are
+	// targets and which are headers - hit-testing by position resolved a click
+	// one row off.
 	drawn := h.drawnLocked()
 	// BUDGETED before drawing, because a tree costs a header row as well as a
 	// row per failure and the band's ceiling did not move when it stopped being
@@ -478,19 +467,13 @@ func (h *PrettyHandler) ensureLease() {
 // non-TTY writer disables it.
 func NewPrettyHandler(w io.Writer, level slog.Level) *PrettyHandler {
 	// One handler per terminal, for the same reason there is one tty.Zone: the
-	// display is a process-scoped resource because the terminal is.
-	//
-	// Two used to exist, and the split was not arbitrary - the CLI installs one
-	// as the process-wide slog default for general diagnostics, while the Cache
-	// builds its own for cache.* events because it is a LIBRARY and cannot
-	// assume a caller configured a global logger. Both are right in isolation
-	// and wrong together: on one terminal they became two views of one run,
-	// each holding half its state, so the failures were pinned by one handler
-	// and unreachable from the other.
+	// display is process-scoped because the terminal is. Two handlers - the
+	// CLI's process-wide default and the Cache's own - became two views of one
+	// run holding half its state each, so failures pinned by one were
+	// unreachable from the other.
 	//
 	// Keyed on w being standard error, the same identity check tty.ZoneFor
-	// makes. A handler pointed at a log file or a test buffer is its own, and
-	// an SDK consumer that never touches stderr is unaffected.
+	// makes, so a handler pointed at a log file or test buffer is its own.
 	if w != os.Stderr {
 		return newPrettyHandler(w, level, tty.SystemProbe)
 	}
@@ -1062,14 +1045,13 @@ func failureCauseExcerpt(cause string) string {
 //	ctx.needs: build: ctx.needs: go-build: ctx.needs: ctx.needs: format: dprint exited 20
 //	build -> go-build -> format: dprint exited 20
 //
-// The hops are not guessed. Every ctx.needs hop wraps the message again, so each
-// marker names exactly the segment that follows it - which is why this reads the
-// markers before removing them. Guessing from shape instead cannot work: `exec`,
-// `config.json` and `./main.go:5:2` all look like target names, and reading
-// `exec: "dprint": executable file not found` as a hop invents a target.
+// The hops are not guessed: every ctx.needs hop wraps the message again, so each
+// marker names the segment that follows it, and the markers are read before being
+// removed. Guessing from shape cannot work - `exec`, `config.json` and
+// `./main.go:5:2` all look like target names.
 //
-// The leading segment joins the path when any marker follows it, since it is the
-// target the chain hangs from. Everything else is the message, colons and all.
+// The leading segment joins the path when any marker follows it. Everything else
+// is the message, colons and all.
 func hopChain(cause string) string {
 	const marker = "ctx.needs"
 	segs := strings.Split(cause, ": ")
@@ -1130,20 +1112,12 @@ func (h *PrettyHandler) printRef(ref string) {
 
 // printRefLegend says once, at the end of a run, what the bare ids above are.
 //
-// Without it a passing run prints "out2f228a2cd116" and nothing else, and a
-// reader who has not met output refs has fourteen characters and no verb. That
-// reader is often an AGENT, in a fresh worktree, under a tool that installed no
-// magus skills - so the transcript is the only surface guaranteed to reach it,
-// and anything the transcript does not say is not knowable.
+// Without it a reader who has not met output refs has fourteen characters and no
+// verb - often an AGENT in a fresh worktree with no magus skills installed, for
+// which the transcript is the only surface guaranteed to reach it.
 //
-// One line per run, not per target, because refs are printed per target and the
-// failure path already spells the command out for the ones that matter. Only
-// when a ref was actually minted, so it never explains a notation nothing on
-// screen used.
-//
-// Deliberately vendor-neutral: the command retrieves the output, and what a
-// reader pipes it into is their business. Naming an agent here would age badly
-// and put a vendor in a build tool's output. The docs carry the worked examples.
+// One line per run, and only when a ref was minted, so it never explains a
+// notation nothing on screen used. Deliberately vendor-neutral.
 func (h *PrettyHandler) printRefLegend(colorize bool) {
 	if !h.mintedRef {
 		return
@@ -1451,25 +1425,16 @@ func (h *PrettyHandler) HitFailure(row int) (Failure, bool) {
 	if !ok || lease != h.lease {
 		return Failure{}, false
 	}
-	// Indexed against the DRAWN list, not the ring.
+	// Indexed against the DRAWN list, not the ring, and through rowFailure,
+	// which band builds as it draws.
 	//
-	// Two assumptions used to live here and both went stale the moment the band
-	// started sizing itself: that band row 0 was a status line (it is the top
-	// rule's caption now, and costs no row), and that band row N held ring slot
-	// N-1 (the band skips empty slots, so row N is the Nth OCCUPIED failure).
-	// Between them a click resolved one row off, which is worse than not
-	// resolving at all - it reruns a target the reader did not point at.
-	//
-	// Sharing drawnLocked with Failures is what keeps them honest: the list the
-	// keyboard walks and the rows a click lands on are now the same sequence by
-	// construction rather than by two functions agreeing to count alike.
-	// Indexed through rowFailure, which band builds as it draws.
-	//
-	// The band is a TREE now, so its rows are not all failures: a project header
-	// occupies a row and names no target. Counting rows as failures resolved a
-	// click one row off the moment grouping arrived - the same way it did when
-	// the status row was removed - so the mapping is recorded by the code that
-	// draws it rather than re-derived by the code that reads it.
+	// Every attempt to re-derive this has resolved a click one row off - worse
+	// than not resolving, since it reruns a target the reader did not point at.
+	// The band skips empty slots and its rows are not all failures (a project
+	// header names no target), so the mapping is recorded by the code that draws
+	// it rather than recomputed by the code that reads it. Sharing drawnLocked
+	// with Failures keeps the keyboard and the mouse on one sequence by
+	// construction.
 	if index < 0 || index >= len(h.rowFailure) {
 		return Failure{}, false
 	}
@@ -1645,16 +1610,12 @@ func (h *PrettyHandler) linkify(text, path string) string {
 // resetRun clears everything that describes ONE run, leaving what describes the
 // terminal. Callers hold h.mu.
 //
-// The split is the whole point. Terminal ownership - the zone, the lease, the
-// notification band - is process-scoped because the terminal is, and must
-// survive across runs. Counters, the elapsed clock, the pinned failures and the
-// selection describe a single run and must not. Sharing one handler across runs
-// was what made the distinction necessary; before that each run built its own
-// and the question never arose.
+// Terminal ownership - the zone, the lease, the notification band - is
+// process-scoped and must survive across runs; counters, the elapsed clock, the
+// pinned failures and the selection describe a single run and must not.
 //
-// Deliberately does NOT touch the lease. A band held past the last summary is
-// handed back by whoever held it, and dropping it here would make a new run
-// re-reserve rows it already had - a visible reflow at the start of every run.
+// Deliberately does NOT touch the lease: dropping it here would make a new run
+// re-reserve rows it already had, a visible reflow at the start of every run.
 func (h *PrettyHandler) resetRun() {
 	h.status = statusLine{}
 	h.failures = [failureRows]Failure{}
@@ -1671,18 +1632,14 @@ func (h *PrettyHandler) resetRun() {
 // The failure prompt's instruction row: the text, and the click keys that name
 // each action.
 //
-// It lives beside the band rather than in the command that dispatches it, for
-// the reason the band itself does: a list of failures and the row saying what
-// you can do with one are a single presentation, drawn into adjacent leases of
-// the same zone, and useless apart. The command owns the VERBS - what rerunning
-// actually does - and this owns what a reader is told and what a click resolves
-// to.
+// It lives beside the band rather than in the command that dispatches it: the
+// failure list and the row saying what you can do with one are a single
+// presentation, drawn into adjacent leases of the same zone. The command owns the
+// VERBS; this owns what a reader is told and what a click resolves to.
 //
-// Splitting them was not free of consequence. The documentation renderer could
-// not import an unexported const from a main package, so it hand-copied the
-// strings; the drift gate then compared that copy against itself and stayed
-// green while the terminal said something else. A shipped picture of a prompt
-// nobody could actually get is the failure mode this prevents.
+// Keeping them together also keeps the docs honest - a renderer that cannot
+// import an unexported const hand-copies the strings, and the drift gate then
+// compares that copy against itself while the terminal says something else.
 const (
 	HintKeyRerun  = "rerun"
 	HintKeyFocus  = "focus"

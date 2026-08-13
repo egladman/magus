@@ -63,13 +63,11 @@ type PickOptions struct {
 	// show, best first.
 	//
 	// It exists so a picker can search something larger than the list it was
-	// opened with - the knowledge graph, which knows about files, symbols and
-	// docs as well as the projects the caller could enumerate up front. The
-	// caller keeps the mapping from the returned label back to whatever it
-	// means; this type only draws strings.
+	// opened with - the knowledge graph rather than the projects a caller can
+	// enumerate up front. The caller keeps the mapping from label back to
+	// meaning; this type only draws strings.
 	//
-	// Nil keeps the substring filter, which is the right behaviour for a list
-	// that is already complete.
+	// Nil keeps the substring filter, right for an already-complete list.
 	Query func(filter string) []string
 }
 
@@ -375,13 +373,12 @@ func (s *session) innerWidth() int {
 //
 // It has to exactly once. Every later move is ARITHMETIC: the block is redrawn
 // from where the old one started, so the prompt lands `newLines-oldLines` rows
-// from where it was, clamped to the last row when growing pushed the screen up.
+// away, clamped to the last row when growing pushed the screen up.
 //
-// The round trip it avoids is not a micro-cost. Asking is microseconds on a
-// local terminal and a full round trip over ssh, and the block changes height
-// on any keystroke that filters the list past the visible rows - so querying
-// per redraw put an RTT of lag on most of the typing, on exactly the connection
-// where lag is already the problem.
+// The round trip it avoids is a full RTT over ssh, and the block changes height
+// on any keystroke that filters past the visible rows - so querying per redraw
+// put an RTT of lag on most of the typing, on the connection where lag is
+// already the problem.
 //
 // optimization: derive the prompt row instead of asking the terminal for it.
 //
@@ -419,16 +416,13 @@ func (s *session) reposition(oldLines, newLines int) {
 // maxRows is how many items the window may show, bounded by what the terminal
 // can actually display.
 //
-// Without the bound the picker asks for its configured ten rows plus a prompt
-// on a terminal that may be shorter, [InlineView.Paint] refuses the block
-// because erasing it would walk off the top of the screen, and the picker draws
-// NOTHING - while still sitting in a raw-mode read loop. A blank terminal with
-// no echo and no prompt is indistinguishable from a hung process, and an
-// eleven-row window is an ordinary split pane rather than an exotic case.
+// Without the bound, a terminal shorter than the configured rows makes
+// [InlineView.Paint] refuse the block and the picker draw NOTHING while still in
+// a raw-mode read loop - indistinguishable from a hung process, on an eleven-row
+// split pane rather than an exotic case.
 //
-// Two rows are held back: one for the prompt line, and one so the block stays
-// strictly shorter than the screen, which is what makes redrawing it in place
-// possible at all.
+// Two rows are held back: one for the prompt, and one so the block stays strictly
+// shorter than the screen, which is what makes redrawing in place possible.
 func (s *session) maxRows() int {
 	max := s.opts.MaxRows
 	height, ok := s.height()
@@ -484,10 +478,9 @@ func (s *session) height() (int, bool) {
 
 // hover moves the highlight to i, redrawing only if it actually moved.
 //
-// The guard is the whole point. Any-event tracking reports EVERY cell the
-// pointer crosses, and a row is many cells wide, so a sweep across one item
-// would otherwise repaint the list once per column - identical bytes, over and
-// over, for a picture that did not change.
+// The guard is the whole point: any-event tracking reports EVERY cell crossed
+// and a row is many cells wide, so a sweep across one item would repaint the list
+// once per column with identical bytes.
 //
 // optimization: skip the redraw when the highlight did not move.
 //

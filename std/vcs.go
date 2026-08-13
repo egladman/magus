@@ -207,16 +207,12 @@ func VcsRoot(ctx context.Context) (string, error) {
 
 // VcsChangedFiles lists files changed against base, defaulting to the resolved base ref.
 //
-// Paths, like vcs.status's, each carrying the repository root as their base. A VCS
-// reports diff paths from the root while a target runs in its project directory, so a
-// bare string left the caller to supply that fact from memory.
+// Paths carry the repository root as their base: a VCS reports diff paths from the root
+// while a target runs in its project directory.
 //
-// The probe runs at EffectiveCwd, matching resolveVCS and vcs.status. It used to pass an
-// empty dir, which means the PROCESS cwd: so magus resolved which VCS to use from the
-// target's project directory and then ran the command somewhere else entirely. Identical
-// only while both sit in the same repository - and a target's cwd IS its project
-// directory, so a nested repository, or a daemon whose process cwd is outside the
-// workspace, made the two disagree.
+// The probe runs at EffectiveCwd, matching resolveVCS and vcs.status. An empty dir means
+// the PROCESS cwd, which would resolve the driver from the target's directory and then
+// run it somewhere else - identical only while both sit in the same repository.
 func VcsChangedFiles(ctx context.Context, base string) ([]types.Path, error) {
 	v, defaultBase := resolveVCS(ctx)
 	if v == nil {
@@ -246,16 +242,13 @@ func VcsChangedFiles(ctx context.Context, base string) ([]types.Path, error) {
 
 // vcsDir is the directory every vcs probe runs in: the target's, not the process's.
 //
-// These call sites passed "" and explained it as "host bindings run in the project cwd".
-// They do not. runBuzz deliberately does NOT os.Chdir - it carries the target's directory
-// on the context so projects can execute concurrently without corrupting a shared process
-// cwd (internal/interp/runtime.go) - so "" meant the PROCESS cwd, which is a different
-// place. resolveVCS already picks the driver from EffectiveCwd, so magus was choosing
-// which VCS to use from one directory and then running it in another.
+// runBuzz deliberately does NOT os.Chdir - it carries the target's directory on the
+// context so projects can execute concurrently without corrupting a shared process cwd -
+// so passing "" means the PROCESS cwd, a different place. resolveVCS already picks the
+// driver from EffectiveCwd.
 //
-// Harmless while both sit in the same repository, which is why it went unnoticed. Not
-// harmless in the daemon, where the process cwd belongs to the daemon and the context cwd
-// comes from the request (internal/proc/server.go).
+// Harmless while both sit in the same repository. Not harmless in the daemon, where the
+// process cwd belongs to the daemon and the context cwd comes from the request.
 func vcsDir(ctx context.Context) string {
 	dir, err := EffectiveCwd(ctx)
 	if err != nil {
@@ -267,15 +260,14 @@ func vcsDir(ctx context.Context) string {
 // vcsMetadata resolves the workspace VCS and reads its metadata, RAISING when either step
 // fails rather than reporting a zero value.
 //
-// These accessors used to swallow both failures and return "". That is not how a Buzz
-// function reports a problem - upstream declares the error in the signature (`!> errors\X`)
-// and the caller writes try/catch - and it is not even unambiguous here, because "" is a
-// value a branch name could in principle take. Worse, it pushed the check onto every call
-// site: a magusfile that forgot `if (h == "")` silently interpolated an empty commit into a
-// version string or an image tag, and nothing surfaced until someone read the artifact.
+// Swallowing both failures and returning "" is not how a Buzz function reports a problem
+// (upstream declares the error in the signature and the caller writes try/catch), and ""
+// is a value a branch name could take. It also pushed the check onto every call site: a
+// magusfile that forgot `if (h == "")` interpolated an empty commit into a version string
+// or an image tag, surfacing only when someone read the artifact.
 //
-// magus.affected already made this call the other way, for the same reason: an empty answer
-// and an unavailable one mean opposite things to whoever is deciding what to build.
+// magus.affected already made this call the other way: an empty answer and an unavailable
+// one mean opposite things to whoever is deciding what to build.
 func vcsMetadata(ctx context.Context) (types.VCSMeta, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
@@ -300,14 +292,13 @@ func VcsRef(ctx context.Context) (string, error) {
 
 // VcsStatus reports the working tree's uncommitted state as a typed Status.
 //
-// It replaces the vcs.dirty_files half of the old pair, which handed a magusfile the
-// backend's own status lines - git porcelain, hg status, jj diff --name-only - so a
-// caller had to know which VCS it was on to parse them, and every caller reimplemented
-// that. statusPaths does it once, here.
+// Handing a magusfile the backend's own status lines - git porcelain, hg status, jj diff
+// --name-only - made every caller reimplement the parsing and know which VCS it was on.
+// statusPaths does it once, here.
 //
-// Paths carry the repository root as their base. A VCS reports paths from the root, but
-// a target runs with its cwd set to its PROJECT directory, so a bare string was silently
-// ambiguous exactly when a project was not the root.
+// Paths carry the repository root as their base: a VCS reports from the root while a
+// target's cwd is its PROJECT directory, so a bare string was ambiguous exactly when a
+// project was not the root.
 //
 // RAISES on a failed probe rather than reporting clean: a gate that cannot read the tree
 // has no answer, and a quiet empty list would let it pass having checked nothing.

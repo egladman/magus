@@ -30,23 +30,17 @@ const (
 // read of `released` or `rows` is a live race rather than a theoretical one.
 //
 // It exists because the terminal's scroll margins are ONE GLOBAL SETTING and
-// magus had more than one component setting them. A run could hold two
-// [region]s at once - the CLI's pretty handler and the one the cache opens for
-// its own events - each computing row arithmetic from a different height, and
-// the only thing keeping the user's shell usable was an unconditional
-// ResetScrollMargins on the way out. That is a mop, not an owner: it cleans up
-// after the damage rather than preventing it, and it cannot help at all while
-// the run is still going.
+// magus had more than one component setting them: two [region]s at once, each
+// computing row arithmetic from a different height, with only an unconditional
+// ResetScrollMargins on the way out keeping the shell usable. That is a mop, not
+// an owner - it cannot help while the run is still going.
 //
-// So the margins are set here, once, by whoever owns the whole zone, and every
-// consumer asks for rows instead of taking the terminal. One DECSTBM, one
-// Release, one composited repaint per change.
+// So the margins are set here once, by whoever owns the whole zone, and every
+// consumer asks for rows instead of taking the terminal.
 //
-// The corollary is that Zone is the concurrency boundary a region deliberately
-// is not. A region is single-threaded by contract; its consumers here are not
-// (a cache handler paints from the run's pool, a notifier from an expiry
-// sweeper, the daemon from a background job), so every region access goes
-// through z.mu.
+// The corollary is that Zone is the concurrency boundary a region deliberately is
+// not: a region is single-threaded by contract and its consumers here are not, so
+// every region access goes through z.mu.
 type Zone struct {
 	mu     sync.Mutex
 	w      io.Writer
@@ -183,12 +177,10 @@ func (l *Lease) Enabled() bool {
 // Set replaces this lease's band and repaints the zone, reporting whether the
 // rows actually reached the terminal.
 //
-// The bool is the point of the signature. A lease cannot do the non-TTY
-// fallback itself, because only the caller knows what its content IS: a
-// failure line is a RECORD and must be printed plainly when it cannot be
-// pinned, while a status line or a toast is a VIEW and must be dropped, since
-// replaying every repaint into a pipe is noise. Returning false and letting the
-// caller decide keeps that judgement where the knowledge is.
+// The bool is the point of the signature: only the caller knows what its content
+// IS. A failure line is a RECORD and must be printed plainly when it cannot be
+// pinned; a status line is a VIEW and must be dropped. Returning false keeps that
+// judgement where the knowledge is.
 //
 // Fewer rows than the lease holds leaves the remainder blank, which is what
 // lets an entry disappear; more are dropped.
@@ -233,15 +225,12 @@ func (l *Lease) Release() error {
 // arrives in - to the lease that owns it and the index of that row within the
 // lease's band.
 //
-// This is the whole reason a click can act on what was clicked without anyone
-// tracking screen geometry separately: the zone already knows where every band
-// sits, because it put them there. A caller receives Row from an [Event] and
-// asks; it never computes a row number itself, so there is no second copy of
-// the layout to drift.
+// The zone already knows where every band sits because it put them there, so a
+// caller passes Row from an [Event] and never computes a row itself - there is no
+// second copy of the layout to drift.
 //
-// Reports false for any row outside the reserved zone, which includes every row
-// of ordinary scrolling output above it. A click up there belongs to the
-// terminal's own selection, not to magus.
+// Reports false for any row outside the reserved zone, including all the ordinary
+// scrolling output above it: a click there belongs to the terminal's selection.
 func (z *Zone) HitTest(row int) (lease *Lease, index int, ok bool) {
 	z.mu.Lock()
 	defer z.mu.Unlock()
@@ -299,16 +288,12 @@ func (l *Lease) Width() int {
 
 // HitSpan reports which keyed span a click at (row, col) landed on.
 //
-// Rows are selected by pointing at them; ACTIONS are taken by clicking the
-// words that name them. This is what makes the second half work, and it is
-// deliberately keyed rather than positional: the caller labels the span it
-// draws, and gets that label back. Nothing outside this file computes a column,
-// so a hint cannot be drawn in one place and hit-tested in another.
+// Keyed rather than positional: the caller labels the span it draws and gets that
+// label back, so a hint cannot be drawn in one place and hit-tested in another.
 //
-// The extents are recomputed from the stored line rather than cached at paint
-// time. A click is a human-speed event, so the arithmetic is free, and a cache
-// would need invalidating on every repaint and resize - which is exactly the
-// kind of staleness that puts a click on the wrong action.
+// Extents are recomputed from the stored line rather than cached at paint time. A
+// click is a human-speed event, so the arithmetic is free, and a cache would need
+// invalidating on every repaint and resize.
 func (z *Zone) HitSpan(row, col int) (key string, ok bool) {
 	lease, index, ok := z.HitTest(row)
 	if !ok {
@@ -340,11 +325,10 @@ func (z *Zone) HitSpan(row, col int) (key string, ok bool) {
 // grow and still fail to paint, and a caller that treated a write error as "did
 // not grow" would keep asking.
 //
-// Growth ONLY: a band that shrank again would make the zone reflow every time
-// its content came and went, and a reflow is a visible movement of the whole
-// screen. Growing on demand instead means a consumer can claim what it needs
-// when it needs it - one row for one notification - rather than reserving for
-// its own worst case up front and charging every run for the possibility.
+// Growth ONLY: a band that shrank again would reflow the zone every time its
+// content came and went, and a reflow moves the whole screen. Growing on demand
+// lets a consumer claim one row for one notification rather than reserving for its
+// worst case and charging every run for the possibility.
 //
 // Refused, like a fresh grant, when the larger total would leave too little
 // scrolling area. The lease keeps the size it had.

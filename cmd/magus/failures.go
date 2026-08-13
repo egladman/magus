@@ -18,11 +18,10 @@ import (
 // rather than merely legible. Click one to select it, press enter to rerun it
 // with stepping on, press o to open its captured output.
 //
-// It runs AFTER the run, deliberately, and that is not a limitation dressed up
-// as a decision. During a run a target's subprocess may own standard input, and
-// two things in raw mode on one terminal corrupt it - the step gate already
-// documents that in its own comment. Afterwards magus owns the terminal
-// outright, which is also exactly when a reader wants to act on a failure.
+// It runs AFTER the run, deliberately: during a run a target's subprocess may own
+// standard input, and two things in raw mode on one terminal corrupt it.
+// Afterwards magus owns the terminal outright, which is also when a reader wants
+// to act on a failure.
 //
 // The rules it keeps, in order of how badly getting them wrong hurts:
 //
@@ -115,8 +114,8 @@ func loadPreview(f cache.Failure, width int) []string {
 
 // sanitizeLogLine makes one captured line safe to draw inside the band.
 //
-// The band is a BOX, and every character in it has to occupy the column the
-// layout thinks it does. Captured output honours neither assumption:
+// The band is a BOX, so every character has to occupy the column the layout
+// thinks it does. Captured output honours neither assumption:
 //
 //   - A TAB advances the terminal to the next 8-column stop while the layout
 //     counts it as one, so the row overruns and loses its right border. This is
@@ -241,18 +240,16 @@ func runFailurePrompt(h failureBand, selected *int) (failureAction, cache.Failur
 // showHint puts the way out where the reader can see it, pinning it when the
 // zone has room and printing it plainly when it does not.
 //
-// The fallback is the whole point, and its absence was a bug. Every other thing
-// this package draws is a VIEW, and a view that cannot be pinned is correctly
-// dropped - replaying it into a pipe would be noise. This is not a view. It is
-// the only statement of how to leave, and a prompt that opens without it is the
-// exact situation people describe killing the terminal to escape.
+// The fallback is the whole point. Everything else this package draws is a VIEW,
+// correctly dropped when it cannot be pinned; this is not a view, it is the only
+// statement of how to leave, and a prompt without it is what people describe
+// killing the terminal to escape.
 //
-// A refused grant is not rare or theoretical: the zone reserves rows only while
-// a useful scrolling area remains, so a short window, or a run that already
-// pinned failures and a notification, is enough to leave nothing for this.
+// A refused grant is not theoretical: the zone reserves rows only while a useful
+// scrolling area remains, so a short window is enough to leave nothing for this.
 //
 // Printed to the scrolling transcript rather than skipped, because nothing else
-// writes there while the prompt is open, so it stays on screen regardless.
+// writes there while the prompt is open.
 func showHint(l *tty.Lease, w io.Writer) error {
 	// Composed by the package that owns the band, not here, so the row the
 	// documentation renders and the row a reader sees are the same object.
@@ -388,16 +385,13 @@ func dispatchFailureKeys(next func() (tty.Event, error), h failureBand, hints hi
 // copyFailure puts the selected failure's captured output on the system
 // clipboard, and says so where the reader is looking.
 //
-// This is the answer to "the two columns cannot be drag-selected". They cannot,
-// and no arrangement of them can be - terminals select linearly. So nobody is
-// asked to select: the text goes to the clipboard exactly as the tool emitted
-// it, with no frame, no padding, no divider and no escape sequences, through a
-// sequence that survives ssh and tmux.
+// The answer to "the two columns cannot be drag-selected" - they cannot, and no
+// arrangement of them can be, because terminals select linearly. So nobody is asked
+// to select: the text goes to the clipboard exactly as the tool emitted it, through
+// a sequence that survives ssh and tmux.
 //
-// A failure to copy is reported as a notification rather than an error, because
-// a terminal that refuses OSC 52 (some disable it) is not a broken run - and
-// `o` still prints the whole thing into the transcript, where it copies like
-// any other output.
+// A failed copy is a notification rather than an error: a terminal that refuses OSC
+// 52 is not a broken run, and `o` still prints the whole thing into the transcript.
 func copyFailure(f cache.Failure) {
 	text := strings.Join(loadPreview(f, previewWidth), "\n")
 	if raw, err := os.ReadFile(f.LogPath); err == nil {

@@ -123,15 +123,13 @@ func (m *Magus) Run(ctx context.Context, targets []types.Target, opts ...RunOpti
 // redactError masks any resolved secret in err's MESSAGE while leaving the error chain
 // intact.
 //
-// This is the boundary where a run's error stops being something magus handles with a
-// context and becomes text a caller prints. The CLI's final line is `slog.Error(err.Error())`
-// with no context, so the log handler's redaction cannot reach it - and a magusfile's
-// `throw "auth failed: " + magus\secret.read(...)` propagates its message all the way there.
-// Redacting once here covers every consumer of a run error instead of asking each to
-// remember, which is the mistake this package's history is made of.
+// The boundary where a run's error stops being something magus handles with a context
+// and becomes text a caller prints: the CLI's final line is `slog.Error(err.Error())`
+// with no context, so the handler's redaction cannot reach it, and a magusfile's
+// `throw "auth failed: " + magus\secret.read(...)` propagates all the way there.
+// Redacting once here covers every consumer instead of asking each to remember.
 //
-// The chain is preserved through Unwrap, so errors.Is/As - which exitCodeOf relies on to
-// recognize ExitError and the usage errors - keep working.
+// The chain is preserved through Unwrap, so errors.Is/As keep working.
 func (m *Magus) redactError(err error) error {
 	if err == nil || m.resolver == nil {
 		return err
@@ -649,20 +647,16 @@ func toolVersionMode() string {
 }
 
 // CurrentRevision resolves the workspace's active VCS revision (full hash) and dirty
-// state. It departs from verifyReadOnly's VCS resolution on purpose: verifyReadOnly
-// treats a vcs.Resolve error as a hard failure (a bad MAGUS_VCS_NAME is misconfiguration
-// it refuses to hide) and only no-ops on res.VCS == nil, but CurrentRevision collapses
-// BOTH a resolution error and no VCS into ("", false). That is correct here because this
-// is provenance metadata, not a drift gate: a target that never declared FailOnDrift
-// never asked to have its VCS state checked, so failing the whole run over an unrelated
-// VCS misconfiguration would be wrong - a missing revision is "unknown", never a reason
-// to fail the caller. Used both to stamp output descriptors (executeStages resolves it
-// ONCE per invocation and copies it onto every step, exactly as toolVersionsByProject
-// does for tool versions - probing per target would spawn a VCS subprocess per step) and
-// by `magus query output <ref> --meta` to compare a stored descriptor's revision against
-// HEAD now. The two returns are types.VCSMeta's Hash and IsDirty under this package's
-// own vocabulary (revision/dirty is what cache.Step, cache.OutputDescriptor, and the
-// CLI all print).
+// state, collapsing BOTH a resolution error and no VCS into ("", false).
+//
+// That differs from verifyReadOnly, which treats a vcs.Resolve error as a hard failure,
+// and it is correct here because this is provenance metadata rather than a drift gate: a
+// target that never declared FailOnDrift never asked to have its VCS state checked, so a
+// missing revision is "unknown", never a reason to fail the caller.
+//
+// executeStages resolves it ONCE per invocation and copies it onto every step, as
+// toolVersionsByProject does - probing per target would spawn a VCS subprocess per step.
+// The two returns are types.VCSMeta's Hash and IsDirty.
 func (m *Magus) CurrentRevision(ctx context.Context) (revision string, dirty bool) {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil || res.VCS == nil {
@@ -967,18 +961,15 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}
 	defer releaseLocks()
 
-	// The probe pass doubles as the toolchain gate. The check this replaced hung off
-	// spell-op dispatch, so it missed any project whose targets shell out directly - every
-	// TypeScript project here runs its own pnpm scripts and declared a window that could
-	// never fail. Enforcement follows the DECLARATION, which is stated per project, not
-	// the dispatch mechanism in use.
+	// The probe pass doubles as the toolchain gate. Enforcement follows the
+	// DECLARATION, stated per project, not the dispatch mechanism: hanging it off
+	// spell-op dispatch missed every project whose targets shell out directly.
 	//
-	// Before any target runs, so a violation stops the invocation rather than surfacing
-	// partway through, and on probes this pass already paid for.
+	// Runs before any target, so a violation stops the invocation rather than
+	// surfacing partway through, on probes this pass already paid for.
 	//
-	// KNOWN GAP: scope is uniqueProjects (the selection plus output-ref owners). A project
-	// reached only through a target dependency joins later, in the dispatcher, so it is
-	// not gated - the one axis on which this is narrower than what it replaced.
+	// KNOWN GAP: scope is uniqueProjects, so a project reached only through a target
+	// dependency joins later in the dispatcher and is not gated.
 	toolWindows := map[string]string{}
 	toolVer := m.probeTools(ctx, uniqueProjects, toolWindows)
 	if err := checkToolWindows(uniqueProjects, toolWindows); err != nil {
@@ -1688,15 +1679,13 @@ func (m *Magus) makeHandler(name string) TargetHandler {
 // withTargetDeadline bounds one target's execution when config.TargetTimeout
 // is set, and is a pass-through otherwise.
 //
-// It is the runaway guard: a magusfile is code, so a loop that never
-// terminates is something someone can write by accident, and nothing else
-// reclaims a CI runner that hit one. The Buzz VM samples cancellation on loop
-// back edges (see vm.checkCancel), so a spinning target notices without the
-// dispatch loop paying for a check per instruction.
+// The runaway guard: a magusfile is code, so a non-terminating loop is writable by
+// accident and nothing else reclaims a CI runner that hit one. The Buzz VM samples
+// cancellation on loop back edges (vm.checkCancel), so a spinning target notices
+// without a check per instruction.
 //
-// The deadline covers the whole target, subprocesses included - cancelling the
-// context kills what the target spawned - which is why it is off by default.
-// A value set near a legitimate target's runtime fails builds that were fine.
+// The deadline covers the whole target, subprocesses included, which is why it is off
+// by default - a value near a legitimate target's runtime fails builds that were fine.
 func (m *Magus) withTargetDeadline(ctx context.Context) (context.Context, context.CancelFunc) {
 	if m.cfg.TargetTimeout <= 0 {
 		return ctx, func() {}

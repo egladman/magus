@@ -113,18 +113,17 @@ func spellToolchains(opCommands map[string][]string) []types.SpellToolchain {
 	return out
 }
 
-// ListCharms builds the inverse charm index: every charm name a target in the
-// workspace declares, plus the reserved built-ins and the workspace's own
-// default_charms set (m.cfg.DefaultCharms), and for each the project/target/spell
-// declarations that give it a patch. Marking which charms apply to every run
-// without a :suffix is why this reads m.cfg directly rather than taking a
-// defaults parameter - a caller reaching this through the Inspector interface
-// (e.g. the MCP handler) has no other way to reach the workspace's own config, and
-// used to pass nil, so every charm silently reported Default: false over MCP even
-// when magus.yaml set defaults. It is the transpose of EvaluateTarget: one charm
-// and every target that declares it. ctx bounds the walk so a large workspace's
-// introspection stays cancellable - this is the most expensive Inspector method
-// (ExplainCommand per charm, per target, per spell, across every project).
+// ListCharms builds the inverse charm index: every charm name a target declares, plus
+// the reserved built-ins and the workspace's default_charms, and for each the
+// project/target/spell declarations that give it a patch. The transpose of
+// EvaluateTarget.
+//
+// It reads m.cfg directly rather than taking a defaults parameter because a caller
+// reaching this through the Inspector interface has no other way to see the workspace's
+// config, and passing nil made every charm report Default: false over MCP.
+//
+// ctx bounds the walk: this is the most expensive Inspector method (ExplainCommand per
+// charm, per target, per spell, across every project).
 func (m *Magus) ListCharms(ctx context.Context) ([]types.Charm, error) {
 	defaultSet := map[string]struct{}{}
 	for _, c := range m.cfg.DefaultCharms {
@@ -307,24 +306,18 @@ func collectTargetNodes(src *interp.Source) []types.TargetGraphNode {
 // target body into the workspace's projects: cross-project dependencies and the
 // per-target cache footprint (ctx.readsFiles / ctx.writesFiles).
 //
-// Cross-project deps (project imports) union into DependsOn, so the affected set and
-// scheduling treat them exactly like a project-level depends_on: a magusfile declares a
-// cross-project dependency once, at the target, rather than also in magus.project.
-// Per-target reads populate TargetInputs in one representation (each InputRef resolved
-// to its owning project's workspace-relative path); writes populate TargetOutputs
-// (project-root relative). Both add to that target's cache/snapshot footprint, unioned
-// onto the project-wide globs, never replacing them. A cross-project input's owning
-// project is also unioned into DependsOn, so an input change marks the consumer affected
-// exactly like a project-level depends_on; a same-project input's owning project is this
-// project itself, which is skipped (a project cannot depend on itself, and it already
-// seeds by directory containment).
+// Cross-project deps union into DependsOn, so affected and scheduling treat them like a
+// project-level depends_on and a magusfile declares one once, at the target. Per-target
+// reads populate TargetInputs (resolved to the owning project's workspace-relative
+// path); writes populate TargetOutputs (project-root relative). Both union onto the
+// project-wide globs, never replacing them. A cross-project input's owning project also
+// unions into DependsOn; a same-project one is skipped.
 //
-// It mutates projects in place. ctx is honored between projects. A project whose source
-// can't be read or whose dep path won't resolve contributes nothing (best-effort,
-// matching the static extractor's never-error contract). One deliberate exception: a
-// ctx.readsFiles/writesFiles/modifiesExistingFiles call with a non-literal argument is a hard load error, because a
-// computed footprint is invisible to this static read and silently under-declaring it
-// risks a stale cache hit.
+// Mutates projects in place, honouring ctx between them. A project whose source cannot
+// be read contributes nothing, matching the static extractor's never-error contract.
+// ONE exception: a ctx.readsFiles/writesFiles/modifiesExistingFiles call with a
+// non-literal argument is a hard load error, because a computed footprint is invisible
+// to this static read and under-declaring it risks a stale cache hit.
 func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 	// Cross-project OUTPUT declarations, collected across the whole walk and applied
 	// after it. Deferred because the owner may not be walked yet when the writer declares
@@ -692,19 +685,17 @@ func (m *Magus) TargetGraph(ctx context.Context) (types.TargetGraphOutput, error
 	return out, nil
 }
 
-// resolveNodeRefs rewrites each node's cross-project dependency paths and its
-// input owning-project paths from the form written in the magusfile to the
-// workspace-relative path the rest of the graph keys projects by. NOT the same resolution
-// WithDependsOn does: a hand-written depends_on entry may be repo-relative OR dot-relative
-// (file.Resolve), while an import path is ALWAYS dot-relative to the importing magusfile
-// (file.ResolveImport). Reading a bare import as repo-relative is what silently mis-anchored
-// every descendant import and broke graph builds, so the two must stay split.
-// For inputs: a same-project entry (empty Project) takes this project's path; a
-// cross-project entry resolves its raw import path.
-// Resolving here lets assembleIO link every consumes edge by path.Join(Project, Rel)
-// against the file node in the owning project directly, without re-anchoring. An
-// unresolvable path is dropped (best-effort, matching the static extractor's never-error
-// contract).
+// resolveNodeRefs rewrites each node's cross-project dependency and input owning-project
+// paths into the workspace-relative form the graph keys projects by.
+//
+// NOT the same resolution WithDependsOn does: a hand-written depends_on entry may be
+// repo-relative OR dot-relative, while an import path is ALWAYS dot-relative to the
+// importing magusfile. Reading a bare import as repo-relative mis-anchored every
+// descendant import, so the two must stay split.
+//
+// For inputs, a same-project entry takes this project's path and a cross-project one
+// resolves its raw import path, which lets assembleIO link every consumes edge by
+// path.Join(Project, Rel) without re-anchoring. An unresolvable path is dropped.
 func resolveNodeRefs(nodes []types.TargetGraphNode, projectPath string) {
 	for i := range nodes {
 		if len(nodes[i].CrossDependencies) > 0 {
@@ -1041,21 +1032,15 @@ func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.Fil
 		// per-target ctx.writesFiles above: baseStep is the project-wide baseline, so a
 		// file a target declares only in its own body was invisible here.
 		//
-		// The consequence was not cosmetic. `magus vcs add` asks whether a drifted
-		// output has a dirty declared input behind it, and it asks by PROJECT identity
-		// (types.SplitExplainedOutputs). docs/content-generate declares
-		// workspace.file("cmd/magus/skills/**/*.md"), so editing a skill source
-		// legitimately regenerates docs/reference/skills - but that source reported
-		// source_of=["."] alone, docs was absent, and the regenerated docs were called
-		// MGS4005 environmental drift with "not your change, do not commit". A staging
-		// check that tells you not to commit your own change is one people learn to
-		// override.
+		// Not cosmetic: `magus vcs add` asks by PROJECT identity whether a drifted
+		// output has a dirty declared input behind it. A source declared only through
+		// a cross-project read reported source_of=["."] alone, so its regenerated
+		// output was called MGS4005 environmental drift - a staging check telling you
+		// not to commit your own change is one people learn to override.
 		//
-		// Cross-project refs are kept here, unlike AllOutputs which drops them. The
-		// ownership rule inverts between the two: writing into another tree makes that
-		// project the owner, while READING another tree is a fact about THIS project's
-		// footprint - it is why this project rebuilds, and why it belongs in its
-		// affected set.
+		// Cross-project refs are KEPT here, unlike AllOutputs which drops them: the
+		// ownership rule inverts, because writing into another tree makes that project
+		// the owner, while READING one is a fact about THIS project's footprint.
 		inputs := make([]string, 0, len(p.TargetInputs))
 		for _, refs := range p.TargetInputs {
 			for _, ref := range refs {

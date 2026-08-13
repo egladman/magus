@@ -40,29 +40,20 @@ const (
 //     and restores it inside one write, and Release does not reposition
 //     it at all.
 //
-// That last property is what lets one type serve two very different
-// consumers. A logging caller interleaves its own scrolling output with
-// region repaints; an interactive caller holds a prompt and has the
-// terminal echoing keystrokes at the cursor. Neither can tolerate a
-// repaint that leaves the cursor parked in the region - the log lands in
-// the footer, or the user types over their own status line - and neither
-// should have to know the region's geometry to put it back. So the region
-// owns the rows it reserved and nothing else, and painting is invisible.
+// That last property is what lets one type serve a logging caller and an
+// interactive one: neither can tolerate a repaint that parks the cursor in
+// the region - the log lands in the footer, or the user types over their
+// own status line - and neither should need to know the geometry.
 //
-// The corollary is a rule about the terminal's cursor-save register: it is
-// a single global slot, so it is taken and released within one write and
-// never held across calls. An earlier version held it for the whole life
-// of the region so Release could restore it, which meant any repaint
+// The corollary is a rule about the cursor-save register: it is a single
+// global slot, so it is taken and released within ONE write and never held
+// across calls. Holding it for the life of the region meant any repaint
 // clobbered the saved position and teardown reinstated the wrong one.
 //
-// The alternate screen buffer (`\e[?1049h`) is never touched, which is the
-// difference between a useful status area and the full-screen takeovers
-// some build tools use.
+// The alternate screen buffer is never touched.
 //
-// A region is not safe for concurrent use. [Zone] is the boundary that makes
-// it so: every access to the region it owns goes through the zone's mutex,
-// because the consumers leasing from it (a run's pool, a notification
-// sweeper, a daemon job) are on different threads.
+// A region is not safe for concurrent use; [Zone] is the boundary that makes
+// it so, because its consumers are on different threads.
 type region struct {
 	w      io.Writer
 	probe  Probe
@@ -95,13 +86,12 @@ type region struct {
 // newRegion returns a region that will pin height rows at the bottom of
 // the terminal behind w, measured through p.
 //
-// Nothing is written to w here. The reservation happens on Reserve, or on
-// the first Render, so a run that never draws never touches the user's
-// terminal. Enabled reports whether the reservation will be
-// attempted at all: it is false when w has no descriptor, when p says
-// the descriptor is not a terminal, when the terminal is too small to
-// host height rows alongside a useful scrolling area, or when the size
-// query fails. A disabled region is safe to use and writes plain lines.
+// Nothing is written to w here: the reservation happens on Reserve or the
+// first Render, so a run that never draws never touches the terminal.
+// Enabled is false when w has no descriptor, when it is not a terminal,
+// when the terminal is too small to host height rows alongside a useful
+// scrolling area, or when the size query fails. A disabled region is safe
+// to use and writes plain lines.
 //
 // Pass [SystemProbe] in production; tests pass their own Probe.
 func newRegion(w io.Writer, height int, p Probe) *region {
@@ -143,15 +133,12 @@ func (r *region) isEnabled() bool { return r.enabled }
 // If the terminal has since become too small, the region disables itself
 // and the caller falls back to plain output.
 //
-// It leaves the caller's cursor exactly where it found it, relative to the
-// caller's own output. That is the whole contract this type keeps (see
-// [region]), and it is what the opening index sequences are for: moving down
-// height rows and stepping back up over them guarantees height rows exist
-// below the cursor without moving the cursor relative to the text. When the
-// cursor was already at the bottom, the screen scrolls and the transcript
-// slides up out of the way; when it was mid-screen, nothing scrolls and the
-// step back is exact. One sequence, correct either way, and it never
-// destroys a row the caller had written.
+// It leaves the caller's cursor exactly where it found it relative to the
+// caller's output - the contract this type keeps (see [region]). That is what
+// the opening index sequences are for: moving down height rows and stepping
+// back up guarantees the rows exist without moving the cursor relative to the
+// text. At the bottom the screen scrolls; mid-screen nothing does and the step
+// back is exact. Correct either way, and it never destroys a written row.
 func (r *region) reserve() error {
 	if !r.enabled || r.open {
 		return nil
@@ -459,18 +446,14 @@ func appendStyled(b []byte, text string, sgr SGR) []byte {
 // Render repaints the ENTIRE reserved zone from rows, in a single write.
 //
 // The whole zone is drawn every time, which is what lets an entry VANISH: rows
-// past the end of the slice are erased, so a list that shrank leaves no residue
-// behind it. An append-only surface could not express that - a line, once
-// written, would stay until something newer displaced it.
+// past the end of the slice are erased, so a list that shrank leaves no residue.
 //
-// Rows beyond the zone's height are DROPPED rather than scrolled. The caller
-// owns the choice of which entries fit, because only it knows whether the
-// newest or the oldest is the one worth keeping.
+// Rows beyond the zone's height are DROPPED rather than scrolled - only the
+// caller knows whether the newest or the oldest is worth keeping.
 //
-// A disabled region drops the call entirely rather than printing the rows: a
-// repainted view replayed line by line into a pipe or a CI log is noise, not
-// information. The caller decides what to print instead, because only it knows
-// whether its content is a record or a view.
+// A disabled region drops the call rather than printing the rows: a repainted
+// view replayed into a pipe is noise. The caller decides what to print, because
+// only it knows whether its content is a record or a view.
 func (r *region) render(rows []Line) error {
 	if !r.enabled {
 		return nil
@@ -567,21 +550,16 @@ func (r *region) render(rows []Line) error {
 // Release hands the terminal back: the zone is cleared and the scroll margins
 // reset. Idempotent and safe to defer.
 //
-// It does NOT reposition the cursor, and that is the point rather than an
-// omission. Because nothing here ever moved the caller's cursor, it is already
-// sitting exactly after the caller's last line of output - which is where the
-// shell prompt belongs. The previous version restored a position saved when the
-// region opened, thousands of scrolled lines earlier in a long run, which put
-// the prompt back into the middle of the transcript and let it overwrite the
-// output the run had just produced.
+// It does NOT reposition the cursor, deliberately: nothing here ever moved it,
+// so it already sits after the caller's last line, which is where the shell
+// prompt belongs. Restoring a position saved when the region opened put the
+// prompt into the middle of the transcript.
 //
-// Which is why the margin reset sits INSIDE the cursor-transparent write rather
-// than after it. DECSTBM homes the cursor - the same behaviour Reserve already
-// works around when it saves before setting margins - so a reset emitted after
-// the restore silently undoes it and parks the cursor at row 1. The shell then
-// draws its prompt at the top of the screen and its first redraw erases
-// everything below, wiping the transcript the run had just produced. It looks
-// like the output flashed up and vanished.
+// Which is why the margin reset sits INSIDE the cursor-transparent write. DECSTBM
+// homes the cursor, so a reset emitted after the restore undoes it and parks the
+// cursor at row 1 - the shell then draws its prompt at the top and its first
+// redraw erases everything below, which looks like the output flashed up and
+// vanished.
 func (r *region) release() error {
 	if !r.enabled || !r.open {
 		return nil
@@ -615,19 +593,16 @@ func (r *region) innerWidth() int { return r.width - 1 - 2*borderCols }
 // the eye reads as decoration, while a real rectangle reads as an edge, which is
 // the whole job - saying which rows hold still and which scroll away.
 //
-// Unconditionally because one look everywhere is worth more than the case it
-// gives up. They are multi-byte, so a terminal whose locale is not UTF-8 shows
-// mojibake - but this border is only ever drawn when [CanRender] says there is
-// an interactive terminal, and the environments that still run non-UTF-8
-// locales (CI, cron, minimal containers, LANG=C scripts) are exactly the ones
-// where output is piped and no border is drawn at all. Choosing per locale
-// would also make a committed picture a function of the shell that generated
-// it. `magus doctor` reports a non-UTF-8 locale rather than silently changing
-// what magus draws.
+// Unconditionally because one look everywhere beats the case it gives up. They
+// are multi-byte, so a non-UTF-8 locale shows mojibake - but the border is only
+// drawn when [CanRender] says there is an interactive terminal, and the
+// environments still running non-UTF-8 locales are the ones where output is
+// piped and no border is drawn. Choosing per locale would also make a committed
+// picture a function of the shell that generated it.
 //
-// They are East Asian AMBIGUOUS width, so a CJK locale configured to render
-// ambiguous runes double-width will shear the box. That is a terminal setting,
-// and doctor names it for the same reason.
+// They are East Asian AMBIGUOUS width, so a CJK locale rendering them
+// double-width will shear the box. `magus doctor` reports both rather than
+// silently changing what magus draws.
 const (
 	boxH = "\u2500"
 	boxV = "\u2502"
@@ -752,16 +727,13 @@ const ellipsis = "..."
 // Clip returns msg shortened to fit n bytes, ending in an ellipsis when
 // truncation happened.
 //
-// nBytes bounds the whole result, ellipsis included, and is a BYTE budget -
-// the name says so because both in-package callers size it from a column count,
-// which is exact for ASCII and conservative for anything else. Text that is
-// already styled needs [ClipVisible] instead: escape bytes would eat this
-// budget and the cut would land inside a sequence.
-// Truncation never splits a UTF-8 sequence: a multi-byte rune straddling
-// the cut is dropped whole.
+// nBytes bounds the whole result, ellipsis included, and is a BYTE budget: exact
+// for the ASCII this package emits and conservative for anything else. Already
+// styled text needs [ClipVisible] instead, or escape bytes eat the budget and the
+// cut lands inside a sequence.
 //
-// Counting bytes rather than display cells is exact for the ASCII this
-// package emits, and conservative (never over-wide) for anything else.
+// Truncation never splits a UTF-8 sequence: a rune straddling the cut is dropped
+// whole.
 func Clip(msg string, nBytes int) string {
 	if nBytes <= 0 {
 		return ""
@@ -793,13 +765,11 @@ func Clip(msg string, nBytes int) string {
 // them, so one reset on the way out restores the user's shell regardless
 // of which component was responsible.
 //
-// It runs on every exit path, including those of commands that never opened a
-// region at all, so it has to be inert on a terminal it did not touch. DECSTBM
-// homes the cursor, which makes a bare reset anything but inert: on `magus
-// help` it was the only escape the whole command emitted, and it left the
-// cursor at row 1 for the shell to draw its prompt over the help text. Hence
-// the save/restore bracket - taken and released inside this one write, per the
-// register rule in [region].
+// It runs on every exit path, including commands that never opened a region, so
+// it must be inert on a terminal it did not touch. DECSTBM homes the cursor, so
+// a bare reset is not inert - on `magus help` it left the cursor at row 1 for the
+// shell to draw its prompt over the help text. Hence the save/restore bracket,
+// taken and released inside one write, per the register rule in [region].
 //
 // No-op when w is not a terminal, so callers do not have to branch.
 func ResetScrollMargins(w io.Writer, p Probe) error {

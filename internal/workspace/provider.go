@@ -71,10 +71,10 @@ func RegisterProviderRunner(fn ProviderRunner) {
 //   - magus\project("libs/foo", {...}) still layers on top of everything here,
 //     because WorkspaceRegistry.Apply runs after this.
 //
-// A rejected path fails the whole load rather than being skipped: a silently
-// dropped project is a target that no longer exists, with nothing on screen to say
-// so. ws is mutated in place, so a caller that continues past an error holds a
-// partially folded workspace; every caller today discards it.
+// A rejected path FAILS the whole load rather than being skipped: a silently dropped
+// project is a target that no longer exists with nothing on screen to say so. ws is
+// mutated in place, so a caller continuing past an error holds a partially folded
+// workspace; every caller today discards it.
 func AddProvidedProjects(ctx context.Context, ws *types.Workspace, spellNames []string, cache ProviderCache) error {
 	if len(spellNames) == 0 {
 		return nil

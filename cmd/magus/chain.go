@@ -25,15 +25,13 @@ import (
 //	magus run build --then file dist/magus contents
 //	magus run build --then file dist/magus export --path ./out/magus
 //
-// The point Dagger gets right is that a result is not a string the CLI prints, it
-// is an object the CLI knows verbs for. The point magus improves on is that the
-// object needs no return statement: a target already declared ctx.writesFiles(...) for
-// the cache, so the artifact set is known without asking the author for anything.
+// A result is not a string the CLI prints, it is an object the CLI knows verbs for -
+// and the object needs no return statement, because a target already declared
+// ctx.writesFiles(...) for the cache.
 //
-// The verb set is deliberately tiny and mirrors the returnable types: `outputs` is
-// the Directory, `file` is the File. Nothing here reaches for Dagger's
-// Container/Service - magus is not a container runtime, and copying that surface
-// would be cargo-culting the architecture rather than the idea.
+// The verb set is deliberately tiny and mirrors the returnable types: `outputs` is the
+// Directory, `file` is the File. Nothing reaches for Container/Service - magus is not a
+// container runtime.
 
 // chainUsage is the shared usage text; every misuse in this file prints it, so a
 // wrong verb teaches the whole grammar rather than only naming what failed.
@@ -261,23 +259,16 @@ func chainFile(ctx context.Context, m *magus.Magus, opts OutputOptions, artifact
 // chainPathFlag reads the required --path value for an export verb, and rejects
 // everything else.
 //
-// It is hand-rolled rather than a FlagSet because the chain grammar is
-// positional and `--then` hands it a raw tail. That makes it the one argument
-// reader in the CLI that does not inherit Go's flag semantics for free, so it
-// has to reproduce them deliberately. Two ways it previously did not, both found
-// by writing the grammar down as a test:
+// Hand-rolled rather than a FlagSet because the chain grammar is positional and
+// `--then` hands it a raw tail, so it is the one argument reader that does not inherit
+// Go's flag semantics for free and has to reproduce them deliberately:
 //
-//   - It accepted `--path v`, `-path v` and `--path=v` but NOT `-path=v`. Three
-//     spellings out of four is worse than one, because the missing one fails
-//     looking like a bad value rather than a bad syntax.
-//   - It scanned for --path anywhere and IGNORED every other argument, so
-//     `export --path out -o json` silently dropped the `-o json` and
-//     `export stray --path out` silently dropped `stray`. That is precisely the
-//     accepted-and-ignored failure the `--then` separator exists to prevent, and
-//     the sibling verbs (history, diff, contents) already rejected it.
+//   - all four spellings, including `-path=v`. Three out of four is worse than one,
+//     because the missing one fails looking like a bad value rather than bad syntax.
+//   - every other argument is REJECTED, not ignored. Scanning for --path anywhere let
+//     `export --path out -o json` silently drop the `-o json`.
 //
-// Repeat flags take the LAST value, matching Go's flag package rather than
-// inventing a stricter rule for one command.
+// Repeat flags take the LAST value, matching Go's flag package.
 func chainPathFlag(argv []string, verb string) (string, error) {
 	dst, seen := "", false
 	for i := 0; i < len(argv); i++ {
@@ -325,21 +316,19 @@ func artifactRoles(ctx context.Context, m *magus.Magus, artifacts []magus.Target
 
 // copyArtifact copies src to dst, creating parent directories.
 //
-// It writes a temporary file beside dst and renames it into place, which is not
-// ceremony - it is what makes three separate ways of destroying data impossible:
+// It writes a temporary file beside dst and renames it into place, which makes three
+// ways of destroying data impossible:
 //
-//   - dst == src. Opening dst with O_TRUNC truncated the source before the read,
-//     so `--then outputs export --path .` from the workspace root emptied every
-//     artifact it claimed to copy AND exited 0.
-//   - A failed read. Truncating first meant an io.Copy error left a half-written
-//     file where a valid artifact had been, with the original already gone.
-//   - A symlink planted at dst (by an earlier run, or a shared CI export dir).
-//     O_CREATE follows it and writes through to wherever it points; rename
-//     replaces the link itself.
+//   - dst == src. O_TRUNC truncated the source before the read, so
+//     `--then outputs export --path .` at the workspace root emptied every artifact it
+//     claimed to copy AND exited 0.
+//   - A failed read left a half-written file where a valid artifact had been.
+//   - A symlink planted at dst: O_CREATE follows it and writes through to wherever it
+//     points, while rename replaces the link itself.
 //
-// The mode is set on the temp file rather than left to O_CREATE, because O_CREATE
-// only applies its mode when it actually creates: exporting over an existing file
-// kept the OLD permissions, so an exported binary quietly lost +x.
+// The mode is set on the temp file rather than left to O_CREATE, which only applies its
+// mode when it actually creates - so exporting over an existing file kept the OLD
+// permissions and an exported binary quietly lost +x.
 func copyArtifact(src, dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err

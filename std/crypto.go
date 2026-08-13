@@ -30,23 +30,16 @@ func init() { Register(Crypto) }
 // SHA-1 and MD5 exist for interop with legacy checksums and are not
 // collision-resistant - never use them for anything security-relevant.
 //
-// The HMAC and byte-list methods moved here from
-// internal/interp/bindings/crypto_bytes.go once the descriptor gained a byte-list
-// type tag. They worked as undeclared companions but were invisible to
-// `magus describe modules`, the knowledge graph and the docs, and untyped in the
-// checker - reachable only by knowing they existed.
+// Signing is here so a magusfile can publish a signed artifact without a Go program in
+// the middle. Two things about its shape:
 //
-// Signing is here so a magusfile can publish a signed artifact without a Go program
-// in the middle. Two things about its shape:
+// The ALGORITHM is a parameter rather than part of the method name, so a second algorithm
+// is a case in signAlgorithm rather than four more methods. checkAlg is the runtime half,
+// rejecting anything but SignEd25519 by name.
 //
-// The ALGORITHM is a parameter rather than part of the method name, so a second
-// algorithm is a case in signAlgorithm rather than four more methods. The
-// sign/verify/public_key methods below declare alg's Arg.Enum as "SignAlgorithm";
-// checkAlg is the runtime half, rejecting anything but SignEd25519 by name.
-//
-// The KEY is named by environment variable rather than passed as a value: a key
-// that never becomes a Buzz string cannot be interpolated into a log line, an
-// error, or a captured run output.
+// The KEY is named by environment variable rather than passed as a value: a key that
+// never becomes a Buzz string cannot be interpolated into a log line, an error, or a
+// captured run output.
 var Crypto = Module{
 	Name: "crypto",
 	WASM: true,

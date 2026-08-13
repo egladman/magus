@@ -135,17 +135,13 @@ type Ret struct {
 	// Impl returns a Go struct carrying BuzzObject (or a slice of them). Empty for a
 	// scalar return.
 	//
-	// It is documentation the CHECKER and the reader can both use, not a
-	// marshalling instruction: the generator already recognizes an object by
-	// reflecting on the Impl, so the bytes are correct either way. What was
-	// missing is the NAME. Without it a method's return types as {str: any}
-	// everywhere outside the generator, so `magus\cmd(...)` hands back a map
-	// whose field names nothing checks - and a magusfile author has no way to
-	// learn that annotating `> ExecResult` would make the checker verify them.
+	// Documentation for the CHECKER and the reader, not a marshalling instruction:
+	// the generator already recognizes an object by reflecting on the Impl. What
+	// was missing is the NAME - without it a method's return types as {str: any}
+	// outside the generator, so nothing checks the field names.
 	//
-	// The generator VALIDATES this against the reflected Impl and fails codegen on
-	// a mismatch or an omission, so it cannot drift from the struct it names. That
-	// is the whole reason it is safe to state twice.
+	// The generator validates this against the reflected Impl and fails codegen on
+	// a mismatch, so it cannot drift from the struct it names.
 	Object string
 	// Enum names the Buzz enum this return's string is a case of. Same role as
 	// Arg.Enum, on the way out.
@@ -155,16 +151,13 @@ type Ret struct {
 // Namespace is a group of related host functions a module exposes behind one of its
 // members: `magus\cache.remote(...)`, `magus\secret.read(...)`.
 //
-// It is NOT a nested module. Buzz has no nested namespace - ast.NamespaceStmt carries
-// a single name - and the call site says so: `magus\cache.remote(x)` is a backslash
-// (namespace access) followed by a DOT (member access on a value). So the group is an
-// OBJECT held by the module, and its functions are that object's static methods. This
-// is upstream's own shape, the one `io\File.open(...)` takes.
+// NOT a nested module: Buzz has no nested namespace, and the call site says so -
+// `magus\cache.remote(x)` is a backslash (namespace access) then a DOT (member access
+// on a value). The group is an OBJECT held by the module, upstream's own shape.
 //
-// Declaring it buys the checking a bare value cannot: an object reports an unknown
-// member, so a typo in `magus\cache.remote` is a load error instead of a null that
-// reaches the VM. The runtime binding does not change - internal/interp/bindings still
-// MapSets a map under this name, and a Buzz object IS a map at run time.
+// Declaring it buys checking a bare value cannot: an object reports an unknown member,
+// so a typo is a load error instead of a null reaching the VM. The runtime binding is
+// unchanged - a Buzz object IS a map at run time.
 type Namespace struct {
 	Name string
 	Doc  string
@@ -209,21 +202,16 @@ type Method struct {
 	// at run time. It carries no Impl and gets no generated trampoline; what it
 	// gets is a declaration.
 	//
-	// The name is upstream Buzz's: `export extern fun` is exactly this, a signature
-	// whose implementation the host binds. The generated decls are already extern
-	// declarations, so this only feeds entries into a mechanism that existed.
+	// The name is upstream Buzz's `export extern fun`: a signature whose
+	// implementation the host binds.
 	//
-	// It exists because a descriptor could previously only mean "declared AND
-	// implemented statically", so any member needing a dynamic binding - one that
-	// closes over per-Open state, or that binds differently per surface, like
-	// `magus\project` being the real thing in a magusfile and an MGS1022 guard in a
-	// script - had to be MapSet and was therefore invisible to the checker. That is
-	// how `crypto\hash`, a function the crypto module has never had, type-checked
-	// inside a spell's AWS SigV4 signing path.
+	// It exists because a member needing a dynamic binding - one closing over
+	// per-Open state, or binding differently per surface - otherwise had to be
+	// MapSet and was invisible to the checker. That is how `crypto\hash`, a
+	// function the crypto module has never had, type-checked inside a spell.
 	//
-	// Set it only when something really does bind the member at run time. An Extern
-	// with nothing behind it declares a member that does not exist, which is the
-	// same defect pointed the other way.
+	// Set it only when something really does bind the member at run time: an Extern
+	// with nothing behind it declares a member that does not exist.
 	Extern bool
 }
 
@@ -232,15 +220,12 @@ type Method struct {
 // invocation.
 //
 // NO MODULE USES THIS, and TestNoModuleDeclaresFields keeps it that way. A Field
-// generates no extern declaration - Buzz has syntax for `extern fun` and none for an
-// extern value - so the checker cannot type it, and a caller who writes the parens
-// gets a runtime "str is not callable" instead of a compile error. vcs.name and
-// vcs.base were Fields and cost exactly that; both are Methods now. Declare a
-// constant as a Method returning it.
+// generates no extern declaration - Buzz has `extern fun` and no extern value - so the
+// checker cannot type it, and a caller who writes the parens gets a runtime "str is not
+// callable". Declare a constant as a Method returning it.
 //
-// The type stays because magus-docs, langservice-manifest and the ModuleFieldEntry
-// boundary type all render Fields, and dropping it would change a Buzz-visible
-// introspection shape to delete a branch that already never runs.
+// The type stays because magus-docs, langservice-manifest and ModuleFieldEntry all
+// render Fields, and dropping it would change a Buzz-visible introspection shape.
 type Field struct {
 	Name string
 	Doc  string
@@ -264,15 +249,12 @@ type Module struct {
 	// case for every top-level module.
 	//
 	// The split exists because Buzz binds a slash-path import under its BASENAME
-	// (see gopherbuzz/session.go's resolveImport, the same rule `magus/spell/go`
-	// already follows). So the path is only the spelling of the import line; the
-	// name is what every call site actually writes, and what codegen has to be
-	// able to put in a Go identifier. Conflating them would mean a module called
-	// `encoding/json` whose generated function was RegisterEncoding/json.
+	// (gopherbuzz/session.go's resolveImport). The path spells the import line; the
+	// name is what call sites write and what codegen puts in a Go identifier -
+	// conflating them would generate RegisterEncoding/json.
 	//
-	// Two modules may not share a Name even under different paths: Register
-	// panics on the collision, which is correct rather than incidental, because a
-	// magusfile cannot import both unaliased anyway.
+	// Two modules may not share a Name even under different paths: Register panics,
+	// correctly, since a magusfile cannot import both unaliased anyway.
 	Path    string
 	Doc     string
 	Fields  []Field
@@ -283,12 +265,9 @@ type Module struct {
 	// process, filesystem, or network access. It is what
 	// internal/interp/bindings/gen's WASM capability is generated FROM.
 	//
-	// Declared here because it is a fact about the MODULE, and it had no home: the
-	// classification lived only as prose in doc comments ("Pure computation:
-	// WASM-safe", std/math.go) and as a hand-maintained table in bindings/gen, whose
-	// wasm half carried the instruction "Keep this in sync with the WASM-capable
-	// entries of modules.go" - a mirror that could drift and a rule no test could
-	// check, because nothing upstream declared the answer.
+	// Declared here because it is a fact about the MODULE. It previously lived as
+	// prose in doc comments and a hand-maintained table in bindings/gen carrying
+	// "keep this in sync" - a mirror that could drift with no test to check it.
 	//
 	// uuid is WASM despite generating randomness: the browser supplies
 	// getRandomValues. The test is whether the BROWSER can provide it, not whether

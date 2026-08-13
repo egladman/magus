@@ -44,16 +44,14 @@ type ExecOptions struct {
 	Quiet bool
 	// TTY runs the child attached to a pseudo-terminal instead of pipes.
 	//
-	// This is the difference between the output a tool gives YOU and the output it
-	// gives a pipe. Nearly every modern CLI calls isatty() and, finding a pipe,
-	// turns off colour and drops its progress rendering. Without this flag magus
-	// necessarily shows - and caches - that degraded form.
+	// The difference between the output a tool gives YOU and the output it gives a
+	// pipe: nearly every modern CLI calls isatty() and drops colour and progress
+	// rendering, so without this magus shows and caches that degraded form.
 	//
-	// Two consequences worth knowing before setting it. A terminal is ONE stream,
-	// so stdout and stderr arrive interleaved and Capture returns them both in
-	// Stdout, with Stderr empty; that is inherent to a tty, not a shortcut here.
-	// And the captured bytes now contain escape sequences, so a tool that animates
-	// a progress bar records every frame it drew.
+	// Two consequences. A terminal is ONE stream, so stdout and stderr arrive
+	// interleaved and Capture returns both in Stdout with Stderr empty. And the
+	// captured bytes contain escape sequences, so an animated progress bar records
+	// every frame it drew.
 	//
 	// Unsupported outside unix (see pty_other.go), where it is an error rather than
 	// a silent downgrade to pipes.
@@ -200,11 +198,9 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		// than a streaming wrapper: it sees the complete output at once, so a secret split
 		// across two writes is still caught.
 		//
-		// A hold-back writer used to sit on c.Stdout/c.Stderr as well. It was removed
-		// because it broke two things a redaction feature has no business breaking. It
-		// truncated this value - the flush ran at function return, after these lines read
-		// the buffer, so anything after the last newline vanished and `printf abcdef` came
-		// back empty. And on the live path it swallowed unterminated output, so a child
+		// A hold-back writer on c.Stdout/c.Stderr was removed: it truncated this value
+		// (the flush ran at function return, after these lines read the buffer, so
+		// `printf abcdef` came back empty) and swallowed unterminated output, so a child
 		// prompting `Password: ` displayed nothing until it exited. The live stream is
 		// redacted per write by the tap in internal/cache/capture.go instead; a secret
 		// split across two writes to the TERMINAL is a documented limit.
@@ -225,13 +221,11 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 // tool going missing used to surface here as a bare exec error with no code and no
 // docs link.
 //
-// Two distinct shapes, and only the first is exec.ErrNotFound: a BARE name that PATH
-// lookup missed, and a PATH-FORM name ("./tool", "/usr/local/bin/tool") that the exec
-// syscall reports as ENOENT without LookPath ever running. Matching only the first
-// left every path-form invocation unclassified - std/magus.go re-execs magus by its
-// absolute path, so that is not a hypothetical shape. started guards the ENOENT arm:
-// a process that ran and exited can fail for its own reasons that wrap ENOENT, and
-// that is the tool's failure, not a missing tool.
+// Two shapes, and only the first is exec.ErrNotFound: a BARE name PATH lookup missed,
+// and a PATH-FORM name that the exec syscall reports as ENOENT without LookPath running.
+// Matching only the first left every path-form invocation unclassified, and std/magus.go
+// re-execs magus by absolute path. started guards the ENOENT arm: a process that ran and
+// exited can fail for its own reasons that wrap ENOENT.
 //
 // The wrap is transparent: errors.Is still reaches the underlying error, so callers
 // matching exec.ErrNotFound keep working.

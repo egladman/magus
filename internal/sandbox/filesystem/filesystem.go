@@ -99,17 +99,15 @@ func normalizePath(path string) (string, error) {
 	// once per ancestor instead of once.
 	//
 	// It matters because callers hit it in loops: fs.glob consults CheckReadCtx once per
-	// match (std/fs.go), so a check over paths that are not on disk pays the multiplier per
-	// path. Anything walking a large candidate set should filter to paths that exist before
-	// checking them, or memoize per run - the resolution is pure for a given tree.
+	// match, so a check over paths not on disk pays the multiplier per path. Filter to
+	// paths that exist before checking, or memoize per run - resolution is pure for a
+	// given tree.
 	//
-	// Resolving only the immediate parent was not enough: when the parent is also
-	// missing - creating a file inside a directory this run has yet to make - the
-	// old fallback kept the whole path lexical, so a symlink anywhere above it went
-	// unresolved. The rule paths it is compared against ARE resolved
-	// (ResolveRulePath), so the two forms could never match and the write was
-	// denied. That is every nested create on a machine whose workspace sits under a
-	// symlink, which on macOS is any path under /var or /tmp.
+	// Resolving only the immediate parent was not enough: when the parent is also missing,
+	// the fallback kept the whole path lexical, so a symlink above it went unresolved.
+	// Rule paths ARE resolved, so the two forms could never match and the write was
+	// denied - every nested create on a workspace under a symlink, which on macOS is any
+	// path under /var or /tmp.
 	missing := []string{}
 	dir := abs
 	for {

@@ -95,21 +95,17 @@ const doubleClickWindow = 400 * time.Millisecond
 // Mouse reporting modes, enabled together and disabled together.
 //
 // 1003 is any-event tracking: press, release, AND motion with no button held.
-// The bare motion is the point - it is what lets a row highlight as the pointer
-// crosses it, so a clickable thing LOOKS clickable. Without that feedback a
-// mouse-driven surface is a guessing game, which defeats the reason for having
-// one. (1002 is the middle mode and reports motion only while a button is down,
-// which is drag, not hover.)
+// The bare motion is what lets a row highlight as the pointer crosses it, so a
+// clickable thing LOOKS clickable. (1002 reports motion only while a button is
+// down, which is drag, not hover.)
 //
-// The cost is real and is why this is scoped: 1003 sends an event for every
-// cell the pointer crosses. It is only ever on while magus owns the terminal,
-// and a motion that does not change what is highlighted repaints nothing, so
-// the traffic ends at the parser.
+// The cost is why this is scoped: 1003 sends an event per cell crossed. It is
+// only on while magus owns the terminal, and a motion that changes no highlight
+// repaints nothing, so the traffic ends at the parser.
 //
-// 1006 is SGR extended coordinates, and it is not optional. The original
-// encoding packs each coordinate into one byte offset by 32, so it cannot
-// address past column 223 - on any modern wide terminal the right-hand columns
-// simply do not report. 1006 sends decimal parameters instead and has no limit.
+// 1006 is SGR extended coordinates and is NOT optional: the original encoding
+// packs each coordinate into one byte offset by 32, so it cannot address past
+// column 223 and the right-hand columns of a wide terminal never report.
 const (
 	mouseTrackAny   = "\x1b[?1003h\x1b[?1006h"
 	mouseTrackClick = "\x1b[?1000h\x1b[?1006h"
@@ -139,18 +135,14 @@ func mouseTrackFor() string {
 
 // ResetMouseTracking turns mouse reporting off unconditionally.
 //
-// [Input.Close] restores a session this process knows it opened. This is the
-// process-exit counterpart, and it is not redundant: a deferred Close does not
-// run on os.Exit, on a SIGKILL, or on a signal handler that exits without
-// unwinding - and a process that dies with tracking still on leaves the user
-// unable to select text in their own shell, with nothing on screen explaining
-// why. That is a broken terminal until they think to run `reset`, which is the
-// single worst thing this package could do to somebody.
+// [Input.Close] restores a session this process knows it opened; this is the
+// process-exit counterpart, and it is not redundant - a deferred Close does not
+// run on os.Exit or a SIGKILL, and a process that dies with tracking on leaves
+// the user unable to select text in their own shell with nothing explaining why.
 //
 // Disabling a mode that was never enabled is a no-op in every terminal, so this
-// is safe on every exit path including commands that never read a key. Unlike
-// DECSTBM these sequences do not move the cursor, so they need no save/restore
-// bracket.
+// is safe on every exit path. Unlike DECSTBM these sequences do not move the
+// cursor, so they need no save/restore bracket.
 //
 // No-op when w is not a terminal, so callers do not branch.
 func ResetMouseTracking(w io.Writer, p Probe) error {
@@ -163,18 +155,14 @@ func ResetMouseTracking(w io.Writer, p Probe) error {
 
 // Input owns the terminal's keyboard and mouse for as long as it is open.
 //
-// IT IS SCOPED ON PURPOSE, and that is the whole design. Enabling mouse
-// reporting takes the mouse away from the terminal emulator's own text
-// selection: while tracking is on, drag-to-select and the scroll wheel belong
-// to this process instead of to the user. magus's contract is that ordinary
-// output stays ordinary - real scrollback, selectable with the mouse - so
-// tracking is switched on only at the moments magus genuinely owns the
-// terminal (an end-of-run prompt, a step gate, a dashboard) and switched off
-// the instant it does not.
+// IT IS SCOPED ON PURPOSE: enabling mouse reporting takes drag-to-select and the
+// scroll wheel away from the terminal emulator. magus's contract is that ordinary
+// output stays ordinary, so tracking is on only at the moments magus genuinely
+// owns the terminal and off the instant it does not.
 //
-// Raw mode is set on the descriptor that is actually READ. That sounds obvious
-// and was not: the step gate calls MakeRaw on stderr and then reads stdin,
-// which happens to work only because both usually point at the same device.
+// Raw mode is set on the descriptor that is actually READ - the step gate calls
+// MakeRaw on stderr then reads stdin, which works only because both usually point
+// at the same device.
 //
 // Not safe for concurrent use: one goroutine reads.
 type Input struct {
@@ -346,21 +334,17 @@ func (i *Input) decode() (Event, error) {
 
 	next, err := i.r.Peek(1)
 	if err != nil {
-		// PROPAGATED, not decoded as a keystroke. Unlike the ESC above, this
-		// point is past the '[', so the buffer may be empty and this Peek can
-		// issue a real read - and CursorPosition puts a 250ms DEADLINE on the
-		// descriptor. A reply truncated at exactly "ESC [" therefore arrives
-		// here as os.ErrDeadlineExceeded.
+		// PROPAGATED, not decoded as a keystroke. Past the '[' the buffer may be
+		// empty, so this Peek can issue a real read against CursorPosition's
+		// 250ms deadline, and a reply truncated at "ESC [" arrives as
+		// os.ErrDeadlineExceeded.
 		//
-		// Returning KeyEscape for that was a bug with a user-visible symptom.
-		// CursorPosition treats an error as "abandon the query" but an EVENT as
-		// a keystroke that overtook the reply, so it queued the fabricated key
-		// in i.pending; discardBuffered drops bytes, not queued events, so the
-		// phantom outlived the query. The picker reads it, maps KeyEscape to
-		// ErrAborted, and closes itself with the user having pressed nothing.
+		// Returning KeyEscape queued a fabricated keystroke in i.pending, which
+		// discardBuffered does not drop, so the phantom outlived the query and
+		// closed the picker with the user having pressed nothing.
 		//
-		// KeyEscape is never a safe default for "we do not know": callers
-		// IGNORE KeyUnknown and QUIT on KeyEscape.
+		// KeyEscape is never a safe default for "we do not know": callers IGNORE
+		// KeyUnknown and QUIT on KeyEscape.
 		return Event{}, err
 	}
 	if next[0] == '<' {
@@ -485,11 +469,10 @@ const cprTimeout = 250 * time.Millisecond
 // CursorPosition asks the terminal where the cursor is, in absolute 1-based
 // terminal coordinates.
 //
-// This is what makes a mouse usable on an INLINE view. A [Zone] band can be
+// This is what makes a mouse usable on an INLINE view: a [Zone] band can be
 // hit-tested because magus chose the rows it drew on, but a view rendered where
-// the cursor happened to be - the picker, a watch frame - knows only its own
-// shape, not its position, so a click coordinate cannot be resolved against it.
-// The terminal is the only thing that knows, and this is how it is asked.
+// the cursor happened to be knows its shape and not its position. The terminal is
+// the only thing that knows.
 //
 // Returns ok=false when the terminal does not answer in time, which is an
 // ordinary answer: the caller keeps its keyboard handling and goes without

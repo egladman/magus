@@ -2,19 +2,14 @@ package spellruntime
 
 import _ "embed"
 
-// This file holds the generated Buzz `object` mirrors of every host-METHOD return
-// type (as opposed to target.go's mirrors, which are what a spell op WRITES). Each
-// one ships with the declarations of the host import path whose method actually
-// returns it - proc.exec returns ExecResult, so ExecResult ships with "os"; vcs.tags
-// returns [Tag], so Tag ships with "vcs" - assembled in
-// internal/interp/bindings/modules.go (magusModules and RegisterSpellSourceModules).
-// That is what lets a spell already doing `import "os";` annotate `> ExecResult`
-// with no second import: the type rides along with the module that returns it.
+// This file holds the generated Buzz `object` mirrors of every host-METHOD return type
+// (target.go's mirrors are what a spell op WRITES). Each ships with the declarations of
+// the import path whose method returns it - proc.exec returns ExecResult, so ExecResult
+// ships with "os" - so a spell already doing `import "os";` can annotate `> ExecResult`
+// with no second import.
 //
-// Ordering within each owning bundle still matters (see each var's comment): a
-// struct-valued field mirrors as its Go type's bare name, and that name must be
-// declared before the object referencing it or the compiled bundle fails to
-// construct.
+// Ordering within each bundle matters: a struct-valued field mirrors as its Go type's
+// bare name, which must be declared before the object referencing it.
 
 // ExecResultSource is the generated Buzz `object ExecResult` mirror of
 // types.ExecResult (see cmd/magus-utils types). Ships with "os": proc.exec /
@@ -53,15 +48,11 @@ var URLSource string
 // dependency between the two (SemverNext's fields are plain strings), but they
 // live next to each other since the two host methods are a pair.
 //
-// SemverVersionSource is ALSO co-located into the "vcs" bundle (see modules.go):
-// vcs.tags returns [Tag], and Tag.version is a SemverVersion, so a spell doing only
-// `import "vcs";` (no "semver") still needs the type in scope. A source-module
-// import line inside vcs's own bundle can't reach across to "semver" - a synthetic
-// module's companion source is only ever *collected* (parsed for its declarations),
-// never *executed*, so an `import` statement inside it is silently inert (see
-// Session.collectImportedModule) - so the fix is to duplicate the (already
-// generated, single source of truth) SemverVersionSource string into both bundles
-// at assembly time, not to duplicate the generated file.
+// SemverVersionSource is ALSO co-located into the "vcs" bundle: vcs.tags returns [Tag]
+// and Tag.version is a SemverVersion, so `import "vcs";` alone still needs it in scope.
+// An import line inside vcs's bundle cannot reach "semver" - a synthetic module's
+// companion source is only collected, never executed, so an import inside it is inert -
+// hence duplicating the generated string into both bundles at assembly time.
 //
 //go:generate go run ../../cmd/magus-utils types -type SemverVersion -out gen/types/semverversion.buzz
 //go:embed gen/types/semverversion.buzz
@@ -136,15 +127,9 @@ var ModuleSource string
 // TargetGraphNodeSource / TargetGraphProjectSource / TargetGraphSource are the
 // generated Buzz mirrors of magus.targets's result (types.TargetGraphOutput and the
 // node/ref types it nests). Ship with "magus" (magus.targets is a magus.* method).
-// This closes the same kind of gap Projects/Affected/Graph closed: magus.targets's
-// own doc told readers to annotate `> TargetGraph`, but until now no mirror existed
-// for it at all.
-//
-// Declare-before-use order, since each nested type is referenced by the one after
-// it: the five leaves (CrossTargetRef, TargetSpellUse, InputRef, OutputRef, UpdateRef) have no
-// struct-valued fields of their own, so their relative order doesn't matter; then
-// TargetGraphNode (which references all five), then TargetGraphProject (nodes:
-// [TargetGraphNode]), then TargetGraph (projects: [TargetGraphProject]).
+// Declare-before-use order, since each nested type is referenced by the next: the five
+// leaves have no struct-valued fields so their relative order does not matter; then
+// TargetGraphNode (referencing all five), TargetGraphProject, then TargetGraph.
 //
 //go:generate go run ../../cmd/magus-utils types -type CrossTargetRef -out gen/types/crosstargetref.buzz
 //go:embed gen/types/crosstargetref.buzz

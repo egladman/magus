@@ -25,21 +25,17 @@ import (
 // symbol used thousands of times in one file keeps a bounded provenance list.
 const MaxRefLines = 20
 
-// isCallableSuffix reports whether a SCIP descriptor suffix names something that can be
-// invoked. An indexer's enclosing range spans a whole declaration, signature included, so
-// the occurrences inside it are every symbol the definition mentions - not just the ones
-// it calls. Measured over this repo's own index, only 26.4% of the in-workspace
-// occurrences attributed that way are callables: 37.4% are struct fields, 15.4% types,
-// 11.8% packages. Emitting all of them under the name "calls" would be wrong roughly three
-// times in four. A field or type reference is still recorded, at file granularity, by the
-// `references` edge.
+// isCallableSuffix reports whether a SCIP descriptor suffix names something invocable.
 //
-// The suffix comes from SCIP's descriptor grammar - part of the moniker, which parseMoniker
-// already decodes - rather than from SymbolInformation.Kind. Kind is OPTIONAL, and an
-// indexer that omits it would silently produce no calls at all: scip-typescript 0.4.0 sets
-// UnspecifiedKind on all 9137 of this workspace's console symbols, while its monikers carry
-// 8440 Method descriptors. Reading the grammar keeps the rule language-neutral and
-// independent of what any one indexer chooses to populate.
+// An enclosing range spans a whole declaration, so the occurrences inside it are every
+// symbol the definition mentions, not just the ones it calls. Measured over this repo's
+// index, only 26.4% are callables (37.4% struct fields, 15.4% types), so emitting all of
+// them as "calls" would be wrong three times in four. Field and type references are still
+// recorded by the `references` edge.
+//
+// The suffix comes from SCIP's descriptor grammar rather than SymbolInformation.Kind,
+// which is OPTIONAL: scip-typescript 0.4.0 sets UnspecifiedKind on all 9137 of this
+// workspace's console symbols while its monikers carry 8440 Method descriptors.
 func isCallableSuffix(suffix scip.Descriptor_Suffix) bool {
 	// Macro counts because a macro invocation is a call in the languages that have them
 	// (Rust macro_rules!, C #define); Type, Term, Namespace, Parameter, and Meta do not.
@@ -140,26 +136,19 @@ func sortedEnclosing(buf []enclosingDef, doc *scip.Document) []enclosingDef {
 // segment is dropped from the key so a dependency bump does not churn every symbol
 // node. Output is sorted by key for deterministic assembly.
 //
-// Calls are attributed the same way, from the same occurrences: a reference that falls
-// inside a definition's enclosing range was written in that definition's body, so the
-// enclosing symbol is the caller. Collapsed per (caller, callee), restricted to callees
-// the workspace defines and that are callable at all (see isCallableSuffix). An indexer that
-// emits no enclosing ranges yields no calls, which is the honest result - nothing here
-// reconstructs a call from source text.
+// Calls are attributed from the same occurrences: a reference inside a definition's
+// enclosing range was written in that body, so the enclosing symbol is the caller.
+// Collapsed per (caller, callee) and restricted to callees the workspace defines and that
+// are callable (see isCallableSuffix). An indexer emitting no enclosing ranges yields no
+// calls, which is the honest result.
 //
 // declaredLanguage is the language the producing spell adapts, used when the index does
-// not say. SCIP makes Document.Language optional and scip-typescript sets it on nothing,
-// so reading the index alone leaves every TypeScript symbol unlabeled and
-// `magus query language:typescript` empty while `language:go` works. The document wins
-// when it has a value - an index may legitimately span languages - and the declaration
-// fills the gap rather than overriding it.
+// not say: SCIP makes Document.Language optional and scip-typescript sets it on nothing.
+// The document wins when it has a value; the declaration fills the gap.
 //
 // projectPath is the ingested project's workspace-relative path. SCIP document paths are
-// relative to the INDEXER's root (the project dir, where magus runs the indexer), so
-// each is joined onto projectPath to become workspace-relative - the same spine the buzz
-// file nodes and project->file edges use, so a nested project's symbols land on the right
-// files instead of dangling at the workspace root. projectPath "" or "." leaves paths
-// unchanged (the root project's paths are already workspace-relative).
+// relative to the INDEXER's root, so each is joined onto projectPath to land on the same
+// spine the file nodes use. "" or "." leaves paths unchanged.
 func ParseIndex(ctx context.Context, data []byte, projectPath, declaredLanguage string) ([]types.KnowledgeSymbol, error) {
 	var idx scip.Index
 	if err := proto.Unmarshal(data, &idx); err != nil {
@@ -313,21 +302,15 @@ func ParseIndex(ctx context.Context, data []byte, projectPath, declaredLanguage 
 // other path-bearing node comes from magus walking its own tree. So the check belongs
 // here and nowhere downstream.
 //
-// ok is false for a document outside the workspace, and the caller drops it. An indexer
-// routinely emits those: scip-go records occurrences in the packages it resolved, so a
-// document path can point into the module or build cache. Rebasing one produced paths
-// like "../../../../../Library/Caches/go-build/01/abc", which became real graph nodes -
-// a committed graph carried 93 of them, describing a layout that existed on one laptop.
-// The graph is committed, published, and shared through the remote cache, so dropping is
-// the whole answer rather than clamping: a file outside the workspace is not the
-// workspace's to describe.
+// ok is false for a document outside the workspace and the caller drops it. Indexers
+// routinely emit those - scip-go records occurrences in the packages it resolved - and a
+// committed graph once carried 93 nodes pointing into one laptop's go-build cache. The
+// graph is committed, published and shared, so dropping is the whole answer.
 //
-// rel is validated BEFORE it is joined, which is load-bearing. path.Join cleans, so
-// joining first cancels ".." against the project path instead of rejecting it:
-// path.Join("libs/gopherbuzz", "../../internal/x.go") is "internal/x.go", which has no
-// ".." left to find. That silently re-attributes a document to an unrelated project
-// rather than dropping it, and it only shows up when the ".." count is within the
-// project's own depth.
+// rel is validated BEFORE it is joined, which is load-bearing: path.Join cleans, so
+// joining first cancels ".." against the project path instead of rejecting it.
+// path.Join("libs/gopherbuzz", "../../internal/x.go") is "internal/x.go", which silently
+// re-attributes the document to an unrelated project.
 func workspacePath(projectPath, rel string) (string, bool) {
 	cleaned := path.Clean(rel)
 	if !workspaceRelative(cleaned) {

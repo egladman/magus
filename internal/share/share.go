@@ -2,13 +2,11 @@
 // time-boxed LAN listener that serves the console's READ surface to a phone on
 // the same network, guarded by a single short-lived read-only token.
 //
-// It is deliberately a THIRD listener, distinct from the daemon's two standing
-// ones (the loopback MCP/console server, bound 127.0.0.1 always). This one binds
-// the machine's LAN IPv4 on an ephemeral port, exists only while a share is
-// active, and every data route on it requires the exact share token minted for
-// that session. There is no loopback guard here - that is the whole point, the
-// phone is remote - so the token is the sole gate, and the listener + token are
-// created and destroyed together so neither can outlive the other.
+// Deliberately a THIRD listener, distinct from the daemon's loopback-bound standing
+// ones: it binds the machine's LAN IPv4 on an ephemeral port and exists only while a
+// share is active. There is no loopback guard - the phone is remote, which is the
+// point - so the TOKEN is the sole gate, and listener and token are created and
+// destroyed together so neither outlives the other.
 //
 // The console app is served from the SAME origin as its API on this listener, so
 // the phone's browser never issues a cross-origin request and CORS never engages.
@@ -43,18 +41,13 @@ const DefaultTTL = 15 * time.Minute
 // can never be made to live indefinitely. The token stays read-only regardless, so
 // a longer window only widens who may look, never what they may change.
 //
-// MaxTTL is 90 days rather than the 24 hours it started at, because the ceiling was
-// set for the phone-glance case and the wall-display one has different arithmetic: a
-// dashboard left running on a TV outlives any session, and a link that expires nightly
-// turns an ambient display into a daily chore, which in practice means people stop
-// using the feature rather than re-mint it.
+// MaxTTL is 90 days because a wall display outlives any session and a link expiring
+// nightly turns an ambient dashboard into a daily chore.
 //
-// It stays BOUNDED, and deliberately short of a year. This is a bearer credential -
-// whoever holds the URL is the audience - and it ends up in the places URLs end up:
-// pasted into chat, photographed off a screen, left in a kiosk browser's history. An
-// unexpiring share would make each of those permanent. A quarter is long enough that
-// re-minting is a habit rather than an interruption, and short enough that anything
-// leaked has a definite end.
+// It stays BOUNDED, and short of a year. This is a bearer credential - whoever holds
+// the URL is the audience - and URLs end up pasted into chat, photographed off a
+// screen, left in a kiosk browser's history. An unexpiring share makes each of those
+// permanent.
 const (
 	MinTTL = 1 * time.Minute
 	MaxTTL = 90 * 24 * time.Hour
@@ -236,10 +229,9 @@ func (m *Manager) resolveTTL(ttl time.Duration) time.Duration {
 // cancellation / Close). ttl is the caller-requested lifetime: a non-positive value
 // uses the manager's configured default, and any other value is clamped to
 // [MinTTL, MaxTTL]. consoleDir must contain the built console.
-// No ctx parameter on purpose. A share OUTLIVES the request that opened it - its lifetime
-// is m.parent (the daemon) bounded by ttl, set below - so accepting the caller's context
-// would invite exactly the wrong wiring: the HTTP handler passes r.Context(), and using it
-// here would tear the LAN share down the instant that POST returned.
+// No ctx parameter on purpose: a share OUTLIVES the request that opened it, so accepting
+// the caller's context invites the wrong wiring - the HTTP handler passes r.Context(),
+// which would tear the share down the instant that POST returned.
 func (m *Manager) Start(consoleDir string, guarded map[string]http.Handler, ttl time.Duration) (Session, error) {
 	addr, err := m.selectAddr()
 	if err != nil {
@@ -417,17 +409,14 @@ func (g *sessionGuard) admit(next http.Handler) http.Handler {
 // passive sniffer on the network can capture and replay the token; binding makes a
 // sniffed token useless from any device other than the one that first used it.
 //
-// The whole check-and-set runs under bindMu, so when two devices race the first request
-// exactly one wins the binding (sets boundHost) and the other is measured against it -
-// there is no window where both read an empty boundHost and both bind. boundHost is
-// per-Start state, so a supersede (a fresh sessionGuard) begins unbound; the binding
-// lives exactly as long as this share's listener and token.
+// The whole check-and-set runs under bindMu, so two racing devices cannot both read an
+// empty boundHost and both bind. boundHost is per-Start state, so a supersede begins
+// unbound and the binding lives exactly as long as this share's listener and token.
 //
-// Caveat: the identity is the source IP, which is NOT stable across a NAT rebind or a
-// Wi-Fi-to-cellular handoff. A legitimate phone that changes IP mid-session is locked
-// out (gets 403) and the operator must re-share. That false-reject is the accepted
-// cost of making a sniffed plaintext token useless from a different device; a rejected
-// device never tears the share down, it just cannot use this link.
+// CAVEAT: the identity is the source IP, which is NOT stable across a NAT rebind or a
+// Wi-Fi-to-cellular handoff. A phone that changes IP mid-session gets 403 and the
+// operator must re-share - the accepted cost of making a sniffed plaintext token
+// useless from another device. A rejected device never tears the share down.
 func (g *sessionGuard) bindDevice(host string) bool {
 	g.bindMu.Lock()
 	defer g.bindMu.Unlock()

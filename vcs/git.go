@@ -55,19 +55,14 @@ func (v gitVCS) Root(ctx context.Context, dir string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// ChangedFiles lists the files changed against base. It diffs the merge-base of base and
-// HEAD against the working tree, not base...HEAD. The three-dot form is commit-to-commit
-// and silently ignores uncommitted work, so editing files without committing (or
-// committing straight onto the base branch, where HEAD == base) reported an empty
-// set and "0 projects affected". The merge-base keeps changes that landed on base
-// after the branch point out of the set; diffing against the work tree folds in
-// staged and unstaged edits, matching the jj and hg drivers and the module's
-// "current working tree" contract. With a clean tree this still equals base...HEAD,
-// so CI behavior is unchanged.
+// ChangedFiles lists the files changed against base, diffing the merge-base of base and
+// HEAD against the WORKING TREE rather than base...HEAD. The three-dot form is
+// commit-to-commit and silently ignores uncommitted work, so editing without committing
+// reported "0 projects affected". With a clean tree the two are equal, so CI is
+// unchanged.
 //
-// ChangedFiles is not purely a read. In a SHALLOW clone whose merge base is missing it fetches
-// more history before answering (see recoverMergeBase), so it can touch the network and
-// add refs. A full clone is never fetched into.
+// NOT purely a read: in a shallow clone whose merge base is missing it fetches more
+// history first (see recoverMergeBase). A full clone is never fetched into.
 func (v gitVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, error) {
 	if err := checkRef(base); err != nil {
 		return nil, err
@@ -101,36 +96,27 @@ func (v gitVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, e
 // recoverMergeBase fetches history until base and HEAD share an ancestor in a shallow
 // clone, returning that merge base, or "" when it cannot get one.
 //
-// A shallow CI checkout holds HEAD, and maybe base, without holding their common
-// ancestor, so `git merge-base` fails exactly the way it does for a ref that does not
-// exist. Diff cannot tell those two apart, affected reports MGS1010, and the run silently
-// builds every project rather than the affected ones - on every run, forever. The
-// documented escape has been to clone the entire history, which makes CI pay for the
-// whole life of the repository to learn which handful of files a branch touched. Fetching
-// just enough history instead makes the cost track how far the branch diverged.
+// A shallow CI checkout holds HEAD, and maybe base, without their common ancestor, so
+// `git merge-base` fails the same way it does for a ref that does not exist. Diff cannot
+// tell those apart, affected reports MGS1010, and the run builds every project instead of
+// the affected ones. Fetching just enough history makes the cost track how far the branch
+// diverged, rather than the whole life of the repository.
 //
-// Both sides need history, and neither fetch alone supplies it: fetching only base leaves
-// HEAD grafted at its original depth, while fetching only the remote's configured refspec
-// never brings base in at all (a single-branch CI checkout has no base ref whatsoever).
-// Each round does both.
+// Both sides need history and neither fetch alone supplies it: fetching only base leaves
+// HEAD grafted at its original depth, and the remote's configured refspec never brings
+// base in at all. Each round does both.
 //
-// Which flag depends on whether the ref is already here, and getting this wrong destroys
+// Which flag depends on whether the ref is already here, and getting it wrong DESTROYS
 // history:
 //
-//   - --depth is absolute in BOTH directions. `git fetch --depth=32` against a checkout
-//     cloned at depth 50 leaves it holding 32. A ladder built on --depth would truncate
-//     every checkout deeper than its first rung, and a rung failing partway would leave
-//     the repository shallower than it was found - breaking a `git describe --tags` later
-//     in the same job. So anything already present is grown with --deepen, which only
-//     ever extends the boundary.
+//   - --depth is absolute in both directions: `git fetch --depth=32` against a checkout
+//     cloned at depth 50 leaves it holding 32. Anything already present is grown with
+//     --deepen, which only ever extends the boundary.
 //   - A base ref arriving for the FIRST time still needs --depth, because --deepen has no
-//     existing boundary to extend there and lets the new ref land with all its history,
-//     which is the whole cost this function exists to avoid.
+//     boundary to extend and would let the ref land with all its history.
 //
-// Only a shallow repository is touched, so a full clone - where a missing merge base means
-// a bad ref no fetch will fix - is left alone. A shallow developer checkout IS fetched
-// into, which is a real side effect of an otherwise read-only query; it only ever adds
-// history, never removes it.
+// Only a shallow repository is touched. A shallow developer checkout IS fetched into,
+// which only ever adds history, never removes it.
 func (v gitVCS) recoverMergeBase(ctx context.Context, dir, base string) string {
 	if shallow, err := vcsOutput(ctx, dir, "git", "rev-parse", "--is-shallow-repository"); err != nil || shallow != "true" {
 		return ""
@@ -992,11 +978,9 @@ func (v gitVCS) Conflicts(ctx context.Context, root string) ([]types.Conflict, e
 // parseConflicts turns `git status --porcelain=v1 -z` output into the unmerged paths.
 //
 // The NUL stream is walked by index, not ranged over: a rename or copy occupies TWO
-// fields ("R  new", then the original path alone) and the second is that entry's payload.
-// Read as its own status entry, an original path like "Utils/x.txt" parses as XY="Ut",
-// passes the U test, and surfaces as a phantom conflict at "ls/x.txt" - which either
-// aborts the resolve naming a file that does not exist, or feeds a never-conflicted path
-// to checkout and rm.
+// fields and the second is that entry's payload. Read as its own entry, an original path
+// like "Utils/x.txt" parses as XY="Ut", passes the U test, and surfaces as a phantom
+// conflict at "ls/x.txt".
 //
 // prefix is the workspace's path relative to the repository top level. Status paths are
 // top-level-relative, so a workspace rooted deeper needs them rebased and should skip the
@@ -1040,10 +1024,10 @@ func parseConflicts(out, prefix string) []types.Conflict {
 // KeepIncoming implements types.ConflictResolver, taking git's `--theirs`: during a
 // rebase, the commit being replayed.
 //
-// The batch attempt only saves processes. `git checkout --theirs` is atomic across its
-// pathspecs (a path with no stage 3 fails the invocation and writes nothing), so the
-// per-path fallback cannot find a half-applied side. A path resolving from neither stage
-// errors rather than being skipped; callers send both-deleted paths to RemoveConflicts.
+// The batch attempt only saves processes: `git checkout --theirs` is atomic across its
+// pathspecs, so the per-path fallback cannot find a half-applied side. A path resolving
+// from neither stage errors rather than being skipped; callers send both-deleted paths to
+// RemoveConflicts.
 // StartMerge begins a merge of ref without committing it. See types.MergeStarter.
 //
 // --no-ff as well as --no-commit: a fast-forwardable branch would otherwise MOVE rather
@@ -1163,14 +1147,12 @@ var gitRedirectVars = []string{
 // gitEnviron is the process environment with gitRedirectVars removed, so -C and cmd.Dir
 // decide which repository a subprocess acts on.
 //
-// Deliberately NOT "drop everything matching GIT_*". That prefix is not one category, it is
-// two, and only one of them is a problem. The variables above answer WHICH repository; the
-// rest answer HOW to work on it - GIT_SSH_COMMAND, GIT_ASKPASS and GIT_PROXY_COMMAND are
-// how a fetch authenticates (recoverMergeBase really does fetch), GIT_TERMINAL_PROMPT=0 is
-// what stops CI hanging on a credential prompt, GIT_EXEC_PATH is how a nonstandard install
-// finds its own subcommands, and GIT_TRACE is someone actively debugging. Stripping those
-// turns a working fetch into an auth failure, or silently discards the flag the user set to
-// find out why. The blanket rule is simpler to write and strictly worse to run.
+// Deliberately NOT "drop everything matching GIT_*": that prefix is two categories and
+// only one is a problem. The variables above answer WHICH repository; the rest answer HOW
+// to work on it - GIT_SSH_COMMAND and GIT_ASKPASS authenticate a fetch (recoverMergeBase
+// really does fetch), GIT_TERMINAL_PROMPT=0 stops CI hanging on a credential prompt,
+// GIT_TRACE is someone actively debugging. Stripping those turns a working fetch into an
+// auth failure.
 //
 // The maintenance rule, so this does not become guesswork: add a variable here only if it
 // changes which repository, work tree, index, object store, or ref namespace git acts on.
