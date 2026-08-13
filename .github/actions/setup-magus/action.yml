@@ -319,30 +319,23 @@ runs:
         echo "MAGUS_CONSOLE_ENABLED=false" >> "$GITHUB_ENV"
         echo "MAGUS_MCP_ENABLED=false" >> "$GITHUB_ENV"
 
+    # Log, not $GITHUB_STEP_SUMMARY: this action runs in every job, so a summary block here
+    # repeated the same banner twenty-odd times on one run's page.
     - name: Verify magus
-      shell: bash
-      run: magus version
-
-    - name: Write job summary
       shell: bash
       env:
         INSTALL_SOURCE: ${{ steps.strategy.outputs.resolved }}
         GIT_REF: ${{ inputs.git-ref }}
         SOURCE_PATH: ${{ inputs.source-path }}
       run: |
-        {
-          if [ "${INSTALL_SOURCE}" = "prebuilt" ]; then
-            echo "magus: installed prebuilt release, git-ref \`${GIT_REF}\` (signature verified)"
-          elif [ -n "${SOURCE_PATH}" ]; then
-            echo "magus: built from source, source-path \`${SOURCE_PATH}\` (the caller's own checkout)"
-          else
-            echo "magus: built from source, git-ref \`${GIT_REF}\` (verified reachable from main)"
-          fi
-          echo
-          echo '```'
-          magus version
-          echo '```'
-        } >> "$GITHUB_STEP_SUMMARY"
+        if [ "${INSTALL_SOURCE}" = "prebuilt" ]; then
+          echo "magus: installed prebuilt release, git-ref ${GIT_REF} (signature verified)"
+        elif [ -n "${SOURCE_PATH}" ]; then
+          echo "magus: built from source, source-path ${SOURCE_PATH} (the caller's own checkout)"
+        else
+          echo "magus: built from source, git-ref ${GIT_REF} (verified reachable from main)"
+        fi
+        magus version
 
     # magus formats the key=value lines itself; this only checks the shape before
     # trusting them. A release from before -o reached `version` (v0.3.0) prints its human
