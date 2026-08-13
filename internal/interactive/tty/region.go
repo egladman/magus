@@ -307,15 +307,15 @@ func cols(s string) int {
 	// composed - and counting those bytes as columns padded the row short,
 	// putting the box's right border nine columns in from the edge on exactly
 	// the rows that had a glyph.
+	// Through escapeLen rather than a second scanner: this one recognised CSI
+	// only and stepped two bytes past an OSC, so a hyperlink's whole URI counted
+	// as visible columns. A failure ref is hyperlinked, so that inflated an
+	// eight-column span to seventy, clipped text that fit, and left the box's
+	// right edge short on exactly the rows carrying a link.
 	n := 0
 	for i := 0; i < len(s); {
-		if s[i] == 0x1b {
-			i++
-			if i < len(s) && s[i] == '[' {
-				for i++; i < len(s) && s[i] >= 0x20 && s[i] <= 0x3f; i++ {
-				}
-			}
-			i++ // the final byte
+		if e := escapeLen(s[i:]); e > 0 {
+			i += e
 			continue
 		}
 		_, size := utf8.DecodeRuneInString(s[i:])

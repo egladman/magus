@@ -202,7 +202,15 @@ func (s *Screen) escape(src string) int {
 			break
 		}
 		if a, b, ok := twoParams(params); ok {
-			s.scrollTop, s.scrollBot = clamp(a, s.height), clamp(b, s.height)
+			top, bot := clamp(a, s.height), clamp(b, s.height)
+			// An INVERTED region is ignored, as a real terminal ignores it.
+			// Clamping the two independently accepted ESC[10;3r, and lineFeed
+			// then sliced cells[9:2] and panicked - a malformed sequence from
+			// captured output taking the process down. Crop guards the same
+			// shape and says so; this is where it is also reachable.
+			if top < bot {
+				s.scrollTop, s.scrollBot = top, bot
+			}
 		}
 	case 'm': // SGR
 		if params == "" || params == "0" {

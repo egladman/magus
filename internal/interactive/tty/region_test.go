@@ -783,3 +783,17 @@ func unbox(s string) string {
 	}
 	return strings.Join(keep, "\n")
 }
+
+// TestColsSkipsHyperlinkURI is the OSC regression. cols recognised CSI only and
+// stepped two bytes past an OSC introducer, so a hyperlink's URI counted as
+// visible columns: an 8-column ref measured ~70, fit clipped text that fitted,
+// and the box's right edge landed short on exactly the rows carrying a link.
+func TestColsSkipsHyperlinkURI(t *testing.T) {
+	t.Parallel()
+
+	linked := Hyperlink("out8518ac44", "file:///a/very/long/path/to/a/captured/log.log")
+	assert.Equal(t, len("out8518ac44"), cols(linked),
+		"a hyperlink is as wide as its visible text, not its URI")
+	assert.Equal(t, cols("out8518ac44"), cols(linked),
+		"linking text must not change how wide it measures")
+}

@@ -210,3 +210,18 @@ func TestCropClampsEveryRowCoordinate(t *testing.T) {
 		t.Errorf("scroll region outside the cropped screen: top=%d bot=%d", top, bot)
 	}
 }
+
+// TestInvertedScrollRegionIsIgnored is the panic regression: clamping the two
+// DECSTBM parameters independently accepted an inverted region, and the next
+// line feed sliced cells[top-1:bot-1] backwards and took the process down.
+func TestInvertedScrollRegionIsIgnored(t *testing.T) {
+	t.Parallel()
+
+	s := New(20, 10)
+	s.Write([]byte("\x1b[10;3r"))
+	assert.NotPanics(t, func() {
+		for range 20 {
+			s.Write([]byte("x\n"))
+		}
+	}, "an inverted scroll region must not reach lineFeed")
+}
