@@ -439,7 +439,7 @@ func (h *PrettyHandler) repaint() bool {
 	// It only ever grows. Shrinking mid-run would make the transcript jump
 	// upward as failures aged out, which is motion the reader did not cause.
 	if len(rows) > h.lease.Rows() {
-		_, _ = h.lease.Grow(min(len(rows), h.ceilingLocked()))
+		_ = h.lease.Grow(min(len(rows), h.ceilingLocked()))
 	}
 	rendered, _ := h.lease.Set(rows)
 	return rendered
@@ -1473,13 +1473,23 @@ func (h *PrettyHandler) ceilingLocked() int {
 // more on the "+N more" line the moment anything is left over. The ceiling is
 // the lease's, so the arithmetic has to happen before the rows exist.
 func fitsInBand(drawn []Failure, ceiling int) int {
+	// The overflow row is budgeted only once it is known to be needed. Reserving
+	// it unconditionally cost the last failure its row: five failures in a
+	// six-row band is one header plus five rows, which fits exactly, yet the
+	// loop stopped at four and spent the sixth row on "+1 more" - so the fifth
+	// pinned failure was never drawable at all. The guard that was meant to
+	// catch this compared n and rows AFTER the loop had already truncated, and
+	// both of its arms returned the same n.
+	if bandRows(drawn) <= ceiling {
+		return len(drawn)
+	}
 	rows, prev, n := 0, "", 0
 	for _, f := range drawn {
 		cost := 1
 		if f.Project != prev {
 			cost = 2 // its header too
 		}
-		// Leave a row for the overflow line whenever this would not be the last.
+		// One row is now genuinely spoken for by the "+N more" line.
 		if rows+cost > ceiling-1 {
 			break
 		}
@@ -1487,10 +1497,21 @@ func fitsInBand(drawn []Failure, ceiling int) int {
 		prev = f.Project
 		n++
 	}
-	if n == len(drawn) && rows <= ceiling {
-		return n // everything fits, so no overflow row is needed
-	}
 	return n
+}
+
+// bandRows is what drawn occupies untruncated: a row each, plus a header row
+// wherever the project changes.
+func bandRows(drawn []Failure) int {
+	rows, prev := 0, ""
+	for _, f := range drawn {
+		if f.Project != prev {
+			rows++
+			prev = f.Project
+		}
+		rows++
+	}
+	return rows
 }
 
 // drawnLocked is the failures the band draws, in the order it draws them.
@@ -1524,7 +1545,11 @@ func (h *PrettyHandler) drawnLocked() []Failure {
 func (h *PrettyHandler) Failures() []Failure {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return h.drawnLocked()
+	// TRUNCATED the same way band() truncates. Returning the full list let the
+	// prompt's arrow keys walk past the last drawn row: the highlight vanished
+	// and Enter reran a target that was not on screen. One list, one length.
+	drawn := h.drawnLocked()
+	return drawn[:fitsInBand(drawn, h.ceilingLocked())]
 }
 
 // SetSelection highlights the nth pinned failure, counting only the occupied

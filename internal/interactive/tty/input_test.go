@@ -2,6 +2,7 @@ package tty
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -24,7 +25,7 @@ func drain(t *testing.T, in *Input) []Event {
 	t.Helper()
 	var out []Event
 	for {
-		ev, err := in.Read()
+		ev, err := in.Read(t.Context())
 		if errors.Is(err, io.EOF) {
 			return out
 		}
@@ -111,12 +112,12 @@ func TestInputTimesADoubleClick(t *testing.T) {
 	// here or it does not exist.
 	in, clock := newTestInput("\x1b[<0;12;20M\x1b[<0;12;20M")
 
-	first, err := in.Read()
+	first, err := in.Read(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, 1, first.Clicks)
 
 	clock.advance(200 * time.Millisecond)
-	second, err := in.Read()
+	second, err := in.Read(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, 2, second.Clicks)
 }
@@ -125,32 +126,32 @@ func TestInputDoesNotDoubleClickAcrossCellsOrTime(t *testing.T) {
 	t.Parallel()
 	t.Run("too slow", func(t *testing.T) {
 		in, clock := newTestInput("\x1b[<0;12;20M\x1b[<0;12;20M")
-		_, err := in.Read()
+		_, err := in.Read(t.Context())
 		require.NoError(t, err)
 		clock.advance(doubleClickWindow + time.Millisecond)
-		second, err := in.Read()
+		second, err := in.Read(t.Context())
 		require.NoError(t, err)
 		assert.Equal(t, 1, second.Clicks)
 	})
 	t.Run("different cell", func(t *testing.T) {
 		in, clock := newTestInput("\x1b[<0;12;20M\x1b[<0;12;21M")
-		_, err := in.Read()
+		_, err := in.Read(t.Context())
 		require.NoError(t, err)
 		clock.advance(50 * time.Millisecond)
-		second, err := in.Read()
+		second, err := in.Read(t.Context())
 		require.NoError(t, err)
 		assert.Equal(t, 1, second.Clicks, "a click on the row below is a new click, not a double")
 	})
 	t.Run("triple press is not two doubles", func(t *testing.T) {
 		in, clock := newTestInput("\x1b[<0;12;20M\x1b[<0;12;20M\x1b[<0;12;20M")
-		_, err := in.Read()
+		_, err := in.Read(t.Context())
 		require.NoError(t, err)
 		clock.advance(50 * time.Millisecond)
-		second, err := in.Read()
+		second, err := in.Read(t.Context())
 		require.NoError(t, err)
 		require.Equal(t, 2, second.Clicks)
 		clock.advance(50 * time.Millisecond)
-		third, err := in.Read()
+		third, err := in.Read(t.Context())
 		require.NoError(t, err)
 		assert.Equal(t, 1, third.Clicks, "the pair resets, or every press past the first reports a double")
 	})
@@ -267,10 +268,10 @@ func TestInputMotionDoesNotArmADoubleClick(t *testing.T) {
 	// motion updated the double-click state, every hover-then-click would read
 	// as a double and act twice.
 	in, clock := newTestInput("\x1b[<35;12;20M\x1b[<0;12;20M")
-	_, err := in.Read()
+	_, err := in.Read(t.Context())
 	require.NoError(t, err)
 	clock.advance(50 * time.Millisecond)
-	press, err := in.Read()
+	press, err := in.Read(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, 1, press.Clicks)
 }
@@ -315,7 +316,7 @@ func TestInputNeverSurfacesACursorReplyAsInput(t *testing.T) {
 	// is not something the user did. Handing it to a caller would look like a
 	// phantom keypress.
 	in, _ := newTestInput("\x1b[12;40Rx")
-	ev, err := in.Read()
+	ev, err := in.Read(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, KeyRune, ev.Key)
 	assert.Equal(t, 'x', ev.Rune, "the reply was dropped and the real keystroke came through")
@@ -343,10 +344,10 @@ func TestInputQueuesKeystrokesThatOvertakeAReply(t *testing.T) {
 	assert.Equal(t, 7, row)
 	assert.Equal(t, 3, col)
 
-	first, err := in.Read()
+	first, err := in.Read(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, 'a', first.Rune)
-	second, err := in.Read()
+	second, err := in.Read(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, 'b', second.Rune, "queued keystrokes keep their order")
 }
@@ -415,7 +416,7 @@ func TestCursorPositionReadsARealReply(t *testing.T) {
 	assert.Equal(t, 14, row)
 	assert.Equal(t, 7, col)
 
-	ev, err := in.Read()
+	ev, err := in.Read(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, 'k', ev.Rune, "the keystroke that overtook the reply survived")
 }
@@ -435,7 +436,7 @@ func TestInputDecodesABareEscapeWithoutWaiting(t *testing.T) {
 	in := &Input{r: bufio.NewReader(r), in: r, now: time.Now}
 	done := make(chan Event, 1)
 	go func() {
-		ev, readErr := in.Read()
+		ev, readErr := in.Read(t.Context())
 		if readErr == nil {
 			done <- ev
 		}
@@ -500,4 +501,32 @@ func TestCursorPositionQueuesNoPhantomOnTwoByteTruncation(t *testing.T) {
 	assert.Empty(t, in.pending,
 		"a read deadline must not be queued as a keystroke; KeyEscape here quits the picker")
 	assert.Zero(t, in.r.Buffered(), "the partial reply is discarded, not left to be misread")
+}
+
+// TestReadReportsACancelledContext is the reason Read takes one: an interactive
+// prompt used to be unabandonable, so a run cancelled by a signal sat in a read
+// that nothing could interrupt, holding the terminal in raw mode.
+func TestReadReportsACancelledContext(t *testing.T) {
+	t.Parallel()
+
+	// Input is waiting even though bytes are available: a cancelled run wants
+	// the terminal back, not one more keystroke off the queue.
+	in, _ := newTestInput("abc")
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	_, err := in.Read(ctx)
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+// TestReadStillDeliversOnALiveContext keeps the cancellation check from costing
+// the ordinary path: a context that is not done must not change what Read does.
+func TestReadStillDeliversOnALiveContext(t *testing.T) {
+	t.Parallel()
+
+	in, _ := newTestInput("k")
+	ev, err := in.Read(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, KeyRune, ev.Key)
+	assert.Equal(t, 'k', ev.Rune)
 }

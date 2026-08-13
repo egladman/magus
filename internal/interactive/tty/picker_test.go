@@ -1,6 +1,7 @@
 package tty
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -60,7 +61,8 @@ func newTestSession(buf *ttyBuf, items []string, opts PickOptions) *session {
 		probe:  p,
 		view:   NewInlineView(buf, p),
 	}
-	s.refilter()
+	// Background: this helper builds a session for assertions, not a live loop.
+	_ = s.refilter(context.Background())
 	s.cursor = s.findInitial()
 	return s
 }
@@ -127,7 +129,7 @@ func TestSessionDrawErasesThePreviousRender(t *testing.T) {
 
 	buf.Reset()
 	s.filter = "alpha"
-	s.refilter()
+	_ = s.refilter(t.Context())
 	s.cursor = 0
 	s.draw()
 
@@ -168,7 +170,7 @@ func TestSessionCleanupErasesEverythingItDrew(t *testing.T) {
 
 func TestPickRejectsAnEmptyItemList(t *testing.T) {
 	t.Parallel()
-	idx, err := Pick(os.Stdin, os.Stderr, notATerminal(), nil, PickOptions{})
+	idx, err := Pick(t.Context(), os.Stdin, os.Stderr, notATerminal(), nil, PickOptions{})
 	assert.Equal(t, -1, idx)
 	assert.Error(t, err, "there is nothing to pick from")
 }
@@ -243,7 +245,7 @@ func TestSessionAsksTheTerminalOnlyOnce(t *testing.T) {
 	queries := 0
 	s.queryRow = func() (int, bool) { queries++; return 20, true }
 
-	s.refilter()
+	_ = s.refilter(t.Context())
 	s.draw()
 	require.Equal(t, 1, queries, "the first draw has to anchor against the terminal")
 	require.Equal(t, 20, s.promptRow)
@@ -252,7 +254,7 @@ func TestSessionAsksTheTerminalOnlyOnce(t *testing.T) {
 	// of them may cost another round trip.
 	for _, f := range []string{"a", "al", "alp", ""} {
 		s.filter = f
-		s.refilter()
+		_ = s.refilter(t.Context())
 		s.draw()
 	}
 	assert.Equal(t, 1, queries, "every later position is arithmetic")
@@ -265,19 +267,19 @@ func TestSessionTracksThePromptRowThroughHeightChanges(t *testing.T) {
 	s := &session{items: items, opts: PickOptions{MaxRows: 10}, out: &buf,
 		probe: terminal(80, 24), view: NewInlineView(&buf, terminal(80, 24)), mouseOK: true}
 	s.queryRow = func() (int, bool) { return 10, true }
-	s.refilter()
+	_ = s.refilter(t.Context())
 	s.draw() // 5 items + prompt = 6 lines, prompt anchored at row 10
 
 	// Narrowing to one match drops the block to 2 lines, so the prompt rises
 	// by four.
 	s.filter = "alpha"
-	s.refilter()
+	_ = s.refilter(t.Context())
 	s.draw()
 	assert.Equal(t, 6, s.promptRow)
 
 	// Widening again pushes it back down.
 	s.filter = ""
-	s.refilter()
+	_ = s.refilter(t.Context())
 	s.draw()
 	assert.Equal(t, 10, s.promptRow)
 }
@@ -292,11 +294,11 @@ func TestSessionClampsThePromptRowToTheLastLine(t *testing.T) {
 		probe: terminal(80, 24), view: NewInlineView(&buf, terminal(80, 24)), mouseOK: true}
 	s.queryRow = func() (int, bool) { return 24, true }
 	s.filter = "a"
-	s.refilter()
+	_ = s.refilter(t.Context())
 	s.draw() // 1 match + prompt = 2 lines at the bottom
 
 	s.filter = ""
-	s.refilter()
+	_ = s.refilter(t.Context())
 	s.draw() // 8 matches + prompt = 9 lines: the screen scrolled
 	assert.Equal(t, 24, s.promptRow, "the prompt cannot be pushed past the last row")
 }
@@ -311,7 +313,7 @@ func TestSessionReanchorsAfterAResize(t *testing.T) {
 		probe: p, view: NewInlineView(&buf, p), mouseOK: true}
 	queries := 0
 	s.queryRow = func() (int, bool) { queries++; return 20, true }
-	s.refilter()
+	_ = s.refilter(t.Context())
 	s.draw()
 	require.Equal(t, 1, queries)
 
@@ -334,7 +336,7 @@ func TestSessionKeepsTheScreenCorrectAcrossRedraws(t *testing.T) {
 		opts:  PickOptions{MaxRows: 10, Prompt: "project"},
 		out:   s, probe: p, view: NewInlineView(s, p),
 	}
-	sess.refilter()
+	_ = sess.refilter(t.Context())
 	sess.draw()
 
 	// Row 2 is the box's top rule, which carries the prompt; the list starts
@@ -354,7 +356,7 @@ func TestSessionKeepsTheScreenCorrectAcrossRedraws(t *testing.T) {
 
 	// Filtering shrinks the block; the rows it gives up must come back clean.
 	sess.filter = "doc"
-	sess.refilter()
+	_ = sess.refilter(t.Context())
 	sess.cursor = 0
 	sess.draw()
 	assert.Contains(t, s.Row(2), "project: doc_", "the filter is on the rule")
@@ -392,7 +394,7 @@ func TestSessionAlwaysDrawsSomethingOnAShortTerminal(t *testing.T) {
 				opts:  PickOptions{MaxRows: 10, Prompt: "project"},
 				out:   sc, probe: p, view: NewInlineView(sc, p),
 			}
-			sess.refilter()
+			_ = sess.refilter(t.Context())
 			sess.draw()
 
 			require.NotZero(t, sc.FindRow("project:"),
@@ -412,7 +414,7 @@ func TestSessionShowsAsManyItemsAsFit(t *testing.T) {
 	items := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"}
 	sess := &session{items: items, opts: PickOptions{MaxRows: 10}, out: sc, probe: p,
 		view: NewInlineView(sc, p)}
-	sess.refilter()
+	_ = sess.refilter(t.Context())
 	sess.draw()
 	assert.Equal(t, 10, sess.visible, "a tall terminal shows the configured window")
 
@@ -420,7 +422,7 @@ func TestSessionShowsAsManyItemsAsFit(t *testing.T) {
 	sp := terminal(40, 8)
 	sess = &session{items: items, opts: PickOptions{MaxRows: 10}, out: short, probe: sp,
 		view: NewInlineView(short, sp)}
-	sess.refilter()
+	_ = sess.refilter(t.Context())
 	sess.draw()
 	assert.Equal(t, 8-pickerRules-1, sess.visible, "a short one shows what it can, and still shows the prompt")
 	assert.NotZero(t, short.FindRow("filter:"))
@@ -434,17 +436,17 @@ func TestPickerLiveQueryReplacesTheList(t *testing.T) {
 	var asked []string
 	s := &session{
 		items: []string{"seed"},
-		opts: PickOptions{Query: func(f string) []string {
+		opts: PickOptions{Query: func(_ context.Context, f string) ([]string, error) {
 			asked = append(asked, f)
 			if f == "" {
-				return []string{"seed"}
+				return []string{"seed"}, nil
 			}
-			return []string{"from-graph-" + f, "second"}
+			return []string{"from-graph-" + f, "second"}, nil
 		}},
 	}
 
 	s.filter = "hash"
-	s.refilter()
+	_ = s.refilter(t.Context())
 
 	assert.Equal(t, []string{"from-graph-hash", "second"}, s.items,
 		"the query's results become the list, not a subset of the old one")
@@ -459,7 +461,7 @@ func TestPickerWithoutQueryStillFilters(t *testing.T) {
 	t.Parallel()
 	s := &session{items: []string{"apps/admin", "libs/authkit", "std"}}
 	s.filter = "a"
-	s.refilter()
+	_ = s.refilter(t.Context())
 	assert.Equal(t, []int{0, 1}, s.matches, "substring filter over the fixed list")
 }
 
@@ -493,7 +495,7 @@ func TestPickerDrawsTheSameBoxAsTheBand(t *testing.T) {
 		view: NewInlineView(&buf, terminal(60, 24)),
 		opts: PickOptions{Prompt: "project", MaxRows: 10},
 	}
-	s.refilter()
+	_ = s.refilter(t.Context())
 	s.draw()
 
 	out := stripANSI(buf.String())

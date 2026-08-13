@@ -339,27 +339,32 @@ func (z *Zone) HitSpan(row, col int) (key string, ok bool) {
 	return "", false
 }
 
-// Grow enlarges this lease to rows, reporting whether it grew and whether the
-// repaint that followed reached the terminal. The two are separate: a lease can
-// grow and still fail to paint, and a caller that treated a write error as "did
-// not grow" would keep asking.
+// Grow enlarges this lease to rows.
+//
+// It returns only an error, deliberately. It used to return a bool as well, in
+// the same position as [Lease.Set]'s and meaning something else - Set's reports
+// whether the paint reached the terminal, Grow's reported whether the model
+// changed - so a caller reading the two alike was wrong at one of them. A
+// caller that needs to know whether it actually got rows asks [Lease.Rows],
+// which is unambiguous.
+//
+// A refusal is not an error: released, already large enough, no descriptor and
+// no room all leave the lease the size it was and report nil. That is the
+// arbitration rule, not a failure.
 //
 // Growth ONLY: a band that shrank again would reflow the zone every time its
 // content came and went, and a reflow moves the whole screen. Growing on demand
 // lets a consumer claim one row for one notification rather than reserving for its
 // worst case and charging every run for the possibility.
-//
-// Refused, like a fresh grant, when the larger total would leave too little
-// scrolling area. The lease keeps the size it had.
-func (l *Lease) Grow(rows int) (grown bool, err error) {
+func (l *Lease) Grow(rows int) error {
 	if l == nil || l.zone == nil {
-		return false, nil
+		return nil
 	}
 	z := l.zone
 	z.mu.Lock()
 	defer z.mu.Unlock()
 	if l.released || rows <= l.rows {
-		return false, nil
+		return nil
 	}
 
 	total := rows - l.rows
@@ -368,20 +373,18 @@ func (l *Lease) Grow(rows int) (grown bool, err error) {
 	}
 	fd, ok := Fd(z.w)
 	if !ok {
-		return false, nil
+		return nil
 	}
 	width, height, sizeErr := z.probe.Size(fd)
 	if sizeErr != nil || !fits(width, height, total+borderRows) {
-		return false, nil
+		return nil
 	}
 	// Committed before the repaint, so a repaint error leaves the lease holding
 	// rows the zone never painted. Reported rather than swallowed: the caller
 	// decides whether a terminal that refused the write is worth acting on.
 	l.rows = rows
-	if _, err := z.repaint(); err != nil {
-		return true, err
-	}
-	return true, nil
+	_, err := z.repaint()
+	return err
 }
 
 // Rows reports how many rows this lease holds, for a caller bounds-checking an

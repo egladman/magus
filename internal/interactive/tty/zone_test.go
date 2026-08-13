@@ -253,7 +253,7 @@ func TestZoneCloseRacesTheRun(t *testing.T) {
 				}
 				_, _ = l.Set([]Line{{Text: fmt.Sprintf("lease %d frame %d", i, n)}})
 				_ = l.Rows()
-				_, _ = l.Grow(l.Rows() + 1)
+				_ = l.Grow(l.Rows() + 1)
 			}
 		}()
 	}

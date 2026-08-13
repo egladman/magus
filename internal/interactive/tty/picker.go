@@ -13,6 +13,7 @@
 package tty
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -68,7 +69,12 @@ type PickOptions struct {
 	// meaning; this type only draws strings.
 	//
 	// Nil keeps the substring filter, right for an already-complete list.
-	Query func(filter string) []string
+	//
+	// It takes the picker's context and may fail: it is called once per
+	// keystroke from inside the input loop, so a lookup that hangs freezes the
+	// prompt, and one that errors used to be indistinguishable from one that
+	// legitimately matched nothing.
+	Query func(ctx context.Context, filter string) ([]string, error)
 }
 
 // Pick blocks until the user selects an item or aborts. On success it returns
@@ -79,7 +85,7 @@ type PickOptions struct {
 // rather than reaching for os.Stdin and os.Stderr itself. It was the one
 // interactive surface a test could not redirect, which is exactly backwards for
 // the one that reads keys.
-func Pick(in *os.File, out io.Writer, p Probe, items []string, opts PickOptions) (int, error) {
+func Pick(ctx context.Context, in *os.File, out io.Writer, p Probe, items []string, opts PickOptions) (int, error) {
 	if len(items) == 0 && opts.Query == nil {
 		return -1, errors.New("picker: no items")
 	}
@@ -110,14 +116,22 @@ func Pick(in *os.File, out io.Writer, p Probe, items []string, opts PickOptions)
 		row, _, ok := input.CursorPosition()
 		return row, ok
 	}
-	s.refilter()
+	if err := s.refilter(ctx); err != nil {
+		return -1, fmt.Errorf("picker: %w", err)
+	}
 	s.cursor = s.findInitial()
 	s.draw()
 	defer s.cleanup()
 
 	for {
-		ev, err := input.Read()
+		ev, err := input.Read(ctx)
 		if err != nil {
+			// A cancelled context is not the user aborting: a caller that
+			// stopped the run wants ctx.Err(), and reporting ErrAborted here
+			// would say the reader declined a choice they were never offered.
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return -1, ctxErr
+			}
 			return -1, ErrAborted
 		}
 
@@ -172,16 +186,22 @@ func Pick(in *os.File, out io.Writer, p Probe, items []string, opts PickOptions)
 				// Strip one rune.
 				rs := []rune(s.filter)
 				s.filter = string(rs[:len(rs)-1])
-				s.refilter()
+				if err := s.refilter(ctx); err != nil {
+					return -1, fmt.Errorf("picker: %w", err)
+				}
 				s.cursor = 0
 			}
 		case KeyCtrlU:
 			s.filter = ""
-			s.refilter()
+			if err := s.refilter(ctx); err != nil {
+				return -1, fmt.Errorf("picker: %w", err)
+			}
 			s.cursor = 0
 		case KeyRune:
 			s.filter += string(ev.Rune)
-			s.refilter()
+			if err := s.refilter(ctx); err != nil {
+				return -1, fmt.Errorf("picker: %w", err)
+			}
 			s.cursor = 0
 		default:
 			continue
@@ -203,7 +223,10 @@ func RenderPick(out io.Writer, p Probe, items []string, opts PickOptions, filter
 		opts.MaxRows = 10
 	}
 	s := &session{items: items, opts: opts, filter: filter, out: out, probe: p}
-	s.refilter()
+	// Background: this renders one frame for the docs and never loops, so there
+	// is nothing to cancel. A Query that fails here is reported as no matches,
+	// which is what a still picture of an empty result should show anyway.
+	_ = s.refilter(context.Background())
 	if cursor >= 0 && cursor < len(s.matches) {
 		s.cursor = cursor
 	}
@@ -260,20 +283,25 @@ func filterIndices(items []string, filter string) []int {
 	return out
 }
 
-func (s *session) refilter() {
+func (s *session) refilter(ctx context.Context) error {
 	if s.opts.Query == nil {
 		s.matches = filterIndices(s.items, s.filter)
-		return
+		return nil
 	}
 	// A live query REPLACES the item list rather than narrowing it, so the
 	// indices the picker returns have to index the new list. Keeping items and
 	// matches in step here is what lets the rest of the session stay identical
 	// for both modes.
-	s.items = s.opts.Query(s.filter)
+	items, err := s.opts.Query(ctx, s.filter)
+	if err != nil {
+		return err
+	}
+	s.items = items
 	s.matches = make([]int, len(s.items))
 	for i := range s.items {
 		s.matches[i] = i
 	}
+	return nil
 }
 
 func (s *session) findInitial() int {
@@ -346,7 +374,7 @@ func (s *session) frame() string {
 		if i == s.cursor {
 			marker = SelectMark + " "
 		}
-		b.WriteString(boxWrap(ClipVisible(marker+s.items[idx], inner), inner, dim))
+		b.WriteString(boxWrap(ClipCols(marker+s.items[idx], inner), inner, dim))
 		b.WriteString("\n")
 	}
 	if len(s.matches) == 0 && maxRows > 0 {

@@ -585,10 +585,13 @@ func (n *Notifier) paint() error {
 	if _, err := n.lease.Set(rows); err != nil {
 		return err
 	}
-	if len(n.toasts) > n.lease.Rows() {
+	if before := n.lease.Rows(); len(n.toasts) > before {
 		// A refused grow is not an error: the stack simply stays as tall as the
-		// terminal allowed, and the oldest entry drops as usual.
-		if grown, _ := n.lease.Grow(min(len(n.toasts), n.max)); grown {
+		// terminal allowed, and the oldest entry drops as usual. Rows is asked
+		// again rather than read off a bool, so "did it grow" is answered by the
+		// lease itself.
+		_ = n.lease.Grow(min(len(n.toasts), n.max))
+		if n.lease.Rows() > before {
 			return n.paint() // now that there is room, draw what fits it
 		}
 	}

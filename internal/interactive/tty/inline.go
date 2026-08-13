@@ -83,13 +83,13 @@ func (v *InlineView) Paint(frame string) bool {
 	// be off by one - which shows up as the view slowly eating the transcript
 	// above it.
 	//
-	// ClipVisible, not Clip: a frame handed to this may already be styled, and
+	// ClipCols, not Clip: a frame handed to this may already be styled, and
 	// counting its escape bytes against a column budget cuts a coloured row in
 	// the middle of a sequence. The terminal then reads what follows as
 	// parameters and eats it.
 	lines := strings.Split(strings.TrimRight(frame, "\n"), "\n")
 	for i, line := range lines {
-		lines[i] = ClipVisible(line, width)
+		lines[i] = ClipCols(line, width)
 	}
 	if len(lines) >= height {
 		return false

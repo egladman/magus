@@ -205,7 +205,7 @@ func TestClipFitsWithinBudget(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := Clip(tc.msg, tc.n)
+			got := ClipBytes(tc.msg, tc.n)
 			assert.Equal(t, tc.want, got)
 			assert.LessOrEqual(t, len(got), tc.n, "Clip must never exceed its byte budget")
 		})
@@ -219,7 +219,7 @@ func TestClipNeverSplitsARune(t *testing.T) {
 	t.Parallel()
 	// Four 3-byte runes; a budget of 8 leaves 5 bytes for content, which
 	// lands mid-rune and must walk back to 3.
-	got := Clip("日本語文", 8)
+	got := ClipBytes("日本語文", 8)
 	assert.True(t, utf8.ValidString(got), "clip must not emit a partial rune: %q", got)
 	assert.LessOrEqual(t, len(got), 8)
 	assert.True(t, strings.HasSuffix(got, ellipsis))

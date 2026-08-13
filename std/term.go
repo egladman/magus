@@ -164,7 +164,7 @@ func TermPick(ctx context.Context, items []string, prompt, initialFilter string,
 		return -1, fmt.Errorf("term.pick: nothing to prompt on (standard input and standard error are not both terminals). " +
 			"Guard the call with term.isInteractive() and choose a default for unattended runs")
 	}
-	idx, err := tty.Pick(os.Stdin, os.Stderr, tty.SystemProbe, items, tty.PickOptions{
+	idx, err := tty.Pick(ctx, os.Stdin, os.Stderr, tty.SystemProbe, items, tty.PickOptions{
 		Prompt:        prompt,
 		InitialFilter: initialFilter,
 		Initial:       initial,

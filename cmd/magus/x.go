@@ -69,7 +69,7 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 
 	state, _ := interactive.LoadState()
 	last := state.LastTarget[chosen.Dir]
-	targetName, err := pickTarget(last)
+	targetName, err := pickTarget(ctx, last)
 	if err != nil {
 		if errors.Is(err, tty.ErrAborted) {
 			return nil
@@ -251,7 +251,7 @@ func pickProject(ctx context.Context, root string, all []*types.Project, filters
 	// not into `scored`. Recording it is how the label maps back to a project.
 	shown := items
 	if q := graphLookup(ctx, root, byPath); q != nil {
-		opts.Query = func(filter string) []string {
+		opts.Query = func(_ context.Context, filter string) ([]string, error) {
 			hits := q(filter)
 			if len(hits) == 0 {
 				// No graph match: fall back to the path filter, so typing
@@ -260,11 +260,11 @@ func pickProject(ctx context.Context, root string, all []*types.Project, filters
 				hits = filterPaths(items, filter)
 			}
 			shown = hits
-			return hits
+			return hits, nil
 		}
 	}
 
-	idx, err := tty.Pick(os.Stdin, os.Stderr, tty.SystemProbe, items, opts)
+	idx, err := tty.Pick(ctx, os.Stdin, os.Stderr, tty.SystemProbe, items, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -294,7 +294,7 @@ func filterPaths(items []string, filter string) []string {
 }
 
 // pickTarget shows the target list with last (if any) pre-highlighted.
-func pickTarget(last string) (string, error) {
+func pickTarget(ctx context.Context, last string) (string, error) {
 	initial := 0
 	for i, v := range xTargets {
 		if v == last {
@@ -302,7 +302,7 @@ func pickTarget(last string) (string, error) {
 			break
 		}
 	}
-	idx, err := tty.Pick(os.Stdin, os.Stderr, tty.SystemProbe, xTargets, tty.PickOptions{
+	idx, err := tty.Pick(ctx, os.Stdin, os.Stderr, tty.SystemProbe, xTargets, tty.PickOptions{
 		Prompt:  "target",
 		Initial: initial,
 		MaxRows: len(xTargets),

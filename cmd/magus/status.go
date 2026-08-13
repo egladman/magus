@@ -929,7 +929,7 @@ func parseRunning(args []string) (project, target string) {
 // is no ASCII substitute that draws them. That is a different question from
 // prose typography, which the repo does keep to ASCII.
 func truncate(s string, n int) string {
-	return tty.Clip(s, n)
+	return tty.ClipBytes(s, n)
 }
 
 // printLockStatus renders the workspace locks held right now.

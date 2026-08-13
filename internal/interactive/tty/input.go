@@ -2,6 +2,7 @@ package tty
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -183,6 +184,10 @@ type Input struct {
 	lastButton MouseButton
 	// now is the clock, injected so double-click timing is testable.
 	now func() time.Time
+	// deadlines records whether in accepts a read deadline, probed once at
+	// open. A pipe (every test that is not a pty) does not, and Read falls back
+	// to a blocking wait there rather than refusing to work.
+	deadlines bool
 }
 
 // ErrNotATerminal is returned by OpenInput when either end is not a terminal.
@@ -211,7 +216,12 @@ func OpenInput(in *os.File, out io.Writer, p Probe) (*Input, error) {
 		_ = restore()
 		return nil, fmt.Errorf("tty: enable mouse reporting: %w", err)
 	}
-	return &Input{r: bufio.NewReader(in), in: in, out: out, restore: restore, now: time.Now}, nil
+	// Probed once rather than per Read: the answer is a property of the
+	// descriptor, and a failed SetReadDeadline on every poll would be its own
+	// cost. Clearing it immediately leaves no deadline in force.
+	deadlines := in.SetReadDeadline(time.Time{}) == nil
+	return &Input{r: bufio.NewReader(in), in: in, out: out, restore: restore,
+		now: time.Now, deadlines: deadlines}, nil
 }
 
 // Close turns mouse reporting off and restores the terminal. Idempotent and
@@ -234,17 +244,32 @@ func (i *Input) Close() error {
 	return trackErr
 }
 
-// Read blocks until the user does something, and reports it.
+// readPoll is how long Read parks in one syscall before looking at ctx again.
+// Short enough that a cancelled run gives the terminal back promptly, long
+// enough that an idle prompt is not a spin loop.
+const readPoll = 50 * time.Millisecond
+
+// Read blocks until the user does something, and reports it. It returns
+// ctx.Err() when ctx is cancelled first.
 //
-// It blocks, rather than offering a channel or a deadline, because every caller
-// so far is a prompt waiting on a person.
+// Cancellation is by DEADLINE, not by closing the descriptor: standard input
+// belongs to the process, and a prompt that closed it would take the shell's
+// stdin with it. So the wait for the first byte is a poll under a short read
+// deadline, and ctx is checked between polls - the mechanism [Input.CursorPosition]
+// already relies on, applied to the wait a person can sit in indefinitely.
 //
-// There is no way to interrupt it. Close restores the terminal and disables
-// mouse reporting; it does not close the descriptor, so a goroutine already
-// parked in Read stays parked until a key arrives. A caller that needs
-// cancellation cannot get it here yet.
-func (i *Input) Read() (Event, error) {
+// The deadline covers ONLY the wait for a sequence's first byte. Once one has
+// arrived the rest is read without one, because a terminal writes an escape
+// sequence in a single write and a deadline firing mid-sequence would leave its
+// tail to be decoded as stray keystrokes - an arrow key arriving as a bracket.
+//
+// On a descriptor that cannot take a deadline the wait is an ordinary blocking
+// read, so behaviour is unchanged where cancellation was never available.
+func (i *Input) Read(ctx context.Context) (Event, error) {
 	for {
+		if err := i.waitForInput(ctx); err != nil {
+			return Event{}, err
+		}
 		ev, err := i.read()
 		if err != nil {
 			return Event{}, err
@@ -255,6 +280,39 @@ func (i *Input) Read() (Event, error) {
 			continue
 		}
 		return ev, nil
+	}
+}
+
+// waitForInput blocks until a byte is available to decode, ctx is done, or the
+// descriptor fails. It is a no-op when something is already queued or buffered,
+// which is what keeps the deadline off the middle of an escape sequence.
+func (i *Input) waitForInput(ctx context.Context) error {
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if len(i.pending) > 0 || i.r.Buffered() > 0 {
+			return nil
+		}
+		if !i.deadlines {
+			// No deadline support, so there is nothing to poll with: fall back
+			// to the blocking read this method replaced. ctx was checked above,
+			// which is all that can be offered here.
+			return nil
+		}
+		if err := i.in.SetReadDeadline(time.Now().Add(readPoll)); err != nil {
+			i.deadlines = false
+			return nil
+		}
+		_, err := i.r.Peek(1)
+		_ = i.in.SetReadDeadline(time.Time{})
+		if err == nil {
+			return nil
+		}
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			continue // nobody typed; look at ctx and wait again
+		}
+		return err
 	}
 }
 

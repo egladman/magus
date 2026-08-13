@@ -1288,3 +1288,35 @@ func TestSplitStaysLegibleWhenNarrow(t *testing.T) {
 		assert.LessOrEqual(t, at, inner, "never wider than the band at width %d", inner)
 	}
 }
+
+// TestFitsInBandDrawsTheLastFailureWhenItFits is the off-by-one regression: the
+// overflow row used to be reserved before it was known to be needed, so a set
+// that fitted exactly lost its final failure to a "+1 more" line counting one.
+func TestFitsInBandDrawsTheLastFailureWhenItFits(t *testing.T) {
+	t.Parallel()
+
+	// One project, five failures: a header row plus five rows is six.
+	drawn := make([]Failure, 5)
+	for i := range drawn {
+		drawn[i] = Failure{Project: "web", Target: fmt.Sprintf("t%d", i)}
+	}
+	assert.Equal(t, 5, fitsInBand(drawn, 6), "an exact fit draws every failure")
+	assert.Equal(t, 6, bandRows(drawn), "header plus one row each")
+
+	// One row short: the overflow line is now real and takes a row of its own.
+	assert.Less(t, fitsInBand(drawn, 5), 5, "over budget, a row goes to the overflow line")
+}
+
+// TestFitsInBandCountsAHeaderPerProject keeps the budget honest across the
+// grouped tree, where each project change costs a row nothing else pays for.
+func TestFitsInBandCountsAHeaderPerProject(t *testing.T) {
+	t.Parallel()
+
+	drawn := []Failure{
+		{Project: "web", Target: "test"},
+		{Project: "api", Target: "test"},
+	}
+	assert.Equal(t, 4, bandRows(drawn), "two projects, two headers, two rows")
+	assert.Equal(t, 2, fitsInBand(drawn, 4))
+	assert.Less(t, fitsInBand(drawn, 3), 2, "three rows cannot hold both trees")
+}

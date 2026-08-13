@@ -126,7 +126,7 @@ func chooseInitVCS(ctx context.Context, root string, m *magus.Magus, vcsFlag str
 			}
 		}
 	}
-	idx, err := tty.Pick(os.Stdin, os.Stderr, tty.SystemProbe, choices, tty.PickOptions{Prompt: "vcs", Initial: initial, MaxRows: len(choices)})
+	idx, err := tty.Pick(ctx, os.Stdin, os.Stderr, tty.SystemProbe, choices, tty.PickOptions{Prompt: "vcs", Initial: initial, MaxRows: len(choices)})
 	if err != nil {
 		return "", err
 	}

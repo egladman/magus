@@ -124,7 +124,7 @@ func Hyperlink(text, uri string) string {
 	return fmt.Sprintf(osc8Fmt, uri) + text + osc8End
 }
 
-// ClipVisible shortens s to cols DISPLAY COLUMNS, counting only what the
+// ClipCols shortens s to cols DISPLAY COLUMNS, counting only what the
 // reader can see and never cutting inside an escape sequence.
 //
 // [Clip] counts bytes, which is exact for the plain text it was written for and
@@ -137,7 +137,7 @@ func Hyperlink(text, uri string) string {
 // Escape sequences are copied through whole and cost nothing against the
 // budget, so the styling of the part that survives is preserved along with any
 // reset that closes it.
-func ClipVisible(s string, cols int) string {
+func ClipCols(s string, cols int) string {
 	if cols <= 0 {
 		return ""
 	}

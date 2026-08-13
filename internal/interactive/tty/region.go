@@ -327,7 +327,7 @@ func cols(s string) int {
 
 // fit shortens text to width DISPLAY COLUMNS, marking the cut.
 //
-// ClipVisible gets the widths right, which is what keeps the box square, but it
+// ClipCols gets the widths right, which is what keeps the box square, but it
 // cuts silently - and a row that was truncated must say so, or a reader takes a
 // half value for the whole one. So the mark is put back here, inside the same
 // budget, rather than by going back to the byte-counting Clip that put it there
@@ -342,7 +342,7 @@ func fit(text string, width int) string {
 	if width <= cols(ellipsis) {
 		return ellipsis[:width]
 	}
-	return ClipVisible(text, width-cols(ellipsis)) + ellipsis
+	return ClipCols(text, width-cols(ellipsis)) + ellipsis
 }
 
 // spanExtent is where a keyed span ended up, in 1-based inclusive columns.
@@ -729,12 +729,12 @@ const ellipsis = "..."
 //
 // nBytes bounds the whole result, ellipsis included, and is a BYTE budget: exact
 // for the ASCII this package emits and conservative for anything else. Already
-// styled text needs [ClipVisible] instead, or escape bytes eat the budget and the
+// styled text needs [ClipCols] instead, or escape bytes eat the budget and the
 // cut lands inside a sequence.
 //
 // Truncation never splits a UTF-8 sequence: a rune straddling the cut is dropped
 // whole.
-func Clip(msg string, nBytes int) string {
+func ClipBytes(msg string, nBytes int) string {
 	if nBytes <= 0 {
 		return ""
 	}

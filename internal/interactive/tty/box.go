@@ -28,13 +28,13 @@ func boxRule(inner int, lc, rc, left, right string, dim func(string) string) str
 	if left == "" && right == "" {
 		return dim(lc + strings.Repeat(boxH, inner) + rc)
 	}
-	lead := " " + ClipVisible(left, max(inner-4, 0)) + " "
+	lead := " " + ClipCols(left, max(inner-4, 0)) + " "
 	if left == "" {
 		lead = ""
 	}
 	tail := ""
 	if right != "" {
-		tail = " " + ClipVisible(right, max(inner-cols(lead)-3, 0)) + " "
+		tail = " " + ClipCols(right, max(inner-cols(lead)-3, 0)) + " "
 	}
 	gap := inner - cols(lead) - cols(tail) - 1
 	if gap < 0 {

@@ -107,7 +107,7 @@ func loadPreview(f cache.Failure, width int) []string {
 		lines = lines[len(lines)-previewRows:]
 	}
 	for i, l := range lines {
-		lines[i] = tty.ClipVisible(sanitizeLogLine(l), width)
+		lines[i] = tty.ClipCols(sanitizeLogLine(l), width)
 	}
 	return lines
 }
@@ -191,7 +191,7 @@ func promptFailures(ctx context.Context, root string, h *cache.PrettyHandler) er
 
 	selected := 0
 	for {
-		action, item, err := runFailurePrompt(h, &selected)
+		action, item, err := runFailurePrompt(ctx, h, &selected)
 		if err != nil || action == actionNone {
 			return err
 		}
@@ -217,7 +217,7 @@ func promptFailures(ctx context.Context, root string, h *cache.PrettyHandler) er
 // Opening and closing per round rather than holding across an action is what
 // keeps the guarantee above: whatever runs next finds a terminal in its normal
 // state, and a panic anywhere in the action cannot leave mouse reporting on.
-func runFailurePrompt(h failureBand, selected *int) (failureAction, cache.Failure, error) {
+func runFailurePrompt(ctx context.Context, h failureBand, selected *int) (failureAction, cache.Failure, error) {
 	in, err := tty.OpenInput(os.Stdin, os.Stderr, tty.SystemProbe)
 	if err != nil {
 		// Not a terminal on both ends: an ordinary answer, not a failure.
@@ -233,7 +233,7 @@ func runFailurePrompt(h failureBand, selected *int) (failureAction, cache.Failur
 	if err := showHint(hint, os.Stderr); err != nil {
 		return actionNone, cache.Failure{}, err
 	}
-	action, item := dispatchFailureKeys(in.Read, h, tty.StderrZone(), selected)
+	action, item := dispatchFailureKeys(func() (tty.Event, error) { return in.Read(ctx) }, h, tty.StderrZone(), selected)
 	return action, item, nil
 }
 
