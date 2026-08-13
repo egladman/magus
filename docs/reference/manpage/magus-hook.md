@@ -27,7 +27,7 @@ a JSON tool to unwrap it: the envelope already says what is about to run and
 whether it is a write. An explicit flag still wins, because a wrapper that
 passed one meant it.
 
---host, --session, and --event are attribution, not policy. They record who
+--agent-name, --session, and --event are attribution, not policy. They record who
 produced the observation on the activity event, and the verdict never reads
 them. All three are optional and unvalidated, including the host name, which
 is an opaque label the caller chooses rather than a set magus knows: a magus
@@ -36,11 +36,11 @@ cannot extract a session id must still be able to get a verdict.
 
 ## Options
 
+**--agent-name** *string*
+: Name of the agent host this invocation came from (attribution only)
+
 **--event** *string*
 : The host's hook event name (e.g. PreToolUse)
-
-**--host** *string*
-: Name of the agent host this invocation came from (attribution only)
 
 **--path**
 : Judge the input as a file path an edit is about to write, not as a shell command

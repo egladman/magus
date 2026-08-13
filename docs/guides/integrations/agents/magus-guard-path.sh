@@ -18,7 +18,7 @@
 # A host with no file-write hook still gets the command rules; it just misses
 # this one. That is a coverage difference to record, not a reason to skip it.
 #
-# GUARD_HOST and HOST_SESSION_PATH work exactly as they do in
+# GUARD_AGENT_NAME and HOST_SESSION_PATH work exactly as they do in
 # magus-guard-command.sh: attribution recorded on the activity event, never an
 # input to the verdict.
 #
@@ -27,14 +27,14 @@
 # surface advises and never denies, so HOST_RESPONSE below renders only the
 # advise arm. If magus ever denies on this surface, this file drops it, and the
 # gate is what turns that into a build failure rather than a silent gap.
-# magus-guard-template: 1
+# magus-guard-template: 3
 # magus-guard-coverage: schema=1 host=claude-code,codex surface=path deny=none advise=model pass=none
 
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}`
 # and the first one would terminate a ${...} expansion.
 [ -n "$HOST_EVENT_PATH" ] || HOST_EVENT_PATH='tool_input.file_path'
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
-[ -n "$GUARD_HOST" ] || GUARD_HOST='claude-code'
+[ -n "$GUARD_AGENT_NAME" ] || GUARD_AGENT_NAME='claude-code'
 [ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}{{end}}'
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 
@@ -51,7 +51,7 @@ fi
 event=$(cat)
 session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty")
 
-# Attribution is BEST EFFORT; the verdict is not. --host and --session postdate the current magus
+# Attribution is BEST EFFORT; the verdict is not. --agent-name and --session postdate the current magus
 # release, and an older binary rejects the unknown flag outright - printing usage to stdout and
 # exiting non-zero - which leaves the host with no verdict rather than an unattributed one. Try with
 # attribution, fall back to the call this script made before it existed.
@@ -62,7 +62,7 @@ guard() {
 # verdict, never merely because it exited non-zero. This surface only advises today, so a
 # blocking exit cannot reach it - the shapes stay identical so neither file grows a
 # behavior the other lacks.
-verdict=$(guard --host "$GUARD_HOST" --session "$session" 2>/dev/null)
+verdict=$(guard --agent-name "$GUARD_AGENT_NAME" --session "$session" 2>/dev/null)
 status=$?
 if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
   verdict=$(guard 2>/dev/null)

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -19,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/interactive"
@@ -1560,6 +1562,288 @@ func newestGoSource(root string) (time.Time, string) {
 		}
 	}
 	return newest, at
+}
+
+// guardTemplateBasenames are the shipped templates a config FILE names by
+// filename - see docs/guides/integrations/agents/. A self-contained template
+// that a host discovers by placing it in a directory, rather than being
+// pointed at by another config's text, is checked directly in the directory
+// branch of checkGuardWiring instead of appearing here.
+var guardTemplateBasenames = []string{
+	"magus-guard-command.sh",
+	"magus-guard-path.sh",
+	"cursor-guard.sh",
+}
+
+// guardWiringCandidates are the config locations a shipped host glue installs
+// into (docs/guides/integrations/agents.md), workspace-relative and
+// home-relative. Path-shaped literals only, so the check can refer to "host
+// hook config at <path>" without ever naming a host in Go.
+func guardWiringCandidates(root, home string) []string {
+	candidates := []string{
+		filepath.Join(root, ".claude", "settings.json"),
+		filepath.Join(root, ".cursor", "hooks.json"),
+		filepath.Join(root, ".opencode", "plugins"),
+	}
+	if home != "" {
+		candidates = append(candidates,
+			filepath.Join(home, ".codex", "config.toml"),
+			filepath.Join(home, ".config", "opencode", "plugins"),
+		)
+	}
+	return candidates
+}
+
+// resolveGuardBinaryForWiring resolves the binary a guard hook would actually
+// execute, in the same order checkGuardBinary reports on: ./magus at the
+// workspace root if present and executable, else whatever resolves on PATH.
+// Kept separate from checkGuardBinary rather than shared, so a change to one
+// check's resolution order cannot silently retarget the other's canary.
+func resolveGuardBinaryForWiring(root string) (string, bool) {
+	bin := filepath.Join(root, "magus")
+	if info, err := os.Stat(bin); err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
+		return bin, true
+	}
+	if found, err := exec.LookPath("magus"); err == nil {
+		return found, true
+	}
+	return "", false
+}
+
+// guardReferencedTemplates finds every known template basename mentioned in a
+// config's bytes and resolves each to a file on disk: first relative to the
+// workspace root (the dogfooded shape - `sh docs/guides/.../foo.sh`), then
+// relative to the config's own directory, then as written. A single config
+// commonly names two (this repository's own .claude/settings.json wires the
+// command and path templates as separate hooks), so this checks every
+// basename rather than stopping at the first.
+//
+// Returns resolved paths AND the tokens that resolved nowhere, because those
+// are the finding rather than the absence of one: a config whose hook points
+// at a template that is not there runs nothing, and reporting only what
+// resolved would grade exactly that case as healthy.
+func guardReferencedTemplates(root, configDir string, body []byte) (found, missing []string) {
+	for _, base := range guardTemplateBasenames {
+		idx := bytes.Index(body, []byte(base))
+		if idx == -1 {
+			continue
+		}
+		start := idx
+		for start > 0 {
+			switch body[start-1] {
+			case '"', '\'', ' ', '\t', '\n', '=':
+			default:
+				start--
+				continue
+			}
+			break
+		}
+		token := string(body[start : idx+len(base)])
+		resolved := ""
+		for _, candidate := range []string{
+			filepath.Join(root, token),
+			filepath.Join(configDir, token),
+			token,
+		} {
+			if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+				resolved = candidate
+				break
+			}
+		}
+		if resolved == "" {
+			missing = append(missing, token)
+			continue
+		}
+		found = append(found, resolved)
+	}
+	return found, missing
+}
+
+// guardTemplateMarkerProblem reports why path's magus-guard-template marker is
+// behind agent.GuardTemplateVersion, or "" when it is current.
+//
+// A MISSING marker is a finding, not a pass, and this is the case that
+// motivated the whole check. The marker postdates the templates themselves, so
+// a copy carrying none is older than versioning - the single most likely thing
+// to be broken, and the exact shape of the plugin that invoked a removed
+// subcommand for weeks while its host reported nothing. Measured on a real
+// machine 2026-08-12: a plugin installed under ~/.config/opencode/plugins/,
+// still calling a subcommand magus had removed and passing its argument in
+// argv, graded healthy under the first version of this function - which
+// returned "" whenever it found no marker.
+//
+// Only ever called on a file already identified AS a template. A wiring-only
+// config that merely names templates (JSON, no comment syntax to carry a
+// marker) is never passed here; what it names is what gets checked.
+func guardTemplateMarkerProblem(path string, body []byte) string {
+	idx := bytes.Index(body, []byte(agent.GuardTemplateMarker))
+	if idx == -1 {
+		return fmt.Sprintf("%s carries no %s line, so it predates template versioning and may not judge anything - re-download it: docs/guides/integrations/agents.md",
+			path, agent.GuardTemplateMarker)
+	}
+	rest := body[idx+len(agent.GuardTemplateMarker):]
+	if end := bytes.IndexByte(rest, '\n'); end != -1 {
+		rest = rest[:end]
+	}
+	version, err := strconv.Atoi(strings.TrimSpace(string(rest)))
+	if err != nil || version >= agent.GuardTemplateVersion {
+		return ""
+	}
+	return fmt.Sprintf("%s carries template version %d, current is %d - re-download it: docs/guides/integrations/agents.md",
+		path, version, agent.GuardTemplateVersion)
+}
+
+// checkGuardWiring answers the question checkGuardBinary cannot: not just
+// which binary would judge a command, but whether anything in this checkout
+// actually HANDS it one. A fresh worktree has no .claude/settings.json (it is
+// gitignored on purpose), so its guard rules are correct and completely
+// unenforced, and nothing else says so. One layer up from a broken invocation
+// (a host glue calling the wrong subcommand for weeks, unnoticed) sits the
+// same failure with nothing to notice at all: no invocation.
+//
+// Two layers, cheapest first. Layer A is a binary-level canary that always
+// runs: it proves the resolved binary can still judge a command at all,
+// independent of whether anything is wired to ask it to. Layer B is a wiring
+// inventory: for each candidate host hook config found, it confirms the
+// config actually mentions magus and hook, and that every template file it
+// names (or, for a self-contained template, the file itself) carries a
+// current magus-guard-template marker.
+//
+// Layer B never executes a candidate config's command string - jq or a
+// host-relative path may only make sense inside the host's own event loop.
+// The canary plus the marker comparison is the honest, portable probe; full
+// end-to-end execution is guard_templates.txtar's job, which runs in CI
+// against real event fixtures.
+func (r *runner) checkGuardWiring() types.DoctorCheck {
+	home, _ := os.UserHomeDir()
+	return checkGuardWiring(r.runCtx(), r.ws.Root(), home, guardCanaryBudget)
+}
+
+// guardCanaryBudget bounds the canary. Generous for what it runs - one `magus
+// hook` that has to load the workspace to answer - but bounded because doctor
+// is interactive and a hung binary must not hang the report. Injected rather
+// than hardcoded at the call site so a test on a loaded machine can raise it
+// without loosening what ships.
+const guardCanaryBudget = 5 * time.Second
+
+// checkGuardWiring is the free-function core, taking home explicitly rather
+// than calling os.UserHomeDir() itself so a test can point it at a fixture
+// directory instead of the machine's real home.
+func checkGuardWiring(ctx context.Context, root, home string, budget time.Duration) types.DoctorCheck {
+	const name = "guard wiring"
+
+	bin, ok := resolveGuardBinaryForWiring(root)
+	if !ok {
+		return types.DoctorCheck{
+			Name:    name,
+			Status:  types.DoctorFail,
+			Message: "no ./magus and no magus on PATH, so the guard canary could not run",
+			Details: []string{"build one: magus run build ."},
+		}
+	}
+
+	canaryCtx, cancel := context.WithTimeout(ctx, budget)
+	defer cancel()
+	cmd := exec.CommandContext(canaryCtx, bin, "hook", "-o", "name")
+	cmd.Dir = root
+	cmd.Stdin = strings.NewReader("git stash")
+	stdout, runErr := cmd.Output()
+	firstLine := strings.SplitN(strings.TrimSpace(string(stdout)), "\n", 2)[0]
+	var exitErr *exec.ExitError
+	exitedNonZero := errors.As(runErr, &exitErr) && exitErr.ExitCode() != 0
+	if firstLine != "deny" || !exitedNonZero {
+		exit := "0"
+		switch {
+		case exitErr != nil:
+			exit = strconv.Itoa(exitErr.ExitCode())
+		case runErr != nil:
+			exit = runErr.Error()
+		}
+		return types.DoctorCheck{
+			Name:    name,
+			Status:  types.DoctorFail,
+			Message: "the guard canary did not return a deny",
+			Details: []string{
+				"command: printf 'git stash' | " + bin + " hook -o name",
+				"stdout:  " + firstLine,
+				"exit:    " + exit,
+				"rebuild: magus run build .",
+			},
+		}
+	}
+
+	var wired []string
+	var problems []string
+	for _, candidate := range guardWiringCandidates(root, home) {
+		info, err := os.Stat(candidate)
+		if err != nil {
+			continue
+		}
+		if info.IsDir() {
+			entries, err := os.ReadDir(candidate)
+			if err != nil {
+				continue
+			}
+			for _, e := range entries {
+				if e.IsDir() || filepath.Ext(e.Name()) != ".ts" {
+					continue
+				}
+				p := filepath.Join(candidate, e.Name())
+				body, err := os.ReadFile(p)
+				if err != nil || !bytes.Contains(body, []byte("magus")) || !bytes.Contains(body, []byte("hook")) {
+					continue
+				}
+				wired = append(wired, p)
+				if problem := guardTemplateMarkerProblem(p, body); problem != "" {
+					problems = append(problems, problem)
+				}
+			}
+			continue
+		}
+
+		body, err := os.ReadFile(candidate)
+		if err != nil || !bytes.Contains(body, []byte("magus")) || !bytes.Contains(body, []byte("hook")) {
+			continue
+		}
+		wired = append(wired, candidate)
+		refPaths, missing := guardReferencedTemplates(root, filepath.Dir(candidate), body)
+		for _, token := range missing {
+			problems = append(problems, fmt.Sprintf("%s references %s, which does not exist, so that hook runs nothing: re-download it: docs/guides/integrations/agents.md", candidate, token))
+		}
+		for _, refPath := range refPaths {
+			refBody, err := os.ReadFile(refPath)
+			if err != nil {
+				problems = append(problems, fmt.Sprintf("%s references %s, which cannot be read: %v", candidate, refPath, err))
+				continue
+			}
+			if problem := guardTemplateMarkerProblem(refPath, refBody); problem != "" {
+				problems = append(problems, problem)
+			}
+		}
+	}
+
+	if len(wired) == 0 {
+		return types.DoctorCheck{
+			Name:    name,
+			Status:  types.DoctorAdvice,
+			Message: "no agent-host hook config found in this checkout; the guard rules exist but nothing invokes them",
+			Details: []string{"see docs/guides/integrations/agents.md"},
+		}
+	}
+	if len(problems) > 0 {
+		return types.DoctorCheck{
+			Name:    name,
+			Status:  types.DoctorFail,
+			Message: "guard wiring found but out of date",
+			Details: problems,
+		}
+	}
+	return types.DoctorCheck{
+		Name:    name,
+		Status:  types.DoctorOK,
+		Message: fmt.Sprintf("guard wired via %d host hook config path(s)", len(wired)),
+		Details: wired,
+	}
 }
 
 // selfStalingScanLimits bound what checkSelfStalingOutputs is willing to read. A workspace

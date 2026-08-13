@@ -16,13 +16,14 @@
 // exactly what the assertions below pin.
 //
 // Coverage is by COMPOSITION, and the seam is worth naming: this file proves the
-// plugin asks correctly, and guard_templates.txtar proves that question gets the
-// right answer from a real binary. Set GUARD_MAGUS_BIN to a built magus to close
-// the seam locally and run the live case at the bottom against it.
+// plugin asks correctly (recorded shim = invocation shape), guard_templates.txtar
+// proves the sh templates get the right answer from a real binary, and
+// opencode-plugin.live.test.ts proves THIS plugin does too (live = binary
+// interface) - it drives the same exported functions through a Bun.spawn shim
+// backed by a real child process instead of a canned reply. Set GUARD_MAGUS_BIN to
+// a built magus to run it locally; it skips loudly without one.
 
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { accessSync, constants } from "node:fs";
 import test from "node:test";
 
 import { MagusGuard } from "./opencode-plugin.ts";
@@ -103,7 +104,7 @@ test("a shell command is judged over stdin by the top-level hook subcommand", as
   assert.equal(calls.length, 1);
   // The exact contract, spelled out rather than pattern-matched: these are the two
   // things that were wrong, and a loose assertion would have passed on both.
-  assert.deepEqual(calls[0].argv, ["hook", "--host", "opencode", "-o", "json"]);
+  assert.deepEqual(calls[0].argv, ["hook", "--agent-name", "opencode", "-o", "json"]);
   assert.equal(calls[0].stdin, "git stash");
   assert.ok(!calls[0].argv.includes("agent"), "`magus agent hook` was removed; hook is top level");
   assert.ok(!calls[0].argv.includes("--"), "the command goes on stdin; hook takes no positionals");
@@ -117,7 +118,7 @@ test("a file write is judged on the path surface, also over stdin", async () => 
     await h["tool.execute.before"]({ tool: "write" }, { args: { filePath: "gen/index.json" } });
   });
 
-  assert.deepEqual(calls[0].argv, ["hook", "--path", "--host", "opencode", "-o", "json"]);
+  assert.deepEqual(calls[0].argv, ["hook", "--path", "--agent-name", "opencode", "-o", "json"]);
   assert.equal(calls[0].stdin, "gen/index.json");
   // Declared advise=human: OpenCode has no context-injection arm, so an advise
   // reaches the person and never the model. It must not throw.
@@ -154,26 +155,4 @@ test("a verdict from an unknown schema is ignored rather than obeyed", async () 
   });
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /schema 99/);
-});
-
-// The seam-closing case. Skipped unless GUARD_MAGUS_BIN names a real binary,
-// because a fresh clone has none and a gate that needs one would fail on checkout.
-// Run it with: GUARD_MAGUS_BIN=$PWD/magus pnpm --dir docs/guides/integrations/agents test
-const magusBin = process.env.GUARD_MAGUS_BIN;
-const haveBinary = (() => {
-  if (magusBin === undefined || magusBin === "") return false;
-  try {
-    accessSync(magusBin, constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-})();
-
-test("live: the recorded argv really produces a deny from magus", { skip: !haveBinary }, () => {
-  const argv = ["hook", "--host", "opencode", "-o", "json"];
-  const proc = spawnSync(magusBin as string, argv, { input: "git stash", encoding: "utf8" });
-  const verdict = JSON.parse(proc.stdout);
-  assert.equal(verdict.decision, "deny");
-  assert.equal(verdict.schema_version, 1);
 });

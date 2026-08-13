@@ -62,26 +62,27 @@ func run(outDir, srcDir string) error {
 		return fmt.Errorf("read agents-section.md: %w", err)
 	}
 	cat := agent.NewCatalog(os.DirFS(srcDir), string(section), types.KnowledgeSchemaVersion)
-	full, err := cat.EmbeddedSkills(agent.VariantFull)
+	defs, err := cat.EmbeddedSkills()
 	if err != nil {
 		return err
-	}
-	simple, err := cat.EmbeddedSkills(agent.VariantSimple)
-	if err != nil {
-		return err
-	}
-	if len(full) != len(simple) {
-		return fmt.Errorf("permutation count mismatch: %d full, %d simple", len(full), len(simple))
 	}
 
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return err
 	}
-	for i, f := range full {
-		s := simple[i]
-		if f.Name != s.Name {
-			return fmt.Errorf("permutation order mismatch at %d: %q vs %q", i, f.Name, s.Name)
+	full := make([]agent.AgentSkill, 0, len(defs))
+	simple := make([]agent.AgentSkill, 0, len(defs))
+	for _, def := range defs {
+		f, err := cat.Render(def, agent.VariantFull)
+		if err != nil {
+			return err
 		}
+		s, err := cat.Render(def, agent.VariantSimple)
+		if err != nil {
+			return err
+		}
+		full = append(full, f)
+		simple = append(simple, s)
 		page := renderSkill(cat, f, s)
 		if err := emit.File(filepath.Join(outDir, f.Name+".md"), []byte(page)); err != nil {
 			return err
@@ -115,10 +116,11 @@ func renderSkill(cat *agent.Catalog, full, simple agent.AgentSkill) string {
 
 	writeStampTable(&b, cat, full)
 
-	b.WriteString("## Full form\n\nThe default: the steps plus the rationale for each.\n\n")
+	b.WriteString("## Full form\n\nThe default: every mechanical step spelled out, plus the rationale for each.\n\n")
 	writeFenced(&b, full.Body)
-	fmt.Fprintf(&b, "## Short form (`--simple`)\n\nThe same steps with the rationale withheld; the bar under "+
-		"the heading above shows by how much. Both are hand-authored from one source body; see "+
+	fmt.Fprintf(&b, "## Short form (`--simple`)\n\nThe enumeration dropped, the judgment kept - for the most "+
+		"capable readers, not the least; the bar under the heading above shows by how much. Both are "+
+		"hand-authored from one source body; see "+
 		"[Agents](../../guides/integrations/agents.md) for when to prefer which.\n\n")
 	b.WriteString("<details>\n<summary>Show the short form</summary>\n\n")
 	writeFenced(&b, simple.Body)

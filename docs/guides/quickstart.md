@@ -139,11 +139,15 @@ Every skill ships in two hand-authored permutations from one source body:
 magus agent install .claude/skills --simple
 ```
 
-The default carries the rationale behind each step. `--simple` withholds it,
-keeping the imperative steps, for a reader that infers the why. Prefer it for a
-capable model where context budget matters, and the full form when you want the
-agent to be able to justify what it is doing, or when you are onboarding a human
-to the same conventions.
+The default spells out every mechanical step and the rationale for each.
+`--simple` drops the enumeration and keeps the judgment, for the MOST capable
+readers - the ones that can re-derive the steps from the tool surface but not
+which failures are silent. Prefer the full form for any model you have not
+measured, and when onboarding a human to the same conventions.
+
+`--simple` also writes an always-full `<skill>-full` twin beside each skill.
+When you delegate to a smaller model, hand it that name: it gets what a default
+install would have given it, without the top-level choice deciding for it.
 
 Both permutations share ONE content digest, so they version together: a magus
 upgrade makes both stale at once, never one silently. Check with:
@@ -178,7 +182,11 @@ opencode, Amp, Zed are all covered):
 Point it at a real binary. If the guard cannot find one it says so loudly, and
 `magus doctor`'s **guard binary** check names the binary a hook would run and
 fails when it is older than your working tree - because a stale guard enforces
-stale rules while looking perfectly healthy.
+stale rules while looking perfectly healthy. The **guard wiring** check answers
+a different question: whether anything actually invokes it. It runs a canary
+command through the resolved binary and inventories every host hook config it
+finds, advising when none exists (correct rules, nothing asking them) and
+failing when a config points at a template file that is stale or missing.
 
 ## Where to go next
 

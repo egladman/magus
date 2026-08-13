@@ -116,6 +116,10 @@ func agentUsage(w io.Writer) {
 	fmt.Fprintln(w, "                 failures are silent. Both permutations are hand-authored")
 	fmt.Fprintln(w, "                 from one source and share one content digest, so they go")
 	fmt.Fprintln(w, "                 stale together and `graph verify` treats them alike.")
+	fmt.Fprintln(w, "                 Also writes an always-full <name>-full twin beside each")
+	fmt.Fprintln(w, "                 skill: simple bets the installing reader can re-derive")
+	fmt.Fprintln(w, "                 what it drops, and a delegated or smaller model never")
+	fmt.Fprintln(w, "                 made that bet - point it at the twin by name.")
 	fmt.Fprintln(w, "  --tar          stream a tar archive to stdout instead of writing files")
 	fmt.Fprintln(w, "  --global       allow absolute destination paths in write mode")
 }
@@ -147,12 +151,12 @@ func hookUsage(w io.Writer) {
 	fmt.Fprintf(w, "  printf '%%s' 'MAGUS.md' | magus hook --path\n")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Flags:")
-	fmt.Fprintln(w, "  --path              judge the input as a file path an edit is about to")
-	fmt.Fprintln(w, "                      write, not as a shell command")
-	fmt.Fprintln(w, "  --host <name>       agent host this invocation came from (attribution")
-	fmt.Fprintln(w, "                      only; the verdict never reads it)")
-	fmt.Fprintln(w, "  --session <id>      the host's own session id, recorded on the event")
-	fmt.Fprintln(w, "  --event <name>      the host's hook event name (e.g. PreToolUse)")
+	fmt.Fprintln(w, "  --path                judge the input as a file path an edit is about to")
+	fmt.Fprintln(w, "                        write, not as a shell command")
+	fmt.Fprintln(w, "  --agent-name <name>   agent host this invocation came from (attribution")
+	fmt.Fprintln(w, "                        only; the verdict never reads it)")
+	fmt.Fprintln(w, "  --session <id>        the host's own session id, recorded on the event")
+	fmt.Fprintln(w, "  --event <name>        the host's hook event name (e.g. PreToolUse)")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Global display flags (-o, -s, -q, -v, --tee) are accepted; see `magus -h`.")
 }
@@ -173,7 +177,7 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	bindDisplayFlags(fset)
 	dir := fset.String("dir", ".", "Repo directory to install into")
 	force := fset.Bool("force", false, "Overwrite existing installed skill files (write mode)")
-	simple := fset.Bool("simple", false, "Install the shorter curated permutation of each skill: the same judgment with the enumeration dropped, for a reader that can re-derive the steps but not which failures are silent")
+	simple := fset.Bool("simple", false, "Install the shorter curated permutation of each skill: the same judgment with the enumeration dropped, for a reader that can re-derive the steps but not which failures are silent. Also writes an always-full <name>-full twin beside each skill, for a delegated or smaller model to be pointed at by name")
 	tarMode := fset.Bool("tar", false, "Stream a tar archive of the skills to stdout instead of writing files")
 	global := fset.Bool("global", false, "Allow absolute destination paths in write mode (use --tar | tar -xf - for paths outside the repo instead)")
 	fset.Usage = func() { agentUsage(os.Stderr) }
@@ -235,6 +239,9 @@ func printAgentInstallNextSteps(dir string, written []string, v agent.Variant) {
 	}
 	interactive.Emit(os.Stderr, fmt.Sprintf("installed %d file(s); commit them so your team and agents share them", len(written)))
 	reportContextCost(dir, written, v)
+	if v == agent.VariantSimple {
+		interactive.Emit(os.Stderr, "each skill also has an always-full <name>-full twin: when you delegate to a smaller model, hand it that name - it never made the bet --simple makes about the reader")
+	}
 	// MAGUS.md is regenerated for HUMAN readers; the skills send agents to the live
 	// verbs instead, because a generated index is only true as of its last run.
 	interactive.Emit(os.Stderr, "regenerate MAGUS.md for human readers:  magus describe graph -o markdown  (the skills send agents to the live verbs - magus describe targets, magus ls)")
@@ -348,7 +355,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// than a set magus knows, because a magus that enumerated hosts would need a
 	// release per host. A wrapper that cannot extract a session id must still get
 	// a verdict; erroring here would block a tool call over metadata.
-	host := fset.String("host", "", "Name of the agent host this invocation came from, recorded on the activity event")
+	host := fset.String("agent-name", "", "Name of the agent host this invocation came from, recorded on the activity event")
 	session := fset.String("session", "", "The host's own session id for this invocation, recorded on the activity event")
 	event := fset.String("event", "", "The host's hook event name (e.g. PreToolUse), recorded on the activity event")
 	// The whole display set, not a hand-rolled -o: this command used to define
@@ -1656,11 +1663,24 @@ func runGuardContextFor(match guardToolMatch) string {
 // on their own problem, and a surface that never states its own cost has no
 // pressure on it to shrink.
 func reportContextCost(dir string, written []string, v agent.Variant) {
+	// Twins are excluded from BOTH sides of the comparison, and they have to be:
+	// the alternative is VariantSize, which reports primaries only, so counting
+	// the twins a simple install writes would compare 26 files against 13 and
+	// report simple as nearly double the cost of full - the exact inverse of
+	// what --simple does to the always-loaded set. A twin is a reference copy
+	// fetched by name when a delegate needs it, not text every session carries.
 	var installed int64
+	var twins int64
 	for _, rel := range written {
-		if info, err := os.Stat(filepath.Join(dir, rel)); err == nil {
-			installed += info.Size()
+		info, err := os.Stat(filepath.Join(dir, rel))
+		if err != nil {
+			continue
 		}
+		if agent.IsFullTwinName(filepath.Base(filepath.Dir(rel))) {
+			twins += info.Size()
+			continue
+		}
+		installed += info.Size()
 	}
 	if installed == 0 {
 		return
@@ -1673,6 +1693,9 @@ func reportContextCost(dir string, written []string, v agent.Variant) {
 	msg := fmt.Sprintf("context cost: %s of always-loaded instructions (%s form)", byteSize(installed), v)
 	if alt, err := agentSkills.VariantSize(other); err == nil && alt > 0 {
 		msg += fmt.Sprintf("; %s would be %s", label, byteSize(alt))
+	}
+	if twins > 0 {
+		msg += fmt.Sprintf("; plus %s of full twins, loaded only when asked for by name", byteSize(twins))
 	}
 	interactive.Emit(os.Stderr, msg)
 }

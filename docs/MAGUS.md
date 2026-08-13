@@ -53,7 +53,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | charm | 10+ | `magus query kind:charm` | `rw`, `cd`, `stable` |
 | module | 30+ | `magus query kind:module` | `fs`, `magus`, `charm` |
 | method | 200+ | `magus query kind:method` | `archive.compress`, `archive.list`, `archive.read_file` |
-| diagnostic | 60+ | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS3003` |
+| diagnostic | 60+ | `magus query kind:diagnostic` | `MGS2001`, `MGS3003`, `MGS1002` |
 | doc | 300+ | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 100+ | `magus query kind:dir` | `docs/reference/buzz`, `docs/reference/manpage`, `docs/reference/codes/magusfile` |
 | file | 200+ | `magus query kind:file` | `magusfile.buzz`, `docs/render.buzz`, `docs/magusfile.buzz` |

@@ -20,10 +20,12 @@ import (
 )
 
 func TestEmbeddedSkillsAreWellFormed(t *testing.T) {
-	skills, err := agentSkills.EmbeddedSkills(agent.VariantFull)
+	defs, err := agentSkills.EmbeddedSkills()
 	require.NoError(t, err)
-	require.Len(t, skills, 13)
-	for _, skill := range skills {
+	require.Len(t, defs, 13)
+	for _, def := range defs {
+		skill, err := agentSkills.Render(def, agent.VariantFull)
+		require.NoError(t, err)
 		assert.NotEmpty(t, skill.Name)
 		assert.NotEmpty(t, skill.Description)
 		assert.NotEmpty(t, skill.Body)
@@ -59,7 +61,7 @@ func TestInstallSkillTreeWritesStampedFiles(t *testing.T) {
 
 	body, err := os.ReadFile(skillPath)
 	require.NoError(t, err)
-	skills, err := agentSkills.EmbeddedSkills(agent.VariantFull)
+	skills, err := agentSkills.RenderedSkills(agent.VariantFull)
 	require.NoError(t, err)
 	var query agent.AgentSkill
 	for _, skill := range skills {
@@ -1069,7 +1071,7 @@ func TestHookCmd_PathAndEmptyInputActivity(t *testing.T) {
 	assert.Empty(t, events, "a hook with no command/path has no observable invocation to record")
 }
 
-// TestHookCmd_RecordsHostAttribution covers the --host/--session/--event flags: the wrapper is
+// TestHookCmd_RecordsHostAttribution covers the --agent-name/--session/--event flags: the wrapper is
 // the only party that knows which agent host ran the hook, so what it passes must survive onto
 // the event line, not only into the request blob.
 func TestHookCmd_RecordsHostAttribution(t *testing.T) {
@@ -1078,7 +1080,7 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
 	var out bytes.Buffer
 	require.NoError(t, hookCmd(ctx, strings.NewReader("ls"), &out,
-		[]string{"--host", "claude-code", "--session", "abc123", "--event", "PreToolUse", "-o", "name"}))
+		[]string{"--agent-name", "claude-code", "--session", "abc123", "--event", "PreToolUse", "-o", "name"}))
 	assert.Equal(t, "pass\n", out.String())
 
 	events, err := trail.ReadRecent(dir, 1)
@@ -1220,17 +1222,62 @@ func TestAdviseMemoryWrite(t *testing.T) {
 // advertised for the whole installable set, so a skill with no marked rationale
 // would quietly install identical bytes and the flag would be a lie for that one.
 func TestEveryEmbeddedSkillHasBothPermutations(t *testing.T) {
-	full, err := agentSkills.EmbeddedSkills(agent.VariantFull)
+	defs, err := agentSkills.EmbeddedSkills()
 	require.NoError(t, err)
-	simple, err := agentSkills.EmbeddedSkills(agent.VariantSimple)
-	require.NoError(t, err)
-	require.Len(t, simple, len(full))
 
-	for i, f := range full {
-		s := simple[i]
+	for _, def := range defs {
+		f, err := agentSkills.Render(def, agent.VariantFull)
+		require.NoError(t, err)
+		s, err := agentSkills.Render(def, agent.VariantSimple)
+		require.NoError(t, err)
 		require.Equal(t, f.Name, s.Name)
 		assert.Less(t, len(s.Body), len(f.Body),
 			"%s marks no rationale, so --simple installs the same bytes; curate it or drop the claim", f.Name)
+	}
+}
+
+// TestSimpleInstallShipsAFullTwinForEverySkill pins the dual install: a simple
+// install is a bet the INSTALLING reader can re-derive what simple drops, and a
+// delegated or smaller model that inherits it never made that bet. Every skill
+// therefore ships a <name>-full twin whose body is byte-identical to what a
+// plain full install writes under the base name, so pointing a sub-agent at the
+// twin is exactly as good as having installed full.
+func TestSimpleInstallShipsAFullTwinForEverySkill(t *testing.T) {
+	defs, err := agentSkills.EmbeddedSkills()
+	require.NoError(t, err)
+	installed, err := agentSkills.RenderedSkills(agent.VariantSimple)
+	require.NoError(t, err)
+
+	byName := make(map[string]agent.AgentSkill, len(installed))
+	for _, s := range installed {
+		byName[s.Name] = s
+	}
+	require.Len(t, installed, 2*len(defs), "a simple install writes one primary plus one twin per skill")
+
+	for _, def := range defs {
+		twin, ok := byName[agent.FullTwinName(def.Name)]
+		require.Truef(t, ok, "simple install ships no %s twin", agent.FullTwinName(def.Name))
+
+		wantFull, err := agentSkills.Render(def, agent.VariantFull)
+		require.NoError(t, err)
+		assert.Equal(t, wantFull.Body, twin.Body,
+			"%s must carry the same body a full install writes for %s", twin.Name, def.Name)
+		// The stamp is keyed off the entry's own Variant, so a twin inside a
+		// simple install must still stamp itself full - otherwise a reader
+		// grading provenance sees "simple" on the copy it was handed BECAUSE
+		// it needed full.
+		assert.Contains(t, string(agentSkills.StampSkill(agentSkills.RenderSkill(twin), twin.Variant)),
+			"skill-variant: full", "%s must stamp itself full", twin.Name)
+
+		// The twin announces itself; the primary does not carry a pointer to it.
+		// simple exists to spend less context, so the discoverability cost is
+		// paid once on the twin's own listing entry rather than on every skill.
+		assert.Contains(t, twin.Description, "delegated",
+			"%s must tell a delegated model to prefer it, or nothing routes to it", twin.Name)
+		primary, ok := byName[def.Name]
+		require.True(t, ok)
+		assert.NotContains(t, primary.Description, agent.FullTwinName(def.Name),
+			"%s must not spend simple's context pointing at its twin; the twin's own entry does that", def.Name)
 	}
 }
 

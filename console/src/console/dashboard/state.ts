@@ -821,7 +821,7 @@ export function mapAgentActivity(events: AgentEventWire[], now: number): AgentAc
     if (!e.isAgentCommand) continue;
     // An unattributed event still counts as work done - it is only its ATTRIBUTION that is missing,
     // and dropping it would undercount the very traffic the tile exists to show. Wrappers on an
-    // older magus produce these (the --host flag postdates the current release).
+    // older magus produce these (the --agent-name flag postdates the current release).
     const host = e.host || "unattributed";
     let slot = byHost.get(host);
     if (!slot) {

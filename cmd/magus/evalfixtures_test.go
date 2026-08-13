@@ -28,13 +28,25 @@ const evalFixtureDir = "../../evals/fixtures"
 // answer whether a permutation changes a model's behavior; measuring text the
 // binary no longer produces answers that question about a skill nobody ships.
 //
-// This compares against exactly what `magus agent install` writes - same render,
-// same stamp - so the fix when it fails is the install command in the message
-// rather than a hand edit.
+// This compares against exactly what the catalog renders for each skill and
+// variant - same render, same stamp - so the fix when it fails is the install
+// command in the message rather than a hand edit. Deliberately the CANONICAL
+// per-skill render (EmbeddedSkills + Render), not RenderedSkills' install-time
+// list: a simple install's <name>-full twin is byte-identical to the full
+// fixture already covered here under its plain name, so fixturing it again
+// under a second name would duplicate maintenance without adding any new
+// behavior for the eval harness to measure.
 func TestEvalFixturesMatchTheEmbeddedSkills(t *testing.T) {
+	defs, err := agentSkills.EmbeddedSkills()
+	require.NoError(t, err)
+
 	for _, v := range []agent.Variant{agent.VariantFull, agent.VariantSimple} {
-		skills, err := agentSkills.EmbeddedSkills(v)
-		require.NoError(t, err)
+		skills := make([]agent.AgentSkill, 0, len(defs))
+		for _, def := range defs {
+			skill, err := agentSkills.Render(def, v)
+			require.NoError(t, err)
+			skills = append(skills, skill)
+		}
 
 		for _, skill := range skills {
 			path := filepath.Join(evalFixtureDir, v.String(), ".claude", "skills", skill.Name, "SKILL.md")
@@ -63,6 +75,14 @@ func TestEvalFixturesMatchTheEmbeddedSkills(t *testing.T) {
 		require.NoError(t, err)
 		for _, e := range entries {
 			if !e.IsDir() {
+				continue
+			}
+			// A simple install also writes each skill's <name>-full twin, so a
+			// fixture tree re-rendered with the command in the messages above
+			// legitimately holds them. They are byte-identical to the full
+			// fixtures already checked under the plain name, so they are
+			// tolerated here rather than fixtured and compared twice.
+			if agent.IsFullTwinName(e.Name()) {
 				continue
 			}
 			assert.Truef(t, shipped[e.Name()],

@@ -99,8 +99,8 @@ flag describe/evaluated
 flag describe/explain
 flag explain/global
 flag explain/refresh
+flag hook/agent-name
 flag hook/event
-flag hook/host
 flag hook/path
 flag hook/session
 flag init/force

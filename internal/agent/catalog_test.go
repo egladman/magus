@@ -30,6 +30,29 @@ func TestLocalSkillNameIsReserved(t *testing.T) {
 	}
 }
 
+// TestFullTwinNamesAreReserved keeps the twin namespace collision-free.
+//
+// A --simple install writes <name>-full beside every skill, so a shipped skill
+// whose own name ends in -full would either collide with another skill's twin
+// or be shadowed by its own. The collision is silent: WriteSkillTree writes
+// whichever entry comes last, so one of the two skills simply vanishes from
+// the installed tree with nothing reporting it. Same hazard as
+// LocalSkillName, same fix - assert it rather than remember it.
+func TestFullTwinNamesAreReserved(t *testing.T) {
+	shipped := make(map[string]bool, len(skillSources))
+	for _, source := range skillSources {
+		shipped[source.name] = true
+	}
+	for _, source := range skillSources {
+		assert.Falsef(t, IsFullTwinName(source.name),
+			"%q ends in %q, which is the reserved suffix for a --simple install's always-full twin; rename the skill",
+			source.name, fullTwinSuffix)
+		assert.Falsef(t, shipped[FullTwinName(source.name)],
+			"%q collides with the twin --simple writes for %q; one of the two would silently overwrite the other",
+			FullTwinName(source.name), source.name)
+	}
+}
+
 func testCatalog(t *testing.T) *Catalog {
 	t.Helper()
 	files := make(fstest.MapFS, len(skillSources))
@@ -44,7 +67,7 @@ func TestCatalogInstallsAndVerifiesSkillTree(t *testing.T) {
 	dir := t.TempDir()
 	written, err := catalog.WriteSkillTree(dir, ".agents/skills", false, VariantFull)
 	require.NoError(t, err)
-	require.Len(t, written, len(skillSources))
+	require.Len(t, written, len(skillSources), "a full install writes one file per skill and no twins")
 
 	body, err := os.ReadFile(filepath.Join(dir, ".agents/skills", anchorSkillRel))
 	require.NoError(t, err)
@@ -102,6 +125,31 @@ func TestCatalogAgentsBlockIsSelfDelimitedAndStable(t *testing.T) {
 	require.Len(t, statuses, 1)
 	assert.Equal(t, "AGENTS.md", statuses[0].Location)
 	assert.False(t, statuses[0].Stale, statuses[0].Detail)
+}
+
+// TestSimpleInstallWritesTwinsStampedFull pins the mixed-batch property: one
+// VariantSimple install produces entries of BOTH variants, so the stamp has to
+// follow each entry's own Variant rather than the variant that was requested.
+// Keying off the request instead would stamp every twin "simple" - mislabelling
+// the copy a delegated model was handed precisely because it needed full.
+func TestSimpleInstallWritesTwinsStampedFull(t *testing.T) {
+	catalog := testCatalog(t)
+	dir := t.TempDir()
+	written, err := catalog.WriteSkillTree(dir, ".claude/skills", false, VariantSimple)
+	require.NoError(t, err)
+	require.Len(t, written, 2*len(skillSources), "simple writes one primary plus one twin per skill")
+
+	primary, err := os.ReadFile(filepath.Join(dir, ".claude/skills", anchorSkillRel))
+	require.NoError(t, err)
+	assert.Contains(t, string(primary), "skill-variant: simple")
+
+	base := strings.TrimSuffix(anchorSkillRel, "/SKILL.md")
+	twin, err := os.ReadFile(filepath.Join(dir, ".claude/skills", FullTwinName(base), "SKILL.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(twin), "skill-variant: full",
+		"a twin inside a simple install must stamp itself full")
+	// One source body, so both still report the same digest and go stale together.
+	assert.Contains(t, string(twin), "skill-content: "+catalog.contentDigest)
 }
 
 func TestCatalogSkillTarIsByteStable(t *testing.T) {
