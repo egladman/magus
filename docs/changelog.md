@@ -271,6 +271,22 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Fixed
 
+- **A shared cache dir no longer merges two workspaces' project locks.** An absolute
+  `cache.dir` (or `MAGUS_CACHE_DIR`) resolves to the same path for every root - that is
+  the point, one cache - but the lock tree hung off it directly, so every workspace's
+  project `.` was the same lock file. An unrelated checkout then blocked on this one,
+  and because the holder is a legitimate live process it presented as an indefinite
+  wait rather than an error. Locks now live under `<cacheDir>/locks/<workspace>/`, and
+  `magus status` reports only the current workspace's holders instead of prefixing every
+  project path with the workspace segment.
+
+- **A re-entrant lock in a library caller hangs instead of reporting MGS3007.** The
+  diagnostic exists for exactly this - a lock held by one of your own ancestors can
+  never be released - but invocation ancestry was stamped only at the CLI and daemon
+  entry points. A Go test driving magus in-process had none, so the check could not
+  fire and the acquire waited forever with the ancestry env var sitting unread in its
+  own environment. The lock boundary now reads it when nothing upstream supplied one.
+
 - **The root `format` target no longer writes into descendant projects.** dprint
   discovers a nested `dprint.json` and formats that subtree under its own config, and
   neither the parent's `includes` nor an explicit `--config` prunes it: a bare run from

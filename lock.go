@@ -3,6 +3,8 @@ package magus
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -18,6 +20,7 @@ import (
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
+	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/types"
 )
 
@@ -48,7 +51,15 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 	for _, p := range projects {
 		paths = append(paths, p.Path)
 	}
-	l := newProjectLocker(resolveCacheDir(m.ws.Root, m.cfg), noWaitLocks())
+	// The CLI and the daemon stamp invocation ancestry at their own entry points; a
+	// LIBRARY caller (a Go test driving magus in-process) has none, so reentrantErr
+	// could never fire for it and a re-entrant acquire hung instead of reporting
+	// MGS3007. The env var is already in this process - read it here so the third
+	// entry point is covered too, and only when nothing upstream stamped one.
+	if len(types.InvocationAncestorsFromContext(ctx)) == 0 {
+		ctx = types.WithInvocationAncestors(ctx, procrun.AncestorsFromEnv())
+	}
+	l := newProjectLocker(resolveCacheDir(m.ws.Root, m.cfg), m.ws.Root, noWaitLocks())
 	release, err := l.acquireAll(ctx, paths)
 	if err != nil {
 		return nil, err
@@ -148,9 +159,9 @@ func watchWorkspaceRoot(ctx context.Context, root string, every time.Duration, r
 // provides is "no two magus invocations mutate the same project at once", NOT
 // "the tree is untouchable".
 //
-// Lock files mirror the workspace project tree under <cacheDir>/locks, so
-// "libs/diagnostics" locks <cacheDir>/locks/libs/diagnostics/lock and the root locks
-// <cacheDir>/locks/lock. Mirroring rather than flattening avoids the collision a
+// Lock files mirror the workspace project tree under <cacheDir>/locks/<workspace>, so
+// "libs/diagnostics" locks <dir>/libs/diagnostics/lock and the root locks <dir>/lock.
+// The <workspace> segment keeps a shared cache dir from merging two trees' locks. Mirroring rather than flattening avoids the collision a
 // sanitized name would create ("libs/diagnostics" -> "libs-diagnostics").
 //
 // It is safe for concurrent use; each acquire opens its own OS lock handle.
@@ -173,10 +184,17 @@ func withLockNotify(fn func(projectPath string)) lockerOption {
 }
 
 // newProjectLocker returns a projectLocker whose lock files live under
-// <cacheDir>/locks, mirroring the workspace project tree. When noWait is true a
-// contended acquire fails fast with a *lockContendedError instead of blocking.
-func newProjectLocker(cacheDir string, noWait bool, opts ...lockerOption) *projectLocker {
-	l := &projectLocker{dir: filepath.Join(cacheDir, locksDirName), noWait: noWait}
+// <cacheDir>/locks/<workspace>, mirroring the workspace project tree. When noWait is
+// true a contended acquire fails fast with a *lockContendedError instead of blocking.
+//
+// The workspace segment is what keeps the lock namespace per-WORKSPACE rather than
+// per-cache-dir. An absolute cache.dir (or MAGUS_CACHE_DIR) is returned unchanged by
+// resolveCacheDir for every root, which is the point - one shared cache - but without
+// this it also collapses every workspace's locks together, so an unrelated tree's
+// project "." blocked on this one's. That is a false conflict between projects that
+// share nothing, and it presents as a hang rather than an error.
+func newProjectLocker(cacheDir, workspaceRoot string, noWait bool, opts ...lockerOption) *projectLocker {
+	l := &projectLocker{dir: filepath.Join(cacheDir, locksDirName, workspaceLockKey(workspaceRoot)), noWait: noWait}
 	for _, o := range opts {
 		o(l)
 	}
@@ -315,6 +333,18 @@ func (l *projectLocker) acquireAll(ctx context.Context, projectPaths []string) (
 		releases = append(releases, rel)
 	}
 	return releaseAll, nil
+}
+
+// workspaceLockKey identifies a workspace inside a shared lock directory. The absolute
+// root is hashed rather than embedded: it is the identity that matters, a path is not a
+// legal single directory name, and a digest keeps the lock tree shallow.
+func workspaceLockKey(root string) string {
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		abs = root
+	}
+	sum := sha256.Sum256([]byte(filepath.Clean(abs)))
+	return hex.EncodeToString(sum[:8])
 }
 
 // lockPath maps a workspace-relative project path to its lock file, mirroring the
@@ -594,13 +624,15 @@ func (l *projectLocker) removeOwner(projectPath string) {
 // caller. A sidecar can outlive its flock if a holder was killed between unlocking and
 // cleanup, so treat an entry as a strong hint, never proof.
 func (m *Magus) HeldLocks() []types.StatusLock {
-	return heldLocks(resolveCacheDir(m.ws.Root, m.cfg))
+	return heldLocks(resolveCacheDir(m.ws.Root, m.cfg), m.ws.Root)
 }
 
 // heldLocks is the cacheDir-addressed form, kept separate so a test can point it at a
-// temp dir without constructing a whole workspace.
-func heldLocks(cacheDir string) []types.StatusLock {
-	dir := filepath.Join(cacheDir, locksDirName)
+// temp dir without constructing a whole workspace. It reports only THIS workspace's
+// locks: under a shared cache dir the others are unrelated runs, and their project
+// paths mean nothing here.
+func heldLocks(cacheDir, workspaceRoot string) []types.StatusLock {
+	dir := filepath.Join(cacheDir, locksDirName, workspaceLockKey(workspaceRoot))
 	var out []types.StatusLock
 	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, lockFileName+ownerSuffix) {

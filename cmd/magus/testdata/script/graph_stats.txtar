@@ -23,11 +23,6 @@ exec magus graph stats -o json
 stdout '"reason": "declared but no target uses it"'
 stdout '"label": "chore"'
 
-# the whole insight subcommand is gone; its analytics live on the workspace API,
-# reachable from Buzz as magus\insightReport and over MCP as magus_insight.
-! exec magus insight structure
-stderr 'unknown subcommand'
-
 -- magus.yaml --
 concurrency: 4
 -- magusfile.buzz --

@@ -24,11 +24,11 @@ import (
 // kernel flock, not an in-process handle.
 func TestSameProjectExclusiveSerializes(t *testing.T) {
 	cacheDir := t.TempDir()
-	lockDir := filepath.Join(cacheDir, "locks")
+	lockDir := filepath.Join(cacheDir, "locks", workspaceLockKey(testWorkspaceRoot))
 
 	// Subprocess acquires the "app" lock and holds it for 600ms.
 	holdMS := 600
-	cmd := helperHold(t, lockDir, "app", holdMS)
+	cmd := helperHold(t, cacheDir, "app", holdMS)
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start holder: %v", err)
 	}
@@ -38,7 +38,7 @@ func TestSameProjectExclusiveSerializes(t *testing.T) {
 	// creating a ready file), so we know our acquire genuinely contends.
 	waitForFile(t, filepath.Join(lockDir, "app", "ready"), 3*time.Second)
 
-	locker := newProjectLocker(cacheDir, false)
+	locker := newProjectLocker(cacheDir, testWorkspaceRoot, false)
 	start := time.Now()
 	release, err := locker.acquire(context.Background(), "app")
 	if err != nil {
@@ -60,7 +60,7 @@ func TestSameProjectExclusiveSerializes(t *testing.T) {
 // TestDifferentProjectsNoContention proves two DIFFERENT projects' exclusive
 // locks are held concurrently, with no false contention.
 func TestDifferentProjectsNoContention(t *testing.T) {
-	locker := newProjectLocker(t.TempDir(), false)
+	locker := newProjectLocker(t.TempDir(), testWorkspaceRoot, false)
 
 	relA, err := locker.acquire(context.Background(), "libs/diagnostics")
 	if err != nil {
@@ -81,7 +81,7 @@ func TestDifferentProjectsNoContention(t *testing.T) {
 
 // TestReleaseFrees proves a released lock can be re-taken immediately.
 func TestReleaseFrees(t *testing.T) {
-	locker := newProjectLocker(t.TempDir(), false)
+	locker := newProjectLocker(t.TempDir(), testWorkspaceRoot, false)
 
 	rel, err := locker.acquire(context.Background(), "docs")
 	if err != nil {
@@ -103,10 +103,10 @@ func TestReleaseFrees(t *testing.T) {
 // killed while holding the lock, and we then acquire it.
 func TestReleasedOnProcessExit(t *testing.T) {
 	cacheDir := t.TempDir()
-	lockDir := filepath.Join(cacheDir, "locks")
+	lockDir := filepath.Join(cacheDir, "locks", workspaceLockKey(testWorkspaceRoot))
 
 	// Hold effectively forever; we kill it.
-	cmd := helperHold(t, lockDir, "svc", 60_000)
+	cmd := helperHold(t, cacheDir, "svc", 60_000)
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start holder: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestReleasedOnProcessExit(t *testing.T) {
 
 	// The kernel must have dropped the lock on process death, so we acquire it
 	// under a bounded context rather than blocking forever.
-	locker := newProjectLocker(cacheDir, false)
+	locker := newProjectLocker(cacheDir, testWorkspaceRoot, false)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	rel, err := locker.acquire(ctx, "svc")
@@ -133,16 +133,16 @@ func TestReleasedOnProcessExit(t *testing.T) {
 // instead of blocking when another handle holds the lock.
 func TestNoWaitFailsFast(t *testing.T) {
 	cacheDir := t.TempDir()
-	lockDir := filepath.Join(cacheDir, "locks")
+	lockDir := filepath.Join(cacheDir, "locks", workspaceLockKey(testWorkspaceRoot))
 
-	cmd := helperHold(t, lockDir, "p", 5_000)
+	cmd := helperHold(t, cacheDir, "p", 5_000)
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start holder: %v", err)
 	}
 	t.Cleanup(func() { _ = cmd.Process.Kill() })
 	waitForFile(t, filepath.Join(lockDir, "p", "ready"), 3*time.Second)
 
-	locker := newProjectLocker(cacheDir, true) // noWait
+	locker := newProjectLocker(cacheDir, testWorkspaceRoot, true) // noWait
 	start := time.Now()
 	_, err := locker.acquire(context.Background(), "p")
 	if time.Since(start) > time.Second {
@@ -161,9 +161,9 @@ func TestNoWaitFailsFast(t *testing.T) {
 // an acquire has to block on a held lock.
 func TestWaitingMessageEmittedOnce(t *testing.T) {
 	cacheDir := t.TempDir()
-	lockDir := filepath.Join(cacheDir, "locks")
+	lockDir := filepath.Join(cacheDir, "locks", workspaceLockKey(testWorkspaceRoot))
 
-	cmd := helperHold(t, lockDir, "w", 400)
+	cmd := helperHold(t, cacheDir, "w", 400)
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start holder: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestWaitingMessageEmittedOnce(t *testing.T) {
 	waitForFile(t, filepath.Join(lockDir, "w", "ready"), 3*time.Second)
 
 	var notes int32
-	locker := newProjectLocker(cacheDir, false, withLockNotify(func(string) { atomic.AddInt32(&notes, 1) }))
+	locker := newProjectLocker(cacheDir, testWorkspaceRoot, false, withLockNotify(func(string) { atomic.AddInt32(&notes, 1) }))
 	rel, err := locker.acquire(context.Background(), "w")
 	if err != nil {
 		t.Fatalf("acquire: %v", err)
@@ -197,16 +197,16 @@ func TestWaitHeartbeatDoesNotBreakContendedAcquire(t *testing.T) {
 	t.Cleanup(func() { lockWaitHeartbeat = prev })
 
 	cacheDir := t.TempDir()
-	lockDir := filepath.Join(cacheDir, "locks")
+	lockDir := filepath.Join(cacheDir, "locks", workspaceLockKey(testWorkspaceRoot))
 
-	cmd := helperHold(t, lockDir, "hb", 300)
+	cmd := helperHold(t, cacheDir, "hb", 300)
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start holder: %v", err)
 	}
 	t.Cleanup(func() { _ = cmd.Process.Kill() })
 	waitForFile(t, filepath.Join(lockDir, "hb", "ready"), 3*time.Second)
 
-	locker := newProjectLocker(cacheDir, false)
+	locker := newProjectLocker(cacheDir, testWorkspaceRoot, false)
 	rel, err := locker.acquire(context.Background(), "hb")
 	if err != nil {
 		t.Fatalf("acquire after heartbeat wait: %v", err)
@@ -220,7 +220,7 @@ func TestWaitHeartbeatDoesNotBreakContendedAcquire(t *testing.T) {
 // orders and both complete. Sorted acquisition means neither can hold one lock
 // while waiting on another the peer holds.
 func TestAcquireAllSortedNoDeadlock(t *testing.T) {
-	locker := newProjectLocker(t.TempDir(), false)
+	locker := newProjectLocker(t.TempDir(), testWorkspaceRoot, false)
 	set1 := []string{"a", "b", "c"}
 	set2 := []string{"c", "b", "a"}
 
@@ -279,13 +279,14 @@ func TestAcquireAllSortedNoDeadlock(t *testing.T) {
 // TestLockPathMirrorsProjectTree proves lock files mirror the project tree and
 // the root project maps to <dir>/lock.
 func TestLockPathMirrorsProjectTree(t *testing.T) {
-	l := newProjectLocker("/cache", false)
+	l := newProjectLocker("/cache", testWorkspaceRoot, false)
+	base := filepath.Join("/cache", "locks", workspaceLockKey(testWorkspaceRoot))
 	cases := map[string]string{
-		"":                 filepath.Join("/cache", "locks", "lock"),
-		".":                filepath.Join("/cache", "locks", "lock"),
-		"docs":             filepath.Join("/cache", "locks", "docs", "lock"),
-		"libs/diagnostics": filepath.Join("/cache", "locks", "libs", "diagnostics", "lock"),
-		"libs/textsearch":  filepath.Join("/cache", "locks", "libs", "textsearch", "lock"),
+		"":                 filepath.Join(base, "lock"),
+		".":                filepath.Join(base, "lock"),
+		"docs":             filepath.Join(base, "docs", "lock"),
+		"libs/diagnostics": filepath.Join(base, "libs", "diagnostics", "lock"),
+		"libs/textsearch":  filepath.Join(base, "libs", "textsearch", "lock"),
 	}
 	for in, want := range cases {
 		if got := l.lockPath(in); got != want {
@@ -294,17 +295,42 @@ func TestLockPathMirrorsProjectTree(t *testing.T) {
 	}
 }
 
+// testWorkspaceRoot is the workspace these lockers belong to. Any fixed path does:
+// the locker only hashes it to keep one workspace's locks out of another's.
+const testWorkspaceRoot = "/ws"
+
+// TestLockNamespaceIsPerWorkspace proves a SHARED cache dir does not merge two
+// workspaces' locks. An absolute cache.dir (or MAGUS_CACHE_DIR) resolves to the same
+// path for every root - that is the point, one cache - but it used to collapse the
+// lock tree too, so an unrelated checkout's project "." blocked on this one's and
+// presented as a hang rather than an error.
+func TestLockNamespaceIsPerWorkspace(t *testing.T) {
+	const shared = "/cache"
+	a := newProjectLocker(shared, "/ws/one", false)
+	b := newProjectLocker(shared, "/ws/two", false)
+
+	for _, project := range []string{"", ".", "docs", "libs/diagnostics"} {
+		if a.lockPath(project) == b.lockPath(project) {
+			t.Errorf("project %q: two workspaces share a lock file %q", project, a.lockPath(project))
+		}
+	}
+	// Same workspace still means the same lock, or the lock stops excluding anything.
+	if got, want := newProjectLocker(shared, "/ws/one", false).lockPath("docs"), a.lockPath("docs"); got != want {
+		t.Errorf("same workspace produced different lock paths: %q vs %q", got, want)
+	}
+}
+
 // --- test helpers -----------------------------------------------------------
 
 // helperHold builds a command that runs TestHelperHold in a subprocess, which
 // acquires the given project's exclusive lock, signals readiness, and holds for
 // holdMS milliseconds. Running in a separate process exercises the real OS lock.
-func helperHold(t *testing.T, lockDir, project string, holdMS int) *exec.Cmd {
+func helperHold(t *testing.T, cacheDir, project string, holdMS int) *exec.Cmd {
 	t.Helper()
 	cmd := exec.Command(os.Args[0], "-test.run=TestHelperHold")
 	cmd.Env = append(os.Environ(),
 		"LOCKTEST_HELPER=1",
-		"LOCKTEST_DIR="+lockDir,
+		"LOCKTEST_CACHE_DIR="+cacheDir,
 		"LOCKTEST_PROJECT="+project,
 		"LOCKTEST_HOLD_MS="+strconv.Itoa(holdMS),
 	)
@@ -319,20 +345,19 @@ func TestHelperHold(t *testing.T) {
 	if os.Getenv("LOCKTEST_HELPER") != "1" {
 		t.Skip("subprocess helper; not run directly")
 	}
-	dir := os.Getenv("LOCKTEST_DIR")
+	cacheDir := os.Getenv("LOCKTEST_CACHE_DIR")
 	project := os.Getenv("LOCKTEST_PROJECT")
 	holdMS, _ := strconv.Atoi(os.Getenv("LOCKTEST_HOLD_MS"))
 
-	// The Locker's dir is <cacheDir>/locks; LOCKTEST_DIR is already that lock dir, so
-	// point the cacheDir one level up.
-	locker := newProjectLocker(filepath.Dir(dir), false)
+	locker := newProjectLocker(cacheDir, testWorkspaceRoot, false)
 	rel, err := locker.acquire(context.Background(), project)
 	if err != nil {
 		t.Fatalf("helper acquire: %v", err)
 	}
 	defer rel()
 
-	if err := os.WriteFile(filepath.Join(dir, project, "ready"), []byte("1"), 0o644); err != nil {
+	// Beside the lock file the locker actually took, so the layout lives in ONE place.
+	if err := os.WriteFile(filepath.Join(filepath.Dir(locker.lockPath(project)), "ready"), []byte("1"), 0o644); err != nil {
 		t.Fatalf("helper write ready: %v", err)
 	}
 	time.Sleep(time.Duration(holdMS) * time.Millisecond)
@@ -355,7 +380,7 @@ func waitForFile(t *testing.T, path string, within time.Duration) {
 // message that can only say "another magus process" is what turned a six-day-old
 // orphan into an investigation.
 func TestLockOwnerNamesTheHolder(t *testing.T) {
-	l := newProjectLocker(t.TempDir(), false)
+	l := newProjectLocker(t.TempDir(), testWorkspaceRoot, false)
 
 	release, err := l.acquire(context.Background(), "web/api")
 	if err != nil {
@@ -400,7 +425,7 @@ func ancestryCtx(t *testing.T, ids ...string) context.Context {
 // process. The ctx timeout is the regression guard: without the refusal this test hangs
 // until the deadline instead of failing on the first assertion.
 func TestReentrantLockRefusedNotAwaited(t *testing.T) {
-	l := newProjectLocker(t.TempDir(), false)
+	l := newProjectLocker(t.TempDir(), testWorkspaceRoot, false)
 
 	outer := ancestryCtx(t, "inv-outer")
 	release, err := l.acquire(outer, "app")
@@ -435,11 +460,11 @@ func TestReentrantLockRefusedNotAwaited(t *testing.T) {
 // refusing it would break every legitimate concurrent magus.
 func TestUnrelatedContentionStillWaits(t *testing.T) {
 	cacheDir := t.TempDir()
-	lockDir := filepath.Join(cacheDir, "locks")
+	lockDir := filepath.Join(cacheDir, "locks", workspaceLockKey(testWorkspaceRoot))
 
 	// A separate process, so the holder's sidecar carries an invocation id this one has
 	// never heard of - the shape of two developers, or two agents, in one workspace.
-	cmd := helperHold(t, lockDir, "app", 400)
+	cmd := helperHold(t, cacheDir, "app", 400)
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start holder: %v", err)
 	}
@@ -447,7 +472,7 @@ func TestUnrelatedContentionStillWaits(t *testing.T) {
 	waitForFile(t, filepath.Join(lockDir, "app", "ready"), 3*time.Second)
 
 	var notes int32
-	l := newProjectLocker(cacheDir, false, withLockNotify(func(string) { atomic.AddInt32(&notes, 1) }))
+	l := newProjectLocker(cacheDir, testWorkspaceRoot, false, withLockNotify(func(string) { atomic.AddInt32(&notes, 1) }))
 	ctx := ancestryCtx(t, "inv-unrelated")
 	release, err := l.acquire(ctx, "app")
 	if err != nil {
@@ -462,7 +487,7 @@ func TestUnrelatedContentionStillWaits(t *testing.T) {
 // TestLockOwnerRecordsInvocation pins the sidecar field the refusal reads. Without it the
 // holder is anonymous to its own descendants and every nested run waits forever again.
 func TestLockOwnerRecordsInvocation(t *testing.T) {
-	l := newProjectLocker(t.TempDir(), false)
+	l := newProjectLocker(t.TempDir(), testWorkspaceRoot, false)
 
 	ctx := ancestryCtx(t, "inv-outer", "inv-mine")
 	release, err := l.acquire(ctx, "app")
@@ -504,9 +529,9 @@ func TestOrphanHintEscalates(t *testing.T) {
 // this reports it as state, and the value is naming who holds what.
 func TestHeldLocksReportsHolders(t *testing.T) {
 	cache := t.TempDir()
-	l := newProjectLocker(cache, false)
+	l := newProjectLocker(cache, testWorkspaceRoot, false)
 
-	if got := heldLocks(cache); len(got) != 0 {
+	if got := heldLocks(cache, testWorkspaceRoot); len(got) != 0 {
 		t.Fatalf("HeldLocks on a fresh cache = %v, want none", got)
 	}
 
@@ -519,7 +544,7 @@ func TestHeldLocksReportsHolders(t *testing.T) {
 		t.Fatalf("acquire web/api: %v", err)
 	}
 
-	held := heldLocks(cache)
+	held := heldLocks(cache, testWorkspaceRoot)
 	if len(held) != 2 {
 		t.Fatalf("HeldLocks = %d entries, want 2: %+v", len(held), held)
 	}
@@ -540,11 +565,11 @@ func TestHeldLocksReportsHolders(t *testing.T) {
 	}
 
 	relWeb()
-	if held := heldLocks(cache); len(held) != 1 || held[0].Project != "." {
+	if held := heldLocks(cache, testWorkspaceRoot); len(held) != 1 || held[0].Project != "." {
 		t.Errorf("after releasing web/api, HeldLocks = %+v; want only the root", held)
 	}
 	relRoot()
-	if held := heldLocks(cache); len(held) != 0 {
+	if held := heldLocks(cache, testWorkspaceRoot); len(held) != 0 {
 		t.Errorf("after releasing everything, HeldLocks = %+v; want none", held)
 	}
 }
@@ -554,7 +579,7 @@ func TestHeldLocksReportsHolders(t *testing.T) {
 // question anyone staring at a queue that will not move is actually asking.
 func TestLockWaitersAreRecorded(t *testing.T) {
 	cache := t.TempDir()
-	l := newProjectLocker(cache, false)
+	l := newProjectLocker(cache, testWorkspaceRoot, false)
 
 	release, err := l.acquire(context.Background(), "web/api")
 	if err != nil {
@@ -562,14 +587,14 @@ func TestLockWaitersAreRecorded(t *testing.T) {
 	}
 	defer release()
 
-	if held := heldLocks(cache); len(held) != 1 || len(held[0].Waiters) != 0 {
+	if held := heldLocks(cache, testWorkspaceRoot); len(held) != 1 || len(held[0].Waiters) != 0 {
 		t.Fatalf("HeldLocks with no contention = %+v; want one holder and no waiters", held)
 	}
 
 	// A waiter marker is written while blocked and cleared when the wait ends, so
 	// record/clear is exercised directly rather than racing a second process.
 	stop := l.recordWaiter(context.Background(), "web/api")
-	held := heldLocks(cache)
+	held := heldLocks(cache, testWorkspaceRoot)
 	if len(held) != 1 {
 		t.Fatalf("HeldLocks = %d entries, want 1", len(held))
 	}
@@ -584,7 +609,7 @@ func TestLockWaitersAreRecorded(t *testing.T) {
 	}
 
 	stop()
-	if held := heldLocks(cache); len(held) != 1 || len(held[0].Waiters) != 0 {
+	if held := heldLocks(cache, testWorkspaceRoot); len(held) != 1 || len(held[0].Waiters) != 0 {
 		t.Errorf("after the wait ended, waiters = %+v; want none", held[0].Waiters)
 	}
 }
@@ -691,7 +716,7 @@ func TestWatchWorkspaceRootStopJoins(t *testing.T) {
 // reader most needs to know which project is held and by whom, and it was the
 // only error in this function that did not say.
 func TestAcquireNamesTheLockItGaveUpOn(t *testing.T) {
-	locker := newProjectLocker(t.TempDir(), false)
+	locker := newProjectLocker(t.TempDir(), testWorkspaceRoot, false)
 
 	rel, err := locker.acquire(context.Background(), "api")
 	if err != nil {
