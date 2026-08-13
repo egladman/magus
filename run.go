@@ -1004,6 +1004,11 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			// exactly as charms do; without this a run with different args
 			// replays the previous run's result.
 			step.ExtraArgs = opts.ExtraArgs
+			// The spell::op filter selects which definition runs (an explicit op
+			// bypasses a shadowing magusfile export), so it keys the cache the
+			// same way; without it a compile-only go::go-build recorded a pass
+			// the real go-build target then replayed around a stale binary.
+			step.Spell = opts.Spell
 			if raceForcesNoCache(opts) {
 				step.NoCache = true
 			}

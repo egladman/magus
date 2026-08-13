@@ -21,9 +21,11 @@ import (
 )
 
 // KeyVersion is bumped when the set of hashed fields changes, forcing a full rebuild.
-// 5 splits the single platform line into separate os and arch lines, each independently
-// omittable, and switched tool versions from raw probe output to narrowed tokens.
-const KeyVersion = 5
+// 6 adds the spell: line for explicit spell::op runs. The line is emitted only when
+// the filter is set, but the usual empty-adds-nothing back-compat is not enough here:
+// a pre-6 store may already hold entries an op-form run recorded under the plain
+// target's key, and only a version bump evicts that poison class.
+const KeyVersion = 6
 
 // hashStep computes the cache key for a Step (version, path, target, sources,
 // env, deps, spell version, tool versions). Sources use an mtime fast-path.
@@ -103,6 +105,13 @@ func (c *Cache) hashStepInputsMemo(ctx context.Context, s *Step, lines *[]string
 	writeLine("projectPath:", s.ProjectPath)
 	if s.Target != "" {
 		writeLine("target:", s.Target)
+	}
+	// The explicit spell::op filter selects a different definition than the plain
+	// target form: it bypasses a magusfile export that shadows the op's name. Same
+	// name, same sources, different body - so the filter must key the cache. Only
+	// op-form runs write it; plain target runs hash without it.
+	if s.Spell != "" {
+		writeLine("spell:", s.Spell)
 	}
 	// Active charms (sorted by the caller) change behaviour, so they key the
 	// cache. Empty Charms adds nothing, so charm-less runs hash as before.

@@ -220,7 +220,7 @@ func TestHashStep_KeyVersionIsHashed(t *testing.T) {
 	assert.NotEmpty(t, h1, "hashStep returned empty hash")
 	// The current KeyVersion is always mixed in; bumping it must change the
 	// hash. Verified here by asserting the current constant is the intended value.
-	const wantKeyVersion = 5
+	const wantKeyVersion = 6
 	assert.Equal(t, wantKeyVersion, KeyVersion, "KeyVersion changed; update this test when bumping")
 }
 
@@ -264,6 +264,7 @@ func TestHashKeyByteLayout(t *testing.T) {
 		IncludeArch:     true,
 		ProjectPath:     "pkg/x",
 		Target:          "build",
+		Spell:           "go",
 		Charms:          []string{"race"},
 		Deps:            []string{"d:1"},
 		ToolVersions:    []string{"go:1.25"},
@@ -279,6 +280,7 @@ func TestHashKeyByteLayout(t *testing.T) {
 	fmt.Fprintf(&want, "os:%s\narch:%s\n", runtime.GOOS, runtime.GOARCH)
 	want.WriteString("projectPath:pkg/x\n")
 	want.WriteString("target:build\n")
+	want.WriteString("spell:go\n")
 	want.WriteString("charm:race\n")
 	want.WriteString("dep:d:1\n")
 	want.WriteString("spellDefVersion:v1\n")
@@ -319,6 +321,29 @@ func TestHashStepKeysExtraArgs(t *testing.T) {
 	// Order is significant: `-run X` is not `X -run`, so args are never sorted.
 	assert.NotEqual(t, hashOf(step("-run", "X")), hashOf(step("X", "-run")), "arg ORDER must key")
 	assert.NotEqual(t, hashOf(step("a", "b")), hashOf(step("ab")), "args must not be concatenated")
+}
+
+// TestHashStepKeysSpellFilter locks in that an explicit `spell::op` invocation keys
+// separately from the plain target. The filter changes which definition runs - an
+// explicit op bypasses the magusfile export that shadows its name - so before this
+// line a compile-only `go::go-build` recorded a pass that `magus run go-build` then
+// replayed, leaving a stale binary that read as a successful rebuild.
+func TestHashStepKeysSpellFilter(t *testing.T) {
+	root := t.TempDir()
+	c := &Cache{mtimes: newMtimeStore(t.TempDir(), nil)}
+	hashOf := func(s *Step) string {
+		h, err := c.hashStep(context.Background(), s)
+		require.NoError(t, err, "hashStep")
+		return h
+	}
+	step := func(spell string) *Step {
+		return &Step{ProjectPath: ".", WorkspaceRoot: root, Target: "go-build", Spell: spell}
+	}
+
+	plain, op := hashOf(step("")), hashOf(step("go"))
+	assert.NotEqual(t, plain, op, "an explicit spell::op run must not share the plain target's entry")
+	assert.Equal(t, op, hashOf(step("go")), "the same filtered run must replay")
+	assert.NotEqual(t, op, hashOf(step("docker")), "different spells must not share a key")
 }
 
 // mustVerify adapts verify's (legacy, error) result for the assertions above, which

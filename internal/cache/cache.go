@@ -134,7 +134,13 @@ type Step struct {
 	// the target does, so like Charms they MUST key the cache: without them a run
 	// with different args replays the previous run's result. Order is significant
 	// (`-run X` is not `X -run`), so unlike Charms they are never sorted.
-	ExtraArgs       []string
+	ExtraArgs []string
+	// Spell is the explicit `spell::op` filter of the invocation, empty on a plain
+	// target run. It keys the cache because the filter selects WHICH DEFINITION
+	// runs: an explicit op bypasses the magusfile export shadowing the same name,
+	// so a compile-only go::go-build must not satisfy (or be satisfied by) the
+	// go-build target's entry.
+	Spell           string
 	SpellDefVersion string   // binary fingerprint; forces miss on magus upgrade
 	ToolVersions    []string // "spell:version" strings; forces miss on toolchain upgrade
 	// PlatformIndependent drops the host-platform line from the key, so one entry

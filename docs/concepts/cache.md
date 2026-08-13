@@ -153,6 +153,11 @@ the `Step`. magus writes these lines, in this order, into one hash:
   foreign artifact out of a shared cache, where being wrong the other way only costs hits.
 - **`projectPath`** and **`target`** - so the same sources under different targets
   key separately.
+- **`spell`** - the explicit `spell::op` filter, written only on such runs. An
+  explicit op bypasses a magusfile export that shadows the same name, so the two
+  forms run different definitions under one target name and must not share an
+  entry: without this line a compile-only `go::go-build` recorded a pass that the
+  real `go-build` target then replayed. Plain target runs hash without it.
 - **`charm:` lines** - the active [charms](charms.md), sorted by name. A
   charm-variant run (`lint:rw`) hashes differently from the bare run, because the
   charm changes behavior. Empty charms add nothing, so charm-less runs are
