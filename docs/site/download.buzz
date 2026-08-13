@@ -48,7 +48,7 @@ fun routeLinks() > str {
 // Every link is relative and resolves one level up, since the page sits at download/ rather
 // than at gen's root: the asset gate proves each target exists, so a renamed setup guide
 // fails the build here rather than 404ing for a reader mid-install.
-export fun renderDownloadPage(site: Site) > void {
+export fun renderDownloadPage(site: Site) > void !> any {
     final html = template\render(`  <section class="landing-hero download-hero">
     <div class="landing-intro">
       <p class="landing-eyebrow">Install</p>
@@ -74,7 +74,7 @@ tar -xzf "magus_windows_amd64_static.tar.gz" magus.exe</code></pre>
     final title = "Download";
     final desc = "Install magus on macOS, Linux or Windows. One binary, no runtime, and the exact command for the machine you are on.";
     final doc = renderPage(title, desc, html, DOWNLOAD_SRC, "", "download/", "", mut [], site);
-    fs\makeDirectory(site.outDir + "/download");
+    fs\mkdirAll(site.outDir + "/download");
     final of = io\File.open(site.outDir + "/download/index.html", io\FileMode.write);
     of.write(doc);
     of.close();

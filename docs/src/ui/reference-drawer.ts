@@ -122,7 +122,8 @@ export function initRefDrawer(): void {
         // is still animating in lands a few pixels down instead of on the definition.
         // Deferred a frame so the freshly inserted article has been laid out.
         requestAnimationFrame(() => {
-          drawer.scrollTop += target.getBoundingClientRect().top - drawer.getBoundingClientRect().top;
+          drawer.scrollTop +=
+            target.getBoundingClientRect().top - drawer.getBoundingClientRect().top;
         });
       } else {
         drawer.scrollTop = 0;

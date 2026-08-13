@@ -35,7 +35,7 @@ import "engine/page" as _;
 // which the drift gate reads as generator non-determinism. The shape is real; the seconds
 // are round.
 //
-// Classed spans, not ANSI: the terminal's colour comes from site.css, so it follows the
+// Classed spans, not ANSI: the terminal's color comes from site.css, so it follows the
 // reader's light/dark theme instead of baking one palette into the markup.
 final TERMINAL_SESSION = `<span class="term-prompt">$</span> <span class="term-cmd">magus affected ci --dry-run</span>
 <span class="term-muted">projects: apps/web (1 of 7)
@@ -64,11 +64,11 @@ dry run: commands shown, not executed</span>
 //
 // fs.list returns sorted names and the files are date-prefixed (YYYY-MM-DD-slug.md),
 // so walking the list backwards is newest-first without parsing a date to sort on.
-fun recentPosts(site: Site) > str {
+fun recentPosts(site: Site) > str !> any {
     final dir = site.root + "/" + site.blog;
     if (isDirectory(dir) == false) { return ""; }
-    var names: [str] = mut [<str>];
-    foreach (name in fs\list(dir)) {
+    var names: mut [str] = mut [<str>];
+    foreach (name in fs\listDir(dir)) {
         if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
             names.append(name);
         }
@@ -102,7 +102,7 @@ fun recentPosts(site: Site) > str {
     return "  <section class=\"landing-section\">\n"
         + "    <h2 class=\"landing-h2\">Recent writing</h2>\n"
         + "    <p class=\"landing-section-lede\">Why things are the way they are, at more length than a documentation page should go to.</p>\n"
-        + "    <div class=\"landing-cards landing-cards-compact\">\n" + cards
+        + "    <div class=\"grid landing-cards landing-cards-compact\">\n" + cards
         + "    </div>\n"
         + "  </section>\n\n";
 }
@@ -114,7 +114,7 @@ fun recentPosts(site: Site) > str {
 // Every link here is relative and points at a page this render also writes - the asset
 // gate proves that, and the orphan gate walks outward from exactly this page, so the four
 // sections below are what make the rest of the site reachable at all.
-export fun renderLanding(site: Site) > void {
+export fun renderLanding(site: Site) > void !> any {
     var html = template\render(`  <section class="landing-hero">
     <div class="landing-intro">
       <p class="landing-eyebrow">magus</p>
@@ -133,7 +133,7 @@ export fun renderLanding(site: Site) > void {
         <span class="landing-rotate" aria-hidden="true">Offline is not a degraded mode.</span>
       </h1>
       <p class="landing-lede">magus is a task orchestrator: it builds, tests and lints the projects in a repository, works out which ones a change reached, and calls the tools you already run instead of replacing them. One project or two hundred, in whatever languages you already use. It caches what those tools produce, so the same work never runs twice. Ask it what it is going to do and it prints the exact command, arguments and all. When something breaks (and something always breaks), the error comes from <em>your</em> tool, not from ours.</p>
-      <p class="landing-sub">One binary, <a href="https://choosealicense.com/licenses/gpl-3.0/">GPL-3.0</a>. It runs on Linux, macOS and Windows, and does not care which languages your repository holds. The Linux build is statically linked and needs no libc; the others are one file with no runtime under them, which is the part you actually feel. No account, no capability behind a paid tier - the cache least of all. It does not phone home, because there is nowhere to phone: magus runs no hosted service of any kind. The OpenTelemetry exporter is off by default, and turning it on requires you to name the collector it sends to.</p>
+      <p class="landing-sub">One binary, <a href="https://choosealicense.com/licenses/gpl-3.0/">GPL-3.0</a>, on Linux, macOS and Windows, whatever languages your repository holds. No account, no paid tier, and nowhere to phone home: magus runs no hosted service, and the OpenTelemetry exporter stays off until you point it at a collector of your own.</p>
       <div class="landing-cta">
         <a class="landing-btn landing-btn-primary" href="download/">Install magus</a>
         <a class="landing-btn" href="tour/">Take the tour</a>
@@ -157,10 +157,10 @@ export fun renderLanding(site: Site) > void {
       </picture>
       </figure>
       <p class="landing-section-lede">Affected sets and a build cache are settled ground, and I am not trying to reinvent them. There is no new idea on this page. The work went into refining old ones and then stopping: nothing here invents vocabulary for something that already has a name, and nothing here hands you a second way to do what one verb already does. What is rarer than a new idea is a build tool you can still follow six months in. Boring is the point, because boring means consistent, and inconsistency is where footguns come from: every arbitrary pattern and special case is one more thing you have to remember instead of derive.</p>
-      <p class="landing-section-lede landing-lede-cont">It also runs where you are standing. <code>magus run test</code> from inside a project works on that project, the way Make has behaved since 1976 and most command-line tools have since, and the way an agent already expects when it walks up the tree looking for its own instructions. Context is not a feature anybody had to invent; it is the default behaviour of a command line, and it survived fifty years because it is right.</p>
+      <p class="landing-section-lede landing-lede-cont">It also runs where you are standing. <code>magus run test</code> from inside a project works on that project, the way Make has behaved since 1976 and most command-line tools have since, and the way an agent already expects when it walks up the tree looking for its own instructions. Context is not a feature anybody had to invent; it is the default behavior of a command line, and it survived fifty years because it is right.</p>
       <p class="landing-humans-body">Which is why a project here is its path, and has no second name. Give it one and you have created a mapping: something has to store it, keep every entry unique, and update it each time a directory moves. Allow arbitrary characters in that name and you have also decided, permanently, what quoting every command in your repository needs. None of it was a problem anyone had before the naming scheme invented it, and the tool that invented it then hands you the ceremony for living with it: name the project every time, because it can no longer work out the one thing the shell already knew, which is where you were standing when you asked.</p>
     </div>
-    <div class="landing-cards">
+    <div class="grid landing-cards">
       <a class="landing-card" href="concepts/wards/">
         <span class="landing-card-mark" aria-hidden="true">01</span>
         <span class="landing-card-title">It assumes you have a reason</span>
@@ -183,7 +183,7 @@ export fun renderLanding(site: Site) > void {
     <h2 class="landing-h2">Built for humans. Agents welcome.</h2>
       <p class="landing-section-lede">A tool for people who do this for a living. It assumes you know what you are doing.</p>
       <p class="landing-humans-body">Every tool that boxes you in was built by someone who believed they had enumerated the cases. Nobody can. The moment you need the one thing they did not anticipate, the answer is that you cannot do that here - and then you are stuck, and so is whoever you escalate to. So the constraints here live where they can be enforced, in the sandbox and the content-addressed cache, rather than in a schema that has to predict you. What is left is a real language with an escape hatch, because sooner or later you need one. It can hand you everything it knows and tell you what it thinks; it cannot make the call for you, and it should not try. A tool you stand this close to has no business being a walled garden.</p>
-      <p class="landing-humans-body">None of which makes the enforcement soft. What is enforced is enforced by the engine and cannot be talked past: <code>ci</code> strips the write charms before it dispatches, so the pipeline cannot mutate your tree even when someone explicitly asks for <code>ci:rw</code>. That is a rule magus keeps, not a convention a plugin author might remember to honour. The freedom is in what you are allowed to want, not in whether the rules apply to you.</p>
+      <p class="landing-humans-body">None of which makes the enforcement soft. What is enforced is enforced by the engine and cannot be talked past: <code>ci</code> strips the write charms before it dispatches, so the pipeline cannot mutate your tree even when someone explicitly asks for <code>ci:rw</code>. That is a rule magus keeps, not a convention a plugin author might remember to honor. The freedom is in what you are allowed to want, not in whether the rules apply to you.</p>
       <p class="landing-humans-body">Easy and permissive are not opposites, whatever the tools that claim to solve everything for you have taught you to expect. Something can meet a person on their first day and still not pen in the one who has been doing this for fifteen years. You get both by informing rather than deciding: the newcomer does what it told them, and the veteran reads the same output and does something else with it.</p>
       <p class="landing-humans-body">It was not designed for agents, which is worth saying plainly given how much tooling now is. They drive it well anyway, and that is a side effect: an interface legible to a person is legible to them.</p>
       <p class="landing-humans-body">Nothing that makes it drivable was invented for a model. <code>--output</code> is a global flag, so any command will hand back <code>json</code>, <code>yaml</code>, a bare list of names, or one field through a Go template, and nobody has to shred a screen of text to get a value out of it. <code>--dry-run</code> prints the exact argument vector before anything runs. A verb means the same thing everywhere it appears, and an error magus raises itself carries a code you can look up. A command line has owed you all of that since long before anything else was reading its output on your behalf. A tool that only got there once machines started reading it was late rather than clever, and giving that old obligation a new name does not make it a new idea.</p>
@@ -227,7 +227,7 @@ export fun ci(ctx: magus&#92;Context, args: [str]) &gt; void \{
     ctx.needs(build, test, lint, format);
 \}</code></pre>
     </div>
-    <div class="landing-pair">
+    <div class="grid landing-pair">
       <div>
         <h3 class="landing-pair-title">A spell names a tool</h3>
         <p class="landing-pair-body">A spell is not an abstraction over your toolchain, it is a name for it. <code>go["go-build"]</code> runs <code>go build</code>; the spell decides the arguments and nothing else. It supplies the operations a target can call, named after the thing they run, so reading a magusfile tells you which binaries will be invoked.</p>
@@ -239,7 +239,7 @@ export fun ci(ctx: magus&#92;Context, args: [str]) &gt; void \{
       </div>
     </div>
     <h3 class="landing-pair-summary-title">Together they are the whole model</h3>
-    <p class="landing-humans-body">Neither invents behaviour your tools do not have. That is deliberate: a tool that abstracts your toolchain away leaves you helpless the first time it breaks, and it breaks eventually. This one expects you to keep the knowledge you already have and hands it straight back when something goes wrong, rather than standing between you and the answer. Adopting it should not cost you anything you already know.</p>
+    <p class="landing-humans-body">Neither invents behavior your tools do not have. That is deliberate: a tool that abstracts your toolchain away leaves you helpless the first time it breaks, and it breaks eventually. This one expects you to keep the knowledge you already have and hands it straight back when something goes wrong, rather than standing between you and the answer. Adopting it should not cost you anything you already know.</p>
     <p class="landing-humans-body">It also will not write code for you. Boilerplate a tool generates into your repository is toil you inherit: now you have to know whether you may edit it, what breaks when you do, and whether the next version overwrites it. magus scaffolds one magusfile with <code>magus init</code> and never touches it again, and nothing it writes into your tree has to exist for a build to run.</p>
   </section>
 
@@ -536,14 +536,14 @@ std&#92;print(yaml);</code></pre>
     <p class="landing-humans-body">That boundary is the point: the thing you are most likely to need to change is the thing you can change without touching magus at all. Adding a tool, a provider or an op is not a pull request you have to get merged and then wait for a release to use. Write the <a href="guides/authoring-spells/">spell</a>, keep it in your repository, bind it. If it turns out to be useful to other people, contribute it back; if it is specific to your company, never do.</p>
     <p class="landing-humans-body">There is a failure mode this avoids by construction. When the extension point is "write code that runs the tool", every plugin author ends up re-solving the same problems - caching, environment, failure handling, secret redaction - and solving each of them slightly differently, so the ecosystem accumulates the same footguns once per plugin and everyone downstream maintains the consequences of a leak they did not write. A spell does not run anything. It declares a command: a binary, its arguments, which charms modify it, which secrets it needs. Running that declaration - caching it, sandboxing it, applying the charms, capturing and redacting the output - is the engine's job, and it happens identically for every spell ever written.</p>
     <p class="landing-humans-body">The same holds for the browser apps. The daemon speaks protobuf and the whole schema is published as <a href="reference/api/">reference documentation</a>, so the console is one possible front end rather than the front end. If you want your own dashboard, everything needed to build it is already written down.</p>
-    <p class="landing-humans-body">That boundary is a licensing one too, which is worth being precise about because magus is <a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">GPL-3.0-or-later</a> and people reasonably assume the worst. A spell is a Buzz file that lives in your repository and that magus reads and runs, the way make reads a Makefile and a shell runs a script. It is your work. It is not part of magus, it is not linked into anything, and nothing in the licence asks you to publish it. Keep the spell that wires up your company's internal artifact store closed forever. That is the intended use, not a loophole.</p>
-    <p class="landing-humans-body">What the licence does reach is magus's own source. Change that and pass the result on, and whoever you passed it to is owed the same freedoms and the same source you had. The obligation attaches to handing it on, not to editing it. A patch you build and run inside your own company and never distribute is yours as well. The practical point is that you are unlikely to need one, because the extension point was deliberately put outside the binary.</p>
+    <p class="landing-humans-body">That boundary is a licensing one too, which is worth being precise about because magus is <a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">GPL-3.0-or-later</a> and people reasonably assume the worst. A spell is a Buzz file that lives in your repository and that magus reads and runs, the way make reads a Makefile and a shell runs a script. It is your work. It is not part of magus, it is not linked into anything, and nothing in the license asks you to publish it. Keep the spell that wires up your company's internal artifact store closed forever. That is the intended use, not a loophole.</p>
+    <p class="landing-humans-body">What the license does reach is magus's own source. Change that and pass the result on, and whoever you passed it to is owed the same freedoms and the same source you had. The obligation attaches to handing it on, not to editing it. A patch you build and run inside your own company and never distribute is yours as well. The practical point is that you are unlikely to need one, because the extension point was deliberately put outside the binary.</p>
   </section>
 
 {{{recent}}}  <section class="landing-section landing-next">
     <h2 class="landing-h2">Where to next</h2>
     <p class="landing-section-lede">Three, in order. The first is the only one you need today.</p>
-    <div class="landing-cards landing-cards-compact">
+    <div class="grid landing-cards landing-cards-compact">
       <a class="landing-card" href="guides/getting-started/">
         <span class="landing-card-mark" aria-hidden="true">01</span>
         <span class="landing-card-title">Install it and run something</span>

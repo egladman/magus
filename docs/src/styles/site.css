@@ -2783,31 +2783,51 @@ a code {
      notices. */
   --landing-measure: 700px;
 
-  /* The middle rung, and the one this page was missing. Content jumped 700 -> 1200 with
-     nothing between, so a terminal or a card grid read as "suddenly enormous" next to the
-     prose. picocss.com's own landing sits nearly all of its content at 950 and keeps 1200
-     for the section wrapper, which is invisible - measured 2026-08-10: h1, p, pre and the
-     CTA grid all render 950 wide at left 245 inside a 1200 container. */
+  /* The second rung, 950, is Pico's container width at its 1024 breakpoint. It exists for
+     ONE block: the numbered card row under "What makes it different". Three cards on the
+     700 measure come out 222px each, which is too narrow for a title plus a paragraph;
+     at 950 they are 305px. Pico's own landing works exactly this way - most of its content
+     sits on a 950 wrapper inside a 1200 container - so a second rung is normal here, not a
+     deviation. What is NOT normal is a heading on one rung and its content on another, so
+     anything that takes this width takes it for the whole section. */
   --landing-wide: 950px;
 }
 
-/* One rung, set on the block itself, centred on the same axis as the prose. Pico sets the
-   width once on a section wrapper (.hook, .demo) and lets every child inherit it; these are
-   the direct children that were defaulting to the full container instead. Scoped to `>` so
-   the terminals nested inside the three-panel output row keep their grid-derived width. */
-.site-landing .landing-section > .landing-cards,
-.site-landing .landing-section > .landing-shot,
-.site-landing .landing-section > .landing-tabs,
-.site-landing .landing-section > .term {
+/* ONE width for the whole page. Every block in a section - prose, card grid, terminal
+   frame, tab card, screenshot, the three-panel output row - sits on the reading measure and
+   centers on the same axis, so the page has a single left edge from top to bottom.
+   There used to be a second, wider rung here. It is gone deliberately: two rungs meant
+   headings sat on one and their content on the other, so a title was inset 125px from the
+   block it named, and the eye tracked an edge that moved every few sections. A ladder is
+   only worth having if something needs a rung, and nothing here did except the hero, which
+   opts out by not being a .landing-section at all. */
+/* The one block on the wide rung: the numbered card row, and nothing else. Three cards on
+   the 700 measure are 222px each, too narrow for a title plus a paragraph; at 950 they are
+   305px. The heading and the prose above it stay on the measure and stay centered, exactly
+   as every other section on the page - a wider card row centered under narrower text is an
+   ordinary breakout, and matching the section to the cards instead made this one section
+   start 125px left of every other one. */
+.site-landing .landing-section > .landing-cards:not(.landing-cards-compact),
+.site-landing .landing-section > .landing-shot {
   max-width: var(--landing-wide);
   margin-inline: auto;
 }
 
-/* The text column is CENTRED in the container, not flush left inside it. The cards,
+.site-landing .landing-section > .landing-cards,
+.site-landing .landing-section > .landing-pair,
+.site-landing .landing-section > .landing-tabs,
+.site-landing .landing-section > .landing-tabs-triple,
+.site-landing .landing-section > .term {
+  max-width: var(--landing-measure);
+  margin-inline: auto;
+}
+
+
+/* The text column is CENTERED in the container, not flush left inside it. The cards,
    the tab card, the verb list and the hero all span the container; prose cannot
    (71rem is ~120 characters a line), so it holds a measure. Left-aligned, that measure
    put every paragraph hard against the left edge with a wide empty gutter on the right
-   and nothing lining up with the full-width blocks above and below it. Centred, the
+   and nothing lining up with the full-width blocks above and below it. Centered, the
    text sits on the container's axis like everything else and the leftover space reads
    as a margin.
 
@@ -2828,6 +2848,12 @@ a code {
   max-width: var(--landing-measure, 42rem);
 }
 
+/* The one deliberate exception to "layout comes from Pico". The hero is a headline beside
+   a terminal, not N equal columns, so it wants an asymmetric split and a LATER breakpoint
+   than the framework's 768: measured at an 800px viewport, Pico's grid gave it two ~340px
+   columns and clipped the transcript mid-line. It holds its columns until 1024 and stacks
+   below that. Every other multi-column block on this page uses `class="grid"` and reflows
+   with the rest of the site; if you are adding one, do that instead of copying this. */
 .landing-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -2872,7 +2898,7 @@ a code {
    Six taglines cycling in the <h1>, with NO JavaScript: the whole effect is one
    keyframe animation plus a per-item negative delay, so it runs before main.js
    loads, survives it failing to load, and adds nothing to the CSP.
-   (CSS cannot randomise, so this is a fixed continuous cycle rather than a
+   (CSS cannot randomize, so this is a fixed continuous cycle rather than a
    different line per page load - that would need script.)
 
    The items are stacked in a single grid cell rather than positioned absolutely,
@@ -3088,11 +3114,11 @@ a code {
   font-size: inherit;
 }
 
-/* The colour spans are INLINE on purpose. They were display:block, which under
+/* The color spans are INLINE on purpose. They were display:block, which under
    white-space:pre meant every line broke twice - once for the block, once for the
    newline already in the source - and the transcript came out double-spaced,
    reading as a styled list rather than as terminal output. The <pre> does the line
-   breaking; these only carry colour. */
+   breaking; these only carry color. */
 .term-prompt {
   color: var(--term-prompt);
   user-select: none;
@@ -3135,7 +3161,7 @@ a code {
    either theme because a terminal is dark; a source listing is a document and
    should follow the reader's theme like every other code block on the site.
    Leaving it on the terminal palette was an actual bug, not just a preference:
-   the --syn-* token colours are theme-aware, so in light mode highlight.js was
+   the --syn-* token colors are theme-aware, so in light mode highlight.js was
    painting dark tokens onto the hard-coded dark background.
 
    Re-theming is one override block because .term declares its palette as custom
@@ -3165,9 +3191,6 @@ a code {
 
 /* ---- Card grids ---------------------------------------------------------- */
 .landing-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-  gap: 1rem;
 }
 
 .landing-card {
@@ -3217,14 +3240,6 @@ a code {
 .landing-cards-compact .landing-card {
   padding: 1rem 1.1rem 1.1rem;
 }
-/* Six cards, so the auto-fit track count is pinned to three: left to itself the
-   grid fits four across a wide container and leaves a ragged row of two. */
-@media (min-width: 900px) {
-  .landing-cards-compact {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
 /* A committed screenshot, regenerated by hacks/screenshots.sh. Captured at 2x, so the
    intrinsic width is double what it renders at; width/height are on the img so the row
    is reserved before it loads and the page does not jump. */
@@ -3239,7 +3254,7 @@ a code {
   border-radius: var(--pico-border-radius);
 }
 /* The caption belongs to the screenshot, so it takes the screenshot's width rather than
-   the prose measure. With the measure it rendered 714px centred under a 1200px image,
+   the prose measure. With the measure it rendered 714px centered under a 1200px image,
    inset 243px from both edges, which reads as a stray paragraph rather than a label for
    the thing above it. A caption is not body copy; it is part of the figure. */
 .landing-shot figcaption {
@@ -3346,25 +3361,12 @@ a code {
    217 / 197 / 257 tall, which read as three unrelated boxes that happened to land in a
    row. The grid default does the work; `start` was making each panel shrink-wrap. */
 .landing-tabs-triple {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
-  gap: 1rem;
-  align-items: stretch;
   margin: 1.25rem 0 0;
 }
 .landing-tabs-triple .term {
   min-width: 0;
 }
 
-/* `.term + *` above means "a terminal frame followed by prose", which is a STACKING
-   relationship. Inside this row the frames are grid siblings sitting side by side, so
-   the rule was matching panels 2 and 3 and giving each a 30px top margin: they started
-   30px below panel 1 and could not fill the row, which is why the set measured
-   287 / 257 / 257 with ragged bottoms even after align-items went to stretch. Adjacency
-   across a grid row is not adjacency down the page. */
-.site-landing .landing-tabs-triple .term + * {
-  margin-top: 0;
-}
 .landing-tabs-triple .term-body {
   font-size: 0.78rem;
 }
@@ -3451,7 +3453,7 @@ a code {
 /* The asset is cropped to the mascot, so its box is what you see. It used to carry
    278px of empty canvas on the left and 229px on the right - a third of its width -
    which meant every margin here was measured from an edge the reader could not see,
-   and the 49px difference between the two sides made it look mis-centred no matter
+   and the 49px difference between the two sides made it look mis-centered no matter
    what the CSS said.
 
    Wide screens float him into the prose. Deliberately NOT shape-outside: it ties the
@@ -3477,7 +3479,7 @@ a code {
    BETWEEN the first paragraph and the rest, never between the heading and its own
    opening sentence. Wedged up there he pushed the argument 261px down - 28% of a
    phone viewport - so the reader met a picture before a single word of the section
-   they had just been promised. Modest and centred: a mascot competing with the
+   they had just been promised. Modest and centered: a mascot competing with the
    sentence he illustrates has won the wrong contest. */
 @media (max-width: 899px) {
   .landing-float-prose {
@@ -3594,7 +3596,7 @@ a code {
   flex: 0 0 auto;
   /* vertical-align does nothing to a flex item, and baseline alignment puts an
      empty box's baseline at its bottom edge, which lifts it clear of the text and
-     stretches the row. Centre it against the line instead. */
+     stretches the row. Center it against the line instead. */
   align-self: center;
   pointer-events: none;
 }
@@ -3772,14 +3774,6 @@ a code {
    they read as a pair. Two columns once there is room; stacked before that,
    because a half-width column of body text on a tablet is worse than a full one. */
 .landing-pair {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 1.5rem 3rem;
-}
-@media (min-width: 900px) {
-  .landing-pair {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 .landing-pair-title {
   font-size: 1.05rem;
@@ -3828,12 +3822,14 @@ a code {
 }
 
 /* Install page (site/download.buzz). It borrows the landing's hero rhythm and section
-   primitives, so the only rules here are the ones where "one command, centred" differs
+   primitives, so the only rules here are the ones where "one command, centered" differs
    from "headline beside a terminal". */
 
-/* .landing-hero is a two-column grid above 1024px: intro on the left, terminal on the
-   right. The install page has no second column, so it would otherwise render its hero at
-   five-elevenths width with a hole beside it. One centred column instead. */
+/* The landing hero is a Pico .grid: two children, so two columns at 768 and one below.
+   The install page's hero has a single child and does not carry the .grid class, so it is
+   an ordinary block and needs no column rules at all - just a centered, measure-capped
+   column. It previously overrode grid-template-columns and justify-items, which stopped
+   meaning anything the moment .landing-hero handed its columns to the framework. */
 .download-hero {
   grid-template-columns: minmax(0, 1fr);
   justify-items: center;
@@ -3841,11 +3837,12 @@ a code {
   margin-top: 3rem;
 }
 .download-hero .landing-intro {
+  margin-inline: auto;
   max-width: var(--landing-measure, 42rem);
 }
 
-/* The command block is the page. It sits left-aligned inside the centred column, because
-   a shell transcript centred line by line is unreadable. */
+/* The command block is the page. It sits left-aligned inside the centered column, because
+   a shell transcript centered line by line is unreadable. */
 .download-command {
   margin: 2rem 0 1rem;
   text-align: left;

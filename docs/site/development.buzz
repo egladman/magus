@@ -61,7 +61,7 @@ fun registerDevPage(title: str, desc: str, url: str, srcRel: str, site: Site) > 
 // The landing is README.md - the repository's front door renders at /development/, not at
 // gen's root (see renderRoot). It is the section overview, and it is registered whether or
 // not the workspace reported any projects, because renderRoot writes that page regardless.
-export fun collectDevelopmentPages(site: Site) > void {
+export fun collectDevelopmentPages(site: Site) > void !> any {
     registerDevPage("Development", DEVELOPMENT_DESC, "development/", "README.md", site);
     if (fs\isFile(site.root + "/CONTRIBUTING.md")) {
         registerDevPage("Contributing", CONTRIBUTING_DESC,

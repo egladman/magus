@@ -55,7 +55,8 @@ export function initRunExample(): void {
     if (!r) return "(no result)";
     if (!r.ok) {
       const d = r.diag;
-      const why = d && d.msg ? (d.line > 0 ? d.line + ":" + d.col + ": " + d.msg : d.msg) : "dry run failed";
+      const why =
+        d && d.msg ? (d.line > 0 ? d.line + ":" + d.col + ": " + d.msg : d.msg) : "dry run failed";
       return (r.output ? r.output + "\n" : "") + why;
     }
     const lines: string[] = [];

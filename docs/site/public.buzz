@@ -119,7 +119,7 @@ export fun loadReleases(site: Site) > void !> any {
     // isVersionTag before it can claim to be a release. Without that, one stray tag
     // newer than the last real one silently becomes the announced version AND the
     // expansion of __MAGUS_VERSION__ across the install docs.
-    var tags: [{str: str}] = mut [<{str: str}>];
+    var tags: mut [{str: str}] = mut [<{str: str}>];
     foreach (t in vcs\tags("v*")) {
         if (isVersionTag(t["name"])) { tags.append(t); }
     }

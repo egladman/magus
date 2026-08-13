@@ -560,7 +560,7 @@ export fun renderRoot(site: Site) > void !> any {
 
     final doc = renderPage(title, desc, html, "README.md", "", README_URL, readingTime(md), parseTags(md), site);
     final dir = site.outDir + "/" + pageDir;
-    fs\makeDirectory(dir);
+    fs\mkdirAll(dir);
     fs\writeFile(dir + "/index.html", doc);
     // "View source" targets this file directly - write the original, unamended README so it
     // matches the committed source byte for byte (the synthesized frontmatter is build-only).

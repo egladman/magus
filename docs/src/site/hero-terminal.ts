@@ -29,7 +29,7 @@ const HELP = [
   "  clear   clear the screen",
   "",
   "  anything else is evaluated as Buzz, the language a magusfile is",
-  "  written in. Try:  import \"std\"; std\\print(1 + 1);",
+  '  written in. Try:  import "std"; std\\print(1 + 1);',
 ].join("\n");
 
 // The reply to `magus <anything>`, and the reason this shell is not a liar: magus
@@ -43,8 +43,12 @@ const NO_MAGUS = [
 export function initHeroTerminal(): void {
   const term = document.querySelector<HTMLElement>("[data-hero-terminal]");
   if (!term) return;
-  const body = term.querySelector<HTMLElement>(".term-body");
-  if (!body) return;
+  const bodyEl = term.querySelector<HTMLElement>(".term-body");
+  if (!bodyEl) return;
+  // Rebound as a non-nullable const. The helpers below are hoisted function
+  // declarations, so TypeScript will not carry the null check above into them,
+  // and biome.json bans the non-null assertion that would otherwise paper over it.
+  const body: HTMLElement = bodyEl;
 
   // Start fetching the runtime now, long before anyone types. The service worker
   // precaches buzz.wasm, so this is usually a Cache Storage read rather than a
@@ -69,8 +73,10 @@ export function initHeroTerminal(): void {
     'aria-label="Terminal input">';
   if (cursor) line.appendChild(cursor);
   body.appendChild(line);
-  const input = line.querySelector<HTMLInputElement>(".term-input");
-  if (!input) return;
+  const inputEl = line.querySelector<HTMLInputElement>(".term-input");
+  if (!inputEl) return;
+  // Same reason as body above.
+  const input: HTMLInputElement = inputEl;
 
   // A second warm signal, earlier than any keystroke: pointing at the box is intent.
   term.addEventListener("pointerenter", warmBuzz, { once: true });
@@ -89,14 +95,15 @@ export function initHeroTerminal(): void {
     const el = document.createElement("span");
     if (cls) el.className = cls;
     el.textContent = text + "\n";
-    body!.insertBefore(el, line);
+    body.insertBefore(el, line);
   }
 
   function echo(cmd: string): void {
     const el = document.createElement("span");
     el.innerHTML = '<span class="term-prompt">$</span> <span class="term-cmd"></span>\n';
-    el.querySelector(".term-cmd")!.textContent = cmd;
-    body!.insertBefore(el, line);
+    const cmdEl = el.querySelector(".term-cmd");
+    if (cmdEl) cmdEl.textContent = cmd;
+    body.insertBefore(el, line);
   }
 
   input.value = PRETYPED;
@@ -105,7 +112,7 @@ export function initHeroTerminal(): void {
   // flex item, sits immediately after it. Exact because the line is monospace.
   // Without this the input is flex: 1 and the cursor is pushed to the far right.
   function sizeInput(): void {
-    input!.style.width = Math.max(input!.value.length, 1) + "ch";
+    input.style.width = Math.max(input.value.length, 1) + "ch";
   }
   sizeInput();
   input.addEventListener("input", sizeInput);
@@ -146,7 +153,7 @@ export function initHeroTerminal(): void {
     if (cmd === "") return;
     if (cmd === "clear") {
       // Keep the prompt; drop everything above it.
-      while (body!.firstChild && body!.firstChild !== line) body!.removeChild(body!.firstChild);
+      while (body.firstChild && body.firstChild !== line) body.removeChild(body.firstChild);
       return;
     }
     if (cmd === "help") {
@@ -180,7 +187,7 @@ export function initHeroTerminal(): void {
       input.value = "";
       submit(v);
       term.scrollTop = term.scrollHeight;
-      body!.scrollTop = body!.scrollHeight;
+      body.scrollTop = body.scrollHeight;
       return;
     }
     if (ev.key === "ArrowUp") {
