@@ -178,7 +178,24 @@ jobs:
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
-      - uses: crazy-max/ghaction-github-runtime@b3a9207c0e1ef41f4cf215303c976869d0c2c1c4 # v3.0.0
+      # spells/github/actions reads these for the remote cache. The runner injects them
+      # into an action's process but not into a `run:` step, and not into a composite's
+      # run steps either, so re-exporting them takes a JS action.
+      - name: Export the Actions cache service credentials
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            for (const name of ['ACTIONS_RESULTS_URL', 'ACTIONS_RUNTIME_TOKEN']) {
+              const value = process.env[name]
+              // Warn, not fail: the spell reports itself disabled and the shard still
+              // builds, just without the cache.
+              if (!value) {
+                core.warning(`${name} is not set; the magus remote cache stays disabled for this job`)
+                continue
+              }
+              if (name.endsWith('_TOKEN')) core.setSecret(value)
+              core.exportVariable(name, value)
+            }
 
       # internal/codec's cgo xz/zstd fast path is the only thing here that needs a
       # system library, and these two are it. libgtk-3-dev and libwebkit2gtk-4.1-dev

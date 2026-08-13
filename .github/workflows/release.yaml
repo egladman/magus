@@ -347,18 +347,25 @@ jobs:
         run: echo "prerelease=$(magus buzz .github/actions/magus/prerelease.buzz)" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
-        with:
-          # This action does NOT infer prerelease from the tag name; left unset it defaults
-          # to false, which would publish v0.5.0-rc.1 as an ordinary release and hand it the
-          # repo's `latest` pointer - the one `gh release view` resolves for CI's compat job
-          # and `magus self update` follows.
-          prerelease: ${{ steps.release.outputs.prerelease }}
-          files: |
-            dist/magus_*.tar.gz
-            dist/SHA256SUMS
-            dist/SHA256SUMS.sig
-          generate_release_notes: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          # Not inferred from the tag name: left to the default, v0.5.0-rc.1 would take the
+          # repo's `latest` pointer, which audit's compat job and `magus self update` follow.
+          PRERELEASE: ${{ steps.release.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          ASSETS=(dist/magus_*.tar.gz dist/SHA256SUMS dist/SHA256SUMS.sig)
+          # Re-runnable: a later step failing is the normal reason to be here twice, and a
+          # bare `create` would die on "already exists" and block the retry.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG already exists; re-uploading assets"
+            gh release upload "$TAG" --clobber "${ASSETS[@]}"
+          else
+            FLAGS=(--generate-notes)
+            if [ "$PRERELEASE" = "true" ]; then FLAGS+=(--prerelease); fi
+            gh release create "$TAG" "${FLAGS[@]}" "${ASSETS[@]}"
+          fi
 
       # The two steps below are what `magus self update` needs and the GitHub Release
       # does not supply. Neither ran until now: `cut` and `release-index` were written,
