@@ -2773,8 +2773,34 @@ a code {
      element's OWN font size: 68ch on an h2 at 1.9rem computed to 1440px against the
      body's 728px, so every heading hung a long way left of its own text. One unit
      everything resolves identically. 42rem is that same 68-character measure at body
-     size. */
-  --landing-measure: 42rem;
+     size.
+
+     Now pinned to 700px rather than 42rem, because 700 is a rung of Pico's own container
+     ladder (510 / 700 / 950 / 1200 / 1450 - the .container max-widths at each breakpoint)
+     and 42rem resolved to 714px against Pico's responsive root size. 14px off a rung reads
+     as a mistake rather than a choice, which is most of what made the page feel unsettled.
+     Same measure to within 2%; the character count is unchanged in any way a reader
+     notices. */
+  --landing-measure: 700px;
+
+  /* The middle rung, and the one this page was missing. Content jumped 700 -> 1200 with
+     nothing between, so a terminal or a card grid read as "suddenly enormous" next to the
+     prose. picocss.com's own landing sits nearly all of its content at 950 and keeps 1200
+     for the section wrapper, which is invisible - measured 2026-08-10: h1, p, pre and the
+     CTA grid all render 950 wide at left 245 inside a 1200 container. */
+  --landing-wide: 950px;
+}
+
+/* One rung, set on the block itself, centred on the same axis as the prose. Pico sets the
+   width once on a section wrapper (.hook, .demo) and lets every child inherit it; these are
+   the direct children that were defaulting to the full container instead. Scoped to `>` so
+   the terminals nested inside the three-panel output row keep their grid-derived width. */
+.site-landing .landing-section > .landing-cards,
+.site-landing .landing-section > .landing-shot,
+.site-landing .landing-section > .landing-tabs,
+.site-landing .landing-section > .term {
+  max-width: var(--landing-wide);
+  margin-inline: auto;
 }
 
 /* The text column is CENTRED in the container, not flush left inside it. The cards,
@@ -3315,15 +3341,29 @@ a code {
    so the row drops to two and then one as the container narrows instead of squeezing
    three unreadable columns of monospace. Each frame keeps .term-body's overflow-x, so
    a long line scrolls inside its own panel rather than widening the page. */
+/* Stretch, not start. These three frames are one answer rendered three ways, so they
+   are a set and a set has one bottom edge. Sized to their own content they came out
+   217 / 197 / 257 tall, which read as three unrelated boxes that happened to land in a
+   row. The grid default does the work; `start` was making each panel shrink-wrap. */
 .landing-tabs-triple {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
   gap: 1rem;
-  align-items: start;
+  align-items: stretch;
   margin: 1.25rem 0 0;
 }
 .landing-tabs-triple .term {
   min-width: 0;
+}
+
+/* `.term + *` above means "a terminal frame followed by prose", which is a STACKING
+   relationship. Inside this row the frames are grid siblings sitting side by side, so
+   the rule was matching panels 2 and 3 and giving each a 30px top margin: they started
+   30px below panel 1 and could not fill the row, which is why the set measured
+   287 / 257 / 257 with ragged bottoms even after align-items went to stretch. Adjacency
+   across a grid row is not adjacency down the page. */
+.site-landing .landing-tabs-triple .term + * {
+  margin-top: 0;
 }
 .landing-tabs-triple .term-body {
   font-size: 0.78rem;
@@ -3764,8 +3804,18 @@ a code {
 
 /* A card grid followed by prose needs the section's own rhythm between them; the
    grid has no bottom margin of its own. Same relationship-shaped rule as the
-   terminal frame above, for the same reason. */
+   terminal frame above, for the same reason.
+
+   The tab card, the three-panel output row and the screenshot figure are the same
+   shape of block and were missing from this list, so each of them sat at a measured
+   gap of ZERO against the paragraph underneath - the prose started on the pixel the
+   frame ended. Three separate reports of "it's cuddled up against it" were all this
+   one omission. Listed here rather than given margins of their own, so there stays a
+   single place that answers "what separates a block from the prose after it". */
 .site-landing .landing-cards + *,
+.site-landing .landing-tabs + *,
+.site-landing .landing-tabs-triple + *,
+.site-landing .landing-shot + *,
 .site-landing .landing-pair + * {
   margin-top: var(--landing-lead-gap);
 }

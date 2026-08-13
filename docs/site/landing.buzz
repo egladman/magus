@@ -38,13 +38,13 @@ import "engine/page" as _;
 // Classed spans, not ANSI: the terminal's colour comes from site.css, so it follows the
 // reader's light/dark theme instead of baking one palette into the markup.
 final TERMINAL_SESSION = `<span class="term-prompt">$</span> <span class="term-cmd">magus affected ci --dry-run</span>
-<span class="term-muted">projects: libs/textsearch (1 of 4)
+<span class="term-muted">projects: apps/web (1 of 7)
 base: git diff vs origin/main
 charms: rw
 cache: local (read+write)
 dry run: commands shown, not executed</span>
-<span class="term-ok">[dry]</span> libs/textsearch
-  magus run ci libs/textsearch
+<span class="term-ok">[dry]</span> apps/web
+  magus run ci apps/web
   <span class="term-cmd">$ pnpm install --frozen-lockfile</span>
   <span class="term-cmd">$ pnpm run typecheck</span>
   <span class="term-cmd">$ pnpm exec biome check src</span>
@@ -271,40 +271,41 @@ export fun ci(ctx: magus&#92;Context, args: [str]) &gt; void \{
       <div class="term term-plain">
         <div class="term-bar">
           <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-          <span class="term-name" data-nolink>magus ls targets libs/textsearch</span>
+          <span class="term-name" data-nolink>magus ls targets apps/api</span>
         </div>
-        <pre class="term-body"><code>project: libs/textsearch (6 targets)
-  preflight
-  generate        Regenerates MAGUS.md and fails on drift.
-  index-generate  Renders MAGUS.md from this magusfile.
-  lint            the TypeScript type-check plus Biome's banned patterns.
-  test            the node:test suite, and a coverage badge from the run.
-  ci              the anchor that magus affected ci keys off.</code></pre>
+        <pre class="term-body"><code>project: apps/api (3 targets)
+  generate  regenerates the client from the schema.
+  lint      [buf: buf-lint]
+  ci        [needs: generate, lint]</code></pre>
       </div>
       <div class="term term-plain">
         <div class="term-bar">
           <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-          <span class="term-name" data-nolink>magus ls targets libs/textsearch -o name</span>
+          <span class="term-name" data-nolink>magus ls targets apps/api -o name</span>
         </div>
         <pre class="term-body"><code>ci
 generate
-index-generate
-lint
-preflight
-test</code></pre>
+lint</code></pre>
       </div>
       <div class="term term-plain">
         <div class="term-bar">
           <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-          <span class="term-name" data-nolink>magus ls targets libs/textsearch -o json</span>
+          <span class="term-name" data-nolink>magus ls targets apps/api -o json</span>
         </div>
         <pre class="term-body"><code class="language-json">\{
-  "path": "libs/textsearch",
-  "count": 6,
-  "targets": [
-    \{ "name": "generate",
-      "doc": "Regenerates MAGUS.md and fails on drift.",
-      "reads_secrets": false \}
+  "workspace": "/home/dev/src/acme",
+  "count": 1,
+  "projects": [
+    \{
+      "path": "apps/api",
+      "name": "api",
+      "count": 3,
+      "targets": [
+        \{ "name": "generate", "reads_secrets": false \},
+        \{ "name": "lint", "reads_secrets": false \},
+        \{ "name": "ci", "dependencies": ["generate", "lint"] \}
+      ]
+    \}
   ]
 \}</code></pre>
       </div>
@@ -351,8 +352,8 @@ test</code></pre>
         <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
         <span class="term-name" data-nolink>magus query invocation invmsnkhkml1</span>
       </div>
-      <pre class="term-body"><code>command: magus run lint libs/textsearch
-cwd:     ~/src/magus
+      <pre class="term-body"><code>command: magus run lint apps/web
+cwd:     ~/src/acme
 started: 2026-08-10 14:30:49 (3.488s)
 status:  pass
 
@@ -373,9 +374,9 @@ events:  19
       </div>
       <pre class="term-body"><code>target:  lint:rw
 status:  pass (1.843s)
-inv:     invmsnkhkml1  (magus run lint libs/textsearch)
+inv:     invmsnkhkml1  (magus run lint apps/web)
 key:     840a2b0bbffb9be6...553bfe4d (keyVersion 5)
-rev:     abd9629fb6e7 (dirty: uncommitted changes at capture time;
+rev:     9f3c1d7a4b2e (dirty: uncommitted changes at capture time;
          the revision alone may not reproduce it)
 
 key components:
@@ -438,9 +439,9 @@ key components:
   "max_parallel": 3,
   "source": "git diff vs origin/main",
   "matrix": [
-    \{ "shard": "0", "projects": ". docs/guides/integrations/agents libs/textsearch" \},
-    \{ "shard": "1", "projects": "console evals" \},
-    \{ "shard": "2", "projects": "docs libs/gopherbuzz" \}
+    \{ "shard": "0", "projects": ". apps/api libs/schema" \},
+    \{ "shard": "1", "projects": "apps/web libs/ui" \},
+    \{ "shard": "2", "projects": "services/worker libs/testing" \}
   ]
 \}</code></pre>
         </div>
@@ -478,7 +479,7 @@ key components:
             <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
             <span class="term-name" data-nolink>magus affected ci --plan | magus run ci-shard:gha</span>
           </div>
-          <pre class="term-body"><code class="language-ini">matrix=\{"include":[\{"shard":"0","projects":". docs/guides/integrations/agents libs/textsearch"\},\{"shard":"1","projects":"console evals"\},\{"shard":"2","projects":"docs libs/gopherbuzz"\}]\}
+          <pre class="term-body"><code class="language-ini">matrix=\{"include":[\{"shard":"0","projects":". apps/api libs/schema"\},\{"shard":"1","projects":"apps/web libs/ui"\},\{"shard":"2","projects":"services/worker libs/testing"\}]\}
 count=3
 max_parallel=3</code></pre>
         </div>
@@ -517,11 +518,11 @@ std&#92;print(yaml);</code></pre>
   parallel:
     matrix:
       - SHARD: "0"
-        PROJECTS: ". docs/guides/integrations/agents libs/textsearch"
+        PROJECTS: ". apps/api libs/schema"
       - SHARD: "1"
-        PROJECTS: "console evals"
+        PROJECTS: "apps/web libs/ui"
       - SHARD: "2"
-        PROJECTS: "docs libs/gopherbuzz"</code></pre>
+        PROJECTS: "services/worker libs/testing"</code></pre>
         </div>
       </section>
     </article>
