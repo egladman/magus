@@ -1,6 +1,6 @@
 //go:build noselfupdate
 
-package manpage
+package clispec
 
 // selfCommand (noselfupdate build) - update is compiled in by default and is
 // omitted here because this build used -tags noselfupdate. install-shorthand

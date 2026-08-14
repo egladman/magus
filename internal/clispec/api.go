@@ -1,4 +1,4 @@
-package manpage
+package clispec
 
 //go:generate go run ../../cmd/magus-utils api -out testdata/api.lock
 

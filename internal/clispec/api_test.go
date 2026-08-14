@@ -1,4 +1,4 @@
-package manpage
+package clispec
 
 import (
 	"os"
@@ -16,11 +16,11 @@ import (
 // API cannot silently change without the diff appearing in a PR. On failure,
 // regenerate:
 //
-//	go generate ./internal/manpage/...
+//	go generate ./internal/clispec/...
 func TestAPIUpToDate(t *testing.T) {
 	committed, err := os.ReadFile(filepath.Join("testdata", "api.lock"))
 	require.NoError(t, err, "read testdata/api.lock")
 	got := strings.Join(API(config.KnownKeys()), "\n") + "\n"
 	assert.Equal(t, string(committed), got,
-		"internal/manpage/testdata/api.lock is out of date; run: go generate ./internal/manpage/...")
+		"internal/clispec/testdata/api.lock is out of date; run: go generate ./internal/clispec/...")
 }

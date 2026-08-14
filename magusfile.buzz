@@ -781,7 +781,7 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 // artifact - the .1 source the `man` command reads, shipped with releases - so they
 // stay owned here at the root, NOT in the docs project. The docs project owns the
 // Markdown manpages (docs/manpage/*.md) instead; both flavors are serialized from the
-// same internal/manpage registry by cmd/magus-manpage (see its -format flag).
+// same internal/clispec registry by cmd/magus-manpage (see its -format flag).
 //
 // It also refreshes api.lock, the drift-gated snapshot of the public CLI surface,
 // because that is serialized from the SAME registry - the two can only disagree if
@@ -789,10 +789,10 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 // so TestAPIUpToDate's remedy was a raw `go generate` that `magus run generate`
 // never performed.
 export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("manpage/*.1", "internal/manpage/testdata/api.lock");
+    ctx.writesFiles("manpage/*.1", "internal/clispec/testdata/api.lock");
     fs\mkdirAll("manpage");
     proc\exec("go", ["run", "./cmd/magus-manpage", "-format", "roff", "-out", "manpage"]);
-    proc\exec("go", ["generate", "./internal/manpage/..."]);
+    proc\exec("go", ["generate", "./internal/clispec/..."]);
 }
 
 // CHANGELOG.md is a root artifact. Keeping its generator beside the file avoids a
@@ -830,7 +830,7 @@ export fun bindings_generate(ctx: magus\Context, args: [str]) > void !> any {
 // Regenerates the magusfile API surface lock: every member a magusfile can call on the
 // magus namespace, one dotted name per line. Named for the magusfile surface rather
 // than "api" alone, because two other things in this repo are also an API surface -
-// internal/manpage/testdata/api.lock is the CLI's, and cmd/magus/surface.go drives
+// internal/clispec/testdata/api.lock is the CLI's, and cmd/magus/surface.go drives
 // completions.
 //
 // The regeneration route is a TEST, not a generator, which is why this target exists:

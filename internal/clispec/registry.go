@@ -1,9 +1,9 @@
-package manpage
+package clispec
 
 import "time"
 
 // All is the ordered list of magus top-level commands consumed by the
-// man-page generator (internal/manpage).
+// man-page generator (cmd/magus-manpage).
 var All = []Command{
 	listCommand,
 	describeCommand,
@@ -1008,7 +1008,7 @@ paths-relative-to-<dir> case. Absolute destinations are refused unless
 		{Name: "global", Kind: FlagBool, Doc: "Allow absolute destination paths in write mode (agent install)"},
 	},
 	Examples: []Example{
-		{"Install into a repo's Claude skills", "magus agent install .claude/skills"},
+		{"Install into a repo's agent skills directory", "magus agent install .claude/skills"},
 		{"Refresh installed skills", "magus agent install .claude/skills --force"},
 		{"Refresh, and drop skills this version no longer ships", "magus agent install .claude/skills --force --prune"},
 		{"Install anywhere via tar", "magus agent install --tar | tar -xf - -C ~/.config/opencode/skills"},

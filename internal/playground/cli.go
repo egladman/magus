@@ -4,14 +4,14 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/egladman/magus/internal/manpage"
+	"github.com/egladman/magus/internal/clispec"
 )
 
 // This file teaches the browser terminal the REAL magus CLI surface, read from
 // the same command registry the binary, the man pages and the shell completions
 // are generated from.
 //
-// It is a read of a declaration, not a second copy of one. internal/manpage is
+// It is a read of a declaration, not a second copy of one. internal/clispec is
 // pure data - it imports flag and time and nothing else - so it compiles to
 // js/wasm unchanged, and the console gets every subcommand and flag magus
 // actually has without listing any of them here.
@@ -34,8 +34,8 @@ var playgroundVerbs = []string{"help", "ls", "targets", "graph", "run", "eval", 
 
 // cliCommands returns every real magus subcommand name, sorted.
 func cliCommands() []string {
-	out := make([]string, 0, len(manpage.All))
-	for _, c := range manpage.All {
+	out := make([]string, 0, len(clispec.All))
+	for _, c := range clispec.All {
 		out = append(out, c.Name)
 	}
 	sort.Strings(out)
@@ -68,13 +68,13 @@ func completableCommands() []string {
 }
 
 // cliCommand finds a registry command by name.
-func cliCommand(name string) (manpage.Command, bool) {
-	for _, c := range manpage.All {
+func cliCommand(name string) (clispec.Command, bool) {
+	for _, c := range clispec.All {
 		if c.Name == name {
 			return c, true
 		}
 	}
-	return manpage.Command{}, false
+	return clispec.Command{}, false
 }
 
 // cliFlagNames returns the flag spellings a subcommand declares, each with its

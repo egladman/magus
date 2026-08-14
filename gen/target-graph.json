@@ -149,7 +149,7 @@
               "glob": "manpage/*.1"
             },
             {
-              "glob": "internal/manpage/testdata/api.lock"
+              "glob": "internal/clispec/testdata/api.lock"
             }
           ]
         },
@@ -988,7 +988,7 @@
         {
           "name": "content-generate",
           "declared": "content_generate",
-          "doc": "content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph).",
+          "doc": "content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/clispec), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph).",
           "spells": [
             {
               "spell": "go",
@@ -1016,7 +1016,7 @@
             },
             {
               "project": ".",
-              "glob": "internal/manpage/**/*.go"
+              "glob": "internal/clispec/**/*.go"
             },
             {
               "project": ".",

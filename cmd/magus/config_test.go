@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/clispec"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/manpage"
 )
 
 func TestRunConfigView_Text(t *testing.T) {
@@ -212,7 +212,7 @@ func TestRunAffectedFlagParity(t *testing.T) {
 // vacuously if it were not for its own emptiness check.
 func registryFlagNames(t *testing.T, command string) map[string]struct{} {
 	t.Helper()
-	for _, c := range manpage.All {
+	for _, c := range clispec.All {
 		if c.Name != command {
 			continue
 		}

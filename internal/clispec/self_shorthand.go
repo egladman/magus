@@ -1,4 +1,4 @@
-package manpage
+package clispec
 
 // selfInstallShorthandCommand documents `magus self install-shorthand`. It lives
 // outside the build-tagged self pages because the shorthand does not depend on

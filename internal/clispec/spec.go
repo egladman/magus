@@ -1,6 +1,17 @@
-// Package manpage defines the Command and Target types used by both the
-// magus CLI and the man-page generator (cmd/magus-manpage).
-package manpage
+// Package clispec is the declarative specification of the magus CLI: every
+// subcommand, its flags, usage, examples and prose, as data.
+//
+// It is the single source those facts have. The CLI binds its flags from it (via
+// the generated binders in cmd/magus/gen), cmd/magus-manpage renders it to roff
+// and Markdown, cmd/magus-utils emits the flag-name constants and the api.lock
+// from it, the shell completions are generated from it, and the browser terminal
+// reads it to complete and explain commands it cannot run.
+//
+// It was called "manpage" while the man pages were its only consumer. The name
+// outlived that by five consumers: a package a WASM terminal imports to learn the
+// CLI should not be named after one of its renderings. The roff rendering lives
+// here still, as one output among several rather than as the package's purpose.
+package clispec
 
 import (
 	"flag"

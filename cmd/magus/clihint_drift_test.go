@@ -4,8 +4,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/egladman/magus/internal/clispec"
 	"github.com/egladman/magus/internal/interactive/clihint"
-	"github.com/egladman/magus/internal/manpage"
 )
 
 // TestClihintHeadsAreRealSubcommands guards against the drift that shipped a
@@ -85,15 +85,15 @@ func TestClihintQueryOutputForm(t *testing.T) {
 }
 
 // TestManpageCoversEverySubcommand guards the drift that shipped `magus man` with pages for
-// 21 of 30 subcommands, vcs among them. internal/manpage/registry.go is a hand-maintained
+// 21 of 30 subcommands, vcs among them. internal/clispec/registry.go is a hand-maintained
 // mirror of surface.go, and api_test.go cannot catch divergence: it locks api.lock against
 // API(), which is generated from the same registry.
 func TestManpageCoversEverySubcommand(t *testing.T) {
 	// `magus help` prints what `magus` prints; man(1) has no page for it.
 	const notDocumented = "help"
 
-	documented := make(map[string]bool, len(manpage.All))
-	for _, c := range manpage.All {
+	documented := make(map[string]bool, len(clispec.All))
+	for _, c := range clispec.All {
 		documented[c.Name] = true
 	}
 
@@ -102,16 +102,16 @@ func TestManpageCoversEverySubcommand(t *testing.T) {
 			continue
 		}
 		if !documented[s.Name] {
-			t.Errorf("subcommand %q has no manpage.All entry, so `magus man` installs no page for it "+
-				"and the docs site renders none - add one to internal/manpage/registry.go", s.Name)
+			t.Errorf("subcommand %q has no clispec.All entry, so `magus man` installs no page for it "+
+				"and the docs site renders none - add one to internal/clispec/registry.go", s.Name)
 		}
 	}
 
 	// A page for a command the dispatcher no longer routes is worse than a missing one:
 	// manpage/magus-churn.1 is a committed artifact of exactly that.
-	for _, c := range manpage.All {
+	for _, c := range clispec.All {
 		if !slices.Contains(knownSubcommands, c.Name) {
-			t.Errorf("manpage.All documents %q, which knownSubcommands does not route - "+
+			t.Errorf("clispec.All documents %q, which knownSubcommands does not route - "+
 				"remove the entry, or restore the subcommand", c.Name)
 		}
 	}

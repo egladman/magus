@@ -1,4 +1,4 @@
-package manpage
+package clispec
 
 import (
 	"bytes"

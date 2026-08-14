@@ -91,11 +91,11 @@ magus\project({
                 // built-in spell or its example, or the CLI/manpage registry must mark this
                 // project affected so content-generate re-runs and the drift gate catches an
                 // unregenerated page. Data sources are ../std + ../host (module ref), ../spells
-                // + ../internal/spellruntime (spell docs), and ../internal/manpage + ../internal/config
+                // + ../internal/spellruntime (spell docs), and ../internal/clispec + ../internal/config
                 // (manpages); the tools themselves live under ../cmd/magus-{docs,spelldocs,manpage}.
                 "../std/**/*.go", "../host/**/*.go",
                 "../spells/**/*.buzz", "../internal/spellruntime/**/*.go",
-                "../internal/manpage/**/*.go", "../internal/config/**/*.go",
+                "../internal/clispec/**/*.go", "../internal/config/**/*.go",
                 "../internal/render/**/*.go", "../internal/knowledge/**/*.go",
                 "../cmd/magus-docs/**/*.go", "../cmd/magus-spelldocs/**/*.go",
                 "../cmd/magus-manpage/**/*.go", "../cmd/magus-examples/**/*.go",
@@ -189,7 +189,7 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 // content-generate regenerates the committed docs Markdown derived from the Go source
 // tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry),
 // the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the
-// Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked
+// Markdown manpages (cmd/magus-manpage -format md, from internal/clispec), and the worked
 // examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). The
 // generator tools live at the repo root, so they run from here (the docs cwd) through
 // the go spell's go-run op (`go run ../cmd/...`) writing into this project's own tree,
@@ -200,7 +200,7 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(workspace.file("std/**/*.go"), workspace.file("host/**/*.go"),
         workspace.file("spells/**/*.buzz"), workspace.file("internal/spellruntime/**/*.go"),
-        workspace.file("internal/manpage/**/*.go"), workspace.file("internal/config/**/*.go"),
+        workspace.file("internal/clispec/**/*.go"), workspace.file("internal/config/**/*.go"),
         workspace.file("internal/render/**/*.go"), workspace.file("internal/knowledge/**/*.go"),
         workspace.file("cmd/magus-docs/**/*.go"), workspace.file("cmd/magus-spelldocs/**/*.go"),
         workspace.file("cmd/magus-manpage/**/*.go"), workspace.file("cmd/magus-examples/**/*.go"),
