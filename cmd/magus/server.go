@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"log/slog"
 	"os"
@@ -79,9 +80,9 @@ const daemonDetachEnv = "MAGUS_DAEMON_DETACH"
 const daemonReadyTimeout = 60 * time.Second
 
 func serverStart(ctx context.Context, args []string) error {
-	var foreground bool
+	var sf *gen.ServerStartFlags
 	_, err := cmdParse("server start", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&foreground, "foreground", false, "run in the foreground and block, instead of auto-backgrounding")
+		sf = gen.BindServerStart(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus server start [--foreground] [flags]")
 			fmt.Fprintln(os.Stderr, "\nStart the persistent daemon that serves MCP and accepts nested magus calls.")
@@ -100,7 +101,7 @@ func serverStart(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	_ = foreground // the parent/child split is decided in startDaemonBackground; here we always run the daemon
+	_ = sf.Foreground // the parent/child split is decided in startDaemonBackground; here we always run the daemon
 
 	addr := os.Getenv("MAGUS_DAEMON_SOCKET")
 	if addr == "" {
@@ -260,11 +261,9 @@ func hasBoolFlag(args []string, name string) bool {
 }
 
 func serverStop(ctx context.Context, args []string) error {
-	var socket string
-	var servicesOnly bool
+	var tf *gen.ServerStopFlags
 	_, err := cmdParse("server stop", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&socket, "socket", "", "daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)")
-		fs.BoolVar(&servicesOnly, "services", false, "stop the daemon's hosted services (leave the daemon running)")
+		tf = gen.BindServerStop(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus server stop [flags]")
 			fmt.Fprintln(os.Stderr, "\nSend a graceful shutdown request to a running daemon. In-flight RPCs")
@@ -279,7 +278,7 @@ func serverStop(ctx context.Context, args []string) error {
 		return err
 	}
 
-	addr, err := resolveDaemonAddr(ctx, socket)
+	addr, err := resolveDaemonAddr(ctx, tf.Socket)
 	if err != nil {
 		// No socket resolved (nothing configured, nothing discoverable): there is no daemon
 		// to stop. Say so plainly and exit non-zero so a script never reads a clean stop as
@@ -287,7 +286,7 @@ func serverStop(ctx context.Context, args []string) error {
 		fmt.Fprintln(os.Stderr, "magus: no running daemon found")
 		return errSilent{exitCode: 1}
 	}
-	if servicesOnly {
+	if tf.Services {
 		n, err := proc.StopAllServices(ctx, addr)
 		if err != nil {
 			return fmt.Errorf("server stop: %w", err)

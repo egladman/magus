@@ -245,8 +245,12 @@ const (
 	FlagSelfUpdateY = "y"
 	// self update: --yes
 	FlagSelfUpdateYes = "yes"
-	// server: --foreground
-	FlagServerForeground = "foreground"
+	// server start: --foreground
+	FlagServerStartForeground = "foreground"
+	// server stop: --services
+	FlagServerStopServices = "services"
+	// server stop: --socket
+	FlagServerStopSocket = "socket"
 	// status: --W
 	FlagStatusW = "W"
 	// status: --c
@@ -653,15 +657,29 @@ func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
 	return &f
 }
 
-// ServerFlags are the flags declared for `magus server`.
-type ServerFlags struct {
+// ServerStartFlags are the flags declared for `magus server start`.
+type ServerStartFlags struct {
 	Foreground bool // --foreground
 }
 
-// BindServer registers `magus server`'s flags on fs and returns the destination.
-func BindServer(fs *flag.FlagSet) *ServerFlags {
-	var f ServerFlags
-	fs.BoolVar(&f.Foreground, FlagServerForeground, false, "Run in the foreground and block, instead of auto-backgrounding (server start)")
+// BindServerStart registers `magus server start`'s flags on fs and returns the destination.
+func BindServerStart(fs *flag.FlagSet) *ServerStartFlags {
+	var f ServerStartFlags
+	fs.BoolVar(&f.Foreground, FlagServerStartForeground, false, "Run in the foreground and block, instead of auto-backgrounding")
+	return &f
+}
+
+// ServerStopFlags are the flags declared for `magus server stop`.
+type ServerStopFlags struct {
+	Socket   string // --socket
+	Services bool   // --services
+}
+
+// BindServerStop registers `magus server stop`'s flags on fs and returns the destination.
+func BindServerStop(fs *flag.FlagSet) *ServerStopFlags {
+	var f ServerStopFlags
+	fs.StringVar(&f.Socket, FlagServerStopSocket, "", "Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)")
+	fs.BoolVar(&f.Services, FlagServerStopServices, false, "Stop the daemon's hosted services, leaving the daemon running")
 	return &f
 }
 

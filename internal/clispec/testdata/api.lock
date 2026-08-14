@@ -154,7 +154,6 @@ flag run/step
 flag run/timeout
 flag run/upstream
 flag run/wait
-flag server/foreground
 flag status/W
 flag status/c
 flag status/compact

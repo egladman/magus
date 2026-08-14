@@ -632,12 +632,25 @@ The socket file acts as the lock: present means a daemon is running, absent
 means none. Shell init hooks (e.g. Nix-injected .profile lines) typically
 check for the file with [ -S "$socket" ] before starting one.`,
 	Usage: "magus server <start|stop> [flags]",
+	// Each subcommand carries its own flags. --foreground sat on the parent with
+	// "(server start)" in its doc, and stop's --socket and --services were not
+	// declared at all - bound by the command, absent from every man page.
 	Children: []Command{
-		{Name: "start", Short: "Start a persistent daemon (auto-backgrounds by default; --foreground blocks)"},
-		{Name: "stop", Short: "Send a graceful shutdown request to a running daemon"},
-	},
-	Flags: []Flag{
-		{Name: "foreground", Kind: FlagBool, Doc: "Run in the foreground and block, instead of auto-backgrounding (server start)"},
+		{
+			Name:  "start",
+			Short: "Start a persistent daemon (auto-backgrounds by default; --foreground blocks)",
+			Flags: []Flag{
+				{Name: "foreground", Kind: FlagBool, Doc: "Run in the foreground and block, instead of auto-backgrounding"},
+			},
+		},
+		{
+			Name:  "stop",
+			Short: "Send a graceful shutdown request to a running daemon",
+			Flags: []Flag{
+				{Name: "socket", Kind: FlagString, Doc: "Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)"},
+				{Name: "services", Kind: FlagBool, Doc: "Stop the daemon's hosted services, leaving the daemon running"},
+			},
+		},
 	},
 	Examples: []Example{
 		{"Start the daemon (auto-backgrounds)", "magus server start"},
