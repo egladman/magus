@@ -107,6 +107,9 @@ history to find the commit that introduced a regression.
 **--upstream**
 : With --graph: show dependents instead of dependencies
 
+**--wait**
+: With --detach, block until the run finishes and exit with its status
+
 ## Targets
 
 **ls**

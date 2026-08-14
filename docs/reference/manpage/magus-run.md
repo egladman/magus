@@ -65,6 +65,9 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 **--upstream**
 : With --graph: show dependents instead of dependencies
 
+**--wait**
+: With --detach, block until the run finishes and exit with its status
+
 ## Targets
 
 **ls**
