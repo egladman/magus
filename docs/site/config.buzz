@@ -23,7 +23,7 @@ export fun magusConfig() > Config {
     return Config{
         baseURL = "https://eli.gladman.cc/magus/",
         title = "magus",
-        description = "magus is a fast, cross-platform task orchestrator for polyglot (mono)repos. Single binary, code as configuration, statically typed.",
+        description = "magus is a fast, cross-platform task orchestrator for polyglot (mono)repos. Single binary, programmable targets, statically typed.",
         repoURL = "https://github.com/egladman/magus",
         navLinks = nav,
         generatorDirs = mut ["node_modules", "gen", "src", "tour"],
