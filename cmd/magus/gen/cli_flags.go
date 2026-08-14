@@ -433,7 +433,8 @@ type GraphExportFlags struct {
 // GraphExportDefaults carries the defaults `magus graph export` resolves at runtime (config, a
 // package constant) rather than declaring as a literal.
 type GraphExportDefaults struct {
-	Budget int // --budget
+	URL    string // --url
+	Budget int    // --budget
 }
 
 // BindGraphExport registers `magus graph export`'s flags on fs and returns the destination.
@@ -447,7 +448,7 @@ func BindGraphExport(fs *flag.FlagSet, d GraphExportDefaults) *GraphExportFlags 
 	fs.BoolVar(&f.Targets, FlagGraphExportTargets, false, "With --open: open the target dependency graph instead of the knowledge graph; pass a project path to scope it")
 	fs.BoolVar(&f.Serve, FlagGraphExportServe, false, "With --open: hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with --targets)")
 	fs.BoolVar(&f.Print, FlagGraphExportPrint, false, "With --open: print the explorer URL to stdout instead of launching a browser")
-	fs.StringVar(&f.URL, FlagGraphExportURL, "https://eli.gladman.cc/magus/console/graph/", "With --open: base URL of the Graph Explorer page (override for a self-hosted mirror)")
+	fs.StringVar(&f.URL, FlagGraphExportURL, d.URL, "With --open: base URL of the Graph Explorer page (override for a self-hosted mirror)")
 	fs.BoolVar(&f.Static, FlagGraphExportStatic, false, "Deprecated alias for --reproducible")
 	fs.StringVar(&f.Select, FlagGraphExportSelect, "", "Export only the neighborhood of a query (same grammar as magus query); required for -o dot and -o mermaid")
 	fs.IntVar(&f.Budget, FlagGraphExportBudget, d.Budget, "Node budget for --select (how many nodes the neighborhood may collect)")
@@ -487,8 +488,14 @@ type QueryFlags struct {
 	Secrets  bool   // --secrets
 }
 
+// QueryDefaults carries the defaults `magus query` resolves at runtime (config, a
+// package constant) rather than declaring as a literal.
+type QueryDefaults struct {
+	URL string // --url
+}
+
 // BindQuery registers `magus query`'s flags on fs and returns the destination.
-func BindQuery(fs *flag.FlagSet) *QueryFlags {
+func BindQuery(fs *flag.FlagSet, d QueryDefaults) *QueryFlags {
 	var f QueryFlags
 	fs.IntVar(&f.Budget, FlagQueryBudget, 0, "Max nodes in the returned neighborhood (default 50)")
 	fs.StringVar(&f.Kind, FlagQueryKind, "", "Restrict matches to these node kinds (comma-separated)")
@@ -499,7 +506,7 @@ func BindQuery(fs *flag.FlagSet) *QueryFlags {
 	fs.BoolVar(&f.Publish, FlagQueryPublish, false, "output <ref>: upload this run's output to the remote cache as a signed bundle")
 	fs.BoolVar(&f.Open, FlagQueryOpen, false, "output <ref>: open the captured output in the browser log viewer (delivered privately)")
 	fs.BoolVar(&f.Print, FlagQueryPrint, false, "With --open, print the viewer URL instead of launching a browser")
-	fs.StringVar(&f.URL, FlagQueryURL, "", "With --open, base URL of the log viewer page (override for a self-hosted mirror)")
+	fs.StringVar(&f.URL, FlagQueryURL, d.URL, "With --open, base URL of the log viewer page (override for a self-hosted mirror)")
 	fs.BoolVar(&f.Secrets, FlagQuerySecrets, false, "invocation <id>: list only the credential reads (reference and provider, never the value)")
 	return &f
 }

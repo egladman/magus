@@ -325,7 +325,7 @@ changed are rebuilt, so a query is cheap to repeat; --refresh forces a full rebu
 		{Name: "publish", Kind: FlagBool, Doc: "output <ref>: upload this run's output to the remote cache as a signed bundle"},
 		{Name: "open", Kind: FlagBool, Doc: "output <ref>: open the captured output in the browser log viewer (delivered privately)"},
 		{Name: "print", Kind: FlagBool, Doc: "With --open, print the viewer URL instead of launching a browser"},
-		{Name: "url", Kind: FlagString, Doc: "With --open, base URL of the log viewer page (override for a self-hosted mirror)"},
+		{Name: "url", Kind: FlagString, Default: "https://eli.gladman.cc/magus/console/logs/", DefaultAtBind: true, Doc: "With --open, base URL of the log viewer page (override for a self-hosted mirror)"},
 		{Name: "secrets", Kind: FlagBool, Doc: "invocation <id>: list only the credential reads (reference and provider, never the value)"},
 	},
 	Children: []Command{
@@ -461,7 +461,7 @@ Subcommands (the first argument):
 			{Name: "targets", Kind: FlagBool, Doc: "With --open: open the target dependency graph instead of the knowledge graph; pass a project path to scope it"},
 			{Name: "serve", Kind: FlagBool, Doc: "With --open: hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with --targets)"},
 			{Name: "print", Kind: FlagBool, Doc: "With --open: print the explorer URL to stdout instead of launching a browser"},
-			{Name: "url", Kind: FlagString, Default: "https://eli.gladman.cc/magus/console/graph/", Doc: "With --open: base URL of the Graph Explorer page (override for a self-hosted mirror)"},
+			{Name: "url", Kind: FlagString, Default: "https://eli.gladman.cc/magus/console/graph/", DefaultAtBind: true, Doc: "With --open: base URL of the Graph Explorer page (override for a self-hosted mirror)"},
 			{Name: "static", Kind: FlagBool, Doc: "Deprecated alias for --reproducible"},
 			{Name: "select", Kind: FlagString, Doc: "Export only the neighborhood of a query (same grammar as magus query); required for -o dot and -o mermaid"},
 			{Name: "budget", Kind: FlagInt, Default: 50, DefaultAtBind: true, Doc: "Node budget for --select (how many nodes the neighborhood may collect)"},
