@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/types"
@@ -23,15 +24,9 @@ import (
 //
 // Supported VCSes: git, hg. jj reports ErrUnsupported.
 func affectedBisect(ctx context.Context, root string, args []string) error {
-	var (
-		project *string
-		goodSHA *string
-		target  *string
-	)
+	var bf *gen.AffectedBisectFlags
 	if _, err := cmdParse("affected --bisect", args, func(fs *flag.FlagSet) {
-		project = fs.String("bisect", "", "Project to bisect for the regression's culprit commit")
-		goodSHA = fs.String("good", "", "Known-good commit SHA to start bisect from (auto-detected from history timestamps when empty)")
-		target = fs.String("target", "test", "magus target to bisect (default: test)")
+		bf = gen.BindAffectedBisect(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus affected --bisect <project> [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -45,10 +40,10 @@ func affectedBisect(ctx context.Context, root string, args []string) error {
 	}); err != nil {
 		return err
 	}
-	if *project == "" {
+	if bf.Bisect == "" {
 		return flag.ErrHelp
 	}
-	projectPath := *project
+	projectPath := bf.Bisect
 
 	// Load history.
 	historyPath := globalCfg.HistoryPath
@@ -65,13 +60,13 @@ func affectedBisect(ctx context.Context, root string, args []string) error {
 		Threshold:        globalCfg.Volatility.Threshold,
 	}
 	rt := volatility.NewRuntime(&h, "", cfg, nil, false) // reads history only; never retries
-	if !rt.IsRegression(projectPath, *target) {
-		stats := rt.Stats(projectPath, *target)
+	if !rt.IsRegression(projectPath, bf.Target) {
+		stats := rt.Stats(projectPath, bf.Target)
 		fmt.Fprintf(os.Stderr, "bisect: need >=%d outcomes, volatility score < %.0f%%, and two consecutive affected failures\n",
 			cfg.MinSamples, cfg.Threshold*100)
 		fmt.Fprintf(os.Stderr, "bisect: outcomes recorded: %d, volatility score: %.1f%%\n",
-			len(stats.RecentOutcomes), rt.Score(projectPath, *target)*100)
-		return fmt.Errorf("bisect: no confirmed regression detected for %q/%q", projectPath, *target)
+			len(stats.RecentOutcomes), rt.Score(projectPath, bf.Target)*100)
+		return fmt.Errorf("bisect: no confirmed regression detected for %q/%q", projectPath, bf.Target)
 	}
 
 	// Resolve the active VCS from the workspace root.
@@ -94,16 +89,16 @@ func affectedBisect(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		self = "magus"
 	}
-	testCmd := fmt.Sprintf("%s run %s --no-volatility-retry %s", self, *target, projectPath)
+	testCmd := fmt.Sprintf("%s run %s --no-volatility-retry %s", self, bf.Target, projectPath)
 
 	// Determine the good commit.
 	opts := types.BisectOptions{
-		Good:    *goodSHA,
+		Good:    bf.Good,
 		Bad:     "HEAD",
 		TestCmd: testCmd,
 	}
 	if opts.Good == "" {
-		lastPass := rt.LastPassTime(projectPath, *target)
+		lastPass := rt.LastPassTime(projectPath, bf.Target)
 		if lastPass.IsZero() {
 			return errors.New("bisect: no passing run found in history; provide --good <sha>")
 		}

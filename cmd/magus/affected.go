@@ -15,9 +15,9 @@ import (
 	"slices"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/graph/url"
 	"github.com/egladman/magus/internal/interactive/clihint"
@@ -104,43 +104,9 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// Split on "--" before flag parsing so passthrough args aren't consumed by flag.
 	flagArgs, extraArgs := splitOnDashDash(rest)
 
-	var (
-		baseStr         string
-		base            *string
-		stdin           *bool
-		null            *bool
-		timeout         *time.Duration
-		graphView       *bool
-		upstream        *bool
-		graphDepth      *int
-		step            *bool
-		raceFlag        *string
-		noDefaultCharms *bool
-		openViewer      *bool
-		noCache         *bool
-		detach          *bool
-		wait            *bool
-	)
+	var af *gen.AffectedFlags
 	_, err := cmdParse("affected "+target, flagArgs, func(fs *flag.FlagSet) {
-		// affected-only: VCS diff base ref; `magus run` has no diff. See run_affected_parity_test.go.
-		fs.StringVar(&baseStr, "base", "", "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or origin/main)")
-		fs.StringVar(&baseStr, "b", "", "Short for --base")
-		base = &baseStr
-		// affected-only: reads changed paths from a pipe (watch loop); `magus run` takes explicit project paths. See run_affected_parity_test.go.
-		stdin = fs.Bool("stdin", false, "Read changed file paths from stdin instead of git diff;\n\t\tpairs with `magus watch` (mutually exclusive with --base)")
-		// affected-only: pairs with --stdin. See run_affected_parity_test.go.
-		null = fs.Bool("null", false, "With --stdin: expect NUL-separated paths and double-NUL between batches\n\t\t(pairs with `magus watch --null`)")
-		timeout = fs.Duration("timeout", 0, "Abort if not finished within this duration (e.g. 5m, 1h30m); 0 = no limit")
-		graphView = fs.Bool("graph", false, "Render the dependency graph for the affected scope instead of executing")
-		upstream = fs.Bool("upstream", false, "With --graph: show dependents instead of dependencies")
-		graphDepth = fs.Int("depth", 0, "With --graph: cap displayed depth (0 = unlimited)")
-		step = fs.Bool("step", false, "Pause before each subprocess for interactive stepping (requires TTY; implies --concurrency=1; not compatible with --stdin)")
-		raceFlag = fs.String("race", "", raceFormatHelp)
-		noDefaultCharms = fs.Bool("no-default-charms", false, "Ignore magus.yaml default_charms for this run")
-		openViewer = fs.Bool("open", false, "Open this run in the browser log viewer and stream to it as it goes, over an ephemeral loopback server (127.0.0.1); the link and data never leave your machine")
-		noCache = fs.Bool("no-cache", false, "Force a fresh run even on a cache hit; still refreshes the entry (unlike a skip_cache target, which never snapshots)")
-		detach = fs.Bool("detach", false, "Hand this run to the daemon and return immediately; it prints an invocation id that magus query invocation reads")
-		wait = fs.Bool("wait", false, "With --detach, block until the run finishes and exit with its status")
+		af = gen.BindAffected(fs)
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus affected %s [flags] [-- <extra args>]\n", target)
 			fmt.Fprintln(os.Stderr, "")
@@ -154,43 +120,43 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if err != nil {
 		return err
 	}
-	if wait != nil && *wait && (detach == nil || !*detach) {
+	if af.Wait && !af.Detach {
 		return usagef("magus affected: --wait applies to --detach; a plain run already blocks until it finishes")
 	}
-	if detach != nil && *detach {
-		return detachToDaemon(ctx, root, append([]string{"affected"}, withoutDetachFlag(origArgs)...), wait != nil && *wait)
+	if af.Detach {
+		return detachToDaemon(ctx, root, append([]string{"affected"}, withoutDetachFlag(origArgs)...), af.Wait)
 	}
 
-	if *step && *stdin {
+	if af.Step && af.Stdin {
 		return fmt.Errorf("magus affected: --step and --stdin are mutually exclusive")
 	}
-	if *step && !isInteractiveTTY() {
+	if af.Step && !isInteractiveTTY() {
 		fmt.Fprintln(os.Stderr, "magus: --step requires an interactive terminal")
 		return errSilent{exitCode: 2}
 	}
-	if *step {
+	if af.Step {
 		ctx = withStepGate(ctx)
 	}
 
-	if *timeout > 0 {
+	if af.Timeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = withTimeout(ctx, *timeout, "affected:"+target)
+		ctx, cancel = withTimeout(ctx, af.Timeout, "affected:"+target)
 		defer cancel()
 	}
 
-	if *stdin && *base != "" {
+	if af.Stdin && af.Base != "" {
 		return fmt.Errorf("magus affected: --stdin and --base are mutually exclusive")
 	}
 
-	if *graphView {
-		if *stdin {
+	if af.Graph {
+		if af.Stdin {
 			return fmt.Errorf("magus affected: --graph and --stdin are mutually exclusive")
 		}
 		ws, err := inspectWorkspace(ctx, root)
 		if err != nil {
 			return err
 		}
-		targets, _, _, err := ws.ExpandAffected(ctx, "list", *base)
+		targets, _, _, err := ws.ExpandAffected(ctx, "list", af.Base)
 		if err != nil {
 			return err
 		}
@@ -199,13 +165,13 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 			roots[i] = t.Path
 		}
 		return renderWorkspaceGraph(ctx, ws, graphRenderOptions{
-			Upstream: *upstream,
-			Depth:    *graphDepth,
+			Upstream: af.Upstream,
+			Depth:    af.Depth,
 			Roots:    roots,
 		})
 	}
 
-	if *stdin {
+	if af.Stdin {
 		if target == "ls" {
 			return fmt.Errorf("magus affected: --stdin is not supported with the ls target")
 		}
@@ -219,7 +185,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		if globalCfg.DryRun {
 			streamOpts = append(streamOpts, magus.WithStreamDryRun())
 		}
-		if *null {
+		if af.Null {
 			streamOpts = append(streamOpts, magus.WithStreamNull())
 		}
 		if len(extraArgs) > 0 {
@@ -235,7 +201,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		if err != nil {
 			return err
 		}
-		targets, source, _, err := ws.ExpandAffected(ctx, "list", *base)
+		targets, source, _, err := ws.ExpandAffected(ctx, "list", af.Base)
 		if err != nil {
 			return err
 		}
@@ -247,7 +213,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if err != nil {
 		return err
 	}
-	targets, source, _, err := m.ExpandAffected(ctx, target, *base)
+	targets, source, _, err := m.ExpandAffected(ctx, target, af.Base)
 	if err != nil {
 		return err
 	}
@@ -277,7 +243,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// Merge magus.yaml default_charms with any explicit charm on the target - the same
 	// as `magus run` does. Previously `affected` used only the explicit charms, so
 	// default_charms (e.g. rw) silently did NOT apply to `affected`, unlike `run`.
-	charms := withDefaultCharms(parsed.Charms, globalCfg.DefaultCharms, *noDefaultCharms)
+	charms := withDefaultCharms(parsed.Charms, globalCfg.DefaultCharms, af.NoDefaultCharms)
 	m.LogCharms(ctx, strings.Join(charms, ","))
 	m.LogCache(ctx)
 	if len(targets) == 0 {
@@ -307,7 +273,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	}
 
 	var runOpts []magus.RunOption
-	race, err := resolveRace(*raceFlag)
+	race, err := resolveRace(af.Race)
 	if err != nil {
 		return err
 	}
@@ -320,10 +286,10 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if globalCfg.DryRun {
 		runOpts = append(runOpts, magus.WithDryRun())
 	}
-	if *step {
+	if af.Step {
 		runOpts = append(runOpts, magus.WithStep())
 	}
-	if *noCache {
+	if af.NoCache {
 		runOpts = append(runOpts, magus.WithNoCache())
 	}
 	if rw != nil {
@@ -349,7 +315,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// The client's cwd (carried on ctx for an adopted affected run), not the daemon's
 	// process cwd, so the invocation's journal records where the user actually ran.
 	cwd := clientCwd(ctx)
-	liveBC, stopLive := beginLive(ctx, *openViewer)
+	liveBC, stopLive := beginLive(ctx, af.Open)
 	defer stopLive()
 	// An adopted affected run (dispatched by the daemon) also feeds the daemon's live-run
 	// registry, carried on ctx; a plain CLI run has no sink, so this is empty there.
@@ -365,8 +331,8 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	} else {
 		err = m.Run(invCtx, targets, runOpts...)
 	}
-	if *timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
-		return fmt.Errorf("affected %s: timed out after %s", target, *timeout)
+	if af.Timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("affected %s: timed out after %s", target, af.Timeout)
 	}
 	if reportedRunErr(err) {
 		return errSilent{exitCode: 1}
@@ -523,22 +489,12 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	}
 	target = canonicalTarget(target) // expand short aliases at the CLI edge, mirroring `magus run`
 
-	var (
-		maxShards        *int
-		runnerPoolBudget *int
-		baseStr          string
-		stdin            *bool
-		null             *bool
-		briefing         *bool
-	)
+	var pf *gen.AffectedPlanFlags
 	if _, err := cmdParse("affected "+target+" --plan", flagArgs, func(fs *flag.FlagSet) {
-		maxShards = fs.Int("max-shards", globalCfg.CI.MaxShards, "Maximum CI shards (-1 = unlimited)")
-		runnerPoolBudget = fs.Int("max-parallel-budget", globalCfg.CI.RunnerPoolBudget, "Cross-shard concurrency cap; 0 = unlimited")
-		fs.StringVar(&baseStr, "base", "", "Override base ref for the VCS diff (mutually exclusive with --stdin)")
-		fs.StringVar(&baseStr, "b", "", "Short for --base")
-		stdin = fs.Bool("stdin", false, "Read one set of changed file paths from stdin instead of a VCS diff")
-		null = fs.Bool("null", false, "With --stdin: expect NUL-separated paths")
-		briefing = fs.Bool("detail", false, "Add per-shard detail: the invocation, its spells, the files it declares it writes, and the skills its work routes to")
+		pf = gen.BindAffectedPlan(fs, gen.AffectedPlanDefaults{
+			MaxShards:         globalCfg.CI.MaxShards,
+			MaxParallelBudget: globalCfg.CI.RunnerPoolBudget,
+		})
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus affected <target> --plan [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -555,10 +511,10 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	}); err != nil {
 		return err
 	}
-	if *stdin && baseStr != "" {
+	if pf.Stdin && pf.Base != "" {
 		return fmt.Errorf("magus affected --plan: --stdin and --base are mutually exclusive")
 	}
-	if *null && !*stdin {
+	if pf.Null && !pf.Stdin {
 		return fmt.Errorf("magus affected --plan: --null requires --stdin")
 	}
 
@@ -568,12 +524,12 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	}
 
 	planOpts := magus.PlanOptions{
-		MaxShards:        *maxShards,
-		RunnerPoolBudget: *runnerPoolBudget,
-		BaseRef:          baseStr,
+		MaxShards:        pf.MaxShards,
+		RunnerPoolBudget: pf.MaxParallelBudget,
+		BaseRef:          pf.Base,
 	}
-	if *stdin {
-		planOpts.ChangedPaths, err = readAffectedPlanPaths(os.Stdin, *null)
+	if pf.Stdin {
+		planOpts.ChangedPaths, err = readAffectedPlanPaths(os.Stdin, pf.Null)
 		if err != nil {
 			return err
 		}
@@ -615,7 +571,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	for i, s := range plan.Shards {
 		out.Matrix[i] = planShard{Shard: s.ID, Projects: strings.Join(s.ProjectPaths, " ")}
 	}
-	if *briefing {
+	if pf.Detail {
 		out.Detail, err = planDetail(ctx, m, target, plan.Shards)
 		if err != nil {
 			return err
@@ -666,16 +622,11 @@ func readAffectedPlanPaths(r io.Reader, null bool) ([]string, error) {
 // affected projects and their targets, then surfaces `magus affected ci` as the
 // follow-up. It NEVER executes a target and takes no positional target or project.
 func affectedImpact(ctx context.Context, root string, args []string) error {
-	var (
-		baseStr    string
-		impactFlag bool
-	)
 	// --impact routed us here (hasModeFlag); bind it so the flag parser accepts it,
 	// then parse --base like the other forensic modes. No positional target is read.
+	var imf *gen.AffectedImpactFlags
 	if _, err := cmdParse("affected --impact", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&impactFlag, "impact", false, "Report the blast radius of the changeset (read-only; runs nothing)")
-		fs.StringVar(&baseStr, "base", "", "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or origin/main)")
-		fs.StringVar(&baseStr, "b", "", "Short for --base")
+		imf = gen.BindAffectedImpact(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus affected --impact [--base <ref>]")
 			fmt.Fprintln(os.Stderr, "")
@@ -700,7 +651,7 @@ func affectedImpact(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	out, err := impact.Compute(ctx, ws, baseStr)
+	out, err := impact.Compute(ctx, ws, imf.Base)
 	if err != nil {
 		return err
 	}

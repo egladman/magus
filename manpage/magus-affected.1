@@ -81,7 +81,7 @@ Open this run in the browser log viewer and stream to it as it goes (loopback; n
 Emit a provider\-neutral JSON CI shard plan for the affected set
 .TP
 \fB\-\-race\fR \fIstring\fR
-Run the same target repeatedly to surface order\-dependent failures
+Race\-condition diagnostics (watch|replay, comma\-combinable); omit to disable. watch: attribution\-gated fsnotify detection (MGS4001/4002/4004), emitting only when >=2 projects' output snapshots confirm a shared write. replay: re\-runs cacheable output\-declaring projects sequentially to content\-hash outputs for non\-determinism (MGS4003); roughly doubles wall\-clock.
 .TP
 \fB\-\-stdin\fR
 Read changed file paths from stdin instead of running a VCS diff
