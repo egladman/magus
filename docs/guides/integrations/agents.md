@@ -642,10 +642,11 @@ only while a daemon runs. A hook writes to the trail whether or not one does,
 so if you wire hooks and never run `magus server start`, nothing trims what they
 write. Retention is a daemon-provided property, not a property of the file.
 
-Rotation keeps the newest events across ALL kinds, so a high-volume producer
-shortens the window for every other kind rather than only its own. That is the
-real cost of observing reads, and the reason the section above says to leave it
-off unless you want it.
+Rotation reserves a floor for every kind before spending what is left on
+recency, so a chatty producer cannot evict the rare events - a sandbox denial,
+a config change - that are the reason to keep this record at all. Reads still
+consume the shared window beyond that floor, which is why the section above says
+to leave them off unless you want them; they just cannot starve anything out.
 Commands and paths are intentionally retained because they are the evidence
 needed to improve adoption, so do not put credentials or other secrets in a
 command line. The authenticated Activity view is the supported way to inspect

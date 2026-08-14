@@ -453,6 +453,89 @@ func Rotate(base string) { rotate(base, maxEvents) }
 // to look when it did not need to, never to skip when it did.
 const minEventBytes = 64
 
+// perKindFloor is how many of a kind's newest events survive a rotate regardless of how loud
+// its neighbours are.
+//
+// Plain recency is the wrong policy for a record with kinds this uneven. One chatty producer -
+// an agent hook wired to a read tool is the obvious one, but MCP tool calls do it too - can push
+// every sandbox_denial and config_change out of the window and, because gcBlobs then unlinks
+// whatever no kept line references, DELETE their payloads. The rare kinds are exactly the ones
+// worth keeping: nobody consults this file to find out that a read happened.
+//
+// A floor rather than an equal split, because an equal split wastes the window on kinds that are
+// idle. With the kinds defined here this reserves a minority of maxEvents and leaves the rest to
+// straight recency, so a quiet trail behaves exactly as it did before.
+const perKindFloor = 500
+
+// selectKept chooses which lines survive a rotate: every kind keeps its newest perKindFloor
+// events, and whatever budget remains goes to the newest events of any kind. Order is preserved,
+// because the file is append-ordered and every reader (ReadRecent, LastRun) depends on that.
+//
+// Kind is read with a narrow decode rather than a full Event unmarshal - this runs over the whole
+// file, and the only field the policy needs is the kind. A line that fails to decode has no kind
+// to reserve against and competes on recency alone, which is the same treatment ReadRecent gives
+// a corrupt line.
+func selectKept(lines []string, max int) []string {
+	type lineKind struct {
+		Kind string `json:"kind"`
+	}
+	kindOf := make([]string, len(lines))
+	present := map[string]bool{}
+	for i, l := range lines {
+		if l == "" {
+			continue
+		}
+		var lk lineKind
+		if err := json.Unmarshal([]byte(l), &lk); err != nil {
+			continue
+		}
+		kindOf[i] = lk.Kind
+		if lk.Kind != "" {
+			present[lk.Kind] = true
+		}
+	}
+
+	// The reservation is the floor OR an equal share of the window, whichever is smaller.
+	// Without the share, a floor larger than the window lets the first pass spend the whole
+	// budget on whichever kind happens to be newest - which is precisely the eviction this
+	// policy exists to prevent, reintroduced by the policy itself.
+	reserve := perKindFloor
+	if len(present) > 0 && max/len(present) < reserve {
+		reserve = max / len(present)
+	}
+
+	admit := make([]bool, len(lines))
+	seen := map[string]int{}
+	budget := max
+
+	// Newest first, so "the newest N of this kind" falls out of the iteration order.
+	for i := len(lines) - 1; i >= 0 && budget > 0; i-- {
+		if kindOf[i] == "" || seen[kindOf[i]] >= reserve {
+			continue
+		}
+		seen[kindOf[i]]++
+		admit[i] = true
+		budget--
+	}
+	// Second pass fills the remaining budget purely by recency, which is what keeps a
+	// single-kind trail behaving exactly as plain truncation did.
+	for i := len(lines) - 1; i >= 0 && budget > 0; i-- {
+		if lines[i] == "" || admit[i] {
+			continue
+		}
+		admit[i] = true
+		budget--
+	}
+
+	kept := make([]string, 0, max)
+	for i, ok := range admit {
+		if ok {
+			kept = append(kept, lines[i])
+		}
+	}
+	return kept
+}
+
 func rotate(base string, max int) {
 	if base == "" {
 		return
@@ -472,7 +555,7 @@ func rotate(base string, max int) {
 	if len(lines) <= max {
 		return
 	}
-	kept := lines[len(lines)-max:]
+	kept := selectKept(lines, max)
 
 	tmp, err := os.CreateTemp(filepath.Join(base, dir), eventsFile+".*")
 	if err != nil {

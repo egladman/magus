@@ -349,6 +349,55 @@ func TestRotate_EmptyBaseIsNoop(t *testing.T) {
 	Rotate("") // must not panic
 }
 
+// TestSelectKept_ReservesAFloorForEveryKind is the governance guarantee: a loud kind must not be
+// able to evict a quiet one. Before the floor, rotation kept the newest N lines blind to kind, so
+// a burst of agent reads pushed every sandbox_denial out of the window - and gcBlobs then deleted
+// their payloads, which is not recoverable.
+func TestSelectKept_ReservesAFloorForEveryKind(t *testing.T) {
+	var lines []string
+	line := func(kind Kind, ts int) string {
+		b, err := json.Marshal(Event{Ts: int64(ts), Kind: kind, Actor: "a", Action: "x", Outcome: OutcomeOK})
+		require.NoError(t, err)
+		return string(b)
+	}
+	// Three rare governance events, then a flood that would bury them under plain recency.
+	for i := 1; i <= 3; i++ {
+		lines = append(lines, line(KindSandboxDenial, i))
+	}
+	for i := 4; i <= 103; i++ {
+		lines = append(lines, line(KindAgentCommand, i))
+	}
+
+	kept := selectKept(lines, 50)
+	require.Len(t, kept, 50)
+
+	var denials int
+	for _, l := range kept {
+		if strings.Contains(l, string(KindSandboxDenial)) {
+			denials++
+		}
+	}
+	assert.Equal(t, 3, denials, "every sandbox_denial survives: there are fewer of them than the floor")
+
+	// Order is preserved - the file is append-ordered and ReadRecent/LastRun depend on it.
+	assert.True(t, strings.Contains(kept[0], string(KindSandboxDenial)), "kept output stays oldest-first")
+}
+
+// TestSelectKept_SingleKindIsPlainTruncation pins that the floor changes nothing for a trail with
+// one producer: the common case must keep behaving exactly as it did before the policy existed.
+func TestSelectKept_SingleKindIsPlainTruncation(t *testing.T) {
+	var lines []string
+	for i := 1; i <= 100; i++ {
+		b, err := json.Marshal(Event{Ts: int64(i), Kind: KindMCPToolCall, Actor: "a", Action: "t", Outcome: OutcomeOK})
+		require.NoError(t, err)
+		lines = append(lines, string(b))
+	}
+	kept := selectKept(lines, 10)
+	require.Len(t, kept, 10)
+	assert.Contains(t, kept[0], `"ts":91`)
+	assert.Contains(t, kept[9], `"ts":100`)
+}
+
 func TestReadRecent_SkipsCorruptLines(t *testing.T) {
 	dir := t.TempDir()
 	Append(t.Context(), dir, Event{Ts: 1, Kind: KindJob, Action: "good-one"})
