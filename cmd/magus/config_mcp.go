@@ -10,6 +10,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/types"
@@ -103,7 +104,7 @@ func configMCPToken(args []string) error {
 func configMCPTokenGenerate(args []string) error {
 	fs := flag.NewFlagSet("config mcp token generate", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	force := fs.Bool("force", false, "Overwrite an existing token (rotation)")
+	gf := gen.BindConfigMCPTokenGenerate(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config mcp token generate [--force]")
 		fmt.Fprintln(os.Stderr, "")
@@ -126,7 +127,7 @@ func configMCPTokenGenerate(args []string) error {
 	// Non-force path uses a create-only write so we never clobber a token the
 	// daemon may already be serving; --force is an explicit atomic overwrite.
 	var path string
-	if *force {
+	if gf.Force {
 		path, err = auth.Save(tok)
 	} else {
 		path, err = auth.SaveNew(tok)
@@ -243,8 +244,7 @@ func configMCPConnector(args []string) error {
 func configMCPConnectorCreate(args []string) error {
 	fs := flag.NewFlagSet("config mcp connector create", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	name := fs.String("name", "", "Name for this connector token (default: connector-N)")
-	expires := fs.String("expires", "", `Lifetime: a duration like 90d or 48h, or "never" (default 90d)`)
+	cf := gen.BindConfigMCPConnectorCreate(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config mcp connector create [--name <n>] [--expires <dur|never>]")
 		fmt.Fprintln(os.Stderr, "")
@@ -259,7 +259,7 @@ func configMCPConnectorCreate(args []string) error {
 		return err
 	}
 
-	exp, err := parseExpiry(time.Now(), *expires)
+	exp, err := parseExpiry(time.Now(), cf.Expires)
 	if err != nil {
 		return fmt.Errorf("magus config mcp connector create: %w", err)
 	}
@@ -268,7 +268,7 @@ func configMCPConnectorCreate(args []string) error {
 	if err != nil {
 		return err
 	}
-	chosen := strings.TrimSpace(*name)
+	chosen := strings.TrimSpace(cf.Name)
 	if chosen == "" {
 		chosen = defaultConnectorName(store)
 	}

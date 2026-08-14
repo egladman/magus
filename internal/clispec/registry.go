@@ -631,12 +631,103 @@ they can be edited by hand.
 Configuration is stored in magus.yaml (or .magus.yaml). The canonical
 locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 	Usage: "magus config <view|set|history|cache|mcp> [flags]",
+	// Nested to match the real tree. These were five flat children with no flags,
+	// while the CLI parses four levels deep and binds fourteen flags across six of
+	// them - every one of which was documented nowhere, because a child could not
+	// carry flags and nothing walked past the first level.
 	Children: []Command{
 		{Name: "view", Short: "Print the effective configuration (defaults + file + env)"},
-		{Name: "set", Short: "Write a key to the local (or global) config file"},
-		{Name: "history", Short: "Manage forecaster runtime history"},
-		{Name: "cache", Short: "Manage the build cache (prune)"},
-		{Name: "mcp", Short: "Manage the MCP server auth token"},
+		{
+			Name:  "set",
+			Short: "Write a key to the local (or global) config file",
+			Flags: []Flag{
+				{Name: "global", Kind: FlagBool, Doc: "Write to the global config ($XDG_CONFIG_HOME/magus/magus.yaml)"},
+			},
+		},
+		{
+			Name:  "history",
+			Short: "Manage forecaster runtime history",
+			Children: []Command{
+				{
+					Name:  "passed",
+					Short: "Record a run outcome in the forecaster history",
+					Flags: []Flag{
+						{Name: "history", Kind: FlagString, DefaultAtBind: true, Doc: "Path to the history JSON to write (default: configured history_path)"},
+						{Name: "ref", Kind: FlagString, Doc: "Ref the run was on (git branch, hg named branch, jj bookmark)"},
+						{Name: "commit", Kind: FlagString, Doc: "Commit the run was at"},
+						{Name: "target", Kind: FlagString, Default: "ci", Doc: "Target that ran"},
+						{Name: "status", Kind: FlagString, Default: "passed", DefaultAtBind: true, Doc: "How the run came out: passed or failed"},
+					},
+				},
+				{
+					Name:  "import",
+					Short: "Merge another history file into this one",
+					Flags: []Flag{
+						{Name: "history", Kind: FlagString, DefaultAtBind: true, Doc: "Path to the history JSON to write (default: configured history_path)"},
+					},
+				},
+				{Name: "dedup", Short: "Collapse duplicate runs in the history file"},
+			},
+		},
+		{
+			Name:  "cache",
+			Short: "Manage the build cache (prune)",
+			Children: []Command{
+				{
+					Name:  "prune",
+					Short: "Evict cache entries by age or count",
+					Flags: []Flag{
+						{Name: "older-than", Kind: FlagDuration, Doc: "Remove entries older than this duration (e.g. 168h = 7 days)"},
+						{Name: "keep-last", Kind: FlagInt, Doc: "Keep only the newest N entries, evict the rest (--remote only)"},
+						{Name: "remote", Kind: FlagBool, Doc: "Prune the configured remote backend instead of the local cache"},
+						{Name: "dry-run", Kind: FlagBool, Doc: "Print what would be removed without deleting anything"},
+					},
+				},
+				{
+					Name:  "export",
+					Short: "Write cache entries to an archive",
+					Flags: []Flag{
+						{Name: "to", Kind: FlagString, Doc: "Write the archive to this file (default: stdout)"},
+					},
+				},
+				{Name: "import", Short: "Load cache entries from an archive"},
+				{Name: "key", Short: "Manage the remote cache signing key"},
+			},
+		},
+		{
+			Name:  "mcp",
+			Short: "Manage the MCP server auth token",
+			Children: []Command{
+				{
+					Name:  "token",
+					Short: "Manage the CLI's own MCP token",
+					Children: []Command{
+						{
+							Name:  "generate",
+							Short: "Create the CLI token",
+							Flags: []Flag{
+								{Name: "force", Kind: FlagBool, Doc: "Overwrite an existing token (rotation)"},
+							},
+						},
+					},
+				},
+				{
+					Name:  "connector",
+					Short: "Manage connector tokens",
+					Children: []Command{
+						{
+							Name:  "create",
+							Short: "Mint a connector token",
+							Flags: []Flag{
+								{Name: "name", Kind: FlagString, Doc: "Name for this connector token (default: connector-N)"},
+								{Name: "expires", Kind: FlagString, Doc: "Lifetime: a duration like 90d or 48h, or \"never\" (default 90d)"},
+							},
+						},
+						{Name: "revoke", Short: "Revoke a connector token"},
+					},
+				},
+			},
+		},
 	},
 	Examples: []Example{
 		{"Show effective config", "magus config view"},

@@ -47,10 +47,9 @@ func runCLIFlags(args []string) error {
 	seen := map[string]string{}
 	var lines []string
 	for _, c := range clispec.All {
-		lines = append(lines, constsFor(c.Name, c.Flags, seen)...)
-		for _, child := range c.Children {
-			lines = append(lines, constsFor(c.Name+" "+child.Name, child.Flags, seen)...)
-		}
+		walkCommands(c.Name, c, func(path string, cmd clispec.Command) {
+			lines = append(lines, constsFor(path, cmd.Flags, seen)...)
+		})
 	}
 	slices.Sort(lines)
 	for _, l := range lines {
@@ -59,19 +58,32 @@ func runCLIFlags(args []string) error {
 	b.WriteString(")\n")
 
 	for _, c := range clispec.All {
-		for _, mode := range modesOf(c.Flags) {
-			name := c.Name
-			if mode != "" {
-				name += " " + mode
+		walkCommands(c.Name, c, func(path string, cmd clispec.Command) {
+			for _, mode := range modesOf(cmd.Flags) {
+				name := path
+				if mode != "" {
+					name += " " + mode
+				}
+				writeBinder(&b, name, path, flagsForMode(cmd.Flags, mode))
 			}
-			writeBinder(&b, name, c.Name, flagsForMode(c.Flags, mode))
-		}
-		for _, child := range c.Children {
-			writeBinder(&b, c.Name+" "+child.Name, c.Name+" "+child.Name, child.Flags)
-		}
+		})
 	}
 
 	return emit.Go(*out, b.Bytes())
+}
+
+// walkCommands visits a command and every descendant, passing the full path
+// ("config mcp connector create") that names its constants and binder.
+//
+// RECURSIVE, because the tree is: config's children have children of their own,
+// four levels down. A one-level walk left every flag below the second level
+// undeclared and unbindable - which is why `config cache prune --older-than` and
+// six siblings were bound by hand and documented nowhere.
+func walkCommands(path string, c clispec.Command, visit func(string, clispec.Command)) {
+	visit(path, c)
+	for _, child := range c.Children {
+		walkCommands(path+" "+child.Name, child, visit)
+	}
 }
 
 // modesOf lists the distinct sub-modes declared across a command's flags, base

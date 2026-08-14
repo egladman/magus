@@ -83,6 +83,36 @@ const (
 	FlagBuzzTest = "test"
 	// clean: --cache
 	FlagCleanCache = "cache"
+	// config cache export: --to
+	FlagConfigCacheExportTo = "to"
+	// config cache prune: --dry-run
+	FlagConfigCachePruneDryRun = "dry-run"
+	// config cache prune: --keep-last
+	FlagConfigCachePruneKeepLast = "keep-last"
+	// config cache prune: --older-than
+	FlagConfigCachePruneOlderThan = "older-than"
+	// config cache prune: --remote
+	FlagConfigCachePruneRemote = "remote"
+	// config history import: --history
+	FlagConfigHistoryImportHistory = "history"
+	// config history passed: --commit
+	FlagConfigHistoryPassedCommit = "commit"
+	// config history passed: --history
+	FlagConfigHistoryPassedHistory = "history"
+	// config history passed: --ref
+	FlagConfigHistoryPassedRef = "ref"
+	// config history passed: --status
+	FlagConfigHistoryPassedStatus = "status"
+	// config history passed: --target
+	FlagConfigHistoryPassedTarget = "target"
+	// config mcp connector create: --expires
+	FlagConfigMCPConnectorCreateExpires = "expires"
+	// config mcp connector create: --name
+	FlagConfigMCPConnectorCreateName = "name"
+	// config mcp token generate: --force
+	FlagConfigMCPTokenGenerateForce = "force"
+	// config set: --global
+	FlagConfigSetGlobal = "global"
 	// describe projects: --e
 	FlagDescribeProjectsE = "e"
 	// describe projects: --evaluated
@@ -701,6 +731,119 @@ type VCSResolveFlags struct {
 func BindVCSResolve(fs *flag.FlagSet) *VCSResolveFlags {
 	var f VCSResolveFlags
 	fs.StringVar(&f.Against, FlagVCSResolveAgainst, "", "Merge this `ref` first, then settle what it conflicts with")
+	return &f
+}
+
+// ConfigSetFlags are the flags declared for `magus config set`.
+type ConfigSetFlags struct {
+	Global bool // --global
+}
+
+// BindConfigSet registers `magus config set`'s flags on fs and returns the destination.
+func BindConfigSet(fs *flag.FlagSet) *ConfigSetFlags {
+	var f ConfigSetFlags
+	fs.BoolVar(&f.Global, FlagConfigSetGlobal, false, "Write to the global config ($XDG_CONFIG_HOME/magus/magus.yaml)")
+	return &f
+}
+
+// ConfigHistoryPassedFlags are the flags declared for `magus config history passed`.
+type ConfigHistoryPassedFlags struct {
+	History string // --history
+	Ref     string // --ref
+	Commit  string // --commit
+	Target  string // --target
+	Status  string // --status
+}
+
+// ConfigHistoryPassedDefaults carries the defaults `magus config history passed` resolves at runtime (config, a
+// package constant) rather than declaring as a literal.
+type ConfigHistoryPassedDefaults struct {
+	History string // --history
+	Status  string // --status
+}
+
+// BindConfigHistoryPassed registers `magus config history passed`'s flags on fs and returns the destination.
+func BindConfigHistoryPassed(fs *flag.FlagSet, d ConfigHistoryPassedDefaults) *ConfigHistoryPassedFlags {
+	var f ConfigHistoryPassedFlags
+	fs.StringVar(&f.History, FlagConfigHistoryPassedHistory, d.History, "Path to the history JSON to write (default: configured history_path)")
+	fs.StringVar(&f.Ref, FlagConfigHistoryPassedRef, "", "Ref the run was on (git branch, hg named branch, jj bookmark)")
+	fs.StringVar(&f.Commit, FlagConfigHistoryPassedCommit, "", "Commit the run was at")
+	fs.StringVar(&f.Target, FlagConfigHistoryPassedTarget, "ci", "Target that ran")
+	fs.StringVar(&f.Status, FlagConfigHistoryPassedStatus, d.Status, "How the run came out: passed or failed")
+	return &f
+}
+
+// ConfigHistoryImportFlags are the flags declared for `magus config history import`.
+type ConfigHistoryImportFlags struct {
+	History string // --history
+}
+
+// ConfigHistoryImportDefaults carries the defaults `magus config history import` resolves at runtime (config, a
+// package constant) rather than declaring as a literal.
+type ConfigHistoryImportDefaults struct {
+	History string // --history
+}
+
+// BindConfigHistoryImport registers `magus config history import`'s flags on fs and returns the destination.
+func BindConfigHistoryImport(fs *flag.FlagSet, d ConfigHistoryImportDefaults) *ConfigHistoryImportFlags {
+	var f ConfigHistoryImportFlags
+	fs.StringVar(&f.History, FlagConfigHistoryImportHistory, d.History, "Path to the history JSON to write (default: configured history_path)")
+	return &f
+}
+
+// ConfigCachePruneFlags are the flags declared for `magus config cache prune`.
+type ConfigCachePruneFlags struct {
+	OlderThan time.Duration // --older-than
+	KeepLast  int           // --keep-last
+	Remote    bool          // --remote
+	DryRun    bool          // --dry-run
+}
+
+// BindConfigCachePrune registers `magus config cache prune`'s flags on fs and returns the destination.
+func BindConfigCachePrune(fs *flag.FlagSet) *ConfigCachePruneFlags {
+	var f ConfigCachePruneFlags
+	fs.DurationVar(&f.OlderThan, FlagConfigCachePruneOlderThan, 0, "Remove entries older than this duration (e.g. 168h = 7 days)")
+	fs.IntVar(&f.KeepLast, FlagConfigCachePruneKeepLast, 0, "Keep only the newest N entries, evict the rest (--remote only)")
+	fs.BoolVar(&f.Remote, FlagConfigCachePruneRemote, false, "Prune the configured remote backend instead of the local cache")
+	fs.BoolVar(&f.DryRun, FlagConfigCachePruneDryRun, false, "Print what would be removed without deleting anything")
+	return &f
+}
+
+// ConfigCacheExportFlags are the flags declared for `magus config cache export`.
+type ConfigCacheExportFlags struct {
+	To string // --to
+}
+
+// BindConfigCacheExport registers `magus config cache export`'s flags on fs and returns the destination.
+func BindConfigCacheExport(fs *flag.FlagSet) *ConfigCacheExportFlags {
+	var f ConfigCacheExportFlags
+	fs.StringVar(&f.To, FlagConfigCacheExportTo, "", "Write the archive to this file (default: stdout)")
+	return &f
+}
+
+// ConfigMCPTokenGenerateFlags are the flags declared for `magus config mcp token generate`.
+type ConfigMCPTokenGenerateFlags struct {
+	Force bool // --force
+}
+
+// BindConfigMCPTokenGenerate registers `magus config mcp token generate`'s flags on fs and returns the destination.
+func BindConfigMCPTokenGenerate(fs *flag.FlagSet) *ConfigMCPTokenGenerateFlags {
+	var f ConfigMCPTokenGenerateFlags
+	fs.BoolVar(&f.Force, FlagConfigMCPTokenGenerateForce, false, "Overwrite an existing token (rotation)")
+	return &f
+}
+
+// ConfigMCPConnectorCreateFlags are the flags declared for `magus config mcp connector create`.
+type ConfigMCPConnectorCreateFlags struct {
+	Name    string // --name
+	Expires string // --expires
+}
+
+// BindConfigMCPConnectorCreate registers `magus config mcp connector create`'s flags on fs and returns the destination.
+func BindConfigMCPConnectorCreate(fs *flag.FlagSet) *ConfigMCPConnectorCreateFlags {
+	var f ConfigMCPConnectorCreateFlags
+	fs.StringVar(&f.Name, FlagConfigMCPConnectorCreateName, "", "Name for this connector token (default: connector-N)")
+	fs.StringVar(&f.Expires, FlagConfigMCPConnectorCreateExpires, "", "Lifetime: a duration like 90d or 48h, or \"never\" (default 90d)")
 	return &f
 }
 

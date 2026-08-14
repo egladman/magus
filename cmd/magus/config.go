@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 )
 
@@ -131,7 +132,7 @@ func intOrDef(n int, def string) string {
 func runConfigSet(args []string) error {
 	fs := flag.NewFlagSet("config set", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	useGlobal := fs.Bool("global", false, "Write to the global config ($XDG_CONFIG_HOME/magus/magus.yaml)")
+	sf := gen.BindConfigSet(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config set key=<key>,value=<value> [flags]")
 		fmt.Fprintln(os.Stderr, "")
@@ -165,7 +166,7 @@ func runConfigSet(args []string) error {
 	}
 
 	var cfgPath string
-	if *useGlobal {
+	if sf.Global {
 		dir, err := config.UserConfigDir()
 		if err != nil {
 			return fmt.Errorf("config set --global: cannot determine config directory: %w", err)
