@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2170,
-  "edge_count": 5630,
+  "edge_count": 5634,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -34362,6 +34362,22 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-affected.md",
+      "target": "diagnostic:MGS4001",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/manpage/magus-affected.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-affected.md",
+      "target": "diagnostic:MGS4003",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/manpage/magus-affected.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-affected.md",
       "target": "doc:docs/reference/manpage/magus-agent.md",
       "relation": "references",
       "confidence": "extracted",
@@ -39007,6 +39023,22 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/manpage/magus-refs.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-run.md",
+      "target": "diagnostic:MGS4001",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/manpage/magus-run.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-run.md",
+      "target": "diagnostic:MGS4003",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/manpage/magus-run.md"
     },
     {
       "source": "doc:docs/reference/manpage/magus-run.md",

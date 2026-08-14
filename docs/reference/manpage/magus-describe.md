@@ -30,25 +30,70 @@ spells that fire, the charm-applied command, and any per-target policy. Add a ch
 and --explain (e.g. "lint:rw --explain") to see each charm reshape the command one
 step at a time.
 
-## Options
+### describe target options
 
-**--against** *string*
-: With --cache: diff the live key inputs against the stored lines behind an output ref
+**--against** *ref*
+: With --cache: diff the live key inputs against the stored lines behind an output \`ref\`
 
 **--cache**
-: For a target ref: show its live cache key, the ref a run would print, and the component classes behind it
+: Show the live cache key, the ref a run would print, and the component classes behind it
 
 **-e**
-: Short for --explain on a target ref, and for --evaluated on a project listing
-
-**--evaluated**
-: For projects: print workspace-rooted globs, effective claims, and per-target policies
+: Short for --explain
 
 **--explain**
-: For a target ref with charms: show the per-charm argv trace (base then each charm)
+: For a ref with charms: show the per-charm argv trace (base then each charm)
 
 **--no-default-charms**
 : With --cache: ignore magus.yaml default_charms when keying, matching a run made the same way (CI)
+
+### describe projects options
+
+**-e**
+: Short for --evaluated
+
+**--evaluated**
+: Print workspace-rooted globs, effective claims, and per-target policies
+
+### describe spells options
+
+**--versions**
+: Probe each spell's tools and report the versions that would key a run
+
+## Subcommands
+
+**targets**
+: List every target the workspace defines
+
+**target**
+: Detail one target ref: its dispatch plan, globs, spells and policy
+
+**projects**
+: List the workspace's projects
+
+**spells**
+: List the spells the workspace resolves
+
+**charms**
+: List charms and the targets that declare them
+
+**workspaces**
+: List the workspaces registered in config
+
+**modules**
+: List the Buzz host modules a magusfile can import
+
+**mcp-tools**
+: List the tools the MCP server exposes
+
+**tools**
+: List the external tools the workspace's spells require
+
+**file**
+: Classify paths as generated output, declared source, maintained, or unclaimed
+
+**graph**
+: Emit the target catalog and dependency graph
 
 ## Examples
 

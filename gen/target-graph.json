@@ -593,6 +593,10 @@
             },
             {
               "project": ".",
+              "glob": ".github/actions/ci-outcome/*.buzz"
+            },
+            {
+              "project": ".",
               "glob": ".github/actions/magus/*.buzz"
             }
           ],

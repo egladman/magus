@@ -382,12 +382,22 @@ jobs:
           installation-strategy: source
           source-path: .
 
-      # One step for the whole job. merge-history only on main: a pull request's shard
-      # histories describe a branch that is about to disappear, and folding them into the
-      # kept history would skew it.
-      - uses: ./.github/actions/magus
+      # Outcome first: it describes the run that just finished, and the history merge
+      # below changes what a later reader would see.
+      - uses: ./.github/actions/ci-outcome
         with:
-          report: 'true'
           ci-result: ${{ needs.ci.result }}
           shard-count: ${{ needs.plan.outputs.count }}
-          merge-history: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      # merge-history only on main: a pull request's shard histories describe a branch
+      # that is about to disappear, and folding them into the kept history would skew it.
+      #
+      # always(), because a bare `if:` implies success() of every step before it, and the
+      # runs whose timings the forecaster most needs are the ones that went red. This
+      # used to be one composite step whose own merge steps carried always(); splitting
+      # the summary out moved that guard up here.
+      - if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: ./.github/actions/magus
+        with:
+          merge-history: 'true'
+          ci-result: ${{ needs.ci.result }}

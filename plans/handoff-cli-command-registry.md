@@ -44,6 +44,16 @@ Also: `internal/manpage` was renamed `internal/clispec` (six consumers, only one
 of them a man page), the browser terminal now reads the same registry for
 completion and help, and `magus agent install --global` works for the first time.
 
+**The run summary left `.github/actions/magus`.** That action is "invoke a magus
+subcommand, or merge per-shard run histories"; its `report` mode invoked neither -
+it ran a Buzz script that reads the workspace through the typed `magus\insight`
+client. It is now `.github/actions/ci-outcome`, beside `.github/actions/advice`,
+and the `report` and `shard-count` inputs are gone (`ci-result` stays; merge mode
+records it). ci.yaml's `report` JOB keeps its name and now composes the two
+actions. The `always()` that the composite's merge steps carried moved up to the
+workflow step, or a red summary would silently skip the history merge - the case
+history matters most in. `advice-test` sweeps the new directory too.
+
 ## Bugs fixed that predate this work
 
 - `--shard` was documented `int` and bound `string`. The name-only drift test
@@ -61,7 +71,7 @@ completion and help, and `magus agent install --global` works for the first time
 
 ## Open: needs a decision
 
-**1. `magus report` is red, on this branch and on `main`.**
+**1. ci.yaml's `report` job is red, on this branch and on `main`.**
 
 Not caused by this work - `main` at `df1eb5a15` fails identically. Root cause is
 pinned. Reproduce:
@@ -75,8 +85,8 @@ wired but no trust set is declared" - the exact condition the flag documents
 itself as waiving. `magus config view` resolves it correctly (`insecure=true`,
 trusted non-empty), and `magus ls` is unaffected; only the `buzz` path breaks,
 which is the one using `WithLoadedConfig(globalCfg)`. `ci.yaml` sets that
-variable workflow-wide, so `.github/actions/magus/ci-outcome.buzz` cannot open a
-workspace and `magus\insight` raises MGS1022.
+variable workflow-wide, so `.github/actions/ci-outcome/ci-outcome.buzz` cannot open
+a workspace and `magus\insight` raises MGS1022.
 
 Two fixes, and the second is a security-posture change that is yours to make:
 

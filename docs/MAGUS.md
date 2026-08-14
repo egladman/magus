@@ -53,7 +53,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | charm | 10+ | `magus query kind:charm` | `rw`, `cd`, `stable` |
 | module | 30+ | `magus query kind:module` | `fs`, `magus`, `charm` |
 | method | 200+ | `magus query kind:method` | `archive.compress`, `archive.list`, `archive.read_file` |
-| diagnostic | 60+ | `magus query kind:diagnostic` | `MGS2001`, `MGS3003`, `MGS1002` |
+| diagnostic | 60+ | `magus query kind:diagnostic` | `MGS2001`, `MGS1022`, `MGS3003` |
 | doc | 300+ | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 100+ | `magus query kind:dir` | `docs/reference/buzz`, `docs/reference/manpage`, `docs/reference/codes/magusfile` |
 | file | 200+ | `magus query kind:file` | `magusfile.buzz`, `docs/render.buzz`, `docs/magusfile.buzz` |
@@ -92,7 +92,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `render` | render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks. |
 | `preflight` |  |
 | `index-generate` | index-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets. |
-| `content-generate` | content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). |
+| `content-generate` | content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/clispec), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). |
 | `site-generate` | site-generate owns publication. |
 | `conventions` | conventions holds the prose corpus to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved. |
 | `buzz-test` | buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve. |

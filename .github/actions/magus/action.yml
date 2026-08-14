@@ -2,10 +2,10 @@ name: magus
 description: >
   Invoke a magus subcommand, or merge per-shard run histories.
 
-  Three modes, all end-to-end CI work rather than three actions to wire up:
-  a command, the run summary, and the per-shard history merge.
+  Two modes, both of them a magus invocation: a command, and the per-shard history
+  merge. Summarizing the run is ../ci-outcome, which invokes no subcommand at all.
 
-  Default mode (merge-history and report both false) runs `magus <command>`, setting
+  Default mode (merge-history false) runs `magus <command>`, setting
   MAGUS_SHARD/MAGUS_N_SHARDS first so shard-aware subcommands (e.g. `run`) emit
   ci.shard.total timing events without extra shell logic in the workflow. When `shard`
   is set it also uploads that shard's run history afterwards.
@@ -43,40 +43,19 @@ inputs:
       history.
     required: false
     default: 'false'
-  report:
-    description: >
-      When "true", write the run's outcome and the workspace's insight report to the
-      GitHub step summary. Combines with merge-history: both are end-of-run work, and a
-      caller that wants them wants them in one place.
-    required: false
-    default: 'false'
   ci-result:
     description: >
-      With report, the result of the job that ran the CI shards
-      (success | failure | cancelled | skipped).
+      With merge-history, the result of the job that ran the CI shards
+      (success | failure | cancelled | skipped). Only success and failure are recorded
+      as an outcome of this commit.
     required: false
     default: ''
-  shard-count:
-    description: With report, how many shards the affected set produced.
-    required: false
-    default: '0'
 
 runs:
   using: composite
   steps:
-    # Report first: it describes the run that just finished, and the history merge below
-    # changes what a later reader would see.
-    - name: Summarize the run
-      if: inputs.report == 'true'
-      shell: bash
-      env:
-        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
-        CI_RESULT: ${{ inputs.ci-result }}
-        SHARD_COUNT: ${{ inputs.shard-count }}
-      run: magus buzz "$GITHUB_ACTION_PATH/ci-outcome.buzz"
-
     - name: Run magus
-      if: inputs.merge-history != 'true' && inputs.report != 'true'
+      if: inputs.merge-history != 'true'
       shell: bash
       env:
         MAGUS_SHARD:       ${{ inputs.shard }}
@@ -107,7 +86,7 @@ runs:
     # of the run that writes the file - and for a run that did not finish, no history is
     # the honest answer rather than a partial one.
     - name: Upload this shard's history
-      if: always() && inputs.shard != '' && inputs.merge-history != 'true' && inputs.report != 'true'
+      if: always() && inputs.shard != '' && inputs.merge-history != 'true'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: magus-history-${{ inputs.shard }}
@@ -123,10 +102,10 @@ runs:
     #
     # always() on all three: they are the aggregation of a run that has already ended,
     # and the job-level `if: always()` that gets them scheduled does NOT reach the steps
-    # inside a composite action - a bare `if:` here implies success(), so a failing
-    # summarize step above would silently skip the merge. That is the case history
-    # matters most in: the runs that go red are the ones whose timings the forecaster
-    # needs, and losing them means the next plan plans blind.
+    # inside a composite action - a bare `if:` here implies success(), so any earlier
+    # failure in the job would silently skip the merge. That is the case history matters
+    # most in: the runs that go red are the ones whose timings the forecaster needs, and
+    # losing them means the next plan plans blind.
     - name: Download shard histories
       if: always() && inputs.merge-history == 'true'
       uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1

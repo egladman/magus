@@ -1689,8 +1689,8 @@ fun total_coverage(func_out: str) > str {
 // against the CWD. In CI the action supplies the same thing as BUZZ_INCLUDE_PATH.
 //
 export fun advice_test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles(".github/actions/advice/*.buzz", ".github/actions/magus/*.buzz");
-    foreach (dir in [".github/actions/advice", ".github/actions/magus"]) {
+    ctx.readsFiles(".github/actions/advice/*.buzz", ".github/actions/ci-outcome/*.buzz", ".github/actions/magus/*.buzz");
+    foreach (dir in [".github/actions/advice", ".github/actions/ci-outcome", ".github/actions/magus"]) {
         foreach (script in fs\glob(dir + "/*.buzz")) {
             magus\cmd("buzz", args: ["-t", fs\basename(script.value)], opts: {"dir": dir});
         }

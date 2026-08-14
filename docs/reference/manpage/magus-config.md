@@ -26,6 +26,65 @@ they can be edited by hand.
 Configuration is stored in magus.yaml (or .magus.yaml). The canonical
 locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 
+### config set options
+
+**--global**
+: Write to the global config ($XDG_CONFIG_HOME/magus/magus.yaml)
+
+### config history passed options
+
+**--commit** *string*
+: Commit the run was at
+
+**--history** *string*
+: Path to the history JSON to write (default: configured history_path)
+
+**--ref** *string*
+: Ref the run was on (git branch, hg named branch, jj bookmark)
+
+**--status** *string* (default: passed)
+: How the run came out: passed or failed
+
+**--target** *string* (default: ci)
+: Target that ran
+
+### config history import options
+
+**--history** *string*
+: Path to the history JSON to write (default: configured history_path)
+
+### config cache prune options
+
+**--dry-run**
+: Print what would be removed without deleting anything
+
+**--keep-last** *int*
+: Keep only the newest N entries, evict the rest (--remote only)
+
+**--older-than** *duration*
+: Remove entries older than this duration (e.g. 168h = 7 days)
+
+**--remote**
+: Prune the configured remote backend instead of the local cache
+
+### config cache export options
+
+**--to** *string*
+: Write the archive to this file (default: stdout)
+
+### config mcp token generate options
+
+**--force**
+: Overwrite an existing token (rotation)
+
+### config mcp connector create options
+
+**--expires** *string*
+: Lifetime: a duration like 90d or 48h, or "never" (default 90d)
+
+**--name** *string*
+: Name for this connector token (default: connector-N)
+
 ## Subcommands
 
 **view**

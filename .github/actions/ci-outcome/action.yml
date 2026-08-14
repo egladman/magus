@@ -1,0 +1,46 @@
+name: magus ci outcome
+description: >
+  Write the run's outcome to the GitHub step summary: whether the affected shards
+  passed, and the volatility lens on the targets they ran.
+
+  A step summary, NOT a pull request comment. It changes on every push, and a comment
+  that changes on every push is the kind people mute; ../advice owns the comment and
+  this owns the run's own page.
+
+  It reads the workspace through the typed `magus\insight` client rather than through a
+  subcommand, so there is nothing to parse and nothing to shell out to twice. That is
+  also why this is its own action: it invokes no magus subcommand, so it never belonged
+  as a mode on ../magus.
+
+  Requires magus on PATH - run egladman/magus/.github/actions/setup-magus first, and
+  check out before this step, since the script reads the caller's workspace.
+
+inputs:
+  ci-result:
+    description: >
+      The result of the job that ran the CI shards
+      (success | failure | cancelled | skipped).
+    required: false
+    default: ''
+  shard-count:
+    description: How many shards the affected set produced.
+    required: false
+    default: '0'
+
+runs:
+  using: composite
+  steps:
+    # BUZZ_INCLUDE_PATH is how the script finds anything beside it: it runs from the
+    # CALLER's checkout, so the action's own directory is not on the search path unless
+    # it is named here.
+    #
+    # always(), because the outcome worth summarizing most is the one where the shards
+    # went red - and a bare `if:` inside a composite action implies success().
+    - name: Summarize the run
+      if: always()
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        CI_RESULT: ${{ inputs.ci-result }}
+        SHARD_COUNT: ${{ inputs.shard-count }}
+      run: magus buzz "$GITHUB_ACTION_PATH/ci-outcome.buzz"

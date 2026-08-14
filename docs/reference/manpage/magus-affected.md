@@ -56,9 +56,6 @@ history to find the commit that introduced a regression.
 **--detail**
 : With --plan: add per-shard detail - the invocation, its spells, the files it declares it writes, and the skills its work routes to
 
-**--dry-run**
-: Print what would run without executing
-
 **--explain** *string*
 : Show why \<project\> is in the affected set instead of executing
 
@@ -67,6 +64,9 @@ history to find the commit that introduced a regression.
 
 **--graph**
 : Render the dependency graph for the affected scope instead of executing
+
+**--impact**
+: Report the blast radius of the changeset (read-only; runs nothing)
 
 **--max-parallel-budget** *int*
 : With --plan: cross-shard concurrency cap; 0 = unlimited
@@ -86,11 +86,11 @@ history to find the commit that introduced a regression.
 **--open**
 : Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)
 
-**--plan**
+**--plan** *string*
 : Emit a provider-neutral JSON CI shard plan for the affected set
 
 **--race** *string*
-: Run the same target repeatedly to surface order-dependent failures
+: Race-condition diagnostics (watch|replay, comma-combinable); omit to disable. watch: attribution-gated fsnotify detection (MGS4001/4002/4004), emitting only when \>=2 projects' output snapshots confirm a shared write. replay: re-runs cacheable output-declaring projects sequentially to content-hash outputs for non-determinism (MGS4003); roughly doubles wall-clock.
 
 **--stdin**
 : Read changed file paths from stdin instead of running a VCS diff

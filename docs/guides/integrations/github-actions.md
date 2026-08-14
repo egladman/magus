@@ -305,18 +305,25 @@ report:
     - uses: actions/checkout@v5
       with: { fetch-depth: 0, filter: blob:none }
     - uses: egladman/magus/.github/actions/setup-magus@v0.4.0
-    - uses: egladman/magus/.github/actions/magus@v0.4.0
+    - uses: egladman/magus/.github/actions/ci-outcome@v0.4.0
       with:
-        report: 'true'
         ci-result: ${{ needs.ci.result }}
         shard-count: ${{ needs.plan.outputs.count }}
-        merge-history: ${{ github.ref == 'refs/heads/main' }}
+    - if: always() && github.ref == 'refs/heads/main'
+      uses: egladman/magus/.github/actions/magus@v0.4.0
+      with:
+        merge-history: 'true'
+        ci-result: ${{ needs.ci.result }}
 ```
 
-`report` writes the outcome and the workspace's insight report to the step summary.
+`ci-outcome` writes the run's result and the volatility lens to the step summary. It is
+its own action because it invokes no magus subcommand - it reads the workspace through
+the typed `magus\insight` client - so it has nothing to do with the action that runs one.
+
 `merge-history` folds each shard's run history into the persisted one, which is what makes
 volatility and timing data accumulate across runs - on main only, since a pull request's
-history describes a branch about to disappear.
+history describes a branch about to disappear. `always()`, so a red run's timings are
+kept too.
 
 ## Pull request advice
 

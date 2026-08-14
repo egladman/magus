@@ -38,13 +38,15 @@ clone would settle silently, and why resolve exists as the bulk counterpart.
 resolve works on git, Mercurial and Jujutsu. Only --against is git-only: merge the
 base in yourself on the others, then run resolve.
 
-## Options
-
-**--against** *string*
-: Merge this ref first, then settle what it conflicts with (vcs resolve)
+### vcs add options
 
 **--untracked**
-: Also stage undeclared files (vcs add)
+: Also stage undeclared files
+
+### vcs resolve options
+
+**--against** *ref*
+: Merge this \`ref\` first, then settle what it conflicts with
 
 ## Subcommands
 
