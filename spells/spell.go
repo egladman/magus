@@ -35,7 +35,6 @@ type InvokeResponse struct {
 type Spell struct {
 	name                string
 	sources             []string
-	claims              []string
 	ignoreDirs          []string
 	outputs             []string
 	targets             []string
@@ -83,7 +82,6 @@ func (s *Spell) Invoke(ctx context.Context, req InvokeRequest) (InvokeResponse, 
 var _ Driver = (*Spell)(nil)
 
 func (s *Spell) Sources() []string { return s.sources }
-func (s *Spell) Claims() []string  { return s.claims }
 func (s *Spell) Outputs() []string { return s.outputs }
 func (s *Spell) Targets() []string { return s.targets }
 
@@ -243,10 +241,6 @@ type Option func(*Spell)
 
 func WithSources(sources ...string) Option {
 	return func(s *Spell) { s.sources = append(s.sources, sources...) }
-}
-
-func WithClaims(claims ...string) Option {
-	return func(s *Spell) { s.claims = append(s.claims, claims...) }
 }
 
 func WithIgnoreDirs(dirs ...string) Option {

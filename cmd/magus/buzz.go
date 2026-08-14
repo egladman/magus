@@ -5,9 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
@@ -40,26 +42,22 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 		return lspCmd(ctx, args[1:])
 	}
 
-	var eval string
-	var test bool
-	var embedded bool
-	var noAutoload bool
-	var workDir string
+	// Bound from the command registry rather than declared here. The -t/--test pair
+	// is ONE switch, which a generated binder can only express because the registry
+	// marks the second AliasOf the first; modelled as two flags they would get two
+	// destinations and the shorthand would parse and then do nothing.
+	var bf *gen.BuzzFlags
 	rest, err := cmdParse("buzz", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&eval, "e", "", "execute `code` given on the command line instead of a file")
-		fs.BoolVar(&test, "t", false, "run the file's `test \"...\" {}` blocks and report pass/fail")
-		fs.BoolVar(&test, "test", false, "alias for -t")
-		fs.BoolVar(&embedded, "embedded", false, "relax upstream strictness (top-level statements, optional arg labels) to match the magusfile engine")
-		fs.BoolVar(&noAutoload, "no-autoload", false, "start the REPL without executing the magusfile")
-		fs.StringVar(&workDir, "C", "", "working directory for the REPL's import resolution (default: cwd)")
+		bf = gen.BindBuzz(fs)
 		fs.Usage = buzzUsage
 	})
 	if err != nil {
 		return err
 	}
-	isRepl := eval == "" && !test && len(rest) == 0
-	if !isRepl && (noAutoload || workDir != "") {
-		return usagef("magus buzz: --no-autoload and -C apply to the REPL, not to a script, -e, or -t")
+	isRepl := bf.E == "" && !bf.Test && len(rest) == 0
+	if !isRepl && (bf.NoAutoload || bf.C != "") {
+		return usagef("magus buzz: --%s and -%s apply to the REPL, not to a script, -%s, or -%s",
+			gen.FlagBuzzNoAutoload, gen.FlagBuzzC, gen.FlagBuzzE, gen.FlagBuzzT)
 	}
 
 	// No code, no file/stdin argument, and an interactive terminal: open the REPL,
@@ -70,10 +68,10 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	// --embedded is a no-op on this path: a REPL is top-level statements by nature,
 	// so the session is always embedded regardless of the flag.
 	if isRepl && stdinIsTerminal() {
-		return buzzRepl(ctx, workDir, noAutoload)
+		return buzzRepl(ctx, bf.C, bf.NoAutoload)
 	}
 
-	code, name, err := buzzSource(eval, rest)
+	code, name, err := buzzSource(bf.E, rest)
 	if err != nil {
 		return err
 	}
@@ -92,15 +90,26 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	// Best-effort: outside a workspace, or when one fails to load, the script still runs
 	// and the workspace-reading members raise as before. A standalone script that touches
 	// none of them must not be blocked by a magusfile it never asked about.
+	//
+	// The load error is LOGGED rather than discarded. Silently dropping it made the two
+	// absences indistinguishable at the point a reader sees them: MGS1022 says "no
+	// workspace on the context" either way, so a script inside a workspace that simply
+	// failed to load reads as a script that was never in one, and the advice it gives
+	// ("fork instead") is then wrong. This is not hypothetical - it is what a green
+	// local run and a red CI run of the same script looked like, with nothing in
+	// between to tell them apart.
 	if m, lerr := loadMagus(ctx, root); lerr == nil && m != nil {
 		ctx = types.WithWorkspace(ctx, m)
+	} else if lerr != nil {
+		slog.Warn("workspace not attached to this script; its workspace-reading members will raise MGS1022",
+			slog.String("error", lerr.Error()))
 	}
 
 	// Default is strict (upstream Buzz parity, what the buzz spell's `run` op forks).
 	// --embedded opts into the relaxations the magusfile engine uses, so a magus
 	// module like the docs generator (render) can be run or tested here.
 	var opts []buzz.Option
-	if embedded {
+	if bf.Embedded {
 		opts = append(opts, buzz.WithEmbedded())
 	}
 	sess := buzz.NewSession(ctx, opts...)
@@ -134,7 +143,7 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, w)
 		}
 	}
-	if test {
+	if bf.Test {
 		return runBuzzTests(ctx, sess, name)
 	}
 	// Like upstream's Run flavor and cmd/buzz, an entry script's `main` runs once

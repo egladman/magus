@@ -76,17 +76,14 @@ type OutputDescriptor struct {
 	TimestampMs int64  `json:"timestamp_ms"`    // unix milliseconds, matching DurationMs' unit
 	DurationMs  int64  `json:"duration_ms"`
 
-	// Schema v2 (portable refs): Ref is the key-derived portable id shared by every
-	// attempt of the step, and the fields below carry the identity it derives from.
-	// A v1 descriptor (Schema zero) predates portable refs: its Ref is the
-	// execution-unique file stem and these fields are empty.
-	Schema       int    `json:"schema,omitempty"`
+	// Ref is the key-derived portable id shared by every attempt of the step; the
+	// fields below carry the identity it derives from.
 	Key          string `json:"key,omitempty"`         // full cache key hash (64 hex)
 	KeyVersion   int    `json:"key_version,omitempty"` // hashStep KeyVersion that produced Key
 	Attempt      string `json:"attempt,omitempty"`     // execution-unique id; the file stem
 	MagusVersion string `json:"magus_version,omitempty"`
 
-	// Schema v3: the cache key pins a TREE STATE (via its source content hashes)
+	// The cache key pins a TREE STATE (via its source content hashes)
 	// without naming it - it deliberately contains no commit, branch, or base. Revision
 	// and Dirty close that gap: they record the VCS state the run's inputs were read
 	// at, so a ref fetched from a foreign machine (CI, a teammate) can say not just
@@ -96,12 +93,21 @@ type OutputDescriptor struct {
 	// (a workspace with no VCS is a supported, silent no-op).
 	Revision string `json:"revision,omitempty"` // full VCS revision hash inputs were read at; "" when unknown
 	Dirty    bool   `json:"dirty,omitempty"`    // working tree had uncommitted changes; Revision alone then is necessary but not sufficient to reproduce
-}
 
-// descriptorSchema is the OutputDescriptor schema this store writes. v3 added
-// Revision/Dirty; v2 introduced portable (key-derived) refs; v1 descriptors carry no
-// schema field.
-const descriptorSchema = 3
+	// The last key inputs a reader cannot recover from the fields above. Charms are
+	// folded into Target by reproTarget and sources are pinned by Revision, but these
+	// key the cache while appearing nowhere else, so `magus x <ref>` would otherwise
+	// rebuild a DIFFERENT invocation and report success. Spell is the sharpest:
+	// `go::go-build` and `go-build` are the same Target with different bodies.
+	Spell     string   `json:"spell,omitempty"`      // spell::op filter that selected the definition
+	ExtraArgs []string `json:"extra_args,omitempty"` // trailing args forwarded after --
+	VCSName   string   `json:"vcs,omitempty"`        // provider Revision came from: git, hg, jj
+	// Platform is GOOS/GOARCH, the same string readManifest and importArtifact
+	// refuse a mismatch on. Recorded unconditionally, NOT gated on the
+	// cache.include.os/arch settings: those govern what keys a build, while this
+	// explains a refusal the guards perform regardless of them.
+	Platform string `json:"platform,omitempty"`
+}
 
 // AmbiguousRefError is returned by output lookup when a ref (or prefix) matches more
 // than one stored identity. Candidates are pasteable-back refs, sorted: a step
@@ -127,12 +133,11 @@ func (e *AmbiguousRefError) Error() string {
 //	outputs/<cacheKey>/<attempt>.out    the exact bytes the process wrote
 //	outputs/<cacheKey>/<attempt>.json   its OutputDescriptor (identity + outcome)
 //
-// The .out blob is the source of truth: ByRef reads it straight through - no reconstruction,
-// byte-for-byte what ran. Per-line structured events are NOT kept here; they live once in the
-// invocation journal (runs/<inv>.jsonl) for the viewer/filter/live paths, so output is never
-// stored twice. Grouping by cache key keeps a nondeterministic target's recent runs together, so
-// keep-last-K retention is a per-directory prune (by blob modtime) and a ref lookup scans a
-// shallow tree. Safe for concurrent Persist calls (each mints a distinct attempt).
+// The .out blob is the source of truth: ByRef reads it straight through, byte-for-byte what
+// ran. Per-line structured events live once in the invocation journal, so output is never
+// stored twice. Grouping by cache key keeps a nondeterministic target's runs together, making
+// keep-last-K a per-directory prune and a ref lookup a shallow scan. Safe for concurrent
+// Persist calls (each mints a distinct attempt).
 type OutputStore struct {
 	cacheDir string // cache ROOT; outputsDir/RunsDir are joined off this
 	seq      atomic.Uint64
@@ -190,7 +195,6 @@ const (
 // the run's own outcome.
 func (s *OutputStore) Persist(ctx context.Context, cacheKey string, output []byte, d OutputDescriptor) (OutputDescriptor, error) {
 	d.Ref = PortableRef(cacheKey)
-	d.Schema = descriptorSchema
 	d.Key = cacheKey
 	d.KeyVersion = KeyVersion
 	d.Attempt = s.mintAttempt(cacheKey)
@@ -313,13 +317,11 @@ func newestAttemptBlob(dir string) string {
 // directory's descriptor sidecars. This is what folds each target's last output ref onto
 // its knowledge-graph node without the graph builder parsing the store's on-disk layout.
 //
-// Descriptors store the REPRO target (bare name plus charm suffix, e.g. "build:rw", the
-// exact re-runnable invocation - see reproTarget); this collapses that back to the bare
-// declared target so the newest run is picked across a target's charm variants and the
-// returned Target matches a knowledge-graph target node. Descriptors without a target
-// (project-scoped output) are skipped. Best-effort: an absent or unreadable store, or an
-// undecodable descriptor, is skipped - fewer entries, never an error. The result is
-// sorted by project then bare target for deterministic assembly.
+// Descriptors store the REPRO target (bare name plus charm suffix, see reproTarget); this
+// collapses that back to the bare declared target so the newest run is picked across charm
+// variants and Target matches a knowledge-graph node. Descriptors without a target are
+// skipped, as is anything unreadable - fewer entries, never an error. Sorted by project
+// then bare target for deterministic assembly.
 func (s *OutputStore) LatestRefsByTarget() []OutputDescriptor {
 	keys, err := os.ReadDir(s.outputsDir())
 	if err != nil {
@@ -878,15 +880,14 @@ func (s *OutputStore) InvocationByID(inv string) (journal.Invocation, error) {
 // EVENTS it was reconstructed from. [OutputStore.InvocationByID] keeps only the header, which
 // is all a `--meta` line needs; this is for a caller that wants the stream itself.
 //
-// It exists because the events were being read and discarded. journal.KindSecret records every
-// credential a run reached for, and docs/concepts/secrets.md offers that as the answer to "what
-// did this run touch" - but nothing could read it back, so the audit trail was a claim with no
-// reader. Anything that wants to answer a question FROM the journal, rather than about a single
-// output, starts here.
+// It exists because the events were being read and discarded: journal.KindSecret records
+// every credential a run reached for, and the docs offer that as the answer to "what did this
+// run touch", but nothing could read it back. Anything answering a question FROM the journal
+// starts here.
 //
-// inv must be a full invocation id: unlike an output ref there is no prefix resolution, because
-// a run log is addressed by exact filename and a partial id would need a directory scan to
-// disambiguate. Returns fs.ErrNotExist when the log has aged out under the RotateLogs cap.
+// inv must be a FULL invocation id - unlike an output ref there is no prefix resolution,
+// because a run log is addressed by exact filename. Returns fs.ErrNotExist when the log has
+// aged out under the RotateLogs cap.
 func (s *OutputStore) InvocationEventsByID(inv string) (journal.Invocation, []journal.Event, error) {
 	events, err := readEvents(filepath.Join(s.cacheDir, RunsDir, inv+runExt))
 	if err != nil {

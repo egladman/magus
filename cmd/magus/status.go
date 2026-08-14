@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"flag"
 	"fmt"
@@ -8,30 +9,18 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
 
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 )
-
-// statusFlags groups the local flags for `magus status` into one value: an
-// idiomatic options struct with a bind method (plain stdlib flag, no reflection,
-// no runtime cost), so the command's whole flag surface lives in one place and is
-// testable. The middle ground between loose per-flag vars and a declarative
-// registry; reach for it when a command carries several flags.
-type statusFlags struct {
-	watchInterval time.Duration
-	socket        string
-	compact       bool
-	symbols       bool
-	probe         string
-	workspace     string
-}
 
 // statusWatchMin keeps status cheap enough to leave running beside real work.
 // A tighter loop adds no useful signal: locks, services, and pool snapshots do
@@ -39,39 +28,38 @@ type statusFlags struct {
 // its next poll before the last one has finished.
 const statusWatchMin = 15 * time.Second
 
-func (f *statusFlags) bind(fs *flag.FlagSet) {
-	fs.DurationVar(&f.watchInterval, "watch", 0, "poll and reprint at this interval (minimum 15s; 0 means one-shot)")
-	fs.DurationVar(&f.watchInterval, "W", 0, "Short for --watch")
-	fs.StringVar(&f.socket, "socket", "", "proc server address as unix:// URL or bare path (default: auto-detect from MAGUS_DAEMON_SOCKET or scan sock dir)")
-	fs.BoolVar(&f.compact, "compact", false, "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)")
-	fs.BoolVar(&f.compact, "c", false, "Short for --compact")
-	fs.BoolVar(&f.symbols, "symbols", false, "Include the expensive symbol-index freshness scan")
-	fs.StringVar(&f.probe, "probe", "", "exec-probe mode: liveness, readiness, mcp (comma-combinable, e.g. liveness,mcp); exits 0=healthy, 1=unhealthy; ignores --watch/--compact")
-	fs.StringVar(&f.workspace, "workspace", "", "workspace root to check for readiness with --probe=readiness (default: any loaded workspace)")
-	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: magus status [flags]")
-		fmt.Fprintln(os.Stderr, "\nShow magus's configured telemetry, cache settings, and (when a parent")
-		fmt.Fprintln(os.Stderr, "process is running) the live concurrency-pool state.")
-		fmt.Fprintln(os.Stderr, "\nFlags (global flags also accepted, see `magus -h`):")
-		fs.PrintDefaults()
+// bindStatus registers status's flags from the command registry and installs its
+// usage banner. The hand-written options struct this replaced described itself as
+// "the middle ground between loose per-flag vars and a declarative registry" - the
+// registry now exists, so the middle ground is gone.
+func bindStatus(f **gen.StatusFlags) func(*flag.FlagSet) {
+	return func(fs *flag.FlagSet) {
+		*f = gen.BindStatus(fs)
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "usage: magus status [flags]")
+			fmt.Fprintln(os.Stderr, "\nShow magus's configured telemetry, cache settings, and (when a parent")
+			fmt.Fprintln(os.Stderr, "process is running) the live concurrency-pool state.")
+			fmt.Fprintln(os.Stderr, "\nFlags (global flags also accepted, see `magus -h`):")
+			fs.PrintDefaults()
+		}
 	}
 }
 
 func status(ctx context.Context, args []string) error {
-	var f statusFlags
-	if _, err := cmdParse("status", args, f.bind); err != nil {
+	var f *gen.StatusFlags
+	if _, err := cmdParse("status", args, bindStatus(&f)); err != nil {
 		return err
 	}
 
 	// Probe mode: exec-probe semantics — exit 0 healthy, exit 1 unhealthy.
 	// Ignores --watch, --compact, and -o formatting flags. The value is
 	// comma-combinable (e.g. --probe=liveness,mcp), failing if any listed probe does.
-	if f.probe != "" {
-		kinds, err := parseProbeKinds(f.probe)
+	if f.Probe != "" {
+		kinds, err := parseProbeKinds(f.Probe)
 		if err != nil {
 			return err
 		}
-		return runProbes(ctx, f.socket, globalCfg.MCP, kinds, f.workspace)
+		return runProbes(ctx, f.Socket, globalCfg.MCP, kinds, f.Workspace)
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -79,31 +67,33 @@ func status(ctx context.Context, args []string) error {
 		return err
 	}
 
-	if f.watchInterval == 0 {
-		return printStatus(buildStatusReport(ctx, f.socket, f.symbols), opts, 0, f.compact)
+	if f.Watch == 0 {
+		return printStatus(buildStatusReport(ctx, f.Socket, f.Symbols), opts, 0, f.Compact)
 	}
-	f.watchInterval = clampStatusWatch(f.watchInterval)
+	f.Watch = clampStatusWatch(f.Watch)
 
 	isTTY := tty.IsTerminalWriter(os.Stdout, tty.SystemProbe)
-	useGrid := gridEnabled(opts, isTTY) && !f.compact
+	useGrid := gridEnabled(opts, isTTY) && !f.Compact
 
 	// In watch+grid mode, animate at 150ms ticks (fluid spinner rotation)
-	// while retaining the last snapshot until the next real poll.
-	// Compact mode has no animation: only the queryTick drives reprints.
-	animTick := time.NewTicker(150 * time.Millisecond)
-	defer animTick.Stop()
-	queryTick := time.NewTicker(f.watchInterval)
+	// while retaining the last snapshot until the next real poll. Every other
+	// mode has no animation - only queryTick drives reprints - so it does not
+	// start a ticker it will never select on.
+	var animTick *time.Ticker
+	if useGrid {
+		animTick = time.NewTicker(150 * time.Millisecond)
+		defer animTick.Stop()
+	}
+	queryTick := time.NewTicker(f.Watch)
 	defer queryTick.Stop()
 
 	animFrame := 0
-	report := buildStatusReport(ctx, f.socket, f.symbols)
+	report := buildStatusReport(ctx, f.Socket, f.Symbols)
+	repaint := tty.NewInlineView(os.Stdout, tty.SystemProbe)
+	defer repaint.Finish()
+	inline := opts.Format == outputText && isTTY
 	for {
-		if opts.Format == outputText && isTTY {
-			// Repaint in place. This is a plain clear, never the alternate
-			// screen buffer, so the user keeps their scrollback after quitting.
-			_ = tty.ClearScreen(os.Stdout)
-		}
-		if err := printStatus(report, opts, animFrame, f.compact); err != nil {
+		if err := paintStatusFrame(repaint, inline, report, opts, animFrame, f.Compact); err != nil {
 			return err
 		}
 		if !useGrid {
@@ -111,7 +101,7 @@ func status(ctx context.Context, args []string) error {
 			case <-ctx.Done():
 				return nil
 			case <-queryTick.C:
-				report = buildStatusReport(ctx, f.socket, f.symbols)
+				report = buildStatusReport(ctx, f.Socket, f.Symbols)
 			}
 			continue
 		}
@@ -121,7 +111,7 @@ func status(ctx context.Context, args []string) error {
 		case <-animTick.C:
 			animFrame++
 		case <-queryTick.C:
-			report = buildStatusReport(ctx, f.socket, f.symbols)
+			report = buildStatusReport(ctx, f.Socket, f.Symbols)
 		}
 	}
 }
@@ -135,16 +125,27 @@ func clampStatusWatch(interval time.Duration) time.Duration {
 
 // printStatus renders one status snapshot; animFrame drives the active-cell pulse (0 = static).
 func printStatus(r types.StatusReport, opts OutputOptions, animFrame int, compact bool) error {
+	return writeStatus(os.Stdout, r, opts, animFrame, compact)
+}
+
+// writeStatus renders one status frame to w. Split from printStatus so the
+// watch loop can render into a buffer and redraw it in place, rather than
+// printing straight at the terminal and having to erase the whole screen to
+// get rid of it.
+func writeStatus(w io.Writer, r types.StatusReport, opts OutputOptions, animFrame int, compact bool) error {
+	// TTY-ness is measured on os.Stdout, not on w, and that is deliberate: in
+	// watch mode w is a buffer this renders into before redrawing it in place,
+	// so the terminal being rendered FOR is still standard output.
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, r)
 	default:
 		if compact {
-			printStatusCompact(os.Stdout, r, time.Now())
+			printStatusCompact(w, r, time.Now())
 			return nil
 		}
 		isTTY := tty.IsTerminalWriter(os.Stdout, tty.SystemProbe)
-		printStatusText(os.Stdout, r, gridEnabled(opts, isTTY), animFrame)
+		printStatusText(w, r, gridEnabled(opts, isTTY), animFrame)
 	}
 	return nil
 }
@@ -303,7 +304,7 @@ func buildCacheStatus(c config.Cache) types.CacheStatus {
 	return types.CacheStatus{Immutable: !c.WriteEnabled(), Dir: c.Dir, SizeMB: c.SizeMB}
 }
 
-func printStatusText(w *os.File, r types.StatusReport, useGrid bool, animFrame int) {
+func printStatusText(w io.Writer, r types.StatusReport, useGrid bool, animFrame int) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "telemetry")
 	fmt.Fprintf(tw, "  enabled\t%t\n", r.Telemetry.Enabled)
@@ -409,7 +410,7 @@ func printServiceStatus(w io.Writer, services []types.StatusService) {
 		if state == "" {
 			state = "unknown"
 		}
-		fmt.Fprintf(w, "  %-10s  %-12s  %d dependent(s)", state, label, s.Dependents)
+		fmt.Fprintf(w, "  %-10s  %-12s  %s", state, label, fmt.Sprintf("%d dependent%s", s.Dependents, pluralSuffix(s.Dependents, "", "s")))
 		if len(s.Ports) > 0 {
 			fmt.Fprintf(w, "  ports %s", strings.Join(s.Ports, ","))
 		}
@@ -525,7 +526,7 @@ func compactServiceToken(services []types.StatusService) string {
 		}
 		dependents += s.Dependents
 	}
-	return fmt.Sprintf("services %d/%d active, %d dependent(s)", running, len(services), dependents)
+	return fmt.Sprintf("services %d/%d active, %s", running, len(services), fmt.Sprintf("%d dependent%s", dependents, pluralSuffix(dependents, "", "s")))
 }
 
 // compactMCPToken renders the MCP endpoint as one sidebar-friendly token, or "" when
@@ -762,7 +763,7 @@ func drawRunningTree(w io.Writer, running []types.StatusRunningTarget, now time.
 	for k := range wsGroups {
 		wsKeys = append(wsKeys, k)
 	}
-	sort.Strings(wsKeys)
+	slices.Sort(wsKeys)
 
 	showWorkspace := len(wsKeys) > 1
 
@@ -784,7 +785,7 @@ func drawProjectTree(w io.Writer, indent string, projects map[string][]leafEntry
 	for k := range projects {
 		projKeys = append(projKeys, k)
 	}
-	sort.Strings(projKeys)
+	slices.Sort(projKeys)
 
 	for i, p := range projKeys {
 		pLast := i == len(projKeys)-1
@@ -797,11 +798,11 @@ func drawProjectTree(w io.Writer, indent string, projects map[string][]leafEntry
 
 		leaves := projects[p]
 		// Stable order: oldest first, then target name.
-		sort.SliceStable(leaves, func(a, b int) bool {
-			if leaves[a].duration != leaves[b].duration {
-				return leaves[a].duration > leaves[b].duration
+		slices.SortStableFunc(leaves, func(a, b leafEntry) int {
+			if a.duration != b.duration {
+				return cmp.Compare(b.duration, a.duration) // oldest first
 			}
-			return leaves[a].target < leaves[b].target
+			return cmp.Compare(a.target, b.target)
 		})
 		for j, lf := range leaves {
 			vLast := j == len(leaves)-1
@@ -821,6 +822,13 @@ func drawProjectTree(w io.Writer, indent string, projects map[string][]leafEntry
 
 // formatDur renders a wall-clock running duration. Returns "" for zero
 // or negative durations (unset upstream / clock skew).
+//
+// Deliberately NOT internal/cache.fmtDur, which they otherwise resemble enough
+// to invite a merge. That one measures how long a target TOOK and resolves to
+// nanoseconds, because the difference between 2ms and 200ms is the answer
+// somebody is looking for. This one is a clock a reader watches tick, so
+// sub-second precision would be unreadable noise, and an unset value has to
+// render as nothing rather than as zero.
 func formatDur(d time.Duration) string {
 	if d <= 0 {
 		return ""
@@ -900,10 +908,14 @@ func parseRunning(args []string) (project, target string) {
 //
 // It delegates to tty.Clip rather than slicing: a raw s[:n-1] splits a
 // multi-byte rune, so a project or target name with a non-ASCII
-// character rendered as a replacement glyph. The ellipsis is ASCII for
-// the same reason every other magus-authored string is.
+// character rendered as a replacement glyph.
+//
+// The ellipsis is ASCII. The rest of this file is deliberately not: the pool
+// grid, the spinner and the tree rules are GLYPHS, chosen for shape, and there
+// is no ASCII substitute that draws them. That is a different question from
+// prose typography, which the repo does keep to ASCII.
 func truncate(s string, n int) string {
-	return tty.Clip(s, n)
+	return tty.ClipBytes(s, n)
 }
 
 // printLockStatus renders the workspace locks held right now.
@@ -943,4 +955,29 @@ func printLockStatus(w io.Writer, locks []types.StatusLock) {
 			fmt.Fprintln(w, line)
 		}
 	}
+}
+
+// paintStatusFrame draws one watch frame, redrawing in place when it can.
+//
+// The fallback is the old behaviour - erase the screen and reprint - and it is
+// kept for the one case the in-place redraw genuinely cannot serve: a frame as
+// tall as the terminal, where erasing upward would walk off the top and eat the
+// transcript above. Falling back is worse than redrawing in place and much
+// better than a corrupted screen.
+func paintStatusFrame(p *tty.InlineView, inline bool, r types.StatusReport, opts OutputOptions, animFrame int, compact bool) error {
+	if !inline {
+		return printStatus(r, opts, animFrame, compact)
+	}
+	var frame strings.Builder
+	if err := writeStatus(&frame, r, opts, animFrame, compact); err != nil {
+		return err
+	}
+	if p.Paint(frame.String()) {
+		return nil
+	}
+	p.Reset()
+	if err := tty.ClearScreen(os.Stdout); err != nil {
+		return err
+	}
+	return printStatus(r, opts, animFrame, compact)
 }

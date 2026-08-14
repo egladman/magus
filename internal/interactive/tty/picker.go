@@ -4,11 +4,16 @@
 // tokens of the filter input. Render goes to stderr so stdout stays
 // clean for downstream pipes; the caller is expected to have already
 // verified that stdin and stderr are TTYs.
+//
+// It is driven by keys OR the mouse. Hovering moves the highlight, a click
+// selects, a double click chooses - so nothing has to be remembered to use it.
+// The mouse needs the terminal to report where the cursor is; one that will not
+// leaves the picker keyboard-only, which is what it always was.
 
 package tty
 
 import (
-	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -16,11 +21,34 @@ import (
 	"strings"
 )
 
+// pickerRules is what the box costs in rows: one rule above, one below. The
+// prompt rides the top and the way out rides the bottom, so the list keeps
+// every line it had.
+const pickerRules = 2
+
+// SelectMark is the glyph every interactive surface uses to show which row a
+// keypress or a click will act on.
+//
+// One constant rather than one per surface: the picker and the run's failure
+// band are two lists a reader learns to drive the same way, and they were
+// marking the current row with different characters - so the same gesture
+// looked like a different affordance depending on which one was open. A ">" is
+// a keyboard character standing in for a pointer; a triangle IS one, and it
+// belongs to the same geometric family as the pool gauge's squares.
+//
+// The glyph only. Each surface pads it to whatever its own row shape needs.
+const SelectMark = "\u25b8"
+
+// pickerHint is the way out, drawn on the prompt line. Short enough to sit
+// beside a filter on a narrow terminal, and stating the two things a reader
+// cannot discover by looking: how to leave, and how to clear what they typed.
+const pickerHint = "[esc] cancel  [ctrl-u] clear"
+
 // ErrAborted is returned when the user presses ESC, Ctrl-C, or Ctrl-D.
 var ErrAborted = errors.New("picker: aborted")
 
-// Options configures a single Pick call.
-type Options struct {
+// PickOptions configures a single Pick call.
+type PickOptions struct {
 	// Prompt is the label drawn before the filter input (e.g. "project").
 	Prompt string
 	// InitialFilter pre-populates the filter string. The picker filters
@@ -31,114 +59,212 @@ type Options struct {
 	Initial int
 	// MaxRows caps the visible window of matches. Defaults to 10.
 	MaxRows int
+	// Query replaces the built-in substring filter with a live lookup, called
+	// once per change to the filter text and expected to return the items to
+	// show, best first.
+	//
+	// It exists so a picker can search something larger than the list it was
+	// opened with - the knowledge graph rather than the projects a caller can
+	// enumerate up front. The caller keeps the mapping from label back to
+	// meaning; this type only draws strings.
+	//
+	// Nil keeps the substring filter, right for an already-complete list.
+	//
+	// It takes the picker's context and may fail: it is called once per
+	// keystroke from inside the input loop, so a lookup that hangs freezes the
+	// prompt, and one that errors used to be indistinguishable from one that
+	// legitimately matched nothing.
+	Query func(ctx context.Context, filter string) ([]string, error)
 }
 
-// Pick blocks until the user selects an item or aborts. On success it
-// returns the index into the original items slice. On abort it returns
-// -1 and ErrAborted.
-func Pick(items []string, opts Options) (int, error) {
-	if len(items) == 0 {
+// Pick blocks until the user selects an item or aborts. On success it returns
+// the index into the original items slice. On abort it returns -1 and
+// ErrAborted.
+//
+// Takes its descriptors and probe like every other entry point in this package
+// rather than reaching for os.Stdin and os.Stderr itself. It was the one
+// interactive surface a test could not redirect, which is exactly backwards for
+// the one that reads keys.
+func Pick(ctx context.Context, in *os.File, out io.Writer, p Probe, items []string, opts PickOptions) (int, error) {
+	if len(items) == 0 && opts.Query == nil {
 		return -1, errors.New("picker: no items")
 	}
 	if opts.MaxRows <= 0 {
 		opts.MaxRows = 10
 	}
 
-	if !StdinIsTerminal() {
-		return -1, errors.New("picker: stdin is not a TTY")
-	}
-
-	restore, err := MakeRaw(os.Stdin.Fd())
+	// One input session for keys AND mouse. The picker used to decode keys
+	// itself, which meant two decoders in one package disagreeing about which
+	// control bytes exist - Ctrl-N and Ctrl-P were documented here and dropped
+	// on the floor, because they are below 0x20 and fell through to "printable".
+	input, err := OpenInput(in, out, p)
 	if err != nil {
 		return -1, fmt.Errorf("picker: %w", err)
 	}
-	defer func() { _ = restore() }()
+	defer func() { _ = input.Close() }()
 
 	s := &session{
-		items:    items,
-		opts:     opts,
-		filter:   opts.InitialFilter,
-		out:      os.Stderr,
-		reader:   bufio.NewReader(os.Stdin),
-		linesOut: 0,
+		items:   items,
+		opts:    opts,
+		filter:  opts.InitialFilter,
+		out:     out,
+		probe:   p,
+		view:    NewInlineView(out, p),
+		mouseOK: true,
 	}
-	s.refilter()
+	s.queryRow = func() (int, bool) {
+		row, _, ok := input.CursorPosition()
+		return row, ok
+	}
+	if err := s.refilter(ctx); err != nil {
+		return -1, fmt.Errorf("picker: %w", err)
+	}
 	s.cursor = s.findInitial()
 	s.draw()
 	defer s.cleanup()
 
 	for {
-		r, err := s.readKey()
+		ev, err := input.Read(ctx)
 		if err != nil {
+			// A cancelled context is not the user aborting: a caller that
+			// stopped the run wants ctx.Err(), and reporting ErrAborted here
+			// would say the reader declined a choice they were never offered.
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return -1, ctxErr
+			}
 			return -1, ErrAborted
 		}
-		switch r {
-		case keyEnter:
+
+		if ev.Kind == EventMouse {
+			i, hit := s.matchAt(ev.Row)
+			if !hit {
+				// Off the list. Deliberately not a choice and not an abort: a
+				// stray click must never pick something, least of all something
+				// the pointer was not even over.
+				continue
+			}
+			if ev.Motion {
+				// Hovering moves the highlight, so what a click would take is
+				// never a guess.
+				s.hover(i)
+				continue
+			}
+			// Left button only, which also means the WHEEL is left alone. The
+			// wheel is how a reader scrolls their own transcript, and magus
+			// does not take it on any surface - a picker that swallowed it
+			// would break scrollback for the seconds it is open, which is the
+			// behaviour that makes other tools unusable inside tmux.
+			if !ev.Press || ev.Button != MouseLeft {
+				continue
+			}
+			s.cursor = i
+			if ev.Clicks == 2 {
+				return s.matches[s.cursor], nil
+			}
+			s.draw()
+			continue
+		}
+
+		switch ev.Key {
+		case KeyEnter:
 			if len(s.matches) == 0 {
 				continue
 			}
 			return s.matches[s.cursor], nil
-		case keyEscape, keyCtrlC, keyCtrlD:
+		case KeyEscape, KeyCtrlC, KeyCtrlD:
 			return -1, ErrAborted
-		case keyUp:
+		case KeyUp, KeyCtrlP:
 			if len(s.matches) > 0 {
 				s.cursor = (s.cursor - 1 + len(s.matches)) % len(s.matches)
 			}
-		case keyDown:
+		case KeyDown, KeyCtrlN:
 			if len(s.matches) > 0 {
 				s.cursor = (s.cursor + 1) % len(s.matches)
 			}
-		case keyBackspace:
+		case KeyBackspace:
 			if len(s.filter) > 0 {
 				// Strip one rune.
 				rs := []rune(s.filter)
 				s.filter = string(rs[:len(rs)-1])
-				s.refilter()
+				if err := s.refilter(ctx); err != nil {
+					return -1, fmt.Errorf("picker: %w", err)
+				}
 				s.cursor = 0
 			}
-		case keyCtrlU:
+		case KeyCtrlU:
 			s.filter = ""
-			s.refilter()
+			if err := s.refilter(ctx); err != nil {
+				return -1, fmt.Errorf("picker: %w", err)
+			}
+			s.cursor = 0
+		case KeyRune:
+			s.filter += string(ev.Rune)
+			if err := s.refilter(ctx); err != nil {
+				return -1, fmt.Errorf("picker: %w", err)
+			}
 			s.cursor = 0
 		default:
-			if r >= 0x20 && r != 0x7f {
-				s.filter += string(r)
-				s.refilter()
-				s.cursor = 0
-			}
+			continue
 		}
 		s.draw()
 	}
 }
 
-const (
-	keyEnter     rune = '\r'
-	keyCtrlC     rune = 0x03
-	keyCtrlD     rune = 0x04
-	keyCtrlU     rune = 0x15
-	keyBackspace rune = 0x7f
-	keyEscape    rune = 0x1b
-	keyUp        rune = 0xE001
-	keyDown      rune = 0xE002
-	keyLeft      rune = 0xE003
-	keyRight     rune = 0xE004
-)
+// RenderPick returns the block a picker WOULD draw for the given state, without
+// opening a terminal or running an input loop.
+//
+// For the documentation renderer, which publishes pictures of this surface: a
+// hand-written imitation drifts from the real thing silently, and the drift
+// gate cannot see it because it compares the renderer against itself. Driving
+// the real composition means a change to the picker's frame shows up in the
+// docs as a stale-SVG failure.
+func RenderPick(out io.Writer, p Probe, items []string, opts PickOptions, filter string, cursor int) string {
+	if opts.MaxRows <= 0 {
+		opts.MaxRows = 10
+	}
+	s := &session{items: items, opts: opts, filter: filter, out: out, probe: p}
+	// Background: this renders one frame for the docs and never loops, so there
+	// is nothing to cancel. A Query that fails here is reported as no matches,
+	// which is what a still picture of an empty result should show anyway.
+	_ = s.refilter(context.Background())
+	if cursor >= 0 && cursor < len(s.matches) {
+		s.cursor = cursor
+	}
+	return s.frame()
+}
 
 type session struct {
 	items   []string
-	opts    Options
+	opts    PickOptions
 	filter  string
 	matches []int // indices into items, post-filter
 	cursor  int   // index into matches
 	out     io.Writer
-	reader  *bufio.Reader
+	probe   Probe
+	view    *InlineView
 
-	linesOut int // tracks how many lines we last drew so redraws can clear
+	// start and visible describe the window the last draw showed, so a click
+	// coordinate can be mapped back to the match it landed on.
+	start, visible int
+	// promptRow is the absolute terminal row of the prompt line, learned by
+	// asking the terminal. mouseOK goes false the first time it will not say,
+	// and stays false: re-asking a terminal that does not answer would cost the
+	// timeout on every keystroke and make the picker feel broken.
+	promptRow int
+	mouseOK   bool
+	// queryRow asks the terminal for the cursor row. A field so a test can
+	// count the round trips, which is the thing worth counting: each one is a
+	// full RTT to the terminal, and over ssh that is tens of milliseconds.
+	queryRow func() (int, bool)
+	// lastHeight is the terminal height the position was last anchored
+	// against. A change means the window was resized and the arithmetic below
+	// no longer describes reality.
+	lastHeight int
 }
 
-// Filter is exposed for tests: it returns the indices of items that
-// match the given filter string under the AND-substring rule.
-func Filter(items []string, filter string) []int {
+// filterIndices returns the indices of items matching filter under the
+// AND-substring rule.
+func filterIndices(items []string, filter string) []int {
 	tokens := strings.Fields(strings.ToLower(filter))
 	out := make([]int, 0, len(items))
 	for i, it := range items {
@@ -157,8 +283,25 @@ func Filter(items []string, filter string) []int {
 	return out
 }
 
-func (s *session) refilter() {
-	s.matches = Filter(s.items, s.filter)
+func (s *session) refilter(ctx context.Context) error {
+	if s.opts.Query == nil {
+		s.matches = filterIndices(s.items, s.filter)
+		return nil
+	}
+	// A live query REPLACES the item list rather than narrowing it, so the
+	// indices the picker returns have to index the new list. Keeping items and
+	// matches in step here is what lets the rest of the session stay identical
+	// for both modes.
+	items, err := s.opts.Query(ctx, s.filter)
+	if err != nil {
+		return err
+	}
+	s.items = items
+	s.matches = make([]int, len(s.items))
+	for i := range s.items {
+		s.matches[i] = i
+	}
+	return nil
 }
 
 func (s *session) findInitial() int {
@@ -170,54 +313,29 @@ func (s *session) findInitial() int {
 	return 0
 }
 
-func (s *session) readKey() (rune, error) {
-	b, err := s.reader.ReadByte()
-	if err != nil {
-		return 0, err
-	}
-	if b != 0x1b {
-		return rune(b), nil
-	}
-	// Possible escape sequence: peek with a non-blocking read. On a TTY
-	// in raw mode an arrow key arrives as ESC '[' 'A' atomically, so a
-	// second ReadByte succeeds immediately if more bytes are buffered.
-	if s.reader.Buffered() == 0 {
-		return keyEscape, nil
-	}
-	b2, err := s.reader.ReadByte()
-	if err != nil || b2 != '[' {
-		return keyEscape, nil //nolint:nilerr // short/!CSI sequence: treat as a bare Escape key
-	}
-	b3, err := s.reader.ReadByte()
-	if err != nil {
-		return keyEscape, nil //nolint:nilerr // truncated escape sequence: treat as a bare Escape key
-	}
-	switch b3 {
-	case 'A':
-		return keyUp, nil
-	case 'B':
-		return keyDown, nil
-	case 'C':
-		return keyRight, nil
-	case 'D':
-		return keyLeft, nil
-	}
-	return keyEscape, nil
+func (s *session) draw() {
+	before := s.view.Lines()
+	s.view.Paint(s.frame())
+	s.reposition(before, s.view.Lines())
 }
 
-func (s *session) draw() {
-	// Erase the previous render before drawing over it.
-	_ = EraseLines(s.out, s.linesOut)
-
+// frame composes the block: the visible window of matches, then the prompt.
+//
+// It returns a string rather than writing it, so [InlineView] can compare it
+// against what is already on screen and rewrite only the lines that differ.
+// Typing changes every row and costs what it always did; moving the highlight
+// changes two rows, and now costs two.
+func (s *session) frame() string {
 	var b strings.Builder
-	visible := s.opts.MaxRows
+	maxRows := s.maxRows()
+	visible := maxRows
 	if visible > len(s.matches) {
 		visible = len(s.matches)
 	}
 	// Window the visible slice around the cursor.
 	start := 0
-	if s.cursor >= s.opts.MaxRows {
-		start = s.cursor - s.opts.MaxRows + 1
+	if s.cursor >= maxRows {
+		start = s.cursor - maxRows + 1
 	}
 	end := start + visible
 	if end > len(s.matches) {
@@ -227,35 +345,222 @@ func (s *session) draw() {
 			start = 0
 		}
 	}
+	s.start, s.visible = start, visible
 
-	for i := start; i < end; i++ {
-		idx := s.matches[i]
-		marker := "  "
-		if i == s.cursor {
-			marker = "> "
-		}
-		b.WriteString(marker)
-		b.WriteString(s.items[idx])
-		b.WriteString("\r\n")
-	}
-	if len(s.matches) == 0 {
-		b.WriteString("  (no matches)\r\n")
-		visible = 1
-	}
-	// Footer / prompt line.
 	prompt := s.opts.Prompt
 	if prompt == "" {
 		prompt = "filter"
 	}
-	fmt.Fprintf(&b, "%s: %s_", prompt, s.filter)
+	// The SAME box the run's pinned band draws, from the same functions.
+	//
+	// The picker used to be a bare list with its hint jammed onto the prompt
+	// row, which made two surfaces a reader drives identically look like two
+	// different products. Position still differs on purpose - this is drawn
+	// where the cursor is, because `magus x` is a command you type and its list
+	// belongs where you typed it - but the LOOK does not.
+	//
+	// The prompt rides the top rule and the way out rides the bottom, so
+	// neither costs a row of the list.
+	inner := s.innerWidth()
+	dim := plain
+	if WantsColor(s.out, s.probe) {
+		dim = func(t string) string { return Colorize(t, SGRDim) }
+	}
+	b.WriteString(boxRule(inner, boxTL, boxTR, prompt+": "+s.filter+"_", "", dim))
+	b.WriteString("\n")
+	for i := start; i < end; i++ {
+		idx := s.matches[i]
+		marker := "  "
+		if i == s.cursor {
+			marker = SelectMark + " "
+		}
+		b.WriteString(boxWrap(ClipCols(marker+s.items[idx], inner), inner, dim))
+		b.WriteString("\n")
+	}
+	if len(s.matches) == 0 && maxRows > 0 {
+		b.WriteString(boxWrap("  (no matches)", inner, dim))
+		b.WriteString("\n")
+		s.visible = 1
+	}
+	b.WriteString(boxRule(inner, boxBL, boxBR, pickerHint, "", dim))
+	return b.String()
+}
 
-	fmt.Fprint(s.out, b.String())
-	s.linesOut = visible + 1
+// innerWidth is the columns a picker row has for its own text: the terminal
+// less the two vertical edges, and less the column held back from the wrap.
+func (s *session) innerWidth() int {
+	w, ok := s.width()
+	if !ok || w < minUsefulWidth {
+		w = minUsefulWidth
+	}
+	return w - 1 - 2*borderCols
+}
+
+// reposition keeps track of where the prompt line is after a redraw, asking the
+// terminal only when it has to.
+//
+// It has to exactly once. Every later move is ARITHMETIC: the block is redrawn
+// from where the old one started, so the prompt lands `newLines-oldLines` rows
+// away, clamped to the last row when growing pushed the screen up.
+//
+// The round trip it avoids is a full RTT over ssh, and the block changes height
+// on any keystroke that filters past the visible rows - so querying per redraw
+// put an RTT of lag on most of the typing, on the connection where lag is
+// already the problem.
+//
+// optimization: derive the prompt row instead of asking the terminal for it.
+//
+//	measured: TestSessionAsksTheTerminalOnlyOnce pins one query per session
+//	          where the old code issued one per height change; the query costs
+//	          149us on a local pty and a full RTT remotely.
+//	trade-off: the row is derived, so any movement this model does not predict
+//	          goes unnoticed until a resize re-anchors it. The model covers the
+//	          only two causes - the block changing height, and growing at the
+//	          bottom scrolling the screen.
+func (s *session) reposition(oldLines, newLines int) {
+	if !s.mouseOK {
+		return
+	}
+	height, ok := s.height()
+	if !ok {
+		return
+	}
+	if s.promptRow == 0 || height != s.lastHeight {
+		// First draw, or the window was resized and the arithmetic no longer
+		// describes anything. Re-anchor against the terminal.
+		s.lastHeight = height
+		s.locate()
+		return
+	}
+	row := s.promptRow + (newLines - oldLines)
+	if row > height {
+		// Growing at the bottom scrolled the screen, so the prompt is on the
+		// last row and everything above it moved up.
+		row = height
+	}
+	s.promptRow = row
+}
+
+// maxRows is how many items the window may show, bounded by what the terminal
+// can actually display.
+//
+// Without the bound, a terminal shorter than the configured rows makes
+// [InlineView.Paint] refuse the block and the picker draw NOTHING while still in
+// a raw-mode read loop - indistinguishable from a hung process, on an eleven-row
+// split pane rather than an exotic case.
+//
+// Two rows are held back: one for the prompt, and one so the block stays strictly
+// shorter than the screen, which is what makes redrawing in place possible.
+func (s *session) maxRows() int {
+	max := s.opts.MaxRows
+	height, ok := s.height()
+	if !ok {
+		return max
+	}
+	// The box's two rules come out of the budget as well as the row the caller
+	// is standing on. Without that a short terminal drew a list that did not
+	// fit, pushing its own prompt off the top - which reads as the picker
+	// having hung rather than as a window being small.
+	if limit := height - 1 - pickerRules; max > limit {
+		max = limit
+	}
+	if max < 0 {
+		max = 0
+	}
+	return max
+}
+
+// height reports the terminal's height. A local ioctl, not a round trip, so it
+// is safe to ask on every redraw.
+// width reports the terminal's column count, for deciding whether an optional
+// piece of the prompt line fits. Sibling of height.
+func (s *session) width() (int, bool) {
+	if s.probe == nil {
+		return 0, false
+	}
+	fd, ok := Fd(s.out)
+	if !ok {
+		return 0, false
+	}
+	w, _, err := s.probe.Size(fd)
+	if err != nil || w <= 0 {
+		return 0, false
+	}
+	return w, true
+}
+
+func (s *session) height() (int, bool) {
+	if s.probe == nil {
+		return 0, false
+	}
+	fd, ok := Fd(s.out)
+	if !ok {
+		return 0, false
+	}
+	_, h, err := s.probe.Size(fd)
+	if err != nil || h <= 0 {
+		return 0, false
+	}
+	return h, true
+}
+
+// hover moves the highlight to i, redrawing only if it actually moved.
+//
+// The guard is the whole point: any-event tracking reports EVERY cell crossed
+// and a row is many cells wide, so a sweep across one item would repaint the list
+// once per column with identical bytes.
+//
+// optimization: skip the redraw when the highlight did not move.
+//
+//	measured: BenchmarkPickerMouseSweep 41.12k -> 4.626k B_written/sweep
+//	          (-88.8%), 50.50us -> 23.12us sec/op (benchstat, n=8).
+//	trade-off: none. The skipped redraws produced byte-identical output; what
+//	          is saved is the terminal parsing and rendering them, and on a
+//	          remote link, carrying them.
+func (s *session) hover(i int) {
+	if i == s.cursor {
+		return
+	}
+	s.cursor = i
+	s.draw()
+}
+
+// locate asks the terminal where the prompt line ended up, which is what makes
+// a click resolvable against a view drawn wherever the cursor happened to be.
+func (s *session) locate() {
+	if s.queryRow == nil || !s.mouseOK {
+		return
+	}
+	row, ok := s.queryRow()
+	if !ok {
+		s.mouseOK = false
+		return
+	}
+	s.promptRow = row
+}
+
+// matchAt maps an absolute terminal row to the match index drawn on it, if any.
+//
+// Items sit directly above the prompt line, so the topmost is `visible` rows up
+// from it. A click on the prompt, or anywhere off the block, matches nothing -
+// and must not be treated as a selection.
+func (s *session) matchAt(row int) (int, bool) {
+	if !s.mouseOK || s.visible == 0 || len(s.matches) == 0 {
+		return 0, false
+	}
+	offset := row - (s.promptRow - s.visible)
+	if offset < 0 || offset >= s.visible {
+		return 0, false
+	}
+	i := s.start + offset
+	if i < 0 || i >= len(s.matches) {
+		return 0, false
+	}
+	return i, true
 }
 
 func (s *session) cleanup() {
-	// Erase our drawing so the parent terminal looks like the picker
-	// never ran. Caller prints whatever permanent output it wants.
-	_ = EraseLines(s.out, s.linesOut)
-	s.linesOut = 0
+	// Erase our drawing so the parent terminal looks like the picker never ran.
+	// The caller prints whatever permanent output it wants.
+	_ = s.view.Clear()
 }

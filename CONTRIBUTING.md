@@ -72,12 +72,12 @@ promise forbids, and the answer is a second name rather than a redefinition.
 
 | Surface        | Gate                                                                                                           |
 | -------------- | -------------------------------------------------------------------------------------------------------------- |
-| CLI            | `internal/manpage/testdata/api.lock`, a drift-gated snapshot of every subcommand, flag, config key, and target |
+| CLI            | `internal/clispec/testdata/api.lock`, a drift-gated snapshot of every subcommand, flag, config key, and target |
 | protobuf       | `buf breaking`, composed into `lint`                                                                           |
 | magusfile keys | the `required_version` floor, plus doctor's check that the floor is accurate                                   |
 
 A diff to `api.lock` is the signal to read carefully: a line removed there is a
-removed public surface. Regenerate it with `go generate ./internal/manpage/...`
+removed public surface. Regenerate it with `go generate ./internal/clispec/...`
 after an intentional addition, and treat a deletion as a question rather than a
 regeneration.
 

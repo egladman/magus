@@ -127,7 +127,7 @@ func (r *runner) run(wsErr error) types.DoctorReport {
 	var out types.DoctorReport
 	out.Checks = append(
 		out.Checks,
-		r.checkJSONCodec(), r.checkStaleSockets(), r.checkMCPTokens(),
+		r.checkJSONCodec(), r.checkStaleSockets(), r.checkMCPTokens(), r.checkTerminal(),
 	)
 
 	if wsErr != nil {

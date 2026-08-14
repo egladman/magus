@@ -83,9 +83,6 @@ func implementedHooks(s *spells.Spell) []string {
 	if len(s.Outputs()) > 0 {
 		got = append(got, "provides")
 	}
-	if len(s.Claims()) > 0 {
-		got = append(got, "claims")
-	}
 	if len(s.IgnoreDirs()) > 0 {
 		got = append(got, "ignore-dirs")
 	}

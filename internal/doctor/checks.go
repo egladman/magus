@@ -87,20 +87,14 @@ func (*runner) checkStaleServiceSuppressions(projects []*types.Project) types.Do
 }
 
 // checkLanguageCoverage notes a project that binds no toolchain spell, which
-// usually means an import was forgotten and the project's real work is invisible
-// to affected tracking and the cache. A project says otherwise with
-// magus.project's "no_language" key, which carries a reason rather than a bool so
-// the exemption reads as a decision.
+// usually means a forgotten import and work invisible to affected tracking and
+// the cache. magus.project's "no_language" key opts out, carrying a reason rather
+// than a bool so the exemption reads as a decision.
 //
-// It does NOT sniff the project's files to guess a language. Discovery retired
-// exactly that (a stray go.mod or package.json no longer registers anything), and
-// the reason applies here too: a guess that is right most of the time still means
-// magus deciding something about your repository that you did not tell it, and
-// being wrong in the remaining cases with no obvious way to argue. A declaration
-// is the whole point - explicit over clever.
+// It does NOT sniff files to guess a language: a guess that is right most of the
+// time still decides something about your repository you did not declare.
 //
-// ADVICE, not failure. A project with no language pack is a legitimate shape, so
-// this is worth saying once and never worth blocking on.
+// ADVICE, not failure - a project with no language pack is a legitimate shape.
 func (*runner) checkLanguageCoverage(projects []*types.Project) types.DoctorCheck {
 	var noLang []string
 	exempt := 0
@@ -210,23 +204,15 @@ func (r *runner) checkGraphBounds() types.DoctorCheck {
 }
 
 // checkGraphBounds fails when the committed knowledge graph holds a node naming a
-// location outside the workspace. It is the sibling of checkSymlinks: both answer "does
-// anything here reach out of the tree", one for the filesystem and one for the artifact
-// the workspace publishes.
+// location outside the workspace - the sibling of checkSymlinks, for the artifact the
+// workspace publishes rather than the filesystem.
 //
-// It matters because the graph is committed, rendered into the docs site, and shared
-// through the remote cache, so a node naming a path on one machine reaches all three. A
-// real graph carried 93 of them, bottoming out in a developer's ~/Library/Caches/go-build
-// shards, put there by a language indexer reporting document paths for the dependencies
-// it resolved.
+// The graph is committed, rendered into the docs site and shared through the remote
+// cache, so one machine's absolute path reaches all three. internal/symbols guards
+// ingest; this notices if a future extractor gets around it, which is why it reads the
+// merged artifact and keys on the node ID - several kinds carry their path only there.
 //
-// The ingest guard in internal/symbols is what stops those getting in. This is what
-// notices if a future extractor finds a way around it, which is why it reads the merged,
-// committed artifact and keys on the node ID rather than any one field: several node
-// kinds carry their path only in an ID or a Label.
-//
-// Import nodes are exempt. Their ID is the specifier a source file literally wrote, so
-// "../../badge" records what the code says rather than a path magus resolved.
+// Import nodes are exempt: their ID is the specifier the source literally wrote.
 func checkGraphBounds(root string) types.DoctorCheck {
 	const name = "graph bounds"
 	path := filepath.Join(root, "gen", "knowledge-graph.json")
@@ -606,9 +592,9 @@ func (*runner) checkEnvVars() types.DoctorCheck {
 		if _, ok := KnownEnvVars[key]; ok {
 			continue
 		}
-		// Vars magus itself reads that are deliberately NOT config fields, so they
-		// will never appear in KnownEnvVars. Each is a runtime or secret input, and
-		// flagging them told users their own documented setup was a typo:
+		// Vars magus reads that are deliberately NOT config fields, so they never
+		// appear in KnownEnvVars. Flagging them told users their own documented
+		// setup was a typo:
 		//   MAGUS_LEVEL              subprocess recursion depth, like GNU Make's
 		//                            MAKELEVEL (internal/proc/run SelfVars); a nested
 		//                            magus legitimately sees it.
@@ -715,21 +701,16 @@ var bespokePhaseFragmentNames = map[string]bool{
 	"audit": true, "style": true, "prettify": true,
 }
 
-// checkBespokePhaseFragmentTargets is MGS1003: a target whose normalized name
-// names a static-analysis or formatting subset rather than a phase of its own is
-// usually better composed into lint (or format), so `magus affected ci` covers it
-// without a bespoke target the pipeline can silently forget to run.
+// checkBespokePhaseFragmentTargets is MGS1003: a target naming a static-analysis or
+// formatting subset rather than a phase of its own is usually better composed into
+// lint, so `magus affected ci` covers it without a target the pipeline can forget.
 //
-// ADVICE, not failure. This is magus's convention, and a workspace is entitled to
-// a different one - a slow audit split out from fast lint is a real reason, and so
-// is simply preferring the name. Failing here would make magus's taste a
-// requirement of using magus, which it is not: `ci` is the one reserved target and
-// the rest of the layout belongs to whoever wrote it. `--strict` promotes this for
-// a workspace that wants the convention enforced.
+// ADVICE, not failure. `ci` is the one reserved target and the rest of the layout
+// belongs to whoever wrote it; `--strict` promotes this where the convention is
+// wanted.
 //
-// Reported per project rather than once per name. Two projects that both name a
-// target "security" are two separate decisions, and collapsing them hid the
-// second one behind whichever magusfile happened to be scanned first.
+// Reported per project, not once per name: two projects naming a target "security"
+// are two separate decisions.
 func (r *runner) checkBespokePhaseFragmentTargets(projects []*types.Project) types.DoctorCheck {
 	const name = "bespoke phase-fragment target names"
 	var found []string
@@ -813,20 +794,16 @@ func (r *runner) checkUnreachedFootprintDecls(projects []*types.Project) types.D
 	}
 }
 
-// checkCacheableSecretReads is MGS1026: a target whose body calls magus\secret.read but which
-// is still cacheable. A resolved credential contributes nothing to the cache key - deliberately,
-// since hashing one would write it into cache metadata and partition the cache per rotation -
-// so rotating or revoking the credential invalidates nothing.
+// checkCacheableSecretReads is MGS1026: a cacheable target that calls magus\secret.read.
+// A resolved credential contributes nothing to the cache key - deliberately, since hashing
+// one would write it into cache metadata - so rotating or revoking it invalidates nothing.
 //
-// The failure that produces is silent and green, which is why this is worth a check rather than
-// a paragraph. An authentication target's sources almost never change, so it becomes a permanent
-// cache hit that never contacts the provider, never authenticates, and reports success; the push
-// that follows fails with the registry's own 401, far from the cause. The `-login` convention
-// magus recommends makes it MORE likely, not less, by giving authentication its own small target.
+// The resulting failure is silent and green: an authentication target's sources rarely
+// change, so it becomes a permanent cache hit that never authenticates and reports success,
+// and the push that follows fails with the registry's 401 far from the cause.
 //
-// A warning rather than a load error: a target may read a credential and legitimately produce a
-// cacheable artifact from it, and only the author knows. The remedy is one line - skip_cache with
-// a reason - and the reason string is what makes the decision auditable later.
+// A warning, not a load error - a target may legitimately produce a cacheable artifact from
+// a credential, and only the author knows. The remedy is skip_cache with a reason.
 func (r *runner) checkCacheableSecretReads(projects []*types.Project) types.DoctorCheck {
 	const name = "cacheable secret reads"
 	var details []string
@@ -898,29 +875,18 @@ func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) types.D
 	}
 }
 
-// checkDeadOutputGlobs is MGS1018: a declared output glob that matches nothing while its
+// checkDeadOutputGlobs is MGS1018: a declared output glob matching nothing while its
 // SIBLING globs in the same project match files.
 //
-// This is the shape that bit us: the typescript spell contributes `dist/**` to every project
-// that binds it, and a project emitting to gen/ never writes a dist/ - so a target with no
-// ctx.writesFiles of its own inherits a glob it can never satisfy. Snapshot then rejects it,
-// but only on a cache MISS, so the failure hides for as long as the target keeps replaying.
-// A cold cache - a new clone, a CI runner, `magus clean --cache` - is the first thing to see
-// it, which is the worst possible time to find out.
+// A spell-contributed glob a project can never satisfy (typescript's `dist/**` in a
+// project emitting to gen/) is rejected by snapshot only on a cache MISS, so it hides
+// for as long as the target replays and surfaces first on a cold cache.
 //
-// The sibling test is what keeps this quiet on an unbuilt tree. If NOTHING a project declares
-// has been produced yet, the project simply has not been built and every glob matching zero is
-// expected; reporting then would fire on every fresh clone and train people to ignore it. Only
-// when some outputs exist and one glob still matches nothing is that glob suspect.
-//
-// "Some outputs exist" has to mean UNTRACKED outputs exist. A generated tree that is committed
-// (console/src/gen from buf-generate, proto/gen) is declared as an output for staleness
-// tracking and is present on a fresh clone, so counting it as evidence says "this was built"
-// about a tree nobody has built - and then reports every sibling glob writing to an untracked
-// gen/ as dead. That is the exact false positive this check was written to avoid, arriving
-// through the back door: it fired on console's `gen/**` on every CI runner while passing on
-// every developer machine, where gen/ had been built. A backend that cannot answer "is this
-// tracked?" cannot tell those apart, so it degrades to plain presence rather than guess.
+// The sibling test keeps this quiet on an unbuilt tree, where every glob matching zero
+// is expected. "Some outputs exist" must mean UNTRACKED outputs: a committed generated
+// tree is present on a fresh clone, so counting it as evidence claims a tree was built
+// when it was not, and then reports every untracked sibling as dead. A backend that
+// cannot answer "is this tracked?" degrades to plain presence rather than guess.
 func (r *runner) checkDeadOutputGlobs(projects []*types.Project) types.DoctorCheck {
 	const name = "dead output globs"
 
@@ -967,21 +933,17 @@ func (r *runner) checkDeadOutputGlobs(projects []*types.Project) types.DoctorChe
 	}
 }
 
-// checkOutputOwnedByTwoTargets is MGS1020: one output glob declared by two targets in the
-// SAME project. MGS4002 already covers the cross-project shape (two projects, one target);
-// this is its sibling, and the gap it fills is the common one - a generator and a formatter
-// that both rewrite a gen/ tree.
+// checkOutputOwnedByTwoTargets is MGS1020: one output glob declared by two targets in
+// the SAME project - typically a generator and a formatter that both rewrite a gen/ tree.
+// MGS4002 covers the cross-project shape.
 //
-// Two owners of one file is not an ordering problem, which is why it earns a diagnostic
-// rather than a scheduling fix. Run the generator first and the formatter's edit is what
-// lands, so the generator's next drift gate fails; run the formatter first and its work is
-// immediately overwritten. Whichever goes last wins and the other's gate fails on the next
-// run, forever, at every ordering. The fix is always ownership: one target owns the bytes,
-// and if generated output needs formatting the GENERATOR formats it as its final step.
+// Not an ordering problem, which is why it earns a diagnostic rather than a scheduling
+// fix: whichever runs last wins and the other's drift gate fails on the next run, at
+// every ordering. The fix is ownership - if generated output needs formatting, the
+// GENERATOR formats it as its final step.
 //
-// Only DECLARED writes are visible here. A formatter that reformats a tree without
-// declaring ctx.writesFiles is undetectable statically, which is why every formatter in
-// this workspace excludes generated trees by configuration as well.
+// Only DECLARED writes are visible, so a formatter that omits ctx.writesFiles is
+// undetectable here.
 func (*runner) checkOutputOwnedByTwoTargets(projects []*types.Project) types.DoctorCheck {
 	const name = "output ownership"
 	var details []string
@@ -1477,21 +1439,14 @@ func (r *runner) checkSpellContract() types.DoctorCheck {
 // checkGuardBinary reports which magus binary an agent-host guard hook would
 // actually execute, and whether it predates the working tree's Go sources.
 //
-// This exists because of a real and expensive failure. The hook resolved its
-// binary as `command -v magus || /tmp/magus`, nothing was on PATH, and so every
-// verdict for a whole session came from a months-old binary left in /tmp by an
-// earlier session. The guard looked like it was working - it denied things, it
-// printed reasons - while every bypass being fixed that session was still wide
-// open in the binary doing the enforcing. Nothing anywhere said so.
-//
 // A stale guard is worse than an absent one: an absent guard is noticed within a
-// command or two, and a stale one is trusted indefinitely. So this check reports
-// the resolved path always, not only on failure, because the question it answers
-// ("which binary is judging me?") has no other way to be asked.
+// command or two, a stale one is trusted indefinitely. A whole session once ran its
+// verdicts through a months-old /tmp binary while denying things and printing
+// reasons, with every bypass being fixed that session still open in the enforcer.
 //
-// The staleness test is deliberately coarse - binary mtime against the newest
-// tracked .go file - because it only has to catch "you edited the guard and did
-// not rebuild", which is the case that actually bites.
+// So the resolved path is reported always, not only on failure - "which binary is
+// judging me?" has no other way to be asked. The staleness test is deliberately
+// coarse (binary mtime against the newest tracked .go file).
 func (r *runner) checkGuardBinary() types.DoctorCheck {
 	const name = "guard binary"
 
@@ -1860,23 +1815,17 @@ const (
 // checkSelfStalingOutputs is MGS1019: a COMMITTED generated file whose bytes contain this
 // repository's own HEAD commit, which is a build that can never be clean.
 //
-// The loop closes on itself. Committing a source change moves HEAD; HEAD is an input to the
-// generated file; so the file committed alongside the source is stale the instant it lands.
-// Regenerating and committing that moves HEAD again. Amending does not escape it either - a
-// new hash restales the footer that recorded the previous one. The only fixed point is a
-// second commit containing nothing but regenerated output, which is why a repository in this
-// state grows a trail of "refresh generated metadata" commits. This one has several, made
-// before anyone traced them to a cause.
+// The loop closes on itself - committing a source change moves HEAD, HEAD is an input to
+// the file, so the file committed alongside the source is stale the instant it lands. The
+// only fixed point is a second commit containing nothing but regenerated output, which is
+// why such a repository grows a trail of "refresh generated metadata" commits.
 //
-// The tracked test carries the whole check. After the fix the same generator still writes the
-// same commit hash into the same files; all that changed is that those files stopped being
-// committed. A check that skipped the tracked test would fire on the repaired state as loudly
-// as on the broken one, so a backend that cannot answer "is this path tracked?"
-// (types.TrackedFileReporter) makes this check skip rather than guess.
+// The TRACKED test carries the check: after the fix the same generator writes the same
+// hash into the same files, and only the committing stopped. A backend that cannot answer
+// "is this path tracked?" skips rather than guesses.
 //
-// Matching HEAD's OWN hash is what keeps it precise. A lockfile pinning some other
-// repository's commit, a vendored dependency, a test fixture full of hashes: none of them
-// contain this repo's current HEAD, so none of them match.
+// Matching HEAD's OWN hash keeps it precise - a lockfile or fixture full of other hashes
+// cannot match.
 func (r *runner) checkSelfStalingOutputs(projects []*types.Project) types.DoctorCheck {
 	const name = "self-staling outputs"
 
@@ -2017,22 +1966,17 @@ func isHexByte(data []byte, i int) bool {
 	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
 }
 
-// checkGeneratedDrift reports declared outputs that moved with nothing in the working
-// tree accounting for them: no declared INPUT of the producing project is dirty.
+// checkGeneratedDrift reports declared outputs that moved with no declared INPUT of the
+// producing project dirty to account for them.
 //
-// It is the "your generated content went stale and nobody told you" check. Until now the
-// first thing to notice was CI's drift gate, which is the worst place to learn it - the
-// least context, the longest feedback loop, and usually on someone else's change. The
-// same condition is visible locally in milliseconds, because it needs only the VCS status
-// magus already reads and the classification `magus describe file` already computes.
+// Otherwise the first thing to notice is CI's drift gate - least context, longest
+// feedback loop, usually on someone else's change - while the same condition is visible
+// locally from VCS status magus already reads.
 //
-// Advice, never fail. An output moving without an input is legitimate mid-work: you may
-// be about to change the source, or you may have deliberately run a generator. It is
-// worth SAYING and never worth blocking a workspace over.
+// Advice, never fail: an output moving without an input is legitimate mid-work.
 //
-// It runs no generator, so it cannot see the third case - a generator that would produce
-// different bytes from unchanged inputs while the committed output is untouched. That is
-// the drift gate's job, and needs the generator to actually run.
+// It runs no generator, so it cannot see a generator that would produce different bytes
+// from unchanged inputs. That is the drift gate's job.
 func (r *runner) checkGeneratedDrift() types.DoctorCheck {
 	const name = "generated output"
 	ctx := r.runCtx()

@@ -12,5 +12,4 @@ export object InsightReport {
     trend: Trend = Trend{},
     volatility: Volatility = Volatility{},
     unreferenced: Unreferenced = Unreferenced{},
-    graphStats: KnowledgeStats = KnowledgeStats{},
 }

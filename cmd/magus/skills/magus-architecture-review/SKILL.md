@@ -12,9 +12,9 @@ Run these and read them together:
 
 ```sh
 magus graph stats            # god nodes (structural risk), orphans, doc coverage
-magus insight hotspots       # churn x complexity per project, with blast radius
-magus insight affinity       # projects that change together: hidden coupling
-magus insight ownership      # author concentration, bus factor, abandonment
+magus_insight lens=hotspots  # churn x complexity per project, with blast radius
+magus_insight lens=affinity  # projects that change together: hidden coupling
+magus_insight lens=ownership # author concentration, bus factor, abandonment
 magus graph deps -o tree     # the declared project DAG
 ```
 

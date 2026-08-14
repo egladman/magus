@@ -100,7 +100,7 @@ func TestPrintStatusCompact(t *testing.T) {
 				{State: "idle", Dependents: 0},
 			},
 		},
-		"daemon · 0/4 idle · services 1/2 active, 2 dependent(s)\n")
+		"daemon · 0/4 idle · services 1/2 active, 2 dependents\n")
 
 	assertCompact("unparsable args fall back to ?:?",
 		types.StatusReport{Pool: &types.StatusOutput{
@@ -645,7 +645,7 @@ func TestPrintStatusTextFullReport(t *testing.T) {
 	assert.Contains(t, out, "serving")
 	assert.Contains(t, out, "telemetry is disabled.")
 	assert.Contains(t, out, "shared services (1)")
-	assert.Contains(t, out, "2 dependent(s)")
+	assert.Contains(t, out, "2 dependents")
 }
 
 func TestPrintStatusTextDoesNotCallActiveLocalWorkIdle(t *testing.T) {

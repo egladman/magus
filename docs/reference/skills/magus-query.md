@@ -29,7 +29,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `37` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `99f5ac7ac873` |
+| `skill-content` | `430a06d637fe` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -198,7 +198,7 @@ declared CODEOWNERS ownership appears - it is not blame-inferred.
 
 - `--global` unions every workspace registered in config
   (`knowledge.workspaces`); IDs are namespaced per workspace (`web//spell:go`).
-- `magus affected`, `magus insight`, and `magus describe` sit alongside the graph;
+- `magus affected`, `magus_insight`, and `magus describe` sit alongside the graph;
   `magus graph export -o json` dumps the whole graph for bulk analysis.
 - To show a PR's domain impact, run `magus graph diff --rev main -o markdown` for a CI
   comment (nodes/edges added, removed, or changed); `--rev` builds the base graph from
@@ -219,7 +219,7 @@ the magus documentation site. Prefer the tools' own output over assumptions.
 
 ## Short form
 
-The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. This is the always-loaded primary. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for the difference.
+The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. This is the always-loaded primary. Both are hand-authored from one source body; see [Skills](../../guides/integrations/agents/skills.md) for the difference.
 
 <details>
 <summary>Show the short form</summary>
@@ -360,7 +360,7 @@ ownership only, never blame-inferred.
 
 - `--global` unions every workspace registered in config
   (`knowledge.workspaces`); IDs are namespaced per workspace (`web//spell:go`).
-- `magus affected`, `magus insight`, and `magus describe` sit alongside the graph;
+- `magus affected`, `magus_insight`, and `magus describe` sit alongside the graph;
   `magus graph export -o json` dumps the whole graph for bulk analysis.
 - To show a PR's domain impact, run `magus graph diff --rev main -o markdown` for a CI
   comment.

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/spells"
 	"io/fs"
 	"os"
@@ -249,10 +250,9 @@ func unknownEntity(kind, name string, all []string) error {
 }
 
 func describeSpells(ctx context.Context, root string, args []string) error {
-	var withVersions bool
+	var sf *gen.DescribeSpellsFlags
 	pos, err := cmdParse("describe spells", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&withVersions, "versions", false,
-			"run each spell's version probe and report what it returns, plus the cache-key fragment it produces")
+		sf = gen.BindDescribeSpells(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe spell[s] [<name>] [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -293,7 +293,7 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 	// Populated before the format switch, not inside the text branch: an agent reading
 	// -o json is the caller that needs this most, and a flag that silently does nothing
 	// for the machine-readable formats is worse than no flag.
-	if withVersions {
+	if sf.Versions {
 		for i := range inventory {
 			inventory[i].Versions = probeSpellVersions(ctx, inventory[i].Name, root)
 		}
@@ -548,16 +548,9 @@ func firstLine(s string) string {
 func describeTargetNoun(ctx context.Context, root string, args []string) error {
 	// Single parse for the whole noun: the delegates below take the parsed
 	// positionals and do not re-parse, so flags are handled exactly once.
-	var explain bool
-	var cacheKey bool
-	var against string
-	var noDefaultCharms bool
+	var tf *gen.DescribeTargetFlags
 	pos, err := cmdParse("describe target", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&explain, "explain", false, "show the per-charm argv trace (base -> +charm -> +charm) for the rendered command")
-		fs.BoolVar(&explain, "e", false, "shorthand for --explain")
-		fs.BoolVar(&cacheKey, "cache", false, "show the target's live cache key, the ref a run would print, and its component classes")
-		fs.StringVar(&against, "against", "", "with --cache, diff the live key inputs against the stored lines behind an output `ref`")
-		fs.BoolVar(&noDefaultCharms, "no-default-charms", false, "with --cache, ignore magus.yaml default_charms when keying, matching a run made the same way (CI)")
+		tf = gen.BindDescribeTarget(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe target[s] [<path:target>] [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -582,26 +575,26 @@ func describeTargetNoun(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if against != "" {
-		cacheKey = true
+	if tf.Against != "" {
+		tf.Cache = true
 	}
-	if cacheKey {
-		if explain {
+	if tf.Cache {
+		if tf.Explain {
 			// --explain traces argv, --cache keys inputs: two different questions, and
 			// silently answering one would misread as the other having no output.
 			fmt.Fprintln(os.Stderr, "magus describe target: --explain traces the rendered command and --cache keys the inputs; run them separately")
 			return errSilent{exitCode: 2}
 		}
-		return describeTargetCache(ctx, root, pos, against, noDefaultCharms)
+		return describeTargetCache(ctx, root, pos, tf.Against, tf.NoDefaultCharms)
 	}
-	if noDefaultCharms {
+	if tf.NoDefaultCharms {
 		fmt.Fprintln(os.Stderr, "magus describe target: --no-default-charms applies only to --cache")
 		return errSilent{exitCode: 2}
 	}
 	if len(pos) == 0 {
 		return describeTargets(ctx, root)
 	}
-	return describeTarget(ctx, root, pos, explain)
+	return describeTarget(ctx, root, pos, tf.Explain)
 }
 
 // targetCacheReport is the -o json/yaml projection of `describe target --cache`: one
@@ -853,10 +846,9 @@ func describeTargets(ctx context.Context, root string) error {
 }
 
 func describeProjects(ctx context.Context, root string, args []string) error {
-	var evaluated bool
+	var pf *gen.DescribeProjectsFlags
 	pos, err := cmdParse("describe projects", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&evaluated, "evaluated", false, "print workspace-rooted globs, effective claims, and target policies")
-		fs.BoolVar(&evaluated, "e", false, "shorthand for --evaluated")
+		pf = gen.BindDescribeProjects(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe project[s] [<path>] [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -880,7 +872,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	if evaluated {
+	if pf.Evaluated {
 		out, err := ws.EvaluateProjects(ctx)
 		if err != nil {
 			return err
@@ -923,14 +915,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 				fmt.Printf("  exclusive: true\n")
 			}
 			for _, s := range p.ResolvedSpells {
-				fmt.Printf("  spell: %s", s.Name)
-				if s.ClaimWeight != 0 {
-					fmt.Printf("  weight=%d", s.ClaimWeight)
-				}
-				if len(s.EffectiveClaims) > 0 {
-					fmt.Printf("  claims=%v", s.EffectiveClaims)
-				}
-				fmt.Println()
+				fmt.Printf("  spell: %s\n", s.Name)
 			}
 			for targetName, pol := range p.TargetPolicies {
 				fmt.Printf("  policy: %s", targetName)
@@ -1080,14 +1065,8 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 		}
 		for _, s := range e.Spells {
 			fmt.Printf("  spell: %s", s.Name)
-			if s.ClaimWeight != 0 {
-				fmt.Printf("  weight=%d", s.ClaimWeight)
-			}
 			if len(s.TargetSources) > 0 {
 				fmt.Printf("  target_sources=%v", s.TargetSources)
-			}
-			if len(s.EffectiveClaims) > 0 {
-				fmt.Printf("  claims=%v", s.EffectiveClaims)
 			}
 			fmt.Println()
 			if len(s.Command) > 0 {

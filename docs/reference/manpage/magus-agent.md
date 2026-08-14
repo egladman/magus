@@ -57,7 +57,7 @@ paths-relative-to-\<dir\> case. Absolute destinations are refused unless
 
 ## Examples
 
-*Install into a repo's Claude skills*
+*Install into a repo's agent skills directory*
 
 ```sh
 magus agent install .claude/skills

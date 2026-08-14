@@ -30,10 +30,18 @@ The socket file acts as the lock: present means a daemon is running, absent
 means none. Shell init hooks (e.g. Nix-injected .profile lines) typically
 check for the file with [ -S "$socket" ] before starting one.
 
-## Options
+### server start options
 
 **--foreground**
-: Run in the foreground and block, instead of auto-backgrounding (server start)
+: Run in the foreground and block, instead of auto-backgrounding
+
+### server stop options
+
+**--services**
+: Stop the daemon's hosted services, leaving the daemon running
+
+**--socket** *string*
+: Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)
 
 ## Subcommands
 

@@ -20,11 +20,9 @@ const logLevelTrace slog.Level = slog.LevelDebug - 4
 
 // Log is the "log" host module: a magusfile's way to say something at a level.
 //
-// This is NOT a second logger. Every method here calls slog at magus's own
-// process-wide default logger - the one cmd/magus installs from the verbosity
-// flags (see cmd/magus/verbosity.go) - which is the same call the host modules
-// already make for their own diagnostics (env.set, os.exec, magus.bust_cache).
-// A magusfile therefore inherits, with nothing to wire up:
+// NOT a second logger: every method calls slog at magus's process-wide default, the
+// one cmd/magus installs from the verbosity flags. A magusfile therefore inherits,
+// with nothing to wire up:
 //
 //   - LEVEL FILTERING from -q/-v/-vv/-vvv, so log.debug costs nothing on a normal
 //     run instead of printing unconditionally.
@@ -36,11 +34,8 @@ const logLevelTrace slog.Level = slog.LevelDebug - 4
 //   - JOURNAL CAPTURE, so the message is in the run's persisted log and reachable
 //     later through `magus query output`.
 //
-// That is the whole reason it exists. `std\print` writes a bare line to the
-// script output stream: it cannot be quieted, cannot be raised to a level, is not
-// captured as a structured event, and is not redacted. The 100-plus std\print
-// calls across this repo's magusfiles all bypass a logging system magus already
-// has.
+// `std\print` writes a bare line to the script output stream: it cannot be quieted or
+// raised to a level, is not captured as a structured event, and is not redacted.
 //
 // Pure compute at this layer (the handler does the I/O), so it is WASM-safe.
 var Log = Module{

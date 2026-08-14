@@ -163,6 +163,7 @@ const (
 	OutputRefMissing          DiagnosticCode = "MGS8001"
 	OutputRefAmbiguous        DiagnosticCode = "MGS8002"
 	OutputRefMalformed        DiagnosticCode = "MGS8003"
+	OutputRefForeignMachine   DiagnosticCode = "MGS8004"
 	BearerRejected            DiagnosticCode = "MGS9001"
 	InsecureTokenPermissions  DiagnosticCode = "MGS9002"
 	ConnectorStoreTooNew      DiagnosticCode = "MGS9003"
@@ -194,7 +195,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits, DaemonRequired,
 	CharmPatchInvalid,
 	UnresolvableBuzzImport, DanglingDocReference,
-	OutputRefMissing, OutputRefAmbiguous, OutputRefMalformed,
+	OutputRefMissing, OutputRefAmbiguous, OutputRefMalformed, OutputRefForeignMachine,
 	BearerRejected, InsecureTokenPermissions, ConnectorStoreTooNew,
 	NoAuthToken, ConnectorNameExists, ConnectorNotFound,
 }

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
@@ -54,11 +55,10 @@ func configHistoryCmd(ctx context.Context, _ string, cfg config.Config, args []s
 func runHistoryPassed(ctx context.Context, cfg config.Config, args []string) error {
 	fs := flag.NewFlagSet("config history passed", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	historyPath := fs.String("history", cfg.HistoryPath, "Path to the history JSON to write (default: configured history_path)")
-	ref := fs.String("ref", "", "Ref the run was on (git branch, hg named branch, jj bookmark)")
-	commit := fs.String("commit", "", "Commit the run was at")
-	target := fs.String("target", "ci", "Target that ran")
-	status := fs.String("status", string(forecast.RunPassed), "How the run came out: passed or failed")
+	hf := gen.BindConfigHistoryPassed(fs, gen.ConfigHistoryPassedDefaults{
+		History: cfg.HistoryPath,
+		Status:  string(forecast.RunPassed),
+	})
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config history passed --ref <name> --commit <id> [--target <name>] [--history <path>]")
 		fmt.Fprintln(os.Stderr, "")
@@ -76,40 +76,40 @@ func runHistoryPassed(ctx context.Context, cfg config.Config, args []string) err
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *historyPath == "" {
+	if hf.History == "" {
 		return errors.New("magus config history passed: --history is required (or set history_path in magus.yaml)")
 	}
-	if *ref == "" || *commit == "" {
+	if hf.Ref == "" || hf.Commit == "" {
 		return errors.New("magus config history passed: --ref and --commit are both required")
 	}
-	st := forecast.RunStatus(*status)
+	st := forecast.RunStatus(hf.Status)
 	if st != forecast.RunPassed && st != forecast.RunFailed {
 		return usagef("magus config history passed: --status must be %q or %q, got %q",
-			forecast.RunPassed, forecast.RunFailed, *status)
+			forecast.RunPassed, forecast.RunFailed, hf.Status)
 	}
 	// Skipped, not failed. A workspace that turned the run log off wired this step in
 	// anyway (it is inside the shipped action), and erroring would paint every run red
 	// for honoring its own configuration.
 	if !cfg.CI.RecordRuns {
 		slog.InfoContext(ctx, "config history passed: run log disabled by ci.record_runs; recording nothing",
-			slog.String("ref", *ref), slog.String("commit", *commit))
+			slog.String("ref", hf.Ref), slog.String("commit", hf.Commit))
 		return nil
 	}
 
 	var hist forecast.History
-	if err := hist.Load(ctx, *historyPath); err != nil {
+	if err := hist.Load(ctx, hf.History); err != nil {
 		return err
 	}
-	hist.RecordRun(forecast.Run{Commit: *commit, Ref: *ref, Target: *target, Status: st}, time.Now())
-	if err := hist.Save(ctx, *historyPath); err != nil {
+	hist.RecordRun(forecast.Run{Commit: hf.Commit, Ref: hf.Ref, Target: hf.Target, Status: st}, time.Now())
+	if err := hist.Save(ctx, hf.History); err != nil {
 		return err
 	}
 	slog.InfoContext(ctx, "config history run recorded",
-		slog.String("ref", *ref),
-		slog.String("commit", *commit),
-		slog.String("target", *target),
+		slog.String("ref", hf.Ref),
+		slog.String("commit", hf.Commit),
+		slog.String("target", hf.Target),
 		slog.String("status", string(st)),
-		slog.String("history_path", *historyPath))
+		slog.String("history_path", hf.History))
 	return nil
 }
 
@@ -121,7 +121,7 @@ func runHistoryPassed(ctx context.Context, cfg config.Config, args []string) err
 func runHistoryImport(ctx context.Context, cfg config.Config, args []string) error {
 	fs := flag.NewFlagSet("config history import", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	historyPath := fs.String("history", cfg.HistoryPath, "Path to the history JSON to write (default: configured history_path)")
+	imf := gen.BindConfigHistoryImport(fs, gen.ConfigHistoryImportDefaults{History: cfg.HistoryPath})
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config history import [--history <path>] <history.json>...")
 		fmt.Fprintln(os.Stderr, "")
@@ -135,7 +135,7 @@ func runHistoryImport(ctx context.Context, cfg config.Config, args []string) err
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *historyPath == "" {
+	if imf.History == "" {
 		return errors.New("magus config history import: --history is required (or set history_path in magus.yaml)")
 	}
 	inputs := fs.Args()
@@ -144,7 +144,7 @@ func runHistoryImport(ctx context.Context, cfg config.Config, args []string) err
 	}
 
 	var hist forecast.History
-	if err := hist.Load(ctx, *historyPath); err != nil {
+	if err := hist.Load(ctx, imf.History); err != nil {
 		return err
 	}
 	files := 0
@@ -165,13 +165,13 @@ func runHistoryImport(ctx context.Context, cfg config.Config, args []string) err
 			files++
 		}
 	}
-	if err := hist.Save(ctx, *historyPath); err != nil {
+	if err := hist.Save(ctx, imf.History); err != nil {
 		return err
 	}
 	slog.InfoContext(ctx, "config history import complete",
 		slog.Int("files", files),
 		slog.Int("projects", len(hist.Projects)),
-		slog.String("history_path", *historyPath))
+		slog.String("history_path", imf.History))
 	return nil
 }
 

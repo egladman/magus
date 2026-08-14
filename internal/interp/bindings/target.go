@@ -89,14 +89,11 @@ func buildCacheNS(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 //	import "spells/github/actions" as github
 //	magus.ci.provider(github)
 //
-// The spell supplies job-log structure for whatever CI system it targets:
-// fold markers around failure output, annotations that surface on a pull
-// request, and a suggested concurrency for that provider's runners. Every
-// op is optional, because providers differ in what they support at all
-// (see internal/ci/annotate).
+// The spell supplies job-log structure for whatever CI system it targets: fold
+// markers, pull-request annotations, and a suggested concurrency. Every op is
+// optional, because providers differ in what they support at all.
 //
-// A declared provider wins over magus's built-ins, so a workspace can
-// override the bundled GitHub Actions support with its own spell.
+// A declared provider wins over magus's built-ins.
 func buildCINS(_ context.Context, obs buzz.DirectObserver) vm.Value {
 	ns := vm.NewMap()
 	ns.MapSet("provider", directVal(obs, "magus.ci.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
@@ -120,15 +117,13 @@ func buildCINS(_ context.Context, obs buzz.DirectObserver) vm.Value {
 //	magus\secret.provider(secrets)
 //	final token = magus\secret.read("DOCKERHUB_TOKEN")
 //
-// read(), NOT resolve(): `resolve` is a hard keyword in the Buzz lexer (the fiber
-// yield/resume/resolve family), so member access on it cannot parse. Do not "fix" this
-// back. See docs/concepts/secrets.md for the reference format and why there is no URI
-// scheme.
+// read(), NOT resolve(): `resolve` is a hard keyword in the Buzz lexer, so member access
+// on it cannot parse. Do not "fix" this back.
 //
-// read() is the ONLY way a value becomes known-secret; redaction keys off having been
-// read here, not off the reference looking credential-shaped. A magusfile that reads the
-// same variable with os\env gets a plain string magus has no reason to protect. That is
-// the documented seam, not a gap.
+// read() is the ONLY way a value becomes known-secret - redaction keys off having been
+// read here, not off the reference looking credential-shaped. Reading the same variable
+// with os\env gets a plain string magus has no reason to protect: the documented seam,
+// not a gap.
 func buildSecretNS(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 	ns := vm.NewMap()
 	ns.MapSet("provider", directVal(obs, "magus.secret.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
@@ -564,10 +559,10 @@ const ctxMarker = "__magus_context"
 //   - needs(...) dispatches the named dependencies - a target function, or a
 //     ctx.glob(...) list of them - deduped through the pool.
 //   - glob(pattern) resolves a pattern to matching target handles, feeding needs.
-//   - readsFiles(...) / writesFiles(...) / modifiesExistingFiles(...) declare the cache footprint. They are no-ops at run
-//     time: the footprint is read STATICALLY from the source by describe.Extract (both
-//     arms of any branch), the sole graph source - the body is never run to learn it. A
-//     non-literal argument is caught there as MGS-level DynamicIO at load, not here.
+//   - readsFiles / writesFiles / modifiesExistingFiles declare the cache footprint, and
+//     are no-ops at run time: it is read STATICALLY by describe.Extract (both arms of
+//     any branch), so the body is never run to learn it. A non-literal argument is
+//     caught there as DynamicIO at load, not here.
 //   - has_charm(name) returns the live charm state.
 //
 // The value is stateless, so the session stashes one instance and reuses it for every
@@ -586,17 +581,12 @@ func buildTargetContext(obs buzz.DirectObserver, targets map[string]vm.Callable,
 	// carrying overrides for the op calls made with it -
 	// go["go-test"](ctx.withEnv({"CGO_ENABLED": "0"})).
 	//
-	// Named for WHAT DIFFERS, not for the act of making it, following context.WithValue /
-	// WithCancel / WithTimeout: at a call site you want to read the change. (Go's docs
-	// call the result a "derived context"; the API never says derive, and neither should
-	// this.) Temporal's workflow.WithActivityOptions(ctx, ao) is the same shape - a
-	// derived context carrying options for the calls made with it - and its
-	// workflow.Context / context.Context split is the same separation magus\Exec makes.
+	// Named for WHAT DIFFERS, not the act of making it, following context.WithValue /
+	// WithCancel / WithTimeout: at a call site you want to read the change.
 	//
 	// magus\Exec deliberately carries no declaration methods, so
-	// ctx.withEnv({...}).inputs("x") fails loudly instead of silently no-op'ing. That is
-	// the guarantee a checked type would give once gopherbuzz has protocol conformance;
-	// until then the names are bound to an explaining error.
+	// ctx.withEnv({...}).inputs("x") fails loudly instead of silently no-op'ing - the
+	// guarantee a checked type would give once gopherbuzz has protocol conformance.
 	var execCtx func(env, cwd vm.Value) vm.Value
 	execCtx = func(env, cwd vm.Value) vm.Value {
 		e := vm.NewMap()

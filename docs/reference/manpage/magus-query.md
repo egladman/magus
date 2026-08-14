@@ -80,7 +80,7 @@ changed are rebuilt, so a query is cheap to repeat; --refresh forces a full rebu
 **--secrets**
 : invocation \<id\>: list only the credential reads (reference and provider, never the value)
 
-**--url** *string*
+**--url** *string* (default: https://eli.gladman.cc/magus/console/logs/)
 : With --open, base URL of the log viewer page (override for a self-hosted mirror)
 
 ## Subcommands

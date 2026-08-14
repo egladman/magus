@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interactive"
@@ -44,25 +45,11 @@ var agentsSection string
 var agentSkills = agent.NewCatalog(skillFS, agentsSection, types.KnowledgeSchemaVersion)
 
 // agentCmd implements `magus agent <subcommand>`: the agent-integration surface.
-// `install` writes the embedded skills into explicitly named destinations and
-// `sample` prints AGENTS.md content for a developer to own. Destinations and
-// event shapes are explicit arguments, never auto-detected (per the
-// explicit-and-granular preference); writing into a repo's agent-config dirs
-// happens only through `install`, never as a side effect of another command.
 //
-// AGENTS.md is the one file magus refuses to write, and `install-agents-md`
-// (which did) is gone with no subcommand replacing it. It managed a marked block
-// inside the file, which is the polite version of an installer appending to your
-// .bashrc and still the wrong shape: the file is the developer's, the merge logic
-// is never as careful as it looks, and a re-run leaves bytes nobody wrote.
-// `install` prints the block when your AGENTS.md is missing it or carrying a
-// stale one, which is the moment the block is worth reading, and `sample` prints
-// a whole starter file with the same block in it.
-//
-// The `hook` and `notify` subcommands used to live here; they are now top-level
-// (`magus hook`, `magus notify`) because their contracts are not agent-specific.
-// A guard evaluates any command or file path the host can produce, and a
-// notification is whatever needs a human's attention regardless of source.
+// Destinations are explicit arguments, never auto-detected, and writing into a
+// repo's agent-config dirs happens only through `install`. AGENTS.md is the one
+// file magus refuses to write - `install` prints the block for the developer to
+// paste instead.
 func agentCmd(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return agentUsageErr()
@@ -171,23 +158,19 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	// stderr redirected that looked exactly like a successful install - the
 	// skills were never written and nothing said so.
 	bindDisplayFlags(fset)
-	dir := fset.String("dir", ".", "Repo directory to install into")
-	force := fset.Bool("force", false, "Overwrite existing installed skill files (write mode)")
+	af := gen.BindAgent(fset)
 	// Not implied by --force, and not the default. --force overwrites files this
 	// command is about to write and can name; --prune deletes directories the caller
 	// has not seen, picked by a rule inside a binary they may have just upgraded.
 	// Without it, install still SAYS what is stale, so the orphans stay visible
 	// rather than becoming invisible again.
-	prune := fset.Bool("prune", false, "Also remove installed skills this binary no longer ships (magus-written ones only)")
-	tarMode := fset.Bool("tar", false, "Stream a tar archive of the skills to stdout instead of writing files")
-	global := fset.Bool("global", false, "Allow absolute destination paths in write mode (use --tar | tar -xf - for paths outside the repo instead)")
 	fset.Usage = func() { agentUsage(os.Stderr) }
 	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	dests := fset.Args()
 
-	if *tarMode {
+	if af.Tar {
 		if len(dests) > 1 {
 			return fmt.Errorf("agent install --tar: at most one destination path prefix is allowed (the path inside the tar archive)")
 		}
@@ -209,7 +192,7 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 		agentUsage(os.Stderr)
 		return fmt.Errorf("agent install: name at least one destination directory (e.g. .claude/skills) or pass --tar")
 	}
-	if !*global {
+	if !af.Global {
 		for _, d := range dests {
 			if filepath.IsAbs(d) || strings.HasPrefix(d, "~") {
 				return fmt.Errorf("agent install: destination %q is outside the working tree; pass --global, or use --tar | tar -xf - -C %q instead", d, d)
@@ -220,22 +203,23 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	var written []string
 	var removed, stale []string
 	for _, dest := range dests {
-		w, err := agentSkills.WriteSkillTree(*dir, dest, *force, agent.VariantSimple)
+		base, leaf := installTarget(af.Dir, dest, af.Global)
+		w, err := agentSkills.WriteSkillTree(base, leaf, af.Force, agent.VariantSimple)
 		if err != nil {
 			return err
 		}
 		written = append(written, w...)
 		// After writing, never before: a prune that ran first would delete a skill
 		// this install then failed to replace.
-		if *prune {
-			r, err := agentSkills.PruneSkillTree(*dir, dest)
+		if af.Prune {
+			r, err := agentSkills.PruneSkillTree(base, leaf)
 			if err != nil {
 				return err
 			}
 			removed = append(removed, r...)
 			continue
 		}
-		s, err := agentSkills.StaleSkillDirs(*dir, dest)
+		s, err := agentSkills.StaleSkillDirs(base, leaf)
 		if err != nil {
 			return err
 		}
@@ -249,7 +233,7 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	for _, p := range removed {
 		slog.InfoContext(ctx, "agent install: removed skill this binary no longer ships", slog.String("path", p))
 	}
-	printAgentInstallNextSteps(*dir, written, stale, agent.VariantSimple)
+	printAgentInstallNextSteps(af.Dir, written, stale, agent.VariantSimple)
 	return nil
 }
 
@@ -287,24 +271,10 @@ func printAgentInstallNextSteps(dir string, written, stale []string, v agent.Var
 	printAgentsBlockToPaste(dir)
 }
 
-// printAgentsBlockToPaste offers the managed AGENTS.md block for the developer to
-// paste, and says nothing when their file already carries a current one.
-//
-// This is what replaced `magus agent install-agents-md`, which WROTE the block
-// into AGENTS.md. Magus does not edit a file the developer owns - for the same
-// reason an installer appending to your .bashrc is bad manners, and it is the
-// careful implementations that make the point, not the sloppy ones: the merge
-// logic was marker-delimited and idempotent, and it still left bytes nobody
-// wrote in a file nobody could easily audit.
-//
-// It rides on install rather than on a subcommand of its own because the block
-// is only ever wanted right after the skills land, and a print-only subcommand
-// would have been a second name for a thing `sample` already prints.
-//
-// Silent when the block is present and current, because 80 lines of Markdown
-// emitted on every --force reinstall is how a reader learns to scroll past this
-// command's output - including the parts that are actionable. CheckStatuses
-// reads AGENTS.md to decide; reading it was never the objectionable part.
+// printAgentsBlockToPaste offers the managed AGENTS.md block for the developer
+// to paste. Silent when their file already carries a current one: 80 lines of
+// Markdown on every --force reinstall is how a reader learns to scroll past this
+// command's output, including the actionable parts.
 func printAgentsBlockToPaste(dir string) {
 	verb := "add it to AGENTS.md at your repo root"
 	for _, s := range agentSkills.CheckStatuses(dir) {
@@ -325,16 +295,10 @@ func printAgentsBlockToPaste(dir string) {
 // another's uncommitted work. Shared by the install hint and the sample doc.
 const vcsSafetyRule = "Version control is the orchestrator's job: do it yourself, never delegate it to a subagent, and never discard or revert uncommitted changes across the whole tree to verify a build - build in place. A whole-tree revert permanently destroys a concurrent agent's uncommitted work."
 
-// agentSampleDoc returns a complete, opinionated-but-tweakable AGENTS.md starter a
-// developer can paste and adapt. It is print-only (magus agent sample): magus hands
-// over a whole file to own rather than managing one in place, so it never risks
-// clobbering an AGENTS.md somebody wrote.
+// agentSampleDoc returns an AGENTS.md starter for a developer to paste and own.
 //
-// The magus guidance arrives inside its begin/end markers, the same bytes install
-// prints, so `magus graph verify` can grade it once pasted and a reader who only
-// wants that part can lift it out on the markers. It carried an UNMARKED copy
-// before this file became the sole source of the block, which left a paste from
-// here invisible to verification.
+// The magus guidance arrives inside its begin/end markers - the same bytes
+// install prints - so `magus graph verify` can grade it once pasted.
 func agentSampleDoc() string {
 	return "# AGENTS.md\n\n" +
 		"<!-- A starter for AI agents working in this repo. Own and edit this file:\n" +
@@ -351,9 +315,7 @@ func agentSampleDoc() string {
 		agentSkills.AgentsBlock()
 }
 
-// agentSampleCmd prints agentSampleDoc to stdout. It never writes a file: an
-// AGENTS.md is the developer's to own, and clobbering an existing one would be the
-// opposite of helpful.
+// agentSampleCmd prints agentSampleDoc to stdout, never to a file.
 func agentSampleCmd() error {
 	fmt.Fprint(os.Stdout, agentSampleDoc())
 	return nil
@@ -371,29 +333,21 @@ type guardVerdict struct {
 	Context       string `json:"context,omitempty"` // advise: context to inject alongside the allowed call
 }
 
-// hookCmd implements `magus hook`: evaluate one shell command against the guard
-// rules and emit a verdict. It reads exactly one command or file path from
-// stdin. The caller owns any extraction from its host-specific event shape;
-// magus owns only the host-neutral policy and response. The verdict goes out
-// through the standard -o arm, so a caller-specific response shape is a
-// documented template, not code. A guard must fail open: an empty or unreadable
-// input is a pass, never an error that would block every tool call.
+// hookCmd implements `magus hook`: evaluate one shell command or file path read
+// from stdin and emit a verdict. The caller owns extraction from its
+// host-specific event shape; magus owns only the host-neutral policy.
 //
-// This used to be `magus agent hook`; it moved to top level because the guard
-// rules are not agent-specific. Any caller that can produce a command or a file
-// path on stdin can wire it.
+// A guard must FAIL OPEN: an empty or unreadable input is a pass, never an error
+// that would block every tool call.
 func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) error {
 	fset := flag.NewFlagSet("hook", flag.ContinueOnError)
-	asPath := fset.Bool("path", false, "Judge the input as a FILE PATH an edit is about to write, not as a shell command: editing a declared target output is advised against")
+	hf := gen.BindHook(fset)
 	// Attribution, not policy: these name WHO produced the observation, and the
 	// guard's verdict never reads them. Every one is optional and unvalidated -
 	// including the host name, which is an opaque label the caller chooses rather
 	// than a set magus knows, because a magus that enumerated hosts would need a
 	// release per host. A wrapper that cannot extract a session id must still get
 	// a verdict; erroring here would block a tool call over metadata.
-	host := fset.String("agent-name", "", "Name of the agent host this invocation came from, recorded on the activity event")
-	session := fset.String("session", "", "The host's own session id for this invocation, recorded on the activity event")
-	event := fset.String("event", "", "The host's hook event name (e.g. PreToolUse), recorded on the activity event")
 	// The whole display set, not a hand-rolled -o: this command used to define
 	// its own output flag and so silently lacked -s, -q, -v and --tee. That gap
 	// is the reason for the rule - a flag accepted on most commands teaches
@@ -414,14 +368,14 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	}
 
 	input, hasInput := readGuardInput(in)
-	who := hookAttribution{Host: *host, Session: *session, Event: *event}
+	who := hookAttribution{Host: hf.AgentName, Session: hf.Session, Event: hf.Event}
 	// A host that writes its hook payload as JSON needs no jq and no --path: the envelope
 	// says what is about to run and whether it is a write. Explicit flags still win, since
 	// a wrapper that passed them meant them.
 	if req, isEnvelope := decodeHookEnvelope(input.Value); isEnvelope {
 		input.Value = req.Value
 		if req.IsPath {
-			*asPath = true
+			hf.Path = true
 		}
 		if who.Session == "" {
 			who.Session = req.Who.Session
@@ -431,7 +385,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		}
 	}
 	verdict := guardVerdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
-	if *asPath {
+	if hf.Path {
 		if hasInput {
 			// The generated-output rule is definitive (it reads declared globs), so it
 			// speaks first; the memory nudge is a heuristic on the filename and only
@@ -483,26 +437,21 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 
 // guardDenyExitCode is what a denied command exits with.
 //
-// A hook that reports a deny and then exits 0 blocks NOTHING: the host reads the status,
-// sees success, and runs the command anyway - so the guard looks installed, the rules look
-// enforced, and neither is true. That is worse than leaving it unwired, because it is
-// believed. Every rule in this guard was reachable and correct while exiting 0, which is
-// exactly how it went unnoticed.
-//
-// 2 rather than 1 because it is what the dominant host reads as "block and show the reason
-// to the model"; hosts that only test for non-zero block on it just the same. It collides
-// with the usage exit code, and that is harmless: a guard that could not parse its input
-// has not judged the command either, so refusing to run it is the same right answer.
+// A hook that reports a deny and exits 0 blocks NOTHING - the host sees success
+// and runs the command anyway, so the guard looks enforced and is not. 2 rather
+// than 1 is what the dominant host reads as "block and show the reason to the
+// model". The collision with the usage code is harmless: a guard that could not
+// parse its input has not judged the command either.
 const guardDenyExitCode = 2
 
-// enforceVerdict turns a deny into a blocking exit. The exit code applies to EVERY format -
-// a deny is a deny however it is rendered, and an `-o json` caller that got a zero status
-// would be told the same lie in a different shape.
+// enforceVerdict turns a deny into a blocking exit. Applies to every format: an
+// `-o json` caller with a zero status would be told the same lie in a different
+// shape.
 //
-// The reason reaches stderr only when stdout does not already carry it as prose, i.e. every
-// format but text. Each guard template here reads the verdict off stdout and one discards
-// stderr outright, so the unconditional copy reached nobody who lacked another channel and
-// simply printed a kilobyte-plus reason twice to an audience with a context budget.
+// The reason reaches stderr only when stdout does not already carry it as prose,
+// i.e. every format but text. The guard templates read the verdict off stdout and
+// one discards stderr outright, so an unconditional copy printed a kilobyte-plus
+// reason twice to an audience with a context budget.
 func enforceVerdict(opts OutputOptions, verdict guardVerdict) error {
 	if verdict.Decision != "deny" {
 		return nil
@@ -534,19 +483,12 @@ func writeGuardVerdict(out io.Writer, opts OutputOptions, verdict guardVerdict) 
 }
 
 // adviseGeneratedWrite explains why editing path is wasted effort, or "" when
-// there is nothing to say. Unlike the command rules this is not a heuristic:
-// magus knows every target's declared outputs, so a role=output path is
-// generated by definition and an edit to it will be overwritten by the next run.
+// there is nothing to say. Not a heuristic: magus knows every target's declared
+// outputs, so a role=output path is generated by definition.
 //
-// It TEACHES rather than blocks, which is the rule the whole guard follows:
-// magus denies only what cannot be undone, and explains everything else. A
-// hand-edited generated file is wasteful, not destructive - regenerating erases
-// it - so it fails the cannot-be-undone test the whole-tree VCS operations pass.
-// Blocking would also treat the agent as unable to learn, when the
-// classification it needs is one `magus describe file` away.
-//
-// Silent on every uncertainty - no workspace, an unreadable one, an unclaimed
-// path - because an advisory fired on a guess trains the reader to ignore it.
+// It teaches rather than blocks - a hand-edited generated file is wasteful, not
+// destructive. Silent on every uncertainty, because an advisory fired on a guess
+// trains the reader to ignore it.
 func adviseGeneratedWrite(ctx context.Context, path string) string {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -674,16 +616,11 @@ func resolveSymlinks(path string) string {
 }
 
 // adviseMemoryWrite nudges a magus-domain decision toward `magus memory put`
-// when the write lands in one of the cross-host instruction files, or "" for
-// every other path.
+// when the write lands in a cross-host instruction file, or "" otherwise.
 //
-// CAPTURE, not replication: it does not argue against writing the file. Host
-// instructions belong there. What it says is that a decision ABOUT THE
-// WORKSPACE outlives the file it is being written into - the file is per-host
-// and per-checkout, while a memory entry survives the worktree, the session,
-// and a change of agent host. Naming both destinations is the point; an
-// advisory that only said "do not write here" would be answering a question
-// nobody asked.
+// Capture, not replication: host instructions belong in the file. The point is
+// that a decision ABOUT THE WORKSPACE outlives a per-checkout, per-host file, so
+// the advisory names both destinations rather than arguing against one.
 func adviseMemoryWrite(path string) string {
 	// Matched as a bare filename stem, which is the sanctioned form: these name
 	// well-known files on disk rather than branching on which host is running.
@@ -702,28 +639,17 @@ func adviseMemoryWrite(path string) string {
 }
 
 // adviseInstalledSkillWrite explains that an installed skill is generated, or
-// "" when the path is not one.
+// "" when the path is not one. The other path advisories catch a write that is
+// wasted; this one catches a write that DISAPPEARS - `graph verify` reports it
+// as drift and the next `install --force` erases it.
 //
-// The other two path advisories catch a write that is wasted; this one catches
-// a write that DISAPPEARS. An installed skill is rendered from magus's embedded
-// sources and stamped, so an edit to it is reported as drift by `graph verify`
-// and erased by the next install --force. Neither event explains itself at the
-// moment the edit is made, which is the only moment the advice is useful.
+// The STAMP is the discriminator, not the path: a workspace's own skill sits in
+// the same directory, and telling an author their file is generated would be
+// worse than saying nothing.
 //
-// The stamp is the discriminator, not the path: a workspace's own skill sits in
-// the same directory under a name magus does not ship, and telling an author
-// their own file is generated would be worse than saying nothing. So this reads
-// the file and speaks only for one magus wrote - and stays silent on an
-// unreadable one, like every other advisory here, because a nudge fired on a
-// guess trains the reader to ignore the ones that are right.
-//
-// It is unreachable in magus's OWN tree, which is worth knowing before hunting
-// for a bug: this repository declares its installed skills as outputs of the
-// root generate target, so adviseGeneratedWrite claims the path first and says
-// something more specific (it can name the producing target). Nobody else does
-// that - a workspace installs skills with `agent install`, which is not a
-// target and declares nothing - so in every repo but this one, this advisory is
-// the only thing that speaks.
+// Unreachable in magus's own tree, which is worth knowing before hunting a bug:
+// this repo declares its installed skills as outputs, so adviseGeneratedWrite
+// claims the path first and can name the producing target.
 func adviseInstalledSkillWrite(path string) string {
 	clean := filepath.ToSlash(strings.TrimSpace(path))
 	if filepath.Base(clean) != "SKILL.md" {
@@ -774,21 +700,16 @@ type hookEnvelope struct {
 	} `json:"tool_input"`
 }
 
-// decodeHookEnvelope pulls the thing to judge out of a host's hook payload, reporting
-// whether the input was an envelope at all.
+// decodeHookEnvelope pulls the thing to judge out of a host's hook payload,
+// reporting whether the input was an envelope at all.
 //
-// Without this, wiring the guard into a host means `jq -r .tool_input.command | magus
-// hook` - an extra dependency in the one place that must never fail, sitting on the
-// critical path of every tool call. Reading the envelope directly makes the config a
-// single command, and lets the attribution (session, event) come from the payload that
-// already carries it instead of from flags the wrapper has to remember.
+// Reading it here keeps `jq` off the critical path of every tool call, and lets
+// attribution come from the payload rather than from flags a wrapper has to
+// remember. A payload carrying file_path rather than command is a write, so the
+// envelope also answers the --path question.
 //
-// A payload with a file_path rather than a command is a WRITE, which is the --path
-// question, so the envelope decides that too: a caller that pipes real JSON should not
-// also have to know which flag its shape implies.
-//
-// Anything that is not an object with a usable tool_input is left alone and judged as the
-// literal text it is - the bare-command form keeps working exactly as before.
+// Anything that is not an object with a usable tool_input is judged as the
+// literal text it is.
 func decodeHookEnvelope(raw string) (hookRequest, bool) {
 	if !strings.HasPrefix(raw, "{") {
 		return hookRequest{}, false
@@ -894,24 +815,17 @@ type bashGuardVerdict struct {
 	Context string
 }
 
-// cmdPos anchors a pattern to a COMMAND position: the start of the line, or just
-// after a shell separator. Without it a pattern matches its own name appearing as
-// text, which only became load-bearing once these verdicts turned into denials -
-// `go test` and `git add -A` show up constantly in test data, documentation, and
-// commit messages, where `git reset --hard` almost never did. Writing the guard's
-// own test file through a shell heredoc was itself denied before this existed.
+// cmdPos anchors a pattern to a COMMAND position - line start or just after a
+// shell separator - so a pattern cannot match its own name appearing as text.
+// `go test` and `git add -A` show up constantly in test data and commit messages.
 //
 // Deliberately NOT applied to the whole-tree VCS patterns: those deny work that
-// cannot be recovered, so a rare false positive there is the safe direction, and
-// `cd /repo && git stash` must keep matching however it is reached.
-// A separator preceded by a BACKSLASH is not a shell separator - it is an escape
-// inside a quoted argument, and the commonest case is a grep alternation
-// (`grep "golangci-lint\|mockery"`). RE2 has no lookbehind, so the char before the
-// separator is consumed by a negated class instead. `^` keeps the start-of-string
-// case, where there is no preceding char to inspect.
+// cannot be recovered, so a rare false positive there is the safe direction.
 //
-// Found by dogfooding: this pattern denied `grep -n "golangci-lint\|mockery|gofmt"`,
-// reading the regex alternation as a pipe into `mockery`.
+// A separator preceded by a BACKSLASH is an escape inside a quoted argument, not
+// a separator (commonly a grep alternation). RE2 has no lookbehind, so the
+// preceding char is consumed by a negated class; `^` keeps the start-of-string
+// case.
 const cmdPos = `(?:^|[^\\][;&|(]\s*|\s&&\s*|\s\|\|\s*|` + "`" + `)\s*`
 
 // A pass-through wrapper runs ANOTHER command, with the environment or timeout
@@ -939,24 +853,14 @@ type guardCommand struct {
 
 // parseGuardCommands resolves a shell line into every command it would run.
 //
-// This is a PARSER and not a pattern for one reason: every wrong verdict this
-// guard has produced was a tokenizing mistake, not a policy mistake. A regex
-// cannot tell a pipe from a pipe inside quotes, so a grep whose pattern
-// contained an alternation denied as a pipe into gofmt. It cannot tell an
-// assignment prefix from an argument, so a quoted GOFLAGS value stranded the
-// payload off the anchor. It cannot see into a shell's own -c argument. And it
-// has to reconstruct wrapper peeling by substitution, which is where the
-// backtick-in-a-comment false positive came from.
-//
-// An AST answers all four structurally rather than by accumulated dogfooding:
-// Assigns is a separate field from Args, a quoted separator is a Lit inside
-// DblQuoted and cannot be a BinaryCmd, and a -c payload is just a string to
-// parse again.
+// A PARSER rather than a pattern because every wrong verdict this guard has
+// produced was a tokenizing mistake, not a policy one: a regex cannot tell a
+// pipe from a pipe inside quotes, an assignment prefix from an argument, or see
+// into a shell's own -c argument. An AST answers all three structurally.
 //
 // The bool is false when the line does not parse, and the caller skips the
-// raw-tool rules rather than guessing. That is less of a bypass than it looks:
-// shell that does not parse does not run either. The residual is a construct
-// valid in the caller's shell but not in this parser's bash dialect.
+// raw-tool rules rather than guessing - less of a bypass than it looks, since
+// shell that does not parse does not run either.
 func parseGuardCommands(command string) ([]guardCommand, bool) {
 	f, err := syntax.NewParser().Parse(strings.NewReader(command), "")
 	if err != nil {
@@ -1130,19 +1034,13 @@ var guardTextFilters = map[string]bool{
 }
 
 // magusPipedToFilter reports a magus command whose output is being trimmed by a
-// shell text filter.
+// shell text filter. Denied rather than advised: as an advisory it fired
+// repeatedly and was read straight past, the same trained-reflex result the
+// raw-tool advisory produced.
 //
-// DENIED rather than advised, and the reason is a measurement taken on this very
-// session: as an advisory it fired repeatedly while the author of the rule piped
-// `magus query output <ref>` into grep anyway, several times, reading straight
-// past its own reminder. That is the same trained-reflex result the raw-tool
-// advisory produced, so it gets the same answer.
-//
-// `magus query output <ref>` is the ONE exemption. Every other verb emits a
-// structured record that `-o json`, `-o name`, or `-o template=` will shape
-// exactly, so a filter there is pure loss. `query output` returns a target's raw
-// captured log - arbitrary tool text with no schema for magus to project - and
-// searching a build log is a real need with no flag that replaces it.
+// `magus query output <ref>` is the ONE exemption - it returns a raw captured
+// log with no schema for magus to project, so searching it is a real need. Every
+// other verb emits a structured record that -o shapes exactly.
 func magusPipedToFilter(command string) bool {
 	f, err := syntax.NewParser().Parse(strings.NewReader(command), "")
 	if err != nil {
@@ -1162,22 +1060,16 @@ func magusPipedToFilter(command string) bool {
 	return found
 }
 
-// magusRedirected reports a magus command whose stdout or stderr is being sent to
-// a file, to /dev/null, or folded together with 2>&1.
+// magusRedirected reports a magus command whose stdout or stderr is being sent
+// to a file, to /dev/null, or folded together with 2>&1.
 //
-// Denied for the same reason as a pipe, and measured the same way: a redirect
-// discards the part you then have to guess at. `--silent > /dev/null 2>&1` is the
-// worst of them - silent mode's whole contract is that it stays quiet UNTIL
-// something fails, at which point it prints the likely diagnostics and the
-// full-log path, and the redirect throws away exactly that. Observed in one
-// session: three gate runs sent to /dev/null, each reporting only an exit code,
-// each requiring a re-run to learn the cause.
+// Denied for the pipe rule's reason. `--silent > /dev/null 2>&1` is the worst
+// case: silent mode stays quiet UNTIL something fails, then prints the likely
+// diagnostics and the full-log path, and the redirect discards exactly that.
 //
-// `magus query output <ref>` is exempt with the pipe rule's reasoning: it emits a
-// raw captured tool log with no schema to project. Note that --tee is NOT the
-// console-output escape hatch a reader might assume - it mirrors STRUCTURED output
-// only (-o json|yaml|jsonl|template) - so the redirect message points at the log
-// magus already persisted rather than at a flag that would silently write nothing.
+// `magus query output <ref>` is exempt, as with the pipe rule. Note --tee is NOT
+// the escape hatch a reader might assume - it mirrors STRUCTURED output only -
+// so the message points at the persisted log instead.
 func magusRedirected(command string) bool {
 	f, err := syntax.NewParser().Parse(strings.NewReader(command), "")
 	if err != nil {
@@ -1215,22 +1107,15 @@ var (
 // magusInThrowawayCopy reports a magus command being run from a COPY of a
 // workspace in a temp or scratchpad directory.
 //
-// This is denied rather than advised because of what it produces: a verdict about
-// a tree nobody will ship. A gate that passes in a stale duplicate is worse than
-// no gate - the real tree stays unverified while reading as green. It also splits
-// the cache (a second .magus alongside the real one), strands every generated file
-// the run writes inside the copy, and duplicates spell sources, which is its own
-// diagnostic (MGS1002).
+// Denied because of what it produces: a verdict about a tree nobody will ship. A
+// gate that passes in a stale duplicate is worse than no gate. It also splits the
+// cache, strands generated files inside the copy, and duplicates spell sources
+// (MGS1002).
 //
-// The observed shape is a whole pipeline chained onto it:
+// Variable assignments are resolved too, since the observed shape chains a whole
+// pipeline onto one - keying on a literal `cd /tmp/...` would miss it.
 //
-//	SP=/private/tmp/.../scratchpad; cd "$SP/fixci" && go test ./std/ 2>&1 | tail -3 && ./magus run generate:rw . -s >/dev/null 2>&1
-//
-// so the assignment is resolved too - keying only on a literal `cd /tmp/...`
-// would miss the form that actually gets written.
-//
-// A genuinely different workspace is not this: that is `--root <path>`, which
-// says so explicitly and keeps one cache.
+// A genuinely different workspace is `--root <path>`, which keeps one cache.
 func magusInThrowawayCopy(command string) bool {
 	if !mentionsMagusCommand(command) {
 		return false
@@ -1312,12 +1197,9 @@ func isTextFilter(cmds []guardCommand) bool {
 // firstRawToolDenied parses the line and returns the FIRST command it would run
 // that magus already covers. A line that does not parse skips this rule.
 //
-// It returns the command rather than a bool so the verdict can name it. A guard
-// that says only "denied" teaches nothing, and the agent's next move is to guess
-// - which is how a denial becomes a wrapper hunt instead of a correction. This
-// matters most for exactly the cases the parser exists to catch: told that
-// `bash -c '...'` was denied, a reader has to work out which part offended,
-// whereas "the command it resolves to is: go test ./..." is self-evident.
+// It returns the command rather than a bool so the verdict can name it: told only
+// that `bash -c '...'` was denied, a reader has to work out which part offended,
+// and a denial becomes a wrapper hunt instead of a correction.
 func firstRawToolDenied(command string) (guardCommand, bool) {
 	cmds, ok := parseGuardCommands(command)
 	if !ok {
@@ -1417,16 +1299,12 @@ func guardCommandPrefix(args []string) []string {
 // gitGuard classifies git invocations from PARSED commands, returning the first
 // verdict any of them earns.
 //
-// These rules were the last unanchored regexes in the guard, and they cost the
-// same way the raw-tool ones did: `git stash` written as PROSE denied. Writing
-// the magus-vcs-hygiene skill - the document whose whole subject is those commands -
-// through a shell heredoc was blocked twice in one session, and a commit message
-// mentioning the command would be too. The old comment argued a false positive
-// here is "the safe direction" because the denials protect unrecoverable work.
-// That trade was real when a regex was the only tool; with an AST it is not a
-// trade at all, because a quoted word structurally cannot be a command. The
-// safety property that mattered - `cd /repo && git stash` matching however it is
-// reached - is strictly better served by parsing, which sees both commands.
+// Parsed rather than pattern-matched because the unanchored form denied `git
+// stash` written as PROSE - a commit message, or the magus-vcs-hygiene skill,
+// whose whole subject is those commands. A false positive here was once defended
+// as the safe direction; with an AST it is not a trade at all, since a quoted
+// word structurally cannot be a command, and `cd /repo && git stash` still
+// matches however it is reached.
 func gitGuard(cmds []guardCommand) (bashGuardVerdict, bool) {
 	for _, c := range cmds {
 		if c.Name != "git" || len(c.Args) == 0 {
@@ -1631,32 +1509,19 @@ var (
 	// magus has output flags for this; a pipe throws away the parts the agent
 	// then has to guess at. jq is deliberately absent: it composes with -o json
 	// rather than fighting it.
-	//
-	// The magus-is-the-COMMAND anchoring this block used to need lives in the
-	// parser now: magusPipedToFilter and magusRedirected resolve the actual
-	// command, which is why the old regexp - and the `grep x cmd/magus/... | head`
-	// false positive it was written to dodge - are both gone.
 )
 
 const (
 	vcsGuardContext = "magus workspace: classify the dirty tree before staging or committing: magus describe file $(git diff --name-only). role=output paths are generated - never hand-edit them; regenerate and commit them with their source change. Stage the reviewed paths explicitly with `git add -- <paths>`. Load the magus-vcs-hygiene skill for the commit checklist if not already loaded."
-	// An explicit ladder, because the old text ended with "if no target covers
-	// this work, proceed" - which reads as permission to go straight to the raw
-	// binary. There is a rung between the two, and naming it is the whole point:
-	// a spell op still runs through magus, so the cache, the sandbox, and
-	// affected tracking all survive.
+	// An explicit ladder: naming the middle rung is the point, because a spell op
+	// still runs through magus, so the cache, the sandbox and affected tracking
+	// all survive. Rung 2 forwards args - `magus run go::go-test <p> -- -run
+	// TestX`.
 	//
-	// Rung 2 DOES forward args: `magus run go::go-test <p> -- -run TestX` runs
-	// `go test ./... -run TestX`. That looked broken until the cache keyed extra
-	// args - the run replayed a cached success, so the arg never executed and the
-	// feature appeared missing.
 	// DENIED, not advised: every tool matched here has an exact magus equivalent,
-	// so the deny costs nothing. It WAS an advisory, and an advisory loses to a
-	// trained reflex - `go test ./...` is muscle memory in a way `git reset --hard`
-	// never is. Measured: a long session with this advisory firing on every raw `go`
-	// call changed behaviour zero times, and left the Go build cache poisoned
-	// (uninstrumented raw runs against magus's coverage-instrumented ones) into a
-	// link-time fingerprint mismatch that took a full `go clean -cache` to clear.
+	// so the deny costs nothing, and an advisory loses to a trained reflex. As an
+	// advisory it changed behaviour zero times over a long session and left the Go
+	// build cache poisoned by uninstrumented raw runs.
 	runGuardContext = "this has an exact equivalent in magus, so it is DENIED rather than explained - not because it is dangerous, but because the replacement does strictly more (cache, sandbox, affected tracking) and costs you nothing. If the command WRITES into the working tree (generate, a formatter with -w/--write/--fix, go mod tidy, build output on a tracked path) the rule is firm and has no exceptions: a raw write leaves the owning target reporting drift it did not cause, and the workspace's account of itself wrong. Escalate only as far as you actually need:\n" +
 		"  1. TOP-LEVEL TARGET (use this almost always):  magus run test|build|lint|format|generate [<project>]  - `magus describe targets` lists every target, `-o name` for just the names\n" +
 		"  2. ONE SPELL OP, still through magus, when a whole target is too broad:  magus run <spell>::<op> [<project>]  (e.g. magus run go::go-test libs/foo). `magus describe spell <name>` lists a spell's ops.\n" +
@@ -1671,22 +1536,14 @@ const (
 	// into the output.
 	revertGuardContext = "magus workspace: do not revert a file just because you did not hand-edit it. Classify first: magus describe file <paths>. A role=output path is a declared target output, and if a source change moved it that is correct - it belongs in the SAME commit as the source, and reverting it is what makes CI fail on drift. Revert only when regenerating reproduces the same diff with the target's declared inputs unchanged, which means the drift is environmental (a tool version, a path baked into the output) rather than yours - report that instead of silently discarding it. Load the magus-vcs-hygiene skill if not already loaded."
 	// ADVISE, not deny. Denying was tried and reverted: magus has no raw-text
-	// search to fall back on, verified against a built binary - `magus query`
-	// fuzzy-matches the DOMAIN graph (targets, Buzz functions, docs) and returns
-	// 0 for a host-language symbol, `magus refs` needs the exact symbol name, and
-	// `magus x` is an interactive TTY picker. So "where does this string appear"
-	// has no magus answer, and denying grep removed a capability with no
-	// replacement - it blocked three legitimate lookups in one session. The
-	// advisory still fires on every repo-wide search, which is the pressure that
-	// matters, without making the agent unable to work.
+	// search to fall back on, so "where does this string appear" has no magus
+	// answer and the deny removed a capability. The advisory still applies the
+	// pressure without making the agent unable to work.
 	//
-	// The reason must ROUTE, not scold. The two surfaces answer different
-	// questions and confusing them is why the graph gets abandoned: `magus query`
-	// indexes DOMAIN entities (projects, targets, spells, ops, docs) and returns 0
-	// for a code symbol, while `magus refs` indexes CODE symbols. An agent that
-	// tries `magus query someFunc`, gets 0, and concludes the graph is useless is
-	// the failure this text exists to prevent - so it names the prerequisite index
-	// too, since refs is empty until one is built.
+	// The reason must ROUTE, not scold: `magus query` indexes DOMAIN entities and
+	// returns 0 for a code symbol, while `magus refs` indexes CODE symbols. An
+	// agent that tries `magus query someFunc`, gets 0, and concludes the graph is
+	// useless is the failure this text exists to prevent.
 	// Names the mechanism, because the fix is not "remember where you are" - it is
 	// that the project is an argument and never needs to be implied by the CWD.
 	cwdGuardContext = "magus workspace: magus is CWD-relative, and `cd` before a magus command is how the right command lands on the wrong project. Pass the project explicitly instead - `magus run <target> <project>`, `magus describe project <path>`, `magus affected ci` - so the command means the same thing from anywhere. Project paths are workspace-relative (`libs/foo`, or `workspace://libs/foo`; both parse). `magus where <name>` resolves a name to its path. Only a DIFFERENT workspace needs relocating, and that is `--root <path>`, not a cd."
@@ -1755,47 +1612,28 @@ func denyWholeTree(op string) string {
 
 // evaluateBashGuard applies the guard rules in severity order.
 //
-// magus denies on three independent triggers, and explains everything else:
+// magus denies on three independent triggers and explains everything else:
 //
 //  1. it cannot be UNDONE - the whole-tree git rules;
-//  2. it WRITES INTO THE WORKING TREE - codegen, formatters with -w/--write/--fix,
+//  2. it WRITES INTO THE WORKING TREE - codegen, formatters with -w/--fix,
 //     dependency files, build output landing on a tracked path;
-//  3. it has an EXACT WORKING EQUIVALENT - a raw `go test` against `magus run test`.
+//  3. it has an EXACT WORKING EQUIVALENT - raw `go test` against `magus run test`.
 //
-// Trigger 2 is the firm one, and the only one with no judgement in it. A write
-// that skips magus is not merely slower: the target that owns that path now
-// reports drift it did not cause, the cache holds a result for a tree that no
-// longer exists, and affected tracking has no record that anything moved. Reading
-// through the wrong tool costs a cache hit; WRITING through the wrong tool
-// corrupts the workspace's account of itself. So the reflex to encode is
-// asymmetric on purpose: a raw linter is a missed opportunity, a raw formatter is
-// a defect.
+// Trigger 2 is the firm one: reading through the wrong tool costs a cache hit,
+// writing through it corrupts the workspace's account of itself. Trigger 3 is
+// denied not because the command is dangerous but because the replacement is
+// complete, which makes the deny free.
 //
-// Trigger 3 is the one that needs the justification: a raw `go test` is harmless
-// and reversible, so it fails the first two tests entirely. It is denied because
-// the replacement is complete, which makes the deny free.
-//
-// That distinction is what the reverted repo-wide-search deny got wrong. Denying
-// grep was not a mistake because grep is safe; it was a mistake because magus has
-// no raw-text search to route to, so the deny removed a capability. Where the
-// equivalent exists and works, a deny costs nothing - and an advisory costs
-// everything, because a trained reflex reads straight past it. Measured, not
-// assumed: a session that had this advisory fire on every raw `go` invocation
-// changed its behaviour zero times, and left a poisoned Go build cache
-// (uninstrumented raw runs against magus's coverage-instrumented ones) that
-// surfaced as a link-time fingerprint mismatch.
-//
-// A deny is only legitimate once the replacement it names actually works. Do not
-// add one here without checking that path end to end.
+// A deny is only legitimate once the replacement it names actually works - the
+// reverted grep deny removed a capability magus had nothing to route to. Do not
+// add one without checking that path end to end.
 func evaluateBashGuard(command string) bashGuardVerdict {
 	// The program rules judge PARSED commands; the rest read the line as written,
-	// because they are about the SHAPE of the line - a pipe, a redirect, a cd
-	// before a magus call - rather than about which program runs.
-	// A matched git rule that only ADVISES is held, not returned: returning it here
-	// let a trailing `git commit` downgrade a deny to an advisory, because this ran
-	// before the rules below. Observed on a real command that cd'd into a scratchpad
-	// copy, redirected four magus runs to /dev/null, and ended with `git commit` -
-	// the git advisory answered and the two denials never got to speak. Deny always
+	// because they are about its SHAPE - a pipe, a redirect, a cd before a magus
+	// call - rather than which program runs.
+	//
+	// A matched git rule that only ADVISES is held, not returned: returning here
+	// let a trailing `git commit` downgrade a deny to an advisory. Deny always
 	// outranks advise, whichever rule saw the line first.
 	// Authoring a note is refused before anything else, because it is the one rule whose
 	// whole point is that it holds on EVERY surface: the path rule sees file writes, and a
@@ -1851,21 +1689,14 @@ func runGuardContextFor(match guardToolMatch) string {
 // reportContextCost tells the caller how many bytes of instruction the install
 // just added, and what the other permutation would have cost.
 //
-// BYTES, not tokens, and deliberately. A token count is only true for one
-// tokenizer, and these files are installed for whatever agent host the reader
-// uses; publishing a number that is wrong for most of them is worse than
-// publishing the one number that is right for all of them. Bytes are also the
-// only figure magus can compute without shipping a tokenizer it would then have
-// to keep matched to somebody else's model.
-//
-// The point of printing it at all is accountability. Skills are always-loaded
-// instruction text: every byte here is a byte the reader does not get to spend
-// on their own problem, and a surface that never states its own cost has no
-// pressure on it to shrink.
+// BYTES, not tokens: a token count is only true for one tokenizer, and these
+// files are installed for whatever host the reader uses. Printed at all for
+// accountability - a surface that never states its own cost has no pressure on
+// it to shrink.
 func reportContextCost(dir string, written []string) {
-	// Twins are counted separately, not folded in. Install writes both forms, and only
-	// the primary is always-loaded: a twin is a reference copy fetched by name when a
-	// reader needs the long form. Summing them would report the always-loaded cost as
+	// Twins are counted separately, not folded in: only the primary is
+	// always-loaded, and a twin is a reference copy fetched by name when a reader
+	// needs the long form. Summing them would report the always-loaded cost as
 	// roughly double what a session actually carries.
 	var installed int64
 	var twins int64
@@ -1903,4 +1734,25 @@ func byteSize(n int64) string {
 		return fmt.Sprintf("%d B", n)
 	}
 	return fmt.Sprintf("%.1f KB", float64(n)/1024)
+}
+
+// installTarget resolves a destination into the (base, leaf) pair the catalog
+// writers take.
+//
+// --global is the flag that permits an absolute destination, and it never
+// worked: this command let one past its own guard and Catalog.WriteSkillTree
+// then refused it unconditionally, so `agent install /abs/path --global` failed
+// with the message telling the caller to pass the flag they had just passed.
+//
+// Fixed HERE rather than by adding an escape hatch to the catalog. That guard is
+// the library's own safety property - it also blocks "../../outside", which no
+// CLI flag should be able to switch off - so instead the absolute path is split
+// into the directory it names and the leaf inside it. The containment check the
+// catalog performs is then still meaningful: the write stays under the directory
+// the caller actually named.
+func installTarget(dir, dest string, global bool) (base, leaf string) {
+	if global && filepath.IsAbs(dest) {
+		return filepath.Dir(dest), filepath.Base(dest)
+	}
+	return dir, dest
 }

@@ -18,6 +18,14 @@ export enum<str> TermStyle {
     brightGreen = "1;32",
 }
 
+export enum<str> LogLevel {
+    trace = "trace",
+    debug = "debug",
+    info = "info",
+    warn = "warn",
+    error = "error",
+}
+
 export object TermSize {
     width: int = 0,
     height: int = 0,
@@ -26,6 +34,7 @@ export object TermSize {
 export extern fun clearScreen() > void !> any;
 export extern fun colorize(s: str, style: TermStyle) > str;
 export extern fun isInteractive() > bool;
+export extern fun notify(message: str, level: LogLevel = "", ttl_ms: int = 0) > void;
 export extern fun pick(items: [str], prompt: str = "", initial_filter: str = "", initial: int = 0, max_rows: int = 0) > int !> any;
 export extern fun size() > TermSize;
 export extern fun wantsColor() > bool;

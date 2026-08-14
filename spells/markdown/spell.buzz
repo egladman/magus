@@ -8,15 +8,11 @@ export fun mgs_listRequiredGlobs() > [Path] {
     return [Path{value = "**/*.md"}, Path{value = "**/*.MD"}, Path{value = "**/*.markdown"}, Path{value = ".markdownlint.json"}, Path{value = ".markdownlint.yaml"}, Path{value = "dprint.json"}];
 }
 
-export fun mgs_listClaimedGlobs() > [Path] {
-    return [Path{value = "**/*.md"}, Path{value = "**/*.mdx"}];
-}
-
 fun markdownlint(target: Target) > Command {
     return Command{bin = "markdownlint", args = ["**/*.md", "**/*.mdx"]};
 }
 fun prettier(target: Target) > Command {
-    // --no-error-on-unmatched-pattern: the claimed globs include **/*.mdx, but a
+    // --no-error-on-unmatched-pattern: the argv globs include **/*.mdx, but a
     // project may have only .md files; without it prettier exits non-zero on the
     // empty .mdx glob. The `rw` charm swaps --check for --write by anchor.
     final args = ["--check", "--no-error-on-unmatched-pattern", "**/*.md", "**/*.mdx"];

@@ -42,9 +42,9 @@ Disable volatility auto\-retry for this run
 Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)
 .TP
 \fB\-\-race\fR \fIstring\fR
-Run the same target repeatedly to surface order\-dependent failures
+Race\-condition diagnostics (watch|replay, comma\-combinable); omit to disable. watch: attribution\-gated fsnotify detection (MGS4001/4002/4004), emitting only when >=2 projects' output snapshots confirm a shared write. replay: re\-runs cacheable output\-declaring projects sequentially to content\-hash outputs for non\-determinism (MGS4003); roughly doubles wall\-clock.
 .TP
-\fB\-\-shard\fR \fIint\fR
+\fB\-\-shard\fR \fIstring\fR
 This run's shard index within a CI matrix; paired with \-\-n\-shards
 .TP
 \fB\-\-step\fR
@@ -55,6 +55,9 @@ Abort if the run has not finished within this duration (e.g. 5m, 1h30m)
 .TP
 \fB\-\-upstream\fR
 With \-\-graph: show dependents instead of dependencies
+.TP
+\fB\-\-wait\fR
+With \-\-detach, block until the run finishes and exit with its status
 .RE
 .SH TARGETS
 .RS

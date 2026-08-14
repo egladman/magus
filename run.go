@@ -123,15 +123,13 @@ func (m *Magus) Run(ctx context.Context, targets []types.Target, opts ...RunOpti
 // redactError masks any resolved secret in err's MESSAGE while leaving the error chain
 // intact.
 //
-// This is the boundary where a run's error stops being something magus handles with a
-// context and becomes text a caller prints. The CLI's final line is `slog.Error(err.Error())`
-// with no context, so the log handler's redaction cannot reach it - and a magusfile's
-// `throw "auth failed: " + magus\secret.read(...)` propagates its message all the way there.
-// Redacting once here covers every consumer of a run error instead of asking each to
-// remember, which is the mistake this package's history is made of.
+// The boundary where a run's error stops being something magus handles with a context
+// and becomes text a caller prints: the CLI's final line is `slog.Error(err.Error())`
+// with no context, so the handler's redaction cannot reach it, and a magusfile's
+// `throw "auth failed: " + magus\secret.read(...)` propagates all the way there.
+// Redacting once here covers every consumer instead of asking each to remember.
 //
-// The chain is preserved through Unwrap, so errors.Is/As - which exitCodeOf relies on to
-// recognize ExitError and the usage errors - keep working.
+// The chain is preserved through Unwrap, so errors.Is/As keep working.
 func (m *Magus) redactError(err error) error {
 	if err == nil || m.resolver == nil {
 		return err
@@ -649,30 +647,28 @@ func toolVersionMode() string {
 }
 
 // CurrentRevision resolves the workspace's active VCS revision (full hash) and dirty
-// state. It departs from verifyReadOnly's VCS resolution on purpose: verifyReadOnly
-// treats a vcs.Resolve error as a hard failure (a bad MAGUS_VCS_NAME is misconfiguration
-// it refuses to hide) and only no-ops on res.VCS == nil, but CurrentRevision collapses
-// BOTH a resolution error and no VCS into ("", false). That is correct here because this
-// is provenance metadata, not a drift gate: a target that never declared FailOnDrift
-// never asked to have its VCS state checked, so failing the whole run over an unrelated
-// VCS misconfiguration would be wrong - a missing revision is "unknown", never a reason
-// to fail the caller. Used both to stamp output descriptors (executeStages resolves it
-// ONCE per invocation and copies it onto every step, exactly as toolVersionsByProject
-// does for tool versions - probing per target would spawn a VCS subprocess per step) and
-// by `magus query output <ref> --meta` to compare a stored descriptor's revision against
-// HEAD now. The two returns are types.VCSMeta's Hash and IsDirty under this package's
-// own vocabulary (revision/dirty is what cache.Step, cache.OutputDescriptor, and the
-// CLI all print).
-func (m *Magus) CurrentRevision(ctx context.Context) (revision string, dirty bool) {
+// state, collapsing BOTH a resolution error and no VCS into ("", false).
+//
+// That differs from verifyReadOnly, which treats a vcs.Resolve error as a hard failure,
+// and it is correct here because this is provenance metadata rather than a drift gate: a
+// target that never declared FailOnDrift never asked to have its VCS state checked, so a
+// missing revision is "unknown", never a reason to fail the caller.
+//
+// executeStages resolves it ONCE per invocation and copies it onto every step, as
+// toolVersionsByProject does - probing per target would spawn a VCS subprocess per step.
+// The two returns are types.VCSMeta's Hash and IsDirty.
+func (m *Magus) CurrentRevision(ctx context.Context) (name, revision string, dirty bool) {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil || res.VCS == nil {
-		return "", false
+		return "", "", false
 	}
 	meta, err := res.VCS.Metadata(ctx, m.ws.Root)
 	if err != nil {
-		return "", false
+		return "", "", false
 	}
-	return meta.ID, meta.IsDirty
+	// The provider name rides along because a hash does not identify its own kind,
+	// and resolving it a second time would spawn another VCS subprocess.
+	return res.Name, meta.ID, meta.IsDirty
 }
 
 // checkToolWindows fails the run when a probed tool falls outside the window its project
@@ -901,7 +897,10 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 				label := types.ProjectDisplayName(p.Path, p.Name, p.Dir)
 				planned++
 				if m.cache != nil {
-					m.cache.LogDry(ctx, p.Path, label, st.target)
+					// Charms folded in, matching the executed line: a dry run whose repro
+					// command omits them prints a command that reproduces something else,
+					// and it is printed precisely when the reader is asking what will run.
+					m.cache.LogDry(ctx, p.Path, label, charmedTarget(st.target, opts.Charms))
 				} else {
 					fmt.Printf("[dry] %s\n", label)
 				}
@@ -924,6 +923,10 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}
 
 	start := time.Now()
+	// Run-scoped remote-cache counters. Installed here rather than held on Cache
+	// because the daemon reuses one Cache per workspace across runs and can serve two
+	// adopted runs at once; LogRemoteSummary below reads them back off ctx.
+	ctx = cache.WithRemoteStats(ctx)
 
 	var uniqueProjects []*types.Project
 	seenProj := make(map[string]struct{})
@@ -967,25 +970,22 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}
 	defer releaseLocks()
 
-	// The probe pass doubles as the toolchain gate. The check this replaced hung off
-	// spell-op dispatch, so it missed any project whose targets shell out directly - every
-	// TypeScript project here runs its own pnpm scripts and declared a window that could
-	// never fail. Enforcement follows the DECLARATION, which is stated per project, not
-	// the dispatch mechanism in use.
+	// The probe pass doubles as the toolchain gate. Enforcement follows the
+	// DECLARATION, stated per project, not the dispatch mechanism: hanging it off
+	// spell-op dispatch missed every project whose targets shell out directly.
 	//
-	// Before any target runs, so a violation stops the invocation rather than surfacing
-	// partway through, and on probes this pass already paid for.
+	// Runs before any target, so a violation stops the invocation rather than
+	// surfacing partway through, on probes this pass already paid for.
 	//
-	// KNOWN GAP: scope is uniqueProjects (the selection plus output-ref owners). A project
-	// reached only through a target dependency joins later, in the dispatcher, so it is
-	// not gated - the one axis on which this is narrower than what it replaced.
+	// KNOWN GAP: scope is uniqueProjects, so a project reached only through a target
+	// dependency joins later in the dispatcher and is not gated.
 	toolWindows := map[string]string{}
 	toolVer := m.probeTools(ctx, uniqueProjects, toolWindows)
 	if err := checkToolWindows(uniqueProjects, toolWindows); err != nil {
 		return err
 	}
 	// Resolved ONCE for the whole invocation, not per target - see CurrentRevision.
-	revision, dirty := m.CurrentRevision(ctx)
+	vcsName, revision, dirty := m.CurrentRevision(ctx)
 
 	// Active charms participate in the cache key: a charm can change a target's
 	// behaviour (pass/fail or output), so charm-variant runs must not collide.
@@ -1009,10 +1009,16 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			applyRunKeying(&step, toolVer[p.Path], charmKey)
 			step.Revision = revision
 			step.Dirty = dirty
+			step.VCSName = vcsName
 			// Args after `--` change what the target does, so they key the cache
 			// exactly as charms do; without this a run with different args
 			// replays the previous run's result.
 			step.ExtraArgs = opts.ExtraArgs
+			// The spell::op filter selects which definition runs (an explicit op
+			// bypasses a shadowing magusfile export), so it keys the cache the
+			// same way; without it a compile-only go::go-build recorded a pass
+			// the real go-build target then replayed around a stale binary.
+			step.Spell = opts.Spell
 			if raceForcesNoCache(opts) {
 				step.NoCache = true
 			}
@@ -1252,6 +1258,10 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if s := m.cache.Stats(); s.Hit+s.Miss+s.Error > 1 {
 		m.cache.LogSummary(ctx, time.Since(start))
 	}
+	// Beside the footer, not deferred by the caller: every path that runs targets
+	// reaches here, including `magus x` and the MCP run tool, and a deferred summary
+	// landed after the terminal band was released.
+	m.cache.LogRemoteSummary(ctx)
 
 	return runErr
 }
@@ -1688,15 +1698,13 @@ func (m *Magus) makeHandler(name string) TargetHandler {
 // withTargetDeadline bounds one target's execution when config.TargetTimeout
 // is set, and is a pass-through otherwise.
 //
-// It is the runaway guard: a magusfile is code, so a loop that never
-// terminates is something someone can write by accident, and nothing else
-// reclaims a CI runner that hit one. The Buzz VM samples cancellation on loop
-// back edges (see vm.checkCancel), so a spinning target notices without the
-// dispatch loop paying for a check per instruction.
+// The runaway guard: a magusfile is code, so a non-terminating loop is writable by
+// accident and nothing else reclaims a CI runner that hit one. The Buzz VM samples
+// cancellation on loop back edges (vm.checkCancel), so a spinning target notices
+// without a check per instruction.
 //
-// The deadline covers the whole target, subprocesses included - cancelling the
-// context kills what the target spawned - which is why it is off by default.
-// A value set near a legitimate target's runtime fails builds that were fine.
+// The deadline covers the whole target, subprocesses included, which is why it is off
+// by default - a value near a legitimate target's runtime fails builds that were fine.
 func (m *Magus) withTargetDeadline(ctx context.Context) (context.Context, context.CancelFunc) {
 	if m.cfg.TargetTimeout <= 0 {
 		return ctx, func() {}
@@ -1762,4 +1770,13 @@ func diagEventFromError(projectPath, target string, err error) (types.Diagnostic
 		unit += ":" + target
 	}
 	return types.DiagnosticEvent{Code: de.Code, Message: de.Msg, Unit: unit}, true
+}
+
+// charmedTarget renders "target:charm,..." the way cache.reproTarget does for an
+// executed step, so a dry run and a real run print the same repro command.
+func charmedTarget(target string, charms []string) string {
+	if len(charms) == 0 {
+		return target
+	}
+	return target + ":" + strings.Join(charms, ",")
 }

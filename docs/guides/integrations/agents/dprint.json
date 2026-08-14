@@ -1,0 +1,15 @@
+{
+  // This project's own Markdown: the per-host guide pages that live beside the templates
+  // they document. Every project with Markdown carries its own dprint.json extending
+  // dprint-base.json, so the rules live with the project.
+  //
+  // Patterns are "./"-anchored: a slash-less dprint pattern matches at any depth, so a
+  // bare "*.md" would sweep every project from here.
+  //
+  // The parent (docs) scopes its own dprint run by ARGV so it stops short of this
+  // directory - a parent exclude alone would not be enough, because dprint discovers a
+  // nested config and formats that subtree under it, which is the parent target writing
+  // into a descendant project (MGS3001).
+  "extends": "../../../../dprint-base.json",
+  "includes": ["./*.md"]
+}

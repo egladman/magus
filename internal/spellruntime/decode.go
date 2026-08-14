@@ -62,7 +62,6 @@ func Decode(src Obj) (spells.Descriptor, error) {
 	}
 	m := spells.Descriptor{
 		Name:       name,
-		Claims:     src.Strs("claims"),
 		IgnoreDirs: src.Strs("ignore_dirs"),
 		Manifests:  src.Strs("manifests"),
 		Tools:      tools,

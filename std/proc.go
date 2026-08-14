@@ -9,23 +9,18 @@ func init() { Register(Proc) }
 // Proc is running OTHER processes, and it is a separate module from os for a
 // reason that is structural rather than cosmetic.
 //
-// magus layers its host methods onto Buzz's own stdlib, so one `import "os"`
-// carries both surfaces at once. Buzz already owns os.execute, which returns an
-// exit code the caller has to remember to check. magus's verb raises instead, and
-// captures, and streams, and enforces the sandbox. Two verbs that are synonyms in
-// English, sharing one namespace, differing on whether a failure is SILENT, is a
-// trap - and one that had already caught the author of this repository.
+// magus layers its host methods onto Buzz's stdlib, so one `import "os"` carries both
+// surfaces. Buzz owns os.execute, which returns an exit code the caller must remember to
+// check; magus's verb raises, captures, streams and enforces the sandbox. Two verbs that
+// are synonyms in English, in one namespace, differing on whether a failure is SILENT, is
+// a trap.
 //
-// Renaming inside os would only have been safe until upstream picked another name.
-// Buzz is at 0.6.0-dev and moving; the day it ships proc.exec or os.run the
-// collision is back. A module magus owns cannot collide with a language magus does
-// not control, so the boundary is the fix rather than the wording.
+// Renaming inside os would only be safe until upstream picked another name - Buzz is at
+// 0.6.0-dev, and the day it ships proc.exec the collision is back. A module magus owns
+// cannot collide with a language magus does not control.
 //
-// What lives here answers "what process is about to run, and under what
-// constraints": the verb, the shell-argv builder, PATH resolution, the concurrency
-// budget bounding how many run at once, and whether this process has a terminal.
-// What stayed in os is the machine itself - platform, CPU count, hostname - which
-// has nothing to do with spawning anything.
+// What lives here answers "what process is about to run, and under what constraints".
+// What stayed in os is the machine itself - platform, CPU count, hostname.
 var Proc = Module{
 	Name: "proc",
 	Doc:  "Run other processes. proc.exec is the one verb that runs anything: it streams output live, captures it, honors the sandbox, and raises on failure instead of handing back a code to check. Needing a shell is not a second verb - proc.shell builds the {bin, args} to hand it, so which shell ran stays visible at the call site instead of hidden inside it. Distinct from Buzz's own os.execute, which returns an exit code and stays silent when you do not read it.",

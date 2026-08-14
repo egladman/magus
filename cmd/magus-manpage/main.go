@@ -6,34 +6,36 @@
 //	                 (default: manpage/). A distribution artifact, owned at the
 //	                 repo root and shipped for the `man` command.
 //	md             - Markdown for the docs site, written to -out
-//	                 (default: docs/manpage/). Docs-site content, owned by the docs
+//	                 (default: docs/reference/manpage/). Docs-site content, owned by the docs
 //	                 project (docs/magusfile.buzz), which renders these to HTML like
 //	                 any other doc.
 //
-// Both render from the same internal/manpage registry; they are independent
+// Both render from the same internal/clispec registry; they are independent
 // serializers, not a conversion of one format into the other.
 //
 // Usage:
 //
 //	go run ./cmd/magus-manpage [-format roff] [-out manpage] [-date ""] [-version dev]
-//	go run ./cmd/magus-manpage  -format md   [-out docs/manpage]
+//	go run ./cmd/magus-manpage  -format md   [-out docs/reference/manpage]
 package main
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
+	iclispec "github.com/egladman/magus/internal/clispec"
 	"github.com/egladman/magus/internal/config"
-	imanpage "github.com/egladman/magus/internal/manpage"
 )
 
 func main() {
 	format := flag.String("format", "roff", "output format: roff or md")
-	out := flag.String("out", "", "output directory (default: manpage for roff, docs/manpage for md)")
+	out := flag.String("out", "", "output directory (default: manpage for roff, docs/reference/manpage for md)")
 	date := flag.String("date", "", "date for .TH header; empty omits it (roff mode)")
 	// The committed man pages carry no version: baking one turns every release bump
 	// into spurious churn across all pages. The .TH source field stays a neutral
@@ -50,7 +52,7 @@ func main() {
 		genRoff(*out, *date, *ver)
 	case "md":
 		if *out == "" {
-			*out = "docs/manpage"
+			*out = "docs/reference/manpage"
 		}
 		genMD(*out)
 	default:
@@ -62,13 +64,19 @@ func genRoff(outDir, date, ver string) {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		fatalf("mkdir %s: %v", outDir, err)
 	}
-	pages := imanpage.RoffPages(date, ver)
+	pages := iclispec.RoffPages(date, ver)
+	wrote := make(map[string]bool, len(pages))
 	for _, page := range pages {
 		if err := writeFile(outDir, page.Name, page.Content); err != nil {
 			fatalf("%s: %v", page.Name, err)
 		}
+		wrote[page.Name] = true
 	}
-	fmt.Fprintf(os.Stderr, "magus-manpage: wrote %d .1 file(s) to %s\n", len(pages), outDir)
+	pruned, err := prune(outDir, ".1", wrote)
+	if err != nil {
+		fatalf("prune %s: %v", outDir, err)
+	}
+	fmt.Fprintf(os.Stderr, "magus-manpage: wrote %d .1 file(s) to %s, pruned %d\n", len(pages), outDir, pruned)
 }
 
 func genMD(outDir string) {
@@ -78,14 +86,61 @@ func genMD(outDir string) {
 	if err := writeFile(outDir, "magus.md", renderMainMD()); err != nil {
 		fatalf("magus.md: %v", err)
 	}
-	for _, seg := range imanpage.All {
+	wrote := map[string]bool{"magus.md": true}
+	for _, seg := range iclispec.All {
 		name := "magus-" + seg.Name + ".md"
 		if err := writeFile(outDir, name, renderCommandMD(seg)); err != nil {
 			fatalf("%s: %v", name, err)
 		}
+		wrote[name] = true
 	}
-	total := 1 + len(imanpage.All)
-	fmt.Fprintf(os.Stderr, "magus-manpage: wrote %d .md file(s) to %s\n", total, outDir)
+	pruned, err := prune(outDir, ".md", wrote)
+	if err != nil {
+		fatalf("prune %s: %v", outDir, err)
+	}
+	fmt.Fprintf(os.Stderr, "magus-manpage: wrote %d .md file(s) to %s, pruned %d\n", len(wrote), outDir, pruned)
+}
+
+// prune deletes pages a previous run wrote that this one did not. Both output dirs
+// are declared as globs, so without this a command dropped from the registry keeps
+// its page forever: magus-churn.1 shipped for a command that never existed.
+//
+// It only ever considers names THIS generator produces - magus<ext> and
+// magus-<command><ext>. -out is a free-form flag, so an unconfined glob would make a
+// mistyped path destructive: `-format md -out .` at the repo root would delete
+// README.md and CHANGELOG.md. Confined this way a wrong -out deletes nothing.
+//
+// keep empty means the page set is empty, which is a bug upstream rather than an
+// instruction to empty the directory, so it prunes nothing.
+func prune(outDir, ext string, keep map[string]bool) (int, error) {
+	if len(keep) == 0 {
+		return 0, nil
+	}
+	matches, err := filepath.Glob(filepath.Join(outDir, "magus*"+ext))
+	if err != nil {
+		return 0, fmt.Errorf("glob %s in %s: %w", ext, outDir, err)
+	}
+	n := 0
+	var errs []error
+	for _, path := range matches {
+		name := filepath.Base(path)
+		if keep[name] || !generatedPage(name, ext) {
+			continue
+		}
+		// A concurrent generate may have removed it already; that is the state we want.
+		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			errs = append(errs, err)
+			continue
+		}
+		n++
+	}
+	return n, errors.Join(errs...)
+}
+
+// generatedPage reports whether name is one this generator could have written, so a
+// file that merely shares the prefix (magusfile.md) is never a deletion candidate.
+func generatedPage(name, ext string) bool {
+	return name == "magus"+ext || strings.HasPrefix(name, "magus-") && strings.HasSuffix(name, ext)
 }
 
 func renderMainMD() []byte {
@@ -102,7 +157,7 @@ func renderMainMD() []byte {
 	m.p(mdB("magus") + " [flags] " + mdEsc("<subcommand>") + " [args]")
 
 	m.h2("Description")
-	for _, para := range imanpage.SplitParas(mainDescription) {
+	for _, para := range iclispec.SplitParas(mainDescription) {
 		m.p(mdEsc(para))
 	}
 
@@ -115,7 +170,7 @@ func renderMainMD() []byte {
 	m.def(mdB("-v"), mdEsc(flagVerbose))
 
 	m.h2("Subcommands")
-	for _, seg := range imanpage.All {
+	for _, seg := range iclispec.All {
 		ref := fmt.Sprintf("[%s(1)](magus-%s.md)", mdB("magus-"+seg.Name), seg.Name)
 		m.def(mdB(seg.Name), mdEsc(seg.Short)+". See "+ref+".")
 	}
@@ -127,7 +182,24 @@ func renderMainMD() []byte {
 	return m.bytes()
 }
 
-func renderCommandMD(seg imanpage.Command) []byte {
+// writeChildFlagsMD emits an options block for every descendant declaring flags.
+func writeChildFlagsMD(m *mdBuf, path string, children []iclispec.Command) {
+	for _, child := range children {
+		sub := path + " " + child.Name
+		if child.HasFlags() {
+			fs := flag.NewFlagSet(sub, flag.ContinueOnError)
+			child.BindFlags(fs)
+			m.h3(sub + " options")
+			fs.VisitAll(func(f *flag.Flag) {
+				typeName, _ := flag.UnquoteUsage(f)
+				m.def(flagLabelMD(f.Name, typeName, f.DefValue), mdEsc(f.Usage))
+			})
+		}
+		writeChildFlagsMD(m, sub, child.Children)
+	}
+}
+
+func renderCommandMD(seg iclispec.Command) []byte {
 	var m mdBuf
 	desc := seg.Description
 	if desc == "" {
@@ -151,14 +223,14 @@ func renderCommandMD(seg imanpage.Command) []byte {
 
 	if seg.Long != "" {
 		m.h2("Description")
-		for _, para := range imanpage.SplitParas(seg.Long) {
+		for _, para := range iclispec.SplitParas(seg.Long) {
 			m.p(mdEsc(para))
 		}
 	}
 
-	if seg.BuildFlags != nil {
+	if seg.HasFlags() {
 		fs := flag.NewFlagSet(seg.Name, flag.ContinueOnError)
-		seg.BuildFlags(fs)
+		seg.BindFlags(fs)
 		m.h2("Options")
 		fs.VisitAll(func(f *flag.Flag) {
 			typeName, _ := flag.UnquoteUsage(f)
@@ -166,18 +238,8 @@ func renderCommandMD(seg imanpage.Command) []byte {
 		})
 	}
 
-	for _, child := range seg.Children {
-		if child.BuildFlags == nil {
-			continue
-		}
-		fs := flag.NewFlagSet(seg.Name+" "+child.Name, flag.ContinueOnError)
-		child.BuildFlags(fs)
-		m.h3(seg.Name + " " + child.Name + " options")
-		fs.VisitAll(func(f *flag.Flag) {
-			typeName, _ := flag.UnquoteUsage(f)
-			m.def(flagLabelMD(f.Name, typeName, f.DefValue), mdEsc(f.Usage))
-		})
-	}
+	// Recursive, matching the roff renderer: config nests four levels deep.
+	writeChildFlagsMD(&m, seg.Name, seg.Children)
 
 	if len(seg.Children) > 0 {
 		m.h2("Subcommands")
@@ -233,7 +295,7 @@ func writeSeeAlsoMD(m *mdBuf, currentName string) {
 	if currentName != "" {
 		refs = append(refs, fmt.Sprintf("[%s(1)](magus.md)", mdB("magus")))
 	}
-	for _, seg := range imanpage.All {
+	for _, seg := range iclispec.All {
 		if seg.Name == currentName {
 			continue
 		}

@@ -20,11 +20,20 @@ The socket address is resolved in priority order:
 The socket file acts as the lock: present means a daemon is running, absent
 means none. Shell init hooks (e.g. Nix\-injected .profile lines) typically
 check for the file with [ \-S "$socket" ] before starting one.
-.SH OPTIONS
+.SS server start options
 .RS
 .TP
 \fB\-\-foreground\fR
-Run in the foreground and block, instead of auto\-backgrounding (server start)
+Run in the foreground and block, instead of auto\-backgrounding
+.RE
+.SS server stop options
+.RS
+.TP
+\fB\-\-services\fR
+Stop the daemon's hosted services, leaving the daemon running
+.TP
+\fB\-\-socket\fR \fIstring\fR
+Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto\-detect)
 .RE
 .SH SUBCOMMANDS
 .RS

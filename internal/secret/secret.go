@@ -2,26 +2,22 @@
 // provider, and remembers the values it handed out so magus can keep them out of
 // everything it persists.
 //
-// WHERE a secret comes from is a spell's problem: a provider is an ordinary magus spell,
-// so 1Password, Vault or AWS Secrets Manager are `proc\exec` away and the engine grows no
-// per-provider code. What only the engine can do is know that a value IS a secret, and a
-// magusfile cannot express that at any level of cleverness - which is why this package
-// exists rather than a magusfile helper that shells out to `op read`.
+// WHERE a secret comes from is a spell's problem, so 1Password, Vault or AWS Secrets
+// Manager are `proc\exec` away and the engine grows no per-provider code. What only the
+// engine can do is know that a value IS a secret.
 //
 // A value is a secret because it was read through a [Resolver], never because its name
 // looked credential-shaped. That removes the "forgot to classify it" failure mode and
-// makes redaction exact over the bytes magus actually produced.
+// makes redaction exact over the bytes magus produced.
 //
-// State is per-WORKSPACE-OPEN, carried on the context, not per-process. That scope is a
-// trade with a sharp edge worth stating: one magusfile evaluation happens during
-// preload and another during the run, so a narrower per-run scope made a top-level read
-// invoke the provider twice - two interactive unlock prompts for one command. Sharing
-// across the Open makes the second a memo hit.
+// State is per-WORKSPACE-OPEN, carried on the context, not per-process. A narrower
+// per-run scope made a top-level read invoke the provider twice - two interactive
+// unlock prompts for one command - because one magusfile evaluation happens during
+// preload and another during the run.
 //
 // The cost is that the daemon holds an Open for as long as it serves a workspace, so
-// resolved plaintext lives that long rather than for one run. It is still not
-// process-global: a second workspace gets a second Resolver, so one workspace's value can
-// never satisfy another's reference, and the memo is keyed by provider as well.
+// resolved plaintext lives that long. It is still not process-global: a second
+// workspace gets a second Resolver, and the memo is keyed by provider as well.
 package secret
 
 import (
@@ -422,18 +418,16 @@ var errNoResolver = errors.New("secret: no resolver on this context")
 // another, masking the shorter first would leave the longer one's remaining bytes in the
 // output.
 //
-// The common ENCODINGS of the value are registered alongside the raw form, because
-// redaction is literal substring matching and a credential a tool re-encodes before
-// printing otherwise passes straight through. It covers a value encoded WHOLE: base64 or
-// hex of the secret by itself, or its percent-escaped form in a URL.
+// The common ENCODINGS are registered alongside the raw form, because redaction is
+// literal substring matching and a credential a tool re-encodes otherwise passes
+// straight through. It covers a value encoded WHOLE: base64 or hex of the secret by
+// itself, or its percent-escaped form in a URL.
 //
-// What it does NOT cover, and the doc must not imply otherwise: a secret base64'd as part
-// of a LARGER string. base64 works in 3-byte groups, so `base64(user + ":" + secret)`
-// contains `base64(secret)` as a substring only when the prefix length happens to be a
-// multiple of 3 - measured, `us:` matches and `user:` does not. An `Authorization: Basic`
-// header is therefore covered about one time in three, by luck of the username's length.
-// Closing that needs the value to mask itself before it is ever concatenated, which is
-// what a secret.Value type is for.
+// What it does NOT cover: a secret base64'd as part of a LARGER string. base64 works in
+// 3-byte groups, so `base64(user + ":" + secret)` contains `base64(secret)` only when
+// the prefix length is a multiple of 3 - `us:` matches and `user:` does not, so an
+// `Authorization: Basic` header is covered about one time in three. Closing that needs
+// the value to mask itself before concatenation, which is what a secret.Value is for.
 func (r *Resolver) record(key memoKey, v string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -675,19 +669,15 @@ func (h redactingHandler) WithGroup(n string) slog.Handler {
 // redactValue returns v with any secret occurrence masked, preserving the value's kind
 // wherever it can.
 //
-// A string attr is not the only carrier: run.exec logs its argv as `"args", args` with a
-// []string, which slog classifies as KindAny, and the earlier string-only filter walked
-// straight past it - so `--log-format=json` printed a subprocess command line verbatim to
-// stdout. []string and []byte are handled by type so the redacted attr keeps its JSON shape
-// (an argv stays an array) rather than collapsing to a rendered string.
+// A string attr is not the only carrier: run.exec logs its argv as a []string, which slog
+// classifies as KindAny, so a string-only filter let `--log-format=json` print a
+// subprocess command line verbatim. []string and []byte are handled by type so the
+// redacted attr keeps its JSON shape rather than collapsing to a rendered string.
 //
-// KNOWN LIMIT, do not read this as full coverage: the final arm compares against what fmt
-// renders, but the handler emits what its encoder produces. A type whose serialized form
-// differs from its fmt form - a json.Marshaler, or any struct holding a credential in a
-// field String() hides - passes this untouched. Closing that needs the secret value to
-// redact ITSELF at every formatting entry point, which is what a secret.Value type is for;
-// a handler cannot guess an arbitrary encoder's output. This arm is best-effort on top of
-// the shapes above, not a guarantee.
+// KNOWN LIMIT, not full coverage: the final arm compares against what fmt renders, but
+// the handler emits what its encoder produces. A json.Marshaler, or a struct holding a
+// credential in a field String() hides, passes untouched. Closing that needs the value to
+// redact ITSELF at every formatting entry point.
 func redactValue(r *Resolver, v slog.Value) slog.Value {
 	switch v.Kind() {
 	case slog.KindString:

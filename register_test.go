@@ -22,19 +22,17 @@ func init() {
 	// built-in spells, which would collide with these shims.)
 	for _, meta := range []struct {
 		name    string
-		claims  []string
 		sources []string
 	}{
-		{"go", nil, []string{"**/*.go", "go.mod", "go.sum"}},
-		{"rust", nil, []string{"**/*.rs", "Cargo.toml"}},
-		{"ts", []string{"**/*.ts", "**/*.tsx"}, []string{"**/*.ts", "**/*.tsx", "package.json"}},
-		{"json", []string{"**/*.json"}, []string{"**/*.json", "**/*.jsonc"}},
+		{"go", []string{"**/*.go", "go.mod", "go.sum"}},
+		{"rust", []string{"**/*.rs", "Cargo.toml"}},
+		{"ts", []string{"**/*.ts", "**/*.tsx", "package.json"}},
+		{"json", []string{"**/*.json", "**/*.jsonc"}},
 	} {
 		m := meta
 		project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(
 			m.name,
 			spells.WithSources(m.sources...),
-			spells.WithClaims(m.claims...),
 		))
 	}
 }
@@ -183,39 +181,6 @@ func TestWithExclusiveOption(t *testing.T) {
 	assert.True(t, p.Exclusive, "Exclusive = false, want true")
 }
 
-// TestWithClaimExtendsClaims verifies that WithClaim adds globs to the
-// pack's Binding.AddedClaims.
-func TestWithClaimExtendsClaims(t *testing.T) {
-	root := makeWorkspaceRoot(t, "magusfile.buzz")
-
-	reg := NewWorkspaceRegistry()
-	reg.RegisterProject(".", WithSpell("go", WithClaim("**/*.proto", "**/*.thrift")))
-
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
-	require.NoError(t, err, "Open")
-	p := ws.Get(".")
-	require.NotNil(t, p, "project . not found")
-	require.Len(t, p.Bindings, 1)
-	assert.Equal(t, []string{"**/*.proto", "**/*.thrift"}, p.Bindings[0].AddedClaims)
-}
-
-// TestWithoutClaimOnBinding verifies that WithoutClaim inside
-// WithSpell populates the pack's Binding.RemovedClaims.
-func TestWithoutClaimOnBinding(t *testing.T) {
-	root := makeWorkspaceRoot(t, "magusfile.buzz")
-
-	reg := NewWorkspaceRegistry()
-	reg.RegisterProject(".", WithSpell("ts", WithoutClaim("**/*.json")))
-
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
-	require.NoError(t, err, "Open")
-	p := ws.Get(".")
-	require.NotNil(t, p, "project . not found")
-	require.Len(t, p.Bindings, 1)
-	assert.Equal(t, "ts", p.Bindings[0].Name)
-	assert.Equal(t, []string{"**/*.json"}, p.Bindings[0].RemovedClaims)
-}
-
 // TestApplyIdempotent verifies that calling Inspect twice with the same registry
 // does not double-accumulate Deps. Each Open gets a fresh *Workspace, so the
 // registry applies cleanly regardless of how many times Inspect is called.
@@ -269,24 +234,4 @@ func TestWithSpell(t *testing.T) {
 	assert.Equal(t, "go", p.Spell)
 	require.Len(t, p.Bindings, 1)
 	assert.Equal(t, "go", p.Bindings[0].Name)
-}
-
-// TestWithClaimWeight verifies that WithClaimWeight sets Binding.ClaimWeight.
-func TestWithClaimWeight(t *testing.T) {
-	root := makeWorkspaceRoot(t, "magusfile.buzz")
-
-	reg := NewWorkspaceRegistry()
-	reg.RegisterProject(
-		".",
-		WithSpell("ts", WithClaimWeight(10)),
-		WithSpell("go"),
-	)
-
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
-	require.NoError(t, err, "Open")
-	p := ws.Get(".")
-	require.NotNil(t, p, "project . not found")
-	require.Len(t, p.Bindings, 2)
-	assert.Equal(t, 10, p.Bindings[0].ClaimWeight)
-	assert.Equal(t, 0, p.Bindings[1].ClaimWeight)
 }

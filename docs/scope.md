@@ -290,11 +290,15 @@ The claim is that magus only reads a model it already had to build. Five places
 strain it.
 
 **It writes versioned artifacts into your repository.** `magus agent install`
-writes agent skills into `.claude/skills/`, `.opencode/skills/`, and `AGENTS.md`,
-each stamped with a magus-internal version. `magus graph verify` reports on them:
+writes agent skills into the directories you name (`.claude/skills/`,
+`.agents/skills/`, `.opencode/skills/`), each stamped with a magus-internal
+version. It does NOT write `AGENTS.md`: that file is yours, so install prints
+the managed block for you to paste. `magus graph verify` reports on both
+surfaces, the pasted block included:
 
 ```text
-agent skills (.claude/skills): up to date (skill v23, schema v7, content ace009cb3627)
+agent skills (.claude/skills): up to date (skill v33, schema v8, content 26f270bc4a34)
+agent skills (AGENTS.md): up to date (skill v33, schema v8, content 26f270bc4a34)
 ```
 
 `MAGUS.md` lands at your repo root. The git merge driver writes your tracked

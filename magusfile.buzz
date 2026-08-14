@@ -45,6 +45,18 @@ import "spells/golang/gomod" as gomod;
 import "project/libs/gopherbuzz" as gopherbuzz;
 
 // Cross-shard remote cache via GitHub Actions Cache; self-gates on GITHUB_ACTIONS.
+//
+// The trust set is the switch: declaring the keys that verify the cache is what turns
+// the cache on. The insecure arm is an escape hatch for validating a backend BEFORE
+// minting keys, and it is deliberately second here - reaching for it as the way to
+// enable the cache is a trap that costs you the verification you thought you had.
+// remoteCacheSigningOpts returns WithInsecureRemote before it ever reads a trust set,
+// so an insecure wiring silently ignores every key in magus.yaml. ci.yaml set it that
+// way for a while and replayed unsigned artifacts the whole time.
+//
+// Two resolutions of one knob, and they can disagree: this reads raw os\env, while the
+// engine reads the parsed config (magus.yaml, then env, then flags). `insecure: false`
+// in magus.yaml with the env var set wires a backend here that the engine then refuses.
 import "spells/github/actions" as github;
 final cache_trusted = os\env("MAGUS_CACHE_REMOTE_TRUSTED_KEYS");
 final cache_insecure = os\env("MAGUS_CACHE_REMOTE_INSECURE");
@@ -126,6 +138,12 @@ magus\project({
         // drift-gates it, and a non-reproducible artifact under a drift gate fails
         // every CI run by construction. See the tapes target below.
         "tapes": {"skip_cache": "screen-records the CLI, so its bytes differ every run and a replay would show different code"},
+        // Same reasoning as tapes: it runs a real session, so real durations and
+        // output refs land in the capture and no two runs agree. Only the RENDER
+        // downstream of it (termcast-generate) is reproducible enough to cache
+        // and to gate.
+        "termcast-record": {"skip_cache": "records a real session, so its bytes differ every run and a replay would show different code"},
+        "termcast-showcase": {"skip_cache": "drives a live interactive session, so its bytes differ every run"},
     },
 });
 
@@ -775,7 +793,7 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 // artifact - the .1 source the `man` command reads, shipped with releases - so they
 // stay owned here at the root, NOT in the docs project. The docs project owns the
 // Markdown manpages (docs/manpage/*.md) instead; both flavors are serialized from the
-// same internal/manpage registry by cmd/magus-manpage (see its -format flag).
+// same internal/clispec registry by cmd/magus-manpage (see its -format flag).
 //
 // It also refreshes api.lock, the drift-gated snapshot of the public CLI surface,
 // because that is serialized from the SAME registry - the two can only disagree if
@@ -783,10 +801,10 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 // so TestAPIUpToDate's remedy was a raw `go generate` that `magus run generate`
 // never performed.
 export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("manpage/*.1", "internal/manpage/testdata/api.lock");
+    ctx.writesFiles("manpage/*.1", "internal/clispec/testdata/api.lock");
     fs\mkdirAll("manpage");
     proc\exec("go", ["run", "./cmd/magus-manpage", "-format", "roff", "-out", "manpage"]);
-    proc\exec("go", ["generate", "./internal/manpage/..."]);
+    proc\exec("go", ["generate", "./internal/clispec/..."]);
 }
 
 // CHANGELOG.md is a root artifact. Keeping its generator beside the file avoids a
@@ -824,7 +842,7 @@ export fun bindings_generate(ctx: magus\Context, args: [str]) > void !> any {
 // Regenerates the magusfile API surface lock: every member a magusfile can call on the
 // magus namespace, one dotted name per line. Named for the magusfile surface rather
 // than "api" alone, because two other things in this repo are also an API surface -
-// internal/manpage/testdata/api.lock is the CLI's, and cmd/magus/surface.go drives
+// internal/clispec/testdata/api.lock is the CLI's, and cmd/magus/surface.go drives
 // completions.
 //
 // The regeneration route is a TEST, not a generator, which is why this target exists:
@@ -908,8 +926,75 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
 // touching it. This target used to end in an `install-agents-md` call that
 // rewrote the block on every generate, which is what made AGENTS.md a hybrid
 // file and put it at odds with the Markdown formatter.
+// The globs name the SHIPPED skills rather than the whole directory, and that
+// distinction is the point. `.claude/skills/**` also claimed the two skills magus
+// does NOT write - magus-skill-authoring and magus-local-development, both
+// hand-authored and tracked by explicit .gitignore negations - so describe file
+// called them generated and the path guard warned an author off the one file
+// CLAUDE.md tells them to edit. install writes only the names it ships, and
+// --prune leaves a hand-authored skill alone, so the declaration should say the
+// same.
+//
+// Enumerated, not computed: the static read collects string LITERALS only, and a
+// pattern built at run time - from a loop, or even from string interpolation - is
+// invisible to it, flagged as a computed footprint argument rather than silently
+// accepted. So the name list is written out per destination, and
+// TestSkillsGenerateDeclaresEveryShippedSkill keeps it in step with
+// cmd/magus/skills: adding a skill without touching this fails there rather than
+// shipping an installed file magus calls hand-editable.
+//
+// One pattern per skill per destination, rather than one brace alternation per
+// destination, because these globs do not stay inside magus: EnsureMergeDriver
+// writes them into .gitattributes, and git's pattern syntax has no brace
+// expansion. A `{a,b}` list is a valid doublestar glob and a DEAD .gitattributes
+// line - the merge driver would quietly stop covering every installed skill,
+// which is the failure this declaration exists to prevent. (Buzz also reads a
+// bare {...} in a string as interpolation, so the braces needed escaping just to
+// survive the parser. Two reasons, same conclusion.)
+//
+// The trailing `*` before /** covers each skill's always-full <name>-full twin,
+// which an install writes beside the primary.
 export fun skills_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles(".claude/skills/**", ".agents/skills/**", ".opencode/skills/**");
+    ctx.writesFiles(
+        ".claude/skills/magus-architecture-review*/**",
+        ".claude/skills/magus-buzz-review*/**",
+        ".claude/skills/magus-buzz-write*/**",
+        ".claude/skills/magus-change-summary*/**",
+        ".claude/skills/magus-context-audit*/**",
+        ".claude/skills/magus-delegate-multi-agent*/**",
+        ".claude/skills/magus-docs-lookup*/**",
+        ".claude/skills/magus-handoff-journal*/**",
+        ".claude/skills/magus-query*/**",
+        ".claude/skills/magus-run*/**",
+        ".claude/skills/magus-sdk*/**",
+        ".claude/skills/magus-vcs-hygiene*/**",
+        ".claude/skills/magus-workspace-rules*/**",
+        ".agents/skills/magus-architecture-review*/**",
+        ".agents/skills/magus-buzz-review*/**",
+        ".agents/skills/magus-buzz-write*/**",
+        ".agents/skills/magus-change-summary*/**",
+        ".agents/skills/magus-context-audit*/**",
+        ".agents/skills/magus-delegate-multi-agent*/**",
+        ".agents/skills/magus-docs-lookup*/**",
+        ".agents/skills/magus-handoff-journal*/**",
+        ".agents/skills/magus-query*/**",
+        ".agents/skills/magus-run*/**",
+        ".agents/skills/magus-sdk*/**",
+        ".agents/skills/magus-vcs-hygiene*/**",
+        ".agents/skills/magus-workspace-rules*/**",
+        ".opencode/skills/magus-architecture-review*/**",
+        ".opencode/skills/magus-buzz-review*/**",
+        ".opencode/skills/magus-buzz-write*/**",
+        ".opencode/skills/magus-change-summary*/**",
+        ".opencode/skills/magus-context-audit*/**",
+        ".opencode/skills/magus-delegate-multi-agent*/**",
+        ".opencode/skills/magus-docs-lookup*/**",
+        ".opencode/skills/magus-handoff-journal*/**",
+        ".opencode/skills/magus-query*/**",
+        ".opencode/skills/magus-run*/**",
+        ".opencode/skills/magus-sdk*/**",
+        ".opencode/skills/magus-vcs-hygiene*/**",
+        ".opencode/skills/magus-workspace-rules*/**");
     magus\cmd("agent", args: ["install", ".claude/skills", "--force"], opts: {"quiet": true});
     magus\cmd("agent", args: ["install", ".agents/skills", "--force"], opts: {"quiet": true});
     magus\cmd("agent", args: ["install", ".opencode/skills", "--force"], opts: {"quiet": true});
@@ -966,11 +1051,12 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void !> any {
 // under the `gha` charm; that branch was unreachable (nothing set
 // MAGUS_INSIGHT_OUTPUT_PATH or ran this target in CI) and was removed.
 export fun postflight(ctx: magus\Context, args: [str]) > void !> any {
-    // A summary built from the typed report rather than the Markdown `magus insight report
-    // --workspace` used to render. This target only ever logged that document locally, so
-    // the counts are what a reader was actually skimming for; the full rendering lives in
-    // the console and the MCP tool, which read the same values.
-    final r = magus\insight([]);
+    // A summary built from the typed report rather than the whole Markdown document:
+    // this target only ever logged that document locally, so the counts are what a
+    // reader was actually skimming for. Both come from the workspace magus already
+    // has open, rather than by shelling a subcommand back into itself; the full
+    // rendering lives in the console and the MCP tool, which read the same values.
+    final r = magus\insight({});
     magus\log.info("hotspots: {r.hotspots.files.len()} file(s) ranked by churn against complexity");
     magus\log.info("ownership: {r.ownership.projects.len()} project(s) attributed");
     magus\log.info("affinity: {r.affinity.pairs.len()} coupled project pair(s)");
@@ -1048,7 +1134,7 @@ export fun tapes(ctx: magus\Context, args: [str]) > void !> any {
     // Declared, or the tapes and the script that stages their workspace would be
     // unclaimed: `magus describe file tapes/core-loop.tape` reported no owner, so
     // editing a tape invalidated nothing and told a reader it affected no target.
-    ctx.readsFiles("tapes/*.tape", "tapes/demo-init.sh");
+    ctx.readsFiles("tapes/*.tape", "tapes/demo-init.sh", "tapes/demo.txtar");
     ctx.writesFiles("assets/gen/*.gif");
     // try/catch, not a sentinel: proc.which RAISES when the tool is absent, so the check
     // cannot be forgotten and the helpful message stays where it was.
@@ -1062,6 +1148,71 @@ export fun tapes(ctx: magus\Context, args: [str]) > void !> any {
         magus\log.info("recording {tape.value}");
         proc\exec("vhs", [tape.value], ".", {});
     }
+}
+
+// Re-records tapes/core-loop.capture: the raw bytes a real magus prints to a real
+// pseudo-terminal, driven by tapes/core-loop.session.sh.
+//
+// Opt-in and NOT named *_generate, for the same reason `tapes` is not: a session
+// is not byte-reproducible, so a drift gate over it would be red by construction.
+// The difference from `tapes` is where the unreproducible part stops. A GIF is
+// unreproducible all the way to the artifact a reader sees, so nothing about it
+// can be gated; a capture is unreproducible only up to the bytes, and RENDERING
+// those bytes is arithmetic - which is what termcast_generate gates.
+//
+// Run it when magus's output changes, commit the capture, and let the render
+// follow in the same commit.
+export fun termcast_record(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("tapes/core-loop.session.sh", "tapes/demo-init.sh",
+        "tapes/demo.txtar", "cmd/magus-termcast/*.go");
+    // The one capture this writes, not the glob over both: termcast_showcase owns
+    // the other, and two targets declaring one glob is MGS1020.
+    ctx.writesFiles("tapes/core-loop.capture");
+    proc\exec("go", ["run", "./cmd/magus-termcast", "-record"]);
+}
+
+// Renders tapes/core-loop.capture into the README's animated SVG.
+//
+// Deterministic - it replays committed bytes through the terminal emulator and
+// emits text - so unlike the GIF it can be drift-gated, and is. That gate is the
+// point: the GIF it replaces went stale without anything noticing, to where the
+// README's alt text described a project count magus no longer reported.
+// Re-records tapes/showcase.capture: a real INTERACTIVE session, driven by real
+// keystrokes, showing the surfaces a transcript cannot - the pinned band, the
+// failure tree beside its captured output, the picker searching the graph.
+//
+// Opt-in and not named *_generate, for the reason termcast_record is not: it
+// runs a live session and no two runs agree byte for byte. Rendering the result
+// is deterministic and is gated with the rest.
+export fun termcast_showcase(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("tapes/demo.txtar", "cmd/magus-termcast/*.go");
+    // Named, not globbed, for the reason termcast_record is.
+    ctx.writesFiles("tapes/showcase.capture");
+    proc\exec("go", ["run", "./cmd/magus-termcast", "-showcase"]);
+}
+
+export fun termcast_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("tapes/*.capture", "cmd/magus-termcast/*.go",
+        "internal/interactive/screen/*.go");
+    ctx.writesFiles("assets/gen/core-loop.svg", "assets/gen/showcase.svg");
+    proc\exec("go", ["run", "./cmd/magus-termcast"]);
+}
+
+// Renders the still SVGs of magus's interactive terminal surfaces for the docs.
+//
+// Recorded nothing: these are CONDITIONS - a run stalled on another process's
+// lock, a failed target awaiting a choice - and staging those in a live shell
+// reliably enough to record is painful. The frames come from driving the real
+// Zone, Notifier and picker through the terminal emulator, so the layout is what
+// a terminal would receive even though the scenario is staged.
+export fun termshots_generate(ctx: magus\Context, args: [str]) > void !> any {
+    // internal/cache too: the shots drive the REAL PrettyHandler, so its band
+    // is an input to the picture. Leaving it undeclared meant editing the band
+    // replayed a cached SVG of the band as it used to be.
+    ctx.readsFiles("cmd/magus-termshots/*.go", "internal/interactive/**/*.go",
+        "internal/cache/*.go");
+    ctx.writesFiles("assets/gen/terminal-*.svg");
+    proc\exec("go", ["run", "./cmd/magus-termshots"]);
 }
 
 // Builds one (goos, goarch) release binary and archives it into dist/, writing a
@@ -1617,8 +1768,8 @@ fun total_coverage(func_out: str) > str {
 // against the CWD. In CI the action supplies the same thing as BUZZ_INCLUDE_PATH.
 //
 export fun advice_test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles(".github/actions/advice/*.buzz", ".github/actions/magus/*.buzz");
-    foreach (dir in [".github/actions/advice", ".github/actions/magus"]) {
+    ctx.readsFiles(".github/actions/advice/*.buzz", ".github/actions/ci-outcome/*.buzz", ".github/actions/magus/*.buzz");
+    foreach (dir in [".github/actions/advice", ".github/actions/ci-outcome", ".github/actions/magus"]) {
         foreach (script in fs\glob(dir + "/*.buzz")) {
             magus\cmd("buzz", args: ["-t", fs\basename(script.value)], opts: {"dir": dir});
         }

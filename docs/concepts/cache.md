@@ -7,7 +7,6 @@ tags:
     cache,
     needs,
     provides,
-    claims,
     cache-key,
     invalidation,
     replay,
@@ -27,7 +26,7 @@ it once here and link there for the distributed story.
 ## Design intent
 
 - **Correctness is a declaration contract.** magus caches what a target _declares_,
-  not what it _touches_. A target's `needs`, `provides`, and `claims` (see below)
+  not what it _touches_. A target's `needs` and `provides` (see below)
   define its whole cache footprint. Under-declare an input and a stale hit slips
   through; over-declare an output and every replay snapshots more than necessary.
   The cache is only as correct as those declarations, which is why the vocabulary
@@ -44,25 +43,21 @@ it once here and link there for the distributed story.
   path. You can `ls` it, `cat` a manifest, and reason about a hit or miss with
   ordinary tools.
 
-## needs, provides, claims: a target's cache footprint
+## needs and provides: a target's cache footprint
 
-A bound [spell](spells.md) contributes three glob sets to its project. Only
-operations are runnable; these three are metadata that make caching and the
-affected set correct (see [What a spell provides](spells.md#what-a-spell-provides)).
-Binding a spell contributes its `needs`/`provides`/`claims` to a project's cache
-key and affected set even before you wire a target.
+A bound [spell](spells.md) contributes two glob sets to its project. Only
+operations are runnable; these two are metadata that make caching correct
+(see [What a spell provides](spells.md#what-a-spell-provides)). Binding a spell
+contributes its `needs`/`provides` to a project's cache key even before you
+wire a target.
 
-| Declaration    | What it is                | Role in the cache                                                  |
-| -------------- | ------------------------- | ------------------------------------------------------------------ |
-| **`needs`**    | input globs (the sources) | hashed into the cache key; also seed the affected set              |
-| **`provides`** | output globs              | snapshotted into the cache on a miss and replayed on a hit         |
-| **`claims`**   | files the spell owns      | affected-set attribution only; **not** hashed, **not** snapshotted |
+| Declaration    | What it is                | Role in the cache                                          |
+| -------------- | ------------------------- | ---------------------------------------------------------- |
+| **`needs`**    | input globs (the sources) | hashed into the cache key                                  |
+| **`provides`** | output globs              | snapshotted into the cache on a miss and replayed on a hit |
 
 Internally these map to a `Step` the cache hashes and replays: `needs` become
-`Step.Sources`, `provides` become `Step.Outputs`. `claims` do not appear in the
-`Step` at all: they attribute changed files to a project for affected-set
-computation and never touch the cache key or the snapshot. Two rules follow
-directly:
+`Step.Sources`, `provides` become `Step.Outputs`. Two rules follow directly:
 
 - **Declare every input in `needs`.** A source file that isn't matched by a `needs`
   glob doesn't enter the key, so editing it produces no miss and you replay a stale
@@ -158,6 +153,11 @@ the `Step`. magus writes these lines, in this order, into one hash:
   foreign artifact out of a shared cache, where being wrong the other way only costs hits.
 - **`projectPath`** and **`target`** - so the same sources under different targets
   key separately.
+- **`spell`** - the explicit `spell::op` filter, written only on such runs. An
+  explicit op bypasses a magusfile export that shadows the same name, so the two
+  forms run different definitions under one target name and must not share an
+  entry: without this line a compile-only `go::go-build` recorded a pass that the
+  real `go-build` target then replayed. Plain target runs hash without it.
 - **`charm:` lines** - the active [charms](charms.md), sorted by name. A
   charm-variant run (`lint:rw`) hashes differently from the bare run, because the
   charm changes behavior. Empty charms add nothing, so charm-less runs are
@@ -218,8 +218,8 @@ hashed line above yields a new key, and thus a new (empty) slot:
 - applying or dropping a charm;
 - renaming the project or target.
 
-What does **not** invalidate: a file's mtime alone (content is what's hashed), a
-`claims`-only file, or anything outside the declared `needs`.
+What does **not** invalidate: a file's mtime alone (content is what's hashed), or
+anything outside the declared `needs`.
 
 Old keys are never mutated - a miss writes a _new_ entry beside the old one - so
 invalidation is additive. Reverting a change restores the earlier key and replays
@@ -370,8 +370,9 @@ mirror that must not accumulate local entries.
 ### Granularity: project-wide vs per-target
 
 Without a target declaration, `baseStep` seeds the cache key with the project
-sources, every bound spell's claims, and the magusfile. That conservative default
-keeps an undeclared target safe, but it can make unrelated work invalidate together.
+sources (its own globs plus every bound spell's `needs`) and the magusfile. That
+conservative default keeps an undeclared target safe, but it can make unrelated
+work invalidate together.
 
 An explicit [`ctx.readsFiles(...)`](#per-target-inputs-and-outputs) call changes that
 contract. It is the target's exact source footprint: magus keeps the magusfiles
@@ -722,9 +723,8 @@ on.
 
 | Term                  | Definition                                                                                                                        |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| **needs**             | A spell's declared input globs. Hashed into the cache key (`Step.Sources`); also seed the affected set.                           |
+| **needs**             | A spell's declared input globs. Hashed into the cache key (`Step.Sources`).                                                       |
 | **provides**          | A spell's declared output globs. Snapshotted on a miss and replayed on a hit (`Step.Outputs`).                                    |
-| **claims**            | Files a spell owns, for affected-set attribution only. Never hashed and never snapshotted.                                        |
 | **Cache key**         | The hex SHA-256 of the serialized `Step`: sources, env, deps, tool versions, spell version, charms, project, and target.          |
 | **Content-addressed** | Stored by content hash: identical output bytes are stored once, and a blob's name is its own SHA-256.                             |
 | **Manifest**          | The JSON record of one cache entry: project, key, target, and one record (path, blob, mode, size, symlink) per output.            |
@@ -736,7 +736,7 @@ on.
 
 ## See also
 
-- [spells.md](spells.md): where `needs`/`provides`/`claims` are declared, and what a bound spell contributes.
+- [spells.md](spells.md): where `needs`/`provides` are declared, and what a bound spell contributes.
 - [dependencies.md](dependencies.md): how `depends_on`'s `dep:` propagation and a `magus\needs` call each interact with this cache key.
 - [operations.md](operations.md): the run hierarchy and the `target.result` event that fires on a hit.
 - [targets.md](targets.md): what a Target is - the unit a cache key is computed and replayed for.

@@ -51,9 +51,9 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 : Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)
 
 **--race** *string*
-: Run the same target repeatedly to surface order-dependent failures
+: Race-condition diagnostics (watch|replay, comma-combinable); omit to disable. watch: attribution-gated fsnotify detection (MGS4001/4002/4004), emitting only when \>=2 projects' output snapshots confirm a shared write. replay: re-runs cacheable output-declaring projects sequentially to content-hash outputs for non-determinism (MGS4003); roughly doubles wall-clock.
 
-**--shard** *int*
+**--shard** *string*
 : This run's shard index within a CI matrix; paired with --n-shards
 
 **--step**
@@ -64,6 +64,9 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 
 **--upstream**
 : With --graph: show dependents instead of dependencies
+
+**--wait**
+: With --detach, block until the run finishes and exit with its status
 
 ## Targets
 

@@ -125,11 +125,11 @@ func TestBuiltinCharmsUnchanged(t *testing.T) {
 	}
 }
 
-// TestTSRequiredGlobsSupersetOfClaimed guards D1/D2: mgs_listRequiredGlobs must
-// cover every module-variant extension and lockfile format mgs_listClaimedGlobs
-// claims, so editing a .mts/.cts/.mjs/.cjs file or bumping a yarn/bun lockfile
-// marks the project affected instead of silently missing it.
-func TestTSRequiredGlobsSupersetOfClaimed(t *testing.T) {
+// TestTSRequiredGlobsCoverModuleVariants guards D1/D2: mgs_listRequiredGlobs must
+// cover every module-variant extension and lockfile format, so editing a
+// .mts/.cts/.mjs/.cjs file or bumping a yarn/bun lockfile invalidates the cache
+// instead of silently missing it.
+func TestTSRequiredGlobsCoverModuleVariants(t *testing.T) {
 	ts, ok := Builtins()["typescript"]
 	require.True(t, ok, "ts spell missing")
 

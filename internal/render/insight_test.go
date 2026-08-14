@@ -18,61 +18,6 @@ func TestHeatBucket(t *testing.T) {
 	assert.Equal(t, 4, heatBucket(99, 10), "over max clamps to hottest")
 }
 
-func TestWriteHotspotMermaid(t *testing.T) {
-	out := types.HotspotOutput{
-		Commits: 100,
-		Nodes: []types.Node{
-			{Path: "api", Churn: 10, Authors: 3, BlastRadius: 2, Children: []string{"core"}},
-			{Path: "core", Churn: 1},
-		},
-	}
-
-	var b strings.Builder
-	require.NoError(t, WriteHotspotMermaid(&b, out))
-	s := b.String()
-
-	assert.Contains(t, s, "graph")
-	assert.Contains(t, s, "commits=10")
-	assert.Contains(t, s, "authors=3")
-	assert.Contains(t, s, "BR=2")
-	assert.Contains(t, s, "classDef heat4")
-	assert.Contains(t, s, "api --> core", "dependency edge is drawn")
-}
-
-func TestWriteAffinityMermaid(t *testing.T) {
-	out := types.AffinityOutput{
-		Pairs: []types.CoChange{
-			{A: "api", B: "web/studio", Count: 4, Hidden: true},
-		},
-	}
-
-	var b strings.Builder
-	require.NoError(t, WriteAffinityMermaid(&b, out))
-	s := b.String()
-
-	assert.Contains(t, s, "graph")
-	assert.Contains(t, s, `|"4"|`, "edge is labelled with the co-change count")
-	assert.Contains(t, s, "-.->", "hidden affinity is drawn dashed")
-	assert.Contains(t, s, "web_studio")
-}
-
-func TestWriteHotspotQuadrant(t *testing.T) {
-	out := types.HotspotOutput{
-		Files: []types.FileHotspot{
-			{Path: "api/hot.go", Commits: 20, Complexity: 100, Score: 2000},
-			{Path: "api/cool.go", Commits: 2, Complexity: 10, Score: 20},
-		},
-	}
-
-	var b strings.Builder
-	require.NoError(t, WriteHotspotQuadrant(&b, out))
-	s := b.String()
-
-	assert.Contains(t, s, "quadrantChart")
-	assert.Contains(t, s, "Refactor now")
-	assert.Contains(t, s, `"api/hot.go": [1.000, 1.000]`, "busiest+most-complex file maps to the top-right corner")
-}
-
 func TestWriteInsightMarkdown(t *testing.T) {
 	r := types.InsightReport{
 		Hotspots: types.HotspotOutput{
@@ -106,7 +51,7 @@ func TestWriteInsightMarkdownGitHubSafe(t *testing.T) {
 		Affinity: types.AffinityOutput{Pairs: []types.CoChange{{A: ".", AName: "magus", B: "docs", BName: "docs", Count: 1}}},
 	}
 	var b strings.Builder
-	require.NoError(t, WriteInsightMarkdown(&b, report, WithMermaidSafe()))
+	require.NoError(t, WriteInsightMarkdown(&b, report))
 	got := b.String()
 	assert.Contains(t, got, "```mermaid")
 	assert.NotContains(t, got, "quadrantChart")

@@ -259,42 +259,6 @@ export object Unreferenced {
     answer: KnowledgeAnswer = KnowledgeAnswer{},
 }
 
-export object KnowledgeGodNode {
-    id: str = "",
-    kind: str = "",
-    label: str = "",
-    degree: int = 0,
-    @"in": int = 0,
-    @"out": int = 0,
-}
-
-export object KnowledgeOrphan {
-    id: str = "",
-    kind: str = "",
-    label: str = "",
-    reason: str = "",
-}
-
-export object KnowledgeDocCoverage {
-    kind: str = "",
-    total: int = 0,
-    documented: int = 0,
-    percent: int = 0,
-    undocumented: [str] = [],
-}
-
-export object KnowledgeStats {
-    definition: str = "",
-    nodeCount: int = 0,
-    edgeCount: int = 0,
-    gods: [KnowledgeGodNode] = [],
-    orphans: [KnowledgeOrphan] = [],
-    coverage: [KnowledgeDocCoverage] = [],
-    isolatedCount: int = 0,
-    componentCount: int = 0,
-    largestComponentSize: int = 0,
-}
-
 export object InsightReport {
     hotspots: Hotspots = Hotspots{},
     affinity: Affinity = Affinity{},
@@ -302,7 +266,6 @@ export object InsightReport {
     trend: Trend = Trend{},
     volatility: Volatility = Volatility{},
     unreferenced: Unreferenced = Unreferenced{},
-    graphStats: KnowledgeStats = KnowledgeStats{},
 }
 
 export object ProjectEntry {
@@ -398,7 +361,8 @@ export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > Drift
 export extern fun doctor(args: [str], opts: {str: any} = {<str: any>}) > DoctorReport !> any;
 export extern fun fatal(msg: str = "") > void;
 export extern fun hasCharm(name: str) > bool;
-export extern fun insight(args: [str], opts: {str: any} = {<str: any>}) > InsightReport !> any;
+export extern fun insight(opts: {str: any} = {<str: any>}) > InsightReport !> any;
+export extern fun insightMarkdown(opts: {str: any} = {<str: any>}) > str !> any;
 export extern fun ls() > Projects !> any;
 export extern fun project(config: any, opts: any = null) > void;
 export extern fun projectGraph() > Graph !> any;

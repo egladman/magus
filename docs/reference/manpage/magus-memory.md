@@ -28,16 +28,22 @@ or that link to something no longer there. The same entries are reachable
 through the magus_memory MCP tool and the console, so a journal written from
 the CLI is readable by an agent without either side learning a new format.
 
-## Options
+### memory put options
 
 **--body** *string*
-: Short why/caption, decision and plan only (memory put)
+: Short why/caption, decision and plan only
+
+**--ref** *string*
+: Entry ref in 'kind: target' form; repeat for multiple refs
+
+**--reference** *string*
+: Name of another entry this one relates to; repeat as needed
 
 **--status** *string*
-: Lifecycle label, e.g. accepted, active, done, stale (memory put)
+: Lifecycle label, e.g. accepted, active, done, stale
 
 **--type** *string*
-: Entry type: pointer, decision, or plan (memory put)
+: Entry type: pointer, decision, or plan
 
 ## Subcommands
 

@@ -328,16 +328,14 @@ type TrackedFileReporter interface {
 // IgnoredFileReporter is an optional capability (sibling of TrackedFileReporter)
 // for VCSDriver implementations that can report which paths the VCS ignores.
 //
-// It answers a different question from TrackedFiles, and the difference is the
-// point. "Untracked" lumps together a file nobody has committed YET (a doc being
-// written) with one nothing should ever commit (a generated artifact); only the
-// ignore rules distinguish them, because a human wrote down which is which. A
-// derived artifact that must be reproducible from a clean checkout therefore
-// filters on ignored, not on untracked - otherwise it would drop work in progress.
+// Different from TrackedFiles, and the difference is the point: "untracked" lumps
+// a file nobody has committed YET together with one nothing should ever commit,
+// and only the ignore rules distinguish them. A derived artifact that must be
+// reproducible from a clean checkout filters on IGNORED, or it drops work in
+// progress.
 //
-// Callers type-assert for it and skip the question when a backend lacks it, rather
-// than guessing: treating an unknown answer as "not ignored" keeps a backend
-// without ignore support behaving exactly as it did before.
+// Callers type-assert and skip the question when a backend lacks it, so treating
+// an unknown answer as "not ignored" keeps such a backend behaving as before.
 type IgnoredFileReporter interface {
 	// IgnoredFiles returns the subset of paths the VCS ignores, as given. Paths are
 	// interpreted relative to dir. An empty paths slice returns no results.
@@ -394,17 +392,16 @@ type Conflict struct {
 // unresolved paths in bulk.
 //
 // A merge driver is the wrong shape for generated files: the VCS invokes one per
-// conflicted path, inside its own index manipulation, so cost scales with the conflict
+// conflicted path inside its own index manipulation, so cost scales with the conflict
 // count and a regeneration cannot run there. Deciding every path first, regenerating
 // once, then staging inverts that, and is the only way to settle ConflictKindDeleted,
 // which a driver is never called for.
 //
-// Callers type-assert for it and degrade (tell the user to resolve by hand) when a
-// backend lacks it.
+// Callers type-assert and degrade to "resolve by hand" when a backend lacks it.
 //
-// Every method takes the repository root and root-relative slash paths. A VCS reports
-// conflict paths relative to the top level but reads pathspecs relative to the process
-// directory, so mixing the two addresses the wrong files instead of failing.
+// Every method takes the repository root and root-relative slash paths: a VCS reports
+// conflict paths from the top level but reads pathspecs from the process directory, so
+// mixing the two addresses the wrong files instead of failing.
 type ConflictResolver interface {
 	// Conflicts returns the unresolved paths of the in-progress operation. No
 	// operation in progress is not an error: it returns none.
@@ -534,8 +531,8 @@ func (d DriftResult) BuzzObject() BuzzObject {
 }
 
 // ClassifyDrift names the cause of a declared output that moved, and the sentence to
-// show for it. It is the one place that fork is decided, so the generate gate and
-// `magus vcs add` cannot describe the same condition two different ways.
+// show for it - the one place that fork is decided, so the generate gate and
+// `magus vcs add` cannot describe one condition two ways.
 //
 // The fork is on WHY, not on how bad it is:
 //
@@ -569,27 +566,20 @@ func ClassifyDrift(inputDirty bool, magusVersion string) (DiagnosticCode, string
 // SplitExplainedOutputs divides the dirty declared outputs into the ones this change
 // accounts for and the ones it does not.
 //
-// It backs both `magus vcs add` and doctor's generated-drift check, which ask the same
-// question at different moments - staging time and any time. `vcs add` classifies by declared GLOB, which answers "is this path generated" and
-// nothing else - so it stages whatever bytes sit at an output path while claiming, in its
-// own help text, to be staging "the generated outputs a source change produced". That is a
-// causal claim it never checked. Stale output from an abandoned experiment, or from a
-// generator run by a DIFFERENT magus build, staged identically to fresh output.
+// It backs both `magus vcs add` and doctor's generated-drift check. Classifying by
+// declared GLOB alone answers "is this path generated" and nothing else, so `vcs add`
+// staged whatever bytes sat at an output path while claiming to stage "the generated
+// outputs a source change produced" - a causal claim it never checked.
 //
-// The check is the one magus.diagnoseDrift (std/magus.go) already codifies for the
-// generate gate, read off the classification this command has already computed rather
-// than re-probing the VCS: an output is EXPLAINED when some project whose declared output
-// glob claims it also has a dirty declared SOURCE in this same change. That is
-// MGS4006's shape - an input moved, so regeneration is expected and the two belong in one
-// commit. An output with no dirty input behind it is the other branch: either it was
-// produced by a different magus version than the committed form (MGS4005) or a generator
-// here is not deterministic (MGS4003). Neither is something to sweep into a commit.
+// An output is EXPLAINED when some project whose output glob claims it also has a dirty
+// declared SOURCE in this change. That is MGS4006's shape. An output with no dirty input
+// behind it is the other branch: a different magus version produced the committed form
+// (MGS4005), or a generator is not deterministic (MGS4003).
 //
-// Role, not the raw glob sets, decides what counts as a dirty input. A committed
-// generated file frequently ALSO matches its own project's source globs (docs declares
-// `**/*.md` as sources and generates `reference/**/*.md` into that same tree), and letting
-// it count would make every such file explain itself. FileEntry.Role already reports
-// "output" whenever both match, for exactly this reason: the regeneration rule dominates.
+// ROLE, not the raw glob sets, decides what counts as a dirty input: a committed
+// generated file frequently also matches its project's source globs, and letting that
+// count would make every such file explain itself. FileEntry.Role reports "output"
+// whenever both match, for exactly this reason.
 func SplitExplainedOutputs(files []FileEntry, alsoChangedIn map[string]bool) (explained, unexplained []string) {
 	inputMoved := SourceProjects(files)
 	// A source change that is already COMMITTED explains its output just as well as a

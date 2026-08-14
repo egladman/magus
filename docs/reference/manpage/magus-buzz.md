@@ -35,8 +35,8 @@ Server Protocol over stdio for an editor integration.
 **-C** *string*
 : Working directory for the REPL's import resolution (default: cwd)
 
-**-e** *string*
-: Execute code given on the command line instead of a file
+**-e** *code*
+: Execute \`code\` given on the command line instead of a file
 
 **--embedded**
 : Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine

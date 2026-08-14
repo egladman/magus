@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interactive"
 )
@@ -48,10 +49,7 @@ func initCmd(ctx context.Context, root string, args []string) error {
 
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	useGlobal := fs.Bool("global", false, "Write only the global config ($XDG_CONFIG_HOME/magus/magus.yaml); skips workspace bootstrap")
-	useLocal := fs.Bool("local", false, "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/")
-	force := fs.Bool("force", false, "Overwrite an existing config file")
-	vcsName := fs.String("vcs", "", "VCS to wire the merge driver for (git|hg); prompts when omitted on a TTY")
+	inf := gen.BindInit(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus init [flags]")
 		fmt.Fprintln(os.Stderr, "")
@@ -73,17 +71,17 @@ func initCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	if *useGlobal && *useLocal {
+	if inf.Global && inf.Local {
 		return fmt.Errorf("init: --global and --local are mutually exclusive")
 	}
 
 	// --global: write XDG config only, skip workspace bootstrap.
-	if *useGlobal {
+	if inf.Global {
 		cfgPath, err := xdgConfigPath()
 		if err != nil {
 			return fmt.Errorf("init --global: %w", err)
 		}
-		if err := config.Init(cfgPath, *force); err != nil {
+		if err := config.Init(cfgPath, inf.Force); err != nil {
 			return err
 		}
 		slog.InfoContext(ctx, "init: wrote global config", slog.String("path", cfgPath))
@@ -94,7 +92,7 @@ func initCmd(ctx context.Context, root string, args []string) error {
 	// Resolve config path: XDG (default) or CWD (--local).
 	var cfgPath string
 	var isLocal bool
-	if *useLocal {
+	if inf.Local {
 		cfgPath = config.Filename
 		isLocal = true
 	} else {
@@ -105,7 +103,7 @@ func initCmd(ctx context.Context, root string, args []string) error {
 		cfgPath = p
 	}
 
-	if err := config.Init(cfgPath, *force); err != nil {
+	if err := config.Init(cfgPath, inf.Force); err != nil {
 		return err
 	}
 	slog.InfoContext(ctx, "init: wrote config", slog.String("path", cfgPath))
@@ -114,7 +112,7 @@ func initCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	if err := installMergeDriverForInit(ctx, root, *vcsName); err != nil {
+	if err := installMergeDriverForInit(ctx, root, inf.VCS); err != nil {
 		return err
 	}
 
@@ -174,7 +172,7 @@ func printInitNextSteps(_ context.Context, cfgPath string, scaffolded, isLocal b
 	// so it does not belong in repo bootstrap - init just says where to look.
 	interactive.Emit(os.Stderr, "")
 	interactive.Emit(os.Stderr, "let an AI agent use this workspace over the daemon (graph-aware skills + MCP tools):")
-	interactive.Emit(os.Stderr, "  magus agent install .agents/skills --agents-md  # Agent Skills + AGENTS.md guidance")
+	interactive.Emit(os.Stderr, "  magus agent install .agents/skills  # Agent Skills; it also prints the AGENTS.md block to paste")
 	interactive.Emit(os.Stderr, "  magus config mcp connector create --name <client>  # mint a token, then configure the client")
 }
 

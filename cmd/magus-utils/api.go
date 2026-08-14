@@ -5,9 +5,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/egladman/magus/internal/clispec"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/generate/emit"
-	"github.com/egladman/magus/internal/manpage"
 )
 
 // runAPI writes magus's public CLI API as a sorted .lock snapshot (the same plain
@@ -20,7 +20,7 @@ func runAPI(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	data := []byte(strings.Join(manpage.API(config.KnownKeys()), "\n") + "\n")
+	data := []byte(strings.Join(clispec.API(config.KnownKeys()), "\n") + "\n")
 	if *out == "" {
 		_, err := os.Stdout.Write(data)
 		return err

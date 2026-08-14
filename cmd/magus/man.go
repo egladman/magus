@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/egladman/magus/internal/manpage"
+	"github.com/egladman/magus/internal/clispec"
 )
 
 func manCmd(args []string) error {
@@ -36,7 +36,7 @@ func manCmd(args []string) error {
 	if err := os.MkdirAll(*dir, 0o755); err != nil {
 		return fmt.Errorf("magus man install: create %s: %w", *dir, err)
 	}
-	pages := manpage.RoffPages("", version)
+	pages := clispec.RoffPages("", version)
 	for _, page := range pages {
 		path := filepath.Join(*dir, page.Name)
 		if err := os.WriteFile(path, page.Content, 0o644); err != nil {

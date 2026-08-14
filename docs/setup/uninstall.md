@@ -68,7 +68,7 @@ The paths above are user-global. Each repository you ran magus in also holds:
 | `.magus/`                      | the [build cache](../concepts/cache.md): `cas/`, `manifests/`, `logs/`, and the mtime memo. Lives in the workspace rather than under XDG; override with `MAGUS_CACHE_DIR` |
 | `magus.yaml`, `magusfile.buzz` | written by `magus init`. Your declarations, tracked in git; delete them only if you are removing magus from the repo itself                                               |
 | `.claude/skills/magus-*`       | present only if you ran [`magus agent install`](../guides/integrations/agents.md)                                                                                         |
-| `AGENTS.md`                    | the file is yours; magus maintains only the section between `# BEGIN magus-generated` and `# END magus-generated`                                                         |
+| `AGENTS.md`                    | the file is yours and magus never writes it; delete the block you pasted between `<!-- magus:skills:begin ... -->` and `<!-- magus:skills:end -->`                        |
 
 `magus init` also wires git, in three places a `rm` will not reach:
 

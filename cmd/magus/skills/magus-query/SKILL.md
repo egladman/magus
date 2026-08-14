@@ -162,7 +162,7 @@ ownership only, never blame-inferred.{{end}}
 
 - `--global` unions every workspace registered in config
   (`knowledge.workspaces`); IDs are namespaced per workspace (`web//spell:go`).
-- `magus affected`, `magus insight`, and `magus describe` sit alongside the graph;
+- `magus affected`, `magus_insight`, and `magus describe` sit alongside the graph;
   `magus graph export -o json` dumps the whole graph for bulk analysis.
 - To show a PR's domain impact, run `magus graph diff --rev main -o markdown` for a CI
   comment{{if .Full}} (nodes/edges added, removed, or changed); `--rev` builds the base graph from

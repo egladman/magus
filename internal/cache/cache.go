@@ -134,7 +134,13 @@ type Step struct {
 	// the target does, so like Charms they MUST key the cache: without them a run
 	// with different args replays the previous run's result. Order is significant
 	// (`-run X` is not `X -run`), so unlike Charms they are never sorted.
-	ExtraArgs       []string
+	ExtraArgs []string
+	// Spell is the explicit `spell::op` filter of the invocation, empty on a plain
+	// target run. It keys the cache because the filter selects WHICH DEFINITION
+	// runs: an explicit op bypasses the magusfile export shadowing the same name,
+	// so a compile-only go::go-build must not satisfy (or be satisfied by) the
+	// go-build target's entry.
+	Spell           string
 	SpellDefVersion string   // binary fingerprint; forces miss on magus upgrade
 	ToolVersions    []string // "spell:version" strings; forces miss on toolchain upgrade
 	// PlatformIndependent drops the host-platform line from the key, so one entry
@@ -154,6 +160,12 @@ type Step struct {
 	// step) and copied onto every step. Display-only provenance for the output
 	// descriptor (recordOutput) - never hashed, so a run before vs. after a commit still
 	// shares a cache entry when the tree content is unchanged.
+	// VCSName is the provider the two above came from ("git", "hg", "jj"). Recorded
+	// because a bare hash does not identify its own kind: a git SHA and an hg node id
+	// are both 40 hex, and a colocated jj repo can yield either a git commit or a jj
+	// commit_id. Comparing two revisions without it is a confident answer to the
+	// wrong question.
+	VCSName  string
 	Revision string
 	Dirty    bool
 }
@@ -521,6 +533,10 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 			// directly above the cause line.
 			slog.String("error", types.CauseText(runErr)),
 			slog.String("ref", ref),
+			// The captured log's path on disk. Carried so the pretty handler can
+			// make the ref a real hyperlink without resolving anything: a
+			// file:// link needs no daemon running, so it cannot be dead.
+			slog.String("log", lp),
 		)
 		if rc.onError != nil {
 			rc.onError(runErr)
@@ -559,6 +575,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				slog.Int64("duration", int64(result.Duration)),
 				slog.String("error", types.CauseText(snapErr)),
 				slog.String("ref", ref),
+				slog.String("log", lp),
 			)
 			if rc.onError != nil {
 				rc.onError(snapErr)
@@ -626,6 +643,10 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 		DurationMs:  dur.Milliseconds(),
 		Revision:    s.Revision,
 		Dirty:       s.Dirty,
+		Spell:       s.Spell,
+		ExtraArgs:   s.ExtraArgs,
+		VCSName:     s.VCSName,
+		Platform:    c.platform,
 	}
 	if runErr != nil {
 		d.ErrMsg = runErr.Error()
@@ -725,15 +746,11 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 	// exclusive step takes the write lock (runs alone); every other step takes the
 	// read lock (runs in parallel with peers but never alongside an exclusive step).
 	//
-	// Ordering is load-bearing: take the lock *after* waitForDeps (so an exclusive
-	// step's own deps aren't blocked by its own writer intent) and *before* the
-	// limiter slot (so a pending writer never holds a slot and starves a dependent
-	// of the slot it needs). That ordering is also why the lock spans the *whole*
-	// c.Run below, not just fn: moving it inside c.Run would put it after the slot
-	// and reintroduce the starvation it avoids. The cost is that an exclusive
-	// *cache hit* also serializes its replay, which is fine: exclusive targets are
-	// rare and typically NoCache. A batch with no exclusive steps only ever takes
-	// uncontended read locks.
+	// Ordering is load-bearing: take the lock AFTER waitForDeps (so a step's own
+	// deps aren't blocked by its writer intent) and BEFORE the limiter slot (so a
+	// pending writer never holds a slot and starves a dependent). That is also why
+	// the lock spans the whole c.Run rather than just fn - moving it inside would
+	// put it after the slot and reintroduce the starvation.
 	var isolationMu sync.RWMutex
 	acquireIsolation := func(exclusive bool) func() {
 		if exclusive {
@@ -1227,14 +1244,13 @@ func (c *Cache) logPath(projectPath, hash string) string {
 // Silent mode (WithSilent) bubbles up only target-marked notice lines, and on
 // failure dumps just the log's tail.
 //
-// The log file is retained in every mode (pass or fail): Run persists it to the
-// output store under a target-output ref, so a failing target's exact output stays
-// retrievable via `magus query ref...`. It is overwritten on the next run of the key.
+// The log file is retained in every mode: Run persists it to the output store
+// under a ref, so a failing target's exact output stays retrievable. It is
+// overwritten on the next run of the key.
 //
-// Alongside the raw logF (which drives the terminal replay/dumps below, unchanged),
-// output is line-tapped into structured journal events tagged with project/target/
-// stream. The records are returned for the output store and streamed to the run's
-// sink; the raw paths are untouched so the live view and failure dumps stay verbatim.
+// Output is also line-tapped into structured journal events for the output store
+// and the run's sink. The raw paths are untouched so the live view and failure
+// dumps stay verbatim.
 func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target string, fn func(context.Context) error) ([]byte, error) {
 	quiet := c.logLevel >= slog.LevelError
 	// Collapse withholds live output the same way quiet does, but at default
@@ -1373,6 +1389,13 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 				_, _ = io.WriteString(os.Stderr, ann.Quote(string(data)))
 				_, _ = fmt.Fprintln(os.Stderr)
 			}
+		default:
+			// The structured formats (text, json) stream target output live and
+			// carry project, target, error and ref on the cache.error record, so
+			// there is nothing to replay and no header to add. Spelled out rather
+			// than left implicit: an unvalidated log.format used to land here and
+			// print nothing at all, which is why config is re-validated after the
+			// environment is applied.
 		}
 		// The failed log is retained (not removed): Run persists it to the output
 		// store under a ref so the exact failing output stays retrievable via

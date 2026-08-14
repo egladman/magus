@@ -39,7 +39,6 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 	for _, spec := range spellruntime.Builtins() {
 		opts := []spells.Option{
 			spells.WithSources(spec.Needs...),
-			spells.WithClaims(spec.Claims...),
 			spells.WithIgnoreDirs(spec.IgnoreDirs...),
 			spells.WithManifests(spec.Manifests...),
 			spells.WithOutputs(spec.Provides...),
@@ -537,7 +536,6 @@ func loadLocalBuzzSpell(ctx context.Context, path string) (spells.Descriptor, bo
 func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 	opts := []spells.Option{
 		spells.WithSources(m.Needs...),
-		spells.WithClaims(m.Claims...),
 		spells.WithIgnoreDirs(m.IgnoreDirs...),
 		spells.WithManifests(m.Manifests...),
 		spells.WithOutputs(m.Provides...),

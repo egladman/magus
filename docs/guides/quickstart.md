@@ -51,6 +51,12 @@ magus knows each target's declared inputs and outputs, so it caches results and
 can compute which projects a change actually affects. That is the whole value
 proposition, and it is also why running the raw tool underneath defeats it.
 
+Which looks like this: a cold run does the work, the same command again replays
+every result from cache, and after one file changes only the project that file
+reaches runs at all.
+
+![A terminal recording: magus ls lists the projects, magus run ci reports 0 cached and 4 ran, the same command again reports 4 cached and 0 ran, then one edited file makes magus affected ci report 4 cached and 1 ran](../../assets/gen/core-loop.svg)
+
 Deeper: [Targets](../concepts/targets.md), [Workspace](../concepts/workspace.md),
 [Spells](../concepts/spells.md), [Cache](../concepts/cache.md).
 
@@ -164,18 +170,19 @@ pass. It parses the shell rather than pattern-matching it, so a command cannot
 evade the guard by adding an environment prefix or a shell indirection:
 
 ```sh
-magus hook -- go test ./...                 # deny: magus run test covers this
-magus hook -- env -u GOROOT go test ./...   # deny: same command, prefix peeled
-magus hook -- magus run test                # pass
+printf '%s' 'go test ./...' | magus hook -o name               # deny: magus run test covers this
+printf '%s' 'env -u GOROOT go test ./...' | magus hook -o name # deny: same command, prefix peeled
+printf '%s' 'magus run test' | magus hook -o name              # pass
 ```
 
-It denies on three triggers: what cannot be undone (whole-tree VCS operations),
-what WRITES into the working tree (codegen, formatters, build output), and what
-has an exact magus equivalent. Everything else it explains or ignores.
+It denies on four triggers: what cannot be undone (whole-tree VCS operations),
+what WRITES into the working tree (codegen, formatters, build output), what has
+an exact magus equivalent, and what breaks a provenance guarantee (a note).
+Everything else it explains or ignores.
 
-Wire it into your host with the ready-made scripts (Claude Code, Codex, Cursor,
-opencode, Amp, Zed are all covered):
-[Agents: guard hooks](integrations/agents.md#guard-hooks).
+Wire it into your host with the ready-made scripts:
+[The guard](integrations/agents/guard.md), with a setup page per host behind
+[Agents](integrations/agents.md).
 
 Point it at a real binary. If the guard cannot find one it says so loudly, and
 `magus doctor`'s **guard binary** check names the binary a hook would run and

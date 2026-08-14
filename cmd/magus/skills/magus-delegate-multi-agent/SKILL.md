@@ -159,7 +159,7 @@ Inspect the relevant target and projects:
 ```sh
 magus describe target <target> -o json
 magus graph deps -o json
-magus insight affinity -o json
+magus_insight lens=affinity
 magus explain project:<path> -o json
 ```
 

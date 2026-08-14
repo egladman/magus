@@ -62,7 +62,7 @@ and the decoder keys they map to is **single-sourced** in
 [`internal/spellruntime/contract.go`](../../internal/spellruntime/contract.go) as
 `OptionalContract`, and the Buzz resolver (`internal/spellruntime/resolve.go`) iterates
 that one list. A spell's `mgs_` functions decode to a `Spec` for every scalar and
-list contribution (`needs`, `provides`, `claims`, `version_cmd`, `opaque`) and
+list contribution (`needs`, `provides`, `version_cmd`, `opaque`) and
 for record-shaped ops (`{bin, args, charms}`).
 
 An op is a command or a service; a function-valued op is `fun(Target) > Command` or

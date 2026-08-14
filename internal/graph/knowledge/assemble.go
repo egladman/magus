@@ -224,14 +224,12 @@ func AssembleShards(in Inputs) []Shard {
 	// path across the shards above; its dir attrs fold onto the structural dir nodes
 	// containsChain emitted in those shards.
 	//
-	// Symbol paths are held OUT of @dirs and aggregated into their own project's @symbols
-	// shard instead. @dirs is merged into the default graph, and assembleDirs emits a node
-	// per directory - so folding symbol paths in here MINTED dir nodes for directories the
-	// default graph does not otherwise contain, purely because a local SCIP index existed.
-	// That made MAGUS.md and gen/knowledge-graph.json vary between a developer who had run
-	// `magus graph build` and CI, which never does: the same source produced different
-	// committed bytes, and the drift gate fired on the difference. A shard's contents must
-	// be visible exactly when its own layer is loaded.
+	// Symbol paths are held OUT of @dirs and aggregated into their project's @symbols
+	// shard. @dirs merges into the default graph and emits a node per directory, so
+	// folding symbol paths in MINTED dir nodes purely because a local SCIP index existed -
+	// making the committed graph differ between a developer who had run `magus graph build`
+	// and CI, which never does. A shard's contents must be visible exactly when its own
+	// layer is loaded.
 	if len(pathToNode) > 0 {
 		churnByPath := make(map[string]int, len(in.VCS))
 		for _, e := range in.VCS {
@@ -276,17 +274,14 @@ func AssembleShards(in Inputs) []Shard {
 }
 
 // containsChain builds the directory containment tree from a project down to a
-// path-bearing leaf node (a file or doc), returning a KindDir node for each directory
-// between the project root and the leaf plus the chain of `contains` edges:
-// project -> topdir -> ... -> parentdir -> leaf. It replaces a single flat
-// project -> leaf edge so a directory (a subsystem/package) is a first-class node -
-// the granularity agent memory anchors to and dir-level coupling/churn reads against.
+// path-bearing leaf, returning a KindDir node per intervening directory plus the chain
+// project -> topdir -> ... -> leaf. It replaces a flat project -> leaf edge so a directory
+// is a first-class node - the granularity agent memory anchors to and dir-level
+// coupling/churn reads against.
 //
-// Dir nodes and edges dedup across shards on merge (a directory holds files from the
-// buzz, docs, and symbols shards, each of which emits the same chain for its own
-// files). A leaf sitting directly in the project root yields just project -> leaf, as
-// before. Paths are workspace-relative and slash-separated, so path (not filepath) is
-// the right splitter regardless of host OS.
+// Dir nodes and edges dedup across shards on merge. A leaf directly in the project root
+// yields just project -> leaf. Paths are workspace-relative and slash-separated, so path
+// (not filepath) is the right splitter regardless of host OS.
 func containsChain(projectPath, leafPath, leafID string) ([]types.KnowledgeNode, []types.KnowledgeEdge) {
 	// A loop precondition, not a second line of defense: every caller already gates on
 	// ownership, which refuses an escaping path. It stays because the loop below is
@@ -346,13 +341,13 @@ func projectContainsFile(projectPath, file string) bool {
 // inside it, and nothing else.
 //
 // Every path in the graph is workspace-relative and slash-separated, so anything absolute
-// or holding a ".." segment names a location the workspace does not own. The graph is
-// committed, published, and shared through the remote cache, so a node reaching outside
-// leaks a local machine's layout into all three.
+// or holding ".." names a location the workspace does not own. The graph is committed,
+// published and shared through the remote cache, so a node reaching outside leaks a local
+// machine's layout into all three.
 //
-// The root project used to own everything unconditionally, which made this reachable
-// rather than theoretical: a leaf climbing upward was adopted by ".", and the directory
-// walk minted a node for every level on the way out.
+// Reachable rather than theoretical: when the root project owned everything
+// unconditionally, a leaf climbing upward was adopted by "." and the walk minted a node
+// for every level on the way out.
 func workspaceContainsPath(p string) bool {
 	// Slash-only, deliberately: the graph's paths are documented slash-separated, so
 	// reaching for filepath here would make an explicitly deterministic, remote-shared

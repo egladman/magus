@@ -523,3 +523,152 @@ func TestParseTagsPattern(t *testing.T) {
 	_, err = parseTags(lines, "v[")
 	require.Error(t, err, "a malformed glob is a caller bug, not a silent match-nothing")
 }
+
+// Metadata is what puts a revision into every output ref, so `magus x <ref>` can say
+// which commit reproduces a run recorded on another machine. That contract belongs to
+// the DRIVER interface, not to git: a backend returning an empty ID silently degrades
+// every ref it touches to "unknown revision", and nothing else would notice.
+//
+// Each backend is skipped when its binary is absent rather than failing, so the suite
+// still means something on a machine with only git.
+//
+// The driver is named through VCSOptions.Name. Resolve's second parameter is a base
+// REF, not a name - passing "jj" there silently autodetects instead, which is what
+// once made this look like a broken jj driver.
+func TestMetadataReportsRevisionAcrossBackends(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		bin  string
+		init func(t *testing.T, dir string)
+	}{
+		{
+			name: "git",
+			bin:  "git",
+			init: func(t *testing.T, dir string) { gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"}) },
+		},
+		{
+			name: "hg",
+			bin:  "hg",
+			init: func(t *testing.T, dir string) {
+				vcsTestRun(t, dir, "hg", "init")
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644))
+				vcsTestRun(t, dir, "hg", "add", "a.txt")
+				vcsTestRun(t, dir, "hg", "commit", "-m", "init", "-u", "test")
+			},
+		},
+		{
+			name: "jj",
+			bin:  "jj",
+			init: func(t *testing.T, dir string) {
+				vcsTestRun(t, dir, "jj", "git", "init")
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644))
+				// jj's working copy IS a commit, so an edit lands in @ and shows as a
+				// diff against its parent. `jj new` closes it and starts an empty one,
+				// which is jj's equivalent of a clean tree.
+				vcsTestRun(t, dir, "jj", "new")
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := exec.LookPath(tc.bin); err != nil {
+				t.Skipf("%s not available", tc.bin)
+			}
+			dir := t.TempDir()
+			tc.init(t, dir)
+
+			res, err := Resolve(t.Context(), dir, "", types.VCSOptions{Name: tc.name})
+			require.NoError(t, err, "Resolve")
+			require.NotNil(t, res.VCS, "no driver detected for a %s repo", tc.name)
+
+			meta, err := res.VCS.Metadata(t.Context(), dir)
+			require.NoError(t, err, "Metadata")
+			assert.NotEmpty(t, meta.ID,
+				"%s reported no revision; every output ref from this backend would say 'unknown'", tc.name)
+			assert.False(t, meta.IsDirty, "a freshly committed tree is not dirty")
+		})
+	}
+}
+
+// The dirty bit is the honesty flag on a ref: it is what tells a reader the recorded
+// revision alone cannot reproduce the run. A backend that never sets it makes every
+// ref look exactly reproducible.
+func TestMetadataReportsDirtyAcrossBackends(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		bin  string
+		init func(t *testing.T, dir string)
+	}{
+		{"git", "git", func(t *testing.T, dir string) { gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"}) }},
+		{"hg", "hg", func(t *testing.T, dir string) {
+			vcsTestRun(t, dir, "hg", "init")
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644))
+			vcsTestRun(t, dir, "hg", "add", "a.txt")
+			vcsTestRun(t, dir, "hg", "commit", "-m", "init", "-u", "test")
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := exec.LookPath(tc.bin); err != nil {
+				t.Skipf("%s not available", tc.bin)
+			}
+			dir := t.TempDir()
+			tc.init(t, dir)
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("changed\n"), 0o644))
+
+			res, err := Resolve(t.Context(), dir, "", types.VCSOptions{Name: tc.name})
+			require.NoError(t, err, "Resolve")
+			require.NotNil(t, res.VCS)
+
+			meta, err := res.VCS.Metadata(t.Context(), dir)
+			require.NoError(t, err, "Metadata")
+			assert.True(t, meta.IsDirty,
+				"%s did not report an uncommitted edit; refs would claim exact reproducibility they cannot deliver", tc.name)
+		})
+	}
+}
+
+// vcsTestRun runs one VCS command in dir, skipping the test when the tool refuses to
+// initialize (a sandbox with no writable config home, say) rather than failing.
+func vcsTestRun(t *testing.T, dir, bin string, args ...string) {
+	t.Helper()
+	cmd := exec.Command(bin, args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Skipf("%s %v failed: %v\n%s", bin, args, err, out)
+	}
+}
+
+// A colocated jj workspace satisfies git's claim too, because `jj git init` writes
+// .git as jj's storage backend. Autodetect has to answer jj, or magus records git's
+// HEAD - which lags jj's working-copy commit until refs sync - as the revision an
+// output ref reproduces from, describing a tree other than the one built.
+func TestAutodetectPrefersJJInAColocatedRepo(t *testing.T) {
+	if _, err := exec.LookPath("jj"); err != nil {
+		t.Skip("jj not available")
+	}
+	dir := t.TempDir()
+	vcsTestRun(t, dir, "jj", "git", "init")
+	require.DirExists(t, filepath.Join(dir, ".jj"))
+	require.DirExists(t, filepath.Join(dir, ".git"), "jj git init is expected to colocate; this test is meaningless otherwise")
+
+	res, err := Resolve(t.Context(), dir, "", types.VCSOptions{})
+	require.NoError(t, err, "Resolve")
+	assert.Equal(t, "jj", res.Name, "a repo with .jj is driven by jj, whatever else it contains")
+	assert.Equal(t, types.VCSSourceAuto, res.Source)
+}
+
+// git stays the answer where it is the only marker, and where there is none at all.
+func TestAutodetectKeepsGitForPlainRepositoriesAndAsTheDefault(t *testing.T) {
+	repo := t.TempDir()
+	gitInitRepo(t, repo, map[string]string{"a.txt": "one\n"})
+	res, err := Resolve(t.Context(), repo, "", types.VCSOptions{})
+	require.NoError(t, err, "Resolve")
+	assert.Equal(t, "git", res.Name)
+	assert.Equal(t, types.VCSSourceAuto, res.Source)
+
+	// No marker at all: git is the fallback, and reordering builtin must not have
+	// quietly made jj the default for every unversioned directory.
+	bare, err := Resolve(t.Context(), t.TempDir(), "", types.VCSOptions{})
+	require.NoError(t, err, "Resolve")
+	assert.Equal(t, "git", bare.Name, "an unversioned directory defaults to git")
+	assert.Equal(t, types.VCSSourceDefault, bare.Source)
+}

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/libs/diagnostics"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +25,7 @@ func TestMagusCmdWarnsForTypedSubcommands(t *testing.T) {
 	}{
 		{"describe warns", "describe", true},
 		{"run warns", "run", true},
-		{"insight warns", "insight", true},
+		{"insight does not warn", "insight", false},
 		{"doctor warns", "doctor", true},
 		{"status does not warn", "status", false},
 		{"affected does not warn", "affected", false},
@@ -166,4 +167,129 @@ func raiseOpts(cause any, url string) map[string]any {
 		return nil
 	}
 	return o
+}
+
+// fakeAnalyzer is a workspace that can answer the insight lenses, recording the
+// options it was handed so a test can prove they arrived.
+type fakeAnalyzer struct {
+	types.WorkspaceRepository
+	got       types.InsightOptions
+	failTrend bool
+}
+
+func (f *fakeAnalyzer) Hotspots(_ context.Context, o types.InsightOptions) (types.HotspotOutput, error) {
+	f.got = o
+	return types.HotspotOutput{Definition: "hot"}, nil
+}
+func (f *fakeAnalyzer) Affinity(context.Context, types.InsightOptions) (types.AffinityOutput, error) {
+	return types.AffinityOutput{}, nil
+}
+func (f *fakeAnalyzer) Ownership(context.Context, types.InsightOptions) (types.OwnershipOutput, error) {
+	return types.OwnershipOutput{}, nil
+}
+func (f *fakeAnalyzer) Trend(context.Context, types.InsightOptions) (types.TrendOutput, error) {
+	if f.failTrend {
+		return types.TrendOutput{}, errors.New("no history")
+	}
+	return types.TrendOutput{}, nil
+}
+func (f *fakeAnalyzer) Volatility(context.Context) (types.VolatilityReport, error) {
+	return types.VolatilityReport{}, errors.New("no run history")
+}
+func (f *fakeAnalyzer) Unreferenced(context.Context) (types.UnreferencedOutput, error) {
+	return types.UnreferencedOutput{}, errors.New("no symbol index")
+}
+
+func TestInsightIsServedInProcess(t *testing.T) {
+	t.Parallel()
+
+	a := &fakeAnalyzer{}
+	ctx := types.WithWorkspace(t.Context(), a)
+
+	report, err := MagusInsight(ctx, nil)
+	require.NoError(t, err, "a workspace that analyses answers here, with no subprocess")
+	assert.Equal(t, "hot", report.Hotspots.Definition)
+	assert.Equal(t, 500, a.got.Commits, "the window the removed subcommand defaulted to")
+	assert.True(t, a.got.Files, "the report always carries the per-file ranking")
+}
+
+// TestInsightNeedsAWorkspace pins the cost of removing the subcommand: there is no
+// longer a nested magus to fall back to, so a caller with no workspace on the
+// context is told so rather than silently getting a different answer.
+func TestInsightNeedsAWorkspace(t *testing.T) {
+	t.Parallel()
+
+	_, err := MagusInsight(t.Context(), nil)
+	require.Error(t, err, "no workspace on the context is an error, not a fork")
+}
+
+// TestInsightRejectsAnUnknownOption keeps a mistyped key from being ignored:
+// silently dropping `comits` would quietly answer the 500-commit question instead.
+// Asserted through the exported entry point, which is the only way a caller reaches
+// the decoder - an earlier version tested a flag parser production could not reach.
+func TestInsightRejectsAnUnknownOption(t *testing.T) {
+	t.Parallel()
+
+	ctx := types.WithWorkspace(t.Context(), &fakeAnalyzer{})
+	for _, opts := range []map[string]any{
+		{"comits": 50.0},
+		{"mermaidStyle": "safe"},
+		{"workspace": true},
+		{"commits": "not a number"},
+		{"since": 90.0},
+	} {
+		_, err := MagusInsight(ctx, opts)
+		assert.Error(t, err, "opts %v must be reported, not ignored", opts)
+	}
+}
+
+// TestInsightMapsTheOptionsItTakes proves the window reaches the analyzer, rather
+// than only checking the struct the decoder returned.
+func TestInsightMapsTheOptionsItTakes(t *testing.T) {
+	t.Parallel()
+
+	a := &fakeAnalyzer{}
+	ctx := types.WithWorkspace(t.Context(), a)
+	// A Buzz number arrives as float64; an int is what a Go caller would pass.
+	_, err := MagusInsight(ctx, map[string]any{"commits": 42.0, "since": "90d"})
+	require.NoError(t, err)
+	assert.Equal(t, 42, a.got.Commits)
+	assert.Equal(t, "90d", a.got.Since)
+
+	// int64 is what a Buzz integer literal actually arrives as; float64 above covers
+	// a Buzz float. A decoder handling only float64 rejects `{commits = 50}` outright.
+	_, err = MagusInsight(ctx, map[string]any{"commits": int64(50)})
+	require.NoError(t, err, "a Buzz integer arrives as int64")
+	assert.Equal(t, 50, a.got.Commits)
+}
+
+// TestInsightMarkdownRendersTheDocument covers the surface that replaced the
+// subcommand's rendering: the same report, handed over as the page.
+func TestInsightMarkdownRendersTheDocument(t *testing.T) {
+	t.Parallel()
+
+	ctx := types.WithWorkspace(t.Context(), &fakeAnalyzer{})
+	doc, err := MagusInsightMarkdown(ctx, nil)
+	require.NoError(t, err)
+	assert.Contains(t, doc, "# Insight", "the document is the whole point of this method")
+	// click/subgraph are what the portable subset drops; quadrantChart never reached
+	// the combined report, so asserting its absence proved nothing.
+	assert.NotContains(t, doc, "click ", "the portable Mermaid subset is the default now")
+	assert.NotContains(t, doc, "subgraph ", "the portable Mermaid subset is the default now")
+}
+
+// TestInsightReportKeepsTheBestEffortSections pins the rule the CLI kept: a lens
+// whose source is missing omits its section rather than failing the whole report.
+func TestInsightReportKeepsTheBestEffortSections(t *testing.T) {
+	t.Parallel()
+
+	a := &fakeAnalyzer{}
+	report, err := buildInsightReport(t.Context(), a, types.InsightOptions{Commits: 500})
+	require.NoError(t, err, "volatility and unreferenced failing must not fail the report")
+	assert.Equal(t, "hot", report.Hotspots.Definition)
+
+	// A required lens failing IS an error: the four VCS lenses are the report.
+	a.failTrend = true
+	_, err = buildInsightReport(t.Context(), a, types.InsightOptions{})
+	require.Error(t, err)
 }

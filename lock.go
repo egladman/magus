@@ -3,6 +3,8 @@ package magus
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -18,6 +20,7 @@ import (
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
+	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/types"
 )
 
@@ -48,7 +51,15 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 	for _, p := range projects {
 		paths = append(paths, p.Path)
 	}
-	l := newProjectLocker(resolveCacheDir(m.ws.Root, m.cfg), noWaitLocks())
+	// The CLI and the daemon stamp invocation ancestry at their own entry points; a
+	// LIBRARY caller (a Go test driving magus in-process) has none, so reentrantErr
+	// could never fire for it and a re-entrant acquire hung instead of reporting
+	// MGS3007. The env var is already in this process - read it here so the third
+	// entry point is covered too, and only when nothing upstream stamped one.
+	if len(types.InvocationAncestorsFromContext(ctx)) == 0 {
+		ctx = types.WithInvocationAncestors(ctx, procrun.AncestorsFromEnv())
+	}
+	l := newProjectLocker(resolveCacheDir(m.ws.Root, m.cfg), m.ws.Root, noWaitLocks())
 	release, err := l.acquireAll(ctx, paths)
 	if err != nil {
 		return nil, err
@@ -73,16 +84,12 @@ const rootWatchdogInterval = 30 * time.Second
 // watchWorkspaceRoot releases the run's locks if the workspace root disappears
 // underneath it, and returns a stop func.
 //
-// This is the orphan case, made harmless. A magus process keeps running when its
-// checkout is deleted - a worktree removed while a dev loop is still watching it -
-// and because a flock lives exactly as long as its holder, it goes on holding every
-// lock it took. Nothing notices, and every later run in that workspace simply waits,
-// with no indication that the holder is never coming back.
+// The orphan case, made harmless: a magus process outlives a deleted checkout and, since
+// a flock lives exactly as long as its holder, goes on holding every lock it took while
+// later runs wait on a holder that is never coming back.
 //
-// It releases rather than exits: a lock exists to prevent concurrent mutation, and a
-// process whose tree is gone is not mutating anything, so continuing to hold is pure
-// harm to peers. Killing the process outright is the caller's decision, not the lock
-// layer's.
+// It releases rather than exits - a process whose tree is gone is not mutating anything,
+// so holding is pure harm to peers. Killing it is the caller's decision.
 func watchWorkspaceRoot(ctx context.Context, root string, every time.Duration, release func()) func() {
 	if root == "" || every <= 0 {
 		return func() {}
@@ -152,12 +159,10 @@ func watchWorkspaceRoot(ctx context.Context, root string, every time.Duration, r
 // provides is "no two magus invocations mutate the same project at once", NOT
 // "the tree is untouchable".
 //
-// Lock files mirror the workspace project tree under a single central directory
-// (<cacheDir>/locks): project "libs/diagnostics" locks <cacheDir>/locks/libs/diagnostics/lock,
-// and the root project locks <cacheDir>/locks/lock. Mirroring (rather than
-// flattening + sanitizing into one level) keeps the directory navigable and avoids
-// the collision a flattened name would create (e.g. "libs/diagnostics" -> "libs-diagnostics"
-// colliding with a real project named "libs-diagnostics").
+// Lock files mirror the workspace project tree under <cacheDir>/locks/<workspace>, so
+// "libs/diagnostics" locks <dir>/libs/diagnostics/lock and the root locks <dir>/lock.
+// The <workspace> segment keeps a shared cache dir from merging two trees' locks. Mirroring rather than flattening avoids the collision a
+// sanitized name would create ("libs/diagnostics" -> "libs-diagnostics").
 //
 // It is safe for concurrent use; each acquire opens its own OS lock handle.
 type projectLocker struct {
@@ -179,10 +184,17 @@ func withLockNotify(fn func(projectPath string)) lockerOption {
 }
 
 // newProjectLocker returns a projectLocker whose lock files live under
-// <cacheDir>/locks, mirroring the workspace project tree. When noWait is true a
-// contended acquire fails fast with a *lockContendedError instead of blocking.
-func newProjectLocker(cacheDir string, noWait bool, opts ...lockerOption) *projectLocker {
-	l := &projectLocker{dir: filepath.Join(cacheDir, locksDirName), noWait: noWait}
+// <cacheDir>/locks/<workspace>, mirroring the workspace project tree. When noWait is
+// true a contended acquire fails fast with a *lockContendedError instead of blocking.
+//
+// The workspace segment is what keeps the lock namespace per-WORKSPACE rather than
+// per-cache-dir. An absolute cache.dir (or MAGUS_CACHE_DIR) is returned unchanged by
+// resolveCacheDir for every root, which is the point - one shared cache - but without
+// this it also collapses every workspace's locks together, so an unrelated tree's
+// project "." blocked on this one's. That is a false conflict between projects that
+// share nothing, and it presents as a hang rather than an error.
+func newProjectLocker(cacheDir, workspaceRoot string, noWait bool, opts ...lockerOption) *projectLocker {
+	l := &projectLocker{dir: filepath.Join(cacheDir, locksDirName, workspaceLockKey(workspaceRoot)), noWait: noWait}
 	for _, o := range opts {
 		o(l)
 	}
@@ -192,18 +204,14 @@ func newProjectLocker(cacheDir string, noWait bool, opts ...lockerOption) *proje
 // reentrantErr returns the MGS3007 diagnostic when the process holding projectPath's lock
 // is running one of THIS invocation's ancestors, and nil for every other contention.
 //
-// This is the deadlock the plain wait cannot survive. A magusfile target that runs magus
-// against a project its own invocation already locked - directly, through magus.run, or
-// through a script several levels down - produces a holder that is waiting for the waiter.
-// flock cannot tell the two cases apart and neither can a timeout; the ancestry can, and
-// it is the only signal that also covers the daemon, where holder and waiter are threads
-// of ONE process and every pid comparison says "myself".
+// The deadlock a plain wait cannot survive: a target running magus against a project its
+// own invocation already locked produces a holder waiting for the waiter. Neither flock
+// nor a timeout can tell that from ordinary contention; ancestry can, and it is the only
+// signal that also covers the daemon, where holder and waiter are threads of one process.
 //
-// It reads the owner sidecar, which is best-effort by design: a holder that wrote no
-// sidecar, or an ancestry that never reached this process, yields nil and the acquire
-// waits exactly as it did before. Under-detecting restores the old behavior;
-// over-detecting would refuse a legitimate concurrent run, so the check errs toward
-// silence.
+// Best-effort by design - no sidecar, or an ancestry that never reached this process,
+// yields nil and the acquire waits as before. Under-detecting restores the old behavior;
+// over-detecting would refuse a legitimate concurrent run.
 func (l *projectLocker) reentrantErr(ctx context.Context, projectPath string) error {
 	rec := l.readOwner(projectPath)
 	if !types.HasInvocationAncestor(ctx, rec.PID, rec.Inv) {
@@ -270,16 +278,27 @@ func (l *projectLocker) acquire(ctx context.Context, projectPath string) (func()
 		l.emitWaiting(ctx, projectPath)
 		stopWaiter := l.recordWaiter(ctx, projectPath)
 		stopHeartbeat := l.startWaitHeartbeat(ctx, projectPath)
+		waitStart := time.Now()
 		got, err = fl.TryLockContext(ctx, lockRetryDelay)
+		waited := time.Since(waitStart)
 		stopHeartbeat()
 		stopWaiter()
 		if err != nil {
-			return nil, fmt.Errorf("workspace lock: lock %s: %w", projectPath, err)
+			// HOW LONG, not just which. This is the path a lock wait actually
+			// ends on - TryLockContext returns the context's own error - and
+			// "workspace lock: lock api: context deadline exceeded" leaves the
+			// reader unable to tell a wait that timed out after five seconds
+			// from one cancelled immediately. The duration is the difference
+			// between "the holder is slow" and "my deadline was too tight",
+			// which are opposite fixes. %w keeps the sentinel intact.
+			return nil, fmt.Errorf("workspace lock: gave up waiting for %s after %s: %w",
+				projectPath, waited.Round(time.Millisecond), err)
 		}
 		if !got {
 			// TryLockContext only returns (false, nil) when ctx is done.
 			if ctx.Err() != nil {
-				return nil, ctx.Err()
+				return nil, fmt.Errorf("workspace lock: gave up waiting for %s after %s: %w",
+					projectPath, waited.Round(time.Millisecond), ctx.Err())
 			}
 			return nil, fmt.Errorf("workspace lock: could not lock %s", projectPath)
 		}
@@ -314,6 +333,18 @@ func (l *projectLocker) acquireAll(ctx context.Context, projectPaths []string) (
 		releases = append(releases, rel)
 	}
 	return releaseAll, nil
+}
+
+// workspaceLockKey identifies a workspace inside a shared lock directory. The absolute
+// root is hashed rather than embedded: it is the identity that matters, a path is not a
+// legal single directory name, and a digest keeps the lock tree shallow.
+func workspaceLockKey(root string) string {
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		abs = root
+	}
+	sum := sha256.Sum256([]byte(filepath.Clean(abs)))
+	return hex.EncodeToString(sum[:8])
 }
 
 // lockPath maps a workspace-relative project path to its lock file, mirroring the
@@ -371,17 +402,14 @@ var lockWaitHeartbeat = 15 * time.Second
 // startWaitHeartbeat reprints the wait periodically until the returned stop func is
 // called.
 //
-// emitWaiting alone is not enough, and this is the single worst usability failure magus
-// has: ONE message followed by unbounded silence is indistinguishable from a hang. A
-// human tabs away and later kills the "stuck" command; an agent, which cannot see a
-// terminal at all and often has the stream buffered behind a pipe, concludes magus wedged
-// and kills it too - then reports that magus hangs. Both happened repeatedly against a
-// perfectly healthy run that was politely queued behind `magus run serve`.
+// One message followed by unbounded silence is indistinguishable from a hang: a human
+// kills the "stuck" command, and an agent behind a pipe concludes magus wedged and
+// reports that it hangs. Both happened repeatedly against healthy runs queued behind
+// `magus run serve`.
 //
-// A periodic line is the evidence of liveness a one-shot notice cannot give, and the
-// elapsed counter is what distinguishes "the holder is working" from "the holder is
-// itself stuck", which is the question the operator actually has. Suppressed when a
-// notify hook is installed so tests keep counting exactly one waiting signal.
+// A periodic line is the liveness evidence a one-shot notice cannot give, and the elapsed
+// counter distinguishes "the holder is working" from "the holder is itself stuck".
+// Suppressed when a notify hook is installed so tests count exactly one signal.
 func (l *projectLocker) startWaitHeartbeat(ctx context.Context, projectPath string) func() {
 	if l.notify != nil {
 		return func() {}
@@ -435,17 +463,13 @@ func (l *projectLocker) emitResumed(ctx context.Context, projectPath string) {
 // lockOwner is the best-effort record of which process holds a project lock,
 // written beside the lock file on acquire.
 //
-// Purely informational. The flock is the ONLY thing that decides exclusion; this
-// record never gates, and a caller that cannot read it proceeds exactly as before.
-// That split matters: a lock whose correctness depended on a hand-written pid file
-// would go stale the moment a process died, whereas the kernel releases a flock
-// then. Here staleness is harmless, because it is only ever read to answer "who am
-// I waiting on".
+// Purely informational: the flock alone decides exclusion, so staleness here is harmless
+// and a caller that cannot read it proceeds as before. A lock whose correctness depended
+// on a hand-written pid file would go stale the moment a process died.
 //
-// It exists because flock carries no identity. Without it the wait message can only
-// say "another magus process", which is exactly what turned a six-day-old orphaned
-// `magus run serve` - running in a worktree that had since been deleted - into an
-// investigation instead of one line of output.
+// It exists because flock carries no identity. Without it the wait message can only say
+// "another magus process", which turned a six-day-old orphaned `magus run serve` in a
+// deleted worktree into an investigation instead of one line of output.
 type processRecord struct {
 	PID     int    `json:"pid"`
 	Command string `json:"command"`
@@ -592,23 +616,23 @@ func (l *projectLocker) removeOwner(projectPath string) {
 // HeldLocks reports every per-project workspace lock currently held under cacheDir,
 // read from the owner sidecars.
 //
-// Reported as state, not as a fault. A held lock is what a normal mutating run looks
-// like; the reason to surface it is that a lock is held for exactly as long as its
-// holder lives, so one held by a process nobody remembers starting is invisible and
-// every other run just waits. Naming the holder makes that a fact instead of a hang.
+// Reported as state, not as a fault: a held lock is what a normal mutating run looks
+// like, but one held by a process nobody remembers starting is invisible while every
+// other run waits. Naming the holder makes that a fact instead of a hang.
 //
-// Best-effort throughout: an unreadable or malformed sidecar is skipped rather than
-// failing the caller, because status must never be the thing that breaks. A sidecar
-// with no live flock behind it can linger if a holder was killed between unlocking
-// and cleanup, so treat an entry as a strong hint, never as proof.
+// Best-effort throughout - an unreadable sidecar is skipped rather than failing the
+// caller. A sidecar can outlive its flock if a holder was killed between unlocking and
+// cleanup, so treat an entry as a strong hint, never proof.
 func (m *Magus) HeldLocks() []types.StatusLock {
-	return heldLocks(resolveCacheDir(m.ws.Root, m.cfg))
+	return heldLocks(resolveCacheDir(m.ws.Root, m.cfg), m.ws.Root)
 }
 
 // heldLocks is the cacheDir-addressed form, kept separate so a test can point it at a
-// temp dir without constructing a whole workspace.
-func heldLocks(cacheDir string) []types.StatusLock {
-	dir := filepath.Join(cacheDir, locksDirName)
+// temp dir without constructing a whole workspace. It reports only THIS workspace's
+// locks: under a shared cache dir the others are unrelated runs, and their project
+// paths mean nothing here.
+func heldLocks(cacheDir, workspaceRoot string) []types.StatusLock {
+	dir := filepath.Join(cacheDir, locksDirName, workspaceLockKey(workspaceRoot))
 	var out []types.StatusLock
 	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, lockFileName+ownerSuffix) {

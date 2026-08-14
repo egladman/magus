@@ -31,7 +31,7 @@ type ContractEntry struct {
 // before there is a selected target or execution context; a target's magus.Context
 // would therefore be fabricated data at this boundary. Per-invocation typed inputs
 // belong on ordinary exported spell functions instead. Every scalar and list
-// contribution (needs, provides, claims, version_cmd, opaque) resolves uniformly.
+// contribution (needs, provides, version_cmd, opaque) resolves uniformly.
 // The "ops" entry (mgs_listTargets) is the exception:
 // resolveOps post-processes it to extract function-valued op handlers into
 // command records (the form the built-in spells use). Record-shaped ops pass
@@ -39,7 +39,6 @@ type ContractEntry struct {
 var OptionalContract = []ContractEntry{
 	{Name: "mgs_listRequiredGlobs", Field: "needs", Paths: true},
 	{Name: "mgs_listProvidedGlobs", Field: "provides", Paths: true},
-	{Name: "mgs_listClaimedGlobs", Field: "claims", Paths: true},
 	{Name: "mgs_listIgnoreDirs", Field: "ignore_dirs", Paths: true},
 	{Name: "mgs_listManifests", Field: "manifests", Paths: true},
 	{Name: "mgs_getTools", Field: "tools"},

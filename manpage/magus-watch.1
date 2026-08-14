@@ -24,6 +24,9 @@ Notification backend: fsnotify or poll
 \fB\-\-debounce\fR \fIduration\fR (default: 200ms)
 Quiet window before emitting a batch
 .TP
+\fB\-\-ignore\fR \fIstring\fR
+Ignore pattern; repeatable. Form: type=<glob|regex|literal>,pattern=<value>
+.TP
 \fB\-\-initial\fR (default: true)
 Emit an \-\-all batch on startup before watching
 .TP

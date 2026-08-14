@@ -36,6 +36,7 @@
 // Run any subcommand with -h/--help for its own flag list.
 //
 //go:generate go run ../magus-utils config -config ../../internal/config/config.go -out gen/config_flags.go -fields-out ../../schema/gen/fields.go -bind-out gen/bind.go -apply-env-out ../../internal/config/gen/env.go
+//go:generate go run ../magus-utils cliflags -out gen/cli_flags.go
 package main
 
 import (
@@ -51,6 +52,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/egladman/magus"
@@ -88,7 +90,7 @@ func runCLI() int {
 
 	args := expandVerbosityArgs(os.Args[1:])
 
-	rootCtx, stopSignals := watchInterrupts(context.Background())
+	rootCtx, stopSignals, interrupted := watchInterrupts(context.Background())
 	// Stamp the binary's version onto the root context so host methods (the drift
 	// classifier) can tell a dev build from the pinned release without importing main.
 	rootCtx = types.WithMagusVersion(rootCtx, version)
@@ -112,7 +114,7 @@ func runCLI() int {
 
 	if exitCode >= 0 {
 		cleanup()
-		return exitCode
+		return withInterrupt(exitCode, interrupted)
 	}
 
 	code := 0
@@ -124,7 +126,39 @@ func runCLI() int {
 	default:
 		code = exitCodeOf(dispatchSub(res.rootCtx, res.root, res.rc, res.sub, res.subArgs))
 	}
+	// Offer the run's pinned failures for rerun or inspection, while they are
+	// still on screen. A no-op unless a run left failures on a terminal, so
+	// every other command reaches it and returns immediately.
+	//
+	// HERE rather than inside the run commands, so that rerunning a failure
+	// cannot re-enter the prompt from inside itself.
+	// Not after an abort. The prompt blocks on a read that cannot be
+	// interrupted, so opening one over the partial failures of a run the user
+	// just told magus to stop is both unwanted and the way to get stuck there.
+	if res.rootCtx.Err() == nil {
+		if err := promptFailures(res.rootCtx, res.root, cache.StderrHandler()); err != nil {
+			fmt.Fprintf(os.Stderr, "magus: %v\n", err)
+		}
+	}
 	cleanup()
+	return withInterrupt(code, interrupted)
+}
+
+// withInterrupt reports a signal-stopped run as the conventional 128+N.
+//
+// A cancelled run's targets die with `context canceled`, which reaches
+// [exitCodeOf] as a nil error - so without this the process printed [fail] and
+// exited 0, and `magus run test . && deploy` deployed after a Ctrl+C.
+//
+// Only when code == 0, so a command that already failed for its own reason
+// keeps the more specific code.
+func withInterrupt(code int, interrupted func() (syscall.Signal, bool)) int {
+	if code != 0 {
+		return code
+	}
+	if sig, ok := interrupted(); ok {
+		return 128 + int(sig)
+	}
 	return code
 }
 
@@ -173,7 +207,7 @@ func hasDetachFlag(args []string) bool {
 		if !strings.HasPrefix(a, "-") {
 			continue
 		}
-		if key, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "="); key == detachFlagName {
+		if key, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "="); key == gen.FlagRunDetach {
 			return true
 		}
 	}
@@ -183,10 +217,21 @@ func hasDetachFlag(args []string) bool {
 // resolveProfile returns the work profile for a subcommand; defaults to "needs everything".
 func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	switch sub {
-	case "help", "version", "buzz":
-		// buzz is a standalone Buzz runner (and `buzz lsp` a stdio language server);
-		// both analyze source text directly, needing no workspace, config, or daemon.
+	case "help", "version":
+		// Neither reads a workspace, a config, or a daemon: one prints text compiled
+		// into the binary, the other a stamp.
 		return dispatchProfile{}
+	case "buzz":
+		// buzz is a standalone Buzz runner (and `buzz lsp` a stdio language server), so
+		// it needs no workspace RESOLUTION and is never forwarded to a daemon. It does
+		// need the config: a script run inside a workspace gets that workspace on its
+		// context (see buzzCmd), and opening one reads magus.yaml and the MAGUS_* env -
+		// the remote cache's trust set among them. Listed as config-free while it opened
+		// a workspace anyway, it opened it against DEFAULTS, so a wired remote backend
+		// came up with no trust set and the load failed with a message naming the very
+		// setting the environment had set. That was invisible locally, where the trust
+		// set is not what the yaml is consulted for, and fatal in CI.
+		return dispatchProfile{needsConfig: true}
 	case "completion", "self", "man":
 		return dispatchProfile{needsConfig: true}
 	case "agent":
@@ -260,16 +305,12 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 // FOLLOW the subcommand and applies them to globalCfg, so the value is present before
 // the workspace preload snapshots it. See the call site for why that ordering matters.
 //
-// It filters to KNOWN config flags rather than parsing the whole tail: everything after
-// the subcommand is a mix of that subcommand's own flags, its positionals, and these, and
-// stdlib flag stops dead at the first name it does not recognize. Filtering first means an
-// unknown local flag is skipped instead of hiding every global flag behind it.
+// It filters to KNOWN config flags rather than parsing the whole tail, because
+// stdlib flag stops dead at the first name it does not recognize - so an unknown
+// local flag would hide every global flag behind it.
 //
-// Scanning stops at "--". Past that the tokens belong to the tool being forwarded to, and
-// a `-- --concurrency 4` meant for a child is not magus's to read.
-//
-// The subcommand parses these again later through cmdParse. Binding twice is harmless -
-// the second parse writes the same values into the same fields.
+// Scanning stops at "--": past that the tokens belong to the tool being
+// forwarded to. The subcommand parses these again later, which is harmless.
 func bindGlobalsAfterSubcommand(subArgs []string) {
 	if len(subArgs) == 0 {
 		return
@@ -400,6 +441,13 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		return startupResult{cleanup: cleanup}, 1
 	}
 	configgen.ApplyEnv(&cfg, os.Getenv)
+	// LoadWithRoot validates the yaml; ApplyEnv then overwrites those fields.
+	// Without a second pass the whole MAGUS_* surface goes unchecked while the
+	// equivalent yaml is rejected. Exit 1 to match the load failure above.
+	if err := config.Validate(cfg); err != nil {
+		slog.Error("invalid configuration from the environment", slog.String("error", err.Error()))
+		return startupResult{cleanup: cleanup}, 1
+	}
 	// Pass config to the workspace singletons via package-level state.
 	globalCfg = cfg
 	// The shared-daemon discovery below runs before the main flag parse, so peek the
@@ -740,7 +788,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Global flags (work before or after the subcommand):")
 	fmt.Fprintln(os.Stderr, "  --help, -h           show help (top-level or subcommand)")
-	fmt.Fprintln(os.Stderr, "  --output, -o <fmt>   output format (text|json|yaml|name|template=<go-template>)")
+	fmt.Fprintln(os.Stderr, "  --output, -o <fmt>   "+outputFormatHelp)
 	fmt.Fprintln(os.Stderr, "  -q, --quiet          suppress progress; only print errors + dump failing project output")
 	fmt.Fprintln(os.Stderr, "  -s, --silent         like -q, but bound failing dumps (tail + log path) and bubble up only 'magus:notice:' lines")
 	fmt.Fprintln(os.Stderr, "  -v, -vv, -vvv        detail (-v), plus live target output (-vv), plus tracing (-vvv)")
@@ -1006,20 +1054,16 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 // subcommand, for the profiles whose startup returns before the main flag parse
 // (help, version, buzz - the ones needing no config or workspace).
 //
-// --root and --config are bound to throwaway targets on purpose: they are legal in
-// this position and would otherwise abort the parse at the first one, taking any
-// later -o with them.
+// --root and --config are bound to throwaway targets: they are legal here and
+// would otherwise abort the parse at the first one, taking any later -o with them.
 //
-// The parse error is RETURNED, not swallowed. For these profiles there is no later
-// flag parse to catch it, so ignoring it meant `magus --bogus -o json version`
-// accepted the unknown flag, silently discarded the -o that followed it (Parse
-// stops at the first error), printed text and exited 0 - a misuse reported as
-// success.
+// The parse error is RETURNED, not swallowed - these profiles have no later parse
+// to catch it, so ignoring it made `magus --bogus -o json version` print text and
+// exit 0.
 //
-// subArgs, not a search for sub, delimits the pre-subcommand slice: peekSub already
-// resolved where the subcommand is, and slices.Index found its FIRST occurrence, so
-// a flag value equal to the subcommand name (`magus --root version version`)
-// truncated at the value instead.
+// subArgs delimits the pre-subcommand slice rather than a search for sub, because
+// slices.Index finds its FIRST occurrence and a flag value equal to the
+// subcommand name truncated at the value.
 func applyPreSubDisplayFlags(args, subArgs []string, sub string) error {
 	pre := args
 	if sub != "" {

@@ -33,6 +33,9 @@ trigger a full initial build in the downstream magus affected --stdin.
 **--debounce** *duration* (default: 200ms)
 : Quiet window before emitting a batch
 
+**--ignore** *string*
+: Ignore pattern; repeatable. Form: type=\<glob|regex|literal\>,pattern=\<value\>
+
 **--initial** (default: true)
 : Emit an --all batch on startup before watching
 

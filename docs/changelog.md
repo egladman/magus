@@ -17,6 +17,34 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Breaking
 
+- **`magus insight` is removed.** The lenses were never a daily verb - they are a
+  reporting surface, reached from CI and from a magusfile - and a subcommand is the
+  one place they cost every reader of `magus --help`. They are now
+  `magus\insight()` (typed) and `magus\insightMarkdown()` (the document), both
+  computed IN-PROCESS from the workspace magus already has open, and `magus_insight`
+  over MCP for agents, which never went through the subcommand at all.
+
+  What this costs, in full:
+
+  - The report can no longer be computed from a bare `magus buzz` script with no
+    workspace on the context: there is no longer a nested magus to fall back to.
+  - The **volatility** lens has no standalone surface any more. It is a field of the
+    whole report, but `magus_insight` never carried it, so an agent cannot ask for it
+    alone.
+  - **Per-project scoping is gone.** The subcommand defaulted to the cwd's project and
+    widened with `--workspace`; both survivors are workspace-wide only.
+  - The standalone Mermaid renders (`-o mermaid` for hotspots and affinity, and the
+    quadrant chart) are gone with the flags that selected them. The combined report
+    now always emits the PORTABLE Mermaid subset - what is left writes INSIGHT.md into
+    a repository or a CI step summary, and those are the renderers that subset targets.
+  - `InsightReport.graphStats` is **removed**. The CLI populated it from the knowledge
+    graph it loaded for itself; nothing else ever did, so keeping the field would have
+    shipped a documented axis that is structurally always empty. `magus graph stats`
+    is the structural axis and is unaffected.
+  - `magus\insight` takes an options map (`{commits, since}`) rather than a list
+    of CLI flag strings, which is the shape the subcommand imposed on it. An unknown
+    key is now an error rather than a silent default.
+
 - **`magus\diagnoseDrift` now returns a `DriftResult` object, not `DriftVerdict`.** A
   magusfile annotating the return type has to follow. The rename settles what the word
   means across the codebase: a VERDICT is the scalar judgment, and the thing carrying one
@@ -71,7 +99,7 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   `graph` and `targetGraph`, the second read as a variant of the first; they are
   siblings, so each is now named for what it contains. It also settles the surface's one
   inconsistent qualifier: every other pair suffixes (`describe`/`describeFile`,
-  `affected`/`affectedImpact`, `insight`/`insightReport`) while this one prefixed.
+  `affected`/`affectedImpact`, `insight`/`insightMarkdown`) while this one prefixed.
 - **`magus\modules()` and `magus\module(name)` are now one `magus\describeModule(name?)`.**
   Omit the name for every module; pass one to detail it. Either way the return is a
   `[Module]`, so detailing one reads `magus\describeModule("fs")[0]`.
@@ -242,6 +270,22 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   is no human to read a failure.
 
 ### Fixed
+
+- **A shared cache dir no longer merges two workspaces' project locks.** An absolute
+  `cache.dir` (or `MAGUS_CACHE_DIR`) resolves to the same path for every root - that is
+  the point, one cache - but the lock tree hung off it directly, so every workspace's
+  project `.` was the same lock file. An unrelated checkout then blocked on this one,
+  and because the holder is a legitimate live process it presented as an indefinite
+  wait rather than an error. Locks now live under `<cacheDir>/locks/<workspace>/`, and
+  `magus status` reports only the current workspace's holders instead of prefixing every
+  project path with the workspace segment.
+
+- **A re-entrant lock in a library caller hangs instead of reporting MGS3007.** The
+  diagnostic exists for exactly this - a lock held by one of your own ancestors can
+  never be released - but invocation ancestry was stamped only at the CLI and daemon
+  entry points. A Go test driving magus in-process had none, so the check could not
+  fire and the acquire waited forever with the ancestry env var sitting unread in its
+  own environment. The lock boundary now reads it when nothing upstream supplied one.
 
 - **The root `format` target no longer writes into descendant projects.** dprint
   discovers a nested `dprint.json` and formats that subtree under its own config, and

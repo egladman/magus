@@ -6,25 +6,19 @@
 // verbs. Provider syntax lives behind an implementation, so supporting a
 // new one is a new implementation and no change to any call site.
 //
-// The vocabulary is deliberately the union of what real providers need,
-// not the intersection, because the intersection is nearly empty:
+// The vocabulary is the UNION of what real providers need, not the
+// intersection, which is nearly empty:
 //
-//   - Groups carry an ID separate from their title. GitHub and Azure use
-//     only a title, but GitLab sections and TeamCity blocks are keyed by
-//     a machine name, and a shared abstraction that omitted it could not
-//     express them at all.
-//   - Groups state whether they want to be collapsed. GitHub always
-//     collapses, Buildkite has three modes, GitLab takes a flag. Callers
-//     say what they mean and a provider honours what it can.
-//   - EndGroup may legitimately do nothing: Buildkite has no end marker,
-//     since a new group implicitly closes the previous one.
-//   - Annotations carry a source location and a diagnostic code, because
-//     every provider that supports them at all supports those, and
-//     dropping them would throw away magus's own MGSxxxx codes.
+//   - Groups carry an ID separate from their title, because GitLab
+//     sections and TeamCity blocks are keyed by a machine name.
+//   - Groups state whether they want to be collapsed; providers honour
+//     what they can.
+//   - EndGroup may legitimately do nothing: Buildkite has no end marker.
+//   - Annotations carry a source location and a diagnostic code, so
+//     magus's own MGSxxxx codes survive.
 //
-// A provider that cannot express something ignores it. Unsupported is
-// the normal case, not an error: AWS CodeBuild and CircleCI have no log
-// markers whatsoever.
+// A provider that cannot express something ignores it. Unsupported is the
+// normal case, not an error: CodeBuild and CircleCI have no markers at all.
 package annotate
 
 import (
@@ -90,14 +84,12 @@ type Group struct {
 // pull request. Every field beyond Message is optional; a provider uses
 // what it supports.
 //
-// SECURITY: Message and Title are UNTRUSTED. They carry a failing
-// process's own output, so their content is whatever some test, compiler,
-// or transitive dependency chose to print. A provider implementation must
-// never interpolate them into a shell command, a URL, or anything else
-// where their content becomes syntax - a dependency that printed a
-// payload would otherwise be executing it on every CI machine that builds
-// the project. [Sanitize] bounds and de-fangs them before they reach a
-// provider, but that is a floor, not a licence to be careless downstream.
+// SECURITY: Message and Title are UNTRUSTED - they carry a failing
+// process's output, so their content is whatever some test, compiler or
+// transitive dependency chose to print. A provider must never interpolate
+// them where their content becomes syntax (a shell command, a URL), or a
+// dependency that printed a payload would be executing it on every CI
+// machine. [Sanitize] is a floor, not a licence to be careless.
 type Annotation struct {
 	Level   Level
 	Message string
@@ -132,15 +124,13 @@ type Annotator interface {
 	// Quote returns text safe to replay into the job log, neutralising any
 	// provider command syntax it contains.
 	//
-	// This is not cosmetic. magus captures a subprocess's output and
-	// replays it, so a test that prints "::error::" or a GitLab section
-	// marker would otherwise be interpreted by the runner: a dependency's
-	// output could forge annotations or close a section magus opened.
+	// Not cosmetic: magus replays captured subprocess output, so a test
+	// printing "::error::" or a GitLab section marker would be interpreted
+	// by the runner, forging annotations or closing a section magus opened.
 	//
-	// A provider supplies the line prefixes that introduce its commands
-	// once, rather than being consulted per line - see QuoteWith. That is
-	// what keeps this affordable on a path that runs over every replayed
-	// line of a failing build's output.
+	// Providers supply their command prefixes once rather than being
+	// consulted per line (see QuoteWith), which is what keeps this
+	// affordable over every replayed line of a failing build.
 	Quote(text string) string
 }
 
@@ -194,16 +184,14 @@ func Detect(w io.Writer) Annotator {
 // given command prefixes, by dropping the prefix's first character so
 // the provider no longer recognises the line as a command.
 //
-// Providers hand over their prefixes once, at resolution, rather than
-// being asked per line: this runs over every replayed line of a failing
-// build's output, which is the one path where crossing into a spell's VM
-// per call would cost more than the whole feature is worth. It is the
-// declarative half of an otherwise fully spell-implemented contract.
+// Providers hand over their prefixes once rather than being asked per line:
+// this runs over every replayed line of a failing build, the one path where
+// crossing into a spell's VM per call would cost more than the feature is
+// worth.
 //
 // Dropping the first character rather than inserting one keeps the result
-// plain ASCII and still legible: "::error::x" becomes ":error::x", and a
-// GitLab marker loses the escape byte that introduced it, leaving text a
-// reader can still see. Leading whitespace is preserved.
+// plain ASCII and legible - "::error::x" becomes ":error::x". Leading
+// whitespace is preserved.
 func QuoteWith(text string, prefixes []string) string {
 	if len(prefixes) == 0 {
 		return text
@@ -235,15 +223,13 @@ func QuoteWith(text string, prefixes []string) string {
 // OnCI reports whether magus is running in an automated environment,
 // independent of which one.
 //
-// It reads CI, the de-facto convention every major provider sets
-// (GitHub, GitLab, CircleCI, Travis, Buildkite, and others). That is a
-// cross-vendor signal rather than a vendor name, so consulting it here
-// does not put provider knowledge back into the binary.
+// It reads CI, the de-facto convention every major provider sets - a
+// cross-vendor signal rather than a vendor name, so it does not put
+// provider knowledge back into the binary.
 //
-// This answers a different question from [Detect]: a workspace that
-// wires no provider spell still runs on CI, and callers that only need
-// to know "is a human at this terminal" - to suppress a hint whose
-// command addresses local state, say - should not require one.
+// Different from [Detect]: a workspace wiring no provider spell still runs
+// on CI, and a caller that only needs "is a human at this terminal" should
+// not require one.
 func OnCI() bool { return os.Getenv("CI") != "" }
 
 // Limits on what crosses into a provider. A provider is third-party code
@@ -265,15 +251,13 @@ const (
 // Sanitize returns a copy of a bounded to the limits above and stripped
 // of control characters.
 //
-// Control characters are the sharp edge: an annotation's message comes
-// from a failing process, so it can contain escape sequences that would
-// re-take control of the terminal or the job log when a provider echoes
-// it. Tab is kept because it is ordinary in compiler output; newline is
-// kept because providers encode it themselves and losing it would mangle
-// multi-line causes.
+// Control characters are the sharp edge: the message comes from a failing
+// process, so it can carry escape sequences that would re-take the terminal
+// or the job log when a provider echoes it. Tab is kept (ordinary in
+// compiler output); newline is kept because providers encode it themselves.
 //
 // Truncation is marked, so a reader can tell a bounded message from a
-// process that simply printed that much.
+// process that printed that much.
 func Sanitize(a Annotation) Annotation {
 	a.Message = clampText(a.Message, maxMessageLen)
 	a.Title = clampText(a.Title, maxFieldLen)

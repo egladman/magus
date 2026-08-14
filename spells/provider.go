@@ -27,23 +27,19 @@ const ListProjectsContract = "list_projects"
 // name carries the adjective because types.Project and types.ProjectEntry already
 // exist; the authoring surface does not need it).
 //
-// The fields match that options map one for one, so a workspace has ONE vocabulary
-// for configuring a project instead of one for hand-authored projects and another
-// for provided ones. Two options are missing: "targets" (per-target
-// skip_cache/exclusive/slots) and "watch_ignore" are magus execution POLICY, which
-// no foreign tool knows. They stay in the magusfile, layered onto a provided project
-// with the central form magus\project("libs/foo", {...}), which runs after the fold.
+// The fields match that options map one for one, so a workspace has ONE vocabulary for
+// configuring a project. Two are missing: "targets" and "watch_ignore" are magus
+// execution POLICY, which no foreign tool knows, so they stay in the magusfile and layer
+// on afterwards via magus\project("libs/foo", {...}).
 //
-// Spells is a list of NAMES rather than the handle list magus\project takes: a spell
-// cannot hold another spell's handle (spells do not import spells), so a provider
-// has only the name to give. Every name must resolve to a registered spell.
+// Spells is a list of NAMES rather than handles: a spell cannot hold another spell's
+// handle, so a provider has only the name to give. Every name must resolve.
 //
-// The record crosses INTO magus as a Buzz object (the generated mirror reads the
-// buzz tags and the field names) and is marshalled back out as JSON by the provider
-// cache, keyed by the json tags below. Those tags are not decoration: without them
-// the cache encoded under Go field names, which musttag could not see and a reader
-// could not predict. So a rename here is a wire change in two directions - regenerate
-// the mirror, and bump providerCacheVersion so existing entries miss.
+// The record crosses INTO magus as a Buzz object and is marshalled back out as JSON by
+// the provider cache, keyed by the json tags below. Those tags are not decoration -
+// without them the cache encoded under Go field names, which musttag could not see. A
+// rename here is a wire change in two directions: regenerate the mirror, and bump
+// providerCacheVersion so existing entries miss.
 type ProvidedProject struct {
 	// Path is the project's directory relative to the WORKSPACE ROOT, forward
 	// slashes. Required. It must stay inside the root and must not be "." - the root

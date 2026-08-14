@@ -38,7 +38,7 @@ by default with `default_charms: [rw]`. See [charms.md](../concepts/charms.md#th
 ## How does magus decide whether to rerun a target or use the cache?
 
 The cache is content-addressed: a target's outputs are keyed by the SHA-256 of its
-declared inputs (`needs`, `provides`, `claims`). Unchanged inputs replay the
+declared inputs (`needs`, `provides`). Unchanged inputs replay the
 previous outputs instead of rerunning. magus caches what a target _declares_, not
 what it touches, so correctness is a declaration contract. See [cache.md](../concepts/cache.md).
 

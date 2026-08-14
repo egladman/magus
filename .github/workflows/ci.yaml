@@ -31,7 +31,15 @@ env:
   GOEXPERIMENT: jsonv2
   # PRs may read the cache but cannot publish to it.
   MAGUS_CACHE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}
-  MAGUS_CACHE_REMOTE_INSECURE: 'true'
+  # The trust set is what wires the shared cache (see the `if` at magusfile.buzz's
+  # cache.remote block) AND what verifies it. MAGUS_CACHE_REMOTE_INSECURE used to be
+  # set here too, which was the whole configuration doing two wrong things at once:
+  # it was the only thing turning the cache ON, and remoteCacheSigningOpts returns
+  # WithInsecureRemote before it ever reads a trust set - so the trusted_keys in
+  # magus.yaml were never consulted and CI replayed unsigned artifacts.
+  #
+  # Unset this variable and the cache is simply not wired: no error, no remote hits.
+  # Setting it is what turns on both the cache and its verification, together.
   MAGUS_CACHE_REMOTE_TRUSTED_KEYS: ${{ vars.MAGUS_CACHE_PUBLIC_KEY }}
   # A CEILING, not a target: the forecaster picks the count, and may raise it to
   # split a shard predicted to exceed the runner's memory. Held at 2 deliberately -
@@ -382,12 +390,22 @@ jobs:
           installation-strategy: source
           source-path: .
 
-      # One step for the whole job. merge-history only on main: a pull request's shard
-      # histories describe a branch that is about to disappear, and folding them into the
-      # kept history would skew it.
-      - uses: ./.github/actions/magus
+      # Outcome first: it describes the run that just finished, and the history merge
+      # below changes what a later reader would see.
+      - uses: ./.github/actions/ci-outcome
         with:
-          report: 'true'
           ci-result: ${{ needs.ci.result }}
           shard-count: ${{ needs.plan.outputs.count }}
-          merge-history: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      # merge-history only on main: a pull request's shard histories describe a branch
+      # that is about to disappear, and folding them into the kept history would skew it.
+      #
+      # always(), because a bare `if:` implies success() of every step before it, and the
+      # runs whose timings the forecaster most needs are the ones that went red. This
+      # used to be one composite step whose own merge steps carried always(); splitting
+      # the summary out moved that guard up here.
+      - if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: ./.github/actions/magus
+        with:
+          merge-history: 'true'
+          ci-result: ${{ needs.ci.result }}

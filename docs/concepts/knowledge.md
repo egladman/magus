@@ -166,9 +166,9 @@ straight from the graph and edit surgically instead of loading the whole file.
 **Where does risk concentrate?**
 
 ```sh
-magus insight hotspots    # churn x complexity per project, with blast radius
-magus insight affinity    # projects that change together: hidden coupling
-magus insight ownership   # author concentration and bus factor
+magus_insight lens=hotspots   # churn x complexity per project, with blast radius (MCP)
+magus_insight lens=affinity   # projects that change together: hidden coupling
+magus_insight lens=ownership  # author concentration and bus factor
 magus explain <node>      # a node's edges and how many nodes reach it (blast radius)
 magus path <a> <b>        # the shortest edge chain between two nodes
 ```
@@ -706,9 +706,9 @@ cursor is stateless and self-validating - it carries the query and a graph
 fingerprint, so a cursor reused against a different query or a graph that changed
 between pages is rejected rather than returning an incoherent slice.
 
-`magus agent install .agents/skills --agents-md` equips Codex with Agent Skills
-and a managed always-on `AGENTS.md` section. Claude Code uses
-`magus agent install .claude/skills`. The skills teach HOW to use magus (the
+`magus agent install .agents/skills` equips Codex with Agent Skills, and prints
+the always-on `AGENTS.md` block for you to paste - magus never writes that file.
+Claude Code uses `magus agent install .claude/skills`. The skills teach HOW to use magus (the
 repo's `MAGUS.md` says WHAT is in the workspace): knowledge-graph verbs,
 target-first execution, generated-file triage, and graph-grounded refactoring.
 They ship with the binary and teach only the tool surface, so they stay current

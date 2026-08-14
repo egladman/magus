@@ -1,6 +1,6 @@
 # Auditing the instructions an agent was given
 
-This is a LENS, like `magus insight`: it observes and ranks, it does not gate.
+This is a LENS, like `magus_insight`: it observes and ranks, it does not gate.
 The output is a findings list a human decides on, never an automatic edit.
 
 What it looks at is not code. It is everything loaded into an agent's context as

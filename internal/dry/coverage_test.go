@@ -229,7 +229,7 @@ export fun work(ctx: magus\Context, args: [str]) > void !> any {
     magus.bustCache();
     magus.affectedImpact("main");
     magus.describeFile(["magusfile.buzz"]);
-    magus.insight([]);
+    magus.insight({});
 }
 `
 	r := Run(context.Background(), src, "work", nil)
@@ -458,7 +458,7 @@ func TestRun_insightLensesAreShaped(t *testing.T) {
 			src := `
 import "magus";
 export fun work(ctx: magus\Context, args: [str]) > void !> any {
-    magus.log.info("{magus.insight([]).` + lens + `.len()}");
+    magus.log.info("{magus.insight({}).` + lens + `.len()}");
     magus.log.info("reached-the-end");
 }
 `

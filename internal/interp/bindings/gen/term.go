@@ -61,6 +61,15 @@ func RegisterTerm(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return IntVal(ret0), nil
 	}))
+	m.MapSet("notify", vm.DirectValue("term.notify", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		message := Str(bzArgs, 0)
+		level := Str(bzArgs, 1)
+		ttl_ms := Int(bzArgs, 2, 0)
+		if err := std.TermNotify(ctx, message, level, ttl_ms); err != nil {
+			return vm.Null, HostError(err)
+		}
+		return vm.Null, nil
+	}))
 	m.MapSet("clearScreen", vm.DirectValue("term.clearScreen", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		if err := std.TermClearScreen(ctx); err != nil {
 			return vm.Null, HostError(err)

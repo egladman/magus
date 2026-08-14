@@ -18,17 +18,23 @@ verify is the maintenance verb: it reports entries that are malformed, stale,
 or that link to something no longer there. The same entries are reachable
 through the magus_memory MCP tool and the console, so a journal written from
 the CLI is readable by an agent without either side learning a new format.
-.SH OPTIONS
+.SS memory put options
 .RS
 .TP
 \fB\-\-body\fR \fIstring\fR
-Short why/caption, decision and plan only (memory put)
+Short why/caption, decision and plan only
+.TP
+\fB\-\-ref\fR \fIstring\fR
+Entry ref in 'kind: target' form; repeat for multiple refs
+.TP
+\fB\-\-reference\fR \fIstring\fR
+Name of another entry this one relates to; repeat as needed
 .TP
 \fB\-\-status\fR \fIstring\fR
-Lifecycle label, e.g. accepted, active, done, stale (memory put)
+Lifecycle label, e.g. accepted, active, done, stale
 .TP
 \fB\-\-type\fR \fIstring\fR
-Entry type: pointer, decision, or plan (memory put)
+Entry type: pointer, decision, or plan
 .RE
 .SH SUBCOMMANDS
 .RS

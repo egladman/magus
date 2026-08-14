@@ -31,8 +31,13 @@ cache:
     # MAGUS_CACHE_SIGNING_KEY secret (only trusted pushes hold it), so a developer
     # laptop or a fork PR cannot publish artifacts that replay here. Keep prior
     # keys listed during a rotation (overlap, then drop the old one).
+    #
+    # The same value must be set as the MAGUS_CACHE_PUBLIC_KEY repository variable:
+    # ci.yaml hands it to MAGUS_CACHE_REMOTE_TRUSTED_KEYS, which REPLACES this list
+    # rather than adding to it, and it is also what wires the backend at all. The two
+    # disagreeing means CI and a laptop trust different keys, silently.
     trusted_keys:
-      - "Jo5PqJClVoakH2DTP6v9j76mqXcJHyCjC7OHKkckMjE="
+      - "4VhfiMjDLmoVolYdjgPHwpHjw9+aGnoHe87P6V3inAk="
 
 # The oldest magus that can load this workspace.
 #

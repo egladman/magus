@@ -1,0 +1,15 @@
+import "term";
+
+// A notification is something to GLANCE at during a long run, not a record of
+// it. It is dropped when there is no terminal to show it on, so anything that
+// must survive the run goes through log as well.
+term\notify("docs regenerated");
+
+// Severity picks the color; the default ttl is 5 seconds.
+term\notify("cache stampede on go-build", level: term\LogLevel.warn);
+
+// A longer ttl for something worth reading twice.
+term\notify("deploy skipped: no credentials", level: term\LogLevel.error, ttl_ms: 15000);
+
+// A negative ttl keeps it until newer notifications push it out of the band.
+term\notify("daemon unreachable", level: term\LogLevel.error, ttl_ms: -1);

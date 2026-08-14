@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -24,12 +25,11 @@ import (
 // which target rebuilds them. `add` classifies paths before staging, `resolve` settles a
 // conflicted merge, `merge-driver` is the per-file callback git invokes.
 //
-// `add` is the replacement for the `git add -A` the agent guard denies. The guard reads a
-// command STRING and infers intent; a magus verb gets the paths as arguments and
-// classifies them against the declared globs before touching the index.
+// `add` replaces the `git add -A` the agent guard denies: the guard infers intent from a
+// command STRING, while a magus verb gets the paths as arguments and classifies them
+// against the declared globs before touching the index.
 //
-// Not a general git proxy: wrapping every VCS verb would put magus on the critical path
-// of operations it has no opinion about.
+// Not a general git proxy.
 func vcsCmd(ctx context.Context, root string, rc runConfig, args []string) error {
 	if len(args) == 0 {
 		vcsUsage(os.Stderr)
@@ -101,9 +101,9 @@ func vcsResolveUsage(w io.Writer) {
 // vcsResolveCmd classifies every conflicted path, settles the generated ones in bulk,
 // regenerates once, and records the result.
 func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string) error {
-	var against string
+	var rf *gen.VCSResolveFlags
 	pos, err := cmdParse("vcs resolve", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&against, "against", "", "merge `ref` first, then settle what it conflicts with")
+		rf = gen.BindVCSResolve(fs)
 		fs.Usage = func() { vcsResolveUsage(os.Stderr) }
 	})
 	if err != nil {
@@ -132,8 +132,8 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 		return fmt.Errorf("vcs resolve: %s cannot report conflicts; resolve this merge by hand", res.Name)
 	}
 
-	if against != "" {
-		undo, err := startMergeAgainst(ctx, m.Root(), res, against)
+	if rf.Against != "" {
+		undo, err := startMergeAgainst(ctx, m.Root(), res, rf.Against)
 		if err != nil {
 			return err
 		}
@@ -145,8 +145,8 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 		return fmt.Errorf("vcs resolve: %w", err)
 	}
 	if len(conflicts) == 0 {
-		if against != "" {
-			fmt.Printf("vcs resolve: %s merged with no conflicts; conclude it with `git commit`\n", against)
+		if rf.Against != "" {
+			fmt.Printf("vcs resolve: %s merged with no conflicts; conclude it with `git commit`\n", rf.Against)
 			return nil
 		}
 		fmt.Println("vcs resolve: nothing to resolve; no conflicted paths")
@@ -168,16 +168,13 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 // backs it out again - a no-op unless this is a dry run, since otherwise the merge is the
 // whole point and stays in progress for the caller to commit.
 //
-// Why a real merge rather than `git merge-tree` in memory: merge-tree reports conflicted
-// PATHS and nothing else, and planResolution decides on the conflict KIND - a path one
-// side deleted is settled differently from one both sides edited, and a modify/delete is
-// the shape no merge driver is ever invoked for. Planning off names alone would silently
-// mis-sort exactly the conflicts this command exists for. (The read-only PR advisor uses
-// merge-tree precisely because it only needs the names.)
+// A real merge rather than `git merge-tree`: merge-tree reports conflicted PATHS only,
+// while planResolution decides on the conflict KIND, and a modify/delete is the shape no
+// merge driver is ever invoked for. (The read-only PR advisor uses merge-tree because it
+// needs only the names.)
 //
-// So a dry run merges for real and then aborts, which is why a clean tree is required
-// up front: `git merge --abort` restores the pre-merge state, and anything uncommitted
-// sitting in the tree when it runs is not guaranteed to survive that.
+// So a dry run merges for real and aborts, which is why a clean tree is required up
+// front - `git merge --abort` does not guarantee uncommitted work survives.
 func startMergeAgainst(ctx context.Context, root string, res types.VCSResolution, ref string) (undo func(), err error) {
 	starter, ok := res.VCS.(types.MergeStarter)
 	if !ok {
@@ -279,17 +276,12 @@ func (p resolutionPlan) rebuiltProjects() map[string]bool {
 // projectKey is the one spelling of a project used to key the rebuild set, on BOTH the
 // filling and the reading side.
 //
-// The PATH, never the label. These strings become arguments to `magus run <target>
-// <project>`, and they are also how settledPaths asks whether a regenerated file belongs
-// to a project that just ran. Those two sides used to spell it differently - filled with
-// paths, read back with types.ProjectLabel - and for every nested project the two agree,
-// so it looked correct. For the ROOT they never can: ProjectLabel routes to Display, whose
-// first branch rejects both "" and ".", so the root resolves to its DIRECTORY BASENAME
-// ("magus", or in a linked worktree that worktree's own directory name) while the set
-// holds ".". The lookup missed every time, and every root-owned output the regeneration
-// rewrote was left modified and unstaged - the dirty tree that makes `git rebase
-// --continue` refuse, which is the thing settledPaths exists to prevent. One helper on
-// both sides is what makes that divergence unrepresentable.
+// The PATH, never the label. Every nested project agrees on both spellings, so filling
+// with paths and reading back with types.ProjectLabel looked correct - but the ROOT can
+// never agree: ProjectLabel rejects "" and ".", resolving the root to its directory
+// basename while the set holds ".". The lookup missed every time, leaving every
+// root-owned regenerated output unstaged, which is the dirty tree settledPaths exists to
+// prevent. One helper on both sides makes that divergence unrepresentable.
 func projectKey(p *types.Project) string {
 	if p.Path == "" {
 		return "."
@@ -482,9 +474,9 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	// --dry-run is the GLOBAL config flag, not a local one: it already means
 	// "show me what would happen" on every other command, and redefining it here
 	// panics the FlagSet anyway.
-	var untracked bool
+	var af *gen.VCSAddFlags
 	pos, err := cmdParse("vcs add", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&untracked, "untracked", false, "Also stage undeclared files")
+		af = gen.BindVCSAdd(fs)
 		fs.Usage = func() { vcsAddUsage(os.Stderr) }
 	})
 	if err != nil {
@@ -578,7 +570,7 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	}
 
 	stage := slices.Concat(sources, outputs)
-	if untracked || explicit {
+	if af.Untracked || explicit {
 		stage = append(stage, undeclared...)
 	}
 	slices.Sort(stage)
@@ -591,7 +583,7 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 		}
 		verdict.Staged, dropped = staged, gone
 	}
-	return emitStaging(verdict, dropped, untracked, globalCfg.DryRun)
+	return emitStaging(verdict, dropped, af.Untracked, globalCfg.DryRun)
 }
 
 // workspaceRelPaths turns the paths you typed into workspace-relative ones.
@@ -676,11 +668,9 @@ func statusPaths(lines []string) []string {
 //   - hg status is one column then a space ("M path")
 //   - jj returns bare paths with no columns at all
 //
-// Stripping a fixed two characters covered the first three by accident and corrupted
-// every jj path; requiring a fixed three covered git only, and left the trimmed first
-// line and all of hg with a "M " glued to the front of the path, where it matched no
-// declared glob and was reported as undeclared. Detecting the width is what handles all
-// four.
+// A fixed width cannot cover all four: two characters corrupts every jj path, three
+// leaves hg and the trimmed first line with "M " glued to the front, matching no declared
+// glob and reported as undeclared.
 func statusPrefix(line string) string {
 	if len(line) < 3 {
 		return ""
@@ -705,17 +695,13 @@ func isStatusColumn(c byte) bool {
 // classifyForStaging splits classified files into the three groups staging cares
 // about.
 //
-// Sources and outputs are BOTH staged, and that is the point rather than an
-// oversight: a generate target rewriting its declared outputs is the system
-// working, and those outputs belong in the same commit as the source that moved
-// them. Committing the source alone is what makes CI fail on drift.
+// Sources and outputs are BOTH staged deliberately: regenerated outputs belong in the
+// same commit as the source that moved them, and committing the source alone is what
+// makes CI fail on drift.
 //
-// Undeclared paths are the actual hazard `git add -A` poses. No target claims
-// them, so they are usually build residue or a scratch file - but they are also
-// where a genuinely new, not-yet-declared source file lives, and where a file
-// magus's own core writes directly (types.IsMagusMaintained) shows up, since
-// neither has a target's declared-output glob to match against. They are
-// reported rather than dropped or assumed inert.
+// Undeclared paths are the hazard `git add -A` poses. Usually build residue, but also
+// where a genuinely new source file and anything magus's core writes directly (see
+// types.IsMagusMaintained) show up - so they are reported rather than dropped.
 func classifyForStaging(out []types.FileEntry) (sources, outputs, undeclared []string) {
 	for _, f := range out {
 		switch f.Role {
@@ -814,24 +800,16 @@ func splitMaintained(undeclared []string) (maintained, unclaimed []string) {
 
 // stagePaths shells out to git for the index write itself.
 //
-// A declared output (or source) whose path no longer exists on disk - a
-// directory renamed out from under it, a stale declaration nobody updated -
-// makes `git add` fail on that ONE pathspec with "did not match any files".
-// `git add` does not skip the bad pathspec and keep going: it aborts the whole
-// invocation before staging anything, so one stale path silently loses every
-// other path handed to the same call. filterStageable splits paths first so
-// that never happens: a path that exists on disk is always staged; a path
-// that is gone from disk but still known to git is ALSO staged, because that
-// is precisely how a deletion or a rename gets recorded - dropping it would
-// make `vcs add` unable to ever commit a removal. Only a path that is neither
-// on disk nor tracked - a declaration that no longer corresponds to anything
-// real - is dropped, and reported rather than silently discarded.
+// One pathspec that matches nothing aborts the WHOLE `git add` before staging anything,
+// so a single stale declaration silently loses every other path in the call.
+// filterStageable splits them first: on disk is staged; gone from disk but still tracked
+// is ALSO staged, since that is how a deletion or rename is recorded. Only a path that is
+// neither is dropped, and reported rather than discarded.
 //
-// Paths are passed after `--` so one that begins with a dash, or collides with a
-// revision name, is unambiguously a path.
-// It returns what it staged and what it dropped rather than printing either: the caller
-// owns rendering, so `-o json` gets the same answer the terminal does instead of a second
-// hand-written version of it.
+// Paths are passed after `--` so one beginning with a dash is unambiguously a path.
+//
+// It returns what it staged and dropped rather than printing either, so `-o json` gets
+// the same answer the terminal does.
 func stagePaths(ctx context.Context, root, vcsName string, recorder types.ConflictResolver, paths []string) (staged, dropped []string, err error) {
 	stageable, dropped, err := filterStageable(ctx, root, vcsName, paths)
 	if err != nil {
@@ -931,15 +909,12 @@ const gitLsFilesChunk = 256
 // base ref and HEAD, so an output whose source change is already COMMITTED still counts as
 // accounted for.
 //
-// Without it the check only saw the working tree, and reported drift on the two ordinary
-// workflows that commit the source first: "commit the source, then commit the generated
-// output", and "pull, then regenerate". Both are exactly when a reader most needs the
-// check to be right, and being wrong there taught people to pass the path explicitly and
-// stop reading it.
+// Working-tree-only reported drift on the two ordinary source-first workflows - commit
+// the source then the output, and pull then regenerate - which is exactly when the check
+// most needs to be right.
 //
-// Best effort: a VCS that cannot answer, or no base ref, yields nothing rather than an
-// error. The check is advisory, and degrading to the working-tree-only answer is the old
-// behaviour, not a new failure.
+// Best effort: no base ref, or a VCS that cannot answer, yields nothing rather than an
+// error.
 func sourcesChangedSinceBase(ctx context.Context, ws types.WorkspaceRepository, res types.VCSResolution, root string) map[string]bool {
 	if res.VCS == nil || res.Base == "" {
 		return nil

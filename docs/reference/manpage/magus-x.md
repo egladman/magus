@@ -1,20 +1,33 @@
 ---
 title: magus x
-description: Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.
-tags: [cli, magus x, interactive, picker, shorthand, run, tty]
+description: Reproduces the invocation an output ref recorded, or opens a TTY picker for project and target when given filters instead.
+tags: [cli, magus x, interactive, picker, shorthand, run, tty, reproduce, output ref]
 ---
 
 # magus-x
 
-Interactive shorthand: pick project + target
+Reproduce an output ref, or pick project + target
 
 ## Synopsis
 
-**magus** x [filter...]
+**magus** x \<ref\> | magus x [filter...]
 
 ## Description
 
-Interactive shorthand for magus run. Filters are AND-combined
+Two forms, chosen by the argument.
+
+Given an output ref (out1a2b3c), x reproduces the invocation that minted it:
+the descriptor records the project, the target and its charms, so nothing is
+picked and no terminal is required. A ref copied from a CI log therefore runs
+here as the same invocation - replaying from cache when the inputs match, and
+running the target when they do not. Before starting it compares the recorded
+cache key with the one this workspace computes and says which of the two will
+happen, and it reports a dirty working tree or a differing revision rather than
+implying an exactness it cannot deliver. It changes no VCS state: a differing
+commit is named, never checked out.
+
+Given filters (or nothing), x is the interactive shorthand for magus run.
+Filters are AND-combined
 substrings matched against project paths; ranking is leaf-anchored
 longest-match-wins, so "magus x dash" prefers a project named "dashboard"
 over one named "dashboards-deprecated/foo". Additional filter args narrow
@@ -31,6 +44,12 @@ x refuses to run when stdin or stderr is not a terminal: shorthand is for
 humans. Scripts should call magus run directly.
 
 ## Examples
+
+*Reproduce the invocation an output ref recorded*
+
+```sh
+magus x out1a2b3c
+```
 
 *Browse all projects in a picker*
 

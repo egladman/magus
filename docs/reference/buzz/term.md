@@ -22,7 +22,7 @@ Terminal interaction: capability probes, an interactive picker, and styled outpu
 
 Report whether this run can prompt at all: both standard input and standard error are terminals. Branch on it before calling pick - in CI, behind a pipe, or under a daemon this is false, and pick would raise. It is the one call that makes an interactive step safe to add to a target that also runs unattended.
 
-**Signature:** `term\isInteractive() → bool` · [source](https://github.com/egladman/magus/blob/main/std/term.go#L105)
+**Signature:** `term\isInteractive() → bool` · [source](https://github.com/egladman/magus/blob/main/std/term.go#L117)
 
 **Returns:** bool
 
@@ -30,7 +30,7 @@ Report whether this run can prompt at all: both standard input and standard erro
 
 Report whether styled output should be emitted: standard error is a terminal and the environment does not ask for plain text (NO_COLOR, TERM=dumb). colorize already consults this, so a caller needs it only to make a wider rendering choice - a box-drawing table versus a plain one.
 
-**Signature:** `term\wantsColor() → bool` · [source](https://github.com/egladman/magus/blob/main/std/term.go#L110)
+**Signature:** `term\wantsColor() → bool` · [source](https://github.com/egladman/magus/blob/main/std/term.go#L122)
 
 **Returns:** bool
 
@@ -38,7 +38,7 @@ Report whether styled output should be emitted: standard error is a terminal and
 
 Return the terminal's {width, height} in character cells. Both are 0 when there is no terminal to measure - piped output, no controlling terminal - so check width rather than expecting a raise. Use it to wrap or truncate output to the reader's actual window instead of assuming 80 columns.
 
-**Signature:** `term\size() → TermSize` · [source](https://github.com/egladman/magus/blob/main/std/term.go#L115)
+**Signature:** `term\size() → TermSize` · [source](https://github.com/egladman/magus/blob/main/std/term.go#L127)
 
 **Returns:** map[string]any
 
@@ -59,7 +59,7 @@ std\print("wrapping to {width} columns");
 
 Wrap s in the given style and close it again. Returns s UNCHANGED when the output is not a terminal or the environment asked for plain text, so a magusfile never has to guard the call and escape codes cannot leak into a CI log. A style of none is also pass-through, which lets a conditionally-computed style be passed without branching.
 
-**Signature:** `term\colorize(s, style) → string` · [source](https://github.com/egladman/magus/blob/main/std/term.go#L130)
+**Signature:** `term\colorize(s, style) → string` · [source](https://github.com/egladman/magus/blob/main/std/term.go#L142)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -72,7 +72,7 @@ Wrap s in the given style and close it again. Returns s UNCHANGED when the outpu
 
 Prompt the reader to choose one of items and return its index. Type to filter (matching every whitespace-separated token), arrow keys or Ctrl-N/Ctrl-P to move, Enter to choose. RAISES when there is no terminal to prompt on - guard with is_interactive - and raises when the reader aborts with ESC, Ctrl-C or Ctrl-D, so a cancel ends the run rather than quietly returning a choice nobody made. Renders to stderr.
 
-**Signature:** `term\pick(items, [prompt], [initial_filter], [initial], [max_rows]) → int` · [source](https://github.com/egladman/magus/blob/main/std/term.go#L138)
+**Signature:** `term\pick(items, [prompt], [initial_filter], [initial], [max_rows]) → int` · [source](https://github.com/egladman/magus/blob/main/std/term.go#L150)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -91,20 +91,60 @@ import "std";
 import "term";
 
 // pick RAISES when there is no terminal, so an interactive step that also has to
-// run unattended guards on isInteractive and declares its own default.
+// run unattended guards on isInteractive and declares its own default. It raises
+// again when the reader aborts with ESC or Ctrl-C, which is why the call is
+// caught rather than merely guarded: a cancel is not a choice.
 final projects = ["console", "docs", "libs/gopherbuzz"];
 
-final chosen = if (term\isInteractive())
-    projects[term\pick(projects, prompt: "project")]
-else
-    projects[0];
+fun choose() > str {
+    if (!term\isInteractive()) {
+        return projects[0];
+    }
+    try {
+        return projects[term\pick(projects, prompt: "project")];
+    } catch (e) {
+        return projects[0];
+    }
+}
 
-std\print(term\colorize(chosen, term\TermStyle.brightGreen));
+std\print(term\colorize(choose(), style: term\TermStyle.brightGreen));
+```
+
+### notify
+
+Raise a notification into the band magus pins at the bottom of the terminal, where it shows for a few seconds and then disappears on its own. Unlike log.info it does not join the scrolling transcript: it is for something worth GLANCING at during a long run, not for the record. Returns immediately - the message expires on its own clock - and never raises: it is DROPPED when there is no terminal to show it on, or when the band has no room, so a piped or CI run is never given a repainted view it cannot use and no caller has to guard a notification. Log the same fact if it also needs recording. ttl_ms defaults to 5000; a negative ttl_ms pins the notification until newer ones push it out.
+
+**Signature:** `term\notify(message, [level], [ttl_ms])` · [source](https://github.com/egladman/magus/blob/main/std/term.go#L199)
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `message` | `string` |  | |
+| `level` | `string` | yes | |
+| `ttl_ms` | `int` | yes | |
+
+**Example:**
+
+```buzz
+import "term";
+
+// A notification is something to GLANCE at during a long run, not a record of
+// it. It is dropped when there is no terminal to show it on, so anything that
+// must survive the run goes through log as well.
+term\notify("docs regenerated");
+
+// Severity picks the color; the default ttl is 5 seconds.
+term\notify("cache stampede on go-build", level: term\LogLevel.warn);
+
+// A longer ttl for something worth reading twice.
+term\notify("deploy skipped: no credentials", level: term\LogLevel.error, ttl_ms: 15000);
+
+// A negative ttl keeps it until newer notifications push it out of the band.
+term\notify("daemon unreachable", level: term\LogLevel.error, ttl_ms: -1);
 ```
 
 ### clearScreen
 
 Erase the screen and move the cursor home, the repaint a full-screen refresh loop issues before redrawing. Scrollback is preserved, so a reader who scrolls up after the loop ends still sees what came before. A no-op when there is no terminal, so a watch loop needs no guard.
 
-**Signature:** `term\clearScreen()` · [source](https://github.com/egladman/magus/blob/main/std/term.go#L174)
+**Signature:** `term\clearScreen()` · [source](https://github.com/egladman/magus/blob/main/std/term.go#L260)
 

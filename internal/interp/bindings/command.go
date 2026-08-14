@@ -23,20 +23,20 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// commandOpts carries the per-invocation options a magusfile passes to a command
-// spell target (e.g. go.build({...})). cwd is the directory to run in (empty means
-// the process cwd, "."). args append as raw tokens after the target's base command -
-// so a build the op's bare base can't express (custom -ldflags, -o, a single package)
-// is reachable through the spell rather than proc.exec. env overlays the subprocess
-// environment (KEY=value; later entries win per Go's exec duplicate-key rule). hasArgs
-// distinguishes "no args key" (fall back to project.ExtraArgs) from an explicit empty
-// list; consulted only on the Buzz path. ignoreDirs are the issuing spell's own
-// mgs_listIgnoreDirs, threaded through so a Command.Sources expansion (see
-// runSourcedCommand) inherits them instead of the op re-declaring them. refs
-// adds op-specific runner-computed values (e.g. a per-run cache destination) to
-// what a $NAME token in Bin/Args may resolve to, alongside run.SelfVars - see
-// resolveRunnerRefs. It is deliberately separate from env: env can carry a
-// resolved Secret, and a Secret must never be reachable through Args.
+// commandOpts carries the per-invocation options a magusfile passes to a command spell
+// target (e.g. go.build({...})).
+//
+//   - cwd: directory to run in; empty means the process cwd.
+//   - args: raw tokens appended after the base command, so a build the op's bare base
+//     cannot express is reachable through the spell rather than proc.exec.
+//   - env: overlays the subprocess environment; later entries win.
+//   - hasArgs: distinguishes "no args key" (fall back to project.ExtraArgs) from an
+//     explicit empty list. Buzz path only.
+//   - ignoreDirs: the issuing spell's own mgs_listIgnoreDirs, so a Command.Sources
+//     expansion inherits them instead of the op re-declaring them.
+//   - refs: op-specific runner-computed values a $NAME token may resolve to, alongside
+//     run.SelfVars. Deliberately separate from env, which can carry a resolved Secret -
+//     and a Secret must never be reachable through Args.
 type commandOpts struct {
 	op         string // the op name, for error attribution; "" only on paths with no name to give
 	cwd        string
@@ -130,16 +130,14 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 	// streaming live, which is the whole point of a non-capture op; the cost is paid only
 	// by an op that actually declares hints.
 	//
-	// ONE TAIL PER STREAM, deliberately. os/exec drives stdout and stderr with a copy
+	// ONE TAIL PER STREAM, deliberately: os/exec drives stdout and stderr with a copy
 	// goroutine each, so a shared buffer would hold an arbitrary interleaving of two
-	// documents that never existed as one - splitting a real message with a chunk of the
-	// other stream, or abutting two chunks into a substring that appeared in neither. A
-	// shared buffer would also make the two compete for one budget, so stdout progress
-	// chatter could evict the stderr error the advice exists to catch.
+	// documents that never existed as one, and would make them compete for one budget -
+	// letting stdout progress chatter evict the stderr error the advice exists to catch.
 	//
 	// The tail is FIRST in each MultiWriter: it cannot fail, and MultiWriter aborts on the
-	// first error, so putting the real stream first would let a broken pipe silently stop
-	// feeding the classifier.
+	// first error, so the real stream first would let a broken pipe stop feeding the
+	// classifier.
 	var outTail, errTail *outputTail
 	if len(tgt.Hints) > 0 {
 		outTail, errTail = newOutputTail(hintTailBytes), newOutputTail(hintTailBytes)
@@ -451,20 +449,15 @@ const sourcesBatchLimit = 256
 // after the declared/charm-patched/extra args. It is the execution half of
 // spells.Command.Sources; see that field's doc for the full design.
 //
-// A glob set that matches nothing runs bin ZERO times and reports success
-// (ExecResult{}) rather than invoking it with no files or failing outright -
-// this mirrors `xargs -r`'s "do not run the command on an empty input" and the
-// --step gate's own skip-is-not-a-failure convention (run.Exec's
-// StepActionSkip branch returns the same zero value for the same reason).
+// A glob set matching nothing runs bin ZERO times and reports success rather than
+// invoking it with no files, mirroring `xargs -r` and the --step gate's
+// skip-is-not-a-failure convention.
 //
-// Every batch/file still runs even after an earlier one exits non-zero:
-// shellcheck/buzz --check across many files should report every file's
-// failure in one run, the same as the `xargs` this replaces (which only
-// aborts early on a command it could not run at all, not on an ordinary
-// non-zero exit) - but the FIRST error is what the caller sees, so the op
-// still fails overall. A process that never started (bad exec, sandbox
-// denial) or a cancelled run stops the loop immediately instead: every
-// remaining invocation would fail identically, or should not proceed.
+// Every batch still runs after an earlier one exits non-zero, so a check across many
+// files reports every failure in one run - but the FIRST error is what the caller sees,
+// so the op still fails overall. A process that never started (bad exec, sandbox denial)
+// or a cancelled run stops the loop immediately: every remaining invocation would fail
+// identically, or should not proceed.
 func runSourcedCommand(ctx context.Context, tgt spells.Op, bin, dir string, baseArgs []string, opts commandOpts) (run.ExecResult, error) {
 	files, err := cache.ExpandSources(tgt.Sources, dir, nil, opts.ignoreDirs)
 	if err != nil {

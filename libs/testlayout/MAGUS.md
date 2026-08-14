@@ -48,12 +48,12 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | project | 10+ | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
 | target | 100+ | `magus query kind:target` | `content-generate`, `site-generate`, `format` |
 | spell | 10+ | `magus query kind:spell` | `go`, `markdown`, `typescript` |
-| op | 60+ | `magus query kind:op` | `go-build`, `go-test`, `go-fmt` |
+| op | 60+ | `magus query kind:op` | `go-build`, `go-test`, `dprint` |
 | tool | 20+ | `magus query kind:tool` | `go`, `pnpm`, `buf` |
 | charm | 10+ | `magus query kind:charm` | `rw`, `cd`, `stable` |
 | module | 30+ | `magus query kind:module` | `fs`, `magus`, `charm` |
 | method | 200+ | `magus query kind:method` | `archive.compress`, `archive.list`, `archive.read_file` |
-| diagnostic | 60+ | `magus query kind:diagnostic` | `MGS2001`, `MGS3003`, `MGS1002` |
+| diagnostic | 60+ | `magus query kind:diagnostic` | `MGS2001`, `MGS1022`, `MGS3003` |
 | doc | 300+ | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 100+ | `magus query kind:dir` | `docs/reference/buzz`, `docs/reference/manpage`, `docs/reference/codes/magusfile` |
 | file | 200+ | `magus query kind:file` | `magusfile.buzz`, `docs/render.buzz`, `docs/magusfile.buzz` |
@@ -63,10 +63,10 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 40 | `magus query project:.` | `buzz-test`, `generate`, `lint` |
+| . | 44 | `magus query project:.` | `buzz-test`, `generate`, `lint` |
 | console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
-| docs/guides/integrations/agents | 4 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
+| docs/guides/integrations/agents | 5 | `magus query project:docs/guides/integrations/agents` | `ci`, `format`, `lint` |
 | evals | 4 | `magus query project:evals` | `lint`, `preflight`, `ci` |
 | libs/diagnostics | 8 | `magus query project:libs/diagnostics` | `format`, `build`, `generate` |
 | libs/gopherbuzz | 10 | `magus query project:libs/gopherbuzz` | `format`, `build`, `generate` |
@@ -91,6 +91,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `postflight` | Renders the insight report (hotspots, affinity, ownership, trend) to stdout. |
 | `generate` | Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd). |
 | `tapes` | Records every VHS tape in tapes/ into assets/gen/. |
+| `termcast-record` | Re-records tapes/core-loop.capture: the raw bytes a real magus prints to a real pseudo-terminal, driven by tapes/core-loop.session.sh. |
+| `termcast-showcase` | Renders tapes/core-loop.capture into the README's animated SVG. |
 | `release-build` | Builds one release binary for one platform. |
 | `release-sign` | Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos). |
 | `release` |  |
@@ -113,6 +115,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `skills-generate` | Reinstalls the agent skills from their embedded sources in cmd/magus/skills. |
 | `index-generate` | Renders MAGUS.md via `magus describe graph`. |
 | `graph-generate` | Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects. |
+| `termcast-generate` |  |
+| `termshots-generate` | Renders the still SVGs of magus's interactive terminal surfaces for the docs. |
 | `advice-test` | Runs the PR advisors' `test "..." {}` blocks. |
 | `buzz-test` | Runs the in-file `test "..." {}` blocks in this repo's own root Buzz modules, through magus's embedded engine. |
 | `lint-build` | Builds ./custom-gcl, the golangci-lint carrying this repo's own linters. |
@@ -135,7 +139,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Target | What it does |
 |---|---|
 | `generate` | generate is the one public docs publication target. |
-| `format` |  |
+| `format` | Scope dprint by ARGV, not by its config, for the same reason the root project does: dprint DISCOVERS a nested dprint.json and formats that subtree under its own config, and neither this project's `includes` nor an exclude prunes it. |
 | `lint` | lint runs the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). |
 | `build` |  |
 | `test` |  |
@@ -148,7 +152,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `render` | render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks. |
 | `preflight` |  |
 | `index-generate` | index-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets. |
-| `content-generate` | content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). |
+| `content-generate` | content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/clispec), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). |
 | `site-generate` | site-generate owns publication. |
 | `conventions` | conventions holds the prose corpus to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved. |
 | `buzz-test` | buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve. |
@@ -161,6 +165,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `test` | test runs the OpenCode plugin's transport cases: does it ASK magus correctly (the top-level `hook` subcommand, the input on stdin) and handle each decision the way it declares. |
 | `ci` | 'ci' is the anchor `magus affected ci` keys off. |
 | `preflight` |  |
+| `format` | format owns the Markdown in this directory - the per-host guide pages beside the templates. |
 
 ## Project: evals
 

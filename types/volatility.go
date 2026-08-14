@@ -6,7 +6,7 @@ import "time"
 // insight. It is computed from the shared runtime-history file - a pure file read plus the
 // Wilson-score compute, no shell-out and no workspace graph - and folded into InsightView
 // (the console serves it under the "volatility" key of GET /api/v1/insight) and into the
-// `magus insight volatility` CLI lens. Threshold is the configured Wilson lower-bound above
+// volatility lens. Threshold is the configured Wilson lower-bound above
 // which a target is treated as volatile (Volatility.Threshold); a target's Volatile field
 // is Score >= Threshold.
 type VolatilityReport struct {

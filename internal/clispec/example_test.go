@@ -1,0 +1,31 @@
+package clispec
+
+import (
+	"fmt"
+)
+
+// ExampleCommand shows how to build a Command descriptor for a CLI subcommand.
+// Commands are consumed by the man-page generator and the registry builder to
+// produce magus(1) and its per-subcommand man pages.
+func ExampleCommand() {
+	seg := Command{
+		Name:  "run",
+		Short: "run a target for selected projects",
+		Usage: "magus run <target> [flags] [project...]",
+		Flags: []Flag{
+			{Name: "dry-run", Kind: FlagBool, Doc: "print what would run without executing"},
+		},
+		Examples: []Example{
+			{Comment: "Build all projects", Command: "magus run build"},
+			{Comment: "Test a single project", Command: "magus run test myapp"},
+		},
+	}
+
+	fmt.Println(seg.Name)
+	fmt.Println(seg.Short)
+	fmt.Println(len(seg.Examples))
+	// Output:
+	// run
+	// run a target for selected projects
+	// 2
+}

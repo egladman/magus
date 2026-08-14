@@ -13,7 +13,19 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-var builtin = []types.VCSDriver{gitVCS{}, hgVCS{}, jjVCS{}}
+// builtin is probed IN ORDER by autodetect, so the most specific marker has to come
+// first. `jj git init` writes both .jj and .git - git is jj's storage backend, not a
+// second VCS - so a colocated repo satisfies git's claim too. With git first, every
+// colocated jj workspace resolved to git, and the revision magus recorded was git's
+// HEAD, which lags jj's working-copy commit (@) until jj syncs refs. That put a
+// revision on an output ref describing a tree other than the one built, and
+// `magus x <ref>` compared against it.
+//
+// .jj and .hg are unambiguous: their presence means that VCS is driving the working
+// copy. .git is the fallback precisely because another tool may have created it.
+// gitVCS stays LAST for the same reason it used to be first - it is also the default
+// when nothing claims the directory (see Resolve).
+var builtin = []types.VCSDriver{jjVCS{}, hgVCS{}, gitVCS{}}
 
 // IsSecondaryCheckout reports whether dir is a second checkout of a repository
 // under any supported VCS (a git linked worktree, an `hg share`, a jj secondary
@@ -67,7 +79,10 @@ func Resolve(_ context.Context, root, runtimeBase string, opts types.VCSOptions)
 			}
 		}
 		if v == nil {
-			v = builtin[0]
+			// Nothing claimed the directory. The default is git - named explicitly
+			// rather than taken as builtin[0], which now heads a list ordered by
+			// marker specificity rather than by which VCS is the sane fallback.
+			v = gitVCS{}
 			name = v.Name()
 			source = types.VCSSourceDefault
 		}

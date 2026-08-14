@@ -290,35 +290,35 @@ const stickyFooterRows = 1
 // simply stopped responding - the state that makes people kill the process. The
 // footer names the depth instead.
 //
-// It degrades to nothing off a TTY: Region reports disabled, and every method here
-// is a no-op, so a piped or scripted session behaves exactly as before.
+// It degrades to nothing off a TTY: the lease reports disabled, and every method
+// here is a no-op, so a piped or scripted session behaves exactly as before.
 type replFooter struct {
-	region *tty.Region
+	lease *tty.Lease
 }
 
 func newReplFooter(out io.Writer) *replFooter {
-	return &replFooter{region: tty.NewRegion(out, stickyFooterRows, tty.SystemProbe)}
+	return &replFooter{lease: tty.ZoneFor(out).Acquire(stickyFooterRows)}
 }
 
 // paint redraws the footer. It needs no cursor bookkeeping: Region painting is
 // cursor-transparent, so the prompt printed next - and the characters the terminal
 // echoes as the user types - land wherever the transcript had reached.
 func (f *replFooter) paint(state string) {
-	if f == nil || !f.region.Enabled() {
+	if f == nil || !f.lease.Enabled() {
 		return
 	}
 	// The error is deliberately dropped rather than surfaced. A footer is
 	// decoration on an interactive session: a terminal that refuses the escape
 	// sequence should cost the reader a status line, never an aborted REPL or a
 	// diagnostic interleaved with their own typing.
-	_ = f.region.SetStatus(state)
+	_, _ = f.lease.Set([]tty.Line{{Text: state, Style: tty.SGRDim}})
 }
 
 func (f *replFooter) release() {
 	if f == nil {
 		return
 	}
-	_ = f.region.Release()
+	_ = f.lease.Release()
 }
 
 // replState renders the footer's one line. Ordering is fixed so the eye lands in

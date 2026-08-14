@@ -1,12 +1,9 @@
 // Opaque (mgs_isOpaque) because pnpm manages its own dependency graph:
 // magus treats the project as a black box rather than tracking per-file inputs.
-// It claims a broad set of web-asset globs so sibling single-file spells (json,
-// css, markdown, ...) don't also claim files inside a TS project.
 //
 // eslint+prettier or Biome: this one spell offers both toolchains as separate
 // ops (eslint/prettier vs biome-check/biome-format) rather than shipping a
-// second spell - Biome targets the same files this spell already claims, so a
-// second spell would fight mgs_listClaimedGlobs over ownership. The magusfile
+// second spell targeting the same files. The magusfile
 // - not the spell - decides which pair composes into lint/format; a project
 // picks one pair, not both.
 
@@ -23,12 +20,6 @@ export fun mgs_listRequiredGlobs() > [Path] {
             Path{value = "**/*.mjs"}, Path{value = "**/*.cjs"}, Path{value = "**/*.json"}, Path{value = "tsconfig*.json"}, Path{value = "package.json"},
             Path{value = ".npmrc"}, Path{value = "pnpm-lock.yaml"}, Path{value = "package-lock.json"}, Path{value = "npm-shrinkwrap.json"},
             Path{value = "yarn.lock"}, Path{value = "bun.lockb"}];
-}
-
-export fun mgs_listClaimedGlobs() > [Path] {
-    return [Path{value = "**/*.ts"}, Path{value = "**/*.tsx"}, Path{value = "**/*.mts"}, Path{value = "**/*.cts"}, Path{value = "**/*.js"}, Path{value = "**/*.mjs"},
-            Path{value = "**/*.cjs"}, Path{value = "**/*.jsx"}, Path{value = "**/*.json"}, Path{value = "**/*.jsonc"}, Path{value = "**/*.md"}, Path{value = "**/*.mdx"},
-            Path{value = "**/*.yaml"}, Path{value = "**/*.yml"}, Path{value = "**/*.css"}, Path{value = "**/*.scss"}, Path{value = "**/*.html"}];
 }
 
 export fun mgs_isOpaque() > bool { return true; }

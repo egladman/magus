@@ -20,26 +20,74 @@ fully\-evaluated dispatch plan: the workspace\-rooted source and output globs, t
 spells that fire, the charm\-applied command, and any per\-target policy. Add a charm
 and \-\-explain (e.g. "lint:rw \-\-explain") to see each charm reshape the command one
 step at a time.
-.SH OPTIONS
+.SS describe target options
 .RS
 .TP
-\fB\-\-against\fR \fIstring\fR
-With \-\-cache: diff the live key inputs against the stored lines behind an output ref
+\fB\-\-against\fR \fIref\fR
+With \-\-cache: diff the live key inputs against the stored lines behind an output `ref`
 .TP
 \fB\-\-cache\fR
-For a target ref: show its live cache key, the ref a run would print, and the component classes behind it
+Show the live cache key, the ref a run would print, and the component classes behind it
 .TP
 \fB\-e\fR
-Short for \-\-explain on a target ref, and for \-\-evaluated on a project listing
-.TP
-\fB\-\-evaluated\fR
-For projects: print workspace\-rooted globs, effective claims, and per\-target policies
+Short for \-\-explain
 .TP
 \fB\-\-explain\fR
-For a target ref with charms: show the per\-charm argv trace (base then each charm)
+For a ref with charms: show the per\-charm argv trace (base then each charm)
 .TP
 \fB\-\-no\-default\-charms\fR
 With \-\-cache: ignore magus.yaml default_charms when keying, matching a run made the same way (CI)
+.RE
+.SS describe projects options
+.RS
+.TP
+\fB\-e\fR
+Short for \-\-evaluated
+.TP
+\fB\-\-evaluated\fR
+Print workspace\-rooted globs, effective claims, and per\-target policies
+.RE
+.SS describe spells options
+.RS
+.TP
+\fB\-\-versions\fR
+Probe each spell's tools and report the versions that would key a run
+.RE
+.SH SUBCOMMANDS
+.RS
+.TP
+\fBtargets\fR
+List every target the workspace defines
+.TP
+\fBtarget\fR
+Detail one target ref: its dispatch plan, globs, spells and policy
+.TP
+\fBprojects\fR
+List the workspace's projects
+.TP
+\fBspells\fR
+List the spells the workspace resolves
+.TP
+\fBcharms\fR
+List charms and the targets that declare them
+.TP
+\fBworkspaces\fR
+List the workspaces registered in config
+.TP
+\fBmodules\fR
+List the Buzz host modules a magusfile can import
+.TP
+\fBmcp\-tools\fR
+List the tools the MCP server exposes
+.TP
+\fBtools\fR
+List the external tools the workspace's spells require
+.TP
+\fBfile\fR
+Classify paths as generated output, declared source, maintained, or unclaimed
+.TP
+\fBgraph\fR
+Emit the target catalog and dependency graph
 .RE
 .SH EXAMPLES
 \fIList every target\fR

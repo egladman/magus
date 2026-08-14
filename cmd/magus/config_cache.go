@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"time"
+
+	"github.com/egladman/magus/cmd/magus/gen"
 )
 
 func configCacheCmd(ctx context.Context, root string, args []string) error {
@@ -55,10 +57,7 @@ func configCacheCmd(ctx context.Context, root string, args []string) error {
 func configCachePrune(ctx context.Context, root string, args []string) error {
 	fs := flag.NewFlagSet("config cache prune", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	olderThan := fs.Duration("older-than", 0, "Remove entries older than this duration (e.g. 168h = 7 days)")
-	keepLast := fs.Int("keep-last", 0, "Keep only the newest N entries, evict the rest (--remote only)")
-	remote := fs.Bool("remote", false, "Prune the configured remote backend instead of the local cache")
-	dryRun := fs.Bool("dry-run", false, "Print what would be removed without deleting anything")
+	pf := gen.BindConfigCachePrune(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config cache prune [--older-than <duration>] [--keep-last <count>] [--remote] [flags]")
 		fmt.Fprintln(os.Stderr, "")
@@ -78,8 +77,8 @@ func configCachePrune(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	if *remote {
-		if *olderThan <= 0 && *keepLast <= 0 {
+	if pf.Remote {
+		if pf.OlderThan <= 0 && pf.KeepLast <= 0 {
 			fs.Usage()
 			return fmt.Errorf("magus config cache prune: --remote requires --older-than and/or --keep-last")
 		}
@@ -87,17 +86,17 @@ func configCachePrune(ctx context.Context, root string, args []string) error {
 		if err != nil {
 			return err
 		}
-		if err := m.PruneRemoteCache(ctx, *olderThan, *keepLast, *dryRun); err != nil {
+		if err := m.PruneRemoteCache(ctx, pf.OlderThan, pf.KeepLast, pf.DryRun); err != nil {
 			return fmt.Errorf("magus config cache prune --remote: %w", err)
 		}
 		fmt.Fprintln(os.Stderr, "magus config cache prune: remote prune complete")
 		return nil
 	}
 
-	if *keepLast > 0 {
+	if pf.KeepLast > 0 {
 		return fmt.Errorf("magus config cache prune: --keep-last is only supported with --remote")
 	}
-	if *olderThan <= 0 {
+	if pf.OlderThan <= 0 {
 		fs.Usage()
 		return fmt.Errorf("magus config cache prune: --older-than is required and must be positive")
 	}
@@ -107,13 +106,13 @@ func configCachePrune(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	cutoff := time.Now().Add(-*olderThan)
-	n, freed, err := m.PruneCache(ctx, cutoff, *dryRun)
+	cutoff := time.Now().Add(-pf.OlderThan)
+	n, freed, err := m.PruneCache(ctx, cutoff, pf.DryRun)
 	if err != nil {
 		return fmt.Errorf("magus config cache prune: %w", err)
 	}
 
-	if *dryRun {
+	if pf.DryRun {
 		fmt.Fprintf(os.Stderr, "magus config cache prune: would remove %d entries (%s)\n", n, fmtBytes(freed))
 	} else {
 		fmt.Fprintf(os.Stderr, "magus config cache prune: removed %d entries (%s freed)\n", n, fmtBytes(freed))
@@ -127,7 +126,7 @@ func configCacheExport(ctx context.Context, root string, args []string) error {
 	// --to, not --output: the global --output selects a FORMAT on every other
 	// command, and one command redefining it to mean a destination path is the
 	// kind of inconsistency that makes callers stop trusting the flag set.
-	out := fs.String("to", "", "Write the archive to this file (default: stdout)")
+	ef := gen.BindConfigCacheExport(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config cache export [--to <file>]")
 		fmt.Fprintln(os.Stderr, "")
@@ -147,14 +146,14 @@ func configCacheExport(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	if *out == "" {
+	if ef.To == "" {
 		if err := m.ExportCache(ctx, os.Stdout); err != nil {
 			return fmt.Errorf("config cache export: %w", err)
 		}
 		return nil
 	}
 
-	f, err := os.Create(*out)
+	f, err := os.Create(ef.To)
 	if err != nil {
 		return fmt.Errorf("config cache export: %w", err)
 	}
@@ -163,9 +162,9 @@ func configCacheExport(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("config cache export: %w", err)
 	}
 	if err := f.Close(); err != nil {
-		return fmt.Errorf("config cache export: close %s: %w", *out, err)
+		return fmt.Errorf("config cache export: close %s: %w", ef.To, err)
 	}
-	fmt.Fprintf(os.Stderr, "magus config cache export: wrote %s\n", *out)
+	fmt.Fprintf(os.Stderr, "magus config cache export: wrote %s\n", ef.To)
 	return nil
 }
 

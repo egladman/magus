@@ -4,8 +4,8 @@ description: "Split work across agents in a magus workspace as an acceptance-cri
 tags: [agents, skills, magus-delegate-multi-agent]
 aliases:
   - reference/skills/magus-delegate-ultra
-skill_full_bytes: 12204
-skill_simple_bytes: 9134
+skill_full_bytes: 12201
+skill_simple_bytes: 9131
 ---
 
 # magus-delegate-multi-agent
@@ -31,7 +31,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `37` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `99f5ac7ac873` |
+| `skill-content` | `430a06d637fe` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -198,7 +198,7 @@ Inspect the relevant target and projects:
 ```sh
 magus describe target <target> -o json
 magus graph deps -o json
-magus insight affinity -o json
+magus_insight lens=affinity
 magus explain project:<path> -o json
 ```
 
@@ -287,7 +287,7 @@ spawn every possible worker.
 
 ## Short form
 
-The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. This is the always-loaded primary. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for the difference.
+The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. This is the always-loaded primary. Both are hand-authored from one source body; see [Skills](../../guides/integrations/agents/skills.md) for the difference.
 
 <details>
 <summary>Show the short form</summary>
@@ -414,7 +414,7 @@ Inspect the relevant target and projects:
 ```sh
 magus describe target <target> -o json
 magus graph deps -o json
-magus insight affinity -o json
+magus_insight lens=affinity
 magus explain project:<path> -o json
 ```
 

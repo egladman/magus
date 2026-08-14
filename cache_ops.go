@@ -181,6 +181,11 @@ func ResolveCacheDir(root string, opts ...Option) (string, error) {
 	return resolveCacheDir(root, cfg), nil
 }
 
+// CacheKeyVersion is the hashing-recipe version this binary computes cache keys
+// with. Two keys from different recipes are not comparable, which is what makes a
+// mismatch worth reporting rather than treating as changed inputs.
+const CacheKeyVersion = cache.KeyVersion
+
 // OutputDescriptor is a stored target execution's identity and outcome - the caller-facing
 // projection of [cache.OutputDescriptor], the metadata behind a target-output ref.
 // Field tags match [cache.OutputDescriptor]'s exactly, so embedding this in a CLI JSON
@@ -194,7 +199,6 @@ type OutputDescriptor struct {
 	ErrMsg      string `json:"error,omitempty"` // failure message; empty on success
 	TimestampMs int64  `json:"timestamp_ms"`    // unix milliseconds, matching DurationMs' unit
 	DurationMs  int64  `json:"duration_ms"`
-	Schema      int    `json:"schema,omitempty"`
 
 	Key          string `json:"key,omitempty"`         // full cache key hash (64 hex)
 	KeyVersion   int    `json:"key_version,omitempty"` // hashStep KeyVersion that produced Key
@@ -203,14 +207,20 @@ type OutputDescriptor struct {
 
 	Revision string `json:"revision,omitempty"` // full VCS revision hash inputs were read at; "" when unknown
 	Dirty    bool   `json:"dirty,omitempty"`    // working tree had uncommitted changes at capture time
+
+	Spell     string   `json:"spell,omitempty"`      // spell::op filter that selected the definition
+	ExtraArgs []string `json:"extra_args,omitempty"` // trailing args forwarded after --
+	VCSName   string   `json:"vcs,omitempty"`        // provider Revision came from: git, hg, jj
+	Platform  string   `json:"platform,omitempty"`   // GOOS/GOARCH the run executed on
 }
 
 func newOutputDescriptor(d cache.OutputDescriptor) OutputDescriptor {
 	return OutputDescriptor{
 		Ref: d.Ref, Project: d.Project, Target: d.Target, Inv: d.Inv,
 		Failed: d.Failed, ErrMsg: d.ErrMsg, TimestampMs: d.TimestampMs, DurationMs: d.DurationMs,
-		Schema: d.Schema, Key: d.Key, KeyVersion: d.KeyVersion, Attempt: d.Attempt, MagusVersion: d.MagusVersion,
+		Key: d.Key, KeyVersion: d.KeyVersion, Attempt: d.Attempt, MagusVersion: d.MagusVersion,
 		Revision: d.Revision, Dirty: d.Dirty,
+		Spell: d.Spell, ExtraArgs: d.ExtraArgs, VCSName: d.VCSName, Platform: d.Platform,
 	}
 }
 

@@ -39,32 +39,24 @@ type Config struct {
 	// A budget rather than a boolean, so one setting covers what other tools split
 	// across a pair of flags: 1 is fail-fast, 3 tolerates three before giving up.
 	//
-	// Keeping going is the default because the alternative answers a different
-	// question than the one being asked. A gate over many projects is asked "what is
-	// broken", and stopping at the first failure answers "something is" - so a run
-	// reports one failure per invocation however many there really are, and each fix
-	// costs another full run to discover the next one. It also let an UNRELATED
-	// project's failure cancel its peers mid-flight, since nothing about a failure in
-	// one project invalidates the work of another.
+	// Keeping going is the default because a gate over many projects is asked "what
+	// is broken", and stopping at the first failure answers "something is" - one
+	// failure per invocation, each fix costing another full run to find the next.
 	//
-	// Projects that depended on a failure still stop; that is not this setting's
-	// doing, and cannot be turned off. Their work is genuinely invalid.
+	// Projects that depended on a failure still stop. That is not this setting's
+	// doing and cannot be turned off; their work is genuinely invalid.
 	MaxFailures int `json:"max_failures" yaml:"max_failures" validate:"gte=0"`
 
 	// TargetTimeout bounds how long any single target may run before magus
 	// cancels it. Zero, the default, means no limit.
 	//
-	// This is a runaway guard, not a performance budget. A magusfile is code,
-	// so a loop that never terminates is a thing someone can write by
-	// accident, and without a deadline nothing reclaims a CI runner that hit
-	// one. The Buzz VM samples cancellation on loop back edges, so a spinning
-	// target notices promptly.
+	// A runaway guard, not a performance budget: a magusfile is code, so a
+	// non-terminating loop is writable by accident and nothing else reclaims a
+	// CI runner that hit one.
 	//
-	// It bounds the WHOLE target, subprocesses included: cancelling the
-	// context kills the commands the target spawned. Set it above your
-	// slowest legitimate target, not near it, or a long compile becomes a
-	// timeout. Off by default for exactly that reason - a wrong value here
-	// fails builds that were fine.
+	// It bounds the WHOLE target, subprocesses included. Set it ABOVE your
+	// slowest legitimate target, not near it - off by default because a wrong
+	// value here fails builds that were fine.
 	TargetTimeout time.Duration `json:"target_timeout" yaml:"target_timeout"`
 
 	// HistoryPath is the path to the runtime-history JSON used by volatility detection,
@@ -91,23 +83,18 @@ type Config struct {
 	// RequiredVersion is the oldest magus that can run this workspace, as a semver
 	// constraint (">= 0.4.0", "^0.4"). Empty means no floor.
 	//
-	// It exists because the binary that hits the problem is the OLD one, and an old
-	// binary cannot be told after the fact which release added the module or key it
-	// is choking on - it has never heard of that release. A declared minimum is the
-	// only thing it can evaluate against a future it does not know about, which is
-	// why Terraform's required_version, Go's `go` directive, and npm's engines all
-	// take this shape. Checked before any magusfile is evaluated, since the
-	// magusfile is what explodes; see MGS1021.
+	// The binary that hits the problem is the OLD one, and it cannot be told which
+	// release added the key it is choking on - it has never heard of that release. A
+	// declared minimum is the only thing it can evaluate against a future it does not
+	// know, which is why Terraform's required_version and Go's `go` directive take
+	// this shape. Checked before any magusfile is evaluated; see MGS1021.
 	//
-	// cli:"-" - magus.yaml ONLY, deliberately. Every other config field takes a flag
-	// and a MAGUS_* env var because the config layering exists to let a caller
-	// override the workspace. A floor is the one field where that is backwards: it
-	// is the workspace protecting the caller from a binary too old to read it, so an
-	// override is a way to switch off a check whose entire job is to stop you. The
-	// env var would be worse than the flag - one MAGUS_REQUIRED_VERSION exported in
-	// a shell or a CI environment silently disables the floor for every workspace
-	// that session touches, and nothing would report it. If the binary is too old,
-	// the fix is to upgrade the binary or lower the floor in the file.
+	// cli:"-" - magus.yaml ONLY, deliberately. Config layering exists to let a caller
+	// override the workspace, and a floor is the one field where that is backwards:
+	// it protects the caller from a binary too old to read the workspace, so an
+	// override switches off a check whose job is to stop you. An env var would be
+	// worse than a flag - one MAGUS_REQUIRED_VERSION exported in a CI environment
+	// would silently disable the floor for every workspace that session touches.
 	RequiredVersion string `json:"required_version" yaml:"required_version" cli:"-"`
 }
 
@@ -248,10 +235,10 @@ type CacheIncludeFlag struct {
 func (c Cache) WriteEnabled() bool { return c.Write.Enabled == nil || *c.Write.Enabled }
 
 // IncludeOS reports whether the host OS keys every entry.
-func (c Cache) IncludeOS() bool { return c.Include.OS.Enabled == nil || *c.Include.OS.Enabled }
+func (c Cache) IncludeOS() bool { return c.Include.OS.Enabled != nil && *c.Include.OS.Enabled }
 
 // IncludeArch reports whether the host architecture keys every entry.
-func (c Cache) IncludeArch() bool { return c.Include.Arch.Enabled == nil || *c.Include.Arch.Enabled }
+func (c Cache) IncludeArch() bool { return c.Include.Arch.Enabled != nil && *c.Include.Arch.Enabled }
 
 // CacheRemote holds settings that apply only to a remote cache backend (wired via
 // magus.cache.remote in the magusfile). The backend binding is code, so it stays
@@ -542,7 +529,7 @@ func EnvVarDocs() []EnvVarDoc {
 	return []EnvVarDoc{
 		{"MAGUS_CACHE_DIR", "cache.dir", "", "Override the default cache location (.magus/ in the workspace root)"},
 		{"MAGUS_CACHE_WRITE_ENABLED", "cache.write.enabled", "true", "When false (or 0), replay cache hits but never write new entries, locally or to a remote"},
-		{"MAGUS_CACHE_INCLUDE_OS_ENABLED", "cache.include.os.enabled", "true", "When false (or 0), the host OS is left out of every cache key"},
+		{"MAGUS_CACHE_INCLUDE_OS_ENABLED", "cache.include.os.enabled", "false", "When true, the host OS keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay"},
 		{"MAGUS_CACHE_INCLUDE_ARCH_ENABLED", "cache.include.arch.enabled", "true", "When false (or 0), the host architecture is left out of every cache key"},
 		{"MAGUS_CACHE_SIZE_MB", "cache.size_mb", "0", "Cache disk usage cap in MB (binary, 1<<20); 0 means unlimited"},
 		{"MAGUS_CACHE_REMOTE_INSECURE", "cache.remote.insecure", "false", "Disable remote-cache signature verification (accept/produce unsigned artifacts); for trusted single-repo CI only"},

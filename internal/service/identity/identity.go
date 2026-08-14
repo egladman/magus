@@ -20,13 +20,9 @@
 //     every workspace on the machine, so config identity alone would let two
 //     checkouts share one container.
 //
-// It sits under internal/service rather than beside it because it answers one
-// question about the thing that package runs, and a sibling package named for an
-// abbreviation invited the reader to guess at the relationship.
-//
-// Today identity is inferred with a docker-argv heuristic ([Parse]), since the
-// canonical case is a container service. A future spell-provided identity
-// descriptor on spells.Service will supersede the heuristic where present.
+// Identity is inferred today with a docker-argv heuristic ([Parse]), since the
+// canonical case is a container service. A spell-provided identity descriptor on
+// spells.Service will supersede the heuristic where present.
 package identity
 
 import (
@@ -64,24 +60,19 @@ func (i Identity) IsContainer() bool { return i.Image != "" }
 // InstanceKey returns the key a RUNNING service may be shared under, namespacing
 // [Fingerprint] to one workspace.
 //
-// The two answer different questions and must not be collapsed. Fingerprint asks
-// "is this the same service config", which is workspace-independent and is what
-// near-duplicate clustering compares. This asks "may these two acquisitions share
-// one running process", which never spans workspaces: the daemon is a single
-// long-lived host that serves every workspace on the machine, so a bare
-// fingerprint would hand two checkouts declaring the same postgres:16 the SAME
-// container, and one workspace's test data would land in the other's database.
+// The two must not be collapsed. Fingerprint asks "is this the same service config",
+// which is workspace-independent. This asks "may these two acquisitions share one
+// running process", which never spans workspaces: the daemon serves every workspace on
+// the machine, so a bare fingerprint would hand two checkouts declaring the same
+// postgres:16 the SAME container, and one workspace's test data would land in the
+// other's database.
 //
-// root is the workspace root path, which is what a workspace IS. Two worktrees of
-// one repo are therefore separate workspaces and correctly get separate services:
-// their file state differs, so sharing a process between them would be wrong even
-// though the declared config is identical.
+// root is the workspace root path. Two worktrees of one repo are separate workspaces and
+// correctly get separate services, since their file state differs.
 //
-// An empty root is a KNOWN GAP, not a namespace. Every rootless invocation on the
-// machine collapses into the same "" bucket, so two unrelated bare `magus buzz`
-// scripts declaring the same image would still share one container. Callers that can
-// supply a root must; closing it properly means giving a rootless run a stable
-// identity of its own, which nothing currently has.
+// An empty root is a KNOWN GAP, not a namespace: every rootless invocation collapses into
+// one "" bucket, so two unrelated `magus buzz` scripts declaring the same image still
+// share a container. Callers that can supply a root must.
 func InstanceKey(root string, s spells.Service) string {
 	return root + "\x00" + Fingerprint(s)
 }

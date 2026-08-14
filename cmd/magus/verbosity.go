@@ -128,17 +128,35 @@ var (
 	displayHandler *cache.PrettyHandler
 )
 
-// restoreTerminal undoes any terminal state this run reserved: the sticky error
-// region's DECSTBM scroll margins. runCLI calls it on every exit path, including
-// the signal path, so an interrupted run does not hand the user back a shell
-// pinned inside a scroll region.
+// resetOnce guards the inbound reset. applyDisplay runs more than once per
+// invocation, so reaching restoreTerminal each time emitted the reset burst
+// three times before a command's first byte of output. One is enough to heal a
+// previously crashed run.
+var resetOnce sync.Once
+
+// releaseDisplay hands back the current handler's rows without touching global
+// terminal state, for the startup path where nothing has reserved any yet.
+func releaseDisplay() {
+	displayMu.Lock()
+	h := displayHandler
+	displayHandler = nil
+	displayMu.Unlock()
+
+	if h != nil {
+		_ = h.Close()
+	}
+	_ = tty.ReleaseStderr()
+}
+
+// restoreTerminal undoes any terminal state this run reserved. runCLI calls it
+// on every exit path, including the signal path, so an interrupted run does not
+// hand back a shell pinned inside a scroll region.
 //
-// It both closes the handler it knows about and resets the scroll margins
-// unconditionally. The second step is not redundant: the cache builds its own
-// pretty handler for cache events (see internal/cache.Open), and that one --
-// not this one -- is what actually reserves a region during a normal run.
-// Scroll margins belong to the terminal rather than to whoever set them, so one
-// reset here covers every handler without threading ownership through the cache.
+// The unconditional reset is not redundant with closing the handler: the cache
+// builds its own pretty handler (see internal/cache.Open), and that one reserves
+// the region during a normal run. Margins belong to the terminal rather than to
+// whoever set them, so one reset covers every handler without threading
+// ownership through the cache.
 func restoreTerminal() {
 	displayMu.Lock()
 	h := displayHandler
@@ -148,14 +166,29 @@ func restoreTerminal() {
 	if h != nil {
 		_ = h.Close()
 	}
+	// Give back every leased row on stderr and stop the notification band's
+	// expiry sweeper. This is the ordered teardown; the unconditional reset
+	// below is still the backstop for margins nothing here owns.
+	_ = tty.ReleaseStderr()
 	_ = tty.ResetScrollMargins(os.Stderr, tty.SystemProbe)
+	// And mouse reporting, for the same reason and on the same unconditional
+	// terms: a process that exits with tracking on leaves the user unable to
+	// select text in their own shell.
+	_ = tty.ResetMouseTracking(os.Stderr, tty.SystemProbe)
 }
 
 // applyDisplay configures the process-global slog logger and writes the resolved level back to globalCfg.
 func applyDisplay() {
 	// Release the previous handler's region before installing a replacement,
 	// so a second call does not strand the first one's scroll margins.
-	restoreTerminal()
+	//
+	// releaseDisplay, not restoreTerminal: nothing has reserved a region on this
+	// path yet, so the escape burst would be pure output.
+	releaseDisplay()
+	resetOnce.Do(func() {
+		_ = tty.ResetScrollMargins(os.Stderr, tty.SystemProbe)
+		_ = tty.ResetMouseTracking(os.Stderr, tty.SystemProbe)
+	})
 
 	// --silent implies --quiet's suppression; the extra behavior rides on Log.Silent.
 	quiet := global.quiet || global.silent

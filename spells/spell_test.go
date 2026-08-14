@@ -46,7 +46,6 @@ func TestNewSpellAccessors(t *testing.T) {
 	s := NewSpell(
 		"go",
 		WithSources("**/*.go"),
-		WithClaims("**/*.go"),
 		WithOutputs("bin/**"),
 		WithIgnoreDirs("vendor", "node_modules"),
 		WithTargets("build", "test"),
@@ -88,7 +87,6 @@ func TestSpellImplementsDriver(t *testing.T) {
 // what the option setters stored.
 func TestSpellMetadataAccessors(t *testing.T) {
 	s := NewSpell("go",
-		WithClaims("**/*.go"),
 		WithLanguage("go"),
 		WithTargetCharms(map[string][]string{"lint": {"rw", "gha"}}),
 		WithTargetDocs(map[string]string{"build": "compile the binary"}),
@@ -96,7 +94,6 @@ func TestSpellMetadataAccessors(t *testing.T) {
 		WithDeclarationFiles("go.mod"),
 		WithDeclarationDirGlobs("cmd/**"),
 	)
-	assert.Equal(t, []string{"**/*.go"}, s.Claims())
 	assert.Equal(t, "go", s.Language())
 	assert.Equal(t, []string{"rw", "gha"}, s.Charms("lint"))
 	assert.Nil(t, s.Charms("missing"))

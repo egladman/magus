@@ -31,7 +31,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `37` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `99f5ac7ac873` |
+| `skill-content` | `430a06d637fe` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -54,9 +54,9 @@ Run these and read them together:
 
 ```sh
 magus graph stats            # god nodes (structural risk), orphans, doc coverage
-magus insight hotspots       # churn x complexity per project, with blast radius
-magus insight affinity       # projects that change together: hidden coupling
-magus insight ownership      # author concentration, bus factor, abandonment
+magus_insight lens=hotspots  # churn x complexity per project, with blast radius
+magus_insight lens=affinity  # projects that change together: hidden coupling
+magus_insight lens=ownership # author concentration, bus factor, abandonment
 magus graph deps -o tree     # the declared project DAG
 ```
 
@@ -170,7 +170,7 @@ browser graph tool - do not hand-draw diagrams of what the graph already knows.
 
 ## Short form
 
-The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. This is the always-loaded primary. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for the difference.
+The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. This is the always-loaded primary. Both are hand-authored from one source body; see [Skills](../../guides/integrations/agents/skills.md) for the difference.
 
 <details>
 <summary>Show the short form</summary>
@@ -189,9 +189,9 @@ Run these and read them together:
 
 ```sh
 magus graph stats            # god nodes (structural risk), orphans, doc coverage
-magus insight hotspots       # churn x complexity per project, with blast radius
-magus insight affinity       # projects that change together: hidden coupling
-magus insight ownership      # author concentration, bus factor, abandonment
+magus_insight lens=hotspots  # churn x complexity per project, with blast radius
+magus_insight lens=affinity  # projects that change together: hidden coupling
+magus_insight lens=ownership # author concentration, bus factor, abandonment
 magus graph deps -o tree     # the declared project DAG
 ```
 

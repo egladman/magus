@@ -16,8 +16,9 @@
 // copied into a host's hook config, and the plugin is loaded FROM SOURCE by OpenCode's own
 // Bun runtime. devDependencies are the two gates only.
 //
-// The docs SSG ignores this directory's non-markdown files - it renders only *.md - so these
-// templates never become pages, and this magusfile is invisible to it.
+// The docs SSG renders only *.md, so these templates never become pages and this magusfile is
+// invisible to it. The per-host guide pages beside them (claude-code.md, codex.md, ...) DO
+// render: they belong to the docs project's **/*.md corpus, not to this project's sources.
 
 import "magus";
 // os shells out to pnpm for the install and the two gates.
@@ -30,13 +31,18 @@ import "proc";
 // the dependency graph - and does not run in ci, which uses the custom targets below.
 import "magus/spell/bash";
 import "magus/spell/typescript";
+// Imported for its dprint op only, NOT added to the project spells list below: binding
+// markdown here would also claim this directory's *.md for markdownlint, which the root
+// project already lints. Formatting is the part this project has to own itself.
+import "magus/spell/markdown";
 
 magus\project({
     "spells": [bash, typescript],
     // Affected tracking is glob-based, not import-graph-based, so every input must be named to
     // be watched: the templates themselves, and the config files that drive the gates.
-    "sources": ["*.ts", "*.sh", "codex-hooks.json",
-                "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json"],
+    "sources": ["*.ts", "*.sh", "codex-hooks.json", "*.md",
+                "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json",
+                "dprint.json"],
     "targets": {
     },
 });
@@ -95,6 +101,16 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 // now, and the honest remaining limit is narrow: the event SHAPES in the fixtures are recorded
 // from each host's documentation, so a host silently renaming a field is still invisible here.
 export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
     ctx.needs(lint);
     ctx.needs(test);
+}
+
+// format owns the Markdown in this directory - the per-host guide pages beside the
+// templates. The docs project cannot do it: dprint discovers this project's dprint.json
+// and would format the subtree under it, which is a parent target writing into a
+// descendant project (MGS3001). So the pages are formatted by the project that owns them,
+// which is the same rule every other project with Markdown follows.
+export fun format(ctx: magus\Context, args: [str]) > void {
+    markdown["dprint"](ctx);
 }

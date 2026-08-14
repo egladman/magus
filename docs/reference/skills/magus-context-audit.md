@@ -29,7 +29,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `37` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `99f5ac7ac873` |
+| `skill-content` | `430a06d637fe` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -41,7 +41,7 @@ Every mechanical step spelled out, plus the rationale for each. Installed as the
 ````markdown
 # Auditing the instructions an agent was given
 
-This is a LENS, like `magus insight`: it observes and ranks, it does not gate.
+This is a LENS, like `magus_insight`: it observes and ranks, it does not gate.
 The output is a findings list a human decides on, never an automatic edit.
 
 What it looks at is not code. It is everything loaded into an agent's context as
@@ -154,7 +154,7 @@ and have the other name it rather than restate it.
 
 ## Short form
 
-The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. This is the always-loaded primary. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for the difference.
+The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. This is the always-loaded primary. Both are hand-authored from one source body; see [Skills](../../guides/integrations/agents/skills.md) for the difference.
 
 <details>
 <summary>Show the short form</summary>
@@ -162,7 +162,7 @@ The enumeration dropped, the judgment kept - for the most capable readers, not t
 ````markdown
 # Auditing the instructions an agent was given
 
-This is a LENS, like `magus insight`: it observes and ranks, it does not gate.
+This is a LENS, like `magus_insight`: it observes and ranks, it does not gate.
 The output is a findings list a human decides on, never an automatic edit.
 
 What it looks at is not code. It is everything loaded into an agent's context as

@@ -5,14 +5,16 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strconv"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/clihint"
@@ -39,7 +41,6 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 
 	// Parsed before the run, not after it: a typo'd verb used to build the whole
 	// project and only then exit 2 on something checkable up front.
-	var detach *bool
 	var chain chainPlan
 	if chained {
 		var proceed bool
@@ -69,39 +70,19 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 
 	flagArgs, extraArgs := splitOnDashDash(rest)
 
-	var (
-		timeout           *time.Duration
-		shardID           *string
-		nShards           *int
-		noVolatilityRetry *bool
-		raceFlag          *string
-		graphView         *bool
-		upstream          *bool
-		graphDepth        *int
-		step              *bool
-		openViewer        *bool
-		noCache           *bool
-
-		noDefaultCharms *bool
-	)
+	// Bound from the command registry, not declared here: the man page's copy of
+	// this list and this one used to be written separately and reconciled by a test.
+	// The two env-var defaults below are applied after binding, because they are a
+	// property of THIS process rather than of the documented flag.
+	var rf *gen.RunFlags
 	projectArgs, err := cmdParse("run "+targetName, flagArgs, func(fs *flag.FlagSet) {
-		timeout = fs.Duration("timeout", 0, "Abort if not finished within this duration (e.g. 5m, 1h30m); 0 = no limit")
-		shardID = fs.String("shard", os.Getenv("MAGUS_SHARD"), "Shard ID within this CI matrix run (e.g. \"0\"); enables ci.shard.total reporting")
-		var nShardsDefault int
-		if s := os.Getenv("MAGUS_N_SHARDS"); s != "" {
-			nShardsDefault, _ = strconv.Atoi(s)
-		}
-		nShards = fs.Int("n-shards", nShardsDefault, "Total shard count for this CI matrix run; paired with --shard")
-		noVolatilityRetry = fs.Bool("no-volatility-retry", false, "Disable volatility auto-retry for this run (used by magus affected --bisect)")
-		raceFlag = fs.String("race", "", raceFormatHelp)
-		graphView = fs.Bool("graph", false, "Render the dependency graph for the selected scope instead of executing")
-		upstream = fs.Bool("upstream", false, "With --graph: show dependents instead of dependencies")
-		graphDepth = fs.Int("depth", 0, "With --graph: cap displayed depth (0 = unlimited)")
-		step = fs.Bool("step", false, "Pause before each subprocess for interactive stepping (requires TTY; implies --concurrency=1)")
-		noDefaultCharms = fs.Bool("no-default-charms", false, "Ignore magus.yaml default_charms for this run")
-		openViewer = fs.Bool("open", false, "Open this run in the browser log viewer and stream to it as it goes, over an ephemeral loopback server (127.0.0.1); the link and data never leave your machine")
-		noCache = fs.Bool("no-cache", false, "Force a fresh run even on a cache hit; still refreshes the entry (unlike a skip_cache target, which never snapshots)")
-		detach = fs.Bool("detach", false, "Hand this run to the daemon and return immediately; watch it with magus status --watch")
+		rf = gen.BindRun(fs)
+		// The shard pair defaults from the environment CI sets, so a matrix job
+		// need not repeat itself on every magus call. Applied by seeding the bound
+		// value (an explicit flag still wins, since parsing runs after this) and
+		// mirroring it into DefValue so -h reports what the flag will actually do.
+		envDefault(fs, gen.FlagRunShard, os.Getenv("MAGUS_SHARD"))
+		envDefault(fs, gen.FlagRunNShards, os.Getenv("MAGUS_N_SHARDS"))
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus run %s [flags] [project...] [-- <extra args>]\n", rawTarget)
 			fmt.Fprintln(os.Stderr, "")
@@ -119,29 +100,43 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if err != nil {
 		return err
 	}
-	if detach != nil && *detach {
-		return detachToDaemon(ctx, append([]string{"run"}, withoutDetachFlag(origArgs)...))
+	if rf.Wait && !rf.Detach {
+		return usagef("magus run: --wait applies to --detach; a plain run already blocks until it finishes")
+	}
+	if rf.Detach {
+		return detachToDaemon(ctx, root, append([]string{"run"}, withoutDetachFlag(origArgs)...), rf.Wait)
 	}
 	// -s deliberately suppresses the usual target progress. That is useful to an
 	// agent, but a person otherwise has no positive signal that a slow invocation
 	// is alive. Say it once, before any potentially long workspace load, and point
 	// at the existing observer rather than inventing another progress surface.
 	if global.silent {
-		interactive.Emit(os.Stderr, "running quietly; follow progress in another terminal with `magus status --watch 15s`")
+		// Says what arrives and when, rather than sending the reader to poll a
+		// dashboard in another terminal. This run BLOCKS: waiting for it is the
+		// normal thing to do, and every target that runs prints an output ref
+		// on the way past, so there is already an exact handle for anything
+		// worth reading afterwards.
+		interactive.Emit(os.Stderr, fmt.Sprintf(
+			"running quietly; output refs print as targets finish, and `%s` reads any of them",
+			clihint.QueryOutput.With("<ref>")))
 	}
 
-	if *step && !isInteractiveTTY() {
+	if rf.Step && !isInteractiveTTY() {
 		fmt.Fprintln(os.Stderr, "magus: --step requires an interactive terminal")
 		return errSilent{exitCode: 2}
 	}
 
-	if *timeout > 0 {
+	if rf.Timeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = withTimeout(ctx, *timeout, "run:"+targetName)
+		ctx, cancel = withTimeout(ctx, rf.Timeout, "run:"+targetName)
 		defer cancel()
 	}
 
-	if *step {
+	if rf.Step && !isInteractiveTTY() {
+		fmt.Fprintln(os.Stderr, "magus: --step requires an interactive terminal")
+		return errSilent{exitCode: 2}
+	}
+	if rf.Step {
 		ctx = withStepGate(ctx)
 	}
 
@@ -149,14 +144,14 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		return fmt.Errorf("spell-qualified syntax (e.g. %q) is not supported for the ci target", rawTarget)
 	}
 
-	if *graphView {
+	if rf.Graph {
 		ws, err := inspectWorkspace(ctx, root)
 		if err != nil {
 			return err
 		}
 		return renderWorkspaceGraph(ctx, ws, graphRenderOptions{
-			Upstream: *upstream,
-			Depth:    *graphDepth,
+			Upstream: rf.Upstream,
+			Depth:    rf.Depth,
 			Spell:    spellFilter,
 			Roots:    projectArgs,
 			Target:   targetName,
@@ -209,7 +204,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// Surface the active charms up front, next to the projects header, so the run's
 	// state ("here's what's in effect") is visible before any work - and so a missing
 	// default charm (e.g. rw not applied) is obvious rather than silent.
-	charms := withDefaultCharms(parsedTarget.Charms, globalCfg.DefaultCharms, *noDefaultCharms)
+	charms := withDefaultCharms(parsedTarget.Charms, globalCfg.DefaultCharms, rf.NoDefaultCharms)
 	m.LogCharms(ctx, strings.Join(charms, ","))
 	m.LogCache(ctx)
 	if len(targets) == 0 {
@@ -250,10 +245,10 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if len(charms) > 0 {
 		runOpts = append(runOpts, magus.WithCharms(charms...))
 	}
-	if *noVolatilityRetry {
+	if rf.NoVolatilityRetry {
 		runOpts = append(runOpts, magus.WithNoVolatilityRetry())
 	}
-	race, err := resolveRace(*raceFlag)
+	race, err := resolveRace(rf.Race)
 	if err != nil {
 		return err
 	}
@@ -263,10 +258,10 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	case race.Enabled:
 		runOpts = append(runOpts, magus.WithRace())
 	}
-	if *step {
+	if rf.Step {
 		runOpts = append(runOpts, magus.WithStep())
 	}
-	if *noCache {
+	if rf.NoCache {
 		runOpts = append(runOpts, magus.WithNoCache())
 	}
 	if rw != nil {
@@ -284,7 +279,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if targetName == "ci" {
 		trigger = journal.TriggerCI
 	}
-	liveBC, stopLive := beginLive(ctx, *openViewer)
+	liveBC, stopLive := beginLive(ctx, rf.Open)
 	defer stopLive()
 	// An adopted run (dispatched by the daemon) also feeds the daemon's live-run registry,
 	// carried on ctx; a plain CLI run has no sink, so this is empty there.
@@ -302,11 +297,11 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	} else {
 		err = m.Run(invCtx, targets, runOpts...)
 	}
-	if *timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
-		return fmt.Errorf("run %s: timed out after %s", targetName, *timeout)
+	if rf.Timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("run %s: timed out after %s", targetName, rf.Timeout)
 	}
-	if rw != nil && *shardID != "" && *nShards > 0 {
-		_ = rw.RecordShardTotal(*shardID, *nShards, time.Since(startedAt))
+	if rw != nil && rf.Shard != "" && rf.NShards > 0 {
+		_ = rw.RecordShardTotal(rf.Shard, rf.NShards, time.Since(startedAt))
 	}
 	if reportedRunErr(err) {
 		return errSilent{exitCode: 1}
@@ -612,15 +607,38 @@ func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, targ
 	return emitFormatted(opts, out)
 }
 
-// detachFlagName is the one flag these helpers act on; it is named once so the two that
-// add and remove it cannot disagree.
-const detachFlagName = "detach"
+// envDefault seeds a bound flag from an environment variable, leaving it alone when
+// the variable is unset. DefValue is updated too, so `-h` shows the value the flag
+// would take rather than the registry's zero.
+func envDefault(fs *flag.FlagSet, name, value string) {
+	if value == "" {
+		return
+	}
+	f := fs.Lookup(name)
+	if f == nil {
+		return
+	}
+	if err := f.Value.Set(value); err != nil {
+		return
+	}
+	f.DefValue = value
+}
 
-// withoutDetachFlag drops --detach from an argv, in every spelling the flag package
-// accepts: -name, --name, and either with an inline =value.
+// localOnlyFlags never travel to the daemon. --detach would make it detach
+// again, handing the work to itself forever; --wait describes what THIS process
+// does after submitting and means nothing to the run itself.
 //
-// The argv is re-submitted verbatim to the daemon, so leaving the flag in would make the
-// daemon detach again - handing the work to itself, forever.
+// Both names come from the command registry rather than from a literal. The
+// second one used to be spelled "wait" right here, beside a constant for the
+// first - and a flag whose name is a literal in one place and a constant in
+// another is a rename waiting to go half-applied.
+var localOnlyFlags = []string{gen.FlagRunDetach, gen.FlagRunWait}
+
+// withoutDetachFlag drops the local-only flags from an argv, in every spelling
+// the flag package accepts: -name, --name, and either with an inline =value.
+//
+// The argv is re-submitted verbatim to the daemon, so leaving one in would be
+// acted on there.
 func withoutDetachFlag(args []string) []string {
 	out := make([]string, 0, len(args))
 	for i, a := range args {
@@ -632,7 +650,7 @@ func withoutDetachFlag(args []string) []string {
 			break
 		}
 		trimmed := strings.TrimLeft(a, "-")
-		if key, _, _ := strings.Cut(trimmed, "="); key == detachFlagName && strings.HasPrefix(a, "-") {
+		if key, _, _ := strings.Cut(trimmed, "="); strings.HasPrefix(a, "-") && slices.Contains(localOnlyFlags, key) {
 			continue
 		}
 		out = append(out, a)
@@ -648,7 +666,7 @@ func withoutDetachFlag(args []string) []string {
 // this invocation exits, so submitting there would queue work that is silently dropped:
 // the caller would be told it detached, and nothing would ever run. Refusing is the only
 // honest answer, and the remedy is one command.
-func detachToDaemon(ctx context.Context, argv []string) error {
+func detachToDaemon(ctx context.Context, root string, argv []string, wait bool) error {
 	addr, err := resolveDaemonAddr(ctx, "")
 	if err != nil || addr == "" {
 		return types.WrapDiagnostic(types.DaemonRequired, nil,
@@ -668,6 +686,75 @@ func detachToDaemon(ctx context.Context, argv []string) error {
 		fmt.Fprintln(os.Stderr, "magus: the daemon is already running this exact command; not queued twice")
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "magus: detached (job %s); watch it with `%s`\n", inv, clihint.Status.With("--watch 15s"))
+	// Hand back the HANDLE and the command that resolves it, never a dashboard
+	// to poll. A "watch it with status --watch" hint gives an agent nothing to
+	// parse and no completion signal, and gives a human another window to
+	// babysit; the invocation id is addressable, and `query invocation` reads
+	// its journal - outcome, timings, the output refs of every target it ran -
+	// whenever the reader actually wants it.
+	if !wait {
+		fmt.Fprintf(os.Stderr, "magus: detached as %s\n  read it with: %s\n",
+			inv, clihint.QueryInvocation.With(inv))
+		return nil
+	}
+	fmt.Fprintf(os.Stderr, "magus: running as %s on the daemon\n", inv)
+	return awaitInvocation(ctx, root, inv)
+}
+
+// awaitInvocation blocks until the daemon's run records a finished event, then
+// reports its outcome and exits with it.
+//
+// This is what --detach --wait is FOR, and the combination is not a
+// contradiction: the daemon owns the run, so it coalesces with an identical one
+// already in flight and shares the pool, while the caller still gets a
+// synchronous answer and an exit status to branch on. Detach alone is for
+// firing and forgetting; this is for wanting the daemon's scheduling without
+// giving up the shell's.
+//
+// Waiting on Status, never on FinishedMs: an interrupted run has no finished
+// event, and InvocationFromEvents backfills its finish time from the last event
+// it saw - so a timestamp says "something happened last", while a status is the
+// only thing that says "this is over".
+func awaitInvocation(ctx context.Context, root, inv string) error {
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return err
+	}
+	for delay := 100 * time.Millisecond; ; {
+		select {
+		case <-ctx.Done():
+			// Ctrl-C detaches the WATCHER, not the run: the daemon owns it and
+			// keeps going, so say how to pick it up again rather than implying
+			// it was cancelled.
+			fmt.Fprintf(os.Stderr, "\nmagus: stopped waiting; %s is still running on the daemon\n  read it with: %s\n",
+				inv, clihint.QueryInvocation.With(inv))
+			return ctx.Err()
+		case <-time.After(delay):
+		}
+		// A log that does not exist yet is a run the daemon has not started, not
+		// an error - it is the ordinary first tick.
+		header, err := m.InvocationByID(inv)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("--wait: read run log for %s: %w", inv, err)
+		}
+		if err == nil && header.Status != "" {
+			return reportInvocation(header, inv)
+		}
+		if delay < 2*time.Second {
+			delay *= 2
+		}
+	}
+}
+
+// reportInvocation prints a finished run's outcome and exits with it.
+func reportInvocation(header magus.Invocation, inv string) error {
+	took := time.Duration(header.FinishedMs-header.StartedMs) * time.Millisecond
+	if header.Status != "pass" {
+		fmt.Fprintf(os.Stderr, "magus: %s failed (%s)\n  read it with: %s\n",
+			inv, formatDur(took), clihint.QueryInvocation.With(inv))
+		return errSilent{exitCode: 1}
+	}
+	fmt.Fprintf(os.Stderr, "magus: %s passed (%s)\n  read it with: %s\n",
+		inv, formatDur(took), clihint.QueryInvocation.With(inv))
 	return nil
 }

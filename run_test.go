@@ -366,7 +366,7 @@ func TestCurrentRevisionNoVCS(t *testing.T) {
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
-	revision, dirty := m.CurrentRevision(t.Context())
+	_, revision, dirty := m.CurrentRevision(t.Context())
 	assert.Empty(t, revision)
 	assert.False(t, dirty)
 }
@@ -389,12 +389,12 @@ func TestCurrentRevisionWithVCS(t *testing.T) {
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
-	revision, dirty := m.CurrentRevision(t.Context())
+	_, revision, dirty := m.CurrentRevision(t.Context())
 	assert.Equal(t, head, revision, "CurrentRevision must pass meta.ID through verbatim")
 	assert.False(t, dirty, "a freshly committed tree is clean")
 
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("x"), 0o644))
-	revision, dirty = m.CurrentRevision(t.Context())
+	_, revision, dirty = m.CurrentRevision(t.Context())
 	assert.Equal(t, head, revision, "an uncommitted edit does not move HEAD")
 	assert.True(t, dirty, "an uncommitted edit must report dirty")
 }

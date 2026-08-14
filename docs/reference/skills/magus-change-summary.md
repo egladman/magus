@@ -4,8 +4,8 @@ description: "Summarize what changed in a magus workspace, write it up, or answe
 tags: [agents, skills, magus-change-summary]
 aliases:
   - reference/skills/magus-changes
-skill_full_bytes: 5133
-skill_simple_bytes: 3911
+skill_full_bytes: 5137
+skill_simple_bytes: 3916
 ---
 
 # magus-change-summary
@@ -31,7 +31,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `37` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `99f5ac7ac873` |
+| `skill-content` | `430a06d637fe` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -58,8 +58,8 @@ brief. The output is a decision aid, not a chronological commit dump.
    git log --first-parent --merges --since="<window>" --format='%h %ad %s' --date=short
    ```
 
-   If no VCS merge history is available, say so. Use `magus insight trend` and
-   `magus insight hotspots --files` for activity, but do not call that a merge summary.
+   If no VCS merge history is available, say so. Use `magus_insight lens=trend`
+   and `magus_insight lens=files` for activity, but do not call that a merge summary.
 3. For each candidate change, list its files, then classify them before reading:
 
    ```sh
@@ -78,7 +78,7 @@ brief. The output is a decision aid, not a chronological commit dump.
    magus graph diff --rev <base> -o markdown
    ```
 
-5. Use `magus insight affinity`, `ownership`, and `trend` only to add context:
+5. Use `magus_insight` with lens=affinity, ownership, or trend only to add context:
    hidden coupling, ownership risk, or unusually rising activity. They do not
    prove that a feature landed.
 
@@ -169,7 +169,7 @@ what a change affects is the work these verbs already did.
 
 ## Short form
 
-The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. This is the always-loaded primary. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for the difference.
+The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. This is the always-loaded primary. Both are hand-authored from one source body; see [Skills](../../guides/integrations/agents/skills.md) for the difference.
 
 <details>
 <summary>Show the short form</summary>
@@ -209,7 +209,7 @@ brief.
    magus graph diff --rev <base> -o markdown
    ```
 
-5. Use `magus insight affinity`, `ownership`, and `trend` only to add context:
+5. Use `magus_insight` with lens=affinity, ownership, or trend only to add context:
    hidden coupling, ownership risk, or unusually rising activity.
 
 ## Write the brief

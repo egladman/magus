@@ -118,6 +118,7 @@ concepts/spells/typescript/
 concepts/targets/
 concepts/targets/ci/
 concepts/telemetry/
+concepts/terminal/
 concepts/volatility/
 concepts/wards/
 concepts/workspace-providers/
@@ -187,6 +188,15 @@ guides/getting-started/
 guides/insight/
 guides/integrations/
 guides/integrations/agents/
+guides/integrations/agents/any-host/
+guides/integrations/agents/claude-code/
+guides/integrations/agents/codex/
+guides/integrations/agents/cursor/
+guides/integrations/agents/guard-templates/
+guides/integrations/agents/guard/
+guides/integrations/agents/notifications/
+guides/integrations/agents/opencode/
+guides/integrations/agents/skills/
 guides/integrations/ci/
 guides/integrations/daemon/
 guides/integrations/editor/
@@ -353,6 +363,7 @@ reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
 reference/codes/outputref/MGS8003/
+reference/codes/outputref/MGS8004/
 reference/codes/race/
 reference/codes/race/MGS4001/
 reference/codes/race/MGS4002/
@@ -473,6 +484,7 @@ spells/ts/
 tags/
 tags/adoption/
 tags/affected/
+tags/agent-install/
 tags/agents-md/
 tags/agents/
 tags/allowlist/
@@ -490,6 +502,7 @@ tags/bounds/
 tags/breaking-changes/
 tags/build/
 tags/buzz/
+tags/cache-key/
 tags/cache/
 tags/cargo/
 tags/changed-files/
@@ -498,6 +511,7 @@ tags/charm/
 tags/charms/
 tags/ci-provider/
 tags/ci/
+tags/claude-code/
 tags/claude/
 tags/cli/
 tags/codegen/
@@ -517,6 +531,7 @@ tags/cosign/
 tags/coupling/
 tags/credentials/
 tags/cross-project/
+tags/cursor/
 tags/cycle/
 tags/daemon/
 tags/debugging/
@@ -524,6 +539,7 @@ tags/dependency-graph/
 tags/depends-on/
 tags/depends/
 tags/describe/
+tags/desktop/
 tags/detach/
 tags/determinism/
 tags/diagnostics/
@@ -573,6 +589,8 @@ tags/import/
 tags/inferred/
 tags/inputs/
 tags/install/
+tags/integration/
+tags/interactive/
 tags/interpreter/
 tags/journal/
 tags/json-patch/
@@ -588,6 +606,7 @@ tags/logs/
 tags/lsp/
 tags/macos/
 tags/magus-buzz/
+tags/magus-hook/
 tags/magus-memory/
 tags/magus-query/
 tags/magus-run/
@@ -611,11 +630,14 @@ tags/monorepo/
 tags/naming/
 tags/needs/
 tags/node/
+tags/notifications/
 tags/nx/
 tags/oci/
 tags/onboarding/
+tags/opencode/
 tags/operations/
 tags/os/
+tags/output-ref/
 tags/output-refs/
 tags/output/
 tags/outputs/
@@ -623,7 +645,9 @@ tags/ownership/
 tags/passthrough/
 tags/path/
 tags/permissions/
+tags/picker/
 tags/platform/
+tags/plugin/
 tags/podman/
 tags/policy/
 tags/pool/
@@ -648,6 +672,7 @@ tags/release/
 tags/remote-cache/
 tags/repl/
 tags/replay/
+tags/reproduce/
 tags/rfc-6902/
 tags/ruff/
 tags/run/
@@ -678,6 +703,7 @@ tags/supported/
 tags/symbols/
 tags/target/
 tags/targets/
+tags/telemetry/
 tags/template/
 tags/terminology/
 tags/test/
@@ -685,6 +711,7 @@ tags/token/
 tags/toolchain/
 tags/tools/
 tags/troubleshooting/
+tags/tty/
 tags/typescript/
 tags/upgrade/
 tags/uv/

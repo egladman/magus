@@ -11,9 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 
 	magus "github.com/egladman/magus"
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/types"
 )
@@ -44,10 +44,9 @@ func (f *ignoreFlag) Set(value string) error {
 func watchCmd(ctx context.Context, root string, rc runConfig, args []string) error {
 	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	debounce := fs.Duration("debounce", 200*time.Millisecond, "quiet window before emitting a batch")
-	initial := fs.Bool("initial", true, "emit an --all batch on startup before watching")
-	null := fs.Bool("null", false, "NUL-separate paths and double-NUL between batches")
-	backend := fs.String("backend", "fsnotify", "notification backend: fsnotify or poll")
+	wf := gen.BindWatch(fs)
+	// --ignore stays hand-bound: it is a repeatable custom flag.Value, a shape the
+	// registry has no kind for, so it is also absent from the man page.
 	var ignores ignoreFlag
 	fs.Var(&ignores, "ignore", "ignore pattern; repeatable. Form: type=<glob|regex|literal>,pattern=<value>")
 	fs.Usage = func() {
@@ -75,13 +74,13 @@ func watchCmd(ctx context.Context, root string, rc runConfig, args []string) err
 	}
 
 	var be watch.Backend
-	switch *backend {
+	switch wf.Backend {
 	case "fsnotify", "":
 		be = watch.FsnotifyBackend
 	case "poll":
 		be = watch.PollBackend
 	default:
-		return fmt.Errorf("magus watch: unknown backend %q (choose: fsnotify, poll)", *backend)
+		return fmt.Errorf("magus watch: unknown backend %q (choose: fsnotify, poll)", wf.Backend)
 	}
 
 	// Collect output globs from all registered projects to avoid
@@ -120,7 +119,7 @@ func watchCmd(ctx context.Context, root string, rc runConfig, args []string) err
 			watch.OutputsIgnore(ws.Root(), outputGlobs),
 			watch.IgnorePatterns(ws.Root(), userPatterns),
 		)),
-		watch.WithDebounce(*debounce),
+		watch.WithDebounce(wf.Debounce),
 		watch.WithBackend(be),
 	)
 	if err != nil {
@@ -129,7 +128,7 @@ func watchCmd(ctx context.Context, root string, rc runConfig, args []string) err
 	defer func() { _ = w.Close() }()
 
 	sep, batchSep := "\n", "\n"
-	if *null {
+	if wf.Null {
 		sep, batchSep = "\x00", "\x00\x00"
 	}
 
@@ -148,7 +147,7 @@ func watchCmd(ctx context.Context, root string, rc runConfig, args []string) err
 		_ = out.Flush() // critical: stdout is block-buffered when piped
 	}
 
-	if *initial {
+	if wf.Initial {
 		// Sentinel consumed by `magus affected --stdin` to trigger a full build.
 		writeBatch([]string{magus.StreamAllSentinel})
 	}

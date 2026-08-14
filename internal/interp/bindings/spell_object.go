@@ -22,7 +22,6 @@ func spellHandleFromMeta(m spells.Descriptor) vm.Value {
 	h.MapSet("name", vm.StrValue(m.Name))
 	h.MapSet("needs", strSliceToBuzzList(m.Needs))
 	h.MapSet("provides", strSliceToBuzzList(m.Provides))
-	h.MapSet("claims", strSliceToBuzzList(m.Claims))
 	h.MapSet("language", vm.StrValue(m.Language))
 	h.MapSet("opaque", vm.BoolValue(m.Opaque))
 	h.MapSet("ops", targetsToMap(m.Ops))
@@ -244,7 +243,6 @@ func buzzSpellObject(name string) vm.Value {
 	}
 
 	m.MapSet("needs", strSliceToBuzzList(spec.Needs))
-	m.MapSet("claims", strSliceToBuzzList(spec.Claims))
 	m.MapSet("provides", strSliceToBuzzList(spec.Provides))
 
 	// listTargets() + a callable per fork target (go.test(), docker.build()).

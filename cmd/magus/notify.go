@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/egladman/magus/cmd/magus/gen"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
@@ -26,8 +27,7 @@ import (
 func notifyCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) error {
 	fset := flag.NewFlagSet("notify", flag.ContinueOnError)
 	bindDisplayFlags(fset)
-	outcome := fset.String("outcome", "", "Event outcome (waiting|permission|failed|finished|diagnostic|update|other), or producer vocabulary classified by substring")
-	desktop := fset.Bool("desktop", false, "Also raise a desktop notification (macOS osascript, Linux notify-send)")
+	nf := gen.BindNotify(fset)
 	fset.Usage = func() { notifyUsage(os.Stderr) }
 	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
 		return err
@@ -46,14 +46,14 @@ func notifyCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) 
 	}
 
 	ev := eventFromStdin(body)
-	if *outcome != "" {
-		ev.Outcome = classifyOutcome(*outcome)
+	if nf.Outcome != "" {
+		ev.Outcome = classifyOutcome(nf.Outcome)
 	} else {
 		ev.Outcome = classifyOutcome(string(ev.Outcome))
 	}
 	normalizeEvent(&ev)
 
-	if *desktop {
+	if nf.Desktop {
 		_ = raiseDesktopNotification(ctx, ev)
 	}
 

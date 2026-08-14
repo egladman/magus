@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -531,4 +532,106 @@ func TestRemoteRejectsOversizedArchive(t *testing.T) {
 	require.NoError(t, err, "run")
 	assert.False(t, r.Hit, "oversized archive was imported as a hit")
 	assert.True(t, ran, "expected a local rebuild after rejecting the oversized archive")
+}
+
+// buildWithStats runs the canonical step under run-scoped remote counters and returns
+// them, mirroring how Magus.Run installs them for a real run.
+func buildWithStats(t *testing.T, root string, c *Cache) (Result, bool, *remoteStats) {
+	t.Helper()
+	ctx := WithRemoteStats(t.Context())
+	writeMain(t, root, "package main")
+	touchOut(t, root)
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
+	out := filepath.Join(root, "test", "pkg", "out.txt")
+	ran := false
+	r, err := c.Run(ctx, step, func(_ context.Context) error {
+		ran = true
+		return os.WriteFile(out, []byte("built"), 0o644)
+	})
+	require.NoError(t, err, "run")
+	return r, ran, remoteStatsFrom(ctx)
+}
+
+// The counters exist to separate "the backend returned success" from "bytes moved" -
+// a distinction the old silent-on-success paths could not make.
+func TestRemoteCountersRecordRealTransfer(t *testing.T) {
+	remote, err := NewFSRemoteBackend(t.TempDir())
+	require.NoError(t, err, "NewFSRemoteBackend")
+	pub, seed := genKeypair(t)
+	trusted := [][]byte{pub}
+
+	root1, producer := openSigned(t, remote, seed, trusted)
+	_, ran, pStats := buildWithStats(t, root1, producer)
+	require.True(t, ran, "producer: expected a build to publish")
+
+	assert.Equal(t, int64(1), pStats.puts.Load())
+	assert.Positive(t, pStats.up.Load(), "published bytes must be counted, not assumed")
+	assert.Zero(t, pStats.fails.Load())
+
+	root2, consumer := openSigned(t, remote, nil, trusted)
+	res, ran2, cStats := buildWithStats(t, root2, consumer)
+	require.True(t, res.Hit, "consumer: expected a remote hit")
+	require.False(t, ran2, "consumer: the entry should have replayed")
+
+	assert.Equal(t, int64(1), cStats.hits.Load())
+	assert.Positive(t, cStats.down.Load(), "imported bytes must be counted")
+	assert.Zero(t, cStats.fails.Load())
+}
+
+// A trust set with no signing key is the half-finished CI setup: every run reports
+// success and the store stays empty. Asserted against the STORE, not just the
+// counters, so the test still fails if the counters are never wired.
+func TestRemotePublishesNothingWithoutASigningKey(t *testing.T) {
+	store := t.TempDir()
+	remote, err := NewFSRemoteBackend(store)
+	require.NoError(t, err, "NewFSRemoteBackend")
+	pub, _ := genKeypair(t)
+
+	root, c := openSigned(t, remote, nil, [][]byte{pub})
+	_, ran, stats := buildWithStats(t, root, c)
+	require.True(t, ran, "expected a local build")
+
+	entries, err := os.ReadDir(store)
+	require.NoError(t, err, "read remote store")
+	assert.Empty(t, entries, "a machine with no signing key must leave the store empty")
+	assert.Zero(t, stats.puts.Load(), "and must not claim to have published")
+	assert.Zero(t, stats.fails.Load(), "declining to publish is not a failure")
+}
+
+// A remote that errors on GET must not end the run on "failures=0": that reads as a
+// clean local-only run, which is the exact confusion the summary exists to remove.
+func TestRemoteGetFailureIsCounted(t *testing.T) {
+	root, c := openSigned(t, errRemote{}, nil, nil)
+	_, ran, stats := buildWithStats(t, root, c)
+
+	require.True(t, ran, "expected a local build after the remote errored")
+	// Two: the fetch before the build and the push after it both fail against an
+	// unreachable store. The regression this guards is either of them landing on the
+	// miss counter, which would end the run on failures=0 at Info.
+	assert.Equal(t, int64(2), stats.fails.Load(), "transport errors are failures, not misses")
+	assert.Zero(t, stats.hits.Load())
+	assert.Zero(t, stats.misses.Load(), "an error is not the store saying it has nothing")
+}
+
+// errRemote is active and fails every fetch, standing in for an unreachable store.
+type errRemote struct{}
+
+func (errRemote) Name() string                { return "err" }
+func (errRemote) Active(context.Context) bool { return true }
+func (errRemote) PutArtifact(context.Context, string, string, io.Reader) error {
+	return errors.New("unreachable")
+}
+
+func (errRemote) GetArtifact(context.Context, string, string) (io.ReadCloser, error) {
+	return nil, errors.New("unreachable")
+}
+
+// Called on every run, and most runs have no remote at all.
+func TestRemoteSummaryToleratesNoBackendAndNoStats(t *testing.T) {
+	c := testCacheDir(t)
+	assert.NotPanics(t, func() { c.LogRemoteSummary(WithRemoteStats(t.Context())) },
+		"local-only run: backend nil")
+	assert.NotPanics(t, func() { c.LogRemoteSummary(t.Context()) },
+		"no stats on ctx: a caller outside Magus.Run")
 }
