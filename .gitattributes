@@ -50,7 +50,8 @@ manpage/*.1 merge=magus linguist-generated
 proto/gen/** merge=magus linguist-generated
 schema/gen/*.go merge=magus linguist-generated
 spells/enum_gen.go merge=magus linguist-generated
-tapes/*.capture merge=magus linguist-generated
+tapes/core-loop.capture merge=magus linguist-generated
+tapes/showcase.capture merge=magus linguist-generated
 types/buzzobject_gen.go merge=magus linguist-generated
 types/enum_gen.go merge=magus linguist-generated
 # END magus-generated

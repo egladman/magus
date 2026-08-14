@@ -1086,7 +1086,9 @@ export fun tapes(ctx: magus\Context, args: [str]) > void !> any {
 export fun termcast_record(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("tapes/core-loop.session.sh", "tapes/demo-init.sh",
         "tapes/demo.txtar", "cmd/magus-termcast/*.go");
-    ctx.writesFiles("tapes/*.capture");
+    // The one capture this writes, not the glob over both: termcast_showcase owns
+    // the other, and two targets declaring one glob is MGS1020.
+    ctx.writesFiles("tapes/core-loop.capture");
     proc\exec("go", ["run", "./cmd/magus-termcast", "-record"]);
 }
 
@@ -1105,7 +1107,8 @@ export fun termcast_record(ctx: magus\Context, args: [str]) > void !> any {
 // is deterministic and is gated with the rest.
 export fun termcast_showcase(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("tapes/demo.txtar", "cmd/magus-termcast/*.go");
-    ctx.writesFiles("tapes/*.capture");
+    // Named, not globbed, for the reason termcast_record is.
+    ctx.writesFiles("tapes/showcase.capture");
     proc\exec("go", ["run", "./cmd/magus-termcast", "-showcase"]);
 }
 

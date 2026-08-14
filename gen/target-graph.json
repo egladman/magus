@@ -432,7 +432,7 @@
           "reads_secrets": false,
           "writes_files": [
             {
-              "glob": "tapes/*.capture"
+              "glob": "tapes/core-loop.capture"
             }
           ]
         },
@@ -453,7 +453,7 @@
           "reads_secrets": false,
           "writes_files": [
             {
-              "glob": "tapes/*.capture"
+              "glob": "tapes/showcase.capture"
             }
           ]
         },
