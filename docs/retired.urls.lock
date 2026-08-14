@@ -202,7 +202,7 @@ reference/manpage/magus-tail/
 
 # Renamed to testsprawl before its first tag. "Orphan" means "no owner" everywhere else
 # here (locks, graph nodes, blobs) and this rule reports the opposite: a test file that
-# HAS an owner and narrows its name. Now at development/libs-testsprawl/. Not aliased -
+# HAS an owner and narrows its name. Now at development/libs-testlayout/. Not aliased -
 # the module was never published and the page was a day old.
 development/libs-orphanator/
 

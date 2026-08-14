@@ -69,7 +69,7 @@ jobs:
       # minutes - docs renders the whole site, console builds the app - and whose own shard
       # runs it anyway, so hoisting them here would serialise the expensive half in front of
       # every shard to accelerate feedback on the cheap half.
-      DRIFT_GATED: '. libs/gopherbuzz libs/diagnostics libs/testsprawl libs/textsearch proto evals docs/guides/integrations/agents'
+      DRIFT_GATED: '. libs/gopherbuzz libs/diagnostics libs/testlayout libs/textsearch proto evals docs/guides/integrations/agents'
       DRIFT_DEFERRED: 'docs console'
     outputs:
       matrix:        ${{ steps.plan.outputs.matrix }}

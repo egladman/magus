@@ -77,7 +77,7 @@ coverage.hand.out
 # Same rule as /magus above: a build output, never committed.
 /libs/gopherbuzz/buzz
 
-# golangci-lint binary built from libs/testsprawl/.custom-gcl.yml, carrying the
+# golangci-lint binary built from libs/testlayout/.custom-gcl.yml, carrying the
 # in-repo linters. Rebuilt from source, never committed.
 /custom-gcl
 
