@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/internal/cache"
@@ -47,17 +48,17 @@ var Magus = Module{
 		"`read` is the ordinary choice. See " +
 		"[Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) " +
 		"and [CI integration](../../guides/integrations/ci.md).\n\n" +
-		"`import \"magus\"` resolves in a `magus buzz` script as well as in a magusfile. The " +
-		"members that declare into the workspace magus is loading (`magus\\project`, the provider " +
-		"selections above) and the ones served in-process from a loaded workspace (`ls`, " +
-		"`affected`, `projectGraph`, `where`) raise [MGS1022](../codes/magusfile/MGS1022.md) in a " +
-		"script; the nested-command methods (`cmd`, `run`, `describe`, `insight`, `doctor`) work " +
-		"there and discover the workspace themselves. `targets` works in both: it serves the " +
-		"workspace on the context when there is one and forks a nested magus when there is not.",
+		"`import \"magus\"` resolves in a `magus buzz` script as well as in a magusfile, and a " +
+		"script run inside a workspace reads that workspace: `ls`, `affected`, `projectGraph`, " +
+		"`where` and `insight` all answer in-process. Only the members that DECLARE into " +
+		"the workspace being loaded (`magus\\project`, the provider selections above) raise " +
+		"[MGS1022](../codes/magusfile/MGS1022.md) in a script - there is nothing for them to " +
+		"declare into. Run a script outside any workspace and the reading members raise it too, " +
+		"since there is no workspace to read.",
 	Methods: []Method{
 		{
 			Name: "cmd",
-			Doc:  "Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method (status, affected, agent, graph, ...). Its signature is the typed methods' signature with the subcommand pushed in front: magus.cmd(sub, args, [opts]) beside magus.run(args, [opts]), same argv, same opts, same ExecResult. The SUBCOMMAND is a typed argument rather than args[0] because it is the part of the invocation magus can reason about - it stays readable in the signature and greppable in the source, while the remaining argv stays free-form. Prefer the dedicated methods (run, describe, insight, doctor) when one exists - magus.cmd warns when sub names one that has. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console.",
+			Doc:  "Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method (status, affected, agent, graph, ...). Its signature is the typed methods' signature with the subcommand pushed in front: magus.cmd(sub, args, [opts]) beside magus.run(args, [opts]), same argv, same opts, same ExecResult. The SUBCOMMAND is a typed argument rather than args[0] because it is the part of the invocation magus can reason about - it stays readable in the signature and greppable in the source, while the remaining argv stays free-form. Prefer the dedicated methods (run, describe, doctor) when one exists - magus.cmd warns when sub names one that has. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console.",
 			Args: []Arg{
 				{Name: "sub", Type: TypeString},
 				{Name: "args", Type: TypeStringSlice},
@@ -149,25 +150,14 @@ var Magus = Module{
 		},
 		{
 			Name: "insight",
-			Doc:  "Run `magus insight <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console.",
-			Args: []Arg{
-				{Name: "args", Type: TypeStringSlice},
-				{Name: "opts", Type: TypeAnyMap, Optional: true},
-			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
-			Raises:  true,
-			Impl:    MagusInsight,
-		},
-		{
-			Name: "insight_report",
-			Doc:  "Every VCS-history lens plus the knowledge-graph axis, as one typed report: {hotspots, affinity, ownership, trend, volatility, graphStats}. Annotate the result `> InsightReport` for compile-checked field access - `r.ownership.projects` gives each project's primary author and bus-factor flag, `r.hotspots.files` the churn-by-complexity ranking, `r.volatility` the targets that flapped. This is the same data `magus insight report` renders as Markdown, handed over as values instead of a document to scrape. Runs a nested magus, so it works from a `magus buzz` script with no workspace on the context.",
+			Doc:  "Every VCS-history lens plus the knowledge-graph axis, as one typed report: {hotspots, affinity, ownership, trend, volatility, graphStats}. Annotate the result `> InsightReport` for compile-checked field access - `r.ownership.projects` gives each project's primary author and bus-factor flag, `r.hotspots.files` the churn-by-complexity ranking, `r.volatility` the targets that flapped. This is the same data `magus insight report` renders as Markdown, handed over as values instead of a document to scrape. Read straight off the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip. Works from a magusfile target and from a `magus buzz` script run inside a workspace; raises MGS1022 only when there is no workspace to read.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "InsightReport"}},
 			Raises:  true,
-			Impl:    MagusInsightReport,
+			Impl:    MagusInsight,
 		},
 		{
 			Name: "affected_impact",
@@ -644,11 +634,6 @@ func MagusDescribe(ctx context.Context, args []string, opts map[string]any) (typ
 	return runMagusSub(ctx, "describe", args, opts)
 }
 
-// MagusInsight runs `magus insight <args>`; see runMagus.
-func MagusInsight(ctx context.Context, args []string, opts map[string]any) (types.ExecResult, error) {
-	return runMagusSub(ctx, "insight", args, opts)
-}
-
 // MagusDoctor validates the workspace and returns the typed report.
 //
 // It is the shape every method here should have and most do not yet: the child already
@@ -669,11 +654,100 @@ func MagusAffectedImpact(ctx context.Context, base string, opts map[string]any) 
 	return runMagusJSON[types.ImpactResult](ctx, "affected", args, opts)
 }
 
-// MagusInsightReport returns every insight lens as one typed report. `magus insight`
-// itself stays the escape hatch for a single lens, the same split describe keeps: the
-// noun that has a domain type gets a typed method, the rest stays free-form.
-func MagusInsightReport(ctx context.Context, args []string, opts map[string]any) (types.InsightReport, error) {
-	return runMagusJSON[types.InsightReport](ctx, "insight", append([]string{"report"}, args...), opts)
+// MagusInsight returns every insight lens as one typed report, read straight off
+// the loaded workspace.
+//
+// This is the one magus\* method that does NOT fork a nested magus, and the difference is
+// the point: analytics are a pure read of a workspace magus has already loaded, so paying
+// a process, a second workspace load, and a JSON round trip to ask it a question about
+// itself was cost with nothing bought. See std/workspace.go for how it reaches the API
+// across an import cycle that used to make forking the only option.
+//
+// An absent analyzer is reported rather than fallen back on. Silently forking here would
+// reintroduce exactly what this replaced, and would make a `magus buzz` script outside a
+// workspace look like it had one.
+func MagusInsight(ctx context.Context, args []string, opts map[string]any) (types.InsightReport, error) {
+	a, ok := AnalyzerFromContext(ctx)
+	if !ok {
+		return types.InsightReport{}, errNoWorkspace("insight")
+	}
+
+	iopts := types.InsightOptions{
+		Dir:     resolveRunDir(ctx, opts),
+		Commits: insightCommits(args),
+		Since:   insightSince(args),
+		// --files ranks individual files instead of projects, and the hotspot lens leaves
+		// its file list empty without it. Carried through rather than forced on: a caller
+		// that wants the per-file ranking asks for it, exactly as on the CLI.
+		Files: hasFlag(args, "--files"),
+	}
+	report := types.InsightReport{}
+	var err error
+	if report.Hotspots, err = a.Hotspots(ctx, iopts); err != nil {
+		return types.InsightReport{}, fmt.Errorf("magus.insight: hotspots: %w", err)
+	}
+	if report.Affinity, err = a.Affinity(ctx, iopts); err != nil {
+		return types.InsightReport{}, fmt.Errorf("magus.insight: affinity: %w", err)
+	}
+	if report.Ownership, err = a.Ownership(ctx, iopts); err != nil {
+		return types.InsightReport{}, fmt.Errorf("magus.insight: ownership: %w", err)
+	}
+	if report.Trend, err = a.Trend(ctx, iopts); err != nil {
+		return types.InsightReport{}, fmt.Errorf("magus.insight: trend: %w", err)
+	}
+	// The last two axes are best-effort, matching what `magus insight report` renders: a
+	// history read that fails or a workspace with no symbol index omits the section rather
+	// than failing a report the other four lenses already answered.
+	if vr, verr := a.Volatility(ctx); verr == nil {
+		report.Volatility = vr
+	}
+	if ur, uerr := a.Unreferenced(ctx); uerr == nil {
+		report.Unreferenced = ur
+	}
+	return report, nil
+}
+
+// insightCommits and insightSince read the two options the lenses accept out of the
+// free-form argv the Buzz signature still takes, so a caller that passed `--commits 200`
+// to the forking version keeps getting 200. Anything else in args is ignored rather than
+// rejected: this is a report, and an unknown flag is not worth failing it over.
+func insightCommits(args []string) int {
+	if v := flagValue(args, "--commits"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return insightDefaultCommits
+}
+
+func insightSince(args []string) string { return flagValue(args, "--since") }
+
+// hasFlag reports whether a bare boolean flag appears in args.
+func hasFlag(args []string, name string) bool {
+	for _, a := range args {
+		if a == name {
+			return true
+		}
+	}
+	return false
+}
+
+// insightDefaultCommits matches the CLI lens default, so the same call returns the same
+// report whichever surface asked.
+const insightDefaultCommits = 500
+
+// flagValue returns the value following name in args, supporting both `--flag value` and
+// `--flag=value`. Empty when absent.
+func flagValue(args []string, name string) string {
+	for i, a := range args {
+		if a == name && i+1 < len(args) {
+			return args[i+1]
+		}
+		if v, ok := strings.CutPrefix(a, name+"="); ok {
+			return v
+		}
+	}
+	return ""
 }
 
 // MagusDescribeFile classifies paths as generated output, declared source, or

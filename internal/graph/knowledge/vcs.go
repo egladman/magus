@@ -71,6 +71,15 @@ func assembleVCS(entries []types.KnowledgeVCS, fileNodePaths map[string]bool, au
 	return s
 }
 
+// The @vcs attr keys, named once because IsHistoryAttr has to list exactly what vcsAttrs
+// writes: a drifting spelling would leave a git-derived value in a reproducible export.
+const (
+	attrVCSLastCommit   = "vcs_last_commit"
+	attrVCSLastModified = "vcs_last_modified"
+	attrVCSLastAuthor   = "vcs_last_author"
+	attrVCSCommits      = "vcs_commits"
+)
+
 // vcsAttrs renders a file's history metadata as node attrs. An empty commit (a file with
 // no recorded history in the scanned window) yields no attrs, so the node is skipped.
 func vcsAttrs(e types.KnowledgeVCS) map[string]string {
@@ -79,18 +88,18 @@ func vcsAttrs(e types.KnowledgeVCS) map[string]string {
 	}
 	attrs := map[string]string{}
 	if e.LastCommit != "" {
-		attrs["vcs_last_commit"] = e.LastCommit
+		attrs[attrVCSLastCommit] = e.LastCommit
 	}
-	if e.LastUnix > 0 {
-		attrs["vcs_last_modified"] = time.Unix(e.LastUnix, 0).UTC().Format("2006-01-02")
+	if !e.LastModified.IsZero() {
+		attrs[attrVCSLastModified] = e.LastModified.UTC().Format(time.DateOnly)
 	}
 	if e.LastAuthor != "" {
 		// The EMERGENT maintainer (who last touched the file), to set against a file's
 		// DECLARED CODEOWNERS owner - the owner-of-record vs who is actually editing.
-		attrs["vcs_last_author"] = sanitize(e.LastAuthor, maxLabelLen)
+		attrs[attrVCSLastAuthor] = sanitize(e.LastAuthor, maxLabelLen)
 	}
 	if e.Commits > 0 {
-		attrs["vcs_commits"] = strconv.Itoa(e.Commits)
+		attrs[attrVCSCommits] = strconv.Itoa(e.Commits)
 	}
 	return attrs
 }

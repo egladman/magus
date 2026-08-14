@@ -437,6 +437,22 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS: MinIntervalSeconds is the minimum time between re-index runs for one project, a",
 	},
 	{
+		GoPath:   "Knowledge.Notes.Shared",
+		YamlPath: "knowledge.notes.shared",
+		EnvVar:   "MAGUS_KNOWLEDGE_NOTES_SHARED",
+		Flag:     fieldtype.FlagNames{Long: "knowledge-notes-shared"},
+		Kind:     fieldtype.KindString,
+		Usage:    "MAGUS_KNOWLEDGE_NOTES_SHARED: Shared is the workspace-relative directory holding notes the TEAM has: committed,",
+	},
+	{
+		GoPath:   "Knowledge.Notes.Private",
+		YamlPath: "knowledge.notes.private",
+		EnvVar:   "MAGUS_KNOWLEDGE_NOTES_PRIVATE",
+		Flag:     fieldtype.FlagNames{Long: "knowledge-notes-private"},
+		Kind:     fieldtype.KindString,
+		Usage:    "MAGUS_KNOWLEDGE_NOTES_PRIVATE: Private is a SECOND notes location, yours rather than the team's, and it may sit",
+	},
+	{
 		GoPath:   "Secret.Interactive",
 		YamlPath: "secret.interactive_timeout",
 		EnvVar:   "MAGUS_SECRET_INTERACTIVE_TIMEOUT",

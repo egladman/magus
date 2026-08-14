@@ -15,12 +15,16 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hostmodules"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/types"
@@ -177,20 +181,12 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, c
 		return nil, err
 	}
 
-	// The @vcs shard is produced by an expensive git-history scan. Fingerprint its inputs
-	// (HEAD + window) and, when unchanged, SKIP the scan entirely: Sync reuses the shard
-	// from disk via the standard store. No bespoke cache file, and the walk runs only when
-	// HEAD actually moved. An empty fingerprint (VCS off / unresolvable) always runs the
-	// scan (which itself no-ops when disabled).
-	vcsFP := vcsInputFingerprint(ctx, cfg, root)
-	inputFPs := map[string]string{}
-	var vcsEntries []types.KnowledgeVCS
-	if vcsFP != "" {
-		inputFPs[knowledge.VCSShardName] = vcsFP
-	}
-	if vcsFP == "" || refresh || !knowledge.ShardInputFresh(cacheDir, knowledge.VCSShardName, vcsFP) {
-		vcsEntries = loadKnowledgeVCS(ctx, cfg, root, log)
-	}
+	// Cached as an INPUT, not as a shard, because three consumers read it: @vcs, the
+	// dir_commits roll-up in @dirs, and prose staleness. Caching it on @vcs instead handed
+	// the other two an empty history on a hit, and they published it as zero churn and
+	// unmeasured prose. Reading it back off @vcs is no substitute either: that shard is
+	// filtered to paths with a file node, so it is a view of the scan and not a record of it.
+	vcsEntries := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, refresh, log)
 
 	in := knowledge.Inputs{
 		Graph:       graph,
@@ -209,13 +205,15 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, c
 		VCSAuthorship:  cfg.Knowledge.VCS.Authorship == nil || *cfg.Knowledge.VCS.Authorship,
 		DeclaredSpells: declaredSpellSet(projects),
 		Coverage:       loadKnowledgeCoverage(root),
+		NotesPath:      cfg.Knowledge.Notes.Shared,
+		Notes:          loadKnowledgeNotesAt(root, cfg.Knowledge.Notes.Shared, notes.ScopeShared),
+		PrivateNotes:   loadKnowledgeNotesAt(root, cfg.Knowledge.Notes.Private, notes.ScopePrivate),
 	}
 	return knowledge.Build(ctx, cacheDir, knowledge.BuildOptions{
-		Immutable:         cacheImmutable(cfg),
-		Refresh:           refresh,
-		MaxBytes:          int64(cfg.Knowledge.MaxSizeMB) * 1024 * 1024,
-		Remote:            remoteShardsFor(ws),
-		InputFingerprints: inputFPs,
+		Immutable: cacheImmutable(cfg),
+		Refresh:   refresh,
+		MaxBytes:  int64(cfg.Knowledge.MaxSizeMB) * 1024 * 1024,
+		Remote:    remoteShardsFor(ws),
 	}, in, log)
 }
 
@@ -261,6 +259,56 @@ func loadKnowledgeTimings(ctx context.Context, cfg config.Config) []types.Knowle
 // data yields no coverage, so the attrs are simply absent, never an error: a workspace
 // that never ran coverage behaves exactly as before. Re-read each build, mirroring the
 // timing/output-ref overlays, so the ratio stays fresh without a schema bump.
+// loadKnowledgeNotes reads the declared notes store and maps each note's anchors to the
+// node IDs the graph uses, so assembly can drop the ones that do not resolve.
+//
+// Best effort by design: an undeclared store, a missing directory, or an unreadable entry
+// yields no notes rather than an error. A note the reader cannot parse is `magus notes
+// verify`'s to report with a repair hint; failing a graph build over it would take the
+// whole workspace down for one bad markdown file.
+// loadKnowledgeNotesAt resolves one of the two declared notes stores and reads it,
+// yielding nothing when that store is not declared. resolve is SharedDir or PrivateDir,
+// which differ in exactly one way: whether the location may sit outside the repository.
+func loadKnowledgeNotesAt(root, declared string, scope notes.Scope) []types.KnowledgeNote {
+	dir, err := notes.Dir(root, scope, declared)
+	if err != nil {
+		return nil // not declared, or declared badly - notes verify says so
+	}
+	return loadKnowledgeNotes(root, dir, string(scope))
+}
+
+func loadKnowledgeNotes(root, dir, scope string) []types.KnowledgeNote {
+	found, _, err := notes.Inspect(dir)
+	if err != nil || len(found) == 0 {
+		return nil
+	}
+	// A shared store is inside the checkout, so its notes get a workspace-relative path
+	// that @vcs can attribute to an author. A private store may be anywhere, so there is
+	// no relative path and no attribution to be had - the absolute path is the honest
+	// Source, and a blank author is the honest answer rather than a fabricated one.
+	rel, err := filepath.Rel(root, dir)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		rel = dir
+	}
+	out := make([]types.KnowledgeNote, 0, len(found))
+	for _, n := range found {
+		anchors := make([]string, 0, len(n.Anchors))
+		for _, a := range n.Anchors {
+			if id := knowledge.AnchorNodeID(string(a.Kind), a.Target, scope); id != "" {
+				anchors = append(anchors, id)
+			}
+		}
+		out = append(out, types.KnowledgeNote{
+			Name:    n.Name,
+			Title:   n.Title,
+			Path:    filepath.ToSlash(filepath.Join(rel, n.Name+".md")),
+			Tags:    n.Tags,
+			Anchors: anchors,
+		})
+	}
+	return out
+}
+
 func loadKnowledgeCoverage(root string) []knowledge.FileCoverage {
 	if root == "" {
 		return nil
@@ -753,9 +801,8 @@ const vcsDefaultMaxCommits = 1000
 // (knowledge.vcs.enabled), routed through the VCS abstraction so it is not git-specific:
 // any resolved backend that implements ChurnReporter works, and one that does not is
 // skipped. Best-effort: a disabled/absent VCS or a scan error yields no metadata (the
-// shard is simply absent), never an error. This is the EXPENSIVE half; the caller skips
-// it entirely when vcsInputFingerprint is unchanged (the @vcs shard is reused from disk
-// via the standard shard store), so it runs only when HEAD or the window actually moved.
+// shard is simply absent), never an error. Callers want loadKnowledgeVCSCached; this is the
+// uncached walk it wraps.
 func loadKnowledgeVCS(ctx context.Context, cfg config.Config, root string, log *slog.Logger) []types.KnowledgeVCS {
 	if !cfg.Knowledge.VCS.Enabled {
 		return nil
@@ -778,28 +825,63 @@ func loadKnowledgeVCS(ctx context.Context, cfg config.Config, root string, log *
 	return aggregateFileHistory(changes, vcsPathPrefix(root, res.VCS.Claims()))
 }
 
-// vcsMaxCommits is the bounded history window: the most recent N commits, never the whole
-// history (the scale guard for a large monorepo). Configurable via knowledge.vcs.max_commits.
-func vcsMaxCommits(cfg config.Config) int {
-	if m := cfg.Knowledge.VCS.MaxCommits; m > 0 {
-		return m
-	}
-	return vcsDefaultMaxCommits
+// vcsHistoryFile holds one cached scan. The fingerprint travels inside the file rather than
+// in its name, so a stale scan is overwritten instead of accumulating a file per dead HEAD.
+type vcsHistoryFile struct {
+	Fingerprint string               `json:"fingerprint"`
+	Entries     []types.KnowledgeVCS `json:"entries"`
 }
 
-// vcsAssemblyVersion invalidates the input-fingerprinted @vcs shard when the SHAPE of what
-// assembleVCS emits changes (an added attr, a new edge, a dropped cap), independently of the
-// global KnowledgeSchemaVersion - so a warm cache never serves the old shape on an unchanged
-// HEAD, without a whole-store rebuild. Bump on any change to the @vcs assembly output.
+// vcsHistoryFormat versions the cached SHAPE. Bump it whenever a KnowledgeVCS json tag is
+// added, renamed, or retyped: the rest of the key cannot see a shape change, so an old file
+// would match on an unchanged HEAD and decode the renamed fields as zero values.
 //
-//	v2: dropped the per-author fan-out cap; author `authored` edges are now uncapped.
-const vcsAssemblyVersion = 2
+//	v2: LastUnix (epoch int64) became LastModified (time.Time).
+const vcsHistoryFormat = 2
 
-// vcsInputFingerprint identifies the git-history scan's inputs - HEAD, the window, and the
-// schema (which fixes the attr shape) - as one SHA256 (the same hash the shards use). When
-// it is unchanged the @vcs shard is byte-identical, so the caller skips the scan and Sync
-// reuses the shard from disk. Empty (never skip, run the scan) when VCS is off or a revision
-// cannot be resolved. Cheap: one FindCommit, no history walk.
+// loadKnowledgeVCSCached returns the per-file history, walking it only when the cached scan
+// does not match the current input.
+//
+// A hit and a miss must be indistinguishable downstream - every consumer gets the same full
+// slice either way - which is the property that makes caching this safe at all.
+//
+// refresh forces the walk and still rewrites the cache, so distrusting it costs one walk
+// rather than every walk. Best-effort throughout: an unreadable file or a failed write just
+// means walking, and nothing here can fail a build.
+func loadKnowledgeVCSCached(ctx context.Context, cfg config.Config, root, cacheDir string, refresh bool, log *slog.Logger) []types.KnowledgeVCS {
+	fp := vcsInputFingerprint(ctx, cfg, root)
+	path := filepath.Join(knowledge.StoreDir(cacheDir), "inputs", "vcs.json")
+	if fp != "" && !refresh {
+		if b, err := os.ReadFile(path); err == nil {
+			var f vcsHistoryFile
+			if err := json.Unmarshal(b, &f); err == nil && f.Fingerprint == fp {
+				log.DebugContext(ctx, "knowledge: reusing cached vcs history", slog.Int("files", len(f.Entries)))
+				return f.Entries
+			}
+		}
+	}
+	entries := loadKnowledgeVCS(ctx, cfg, root, log)
+	// An empty scan is not worth a file, and writing one would cache "no history" against a
+	// real HEAD - so a transient git failure would persist as an answer.
+	if fp == "" || len(entries) == 0 || cacheImmutable(cfg) {
+		return entries
+	}
+	b, err := json.Marshal(vcsHistoryFile{Fingerprint: fp, Entries: entries})
+	if err == nil {
+		err = file.WriteFileAtomic(path, b, 0o644)
+	}
+	if err != nil {
+		log.DebugContext(ctx, "knowledge: caching vcs history failed", slog.String("error", err.Error()))
+	}
+	return entries
+}
+
+// vcsInputFingerprint identifies the history the scan reads: where it starts, how far back
+// it walks, and the format it is cached in.
+//
+// Uncommitted work is deliberately excluded - the scan reads committed history only, so
+// folding the dirty set in busted the cache on every add or delete of a tracked file for no
+// gain. Empty (always walk) when VCS is off or no revision resolves.
 func vcsInputFingerprint(ctx context.Context, cfg config.Config, root string) string {
 	if !cfg.Knowledge.VCS.Enabled {
 		return ""
@@ -812,24 +894,18 @@ func vcsInputFingerprint(ctx context.Context, cfg config.Config, root string) st
 	if err != nil || head.ID == "" {
 		return ""
 	}
-	// The @vcs shard filters onto the LIVE file nodes, which move when the working tree
-	// changes without a commit (a tracked source file deleted but not committed is no
-	// longer a node). So fold the uncommitted-file set in: an unchanged commit AND an
-	// unchanged dirty set reuse the shard, but adding/removing a tracked file re-scans and
-	// re-filters, so the cached shard can never outlive the files it references. A content
-	// edit to an already-dirty file does not change the set (committed history is the same),
-	// so the skip still holds mid-edit. Cheap (one status); a dirty-list error just omits
-	// the detail, falling back to HEAD-only (conservative, worst case a transient stale entry).
-	dirty, _ := res.VCS.DirtyFiles(ctx, root, nil)
-	slices.Sort(dirty)
-	authorship := cfg.Knowledge.VCS.Authorship == nil || *cfg.Knowledge.VCS.Authorship
 	h := sha256.New()
-	fmt.Fprintf(h, "v%d\x00a%d\x00%s\x00%d\x00%t\x00", types.KnowledgeSchemaVersion, vcsAssemblyVersion, head.ID, vcsMaxCommits(cfg), authorship)
-	for _, f := range dirty {
-		_, _ = h.Write([]byte(f))
-		_, _ = h.Write([]byte{0})
-	}
+	fmt.Fprintf(h, "f%d\x00%s\x00%d\x00", vcsHistoryFormat, head.ID, vcsMaxCommits(cfg))
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// vcsMaxCommits is the bounded history window: the most recent N commits, never the whole
+// history (the scale guard for a large monorepo). Configurable via knowledge.vcs.max_commits.
+func vcsMaxCommits(cfg config.Config) int {
+	if m := cfg.Knowledge.VCS.MaxCommits; m > 0 {
+		return m
+	}
+	return vcsDefaultMaxCommits
 }
 
 // vcsPathPrefix returns the "<subdir>/" prefix ChangesByCommit paths carry when the
@@ -865,17 +941,17 @@ func vcsPathPrefix(root string, claims []string) string {
 // subtree is dropped. Renames are not followed; a renamed file starts a fresh history.
 func aggregateFileHistory(changes []types.CommitChange, prefix string) []types.KnowledgeVCS {
 	type acc struct {
-		lastCommit string
-		lastUnix   int64
-		lastAuthor string
-		authors    map[string]bool
-		commits    int
+		lastCommit   string
+		lastModified time.Time
+		lastAuthor   string
+		authors      map[string]bool
+		commits      int
 	}
 	byPath := map[string]*acc{}
 	var order []string
 	for _, c := range changes {
 		short := ShortRevision(c.ID)
-		unix := c.Date.Unix()
+		modified := c.Date.UTC()
 		for _, f := range c.Files {
 			f = filepath.ToSlash(strings.TrimSpace(f))
 			if prefix != "" {
@@ -891,7 +967,7 @@ func aggregateFileHistory(changes []types.CommitChange, prefix string) []types.K
 			a := byPath[f]
 			if a == nil {
 				// First sighting = the most recent commit (changes are newest-first).
-				a = &acc{lastCommit: short, lastUnix: unix, lastAuthor: c.Author, authors: map[string]bool{}}
+				a = &acc{lastCommit: short, lastModified: modified, lastAuthor: c.Author, authors: map[string]bool{}}
 				byPath[f] = a
 				order = append(order, f)
 			}
@@ -904,7 +980,7 @@ func aggregateFileHistory(changes []types.CommitChange, prefix string) []types.K
 	entries := make([]types.KnowledgeVCS, 0, len(order))
 	for _, p := range order {
 		a := byPath[p]
-		entries = append(entries, types.KnowledgeVCS{Path: p, LastCommit: a.lastCommit, LastUnix: a.lastUnix, LastAuthor: a.lastAuthor, Authors: slices.Sorted(maps.Keys(a.authors)), Commits: a.commits})
+		entries = append(entries, types.KnowledgeVCS{Path: p, LastCommit: a.lastCommit, LastModified: a.lastModified, LastAuthor: a.lastAuthor, Authors: slices.Sorted(maps.Keys(a.authors)), Commits: a.commits})
 	}
 	return entries
 }

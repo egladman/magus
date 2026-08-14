@@ -79,6 +79,9 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		if n := testRefCount(sym.Refs); n > 0 {
 			attrs[AttrTestRefs] = strconv.Itoa(n)
 		}
+		if sym.DefEndLine > 0 {
+			attrs[AttrDefEndLine] = strconv.Itoa(sym.DefEndLine)
+		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{
 			ID:     sID,
 			Kind:   types.KindSymbol,

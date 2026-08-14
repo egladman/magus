@@ -27,7 +27,7 @@ func TestBuzzCmd_UnusedImportWarnsOnStderrAndExitsClean(t *testing.T) {
 	var runErr error
 	stderr := captureStderr(t, func() {
 		stdout := captureStdout(t, func() {
-			runErr = buzzCmd(context.Background(), []string{path})
+			runErr = buzzCmd(context.Background(), "", []string{path})
 		})
 		assert.NotContains(t, stdout, "BZZ3001", "stdout carries structured output only; a warning must never land there")
 	})
@@ -51,7 +51,7 @@ func TestBuzzCmd_SilentSuppressesUnusedImportWarning(t *testing.T) {
 
 	var runErr error
 	stderr := captureStderr(t, func() {
-		runErr = buzzCmd(context.Background(), []string{"-s", path})
+		runErr = buzzCmd(context.Background(), "", []string{"-s", path})
 	})
 
 	require.NoError(t, runErr)

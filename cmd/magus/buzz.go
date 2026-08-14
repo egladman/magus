@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/types"
 )
 
 // buzzCmd runs Buzz source from a file, stdin, or an inline snippet using the
@@ -29,7 +30,7 @@ import (
 // With no arguments on an interactive terminal it opens a REPL, matching upstream
 // `buzz`. A piped or redirected stdin still runs as a script (so `cat x | magus
 // buzz` and heredocs keep working), and `magus buzz -` forces stdin.
-func buzzCmd(ctx context.Context, args []string) error {
+func buzzCmd(ctx context.Context, root string, args []string) error {
 	// `magus buzz lsp` is the Buzz language server (stdio LSP). It is a noun
 	// subcommand of buzz, grouped with the rest of the Buzz-language tooling, rather
 	// than a top-level `magus lsp`, so serving other languages later needs no new
@@ -75,6 +76,24 @@ func buzzCmd(ctx context.Context, args []string) error {
 	code, name, err := buzzSource(eval, rest)
 	if err != nil {
 		return err
+	}
+
+	// Put the workspace on the script's context when there is one.
+	//
+	// Without this every workspace-reading member of the magus module raised MGS1022 from
+	// a script - `magus\ls`, `affected`, `projectGraph`, `where`, `insight` - and the
+	// error told the reader to reach for the forking `magus\cmd` instead. That advice was
+	// sound only because nothing had put the workspace here: the process had already loaded
+	// one (loadMagus is a sync.Once singleton, so this is the same instance the dispatcher
+	// built, not a second load), and the script simply never saw it. A `magus buzz` script
+	// run inside a workspace is a script ON that workspace, the same way the REPL below
+	// already autoloads the magusfile at cwd.
+	//
+	// Best-effort: outside a workspace, or when one fails to load, the script still runs
+	// and the workspace-reading members raise as before. A standalone script that touches
+	// none of them must not be blocked by a magusfile it never asked about.
+	if m, lerr := loadMagus(ctx, root); lerr == nil && m != nil {
+		ctx = types.WithWorkspace(ctx, m)
 	}
 
 	// Default is strict (upstream Buzz parity, what the buzz spell's `run` op forks).

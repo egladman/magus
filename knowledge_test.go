@@ -3,10 +3,15 @@ package magus
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -331,7 +336,7 @@ func TestLoadKnowledgeVCSHistory(t *testing.T) {
 		byPath[e.Path] = e.Commits
 		last[e.Path] = e.LastCommit
 		assert.NotEmpty(t, e.LastCommit, "every entry has a last commit")
-		assert.Positive(t, e.LastUnix, "every entry has an author time")
+		assert.False(t, e.LastModified.IsZero(), "every entry has an author time")
 		assert.Equal(t, "t", e.LastAuthor, "the last commit's author is captured (GIT_AUTHOR_NAME)")
 	}
 	assert.Equal(t, 2, byPath["a.buzz"], "a.buzz was touched by two commits")
@@ -355,39 +360,118 @@ func TestLoadKnowledgeVCSDisabledAndNonGit(t *testing.T) {
 	assert.Nil(t, loadKnowledgeVCS(context.Background(), enabled, t.TempDir(), slog.Default()))
 }
 
-// TestVCSInputFingerprint proves the scan's input fingerprint is stable on an unchanged
-// tree and moves when HEAD or the window moves - which is what lets the caller skip the git
-// scan and reuse the @vcs shard from disk on an unchanged commit (no bespoke cache file).
-func TestVCSInputFingerprint(t *testing.T) {
+// TestBuildKnowledgeGraphChurnIsStableAcrossBuilds pins the property that makes caching the
+// scan safe: a cache HIT and a cache MISS must be indistinguishable downstream.
+//
+// The first build walks history, the second reads the cached scan, and the graph they
+// publish has to be identical. When the cache sat on the @vcs shard instead of on the scan,
+// it was not: the second build handed the two derived consumers an empty history, so every
+// directory published dir_commits 0 and no prose was measured, while the reused shard kept
+// the graph looking complete. That is why this asserts the second build AGREES with the
+// first rather than merely asserting the first is right.
+func TestBuildKnowledgeGraphChurnIsStableAcrossBuilds(t *testing.T) {
+	ctx := context.Background()
 	root := t.TempDir()
+	gitRun(t, root, "init", "-q")
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("export fun build(args: [str]) > void {}\n"), 0o644))
+	writeCommit(t, root, "pkg/a.buzz", "export fun a(args: [str]) > void {}\n")
+	writeCommit(t, root, "pkg/a.buzz", "export fun a(args: [str]) > void { }\n")
+
+	ws, err := Inspect(ctx, root)
+	require.NoError(t, err)
+	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
+
+	churn := func() map[string]string {
+		g, err := BuildKnowledgeGraph(ctx, ws, root, cfg, false, slog.Default())
+		require.NoError(t, err)
+		got := map[string]string{}
+		for _, n := range g.Output().Nodes {
+			if v, ok := n.Attrs["dir_commits"]; ok {
+				got[n.ID] = v
+			}
+		}
+		return got
+	}
+
+	first := churn()
+	require.NotEmpty(t, first, "the fixture has a committed subdirectory, so some dir reports churn")
+	assert.Contains(t, slices.Collect(maps.Values(first)), "2", "pkg/ holds a file with two commits")
+	assert.Equal(t, first, churn(), "a cached scan must publish what the walk published")
+
+	// And the second build really did take the cached path, rather than agreeing by walking
+	// twice - otherwise this test would still pass with the cache silently broken.
+	assert.FileExists(t, filepath.Join(root, ".magus", "knowledge", "inputs", "vcs.json"))
+}
+
+// TestLoadKnowledgeVCSCached covers the three ways the cache must yield to the walk. Each
+// one is a case where serving what is on disk would publish a history that is not the
+// workspace's, and the cost of being wrong (a graph that disagrees with itself) is far
+// higher than the 0.41s walk it saves.
+func TestLoadKnowledgeVCSCached(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	// The cache dir sits OUTSIDE the fixture repo: this test commits between calls, and a
+	// cache written under root would be swept into the very history it is caching.
+	cacheDir := t.TempDir()
 	gitRun(t, root, "init", "-q")
 	writeCommit(t, root, "a.buzz", "x\n")
 	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
-	ctx := context.Background()
+	path := filepath.Join(cacheDir, "knowledge", "inputs", "vcs.json")
 
-	fp1 := vcsInputFingerprint(ctx, cfg, root)
-	require.NotEmpty(t, fp1, "an enabled git repo yields a fingerprint")
-	assert.Equal(t, fp1, vcsInputFingerprint(ctx, cfg, root), "unchanged HEAD + window -> stable fingerprint")
+	first := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default())
+	require.NotEmpty(t, first)
+	require.FileExists(t, path)
+	assert.Equal(t, first, loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default()), "a hit returns the scan verbatim")
 
-	// A new commit moves HEAD, so the fingerprint changes (the scan must re-run).
+	// A new commit is new history, so the key moves and the walk re-runs.
 	writeCommit(t, root, "b.buzz", "y\n")
-	assert.NotEqual(t, fp1, vcsInputFingerprint(ctx, cfg, root), "a new commit changes the fingerprint")
+	moved := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default())
+	assert.NotEqual(t, first, moved, "a moved HEAD is a different history")
+	assert.Len(t, moved, 2)
 
-	// The window is part of the key, so changing max_commits changes the fingerprint even
-	// when the result would be identical (conservative: re-scan on a widened window).
-	widened := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true, MaxCommits: 5}}}
-	assert.NotEqual(t, vcsInputFingerprint(ctx, cfg, root), vcsInputFingerprint(ctx, widened, root), "a changed max_commits changes the fingerprint")
+	// A widened window is a different history too, even where the result would coincide.
+	widened := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true, MaxCommits: 1}}}
+	assert.Len(t, loadKnowledgeVCSCached(ctx, widened, root, cacheDir, false, slog.Default()), 1, "a narrowed window re-walks")
 
-	// A working-tree change with no commit (delete a tracked file) moves the dirty set, so
-	// the fingerprint changes - the cached @vcs shard must not outlive the file nodes it
-	// filters onto. This is the regression guard for the "skip on unchanged HEAD" phantom.
-	clean := vcsInputFingerprint(ctx, cfg, root)
-	require.NoError(t, os.Remove(filepath.Join(root, "a.buzz")))
-	assert.NotEqual(t, clean, vcsInputFingerprint(ctx, cfg, root), "an uncommitted deletion changes the fingerprint")
+	// Garbage on disk degrades to a walk rather than to an empty history. Reading a
+	// corrupt file as "no commits" would be the same silent-zero failure in a new place.
+	require.NoError(t, os.WriteFile(path, []byte("{not json"), 0o644))
+	assert.Equal(t, moved, loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default()), "a corrupt cache is not an answer")
 
-	// Disabled or non-git yields an empty fingerprint, so the caller never skips the scan.
-	assert.Empty(t, vcsInputFingerprint(ctx, config.Config{}, root), "disabled -> empty")
-	assert.Empty(t, vcsInputFingerprint(ctx, cfg, t.TempDir()), "non-git -> empty")
+	// --refresh distrusts the cache even on a matching key, and repairs it on the way out,
+	// so the distrust costs one walk rather than every walk.
+	require.NoError(t, os.WriteFile(path, []byte("{not json"), 0o644))
+	assert.Equal(t, moved, loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, true, slog.Default()))
+	b, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.NotContains(t, string(b), "not json", "a refresh rewrites the cache it bypassed")
+}
+
+// TestLoadKnowledgeVCSCachedWritesNothingWhenReadOnly: an immutable cache means the run may
+// read what is there but must not leave anything behind, and a workspace with no resolvable
+// history must not persist "no history" as a fact about it.
+func TestLoadKnowledgeVCSCachedWritesNothingWhenReadOnly(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	cacheDir := t.TempDir()
+	gitRun(t, root, "init", "-q")
+	writeCommit(t, root, "a.buzz", "x\n")
+	path := filepath.Join(cacheDir, "knowledge", "inputs", "vcs.json")
+
+	no := false
+	ro := config.Config{
+		Cache:     config.Cache{Write: config.CacheWrite{Enabled: &no}},
+		Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}},
+	}
+	require.NotEmpty(t, loadKnowledgeVCSCached(ctx, ro, root, cacheDir, false, slog.Default()))
+	assert.NoFileExists(t, path, "a read-only cache is never written")
+
+	// Not a git repo: nothing to key on, so nothing is cached.
+	bare, bareCache := t.TempDir(), t.TempDir()
+	rw := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
+	assert.Nil(t, loadKnowledgeVCSCached(ctx, rw, bare, bareCache, false, slog.Default()))
+	assert.NoFileExists(t, filepath.Join(bareCache, "knowledge", "inputs", "vcs.json"))
 }
 
 // TestLoadKnowledgeVCSNestedWorkspace confirms the prefix strip: when the workspace root
@@ -494,4 +578,32 @@ func TestSymbolOccurrencesReadsAGoodIndex(t *testing.T) {
 	require.Len(t, got.Files[0].Occurrences, 1)
 	assert.Equal(t, types.SymbolOccurrenceVerified, got.Files[0].Occurrences[0].Status,
 		"the range holds Foo, so the site is editable")
+}
+
+// TestVCSHistoryFormatKeysTheCache: a shape change is invisible to the rest of the key -
+// the same HEAD and window hash the same - so without the format version an old file would
+// match, decode with the renamed field absent, and hand every consumer a zero timestamp.
+// That is the exact silent-zero failure this cache was rebuilt to eliminate, arriving
+// through the cache's own front door.
+func TestVCSHistoryFormatKeysTheCache(t *testing.T) {
+	ctx := context.Background()
+	root, cacheDir := t.TempDir(), t.TempDir()
+	gitRun(t, root, "init", "-q")
+	writeCommit(t, root, "a.buzz", "x\n")
+	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
+	path := filepath.Join(cacheDir, "knowledge", "inputs", "vcs.json")
+
+	want := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default())
+	require.NotEmpty(t, want)
+	require.False(t, want[0].LastModified.IsZero())
+
+	// A file in the PREVIOUS shape, written under the previous format's key.
+	prev := sha256.New()
+	fmt.Fprintf(prev, "f%d\x00%s\x00%d\x00", vcsHistoryFormat-1, gitHeadFull(t, root), vcsDefaultMaxCommits)
+	stale := fmt.Sprintf(`{"fingerprint":%q,"entries":[{"path":"a.buzz","last_unix":1700000000}]}`,
+		hex.EncodeToString(prev.Sum(nil)))
+	require.NoError(t, os.WriteFile(path, []byte(stale), 0o644))
+
+	assert.Equal(t, want, loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default()),
+		"a file in the old shape must miss, not decode as zeros")
 }
