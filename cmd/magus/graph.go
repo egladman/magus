@@ -178,40 +178,9 @@ func graphDeps(ctx context.Context, root string, args []string) error {
 // <cache>/knowledge, and writes the node-link export. The cache-first loader
 // makes building implicit - there is no separate build subcommand.
 func graphExport(ctx context.Context, root string, args []string) error {
-	var (
-		refresh      bool
-		globalScope  bool
-		reproducible bool
-		staticAlias  bool
-		sel          string
-		budget       int
-		open         bool
-		exploreBase  string
-		printOnly    bool
-		serve        bool
-		useTargets   bool
-		follow       bool
-	)
+	var ef *gen.GraphExportFlags
 	pos, err := cmdParse("graph export", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&refresh, "refresh", false, "force a full graph rebuild before exporting")
-		fs.BoolVar(&globalScope, "global", false, "union the workspaces registered in config (knowledge.workspaces) into one graph, IDs namespaced by workspace")
-		fs.BoolVar(&reproducible, "reproducible", false, "omit everything that is not a function of the source tree (locally observed runtime attrs, git history) so the export regenerates byte-identically")
-		// compat(until: no released magusfile or script passes --static): renamed to
-		// --reproducible, which names the guarantee rather than gesturing at the site build.
-		// Drop it once `git grep -- --static` finds no caller outside this repo's history.
-		fs.BoolVar(&staticAlias, "static", false, "deprecated alias for --reproducible")
-		fs.StringVar(&sel, "select", "", "export only the neighborhood of a query (same grammar as `magus query`) instead of the whole graph")
-		fs.IntVar(&budget, "budget", knowledge.DefaultBudget, "node budget for --select (how many nodes the neighborhood may collect)")
-		// Opening a viewer is spelled --open everywhere in this CLI (see `magus query
-		// output --open`). It lives on export because export is already the verb that
-		// emits the graph: -o json hands it to another tool, --open hands it to the
-		// Graph Explorer. The flags below only mean anything alongside it.
-		fs.BoolVar(&open, "open", false, "deliver the graph to the interactive Graph Explorer instead of stdout (privately: it never leaves your machine)")
-		fs.StringVar(&exploreBase, "url", defaultExploreURL, "with --open: base URL of the Graph Explorer page (override for a self-hosted mirror)")
-		fs.BoolVar(&printOnly, "print", false, "with --open: print the explorer URL to stdout instead of launching a browser")
-		fs.BoolVar(&serve, "serve", false, "with --open: hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; serves once and stops)")
-		fs.BoolVar(&useTargets, "targets", false, "with --open: open the target dependency graph instead of the knowledge graph; pass a project path to scope it")
-		fs.BoolVar(&follow, "follow", false, "with --open: keep the explorer updating from the running daemon instead of showing a snapshot (needs `magus server start`)")
+		ef = gen.BindGraphExport(fs, gen.GraphExportDefaults{URL: defaultExploreURL, Budget: knowledge.DefaultBudget})
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph export [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -245,15 +214,15 @@ func graphExport(ctx context.Context, root string, args []string) error {
 	// --open is a different DESTINATION, not a different format, so it short-circuits
 	// before any -o resolution: the explorer takes the graph in the shape the explorer
 	// wants, and -o json/graphml stay the paths that hand it to another tool.
-	if open {
+	if ef.Open {
 		return openExplorer(ctx, root, explorerOptions{
-			refresh:     refresh,
-			globalScope: globalScope,
-			base:        exploreBase,
-			printOnly:   printOnly,
-			serve:       serve,
-			useTargets:  useTargets,
-			follow:      follow,
+			refresh:     ef.Refresh,
+			globalScope: ef.Global,
+			base:        ef.URL,
+			printOnly:   ef.Print,
+			serve:       ef.Serve,
+			useTargets:  ef.Targets,
+			follow:      ef.Follow,
 		}, pos)
 	}
 
@@ -263,27 +232,27 @@ func graphExport(ctx context.Context, root string, args []string) error {
 	}
 	// dot/mermaid are graph-layout formats; on the whole graph (1000s of nodes)
 	// they are unreadable, so they require a --select neighborhood to scope down.
-	if (opts.Format == outputDot || opts.Format == outputMermaid) && sel == "" {
+	if (opts.Format == outputDot || opts.Format == outputMermaid) && ef.Select == "" {
 		return fmt.Errorf("-o %s requires --select \"<terms>\" to scope the export; the full graph is too large to lay out (use -o json or -o graphml for the whole graph)", opts.Format)
 	}
 
 	// The whole-graph export stays domain-only; a --select neighborhood pulls in the
 	// symbol shards only when the selection actually targets symbols.
-	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope, sel != "" && knowledge.SeedsSymbols(sel))
+	g, err := loadKnowledgeGraph(ctx, root, ef.Refresh, ef.Global, ef.Select != "" && knowledge.SeedsSymbols(ef.Select))
 	if err != nil {
 		return err
 	}
 	out := g.Output()
-	if sel != "" {
-		out = g.Select(sel, budget)
+	if ef.Select != "" {
+		out = g.Select(ef.Select, ef.Budget)
 		if out.NodeCount == 0 {
-			fmt.Fprintf(os.Stderr, "magus graph export: no nodes matched --select %q\n", sel)
+			fmt.Fprintf(os.Stderr, "magus graph export: no nodes matched --select %q\n", ef.Select)
 		}
 	}
-	if staticAlias {
-		reproducible = true
+	if ef.Static {
+		ef.Reproducible = true
 	}
-	if reproducible {
+	if ef.Reproducible {
 		stripUnreproducible(&out)
 	}
 	// Omitted under --reproducible for the same reason as everything else it drops: the
@@ -292,12 +261,12 @@ func graphExport(ctx context.Context, root string, args []string) error {
 	//
 	// Every other export still carries it, which is where it answers its question:
 	// when two graphs disagree, which build produced each.
-	if !reproducible {
+	if !ef.Reproducible {
 		out.CatalogFingerprint = magus.CatalogFingerprint()
 	}
 	// The blob base lets a viewer link a node's relative `source` to the right repo.
 	// A --global union spans many repos, so a single base would be wrong: leave it off.
-	if !globalScope {
+	if !ef.Global {
 		out.SourceBaseURL = deriveSourceBase(ctx, root)
 	}
 
@@ -385,17 +354,9 @@ func stripUnreproducible(g *types.KnowledgeGraphOutput) {
 // coverage. It reads the graph cache-first rather than git history - the
 // structural companion to insight's history lenses (insight report embeds it).
 func graphStats(ctx context.Context, root string, args []string) error {
-	var (
-		kind        string
-		refresh     bool
-		globalScope bool
-		withSymbols bool
-	)
+	var sf *gen.GraphStatsFlags
 	_, err := cmdParse("graph stats", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&kind, "kind", "", "scope every section to one node kind (e.g. spell, target, doc, diagnostic)")
-		fs.BoolVar(&refresh, "refresh", false, "force a full graph rebuild first")
-		fs.BoolVar(&globalScope, "global", false, "union the workspaces registered in config (knowledge.workspaces) before computing stats")
-		fs.BoolVar(&withSymbols, "symbols", false, "include the lazily-loaded symbol shards in the stats (excluded by default; they can dwarf the domain graph)")
+		sf = gen.BindGraphStats(fs)
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus graph stats [flags]\n\n%s\n\nFlags (global flags also accepted, see `magus -h`):\n", types.KnowledgeStatsDefinition)
 			fs.PrintDefaults()
@@ -409,11 +370,11 @@ func graphStats(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	// Stats stay domain-only unless --symbols (or a --kind symbol scope) opts in.
-	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope, withSymbols || kind == types.KindSymbol)
+	g, err := loadKnowledgeGraph(ctx, root, sf.Refresh, sf.Global, sf.Symbols || sf.Kind == types.KindSymbol)
 	if err != nil {
 		return err
 	}
-	out := g.Stats(kind)
+	out := g.Stats(sf.Kind)
 
 	switch outOpts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:

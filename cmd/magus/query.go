@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/url"
@@ -39,31 +40,9 @@ import (
 const defaultLogViewerURL = "https://eli.gladman.cc/magus/console/logs/"
 
 func queryCmd(ctx context.Context, root string, args []string) error {
-	var (
-		budget      int
-		kinds       string
-		refresh     bool
-		globalScope bool
-		open        bool
-		printURL    bool
-		viewerBase  string
-		attempts    bool
-		meta        bool
-		publish     bool
-		secretsOnly bool
-	)
+	var qf *gen.QueryFlags
 	pos, err := cmdParse("query", args, func(fs *flag.FlagSet) {
-		fs.IntVar(&budget, "budget", 0, "max nodes in the returned neighborhood (default 50)")
-		fs.StringVar(&kinds, "kind", "", "restrict matches to these node kinds (comma-separated)")
-		fs.BoolVar(&refresh, "refresh", false, "force a full graph rebuild before querying")
-		fs.BoolVar(&globalScope, "global", false, "query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace")
-		fs.BoolVar(&open, "open", false, "with `output <ref>`, open the captured output in the browser log viewer (delivered privately; never uploaded)")
-		fs.BoolVar(&printURL, "print", false, "with --open, print the viewer URL instead of launching a browser")
-		fs.StringVar(&viewerBase, "url", defaultLogViewerURL, "with --open, base URL of the log viewer page (override for a self-hosted mirror)")
-		fs.BoolVar(&attempts, "attempts", false, "with `output <ref>`, list the ref's stored executions (newest first) instead of printing output")
-		fs.BoolVar(&meta, "meta", false, "with `output <ref>`, show the run's identity instead of its output: descriptor, lineage, cache key, component digests")
-		fs.BoolVar(&secretsOnly, "secrets", false, "with `invocation <id>`, list only the credential reads: which references this run reached for, and through which provider")
-		fs.BoolVar(&publish, "publish", false, "with `output <ref>`, upload this run's output to the remote cache as a signed bundle so a teammate can resolve the same ref (failing runs are never shared automatically)")
+		qf = gen.BindQuery(fs, gen.QueryDefaults{URL: defaultLogViewerURL})
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus query <terms> [flags]")
 			fmt.Fprintln(os.Stderr, "       magus query output <ref> [-o json] [--open] [--attempts] [--meta] [--publish]")
@@ -117,7 +96,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 			return oerr
 		}
 		exclusive := 0
-		for _, set := range []bool{attempts, meta, publish, open || printURL} {
+		for _, set := range []bool{qf.Attempts, qf.Meta, qf.Publish, qf.Open || qf.Print} {
 			if set {
 				exclusive++
 			}
@@ -126,7 +105,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintf(os.Stderr, "magus query output: --attempts, --meta, --publish, and --open/--print are distinct actions; pick one\n")
 			return errSilent{exitCode: 2}
 		}
-		return queryOutputRef(ctx, root, ref, outputRefOpts{open: open, printURL: printURL, viewerBase: viewerBase, attempts: attempts, meta: meta, publish: publish, out: outOpts})
+		return queryOutputRef(ctx, root, ref, outputRefOpts{open: qf.Open, printURL: qf.Print, viewerBase: qf.URL, attempts: qf.Attempts, meta: qf.Meta, publish: qf.Publish, out: outOpts})
 	}
 	// `magus query invocation <id>` - the sibling of `query output <ref>`, and explicit for
 	// the same reason: an id is shape-routed nowhere, so a search term cannot collide with one.
@@ -146,7 +125,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		if oerr != nil {
 			return oerr
 		}
-		return queryInvocation(ctx, root, inv, secretsOnly, outOpts)
+		return queryInvocation(ctx, root, inv, qf.Secrets, outOpts)
 	}
 	// An invocation id handed to the graph grammar finds nothing and reports `matches: 0`,
 	// which reads as "that run does not exist" rather than "wrong command". magus printed the
@@ -156,13 +135,13 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 			pos[0], clihint.QueryInvocation.With(pos[0]))
 		return errSilent{exitCode: 2}
 	}
-	if open || printURL || attempts || meta || publish {
+	if qf.Open || qf.Print || qf.Attempts || qf.Meta || qf.Publish {
 		// --open/--print/--attempts/--meta only apply to `query output <ref>`. Set on a graph
 		// search, they were a mistake; stop rather than silently ignore them.
 		fmt.Fprintf(os.Stderr, "magus query: --open/--print/--attempts/--meta/--publish apply only to `%s <ref>`. To open the knowledge graph in a browser, use `%s`.\n", clihint.QueryOutput, clihint.GraphExport.With("--open"))
 		return errSilent{exitCode: 2}
 	}
-	if len(pos) == 0 && kinds == "" {
+	if len(pos) == 0 && qf.Kind == "" {
 		fmt.Fprintln(os.Stderr, "magus query: requires search terms")
 		return errSilent{exitCode: 2}
 	}
@@ -173,16 +152,16 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	}
 
 	input := strings.Join(pos, " ")
-	for _, k := range splitCSV(kinds) {
+	for _, k := range splitCSV(qf.Kind) {
 		input += " kind:" + k
 	}
 
 	seedsSymbols := knowledge.SeedsSymbols(input)
-	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope, seedsSymbols)
+	g, err := loadKnowledgeGraph(ctx, root, qf.Refresh, qf.Global, seedsSymbols)
 	if err != nil {
 		return err
 	}
-	out := g.Query(input, budget)
+	out := g.Query(input, qf.Budget)
 	reason, gaps := symbolCoverage(ctx, root, input, seedsSymbols)
 	out.Answer = types.Answer(out.MatchCount > 0, reason, gaps)
 
