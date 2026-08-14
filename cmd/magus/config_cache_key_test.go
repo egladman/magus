@@ -68,9 +68,22 @@ func TestCacheKeyGenerateRefusesTee(t *testing.T) {
 	assert.Contains(t, err.Error(), "must not come to rest on disk")
 }
 
+// seedOf pulls the base64 seed back out of the rendered banner: it is the one line
+// that decodes to 32 bytes.
+func seedOf(t *testing.T, out string) string {
+	t.Helper()
+	for _, line := range strings.Split(out, "\n") {
+		if raw, err := base64.StdEncoding.DecodeString(line); err == nil && len(raw) == 32 {
+			return line
+		}
+	}
+	t.Fatal("no 32-byte base64 line in the output; the seed is not on a line of its own")
+	return ""
+}
+
 // The default is a human who will read the seed once and paste it into a password
-// manager, so the prose banner stays. Pinned because the structured arm above is
-// an easy place to accidentally reroute every caller.
+// manager, so the prose banner stays. Every assertion here is a property someone
+// copying from a terminal depends on, not a spelling.
 func TestCacheKeyGenerateDefaultStaysHumanReadable(t *testing.T) {
 	withOutputFlags(t, "", "")
 
@@ -78,8 +91,17 @@ func TestCacheKeyGenerateDefaultStaysHumanReadable(t *testing.T) {
 	out := captureStdout(t, func() { err = configCacheKeyGenerate(nil) })
 	require.NoError(t, err)
 
-	assert.Contains(t, out, "keyid:")
-	assert.Contains(t, out, signingKeyEnv+"=")
-	assert.Contains(t, out, "trusted_keys:")
-	assert.Greater(t, strings.Count(out, "\n"), 5, "the default output is the multi-line banner")
+	assert.Contains(t, out, "keyid  ")
+	// The seed sits BARE on its own line - not after "VAR=", which is awkward to
+	// select and invites pasting it into an export, straight into shell history.
+	assert.Contains(t, out, "\n\n"+seedOf(t, out)+"\n\n", "the seed must be alone on its line")
+	assert.NotContains(t, out, signingKeyEnv+"=", "the seed must not be rendered as an assignment")
+	// Column zero, or the snippet does not paste into magus.yaml.
+	assert.Contains(t, out, "\ncache:\n  remote:\n    trusted_keys:\n")
+	assert.Contains(t, out, "gh secret set "+signingKeyEnv, "the next command is spelled out")
+	// Plain ASCII: the old layout drew a box, which this repo's own rule forbids in
+	// user-facing strings and which renders badly in a plain terminal.
+	for _, r := range out {
+		assert.Less(t, r, rune(128), "user-facing output must be ASCII, found %q", r)
+	}
 }

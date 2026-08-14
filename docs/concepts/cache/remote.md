@@ -199,12 +199,10 @@ magus config cache key id <pubkey>   # show the keyid + pubkey for a key
 magus config cache key id            # same, derived from MAGUS_CACHE_SIGNING_KEY (seed never printed)
 ```
 
-**Gold-standard custody:** generate the key inside a one-shot CI bootstrap job and
-write the seed straight into your secret store, so it never touches a developer
-machine. **Rotation:** add the new public key to `trusted_keys` alongside the old
-one, switch CI's `MAGUS_CACHE_SIGNING_KEY` to the new seed, then drop the old key
-once no live artifact was signed by it. Multiple trusted keys are supported for
-exactly this overlap.
+**Rotation:** add the new public key to `trusted_keys` alongside the old one, switch
+CI's `MAGUS_CACHE_SIGNING_KEY` to the new seed, then drop the old key once no live
+artifact was signed by it. Multiple trusted keys are supported for exactly this
+overlap.
 
 ### Set the signing secret in CI
 
@@ -254,8 +252,7 @@ and a signing key must not come to rest on disk.
 
 The web UI is equally fine for either model: _Settings -> Secrets and variables ->
 Actions -> Secrets -> New repository secret_. A paste into a password field is not in
-your shell history either. And if the seed should never touch your machine at all, use
-the one-shot CI bootstrap job described above.
+your shell history either.
 
 **3. Publish the public key.** It is not secret, so an argument is fine here. It goes
 in two places - `magus.yaml` is what every consumer verifies against, and the

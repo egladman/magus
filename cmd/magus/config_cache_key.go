@@ -114,19 +114,36 @@ func configCacheKeyGenerate(args []string) error {
 		return emitFormatted(opts, signingKeyOutput{KeyID: km.KeyID, Seed: km.SeedB64, PubKey: km.PubB64})
 	}
 
-	fmt.Printf("keyid: %s\n\n", km.KeyID)
-	fmt.Println("┌─ SECRET - the signing key. Anyone holding it can publish trusted cache")
-	fmt.Println("│  artifacts. Store it as the MAGUS_CACHE_SIGNING_KEY secret in your CI for")
-	fmt.Println("│  trusted pushes ONLY. Do NOT commit it, save it to disk, or paste it")
-	fmt.Println("│  anywhere else. It is shown once.")
-	fmt.Printf("└─ %s=%s\n\n", signingKeyEnv, km.SeedB64)
-	fmt.Println("Public key - not secret. Add it to cache.remote.trusted_keys in magus.yaml:")
-	fmt.Println("    cache:")
-	fmt.Println("      remote:")
-	fmt.Println("        trusted_keys:")
-	fmt.Printf("          - \"%s\"\n\n", km.PubB64)
-	fmt.Println("Gold-standard custody: run this inside a one-shot CI job and write the seed")
-	fmt.Println("straight to your secret store, so it never touches a developer machine.")
+	// Same rule the run output follows: a value you must copy goes LAST on its own
+	// line, unprefixed, so a double-click selects it and nothing else. The old layout
+	// put the seed after "MAGUS_CACHE_SIGNING_KEY=" inside a drawn box, which made it
+	// awkward to select and invited pasting it into an `export` - straight into shell
+	// history, which is the one place it must not land.
+	fmt.Printf("keyid  %s\n\n", km.KeyID)
+
+	fmt.Println("SECRET. Anyone holding this can publish cache artifacts that every")
+	fmt.Println("consumer will trust. It is shown once and is never written to disk.")
+	fmt.Println("Store it as the MAGUS_CACHE_SIGNING_KEY secret, on trusted pushes only.")
+	fmt.Println("Do not commit it and do not save it to a file.")
+	fmt.Println()
+	fmt.Println(km.SeedB64)
+	fmt.Println()
+
+	// Column zero: magus.yaml wants `cache:` at the left margin, so indenting the
+	// snippet for looks would hand you something that does not paste.
+	fmt.Println("Public key, not secret. Add it under cache.remote.trusted_keys in magus.yaml:")
+	fmt.Println()
+	fmt.Println("cache:")
+	fmt.Println("  remote:")
+	fmt.Println("    trusted_keys:")
+	fmt.Printf("      - \"%s\"\n", km.PubB64)
+	fmt.Println()
+
+	fmt.Println("Then store both, secret first - the variable is what turns the cache on:")
+	fmt.Println()
+	fmt.Println("  gh secret set MAGUS_CACHE_SIGNING_KEY")
+	fmt.Printf("  gh variable set MAGUS_CACHE_PUBLIC_KEY --body %q\n", km.PubB64)
+
 	return nil
 }
 
