@@ -79,11 +79,23 @@ const (
 	KindOwner      = "owner"     // a CODEOWNERS owner (@user, @org/team, email)
 	KindSymbol     = "symbol"    // a definition ingested from a SCIP index (compiled-language source, e.g. Go)
 	KindAuthor     = "author"    // a git contributor; `authored` the files they touched (emergent, vs the declared owner)
+	// KindPackage is a THIRD-PARTY dependency a project declares in its manifest, at
+	// the version that manifest resolves to. It is the one node kind whose subject
+	// lives outside the workspace, which is the point: a workspace that knows it is on
+	// connect v1.20.0 can answer a question about connect against v1.20.0, instead of
+	// against whatever the open web happens to rank first.
+	//
+	// Distinct from KindModule (a magus host module a magusfile calls, e.g. fs) and
+	// from KindSymbol (a definition, which for an external package comes from a SCIP
+	// index rather than a manifest). A package and the symbols it defines are the same
+	// dependency seen from two sides: the manifest says what is INSTALLED, the SCIP
+	// monikers say what is actually IMPORTED, and neither answers the other's question.
+	KindPackage = "package"
 )
 
 // Knowledge edge relations. Values are stable wire strings.
 const (
-	RelationDependsOn    = "depends_on"    // project->project, target->target
+	RelationDependsOn    = "depends_on"    // project->project, target->target, project->package
 	RelationContains     = "contains"      // project->target, spell->op, project->file/doc
 	RelationUses         = "uses"          // target->op
 	RelationReferences   = "references"    // charm->target/project; reused for file->symbol (SCIP)
@@ -182,6 +194,36 @@ type KnowledgeSymbol struct {
 	// callee yields one entry per caller, never one per call site. Empty when the indexer
 	// emits no enclosing ranges, which is the honest answer rather than a guess.
 	Calls []KnowledgeSymbolCall
+}
+
+// KnowledgePackage is one third-party dependency read out of a project's manifest:
+// which package manager governs it, its name in that manager's namespace, and the
+// version the manifest resolves to.
+//
+// Manager is not decoration and not derivable from Name. It is what keeps the npm
+// package `foo` and the Go module `foo` from colliding on one node - the same
+// collision internal/symbols/scip.go's parseMoniker already folds the manager into
+// its key to avoid, and for the same reason.
+//
+// Version is what the manifest RESOLVES to, never a range. Go states exact versions
+// in go.mod, so the manifest is the resolved list; ecosystems whose manifest holds a
+// range (npm's ^4.2.0) must read their lockfile instead, which is what
+// spells.Manifest.LockCandidates leads to. A record here always carries a pin - an
+// unresolvable dependency is omitted rather than recorded with a range, because a
+// range presented as a version is exactly the version skew this exists to end.
+type KnowledgePackage struct {
+	Manager string
+	Name    string
+	Version string
+	// Indirect marks a transitive dependency (go.mod's `// indirect`). Kept because
+	// "do we depend on this directly" changes the answer to whether a version is ours
+	// to bump, and because a direct dependency is the one worth reading docs about.
+	Indirect bool
+	// Replaced marks a dependency a replace directive redirects. Its Version is the
+	// replacement's, which is what actually builds - so the node stays truthful about
+	// what is on disk - and this flag is what stops a reader concluding the manifest's
+	// original requirement is what shipped.
+	Replaced bool
 }
 
 // SymbolIndexFreshness is the state of a project's cached SCIP index relative to its

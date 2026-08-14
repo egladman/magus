@@ -49,7 +49,7 @@ type Spell struct {
 	docRequiredTargets  []string            // function-handler targets doctor requires a doc comment on (local Buzz spells)
 	declarationFiles    []string
 	declarationDirGlobs []string
-	manifests           []string
+	manifests           []Manifest
 
 	invoke      func(ctx context.Context, req InvokeRequest) (any, error)
 	renderCmd   func(target string, charms []string) (cmd string, args []string, ok bool, err error)
@@ -163,21 +163,29 @@ func (s *Spell) ServiceView(target string) (view *ServiceView, ok bool) {
 func (s *Spell) DeclarationFiles() []string    { return s.declarationFiles }
 func (s *Spell) DeclarationDirGlobs() []string { return s.declarationDirGlobs }
 
-// Manifests returns the ordered candidate filenames that carry this spell's
-// ecosystem's project-version metadata (go.mod, package.json, Cargo.toml,
-// pyproject.toml), declared by mgs_listManifests. Ordered because a language can
-// have genuine alternatives (Python's pyproject.toml / setup.py / setup.cfg): the
-// first candidate present in a project directory is the one that carries its
-// version, not all of them at once.
+// Manifests returns the ordered candidate manifests this spell's ecosystem declares
+// (go.mod, package.json, Cargo.toml, pyproject.toml), each with the lockfiles that
+// ecosystem might resolve it into, as declared by mgs_listManifests. Ordered because
+// a language can have genuine alternatives (Python's pyproject.toml / setup.py /
+// setup.cfg): the first candidate present in a project directory is that project's
+// manifest, not all of them at once.
+//
+// A manifest answers two questions that happen to share a file. It carries the
+// project's own VERSION, which is what this was originally for, and it declares the
+// project's DEPENDENCIES, which is what its lock candidates lead to. Go is the case
+// that makes them look like one question - go.mod holds both - and npm is the case
+// that separates them, since package.json pins neither its own resolved dependency
+// versions nor, in a workspace, the lockfile's location.
 //
 // Do not confuse this with three adjacent but distinct facts: Sources
 // (mgs_listRequiredGlobs) answers "what feeds my targets" and often already lists
-// a manifest as a cache/affected input (package.json among **/*.ts and friends) -
-// that is a different question from "what declares my version". DeclarationFiles
-// answers "a directory holding this file IS a project of mine" (discovery), used
-// today only by the magusfile spell. VersionProbe is the TOOLCHAIN's version (`go
-// version`), which feeds cache keys, not the project's own version.
-func (s *Spell) Manifests() []string { return s.manifests }
+// a manifest AND its lockfiles as cache/affected inputs (package.json and
+// pnpm-lock.yaml among **/*.ts and friends) - that is a different question from
+// "what declares this project". DeclarationFiles answers "a directory holding this
+// file IS a project of mine" (discovery), used today only by the magusfile spell.
+// VersionProbe is the TOOLCHAIN's version (`go version`), which feeds cache keys,
+// not the project's own version.
+func (s *Spell) Manifests() []Manifest { return s.manifests }
 
 // TargetDoc returns the documentation comment of the named target's handler, or
 // "" when undocumented or unknown.
@@ -351,12 +359,11 @@ func WithDeclarationDirGlobs(globs ...string) Option {
 	return func(s *Spell) { s.declarationDirGlobs = append(s.declarationDirGlobs, globs...) }
 }
 
-// WithManifests sets the ordered candidate filenames that carry this spell's
-// ecosystem's project-version metadata. See Spell.Manifests for the ordering
-// contract and how this differs from WithSources, WithDeclarationFiles, and
-// WithVersionProbe.
-func WithManifests(files ...string) Option {
-	return func(s *Spell) { s.manifests = append(s.manifests, files...) }
+// WithManifests sets the ordered candidate manifests this spell's ecosystem
+// declares. See Spell.Manifests for the ordering contract and how this differs from
+// WithSources, WithDeclarationFiles, and WithVersionProbe.
+func WithManifests(manifests ...Manifest) Option {
+	return func(s *Spell) { s.manifests = append(s.manifests, manifests...) }
 }
 
 // WithTargetSources attaches workspace-root globs for the cache key per target.

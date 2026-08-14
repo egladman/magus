@@ -7,8 +7,8 @@ package spellruntime
 type ContractEntry struct {
 	Name  string // exported mgs_ function name
 	Field string // decoder field key the resolved value is stored under
-	// Paths marks an entry whose Buzz value is a [Path] rather than a [str], so the
-	// resolver runs it through pathValues before storing it.
+	// Shape is what the entry's Buzz value is made of, and therefore which reduction
+	// the resolver runs before storing it.
 	//
 	// It lives HERE, on the entry, rather than in a switch over field names in
 	// resolve.go, because a field name spelled in two places is a field name that can
@@ -19,8 +19,30 @@ type ContractEntry struct {
 	// objects were never reduced to strings, and the decoded field came back EMPTY with
 	// nothing pointing at the cause. The rename was reverted over it. One list means the
 	// next rename carries this behaviour along with it.
-	Paths bool
+	//
+	// It is an enum rather than the bool it started as because a third shape arrived
+	// (ShapeManifests) and the alternative - a second bool beside the first - encodes
+	// "both set" as a reachable state that means nothing.
+	Shape ContractShape
 }
+
+// ContractShape is the element type of a contract entry's Buzz list value.
+type ContractShape uint8
+
+const (
+	// ShapeStrs is the zero value: a [str] stored as-is.
+	ShapeStrs ContractShape = iota
+	// ShapePaths is a [Path], reduced to a [str] by pathValues. The Path object's
+	// other fields (base, isDir) are DISCARDED - the cache descriptor wants the
+	// lexical value, because glob matching does not resolve filesystem paths.
+	ShapePaths
+	// ShapeManifests is a [Manifest], kept structured because its lockCandidates
+	// field is data the descriptor needs, not decoration. A spell still returning
+	// [Path] here decodes as manifests declaring no lockfile: both objects carry a
+	// .value and the reduction reads keys structurally, so the pre-Manifest contract
+	// keeps loading rather than failing.
+	ShapeManifests
+)
 
 // OptionalContract is the canonical list of optional mgs_ functions a spell
 // module may export (mgs_getName is required and handled separately by the
@@ -37,11 +59,11 @@ type ContractEntry struct {
 // command records (the form the built-in spells use). Record-shaped ops pass
 // through unchanged. See docs/engines.md.
 var OptionalContract = []ContractEntry{
-	{Name: "mgs_listRequiredGlobs", Field: "needs", Paths: true},
-	{Name: "mgs_listProvidedGlobs", Field: "provides", Paths: true},
-	{Name: "mgs_listClaimedGlobs", Field: "claims", Paths: true},
-	{Name: "mgs_listIgnoreDirs", Field: "ignore_dirs", Paths: true},
-	{Name: "mgs_listManifests", Field: "manifests", Paths: true},
+	{Name: "mgs_listRequiredGlobs", Field: "needs", Shape: ShapePaths},
+	{Name: "mgs_listProvidedGlobs", Field: "provides", Shape: ShapePaths},
+	{Name: "mgs_listClaimedGlobs", Field: "claims", Shape: ShapePaths},
+	{Name: "mgs_listIgnoreDirs", Field: "ignore_dirs", Shape: ShapePaths},
+	{Name: "mgs_listManifests", Field: "manifests", Shape: ShapeManifests},
 	{Name: "mgs_getTools", Field: "tools"},
 	{Name: "mgs_getLanguage", Field: "language"},
 	{Name: "mgs_isOpaque", Field: "opaque"},

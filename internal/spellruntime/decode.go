@@ -45,6 +45,31 @@ type Obj interface {
 	CallStrs(key string, args ...string) ([]string, error)
 }
 
+// decodeManifests reads the manifests field, which is a list of records rather than
+// the list of strings every other path-bearing field decodes to (see
+// ContractEntry.Shape). Each record is a Manifest - the file dependencies are declared
+// in, plus the lockfiles its ecosystem might resolve them into.
+//
+// A record carrying only .value decodes as a manifest with no lock candidates, which
+// is what makes a spell written against the older [Path] contract keep loading. That
+// is the entire compat surface: Path and Manifest agree on .value, and the extra Path
+// fields (base, isDir) are meaningless for a manifest, so ignoring them loses nothing.
+func decodeManifests(src Obj) []spells.Manifest {
+	objs := src.Objs("manifests")
+	if len(objs) == 0 {
+		return nil
+	}
+	out := make([]spells.Manifest, 0, len(objs))
+	for _, o := range objs {
+		value, ok := o.Str("value")
+		if !ok || value == "" {
+			continue
+		}
+		out = append(out, spells.Manifest{Value: value, LockCandidates: o.Strs("lockCandidates")})
+	}
+	return out
+}
+
 // Decode marshals a spell definition record into the canonical spells.Descriptor,
 // resolving needs()/provides() and validating op names and charm strategies. It
 // is the single reader the Buzz engine routes through, so a spell's shape is
@@ -64,7 +89,7 @@ func Decode(src Obj) (spells.Descriptor, error) {
 		Name:       name,
 		Claims:     src.Strs("claims"),
 		IgnoreDirs: src.Strs("ignore_dirs"),
-		Manifests:  src.Strs("manifests"),
+		Manifests:  decodeManifests(src),
 		Tools:      tools,
 		Language:   language,
 		Opaque:     src.Bool("opaque"),

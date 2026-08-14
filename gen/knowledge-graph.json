@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2156,
-  "edge_count": 5599,
+  "node_count": 2259,
+  "edge_count": 5714,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -13937,78 +13937,78 @@
       "id": "function:spells/golang/spell.buzz:goBuild",
       "kind": "function",
       "label": "goBuild",
-      "source": "spells/golang/spell.buzz:85"
+      "source": "spells/golang/spell.buzz:93"
     },
     {
       "id": "function:spells/golang/spell.buzz:goClean",
       "kind": "function",
       "label": "goClean",
-      "source": "spells/golang/spell.buzz:86"
+      "source": "spells/golang/spell.buzz:94"
     },
     {
       "id": "function:spells/golang/spell.buzz:goFmt",
       "kind": "function",
       "label": "goFmt",
-      "source": "spells/golang/spell.buzz:90"
+      "source": "spells/golang/spell.buzz:98"
     },
     {
       "id": "function:spells/golang/spell.buzz:goGenerate",
       "kind": "function",
       "label": "goGenerate",
-      "source": "spells/golang/spell.buzz:87"
+      "source": "spells/golang/spell.buzz:95"
     },
     {
       "id": "function:spells/golang/spell.buzz:goModEdit",
       "kind": "function",
       "label": "goModEdit",
       "doc": "Edit is offline: it \"reads only go.mod; it does not look up information about the modules involved\" (go help mod edit), so the same tree always yields the same bytes. The write charm is therefore rw, not relock.",
-      "source": "spells/golang/spell.buzz:127"
+      "source": "spells/golang/spell.buzz:135"
     },
     {
       "id": "function:spells/golang/spell.buzz:goModJSON",
       "kind": "function",
       "label": "goModJSON",
       "doc": "Captures Go's structured module view for the spell's higher-level Buzz helper. This is deliberately a separate read-only op: `-json` and `-print` are distinct Go modes, while go-mod-edit remains the one command that applies derived edits.",
-      "source": "spells/golang/spell.buzz:136"
+      "source": "spells/golang/spell.buzz:144"
     },
     {
       "id": "function:spells/golang/spell.buzz:goModTidy",
       "kind": "function",
       "label": "goModTidy",
       "doc": "Tidy resolves against the module proxy, and an import go.mod does not require yet arrives at latest, so its result turns on what upstream serves today rather than on this tree alone. The write charm is therefore relock, not rw.",
-      "source": "spells/golang/spell.buzz:118"
+      "source": "spells/golang/spell.buzz:126"
     },
     {
       "id": "function:spells/golang/spell.buzz:goRun",
       "kind": "function",
       "label": "goRun",
-      "source": "spells/golang/spell.buzz:88"
+      "source": "spells/golang/spell.buzz:96"
     },
     {
       "id": "function:spells/golang/spell.buzz:goTest",
       "kind": "function",
       "label": "goTest",
-      "source": "spells/golang/spell.buzz:109"
+      "source": "spells/golang/spell.buzz:117"
     },
     {
       "id": "function:spells/golang/spell.buzz:goVet",
       "kind": "function",
       "label": "goVet",
-      "source": "spells/golang/spell.buzz:139"
+      "source": "spells/golang/spell.buzz:147"
     },
     {
       "id": "function:spells/golang/spell.buzz:goVulncheck",
       "kind": "function",
       "label": "goVulncheck",
       "doc": "Invoked directly rather than through `go tool`, for the same reason as golangCILint above: `go tool govulncheck` requires the binary in the module's tool block, and a workspace that had not put it there got \"no such tool\" - so the op could not run at all. On PATH it is pinned by whatever the workspace uses, and mgs_getVersionProbes records which.",
-      "source": "spells/golang/spell.buzz:144"
+      "source": "spells/golang/spell.buzz:152"
     },
     {
       "id": "function:spells/golang/spell.buzz:golangCILint",
       "kind": "function",
       "label": "golangCILint",
       "doc": "Invoked directly rather than through `go tool`: golangci-lint generates no code, so it has none of the generator/runtime lockstep that keeps protoc-gen-go pinned in go.mod. `go tool golangci-lint` also required the binary in the module's tool block, and a workspace that had not put it there got \"no such tool\" - the op could not run at all. On PATH it is pinned by whatever the workspace uses (mise, asdf, a system package), and the spell's version probe records which.",
-      "source": "spells/golang/spell.buzz:102"
+      "source": "spells/golang/spell.buzz:110"
     },
     {
       "id": "function:spells/golang/spell.buzz:mgs_getLanguage",
@@ -14051,8 +14051,8 @@
       "id": "function:spells/golang/spell.buzz:mgs_listManifests",
       "kind": "function",
       "label": "mgs_listManifests",
-      "doc": "mgs_listManifests names the file that carries this project's OWN version - not the toolchain's (that's mgs_getVersionProbe) and not a cache input (go.mod is separately listed in mgs_listRequiredGlobs above, because it also feeds the cache key). A Go module has exactly one candidate.",
-      "source": "spells/golang/spell.buzz:68",
+      "doc": "mgs_listManifests names the file this project's dependencies are declared in - not the toolchain's version (that's mgs_getVersionProbe) and not a cache input (go.mod and go.sum are separately listed in mgs_listRequiredGlobs above, because they also feed the cache key). A Go module has exactly one candidate.  go.mod is the ecosystem where manifest and lockfile answer nearly the same question: its require lines are EXACT versions, never ranges, so it already names what gets compiled. go.sum holds hashes for m",
+      "source": "spells/golang/spell.buzz:74",
       "attrs": {
         "exported": "true"
       }
@@ -14071,7 +14071,7 @@
       "id": "function:spells/golang/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/golang/spell.buzz:149",
+      "source": "spells/golang/spell.buzz:157",
       "attrs": {
         "exported": "true"
       }
@@ -14080,7 +14080,7 @@
       "id": "function:spells/golang/spell.buzz:scipGo",
       "kind": "function",
       "label": "scipGo",
-      "source": "spells/golang/spell.buzz:145"
+      "source": "spells/golang/spell.buzz:153"
     },
     {
       "id": "function:spells/markdown/spell.buzz:dprint",
@@ -14285,8 +14285,8 @@
       "id": "function:spells/python/spell.buzz:mgs_listManifests",
       "kind": "function",
       "label": "mgs_listManifests",
-      "doc": "mgs_listManifests names the file that carries this project's OWN version - not the toolchain's (that's mgs_getTools) and not a cache input (these three are separately listed in mgs_listRequiredGlobs above, because they also feed the cache key). Python genuinely has alternatives, unlike the other built-ins: a pyproject.toml-managed project may still ship a legacy setup.py or setup.cfg, so this is ORDERED and the first candidate present in a project directory wins.",
-      "source": "spells/python/spell.buzz:33",
+      "doc": "mgs_listManifests names the files this project's dependencies are declared in - not the toolchain's version (that's mgs_getTools) and not a cache input (these three are separately listed in mgs_listRequiredGlobs above, because they also feed the cache key). Python genuinely has alternatives, unlike the other built-ins: a pyproject.toml-managed project may still ship a legacy setup.py or setup.cfg, so this is ORDERED and the first candidate present in a project directory wins.  Only pyproject.toml carries lo",
+      "source": "spells/python/spell.buzz:41",
       "attrs": {
         "exported": "true"
       }
@@ -14304,7 +14304,7 @@
       "id": "function:spells/python/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/python/spell.buzz:68",
+      "source": "spells/python/spell.buzz:80",
       "attrs": {
         "exported": "true"
       }
@@ -14313,69 +14313,69 @@
       "id": "function:spells/python/spell.buzz:pytest",
       "kind": "function",
       "label": "pytest",
-      "source": "spells/python/spell.buzz:39"
+      "source": "spells/python/spell.buzz:51"
     },
     {
       "id": "function:spells/python/spell.buzz:ruffCheck",
       "kind": "function",
       "label": "ruffCheck",
-      "source": "spells/python/spell.buzz:44"
+      "source": "spells/python/spell.buzz:56"
     },
     {
       "id": "function:spells/python/spell.buzz:ruffFormat",
       "kind": "function",
       "label": "ruffFormat",
-      "source": "spells/python/spell.buzz:52"
+      "source": "spells/python/spell.buzz:64"
     },
     {
       "id": "function:spells/python/spell.buzz:scip",
       "kind": "function",
       "label": "scip",
       "doc": "scip is the reserved op that runs the Python SCIP indexer for the knowledge graph. The indexer is a PATH binary (install it with mise, not as a project dep), so the op forks it directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-python writes there via --output. The runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.",
-      "source": "spells/python/spell.buzz:64"
+      "source": "spells/python/spell.buzz:76"
     },
     {
       "id": "function:spells/python/spell.buzz:uvBuild",
       "kind": "function",
       "label": "uvBuild",
       "doc": "build/clean are uv's own subcommands; pytest and ruff are tools uv merely runs, so they are named after the tool (pytest, ruff-check), not the `uv run` wrapper.",
-      "source": "spells/python/spell.buzz:37"
+      "source": "spells/python/spell.buzz:49"
     },
     {
       "id": "function:spells/python/spell.buzz:uvClean",
       "kind": "function",
       "label": "uvClean",
-      "source": "spells/python/spell.buzz:38"
+      "source": "spells/python/spell.buzz:50"
     },
     {
       "id": "function:spells/rust/spell.buzz:cargoBuild",
       "kind": "function",
       "label": "cargoBuild",
-      "source": "spells/rust/spell.buzz:34"
+      "source": "spells/rust/spell.buzz:41"
     },
     {
       "id": "function:spells/rust/spell.buzz:cargoClean",
       "kind": "function",
       "label": "cargoClean",
-      "source": "spells/rust/spell.buzz:35"
+      "source": "spells/rust/spell.buzz:42"
     },
     {
       "id": "function:spells/rust/spell.buzz:cargoClippy",
       "kind": "function",
       "label": "cargoClippy",
-      "source": "spells/rust/spell.buzz:44"
+      "source": "spells/rust/spell.buzz:51"
     },
     {
       "id": "function:spells/rust/spell.buzz:cargoFmt",
       "kind": "function",
       "label": "cargoFmt",
-      "source": "spells/rust/spell.buzz:45"
+      "source": "spells/rust/spell.buzz:52"
     },
     {
       "id": "function:spells/rust/spell.buzz:cargoTest",
       "kind": "function",
       "label": "cargoTest",
-      "source": "spells/rust/spell.buzz:55"
+      "source": "spells/rust/spell.buzz:62"
     },
     {
       "id": "function:spells/rust/spell.buzz:mgs_getLanguage",
@@ -14419,8 +14419,8 @@
       "id": "function:spells/rust/spell.buzz:mgs_listManifests",
       "kind": "function",
       "label": "mgs_listManifests",
-      "doc": "mgs_listManifests names the file that carries this project's OWN version - not the toolchain's (that's mgs_getVersionProbe) and not a cache input (Cargo.toml is separately listed in mgs_listRequiredGlobs above, because it also feeds the cache key). A cargo crate has exactly one candidate.",
-      "source": "spells/rust/spell.buzz:32",
+      "doc": "mgs_listManifests names the file this project's dependencies are declared in - not the toolchain's version (that's mgs_getVersionProbe) and not a cache input (Cargo.toml and Cargo.lock are separately listed in mgs_listRequiredGlobs above, because they also feed the cache key). A cargo crate has exactly one of each.  In a cargo WORKSPACE only the workspace root holds a Cargo.lock; member crates have a Cargo.toml and no lock of their own. That is why the lock is declared as a bare filename and located by walk",
+      "source": "spells/rust/spell.buzz:37",
       "attrs": {
         "exported": "true"
       }
@@ -14438,7 +14438,7 @@
       "id": "function:spells/rust/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/rust/spell.buzz:65",
+      "source": "spells/rust/spell.buzz:72",
       "attrs": {
         "exported": "true"
       }
@@ -14448,35 +14448,35 @@
       "kind": "function",
       "label": "scip",
       "doc": "scip is the reserved op that runs the Rust SCIP indexer for the knowledge graph. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; rust-analyzer's scip subcommand writes there via --output. The runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.",
-      "source": "spells/rust/spell.buzz:61"
+      "source": "spells/rust/spell.buzz:68"
     },
     {
       "id": "function:spells/typescript/spell.buzz:biomeCheck",
       "kind": "function",
       "label": "biomeCheck",
       "doc": "biome-check is biome's lint/analyze pass (eslint's role, if your project chose Biome over eslint+prettier - the magusfile decides which composes into lint, not this spell). --write and --reporter=github verified against the current Biome CLI docs (biomejs.dev/reference/cli).",
-      "source": "spells/typescript/spell.buzz:138"
+      "source": "spells/typescript/spell.buzz:152"
     },
     {
       "id": "function:spells/typescript/spell.buzz:biomeFormat",
       "kind": "function",
       "label": "biomeFormat",
       "doc": "biome-format is biome's formatter (prettier's role). Unlike prettier/ruffFormat, `biome format` has no --check flag to drop: it is read-only by default (reports differences, writes nothing) and --write applies them, so rw ADDS a flag instead of removing one.",
-      "source": "spells/typescript/spell.buzz:149"
+      "source": "spells/typescript/spell.buzz:163"
     },
     {
       "id": "function:spells/typescript/spell.buzz:devServer",
       "kind": "function",
       "label": "devServer",
       "doc": "dev-server runs the project's package.json \"dev\" script via the package manager - framework-neutral (Vite, Next, webpack-dev-server, ...). No readiness probe is declared: the port and startup signal vary by framework, so guessing one would be wrong more often than right (readiness is optional - see services.md). A magusfile that needs to block on readiness for its specific dev server can declare its own service op instead.",
-      "source": "spells/typescript/spell.buzz:192"
+      "source": "spells/typescript/spell.buzz:206"
     },
     {
       "id": "function:spells/typescript/spell.buzz:eslint",
       "kind": "function",
       "label": "eslint",
       "doc": "eslint has no built-in \"github\" formatter (unlike ruff's --output-format=github); \"unix\" is the built-in, no-extra-devDependency formatter closest to a CI-friendly, one-line-per-problem shape for annotation/regex parsing.",
-      "source": "spells/typescript/spell.buzz:158"
+      "source": "spells/typescript/spell.buzz:172"
     },
     {
       "id": "function:spells/typescript/spell.buzz:mgs_getLanguage",
@@ -14538,8 +14538,8 @@
       "id": "function:spells/typescript/spell.buzz:mgs_listManifests",
       "kind": "function",
       "label": "mgs_listManifests",
-      "doc": "mgs_listManifests names the file that carries this project's OWN version - not the toolchain's (that's mgs_getTools) and not a cache input (package.json is separately listed in mgs_listRequiredGlobs above, because it also feeds the cache key). A node project has exactly one candidate.",
-      "source": "spells/typescript/spell.buzz:91",
+      "doc": "mgs_listManifests names the file this project's dependencies are declared in - not the toolchain's version (that's mgs_getTools) and not a cache input (package.json and every lockfile below are separately listed in mgs_listRequiredGlobs above, because they also feed the cache key). A node project has exactly one manifest candidate and five LOCK candidates.  The five are alternatives, not a set: whichever package manager the project uses writes one of them and the others are absent. package.json alone cannot",
+      "source": "spells/typescript/spell.buzz:102",
       "attrs": {
         "exported": "true"
       }
@@ -14568,7 +14568,7 @@
       "kind": "function",
       "label": "mgs_listTargets",
       "doc": "mgs_listTargets is typed `any` (not {str: fun(Target) Command}) because dev-server mixes in a Service-returning op alongside the Command-returning ones.",
-      "source": "spells/typescript/spell.buzz:207",
+      "source": "spells/typescript/spell.buzz:221",
       "attrs": {
         "exported": "true"
       }
@@ -14578,46 +14578,46 @@
       "kind": "function",
       "label": "preflight",
       "doc": "preflight is a no-op marker op (no command).",
-      "source": "spells/typescript/spell.buzz:166"
+      "source": "spells/typescript/spell.buzz:180"
     },
     {
       "id": "function:spells/typescript/spell.buzz:prettier",
       "kind": "function",
       "label": "prettier",
-      "source": "spells/typescript/spell.buzz:167"
+      "source": "spells/typescript/spell.buzz:181"
     },
     {
       "id": "function:spells/typescript/spell.buzz:scip",
       "kind": "function",
       "label": "scip",
       "doc": "scip is the reserved op that runs the TypeScript SCIP indexer for the knowledge graph. The indexer is a PATH binary (install it with mise, not as a project dep), so the op forks it directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-typescript writes there via --output. The runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.",
-      "source": "spells/typescript/spell.buzz:201"
+      "source": "spells/typescript/spell.buzz:215"
     },
     {
       "id": "function:spells/typescript/spell.buzz:tsc",
       "kind": "function",
       "label": "tsc",
-      "source": "spells/typescript/spell.buzz:173"
+      "source": "spells/typescript/spell.buzz:187"
     },
     {
       "id": "function:spells/typescript/spell.buzz:tscBuild",
       "kind": "function",
       "label": "tscBuild",
       "doc": "tsc-build uses TypeScript's project-references incremental build mode (works even without declared references, via its own .tsbuildinfo cache), emitting per tsconfig outDir - see mgs_listProvidedGlobs.",
-      "source": "spells/typescript/spell.buzz:177"
+      "source": "spells/typescript/spell.buzz:191"
     },
     {
       "id": "function:spells/typescript/spell.buzz:tscClean",
       "kind": "function",
       "label": "tscClean",
       "doc": "tsc-clean mirrors tsc-build's project-references mode: --clean removes the declared outputs and the incremental .tsbuildinfo cache.",
-      "source": "spells/typescript/spell.buzz:180"
+      "source": "spells/typescript/spell.buzz:194"
     },
     {
       "id": "function:spells/typescript/spell.buzz:vitest",
       "kind": "function",
       "label": "vitest",
-      "source": "spells/typescript/spell.buzz:181"
+      "source": "spells/typescript/spell.buzz:195"
     },
     {
       "id": "function:std/lib/lcov.buzz:keepsSource",
@@ -18390,6 +18390,995 @@
       "attrs": {
         "argv": "pnpm exec vitest run",
         "tool": "pnpm"
+      }
+    },
+    {
+      "id": "package:gomod aead.dev/minisign",
+      "kind": "package",
+      "label": "aead.dev/minisign",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.2.0"
+      }
+    },
+    {
+      "id": "package:gomod buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go",
+      "kind": "package",
+      "label": "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.36.11-20260415201107-50325440f8f2.1"
+      }
+    },
+    {
+      "id": "package:gomod connectrpc.com/connect",
+      "kind": "package",
+      "label": "connectrpc.com/connect",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.20.0"
+      }
+    },
+    {
+      "id": "package:gomod dario.cat/mergo",
+      "kind": "package",
+      "label": "dario.cat/mergo",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.0.2"
+      }
+    },
+    {
+      "id": "package:gomod github.com/Masterminds/goutils",
+      "kind": "package",
+      "label": "github.com/Masterminds/goutils",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.1.1"
+      }
+    },
+    {
+      "id": "package:gomod github.com/Masterminds/semver/v3",
+      "kind": "package",
+      "label": "github.com/Masterminds/semver/v3",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v3.5.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/Masterminds/sprig/v3",
+      "kind": "package",
+      "label": "github.com/Masterminds/sprig/v3",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v3.3.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/bmatcuk/doublestar/v4",
+      "kind": "package",
+      "label": "github.com/bmatcuk/doublestar/v4",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v4.10.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/brunoga/deep",
+      "kind": "package",
+      "label": "github.com/brunoga/deep",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.2.4"
+      }
+    },
+    {
+      "id": "package:gomod github.com/cbroglie/mustache",
+      "kind": "package",
+      "label": "github.com/cbroglie/mustache",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.4.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/cenkalti/backoff/v5",
+      "kind": "package",
+      "label": "github.com/cenkalti/backoff/v5",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v5.0.3"
+      }
+    },
+    {
+      "id": "package:gomod github.com/cespare/xxhash/v2",
+      "kind": "package",
+      "label": "github.com/cespare/xxhash/v2",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v2.3.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/davecgh/go-spew",
+      "kind": "package",
+      "label": "github.com/davecgh/go-spew",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.1.1",
+        "version_conflict": "v1.1.1,v1.1.2-0.20180830191138-d8f796af33cc"
+      }
+    },
+    {
+      "id": "package:gomod github.com/dlclark/regexp2",
+      "kind": "package",
+      "label": "github.com/dlclark/regexp2",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.12.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/ebitengine/purego",
+      "kind": "package",
+      "label": "github.com/ebitengine/purego",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.10.0",
+        "version_conflict": "v0.10.0,v0.10.2"
+      }
+    },
+    {
+      "id": "package:gomod github.com/evanphx/json-patch/v5",
+      "kind": "package",
+      "label": "github.com/evanphx/json-patch/v5",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v5.9.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/fatih/color",
+      "kind": "package",
+      "label": "github.com/fatih/color",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.19.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/fatih/structs",
+      "kind": "package",
+      "label": "github.com/fatih/structs",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.1.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/fsnotify/fsnotify",
+      "kind": "package",
+      "label": "github.com/fsnotify/fsnotify",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.10.1"
+      }
+    },
+    {
+      "id": "package:gomod github.com/gabriel-vasile/mimetype",
+      "kind": "package",
+      "label": "github.com/gabriel-vasile/mimetype",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.4.15"
+      }
+    },
+    {
+      "id": "package:gomod github.com/go-logr/logr",
+      "kind": "package",
+      "label": "github.com/go-logr/logr",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.4.4"
+      }
+    },
+    {
+      "id": "package:gomod github.com/go-logr/stdr",
+      "kind": "package",
+      "label": "github.com/go-logr/stdr",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.2.2"
+      }
+    },
+    {
+      "id": "package:gomod github.com/go-playground/locales",
+      "kind": "package",
+      "label": "github.com/go-playground/locales",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.14.1"
+      }
+    },
+    {
+      "id": "package:gomod github.com/go-playground/universal-translator",
+      "kind": "package",
+      "label": "github.com/go-playground/universal-translator",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.18.1"
+      }
+    },
+    {
+      "id": "package:gomod github.com/go-playground/validator/v10",
+      "kind": "package",
+      "label": "github.com/go-playground/validator/v10",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v10.30.3"
+      }
+    },
+    {
+      "id": "package:gomod github.com/go-viper/mapstructure/v2",
+      "kind": "package",
+      "label": "github.com/go-viper/mapstructure/v2",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v2.3.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/gofrs/flock",
+      "kind": "package",
+      "label": "github.com/gofrs/flock",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.13.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/golangci/plugin-module-register",
+      "kind": "package",
+      "label": "github.com/golangci/plugin-module-register",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.1.2"
+      }
+    },
+    {
+      "id": "package:gomod github.com/google/jsonschema-go",
+      "kind": "package",
+      "label": "github.com/google/jsonschema-go",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.4.2"
+      }
+    },
+    {
+      "id": "package:gomod github.com/google/uuid",
+      "kind": "package",
+      "label": "github.com/google/uuid",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.6.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/grpc-ecosystem/grpc-gateway/v2",
+      "kind": "package",
+      "label": "github.com/grpc-ecosystem/grpc-gateway/v2",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v2.29.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/huandu/xstrings",
+      "kind": "package",
+      "label": "github.com/huandu/xstrings",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.5.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/inconshreveable/mousetrap",
+      "kind": "package",
+      "label": "github.com/inconshreveable/mousetrap",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.1.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/jedib0t/go-pretty/v6",
+      "kind": "package",
+      "label": "github.com/jedib0t/go-pretty/v6",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v6.6.7"
+      }
+    },
+    {
+      "id": "package:gomod github.com/kkyr/fig",
+      "kind": "package",
+      "label": "github.com/kkyr/fig",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.5.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/klauspost/compress",
+      "kind": "package",
+      "label": "github.com/klauspost/compress",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.19.1"
+      }
+    },
+    {
+      "id": "package:gomod github.com/klauspost/pgzip",
+      "kind": "package",
+      "label": "github.com/klauspost/pgzip",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.2.6"
+      }
+    },
+    {
+      "id": "package:gomod github.com/knadh/koanf/maps",
+      "kind": "package",
+      "label": "github.com/knadh/koanf/maps",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.1.2"
+      }
+    },
+    {
+      "id": "package:gomod github.com/knadh/koanf/parsers/yaml",
+      "kind": "package",
+      "label": "github.com/knadh/koanf/parsers/yaml",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.1.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/knadh/koanf/providers/env",
+      "kind": "package",
+      "label": "github.com/knadh/koanf/providers/env",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.0.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/knadh/koanf/providers/file",
+      "kind": "package",
+      "label": "github.com/knadh/koanf/providers/file",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.1.2"
+      }
+    },
+    {
+      "id": "package:gomod github.com/knadh/koanf/providers/posflag",
+      "kind": "package",
+      "label": "github.com/knadh/koanf/providers/posflag",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.1.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/knadh/koanf/providers/structs",
+      "kind": "package",
+      "label": "github.com/knadh/koanf/providers/structs",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.1.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/knadh/koanf/v2",
+      "kind": "package",
+      "label": "github.com/knadh/koanf/v2",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v2.2.1"
+      }
+    },
+    {
+      "id": "package:gomod github.com/leodido/go-urn",
+      "kind": "package",
+      "label": "github.com/leodido/go-urn",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.5.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/mark3labs/mcp-go",
+      "kind": "package",
+      "label": "github.com/mark3labs/mcp-go",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.48.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/mattn/go-colorable",
+      "kind": "package",
+      "label": "github.com/mattn/go-colorable",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.1.15"
+      }
+    },
+    {
+      "id": "package:gomod github.com/mattn/go-isatty",
+      "kind": "package",
+      "label": "github.com/mattn/go-isatty",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.0.24"
+      }
+    },
+    {
+      "id": "package:gomod github.com/mattn/go-runewidth",
+      "kind": "package",
+      "label": "github.com/mattn/go-runewidth",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.0.16"
+      }
+    },
+    {
+      "id": "package:gomod github.com/minio/selfupdate",
+      "kind": "package",
+      "label": "github.com/minio/selfupdate",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.6.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/mitchellh/copystructure",
+      "kind": "package",
+      "label": "github.com/mitchellh/copystructure",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.2.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/mitchellh/mapstructure",
+      "kind": "package",
+      "label": "github.com/mitchellh/mapstructure",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.5.1-0.20231216201459-8508981c8b6c"
+      }
+    },
+    {
+      "id": "package:gomod github.com/mitchellh/reflectwalk",
+      "kind": "package",
+      "label": "github.com/mitchellh/reflectwalk",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.0.2"
+      }
+    },
+    {
+      "id": "package:gomod github.com/pelletier/go-toml/v2",
+      "kind": "package",
+      "label": "github.com/pelletier/go-toml/v2",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v2.4.3"
+      }
+    },
+    {
+      "id": "package:gomod github.com/pkg/errors",
+      "kind": "package",
+      "label": "github.com/pkg/errors",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.9.1"
+      }
+    },
+    {
+      "id": "package:gomod github.com/pmezard/go-difflib",
+      "kind": "package",
+      "label": "github.com/pmezard/go-difflib",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.0.0",
+        "version_conflict": "v1.0.0,v1.0.1-0.20181226105442-5d4384ee4fb2"
+      }
+    },
+    {
+      "id": "package:gomod github.com/rivo/uniseg",
+      "kind": "package",
+      "label": "github.com/rivo/uniseg",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.4.7"
+      }
+    },
+    {
+      "id": "package:gomod github.com/rogpeppe/go-internal",
+      "kind": "package",
+      "label": "github.com/rogpeppe/go-internal",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.14.1"
+      }
+    },
+    {
+      "id": "package:gomod github.com/rs/zerolog",
+      "kind": "package",
+      "label": "github.com/rs/zerolog",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.33.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/samber/lo",
+      "kind": "package",
+      "label": "github.com/samber/lo",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.53.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/scip-code/scip/bindings/go/scip",
+      "kind": "package",
+      "label": "github.com/scip-code/scip/bindings/go/scip",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.9.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/shopspring/decimal",
+      "kind": "package",
+      "label": "github.com/shopspring/decimal",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.4.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/sourcegraph/beaut",
+      "kind": "package",
+      "label": "github.com/sourcegraph/beaut",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.0.0-20240611013027-627e4c25335a"
+      }
+    },
+    {
+      "id": "package:gomod github.com/spf13/cast",
+      "kind": "package",
+      "label": "github.com/spf13/cast",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.10.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/spf13/cobra",
+      "kind": "package",
+      "label": "github.com/spf13/cobra",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.8.1"
+      }
+    },
+    {
+      "id": "package:gomod github.com/spf13/pflag",
+      "kind": "package",
+      "label": "github.com/spf13/pflag",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.0.5"
+      }
+    },
+    {
+      "id": "package:gomod github.com/stretchr/objx",
+      "kind": "package",
+      "label": "github.com/stretchr/objx",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.5.2"
+      }
+    },
+    {
+      "id": "package:gomod github.com/stretchr/testify",
+      "kind": "package",
+      "label": "github.com/stretchr/testify",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.11.1"
+      }
+    },
+    {
+      "id": "package:gomod github.com/twitchyliquid64/golang-asm",
+      "kind": "package",
+      "label": "github.com/twitchyliquid64/golang-asm",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.15.1"
+      }
+    },
+    {
+      "id": "package:gomod github.com/ulikunitz/xz",
+      "kind": "package",
+      "label": "github.com/ulikunitz/xz",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.5.16"
+      }
+    },
+    {
+      "id": "package:gomod github.com/vektra/mockery/v3",
+      "kind": "package",
+      "label": "github.com/vektra/mockery/v3",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v3.5.4"
+      }
+    },
+    {
+      "id": "package:gomod github.com/xeipuuv/gojsonpointer",
+      "kind": "package",
+      "label": "github.com/xeipuuv/gojsonpointer",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.0.0-20180127040702-4e3ac2762d5f"
+      }
+    },
+    {
+      "id": "package:gomod github.com/xeipuuv/gojsonreference",
+      "kind": "package",
+      "label": "github.com/xeipuuv/gojsonreference",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.0.0-20180127040603-bd5ef7bd5415"
+      }
+    },
+    {
+      "id": "package:gomod github.com/xeipuuv/gojsonschema",
+      "kind": "package",
+      "label": "github.com/xeipuuv/gojsonschema",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.2.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/yosida95/uritemplate/v3",
+      "kind": "package",
+      "label": "github.com/yosida95/uritemplate/v3",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v3.0.2"
+      }
+    },
+    {
+      "id": "package:gomod github.com/yuin/goldmark",
+      "kind": "package",
+      "label": "github.com/yuin/goldmark",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.8.4"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/auto/sdk",
+      "kind": "package",
+      "label": "go.opentelemetry.io/auto/sdk",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.2.1"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/otel",
+      "kind": "package",
+      "label": "go.opentelemetry.io/otel",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.44.0"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc",
+      "kind": "package",
+      "label": "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.44.0"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp",
+      "kind": "package",
+      "label": "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.44.0"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/otel/exporters/otlp/otlptrace",
+      "kind": "package",
+      "label": "go.opentelemetry.io/otel/exporters/otlp/otlptrace",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.44.0"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc",
+      "kind": "package",
+      "label": "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.44.0"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp",
+      "kind": "package",
+      "label": "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.44.0"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/otel/metric",
+      "kind": "package",
+      "label": "go.opentelemetry.io/otel/metric",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.44.0"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/otel/sdk",
+      "kind": "package",
+      "label": "go.opentelemetry.io/otel/sdk",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.44.0"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/otel/sdk/metric",
+      "kind": "package",
+      "label": "go.opentelemetry.io/otel/sdk/metric",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.44.0"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/otel/trace",
+      "kind": "package",
+      "label": "go.opentelemetry.io/otel/trace",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.44.0"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/proto/otlp",
+      "kind": "package",
+      "label": "go.opentelemetry.io/proto/otlp",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.11.0"
+      }
+    },
+    {
+      "id": "package:gomod golang.org/x/crypto",
+      "kind": "package",
+      "label": "golang.org/x/crypto",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.53.0",
+        "version_conflict": "v0.53.0,v0.54.0"
+      }
+    },
+    {
+      "id": "package:gomod golang.org/x/exp",
+      "kind": "package",
+      "label": "golang.org/x/exp",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.0.0-20240719175910-8a7402abbf56"
+      }
+    },
+    {
+      "id": "package:gomod golang.org/x/mod",
+      "kind": "package",
+      "label": "golang.org/x/mod",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.37.0",
+        "version_conflict": "v0.37.0,v0.38.0"
+      }
+    },
+    {
+      "id": "package:gomod golang.org/x/net",
+      "kind": "package",
+      "label": "golang.org/x/net",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.57.0"
+      }
+    },
+    {
+      "id": "package:gomod golang.org/x/sync",
+      "kind": "package",
+      "label": "golang.org/x/sync",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.21.0",
+        "version_conflict": "v0.21.0,v0.22.0"
+      }
+    },
+    {
+      "id": "package:gomod golang.org/x/sys",
+      "kind": "package",
+      "label": "golang.org/x/sys",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.46.0",
+        "version_conflict": "v0.46.0,v0.47.0"
+      }
+    },
+    {
+      "id": "package:gomod golang.org/x/term",
+      "kind": "package",
+      "label": "golang.org/x/term",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.45.0"
+      }
+    },
+    {
+      "id": "package:gomod golang.org/x/text",
+      "kind": "package",
+      "label": "golang.org/x/text",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.40.0"
+      }
+    },
+    {
+      "id": "package:gomod golang.org/x/tools",
+      "kind": "package",
+      "label": "golang.org/x/tools",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.47.0"
+      }
+    },
+    {
+      "id": "package:gomod google.golang.org/genproto/googleapis/api",
+      "kind": "package",
+      "label": "google.golang.org/genproto/googleapis/api",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.0.0-20260724162435-b2f20204f0df"
+      }
+    },
+    {
+      "id": "package:gomod google.golang.org/genproto/googleapis/rpc",
+      "kind": "package",
+      "label": "google.golang.org/genproto/googleapis/rpc",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.0.0-20260724162435-b2f20204f0df"
+      }
+    },
+    {
+      "id": "package:gomod google.golang.org/grpc",
+      "kind": "package",
+      "label": "google.golang.org/grpc",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.82.1"
+      }
+    },
+    {
+      "id": "package:gomod google.golang.org/protobuf",
+      "kind": "package",
+      "label": "google.golang.org/protobuf",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.36.11"
+      }
+    },
+    {
+      "id": "package:gomod gopkg.in/yaml.v3",
+      "kind": "package",
+      "label": "gopkg.in/yaml.v3",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v3.0.1"
+      }
+    },
+    {
+      "id": "package:gomod mvdan.cc/sh/v3",
+      "kind": "package",
+      "label": "mvdan.cc/sh/v3",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v3.13.1"
       }
     },
     {
@@ -58962,6 +59951,822 @@
     },
     {
       "source": "project:.",
+      "target": "package:gomod aead.dev/minisign",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod connectrpc.com/connect",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod dario.cat/mergo",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/Masterminds/goutils",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/Masterminds/semver/v3",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/Masterminds/sprig/v3",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/bmatcuk/doublestar/v4",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/brunoga/deep",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/cbroglie/mustache",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/cenkalti/backoff/v5",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/cespare/xxhash/v2",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/davecgh/go-spew",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/dlclark/regexp2",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/ebitengine/purego",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/evanphx/json-patch/v5",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/fatih/color",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/fatih/structs",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/fsnotify/fsnotify",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/gabriel-vasile/mimetype",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/go-logr/logr",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/go-logr/stdr",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/go-playground/locales",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/go-playground/universal-translator",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/go-playground/validator/v10",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/go-viper/mapstructure/v2",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/gofrs/flock",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/google/jsonschema-go",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/google/uuid",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/grpc-ecosystem/grpc-gateway/v2",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/huandu/xstrings",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/inconshreveable/mousetrap",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/jedib0t/go-pretty/v6",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/kkyr/fig",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/klauspost/compress",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/klauspost/pgzip",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/knadh/koanf/maps",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/knadh/koanf/parsers/yaml",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/knadh/koanf/providers/env",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/knadh/koanf/providers/file",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/knadh/koanf/providers/posflag",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/knadh/koanf/providers/structs",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/knadh/koanf/v2",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/leodido/go-urn",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/mark3labs/mcp-go",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/mattn/go-colorable",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/mattn/go-isatty",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/mattn/go-runewidth",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/minio/selfupdate",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/mitchellh/copystructure",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/mitchellh/mapstructure",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/mitchellh/reflectwalk",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/pelletier/go-toml/v2",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/pkg/errors",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/pmezard/go-difflib",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/rivo/uniseg",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/rogpeppe/go-internal",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/rs/zerolog",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/samber/lo",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/scip-code/scip/bindings/go/scip",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/shopspring/decimal",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/sourcegraph/beaut",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/spf13/cast",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/spf13/cobra",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/spf13/pflag",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/stretchr/objx",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/stretchr/testify",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/twitchyliquid64/golang-asm",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/ulikunitz/xz",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/vektra/mockery/v3",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/xeipuuv/gojsonpointer",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/xeipuuv/gojsonreference",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/xeipuuv/gojsonschema",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/yosida95/uritemplate/v3",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/yuin/goldmark",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/auto/sdk",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/otel",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/otel/exporters/otlp/otlptrace",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/otel/metric",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/otel/sdk",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/otel/sdk/metric",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/otel/trace",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/proto/otlp",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod golang.org/x/crypto",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod golang.org/x/exp",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod golang.org/x/mod",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod golang.org/x/net",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod golang.org/x/sync",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod golang.org/x/sys",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod golang.org/x/term",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod golang.org/x/text",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod golang.org/x/tools",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod google.golang.org/genproto/googleapis/api",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod google.golang.org/genproto/googleapis/rpc",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod google.golang.org/grpc",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod google.golang.org/protobuf",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod gopkg.in/yaml.v3",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod mvdan.cc/sh/v3",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
       "target": "project:libs/gopherbuzz",
       "relation": "depends_on",
       "confidence": "extracted",
@@ -59930,6 +61735,78 @@
     },
     {
       "source": "project:libs/gopherbuzz",
+      "target": "package:gomod github.com/davecgh/go-spew",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "project:libs/gopherbuzz",
+      "target": "package:gomod github.com/dlclark/regexp2",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "project:libs/gopherbuzz",
+      "target": "package:gomod github.com/ebitengine/purego",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "project:libs/gopherbuzz",
+      "target": "package:gomod github.com/pmezard/go-difflib",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "project:libs/gopherbuzz",
+      "target": "package:gomod github.com/stretchr/testify",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "project:libs/gopherbuzz",
+      "target": "package:gomod github.com/twitchyliquid64/golang-asm",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "project:libs/gopherbuzz",
+      "target": "package:gomod golang.org/x/crypto",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "project:libs/gopherbuzz",
+      "target": "package:gomod golang.org/x/sys",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "project:libs/gopherbuzz",
+      "target": "package:gomod gopkg.in/yaml.v3",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "project:libs/gopherbuzz",
       "target": "target:libs/gopherbuzz:build",
       "relation": "contains",
       "confidence": "extracted",
@@ -60023,6 +61900,38 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "libs/testsprawl/magusfile.buzz"
+    },
+    {
+      "source": "project:libs/testsprawl",
+      "target": "package:gomod github.com/golangci/plugin-module-register",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/testsprawl"
+    },
+    {
+      "source": "project:libs/testsprawl",
+      "target": "package:gomod golang.org/x/mod",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/testsprawl"
+    },
+    {
+      "source": "project:libs/testsprawl",
+      "target": "package:gomod golang.org/x/sync",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/testsprawl"
+    },
+    {
+      "source": "project:libs/testsprawl",
+      "target": "package:gomod golang.org/x/tools",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/testsprawl"
     },
     {
       "source": "project:libs/testsprawl",

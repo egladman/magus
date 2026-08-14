@@ -422,6 +422,20 @@ type ProjectEntry struct {
 	// or none of whose candidates exist, has an empty list: it carries no version of
 	// its own.
 	Manifests []string `json:"manifests,omitempty" yaml:"manifests,omitempty"`
+	// Lockfiles lists the lockfile each entry in Manifests actually resolves into
+	// (spells.Manifest.LockCandidates), found by walking from Dir up to the workspace
+	// root and taking the first candidate that exists. Empty when the ecosystem has no
+	// lockfile, when none has been written yet, or when the manifest is one that does
+	// not lock (setup.py).
+	//
+	// These are WORKSPACE-RELATIVE, unlike Manifests, which are bare filenames. That
+	// asymmetry is the useful part rather than an inconsistency: a manifest is always
+	// in Dir, so its directory says nothing, while a lockfile may be hoisted to a
+	// workspace root several levels up to serve many projects - so which directory
+	// holds it is the only thing resolving it determines. A pnpm workspace member
+	// reports "pnpm-lock.yaml" at the root here while its Manifests says
+	// "package.json" beside it.
+	Lockfiles []string `json:"lockfiles,omitempty" yaml:"lockfiles,omitempty"`
 }
 
 // ProjectsOutput is the top-level result for "describe projects".

@@ -84,11 +84,25 @@ export fun mgs_getLanguage() > str { return "typescript"; }
 // .turbo/.pnpm-store are dot-dirs skipped structurally, so only node_modules belongs here.
 export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "node_modules", isDir = true}]; }
 
-// mgs_listManifests names the file that carries this project's OWN version - not
-// the toolchain's (that's mgs_getTools) and not a cache input (package.json
-// is separately listed in mgs_listRequiredGlobs above, because it also feeds the
-// cache key). A node project has exactly one candidate.
-export fun mgs_listManifests() > [Path] { return [Path{value = "package.json"}]; }
+// mgs_listManifests names the file this project's dependencies are declared in -
+// not the toolchain's version (that's mgs_getTools) and not a cache input
+// (package.json and every lockfile below are separately listed in
+// mgs_listRequiredGlobs above, because they also feed the cache key). A node project
+// has exactly one manifest candidate and five LOCK candidates.
+//
+// The five are alternatives, not a set: whichever package manager the project uses
+// writes one of them and the others are absent. package.json alone cannot answer
+// what is installed - its ranges (^4.2.0) name a window, and the lockfile is what
+// pins a version inside it - which makes node the ecosystem this field exists for.
+//
+// Ordered as mgs_listRequiredGlobs orders them, so the two lists read the same way.
+// bun.lockb is bun's binary lockfile; newer bun writes a text bun.lock, and adding
+// it here needs the required-globs list to learn it at the same time or the cache
+// key stops covering a file the build reads.
+export fun mgs_listManifests() > [Manifest] {
+    return [Manifest{value = "package.json",
+                     lockCandidates = ["pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "bun.lockb"]}];
+}
 
 // PACKAGE_MANAGER_HINTS classify the failures that follow a stale install - the case where
 // somebody else's merge changed the lockfile and node_modules did not move with it. The

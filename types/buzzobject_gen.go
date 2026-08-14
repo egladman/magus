@@ -244,6 +244,7 @@ func (v ProjectEntry) BuzzObject() BuzzObject {
 		"dependsOn": v.DependsOn,
 		"exclusive": v.Exclusive,
 		"manifests": v.Manifests,
+		"lockfiles": v.Lockfiles,
 	}
 }
 
