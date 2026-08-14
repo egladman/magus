@@ -188,6 +188,15 @@ guides/getting-started/
 guides/insight/
 guides/integrations/
 guides/integrations/agents/
+guides/integrations/agents/any-host/
+guides/integrations/agents/claude-code/
+guides/integrations/agents/codex/
+guides/integrations/agents/cursor/
+guides/integrations/agents/guard-templates/
+guides/integrations/agents/guard/
+guides/integrations/agents/notifications/
+guides/integrations/agents/opencode/
+guides/integrations/agents/skills/
 guides/integrations/ci/
 guides/integrations/daemon/
 guides/integrations/editor/
@@ -474,6 +483,7 @@ spells/ts/
 tags/
 tags/adoption/
 tags/affected/
+tags/agent-install/
 tags/agents-md/
 tags/agents/
 tags/allowlist/
@@ -499,6 +509,7 @@ tags/charm/
 tags/charms/
 tags/ci-provider/
 tags/ci/
+tags/claude-code/
 tags/claude/
 tags/cli/
 tags/codegen/
@@ -518,6 +529,7 @@ tags/cosign/
 tags/coupling/
 tags/credentials/
 tags/cross-project/
+tags/cursor/
 tags/cycle/
 tags/daemon/
 tags/debugging/
@@ -525,6 +537,7 @@ tags/dependency-graph/
 tags/depends-on/
 tags/depends/
 tags/describe/
+tags/desktop/
 tags/detach/
 tags/determinism/
 tags/diagnostics/
@@ -574,6 +587,7 @@ tags/import/
 tags/inferred/
 tags/inputs/
 tags/install/
+tags/integration/
 tags/interactive/
 tags/interpreter/
 tags/journal/
@@ -590,6 +604,7 @@ tags/logs/
 tags/lsp/
 tags/macos/
 tags/magus-buzz/
+tags/magus-hook/
 tags/magus-memory/
 tags/magus-query/
 tags/magus-run/
@@ -617,6 +632,7 @@ tags/notifications/
 tags/nx/
 tags/oci/
 tags/onboarding/
+tags/opencode/
 tags/operations/
 tags/os/
 tags/output-refs/
@@ -628,6 +644,7 @@ tags/path/
 tags/permissions/
 tags/picker/
 tags/platform/
+tags/plugin/
 tags/podman/
 tags/policy/
 tags/pool/
@@ -682,6 +699,7 @@ tags/supported/
 tags/symbols/
 tags/target/
 tags/targets/
+tags/telemetry/
 tags/template/
 tags/terminology/
 tags/test/

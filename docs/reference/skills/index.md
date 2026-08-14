@@ -11,7 +11,7 @@ These are the skills `magus agent install` writes, reproduced verbatim from the
 bodies embedded in the binary. Each ships in two hand-authored permutations, and
 install writes both: the short form is the always-loaded primary, and the full form
 is its `<name>-full` twin, loaded by name when a reader needs the rationale.
-See [Agents](../../guides/integrations/agents.md) for the difference.
+See [Skills](../../guides/integrations/agents/skills.md) for the difference.
 
 | skill | full | short | saved | what it is for |
 | --- | --- | --- | --- | --- |

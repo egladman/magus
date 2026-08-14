@@ -291,13 +291,121 @@
           "reads_secrets": false,
           "writes_files": [
             {
-              "glob": ".claude/skills/**"
+              "glob": ".claude/skills/magus-architecture-review*/**"
             },
             {
-              "glob": ".agents/skills/**"
+              "glob": ".claude/skills/magus-buzz-review*/**"
             },
             {
-              "glob": ".opencode/skills/**"
+              "glob": ".claude/skills/magus-buzz-write*/**"
+            },
+            {
+              "glob": ".claude/skills/magus-change-summary*/**"
+            },
+            {
+              "glob": ".claude/skills/magus-context-audit*/**"
+            },
+            {
+              "glob": ".claude/skills/magus-delegate-multi-agent*/**"
+            },
+            {
+              "glob": ".claude/skills/magus-docs-lookup*/**"
+            },
+            {
+              "glob": ".claude/skills/magus-handoff-journal*/**"
+            },
+            {
+              "glob": ".claude/skills/magus-query*/**"
+            },
+            {
+              "glob": ".claude/skills/magus-run*/**"
+            },
+            {
+              "glob": ".claude/skills/magus-sdk*/**"
+            },
+            {
+              "glob": ".claude/skills/magus-vcs-hygiene*/**"
+            },
+            {
+              "glob": ".claude/skills/magus-workspace-rules*/**"
+            },
+            {
+              "glob": ".agents/skills/magus-architecture-review*/**"
+            },
+            {
+              "glob": ".agents/skills/magus-buzz-review*/**"
+            },
+            {
+              "glob": ".agents/skills/magus-buzz-write*/**"
+            },
+            {
+              "glob": ".agents/skills/magus-change-summary*/**"
+            },
+            {
+              "glob": ".agents/skills/magus-context-audit*/**"
+            },
+            {
+              "glob": ".agents/skills/magus-delegate-multi-agent*/**"
+            },
+            {
+              "glob": ".agents/skills/magus-docs-lookup*/**"
+            },
+            {
+              "glob": ".agents/skills/magus-handoff-journal*/**"
+            },
+            {
+              "glob": ".agents/skills/magus-query*/**"
+            },
+            {
+              "glob": ".agents/skills/magus-run*/**"
+            },
+            {
+              "glob": ".agents/skills/magus-sdk*/**"
+            },
+            {
+              "glob": ".agents/skills/magus-vcs-hygiene*/**"
+            },
+            {
+              "glob": ".agents/skills/magus-workspace-rules*/**"
+            },
+            {
+              "glob": ".opencode/skills/magus-architecture-review*/**"
+            },
+            {
+              "glob": ".opencode/skills/magus-buzz-review*/**"
+            },
+            {
+              "glob": ".opencode/skills/magus-buzz-write*/**"
+            },
+            {
+              "glob": ".opencode/skills/magus-change-summary*/**"
+            },
+            {
+              "glob": ".opencode/skills/magus-context-audit*/**"
+            },
+            {
+              "glob": ".opencode/skills/magus-delegate-multi-agent*/**"
+            },
+            {
+              "glob": ".opencode/skills/magus-docs-lookup*/**"
+            },
+            {
+              "glob": ".opencode/skills/magus-handoff-journal*/**"
+            },
+            {
+              "glob": ".opencode/skills/magus-query*/**"
+            },
+            {
+              "glob": ".opencode/skills/magus-run*/**"
+            },
+            {
+              "glob": ".opencode/skills/magus-sdk*/**"
+            },
+            {
+              "glob": ".opencode/skills/magus-vcs-hygiene*/**"
+            },
+            {
+              "glob": ".opencode/skills/magus-workspace-rules*/**"
             }
           ]
         },
@@ -1236,6 +1344,7 @@
         },
         {
           "name": "format",
+          "doc": "Scope dprint by ARGV, not by its config, for the same reason the root project does: dprint DISCOVERS a nested dprint.json and formats that subtree under its own config, and neither this project's `includes` nor an exclude prunes it.",
           "dependencies": [
             "generate"
           ],
@@ -1450,8 +1559,22 @@
           "name": "ci",
           "doc": "'ci' is the anchor `magus affected ci` keys off.",
           "dependencies": [
+            "format",
             "lint",
             "test"
+          ],
+          "reads_secrets": false
+        },
+        {
+          "name": "format",
+          "doc": "format owns the Markdown in this directory - the per-host guide pages beside the templates.",
+          "spells": [
+            {
+              "spell": "markdown",
+              "ops": [
+                "dprint"
+              ]
+            }
           ],
           "reads_secrets": false
         }

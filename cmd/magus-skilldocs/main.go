@@ -168,7 +168,7 @@ func renderSkill(cat *agent.Catalog, full, simple agent.AgentSkill) string {
 	fmt.Fprintf(&b, "## Short form\n\nThe enumeration dropped, the judgment kept - for the most "+
 		"capable readers, not the least; the bar under the heading above shows by how much. This is "+
 		"the always-loaded primary. Both are hand-authored from one source body; see "+
-		"[Agents](../../guides/integrations/agents.md) for the difference.\n\n")
+		"[Skills](../../guides/integrations/agents/skills.md) for the difference.\n\n")
 	b.WriteString("<details>\n<summary>Show the short form</summary>\n\n")
 	writeFenced(&b, simple.Body)
 	b.WriteString("\n</details>\n")
@@ -214,7 +214,7 @@ func renderIndex(full, simple []agent.AgentSkill) string {
 	b.WriteString("bodies embedded in the binary. Each ships in two hand-authored permutations, and\n")
 	b.WriteString("install writes both: the short form is the always-loaded primary, and the full form\n")
 	b.WriteString("is its `<name>-full` twin, loaded by name when a reader needs the rationale.\n")
-	b.WriteString("See [Agents](../../guides/integrations/agents.md) for the difference.\n\n")
+	b.WriteString("See [Skills](../../guides/integrations/agents/skills.md) for the difference.\n\n")
 
 	var tf, ts int
 	b.WriteString("| skill | full | short | saved | what it is for |\n| --- | --- | --- | --- | --- |\n")

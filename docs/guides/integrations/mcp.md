@@ -213,7 +213,7 @@ logs and history). How you connect depends on the client:
   change `mcp.address`, update the URL in `~/.codex/config.toml` too. In the
   desktop app, `/mcp` shows connected servers. Install matching guidance with
   `magus agent install .agents/skills`, then paste the `AGENTS.md` block it
-  prints; see [Agents](agents.md#codex) for why Codex needs both locations.
+  prints; see [Codex](agents/codex.md) for why Codex wants both locations.
 
 - **Claude Desktop / other IDE plugins** that take a Streamable-HTTP URL plus
   headers use the same shape:

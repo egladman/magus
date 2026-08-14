@@ -1,0 +1,342 @@
+---
+title: Guard hook templates
+description: The two POSIX sh templates Claude Code and Codex run for the magus guard - the variables that adapt them to a host, the version marker that tells you when your copy is stale, and the full source of each.
+tags: [agents, guard, hooks, templates, claude code, codex]
+---
+
+# Guard hook templates
+
+These are files, not snippets. They sit in
+[`docs/guides/integrations/agents/`](https://github.com/egladman/magus/tree/main/docs/guides/integrations/agents):
+download them from there, or copy a block below. magus's own repository invokes
+the same files rather than keeping a private copy, so what it dogfoods is what
+you get, and two tests fail if its config stops referencing them or a block here
+drifts from the file.
+
+They are a magus project of their own, so the TypeScript beside them is held to
+the same gates as the rest of the workspace
+(`magus run lint docs/guides/integrations/agents` runs `tsc --noEmit`, Biome,
+and shellcheck).
+
+Two hosts run these two files: [Claude Code](claude-code.md) and
+[Codex](codex.md). [Cursor](cursor.md) and [OpenCode](opencode.md) each ship one
+self-contained file instead, on their own pages, because a host that needs three
+downloads to install a guard ends up without one.
+
+## Checking whether your copy is current
+
+Once you copy a template into your host's config it is yours, and magus cannot
+reach it again. That is the point - you are meant to edit these - but it means a
+fix magus makes never arrives on its own, and nothing about your copy says how
+old it is. So each one carries a version line:
+
+```sh
+grep magus-guard-template ~/.claude/hooks/magus-guard-command.sh
+```
+
+Compare it with the version in the block below. If yours is lower or absent,
+re-copy - and diff rather than overwrite, because your edits are worth keeping.
+A missing line means the copy predates versioning entirely.
+
+The version tracks BEHAVIOR, not wording: it moves when a template starts doing
+something different, not when a comment is rewritten. It is deliberately not a
+checksum, because these are yours to modify and a checksum would flag your own
+edits as drift.
+
+This is the one part of the agent surface with no automatic staleness check.
+Installed skills are generated, so `magus graph verify` regrades them against
+the binary; a copied hook template is owned by you, and this line stands in for
+that. `magus doctor`'s **guard wiring** check reads the marker in whatever file
+your host config points at, and fails when it is stale or missing.
+
+## How they fit together
+
+One implementation per guard surface. A host sets overrides and delegates:
+
+| variable                     | what it is                                                                                      |
+| ---------------------------- | ----------------------------------------------------------------------------------------------- |
+| `HOST_EVENT_PATH`            | dot-path to the command or file path inside your host's event JSON                              |
+| `HOST_SESSION_PATH`          | dot-path to the session id inside your host's event JSON                                        |
+| `HOST_RESPONSE`              | Go template rendering your host's reply from the verdict                                        |
+| `GUARD_AGENT_NAME`           | the agent host name recorded on the activity event (`claude-code`, `codex`, ...)                |
+| `GUARD_UNAVAILABLE_RESPONSE` | what to print when magus is missing, so each host picks its own fail-open or fail-closed stance |
+| `GUARD_FAILED_RESPONSE`      | the same, for a magus that is found but cannot judge the input                                  |
+| `GUARD_MAGUS_BIN`            | absolute path to magus when it is not on PATH                                                   |
+
+`GUARD_AGENT_NAME` and `HOST_SESSION_PATH` feed `magus hook --agent-name` and
+`--session`, which are pure attribution: they label the recorded observation and
+cannot change a verdict. A host that supplies neither is judged identically and
+simply records less about itself.
+
+`GUARD_MAGUS_BIN` avoids the `MAGUS_*` prefix on purpose. That space is magus's
+own configuration surface, and a variable these templates invent must not look
+like a setting magus reads.
+
+## `magus-guard-command.sh`
+
+The command guard. Claude Code and Codex both run this one file; each sets its
+overrides and execs it, so there is one implementation to reason about.
+
+```sh
+#!/usr/bin/env sh
+# magus guard hook: judges ONE shell command an agent is about to run.
+#
+# This file is the source of truth. The docs site embeds it, magus's own
+# repository invokes it, and you can download it and do the same. POSIX sh, no
+# bashisms; nothing in it is magus-internal.
+#
+# Contract: reads the host's event as JSON on stdin, selects its command with
+# jq, then pipes the command into magus hook. It writes the host's response on
+# stdout and exits 0 either way. Override any of the variables below:
+#
+#   HOST_EVENT_PATH  dot-path to the command inside your host's event
+#   HOST_SESSION_PATH  dot-path to the session id inside your host's event
+#   HOST_RESPONSE    Go template rendering your host's reply
+#   GUARD_AGENT_NAME  the agent host name recorded alongside the observation
+#   GUARD_MAGUS_BIN  path to the binary, when it is not on PATH
+#   GUARD_UNAVAILABLE_RESPONSE  what to print when magus cannot be found, so a
+#                    host can choose its own fail-open or fail-closed stance
+#   GUARD_FAILED_RESPONSE  the same, for a magus that IS found but cannot judge
+#                    the command (too old for `hook`, cannot load the workspace)
+#
+# The defaults are Claude Code's event and response shape.
+#
+# GUARD_AGENT_NAME and the session are ATTRIBUTION, not policy. magus records them on
+# its activity event so a reader can tell which host produced an observation;
+# neither one can change the verdict, and a host whose event carries no session
+# id records none and is judged exactly the same.
+#
+# GUARD_MAGUS_BIN is deliberately NOT called MAGUS_BIN: the whole MAGUS_* space is
+# magus's own configuration surface, so a variable this template invents must stay
+# out of it rather than look like a setting magus reads.
+#
+# On a missing magus this prints a visible notice rather than exiting quietly. A
+# bare `command -v magus || exit 0` fails SILENTLY - the guard never runs and
+# nothing says so - and an unguarded session you know about beats one you do not.
+#
+# The line below declares, per guard surface, how much of a verdict this file
+# can carry: model (reaches the agent), human (reaches the person only), or none
+# (not delivered). It is machine-read by the host-parity gate, which fails the
+# build when a decision or surface exists in the guard contract that some host
+# was never asked about. Keep it true to what HOST_RESPONSE actually renders.
+# magus-guard-template: 4
+# magus-guard-coverage: schema=1 host=claude-code,codex surface=command deny=model advise=model pass=none
+
+# Plain assignment, NOT ${VAR:=default}: the response template is full of `}` and
+# the first one would terminate a ${...} expansion, silently truncating it.
+[ -n "$HOST_EVENT_PATH" ] || HOST_EVENT_PATH='tool_input.command'
+[ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
+[ -n "$GUARD_AGENT_NAME" ] || GUARD_AGENT_NAME='claude-code'
+[ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}{{end}}'
+# Prefer the workspace's own ./magus over PATH. A repository that builds magus, or pins a
+# newer one than is installed, keeps its RULES in that binary - and an older PATH copy does
+# not fail loudly when it lacks them. It does not recognize the config key that ARMS a rule,
+# warns about an unknown field, and returns pass: silent non-enforcement at exit 0. Measured
+# 2026-08-13, when a write into a declared notes store was allowed by a binary that predated
+# the knowledge.notes key while `magus doctor` reported the guard as fine.
+[ -n "$GUARD_MAGUS_BIN" ] || { [ -x ./magus ] && GUARD_MAGUS_BIN=./magus; }
+[ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
+[ -n "$GUARD_UNAVAILABLE_RESPONSE" ] || GUARD_UNAVAILABLE_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set GUARD_MAGUS_BIN to its path, to restore the guard."}}'
+[ -n "$GUARD_FAILED_RESPONSE" ] || GUARD_FAILED_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: the magus binary was found but could not judge this command, so its deny and advise rules are unenforced right now. It is probably too old for the hook subcommand, or cannot load this workspace - run magus hook by hand to see the error, then rebuild or update it to restore the guard."}}'
+
+if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
+  printf '%s' "$GUARD_UNAVAILABLE_RESPONSE"
+  exit 0
+fi
+
+# stdin is a pipe and can only be drained once, so the event is read into a
+# variable and selected from twice - the command to judge, and the session id to
+# attribute it to. `// empty` keeps a host without that field at the empty
+# string rather than the literal "null".
+event=$(cat)
+session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty")
+
+# Attribution is BEST EFFORT; the verdict is not.
+#
+# --agent-name and --session postdate the current magus release, and this template is downloaded and run
+# against whatever binary a reader already has. Passing them unconditionally does not degrade the
+# guard, it BREAKS it: an older binary rejects the unknown flag, prints its usage to stdout, and
+# exits non-zero, so the host receives no verdict at all and every deny and advise rule silently
+# stops being enforced. A guard that fails because of a metadata flag has its priorities backwards.
+#
+# So: try with attribution, and on any failure re-run without it - exactly the call this script made
+# before attribution existed. One extra process only on an older binary, and none once the flags are
+# in a release.
+guard() {
+  printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" hook "$@" -o "template=$HOST_RESPONSE"
+}
+# A DENY exits non-zero (2) with the verdict on stdout, so a bare `||` retry would treat
+# every blocked command as "this binary rejected the attribution flags" and judge it a
+# second time - unattributed, and recorded twice in the activity trail. Emptiness alone
+# cannot tell the cases apart either, because a pass renders empty on purpose. Both
+# together can: a rejected flag prints its usage to STDERR and leaves stdout empty, while
+# any real verdict that is not a pass leaves something on stdout.
+verdict=$(guard --agent-name "$GUARD_AGENT_NAME" --session "$session" 2>/dev/null)
+status=$?
+if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
+  verdict=$(guard 2>/dev/null)
+  status=$?
+fi
+
+# A PASS and a BROKEN GUARD both render nothing, and telling them apart is the whole
+# point of this block. A pass exits 0 with empty output because there was nothing to
+# say; a binary that cannot run - too old for `hook`, unable to load the workspace,
+# half-written by a concurrent build - exits non-zero with empty output, and printing
+# that as a pass silently disables every rule with nothing anywhere saying so.
+#
+# That silence is the failure mode this guard can least afford, because it looks
+# exactly like a clean session. The same reasoning is already spelled out above for a
+# MISSING binary; a broken one had been left to fail quietly, which is the case that
+# actually occurs - a stale binary on PATH outlives a missing one.
+#
+# Fail OPEN either way. A guard that blocks work because it cannot judge it has its
+# priorities backwards, and an unguarded session you know about beats one you do not.
+if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
+  printf '%s' "$GUARD_FAILED_RESPONSE"
+  exit 0
+fi
+printf '%s' "$verdict"
+```
+
+## `magus-guard-path.sh`
+
+The declared-output guard. Wire it to your host's file-editing tool rather than
+its shell tool. It explains rather than blocks: editing a generated file is
+wasteful, not destructive.
+
+```sh
+#!/usr/bin/env sh
+# magus guard hook: judges ONE file path an agent is about to write.
+#
+# Companion to magus-guard-command.sh, wired to your host's file-editing tool
+# rather than its shell tool. POSIX sh, no bashisms.
+#
+# The declared-output rule here is the one guard rule that is not a heuristic:
+# magus reads every target's DECLARED outputs, so a generated file is generated
+# by definition and an edit to it would be overwritten by the next run.
+#
+# That rule ADVISES rather than blocks. magus denies only what cannot be undone;
+# a hand-edited generated file is wasteful, not destructive, since regenerating
+# erases it. So it explains that the edit will be overwritten and lets the agent
+# correct itself, rather than treating it as unable to learn. Every rule on this
+# surface says nothing on any uncertainty - no magus, no workspace, an unclaimed
+# path - because an advisory fired on a guess trains the reader to ignore it.
+#
+# HOST_RESPONSE renders BOTH arms even though the rules shipping today only
+# advise. That is deliberate and it is why this template exists at version 2.
+# These files are COPIED into a reader's config and never self-correct, so a
+# deny arm added at the same time as the first denying rule would fail OPEN on
+# every already-installed copy: the deny renders empty, magus exits non-zero,
+# and the tail below reads empty-output-plus-nonzero as a broken guard and exits
+# 0, which every host takes as allow. Shipping the arm first gives installed
+# copies a window to update against a rule that is not yet firing.
+#
+# A host with no file-write hook still gets the command rules; it just misses
+# this one. That is a coverage difference to record, not a reason to skip it.
+#
+# GUARD_AGENT_NAME and HOST_SESSION_PATH work exactly as they do in
+# magus-guard-command.sh: attribution recorded on the activity event, never an
+# input to the verdict.
+#
+# Coverage declaration, machine-read by the host-parity gate - see the longer
+# note in magus-guard-command.sh. It records what HOST_RESPONSE RENDERS, not
+# which rules currently fire, so deny=model is true the moment the arm exists.
+# magus-guard-template: 4
+# magus-guard-coverage: schema=1 host=claude-code,codex surface=path deny=model advise=model pass=none
+
+# Plain assignment, NOT ${VAR:=default}: the response template is full of `}`
+# and the first one would terminate a ${...} expansion.
+[ -n "$HOST_EVENT_PATH" ] || HOST_EVENT_PATH='tool_input.file_path'
+[ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
+[ -n "$GUARD_AGENT_NAME" ] || GUARD_AGENT_NAME='claude-code'
+[ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}{{end}}'
+# Prefer the workspace's own ./magus over PATH. A repository that builds magus, or pins a
+# newer one than is installed, keeps its RULES in that binary - and an older PATH copy does
+# not fail loudly when it lacks them. It does not recognize the config key that ARMS a rule,
+# warns about an unknown field, and returns pass: silent non-enforcement at exit 0. Measured
+# 2026-08-13, when a write into a declared notes store was allowed by a binary that predated
+# the knowledge.notes key while `magus doctor` reported the guard as fine.
+[ -n "$GUARD_MAGUS_BIN" ] || { [ -x ./magus ] && GUARD_MAGUS_BIN=./magus; }
+[ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
+
+if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
+  # Prints nothing by default: for most hosts an empty response means "allow".
+  # Set GUARD_UNAVAILABLE_RESPONSE for a host that needs an explicit verdict.
+  [ -n "$GUARD_UNAVAILABLE_RESPONSE" ] && printf '%s' "$GUARD_UNAVAILABLE_RESPONSE"
+  exit 0
+fi
+
+# One drain of stdin, two selections from it: the path to judge, and the session
+# id to attribute it to. `// empty` keeps a host without that field at the empty
+# string rather than the literal "null".
+event=$(cat)
+session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty")
+
+# Attribution is BEST EFFORT; the verdict is not. --agent-name and --session postdate the current magus
+# release, and an older binary rejects the unknown flag outright - printing usage to stdout and
+# exiting non-zero - which leaves the host with no verdict rather than an unattributed one. Try with
+# attribution, fall back to the call this script made before it existed.
+guard() {
+  printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" hook --path "$@" -o "template=$HOST_RESPONSE"
+}
+# Same discrimination as magus-guard-command.sh, and for the same reason now that this
+# surface can render a deny: a DENY exits non-zero (2) with the verdict on stdout, so a
+# bare `||` retry would treat every blocked write as "this binary rejected the attribution
+# flags" and judge it a second time - unattributed, and recorded twice in the activity
+# trail. Emptiness alone cannot tell the cases apart either, because a pass renders empty
+# on purpose. Both together can: a rejected flag prints its usage to STDERR and leaves
+# stdout empty, while any real verdict that is not a pass leaves something on stdout.
+verdict=$(guard --agent-name "$GUARD_AGENT_NAME" --session "$session" 2>/dev/null)
+status=$?
+if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
+  verdict=$(guard 2>/dev/null)
+  status=$?
+fi
+
+# A pass and a broken guard both render nothing; see magus-guard-command.sh for why
+# telling them apart matters. Kept identical here so neither surface grows a behavior
+# the other lacks - the difference is only that this one has no default message,
+# because for most hosts an empty response on this surface already means "allow".
+if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
+  [ -n "$GUARD_FAILED_RESPONSE" ] && printf '%s' "$GUARD_FAILED_RESPONSE"
+  exit 0
+fi
+printf '%s' "$verdict"
+```
+
+## What a template must not get wrong
+
+Three failure modes are worth naming, because each one looks like a working
+guard.
+
+**A missing arm renders empty.** `HOST_RESPONSE` carries both a deny arm and an
+advise arm. A template missing one does not fail loudly; it renders nothing, and
+every host reads nothing as allow. Claude Code's `--path` wiring once rendered
+only the deny arm, so every advisory it produced was silently dropped, while the
+shipped `magus-guard-path.sh` had the opposite gap and dropped denials.
+
+**A pass and a broken guard both render nothing.** A pass exits 0 with empty
+output because there was nothing to say. A binary that cannot run - too old for
+`hook`, unable to load the workspace, half-written by a concurrent build - exits
+non-zero with empty output. Printing that as a pass disables every rule with
+nothing anywhere saying so. Both scripts discriminate on status and emptiness
+together, and print `GUARD_FAILED_RESPONSE` for the second case.
+
+**Attribution must never break a verdict.** `--agent-name` and `--session`
+postdate the current release, and an older binary rejects an unknown flag by
+printing usage and exiting non-zero, which leaves the host with no verdict at
+all. Both scripts try with attribution and retry without it, and they retry only
+when the call produced no verdict - never merely because it exited non-zero,
+since a deny exits 2 with the verdict on stdout.
+
+## Trying a verdict by hand
+
+```sh
+printf '%s' 'git stash' | magus hook -o name
+printf '%s' 'MAGUS.md' | magus hook --path -o name
+magus hook -o template
+```
+
+The last one lists the fields available to `-o template`. A deny exits 2 with
+the verdict on stdout; a pass and an advise exit 0. See [The guard](guard.md)
+for the rules behind the verdicts.

@@ -110,14 +110,19 @@ omitted on purpose: the declared-output globs are what EnsureMergeDriver writes 
 never be tracked and so can never conflict. The relevant part is just that a read-only
 run does not leave a fresh binary behind.
 
-BOTH raw Go entry points are meant to be DENIED by the agent guard - but do not
-count on the denial arriving. The guard is wired through `.claude/settings.json`,
-which is GITIGNORED on purpose (a stale `magus hook` binary fails every
-Bash/Edit/Write closed, which cost a whole session once), so a FRESH WORKTREE HAS
-NO GUARD AT ALL and these are convention-only there. Measured 2026-08-11: three
-separate agents ran `go build` in a guardless worktree and it succeeded; the rule
-held only because they chose to obey it and said so. Treat the list below as a
-rule you enforce yourself, not one the harness enforces for you:
+BOTH raw Go entry points are DENIED by the agent guard, verified 2026-08-14
+against this tree. `.claude/settings.json` is now TRACKED - `dogfood_test.go`
+fails when it is missing, because a skip meant the one test covering this repo's
+own guard wiring had effectively never run - so a fresh worktree DOES carry the
+wiring. (This file used to say the opposite, from when the config was gitignored:
+that a fresh worktree had no guard at all.)
+
+Still enforce the list yourself. The wiring being present is not the same as the
+guard running: it resolves `./magus` and then PATH, and a binary that is missing
+or too old to judge fails OPEN with a notice rather than blocking. Measured
+2026-08-11, back when the config was per-developer: three agents ran `go build`
+in a guardless worktree and it succeeded; the rule held only because they chose
+to obey it and said so.
 
 - `go build` at every output path, including the `-o /tmp/magus` form this file
   once recommended.

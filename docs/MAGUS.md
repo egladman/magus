@@ -48,7 +48,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | project | 10+ | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
 | target | 100+ | `magus query kind:target` | `content-generate`, `site-generate`, `format` |
 | spell | 10+ | `magus query kind:spell` | `go`, `markdown`, `typescript` |
-| op | 60+ | `magus query kind:op` | `go-build`, `go-test`, `go-fmt` |
+| op | 60+ | `magus query kind:op` | `go-build`, `go-test`, `dprint` |
 | tool | 20+ | `magus query kind:tool` | `go`, `pnpm`, `buf` |
 | charm | 10+ | `magus query kind:charm` | `rw`, `cd`, `stable` |
 | module | 30+ | `magus query kind:module` | `fs`, `magus`, `charm` |
@@ -66,7 +66,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | . | 44 | `magus query project:.` | `buzz-test`, `generate`, `lint` |
 | console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
-| docs/guides/integrations/agents | 4 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
+| docs/guides/integrations/agents | 5 | `magus query project:docs/guides/integrations/agents` | `ci`, `format`, `lint` |
 | evals | 4 | `magus query project:evals` | `lint`, `preflight`, `ci` |
 | libs/diagnostics | 8 | `magus query project:libs/diagnostics` | `format`, `build`, `generate` |
 | libs/gopherbuzz | 10 | `magus query project:libs/gopherbuzz` | `format`, `build`, `generate` |
@@ -79,7 +79,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Target | What it does |
 |---|---|
 | `generate` | generate is the one public docs publication target. |
-| `format` |  |
+| `format` | Scope dprint by ARGV, not by its config, for the same reason the root project does: dprint DISCOVERS a nested dprint.json and formats that subtree under its own config, and neither this project's `includes` nor an exclude prunes it. |
 | `lint` | lint runs the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). |
 | `build` |  |
 | `test` |  |
