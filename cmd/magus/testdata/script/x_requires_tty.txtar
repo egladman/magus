@@ -1,6 +1,9 @@
-# magus x draws a picker and reads keystrokes, so without a terminal there is
-# nothing for it to do. Unlike `magus tail`, there is no half of x that works
-# headless, which is why its refusal points at `magus run` rather than at a flag.
+# magus x's PICKER draws and reads keystrokes, so without a terminal there is
+# nothing for it to do, and its refusal points at `magus run` rather than a flag.
+#
+# The ref form is the half that does work headless - `magus x <ref>` takes project
+# and target from the descriptor, so there is nothing to pick. It is checked before
+# this gate, which is why the gate below still fires for a bare `magus x`.
 #
 # There used to be an assume_interactive override advertised here, and it never
 # worked: lifting the outer gate only moved the failure a few lines later, into
@@ -16,8 +19,9 @@ stderr 'magus: x requires an interactive terminal; use `magus run <target> <proj
 ! stderr 'MAGUS_ASSUME_INTERACTIVE'
 
 exec magus x -h
-stderr 'Usage: magus x \[filter\.\.\.\]'
-stderr 'Requires an interactive terminal'
+stderr 'Usage: magus x <ref>'
+stderr 'magus x \[filter\.\.\.\]'
+stderr 'requires an interactive terminal'
 stderr 'for scripts use `magus run`'
 
 # Setting the retired key in magus.yaml changes nothing - it is not a config

@@ -5167,7 +5167,7 @@
       "attrs": {
         "role": "doc",
         "section": "reference",
-        "tags": "cli,magus x,interactive,picker,shorthand,run,tty",
+        "tags": "cli,magus x,interactive,picker,shorthand,run,tty,reproduce,output ref",
         "title": "magus x"
       }
     },

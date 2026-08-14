@@ -1,11 +1,24 @@
 .TH MAGUS-X 1 "" "magus" "magus Manual"
 .SH NAME
-magus\-x \- Interactive shorthand: pick project + target
+magus\-x \- Reproduce an output ref, or pick project + target
 .SH SYNOPSIS
 .B magus
-.RI "x [filter...]"
+.RI "x <ref> | magus x [filter...]"
 .SH DESCRIPTION
-Interactive shorthand for magus run. Filters are AND\-combined
+Two forms, chosen by the argument.
+.PP
+Given an output ref (out1a2b3c), x reproduces the invocation that minted it:
+the descriptor records the project, the target and its charms, so nothing is
+picked and no terminal is required. A ref copied from a CI log therefore runs
+here as the same invocation \- replaying from cache when the inputs match, and
+running the target when they do not. Before starting it compares the recorded
+cache key with the one this workspace computes and says which of the two will
+happen, and it reports a dirty working tree or a differing revision rather than
+implying an exactness it cannot deliver. It changes no VCS state: a differing
+commit is named, never checked out.
+.PP
+Given filters (or nothing), x is the interactive shorthand for magus run.
+Filters are AND\-combined
 substrings matched against project paths; ranking is leaf\-anchored
 longest\-match\-wins, so "magus x dash" prefers a project named "dashboard"
 over one named "dashboards\-deprecated/foo". Additional filter args narrow
@@ -21,6 +34,12 @@ $HOME/.local/state/magus/) is pre\-highlighted.
 x refuses to run when stdin or stderr is not a terminal: shorthand is for
 humans. Scripts should call magus run directly.
 .SH EXAMPLES
+\fIReproduce the invocation an output ref recorded\fR
+.PP
+.EX
+magus x out1a2b3c
+.EE
+.PP
 \fIBrowse all projects in a picker\fR
 .PP
 .EX

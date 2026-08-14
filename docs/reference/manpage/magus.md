@@ -55,7 +55,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Run a target for selected projects. See [**magus-run**(1)](magus-run.md).
 
 **x**
-: Interactive shorthand: pick project + target. See [**magus-x**(1)](magus-x.md).
+: Reproduce an output ref, or pick project + target. See [**magus-x**(1)](magus-x.md).
 
 **where**
 : Print the absolute path of a project. See [**magus-where**(1)](magus-where.md).
