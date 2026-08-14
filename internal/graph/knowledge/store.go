@@ -52,20 +52,6 @@ var ErrNoStore = errors.New("knowledge: no persisted graph")
 // StoreDir returns the knowledge-store directory for a resolved cache dir.
 func StoreDir(cacheDir string) string { return filepath.Join(cacheDir, "knowledge") }
 
-// ShardInputFresh reports whether the persisted shard `name` was built from the input
-// identified by inputFP and its file is still on disk - so the composition root can skip
-// an EXPENSIVE producer (a git-history scan) and let Sync reuse the shard from disk. False
-// on an empty inputFP, no store, no such shard, a changed input, or a missing file, so the
-// caller falls back to running the producer. It reads only the manifest, so it is cheap.
-func ShardInputFresh(cacheDir, name, inputFP string) bool {
-	if inputFP == "" {
-		return false
-	}
-	s := &Store{dir: StoreDir(cacheDir), log: slog.Default()}
-	m, ok := s.readManifestOrNil().shard(name)
-	return ok && m.InputFingerprint == inputFP && s.shardExists(name)
-}
-
 // manifest is the per-shard index persisted at manifest.json. It doubles as the
 // (future) shard routing index; Phase 1 carries only fingerprints and counts.
 type manifest struct {
@@ -75,14 +61,8 @@ type manifest struct {
 
 type shardMeta struct {
 	Fingerprint string `json:"fingerprint"`
-	// InputFingerprint keys a shard produced from an EXPENSIVE input (a git-history scan)
-	// by that input's identity (HEAD + window), not its content. When the current input
-	// fingerprint matches, the producer skips the scan and the shard is reused from disk,
-	// so the standard shard store IS the cache - no bespoke side file. Empty for shards
-	// cheap to re-derive each build (they ride the content fingerprint alone).
-	InputFingerprint string `json:"input_fingerprint,omitempty"`
-	NodeCount        int    `json:"node_count"`
-	EdgeCount        int    `json:"edge_count"`
+	NodeCount   int    `json:"node_count"`
+	EdgeCount   int    `json:"edge_count"`
 }
 
 // shardFile is one shard's on-disk form. Name is stored so filenames never need
@@ -122,7 +102,7 @@ func NewStore(cacheDir string, immutable bool, maxBytes int64, remote RemoteShar
 // and rewrites the manifest. In immutable mode it writes nothing but still
 // returns the merged graph, warning once if the persisted store is stale.
 // refresh forces every shard to be treated as stale (a full rebuild).
-func (s *Store) Sync(ctx context.Context, shards []Shard, fps, inputFPs map[string]string, refresh bool) (*Graph, error) {
+func (s *Store) Sync(ctx context.Context, shards []Shard, fps map[string]string, refresh bool) (*Graph, error) {
 	old := s.readManifestOrNil()
 	if refresh {
 		old = nil
@@ -146,7 +126,7 @@ func (s *Store) Sync(ctx context.Context, shards []Shard, fps, inputFPs map[stri
 		if !IsSymbolsShard(sh.Name) && !IsCoverageShard(sh.Name) {
 			g.Merge(sh.Nodes, sh.Edges)
 		}
-		newMan.Shards[sh.Name] = shardMeta{Fingerprint: fp, InputFingerprint: inputFPs[sh.Name], NodeCount: len(sh.Nodes), EdgeCount: len(sh.Edges)}
+		newMan.Shards[sh.Name] = shardMeta{Fingerprint: fp, NodeCount: len(sh.Nodes), EdgeCount: len(sh.Edges)}
 
 		prev, ok := old.shard(sh.Name)
 		unchanged := ok && prev.Fingerprint == fp && s.shardExists(sh.Name)
@@ -158,35 +138,6 @@ func (s *Store) Sync(ctx context.Context, shards []Shard, fps, inputFPs map[stri
 			continue
 		}
 		toWrite = append(toWrite, shardWrite{shard: sh, fp: fp})
-	}
-
-	// Retain input-cached shards the caller SKIPPED because their expensive input was
-	// unchanged: the producer never ran, so they are absent from `shards`, but their disk
-	// file is still current (input fingerprint matches). Reuse it - load it into the graph
-	// and keep its manifest entry - instead of rebuilding or, worse, pruning it. This is
-	// what lets the git scan be skipped without a bespoke cache file.
-	// Sorted for the same first-writer-wins reason Load and MergeSymbolShards sort:
-	// this loop MERGES retained shards, so ranging the manifest map directly decided
-	// node provenance by Go's randomized map order. The freshly-built shards above are
-	// merged from a slice and were always fine, which is what made this the harder half
-	// to see - the ordering hazard only rides in on the shards Sync reuses from disk.
-	retained := make([]string, 0, len(old.shards()))
-	for name := range old.shards() {
-		retained = append(retained, name)
-	}
-	slices.Sort(retained)
-	for _, name := range retained {
-		m := old.shards()[name]
-		if present[name] || m.InputFingerprint == "" || inputFPs[name] != m.InputFingerprint || !s.shardExists(name) {
-			continue
-		}
-		if !IsSymbolsShard(name) && !IsCoverageShard(name) {
-			if err := s.readMergeShard(ctx, g, old, name); err != nil {
-				return nil, err
-			}
-		}
-		newMan.Shards[name] = m
-		present[name] = true
 	}
 
 	if s.immutable {
@@ -510,7 +461,7 @@ const remotePushTimeout = 15 * time.Second
 // content fingerprint, so teammates and CI can restore it. A remote error or slow
 // backend is logged and dropped: the local write already succeeded.
 func (s *Store) pushShard(ctx context.Context, name, fp string, b []byte) {
-	if s.remote == nil || IsRuntimeShard(name) || IsCoverageShard(name) {
+	if s.remote == nil || IsLocalShard(name) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(ctx, remotePushTimeout)
@@ -568,14 +519,6 @@ func (m *manifest) shard(name string) (shardMeta, bool) {
 	}
 	sm, ok := m.Shards[name]
 	return sm, ok
-}
-
-// shards returns the persisted shard map, nil-safe (a nil manifest ranges as empty).
-func (m *manifest) shards() map[string]shardMeta {
-	if m == nil {
-		return nil
-	}
-	return m.Shards
 }
 
 // prunable reports whether the manifest names any shard absent from present,

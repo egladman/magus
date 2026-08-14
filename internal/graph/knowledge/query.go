@@ -176,7 +176,16 @@ func (g *Graph) Resolve(input string, limit int) []types.KnowledgeMatch {
 		if !ok {
 			continue
 		}
-		matches = append(matches, types.KnowledgeMatch{ID: id, Kind: n.Kind, Label: n.Label, Score: score})
+		m := types.KnowledgeMatch{ID: id, Kind: n.Kind, Label: n.Label, Score: score}
+		// Prose whose subject moved on without it ranks below prose that kept up. The
+		// penalty is applied HERE rather than inside scoreNode so the evidence can travel
+		// with the match: a weight a reader cannot see is one they cannot argue with.
+		if p := stalenessPenalty(n.Attrs); p > 0 {
+			m.Score -= p
+			m.Staleness = n.Attrs[AttrStaleness]
+			m.OutrunDays, _ = strconv.Atoi(n.Attrs[AttrOutrunDays])
+		}
+		matches = append(matches, m)
 	}
 	slices.SortFunc(matches, func(a, b types.KnowledgeMatch) int {
 		if a.Score != b.Score {

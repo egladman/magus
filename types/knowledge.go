@@ -1,6 +1,9 @@
 package types
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 // Knowledge-graph schema: the deterministic, derived graph of the magus domain
 // (projects, targets, spells, ops, charms, modules, methods, diagnostics, and -
@@ -79,6 +82,12 @@ const (
 	KindOwner      = "owner"     // a CODEOWNERS owner (@user, @org/team, email)
 	KindSymbol     = "symbol"    // a definition ingested from a SCIP index (compiled-language source, e.g. Go)
 	KindAuthor     = "author"    // a git contributor; `authored` the files they touched (emergent, vs the declared owner)
+	// KindNote is the one kind that is INJECTED rather than extracted. Every other kind is a
+	// projection of workspace content - a doc from markdown, a rationale from a comment, a
+	// symbol from an index, an author from git - so deleting the graph and rebuilding
+	// recovers all of them. A note's content originates with a person and no rebuild
+	// recovers it, which is also why nothing but a person may write one.
+	KindNote = "note" // a human-authored note from the declared notes store
 )
 
 // Knowledge edge relations. Values are stable wire strings.
@@ -97,6 +106,12 @@ const (
 	RelationProduces     = "produces"      // target->file/doc, from magus.outputs (v5)
 	RelationConsumes     = "consumes"      // target->file/doc, from magus.inputs (v5)
 	RelationAuthored     = "authored"      // author->file, from git history (v6)
+	// RelationAnnotates completes the trio for the three ways knowledge attaches to code, kept
+	// distinct because their provenance differs: documents is doc->entity, rationale_for is
+	// an in-code marker->function, and annotates is a human note->entity. A note attaches to
+	// an ENTITY and never to a position inside one, which is what lets its breakage be
+	// reported rather than silently drifting.
+	RelationAnnotates = "annotates" // note->symbol/file/project/target/note, from the notes store
 )
 
 // Edge confidence. Extracted edges are read directly off a parsed source (score
@@ -137,24 +152,44 @@ type KnowledgeOutputRef struct {
 	OK      bool
 }
 
-// KnowledgeVCS is one file's git history metadata (an assembly input, not a wire type),
-// folded onto the file node as attrs in the @vcs shard. It is EXTRACTED from git, not
-// inferred, and deterministic per commit: the same HEAD yields the same values, so the
-// shard is remote-shareable (unlike @runtime). Path is workspace-relative and matches a
-// file node's Source. Commits is the number of commits touching the file within the
-// scanned window; LastCommit/LastUnix/LastAuthor are the most recent such commit's short
-// SHA, author time, and author name - the last is the EMERGENT maintainer, comparable
-// against a file's DECLARED CODEOWNERS owner.
+// KnowledgeVCS is one file's git history metadata (an assembly input, not part of the
+// exported graph), folded onto the file node as attrs in the @vcs shard. It is EXTRACTED
+// from git, not inferred, and deterministic per commit: the same HEAD yields the same
+// values, so the shard is remote-shareable (unlike @runtime). Path is workspace-relative
+// and matches a file node's Source. Commits is the number of commits touching the file
+// within the scanned window; LastCommit/LastModified/LastAuthor are the most recent such
+// commit's short SHA, author time, and author name - the last is the EMERGENT maintainer,
+// comparable against a file's DECLARED CODEOWNERS owner.
+//
+// The json tags are this type's CACHE format: the scan is expensive enough to persist
+// between builds, so the names on disk are pinned here rather than left to follow Go
+// identifiers.
 type KnowledgeVCS struct {
-	Path       string
-	LastCommit string
-	LastUnix   int64
-	LastAuthor string
+	Path         string    `json:"path"`
+	LastCommit   string    `json:"last_commit"`
+	LastModified time.Time `json:"last_modified"`
+	LastAuthor   string    `json:"last_author"`
 	// Authors is the distinct set of authors who touched the file within the scanned
 	// window (sorted), the source for the `author --authored--> file` edges. LastAuthor
 	// is one of them (the most recent).
-	Authors []string
-	Commits int
+	Authors []string `json:"authors"`
+	Commits int      `json:"commits"`
+}
+
+// KnowledgeNote is one human-authored note from the declared notes store (an assembly
+// input, not a wire type). Path is workspace-relative and is what the @vcs shard joins on
+// to attribute the note to whoever wrote it - the reason notes live in the checkout at all.
+//
+// Anchors are the entities the note attaches to, already resolved to node IDs by the
+// caller: assembly emits an edge only for an anchor that resolves, because an edge to a
+// node that does not exist is dangling in the graph and `magus notes verify` is the right
+// place to report that instead.
+type KnowledgeNote struct {
+	Name    string
+	Title   string
+	Path    string
+	Tags    []string
+	Anchors []string
 }
 
 // KnowledgeSymbol is one code symbol ingested from a SCIP index (an assembly input,
@@ -174,8 +209,17 @@ type KnowledgeSymbol struct {
 	// Source is "<path>:<line>" of the definition, or empty when only references
 	// were seen (the definition lives in another index).
 	Source string
-	Defs   []string
-	Refs   []KnowledgeSymbolRef
+	// DefEndLine is the 1-based last line of the definition's BODY, from the SCIP
+	// occurrence's enclosing range, or 0 when the indexer emits none (which is the honest
+	// answer rather than a guess - see Calls, which makes the same trade).
+	//
+	// Source alone gives a start with no end, which is enough to point a reader at a
+	// definition but not enough to fingerprint one. Pairing them bounds the exact lines a
+	// symbol occupies, so a consumer can tell "this symbol still exists" from "this symbol
+	// still exists and says the same thing".
+	DefEndLine int
+	Defs       []string
+	Refs       []KnowledgeSymbolRef
 	// Calls are the workspace-defined symbols referenced from inside this symbol's own
 	// definition body, attributed by the SCIP occurrence's enclosing range. Collapsed per
 	// (caller, callee) - the same scale decision Refs makes per (file, symbol) - so a hot
@@ -367,6 +411,13 @@ type KnowledgeMatch struct {
 	Kind  string `json:"kind"  yaml:"kind"`
 	Label string `json:"label" yaml:"label"`
 	Score int    `json:"score" yaml:"score"`
+	// Staleness and OutrunDays travel with a prose match that ranked DOWN because the
+	// thing it describes moved on without it. They are the evidence for the weight, and
+	// they exist so the weight is never silent: a reader can see "ranked down: 400 days
+	// behind its subject" instead of wondering why a doc sank. Empty on anything that was
+	// not penalized, including prose with no history to measure.
+	Staleness  string `json:"staleness,omitempty"   yaml:"staleness,omitempty"`
+	OutrunDays int    `json:"outrun_days,omitempty" yaml:"outrun_days,omitempty"`
 }
 
 // KnowledgeGraphDiffDefinition is the human-readable description of `magus graph diff`.
