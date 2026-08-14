@@ -60,6 +60,8 @@ import { createClient } from "@connectrpc/connect";
 import { StatusService } from "../gen/magus/status/v1/status_pb";
 import { mountSharePanel } from "./share";
 import { applyFocusRing, getFocusRing, getDefaultHost } from "../lib/settings";
+import { browserInstallHost, createInstallStore } from "../lib/install";
+import { registerServiceWorker } from "../lib/sw";
 import type { PageController, PageModule } from "./page";
 
 // The console's default tab keybindings. Flat commandId -> chord, layered over the user's persisted
@@ -85,7 +87,7 @@ const CONSOLE_KEYMAP: Keymap = {
   "console.pane.moveUp": "alt+shift+k",
   "console.pane.moveRight": "alt+shift+l",
   "console.pane.focusParent": "alt+a",
-  // The action bar: one searchable list of every action (and its chord).
+  // The Command Palette: one searchable list of every command (and its chord).
   "console.actionBar.open": "mod+k",
 };
 const keymapCell = persisted<Keymap>("keymap", {});
@@ -174,13 +176,28 @@ const SURFACES: Launchable[] = [
   { pageId: "dashboard", label: "Dashboard", hint: "What magus is doing right now" },
   {
     pageId: "activity",
-    label: "Activity Trail",
-    hint: "A history of magus actions, user-triggered and scheduled",
+    // "Trail" was the whole problem: "audit trail" is the phrase, and it framed this as governance,
+    // which it is not. The bare noun matches the service behind it (magus.activity.v1) and survives
+    // what is coming - once sessions group and replay, and an agent's reasoning hangs off the command
+    // it led to, "activity" still covers it where "audit trail" would fight it.
+    label: "Activity",
+    hint: "Everything that happened here, and what led to it",
   },
   { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
   { pageId: "graph", label: "Graph Explorer", hint: "Start exploring the knowledge graph" },
-  { pageId: "notes", label: "Notes", hint: "What people wrote about this workspace" },
-  { pageId: "actions", label: "Actions", hint: "Every console action and its shortcut" },
+  // Not "what people wrote about this workspace" - that describes the storage. A note's whole point is
+  // that someone who was here before you left it for you, at the spot where it matters.
+  { pageId: "notes", label: "Notes", hint: "What people left here for whoever comes next" },
+  // pageId stays "actions" (it is an identifier, and every keymap/route/test keys on it); the LABEL is
+  // Shortcuts. "Actions" collided twice - with the Command Palette, which was called the action bar, and
+  // with the Activity tile's old "a history of magus actions". Prior art splits these two roles cleanly and
+  // this surface is the second one: VS Code's Keyboard Shortcuts editor (and GNOME's, and KDE's) is the
+  // list of every command with its binding, while the palette is the thing that runs one.
+  {
+    pageId: "actions",
+    label: "Shortcuts",
+    hint: "Every command, its keys, and where to change them",
+  },
   { pageId: "settings", label: "Settings", hint: "Console settings and keybindings" },
 ];
 
@@ -661,11 +678,22 @@ function formatReadinessTitle(
   return summary ? base + " " + summary + "." : base;
 }
 
+// The PWA install offer, captured at MODULE SCOPE rather than inside startConsole: Chromium fires
+// `beforeinstallprompt` once, early, and a listener attached later misses it outright. Bundle evaluation
+// is the earliest point the shell has. The store is handed to the Settings surface below, which is where
+// the operator asks for the install it defers.
+const installStore = createInstallStore(browserInstallHost());
+
 export function startConsole(
   tabBarHost: HTMLElement,
   outlet: HTMLElement,
   statusHost: HTMLElement,
 ): void {
+  // The console's own service worker, registered by the SHELL so every session has one - it precaches
+  // this shell and its surface bundles, and Chromium's install-prompt algorithm still requires a fetch
+  // handler. It used to be registered only by the dashboard, so a console that never opened that surface
+  // had neither an offline shell nor an install offer.
+  void registerServiceWorker(new URL("./sw.js", import.meta.url));
   // Snapshot the boot fragment BEFORE adoptDaemonOrigin consumes/strips the #token= (below), so the
   // attach-visibility notification further down can still tell it booted attached and name the port.
   const bootParams = parseHash();
@@ -1145,8 +1173,9 @@ export function startConsole(
   });
   document.body.append(commandBar.el);
   registerCommand({
+    // id is an identifier and stays; only the label moved to the Command Palette naming.
     id: "console.actionBar.open",
-    label: "Action bar",
+    label: "Command Palette",
     group: "General",
     run: () => commandBar.open(),
   });
@@ -1181,7 +1210,7 @@ export function startConsole(
       mergeKeymap(CONSOLE_KEYMAP, keymapCell.get())["console.actionBar.open"] ?? "",
       isMac(),
     );
-    if (chord) commandBarBtn.title = "Action bar (" + chord + ")";
+    if (chord) commandBarBtn.title = "Command Palette (" + chord + ")";
   }
 
   // The Panes tray: a small square control panel, docked to the bottom-right corner, opened from the
@@ -1737,7 +1766,7 @@ export function startConsole(
   register(
     moduleSurface({
       id: "activity",
-      title: "Activity Trail",
+      title: "Activity",
       bundle: "activity/activity.js",
       css: "logs/logs.css",
     }),
@@ -1774,6 +1803,7 @@ export function startConsole(
       keybindings: { commands: editableCommands, defaults: CONSOLE_KEYMAP, keymap: keymapCell },
       presets: KEYMAP_PRESETS,
       presetList: KEYMAP_PRESET_LIST,
+      install: installStore,
     }),
   );
   // The Reference surface backs the drawer's "break out to tab" button. Registered but NOT in SURFACES:

@@ -51,7 +51,7 @@ export interface NotifyLink {
 
 // The caller-facing shape. `source` is REQUIRED (not optional-with-empty) so a new caller cannot forget
 // to say WHERE a signal came from: it names the surface or feature that raised it ("Settings", "Log
-// Viewer", "Dashboard", "Activity Trail", "Share") and is rendered as a quiet chip on both the transient
+// Viewer", "Dashboard", "Activity", "Share") and is rendered as a quiet chip on both the transient
 // toast and the history entry - a toast fires globally, so its origin matters in the moment too, not just
 // in scrollback. `kind` defaults to "ok" (history tier). `link` may be a bare href string (labelled
 // "Open") or a full {label, href}. `key` is the dedupe key: a notification whose key was already admitted

@@ -58,6 +58,7 @@ FileHotspot is one file's hotspot score: edit frequency weighted by complexity. 
 | `score` | int32 | 4 |  |
 | `authors` | int32 | 5 |  |
 | `last_commit` | Timestamp | 6 |  |
+| `moves` | int32 | 7 | How many times the file changed path inside the window. commits and moves are different kinds of churn - one is the contents being rewritten, the other is the file being moved around - and a reader wants both, because a file doing both at once is a stronger signal than either count alone. Not derivable from path, which carries only the name the file ends under. |
 
 ### GetInsightRequest
 

@@ -123,7 +123,7 @@ export function createCommandBar(deps: CommandBarDeps): CommandBar {
   bar.id = "command-bar";
   bar.hidden = true;
   bar.setAttribute("role", "dialog");
-  bar.setAttribute("aria-label", "Action bar");
+  bar.setAttribute("aria-label", "Command Palette");
 
   const prompt = h("span", "console-shell-commandbar__prompt", "run");
   prompt.setAttribute("aria-hidden", "true");
@@ -133,7 +133,7 @@ export function createCommandBar(deps: CommandBarDeps): CommandBar {
   input.setAttribute("aria-label", "Search actions");
   input.setAttribute("autocomplete", "off");
   input.setAttribute("spellcheck", "false");
-  input.placeholder = "Run an action"; // a terse prompt; the "run" cap already names the verb
+  input.placeholder = "Run a command"; // a terse prompt; the "run" cap already names the verb
 
   const items = h("div", "console-shell-commandbar__items");
   items.setAttribute("role", "listbox");

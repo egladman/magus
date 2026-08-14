@@ -16,7 +16,7 @@ Package `magus.notes.v1`, defined in `proto/magus/notes/v1/notes.proto`. Part of
 
 ListNotes returns every note in both declared stores, each with its anchors already resolved. Paginated by contract so growth never forces a breaking change, though the store returns all notes today (bounded by the store's own scan cap).
 
-`POST /magus.notes.v1.NotesService/ListNotes` - unary.
+`POST /magus.notes.v1.NotesService/ListNotes`: unary.
 
 Takes `ListNotesRequest`, returns `ListNotesResponse`.
 
@@ -24,7 +24,7 @@ Takes `ListNotesRequest`, returns `ListNotesResponse`.
 
 GetNote returns one note by scope and name, including its body.
 
-`POST /magus.notes.v1.NotesService/GetNote` - unary.
+`POST /magus.notes.v1.NotesService/GetNote`: unary.
 
 Takes `GetNoteRequest`, returns `GetNoteResponse`.
 

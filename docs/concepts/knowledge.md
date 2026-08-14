@@ -513,6 +513,18 @@ A note is the exception. Its content originates with a person, nothing in the re
 corroborates it, and no rebuild recovers it. That single property is why the store looks
 the way it does.
 
+If you have played Dark Souls, you have already used this. Players there cannot talk to
+each other; they can only leave a short message on the ground where they are standing, and
+everyone who passes that spot afterwards reads it. A few are jokes. Most are someone who
+just got caught by something, telling you what caught them - and they beat any wiki,
+because they are lying exactly where you needed them.
+
+That is what a note is for, and the rest of this section is the machinery that keeps the
+promise. Not documentation filed somewhere central and read by nobody: one sentence left at
+the spot in the code that earned it, for whoever arrives next. An anchor is how it stays at
+that spot when the code moves, `verify` is how it speaks up when the spot quietly stops
+meaning what the note said, and git is how the person who left it has their name on it.
+
 ### Where a note goes, and what that means
 
 There are two independent questions - who wrote it, and who can read it - and together

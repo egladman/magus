@@ -447,6 +447,7 @@ func (v FileHotspot) BuzzObject() BuzzObject {
 		"score":      v.Score,
 		"authors":    v.Authors,
 		"lastCommit": formattedLastCommit,
+		"moves":      v.Moves,
 	}
 }
 

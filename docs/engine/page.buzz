@@ -47,6 +47,10 @@ export fun render404(site: Site) > void !> any {
   <meta http-equiv="Content-Security-Policy" content="{{{csp}}}">
   <title>{{title}}</title>
   <meta name="description" content="{{desc}}">
+  <!-- SVG first: Chrome, Edge and Firefox render it and honor its
+       prefers-color-scheme, so the mark inverts with the browser theme. Safari
+       ignores SVG favicons and falls back to the PNG below. -->
+  <link rel="icon" type="image/svg+xml" href="{{basePath}}assets/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="{{basePath}}assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="{{basePath}}assets/apple-touch-icon.png">
   <link rel="stylesheet" href="{{basePath}}assets/pico.min.css">
@@ -100,6 +104,10 @@ export fun writeOffline(site: Site) > void !> any {
   <meta http-equiv="Content-Security-Policy" content="{{{csp}}}">
   <title>{{title}}</title>
   <meta name="description" content="{{desc}}">
+  <!-- SVG first: Chrome, Edge and Firefox render it and honor its
+       prefers-color-scheme, so the mark inverts with the browser theme. Safari
+       ignores SVG favicons and falls back to the PNG below. -->
+  <link rel="icon" type="image/svg+xml" href="{{basePath}}assets/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="{{basePath}}assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="{{basePath}}assets/apple-touch-icon.png">
   <link rel="stylesheet" href="{{basePath}}assets/pico.min.css">
@@ -435,11 +443,15 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
 {{#preloadHero}}
   <link rel="preload" as="image" href="{{root}}assets/gopher.webp" type="image/webp" fetchpriority="high">
 {{/preloadHero}}
+  <!-- SVG first: Chrome, Edge and Firefox render it and honor its
+       prefers-color-scheme, so the mark inverts with the browser theme. Safari
+       ignores SVG favicons and falls back to the PNG below. -->
+  <link rel="icon" type="image/svg+xml" href="{{root}}assets/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="{{root}}assets/favicon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="{{root}}assets/apple-touch-icon.png">
   <link rel="manifest" href="{{root}}manifest.webmanifest">
-  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
-  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#13171f">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#e6e2da">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#2a2e34">
   <link rel="stylesheet" href="{{root}}assets/pico.min.css">
   <link rel="stylesheet" href="{{root}}theme.css">
   <link rel="stylesheet" href="{{root}}site.css">

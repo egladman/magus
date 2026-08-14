@@ -30,11 +30,18 @@ import "engine/path" as _;
 // form the href (so it is host- and depth-independent); key is what renderSiteNav
 // compares against its `active` argument to mark the current section; blank flags a
 // link that opens in a new tab (an app that lives outside the docs, like the console).
+//
+// A GROUP is a NavLink with children and no suffix: it renders as a dropdown whose label
+// is not itself a destination. Grouping exists because a flat bar of eight sections is a
+// list to read rather than a structure to navigate; two levels let someone find a page by
+// what they want to DO rather than by scanning every label. One level of nesting only -
+// a submenu inside a submenu in a top bar is a worse answer than a better top level.
 export object NavLink {
     suffix: str = "",
     label: str = "",
     key: str = "",
     blank: bool = false,
+    children: [NavLink] = mut [<NavLink>],
 }
 
 // Config is the whole site-specific surface the engine renders against - the single swap

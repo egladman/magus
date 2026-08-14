@@ -413,13 +413,19 @@ func (x *ProjectNode) GetLastCommit() *timestamppb.Timestamp {
 // commits x complexity, sent rather than derived so a reader ranks by the same number the CLI
 // printed even if the weighting changes.
 type FileHotspot struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	Commits       int32                  `protobuf:"varint,2,opt,name=commits,proto3" json:"commits,omitempty"`
-	Complexity    int32                  `protobuf:"varint,3,opt,name=complexity,proto3" json:"complexity,omitempty"`
-	Score         int32                  `protobuf:"varint,4,opt,name=score,proto3" json:"score,omitempty"`
-	Authors       int32                  `protobuf:"varint,5,opt,name=authors,proto3" json:"authors,omitempty"`
-	LastCommit    *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_commit,json=lastCommit,proto3" json:"last_commit,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Path       string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Commits    int32                  `protobuf:"varint,2,opt,name=commits,proto3" json:"commits,omitempty"`
+	Complexity int32                  `protobuf:"varint,3,opt,name=complexity,proto3" json:"complexity,omitempty"`
+	Score      int32                  `protobuf:"varint,4,opt,name=score,proto3" json:"score,omitempty"`
+	Authors    int32                  `protobuf:"varint,5,opt,name=authors,proto3" json:"authors,omitempty"`
+	LastCommit *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_commit,json=lastCommit,proto3" json:"last_commit,omitempty"`
+	// How many times the file changed path inside the window. commits and moves are
+	// different kinds of churn - one is the contents being rewritten, the other is the
+	// file being moved around - and a reader wants both, because a file doing both at
+	// once is a stronger signal than either count alone. Not derivable from path, which
+	// carries only the name the file ends under.
+	Moves         int32 `protobuf:"varint,7,opt,name=moves,proto3" json:"moves,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -494,6 +500,13 @@ func (x *FileHotspot) GetLastCommit() *timestamppb.Timestamp {
 		return x.LastCommit
 	}
 	return nil
+}
+
+func (x *FileHotspot) GetMoves() int32 {
+	if x != nil {
+		return x.Moves
+	}
+	return 0
 }
 
 // AffinityOutput reports projects that change together (temporal coupling).
@@ -1192,7 +1205,7 @@ const file_magus_insight_v1_insight_proto_rawDesc = "" +
 	"\aauthors\x18\n" +
 	" \x01(\x05R\aauthors\x12;\n" +
 	"\vlast_commit\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"lastCommit\"\xc8\x01\n" +
+	"lastCommit\"\xde\x01\n" +
 	"\vFileHotspot\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
 	"\acommits\x18\x02 \x01(\x05R\acommits\x12\x1e\n" +
@@ -1202,7 +1215,8 @@ const file_magus_insight_v1_insight_proto_rawDesc = "" +
 	"\x05score\x18\x04 \x01(\x05R\x05score\x12\x18\n" +
 	"\aauthors\x18\x05 \x01(\x05R\aauthors\x12;\n" +
 	"\vlast_commit\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"lastCommit\"\x92\x01\n" +
+	"lastCommit\x12\x14\n" +
+	"\x05moves\x18\a \x01(\x05R\x05moves\"\x92\x01\n" +
 	"\x0eAffinityOutput\x12\x1e\n" +
 	"\n" +
 	"definition\x18\x01 \x01(\tR\n" +

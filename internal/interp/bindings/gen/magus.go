@@ -450,6 +450,7 @@ func buzzValueMagusFileHotspot(v types.FileHotspot) vm.Value {
 		formattedLastCommit = v.LastCommit.Format(time.RFC3339)
 	}
 	out.MapSet("lastCommit", vm.StrValue(formattedLastCommit))
+	out.MapSet("moves", vm.IntValue(int64(v.Moves)))
 	return out
 }
 

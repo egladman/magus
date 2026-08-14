@@ -58,7 +58,9 @@ export function createCheatsheet(deps: CheatsheetDeps): Cheatsheet {
   const foot = h(
     "p",
     "console-cheatsheet-box__hint",
-    "Press Esc or click outside to dismiss. Open the action bar to rebind.",
+    // Points at Shortcuts, not the Palette: rebinding is what that surface does (each row jumps to the
+    // keybindings editor) and what the Palette, which only runs a command, cannot.
+    "Press Esc or click outside to dismiss. Open Shortcuts to rebind.",
   );
   box.append(head, closeBtn, body, foot);
   bullseye.append(box);

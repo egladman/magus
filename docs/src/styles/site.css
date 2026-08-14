@@ -14,6 +14,13 @@
 
 :root {
   --pico-font-size: 106.25%;
+  /* The gap between a dropdown trigger and its panel, set ONCE for every dropdown on the site.
+     Pico derives this from --pico-outline-width (its panel rule is margin-top:
+     var(--pico-outline-width)), but that token also sets focus-ring thickness everywhere, so
+     raising it to float the panel would fatten every focus outline on the site. Own the value
+     here instead and apply it to Pico's own selector below, so a menu that reads as attached
+     but independent is the default for any dropdown we add later, not a per-menu tweak. */
+  --site-dropdown-offset: 0.58rem;
   /* Shared width for the app-like tool pages (search, playground editor) so they
      occupy the same screen real estate instead of one being 78rem and the other
      full-bleed. Wider than the prose container, but still capped. */
@@ -157,6 +164,51 @@ body {
   color: var(--pico-primary);
 }
 
+/* Applied to Pico's own panel selector so every dropdown gets it, present and future. */
+details.dropdown > summary + ul {
+  margin-top: var(--site-dropdown-offset);
+}
+
+/* Grouped sections are Pico's own nav dropdown (details.dropdown inside <nav>), and Pico
+   already handles the chevron, the panel, its positioning and its theming - none of that is
+   reimplemented here.
+
+   The ONE thing it cannot know is that this site styles nav links more compactly than Pico's
+   default: the rule above trades Pico's --pico-nav-link-spacing-vertical for 0.2rem plus a
+   negative block margin, to get the tight hover pill. Pico sizes its dropdown summary from its
+   OWN spacing (measured 42.5px against these links' effective 25.5px), so the group sat 17px
+   taller and off the baseline. Restate the summary in the same two terms the links use, and
+   the rest of the dropdown stays Pico's.
+
+   Removing the height override also fixed the panel overlapping the trigger, which had looked
+   like a separate positioning bug: Pico's offset was right all along and was only landing
+   inside the summary because the summary was the wrong height. */
+.site-header .nav-links details.dropdown > summary {
+  height: calc(1rem * var(--pico-line-height) + 0.2rem * 2);
+  padding: 0.2rem 0.5rem;
+  margin: -0.2rem 0;
+  background: none;
+  border: none;
+  border-radius: var(--pico-border-radius);
+  color: var(--pico-primary);
+}
+/* The nav summary carries a -0.2rem block margin (to match this site's compact links), so it
+   hangs that far below the box the panel is positioned against and eats exactly that much of
+   the gap. Add it back rather than hardcoding a second offset - the site-wide value above stays
+   the single source of truth, and this line says only what is peculiar to the nav. */
+.site-header .nav-links details.dropdown > summary + ul {
+  margin-top: calc(var(--site-dropdown-offset) + 0.2rem);
+}
+
+.site-header .nav-links details.dropdown > summary:hover,
+.site-header .nav-links details.dropdown > summary:focus-visible {
+  background: var(--pico-card-sectioning-background-color);
+}
+/* A group whose child is the current page wears the same quiet pill its sibling links wear. */
+.site-header .nav-links details.dropdown[data-section-current] > summary {
+  background: color-mix(in srgb, var(--pico-primary-focus) 65%, transparent);
+}
+
 /* Right cluster of the top bar: the section links (collapsible on mobile) plus the
    always-visible theme toggle. */
 .nav-right {
@@ -239,6 +291,38 @@ body {
   }
   .js .nav-right.nav-open .nav-links { display: block; }
   .js .nav-links li { display: block; margin: 0; } /* stack one per row */
+  /* Groups become an ACCORDION here, not a flyout. On the wide bar a group opens an absolutely
+     positioned panel beside its neighbors, which is right there and wrong inside this popup:
+     measured at 420px, the panel floated over the items beneath it and made Community and
+     Console unreachable while a group was open. Static positioning lets an open group push the
+     rest of the menu down instead, so everything stays reachable with one thumb. */
+  .js .nav-links details.dropdown { display: block; }
+  /* Full width so the row is tappable end to end, and a flex row so Pico's float:right
+     chevron becomes a flex item instead of wrapping to a line of its own - which is exactly
+     what it did once the summary spanned the menu. space-between parks it on the trailing
+     edge, where a disclosure arrow belongs in a stacked menu. */
+  .js .nav-links details.dropdown > summary {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  /* Pico paints dropdown items with --pico-dropdown-color, the body text color, because in a
+     floating panel they are menu rows rather than nav links. Inline in this accordion they sit
+     directly among the blue section links, so measured rgb(43,48,56) against their siblings'
+     rgb(31,107,176) just read as two kinds of link. Match them here only - on the wide bar the
+     panel really is a floating menu and Pico's own color is right there. */
+  .js .nav-links details.dropdown > ul a { color: var(--pico-primary); }
+  .js .nav-links details.dropdown > ul {
+    position: static;
+    inset: auto;
+    min-width: 0;
+    margin: 0;
+    padding: 0 0 0.15rem 0.7rem; /* indent the children so the grouping still reads */
+    background: none;
+    border: none;
+    box-shadow: none;
+  }
   /* Popup heading, matching .toc-title: uppercase, muted, tracked. text-transform
      renders the plain "Menu" markup as "MENU" - same treatment the TOC sheet uses. */
   .js .nav-links .nav-menu-label {
@@ -274,10 +358,25 @@ body {
   .no-js .nav-links { flex-wrap: wrap; justify-content: flex-end; }
 }
 
-/* Small hat mark beside the "magus" wordmark in the nav. */
+/* The brand lockup must never break across lines. It sits a fraction of a pixel from
+   overflowing its own shrink-wrapped box (mark + space + wordmark came to 88.85px inside an
+   88.8px content box), so without this the hat wraps onto the line above the word - which is
+   what it did, and it is not a width the artwork can be tuned out of. */
+.site-header ul a.contrast {
+  white-space: nowrap;
+}
+
+/* Small hat mark beside the "magus" wordmark in the nav. Inline SVG on currentColor, so it
+   takes the wordmark's color in both themes.
+
+   The width is COMPUTED from the viewBox ratio (875/766) rather than left as `auto`. That is
+   not a preference: `width: auto` on an inline <svg> does not scale from the height the way it
+   does on an <img>, it resolves to the element's own width attribute - 875px - so the box was
+   full-width and the wordmark wrapped to the next line. Keep the two in step if the artwork's
+   viewBox ever changes. */
 .brand-mark {
   height: 1.5em;
-  width: auto;
+  width: calc(1.5em * 875 / 766);
   vertical-align: -0.35em;
 }
 
@@ -1206,10 +1305,15 @@ article dd,
    elsewhere", the same glyph Open-in-Playground uses, so the two arrows stay readable as one system -
    right means "another page here", up-right means "a new tab". Muted, since it annotates the label
    rather than competing with it. */
+/* The "opens in a new tab" marker. A bare diagonal arrow reads as "scroll" or "expand" as
+   readily as "leaves this site"; the box-with-an-arrow-leaving-it is the established glyph for
+   an external destination, so it says the one thing it is there to say. Sized in em so it
+   tracks the link text, and drawn on currentColor so it themes with it. */
 .ext-arrow {
   display: inline-block;
-  font-size: 0.85em;
-  vertical-align: 0.05em;
+  width: 0.8em;
+  height: 0.8em;
+  vertical-align: -0.05em;
   opacity: 0.7;
 }
 

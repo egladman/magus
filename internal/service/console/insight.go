@@ -75,7 +75,11 @@ func (s *Service) computeInsight(ctx context.Context) (types.InsightView, error)
 	if s.magus == nil {
 		return types.InsightView{}, ErrNoWorkspace
 	}
-	opts := types.InsightOptions{Commits: insightCommits}
+	// Files: the per-file ranking the dashboard draws. The history scan behind it is
+	// shared with every other lens and already paid for; the only added work is one
+	// complexity read per distinct file, and cachedScan holds the result for the TTL,
+	// so a burst of pollers pays it once rather than each.
+	opts := types.InsightOptions{Commits: insightCommits, Files: true}
 	hot, err := s.magus.Hotspots(ctx, opts)
 	if err != nil {
 		return types.InsightView{}, err

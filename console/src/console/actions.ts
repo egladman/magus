@@ -1,12 +1,15 @@
-// actions.ts - the Actions surface: a first-class tab listing EVERY registered command, grouped by
+// actions.ts - the Shortcuts surface: a first-class tab listing EVERY registered command, grouped by
 // area. It is the command companion to the keyboard cheat sheet (cheatsheet.ts): where that one shows
 // only the commands that HAVE a chord (a keybinding reference, opened by holding "?"), this one is the
 // full command catalogue - each row shows the canonical TOKEN (open.logs) in monospace, the prose
 // label, and the chord when one is bound. Unlike the cheat sheet it is a real surface (page.ts), not a
 // modal overlay: it mounts straight into the pane host like any other tab, so it can be opened, tiled,
 // and moved to its own window the same way. Each row is CLICK-TO-RUN (a discovery aid AND a runner,
-// the tab companion to the action bar); a command with a rebindable chord also gets a per-row jump to
-// the keybindings editor, so this surface both explains and edits what the action bar only runs.
+// the tab companion to the Command Palette); a command with a rebindable chord also gets a per-row jump
+// to the keybindings editor, so this surface both explains and edits what the Palette only runs.
+//
+// The file keeps its "actions" name because pageId "actions" is the identifier everything routes on;
+// only what the user READS says Shortcuts. See the note beside the launcher entry in main.ts.
 
 import { formatChord, type Command, type Keymap } from "./commands";
 import { displayToken } from "./commandBar";
@@ -64,7 +67,7 @@ function editIcon(): SVGElement {
 export function createActionsSurface(deps: ActionsSurfaceDeps): PageModule<null, null> {
   return {
     id: "actions",
-    title: "Actions",
+    title: "Shortcuts",
     async activate(host: HTMLElement): Promise<PageController<null, null>> {
       const root = h("div");
       root.dataset.surface = "actions";

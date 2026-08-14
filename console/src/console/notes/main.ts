@@ -53,14 +53,30 @@ interface Refs {
 // SCOPE_COPY names each store by its CONSEQUENCE rather than by its config key. "shared" and
 // "private" are the words in magus.yaml, but what a reader needs at a glance is who ends up
 // able to read the note, which is the only difference between the two.
-const SCOPE_COPY: Record<number, { title: string; sub: string }> = {
+//
+// It renders as an inline Alert rather than a paragraph, and that is the point: the single
+// most costly thing a reader can get wrong here is believing a private note is committed, or
+// that a shared one is not. A sentence under a heading is skimmable; a banner is not. The
+// variants are deliberately NOT status colours - neither store is a problem - so shared takes
+// info and private takes custom, two hues that read as "different kind of thing" rather than
+// as "one of these is wrong".
+const SCOPE_COPY: Record<
+  number,
+  { title: string; variant: string; consequence: string; where: string }
+> = {
   [Scope.SHARED]: {
     title: "Shared",
-    sub: "Committed to this repository. Your team has these, and git records who wrote each one.",
+    variant: "pf-m-info",
+    consequence:
+      "In your git history. Committing a note is what publishes it, so review sees it and git records who wrote each one.",
+    where: "Inside the repository, at ",
   },
   [Scope.PRIVATE]: {
     title: "Private",
-    sub: "This machine only. Nothing attributes these and no clone has them.",
+    variant: "pf-m-custom",
+    consequence:
+      "Never committed. Nothing here enters your git history, reaches a clone, or is exported to the remote cache.",
+    where: "Outside the repository entirely, at ",
   },
 };
 
@@ -244,17 +260,18 @@ function buildStoreSection(
   notes: Note[],
   loadBody: (n: Note) => Promise<string>,
 ): HTMLElement {
-  const copy = SCOPE_COPY[store.scope] ?? { title: "Notes", sub: "" };
+  const copy = SCOPE_COPY[store.scope] ?? {
+    title: "Notes",
+    variant: "",
+    consequence: "",
+    where: "",
+  };
   const section = h("section", "console-render-section");
 
   const head = h("div", "console-render-section__head");
   head.append(h("h2", undefined, copy.title));
   head.append(label(notes.length + (notes.length === 1 ? " note" : " notes"), "pf-m-grey"));
   section.append(head);
-
-  const sub = h("p");
-  sub.textContent = copy.sub;
-  section.append(sub);
 
   if (!store.declared) {
     const none = h("p");
@@ -266,6 +283,23 @@ function buildStoreSection(
       " in magus.yaml to enable one.";
     section.append(none);
     return section;
+  }
+
+  // The scope banner sits ABOVE any repair warnings: what a store IS outranks what is
+  // currently wrong inside it, and a reader who scrolls past this one has lost the only
+  // fact that distinguishes the two stores.
+  if (copy.consequence) {
+    const banner = h("div", "pf-v6-c-alert pf-m-inline " + copy.variant);
+    banner.append(h("p", "pf-v6-c-alert__title", copy.consequence));
+    if (store.path) {
+      const desc = h("div", "pf-v6-c-alert__description");
+      const p = h("p");
+      p.append(document.createTextNode(copy.where));
+      p.append(h("code", undefined, store.path));
+      desc.append(p);
+      banner.append(desc);
+    }
+    section.append(banner);
   }
 
   for (const issue of store.issues) {

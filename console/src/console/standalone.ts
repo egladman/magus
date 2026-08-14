@@ -52,7 +52,7 @@ interface BootModule {
 // for the Activity view (there is no /console/activity/ tool page). Paths are relative to gen/console/.
 export interface ModuleSurface {
   id: string; // registry id / pageId, e.g. "activity"
-  title: string; // tab title, e.g. "Activity Trail"
+  title: string; // tab title, e.g. "Activity"
   bundle: string; // bundle path under gen/console/ whose activate(host) builds the DOM, e.g. "activity/activity.js"
   css: string; // page-scoped stylesheet path under gen/console/, e.g. "logs/logs.css" (the trail reuses it)
 }

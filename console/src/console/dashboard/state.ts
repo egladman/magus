@@ -597,6 +597,19 @@ export interface HotspotNodeView {
   blastRadius: number;
   lastCommit: string;
 }
+// FileHotspotView is the per-FILE ranking, the granularity a reader can act on: a project
+// tells you which subtree is hot, a file tells you what to open. `moves` is how many times
+// the file changed path in the window - churn the score cannot see, because a file being
+// moved around is a different kind of thrash from its contents being rewritten.
+export interface FileHotspotView {
+  path: string;
+  commits: number;
+  complexity: number;
+  score: number;
+  authors: number;
+  moves: number;
+  lastCommit: string;
+}
 export interface AffinityPairView {
   a: string;
   b: string;
@@ -670,6 +683,7 @@ export const renderWindow = (b: { min: string; below: string } | undefined): str
 export interface InsightView {
   commits: number; // the git-history window shared by the four VCS lenses
   hotspots: HotspotNodeView[];
+  hotspotFiles: FileHotspotView[];
   affinity: AffinityPairView[];
   ownership: OwnershipRowView[];
   trend: TrendRowView[];
@@ -685,6 +699,15 @@ export function mapInsight(w: Insight): InsightView {
       authors: n.authors,
       blastRadius: n.blastRadius,
       lastCommit: fmtDate(n.lastCommit),
+    })),
+    hotspotFiles: (w.hotspots?.files ?? []).map((f) => ({
+      path: f.path,
+      commits: f.commits,
+      complexity: f.complexity,
+      score: f.score,
+      authors: f.authors,
+      moves: f.moves,
+      lastCommit: fmtDate(f.lastCommit),
     })),
     affinity: (w.affinity?.pairs ?? []).map((p) => ({
       a: p.a,

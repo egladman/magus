@@ -535,6 +535,15 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
       blastRadius: n.blastRadius,
       lastCommit: date(n.lastCommitMs),
     })),
+    hotspotFiles: si.hotspotFiles.map((f) => ({
+      path: f.path,
+      commits: f.commits,
+      complexity: f.complexity,
+      score: f.score,
+      authors: f.authors,
+      moves: f.moves,
+      lastCommit: date(f.lastCommitMs),
+    })),
     affinity: si.affinity.map((p) => ({ a: p.a, b: p.b, count: p.count, hidden: p.hidden })),
     ownership: si.ownership.map((o) => ({
       path: o.path,
