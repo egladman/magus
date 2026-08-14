@@ -908,8 +908,75 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
 // touching it. This target used to end in an `install-agents-md` call that
 // rewrote the block on every generate, which is what made AGENTS.md a hybrid
 // file and put it at odds with the Markdown formatter.
+// The globs name the SHIPPED skills rather than the whole directory, and that
+// distinction is the point. `.claude/skills/**` also claimed the two skills magus
+// does NOT write - magus-skill-authoring and magus-local-development, both
+// hand-authored and tracked by explicit .gitignore negations - so describe file
+// called them generated and the path guard warned an author off the one file
+// CLAUDE.md tells them to edit. install writes only the names it ships, and
+// --prune leaves a hand-authored skill alone, so the declaration should say the
+// same.
+//
+// Enumerated, not computed: the static read collects string LITERALS only, and a
+// pattern built at run time - from a loop, or even from string interpolation - is
+// invisible to it, flagged as a computed footprint argument rather than silently
+// accepted. So the name list is written out per destination, and
+// TestSkillsGenerateDeclaresEveryShippedSkill keeps it in step with
+// cmd/magus/skills: adding a skill without touching this fails there rather than
+// shipping an installed file magus calls hand-editable.
+//
+// One pattern per skill per destination, rather than one brace alternation per
+// destination, because these globs do not stay inside magus: EnsureMergeDriver
+// writes them into .gitattributes, and git's pattern syntax has no brace
+// expansion. A `{a,b}` list is a valid doublestar glob and a DEAD .gitattributes
+// line - the merge driver would quietly stop covering every installed skill,
+// which is the failure this declaration exists to prevent. (Buzz also reads a
+// bare {...} in a string as interpolation, so the braces needed escaping just to
+// survive the parser. Two reasons, same conclusion.)
+//
+// The trailing `*` before /** covers each skill's always-full <name>-full twin,
+// which an install writes beside the primary.
 export fun skills_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles(".claude/skills/**", ".agents/skills/**", ".opencode/skills/**");
+    ctx.writesFiles(
+        ".claude/skills/magus-architecture-review*/**",
+        ".claude/skills/magus-buzz-review*/**",
+        ".claude/skills/magus-buzz-write*/**",
+        ".claude/skills/magus-change-summary*/**",
+        ".claude/skills/magus-context-audit*/**",
+        ".claude/skills/magus-delegate-multi-agent*/**",
+        ".claude/skills/magus-docs-lookup*/**",
+        ".claude/skills/magus-handoff-journal*/**",
+        ".claude/skills/magus-query*/**",
+        ".claude/skills/magus-run*/**",
+        ".claude/skills/magus-sdk*/**",
+        ".claude/skills/magus-vcs-hygiene*/**",
+        ".claude/skills/magus-workspace-rules*/**",
+        ".agents/skills/magus-architecture-review*/**",
+        ".agents/skills/magus-buzz-review*/**",
+        ".agents/skills/magus-buzz-write*/**",
+        ".agents/skills/magus-change-summary*/**",
+        ".agents/skills/magus-context-audit*/**",
+        ".agents/skills/magus-delegate-multi-agent*/**",
+        ".agents/skills/magus-docs-lookup*/**",
+        ".agents/skills/magus-handoff-journal*/**",
+        ".agents/skills/magus-query*/**",
+        ".agents/skills/magus-run*/**",
+        ".agents/skills/magus-sdk*/**",
+        ".agents/skills/magus-vcs-hygiene*/**",
+        ".agents/skills/magus-workspace-rules*/**",
+        ".opencode/skills/magus-architecture-review*/**",
+        ".opencode/skills/magus-buzz-review*/**",
+        ".opencode/skills/magus-buzz-write*/**",
+        ".opencode/skills/magus-change-summary*/**",
+        ".opencode/skills/magus-context-audit*/**",
+        ".opencode/skills/magus-delegate-multi-agent*/**",
+        ".opencode/skills/magus-docs-lookup*/**",
+        ".opencode/skills/magus-handoff-journal*/**",
+        ".opencode/skills/magus-query*/**",
+        ".opencode/skills/magus-run*/**",
+        ".opencode/skills/magus-sdk*/**",
+        ".opencode/skills/magus-vcs-hygiene*/**",
+        ".opencode/skills/magus-workspace-rules*/**");
     magus\cmd("agent", args: ["install", ".claude/skills", "--force"], opts: {"quiet": true});
     magus\cmd("agent", args: ["install", ".agents/skills", "--force"], opts: {"quiet": true});
     magus\cmd("agent", args: ["install", ".opencode/skills", "--force"], opts: {"quiet": true});
