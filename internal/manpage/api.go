@@ -21,9 +21,9 @@ func API(configKeys []string) []string {
 	var out []string
 	for _, c := range All {
 		out = append(out, "subcommand "+c.Name)
-		if c.BuildFlags != nil {
+		if c.HasFlags() {
 			fs := flag.NewFlagSet(c.Name, flag.ContinueOnError)
-			c.BuildFlags(fs)
+			c.BindFlags(fs)
 			fs.VisitAll(func(f *flag.Flag) {
 				out = append(out, "flag "+c.Name+"/"+f.Name)
 			})

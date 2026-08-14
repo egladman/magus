@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
@@ -47,12 +48,12 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	var noAutoload bool
 	var workDir string
 	rest, err := cmdParse("buzz", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&eval, "e", "", "execute `code` given on the command line instead of a file")
-		fs.BoolVar(&test, "t", false, "run the file's `test \"...\" {}` blocks and report pass/fail")
-		fs.BoolVar(&test, "test", false, "alias for -t")
-		fs.BoolVar(&embedded, "embedded", false, "relax upstream strictness (top-level statements, optional arg labels) to match the magusfile engine")
-		fs.BoolVar(&noAutoload, "no-autoload", false, "start the REPL without executing the magusfile")
-		fs.StringVar(&workDir, "C", "", "working directory for the REPL's import resolution (default: cwd)")
+		fs.StringVar(&eval, gen.FlagBuzzE, "", "execute `code` given on the command line instead of a file")
+		fs.BoolVar(&test, gen.FlagBuzzT, false, "run the file's `test \"...\" {}` blocks and report pass/fail")
+		fs.BoolVar(&test, gen.FlagBuzzTest, false, "alias for -t")
+		fs.BoolVar(&embedded, gen.FlagBuzzEmbedded, false, "relax upstream strictness (top-level statements, optional arg labels) to match the magusfile engine")
+		fs.BoolVar(&noAutoload, gen.FlagBuzzNoAutoload, false, "start the REPL without executing the magusfile")
+		fs.StringVar(&workDir, gen.FlagBuzzC, "", "working directory for the REPL's import resolution (default: cwd)")
 		fs.Usage = buzzUsage
 	})
 	if err != nil {
@@ -60,7 +61,8 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	}
 	isRepl := eval == "" && !test && len(rest) == 0
 	if !isRepl && (noAutoload || workDir != "") {
-		return usagef("magus buzz: --no-autoload and -C apply to the REPL, not to a script, -e, or -t")
+		return usagef("magus buzz: --%s and -%s apply to the REPL, not to a script, -%s, or -%s",
+			gen.FlagBuzzNoAutoload, gen.FlagBuzzC, gen.FlagBuzzE, gen.FlagBuzzT)
 	}
 
 	// No code, no file/stdin argument, and an interactive terminal: open the REPL,

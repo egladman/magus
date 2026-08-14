@@ -241,17 +241,17 @@ func recordedFlagsUnder(name string) ([]recordedFlag, bool) {
 // usage and parses nothing - so its children are what get probed.
 func flagProbes(cmd manpage.Command) []flagProbe {
 	if len(cmd.Children) == 0 {
-		if cmd.BuildFlags == nil {
+		if !cmd.HasFlags() {
 			return nil
 		}
-		return []flagProbe{{name: cmd.Name, argvs: argvsFor(cmd.Name), buildFlags: cmd.BuildFlags}}
+		return []flagProbe{{name: cmd.Name, argvs: argvsFor(cmd.Name), buildFlags: cmd.BindFlags}}
 	}
 	var out []flagProbe
 	for _, child := range cmd.Children {
-		if child.BuildFlags == nil {
+		if !child.HasFlags() {
 			continue
 		}
-		out = append(out, flagProbe{name: cmd.Name + " " + child.Name, argvs: argvsFor(cmd.Name + " " + child.Name), buildFlags: child.BuildFlags})
+		out = append(out, flagProbe{name: cmd.Name + " " + child.Name, argvs: argvsFor(cmd.Name + " " + child.Name), buildFlags: child.BindFlags})
 	}
 	return out
 }

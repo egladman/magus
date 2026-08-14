@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/clihint"
@@ -632,12 +633,17 @@ func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, targ
 
 // detachFlagName is the one flag these helpers act on; it is named once so the two that
 // add and remove it cannot disagree.
+const detachFlagName = gen.FlagRunDetach
+
 // localOnlyFlags never travel to the daemon. --detach would make it detach
 // again, handing the work to itself forever; --wait describes what THIS process
 // does after submitting and means nothing to the run itself.
-const detachFlagName = "detach"
-
-var localOnlyFlags = []string{detachFlagName, "wait"}
+//
+// Both names come from the command registry rather than from a literal. The
+// second one used to be spelled "wait" right here, beside a constant for the
+// first - and a flag whose name is a literal in one place and a constant in
+// another is a rename waiting to go half-applied.
+var localOnlyFlags = []string{detachFlagName, gen.FlagRunWait}
 
 // withoutDetachFlag drops the local-only flags from an argv, in every spelling
 // the flag package accepts: -name, --name, and either with an inline =value.

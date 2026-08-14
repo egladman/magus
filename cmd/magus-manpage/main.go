@@ -211,9 +211,9 @@ func renderCommandMD(seg imanpage.Command) []byte {
 		}
 	}
 
-	if seg.BuildFlags != nil {
+	if seg.HasFlags() {
 		fs := flag.NewFlagSet(seg.Name, flag.ContinueOnError)
-		seg.BuildFlags(fs)
+		seg.BindFlags(fs)
 		m.h2("Options")
 		fs.VisitAll(func(f *flag.Flag) {
 			typeName, _ := flag.UnquoteUsage(f)
@@ -222,11 +222,11 @@ func renderCommandMD(seg imanpage.Command) []byte {
 	}
 
 	for _, child := range seg.Children {
-		if child.BuildFlags == nil {
+		if !child.HasFlags() {
 			continue
 		}
 		fs := flag.NewFlagSet(seg.Name+" "+child.Name, flag.ContinueOnError)
-		child.BuildFlags(fs)
+		child.BindFlags(fs)
 		m.h3(seg.Name + " " + child.Name + " options")
 		fs.VisitAll(func(f *flag.Flag) {
 			typeName, _ := flag.UnquoteUsage(f)

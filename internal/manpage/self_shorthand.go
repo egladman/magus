@@ -1,7 +1,5 @@
 package manpage
 
-import "flag"
-
 // selfInstallShorthandCommand documents `magus self install-shorthand`. It lives
 // outside the build-tagged self pages because the shorthand does not depend on
 // the updater, so both the default and the -tags noselfupdate build ship it.
@@ -18,9 +16,9 @@ every shipped completion script already registers mgs alongside magus.
 The shorthand survives magus self update: the updater resolves symlinks before
 it swaps, so the real binary is replaced underneath a link that keeps pointing
 at it. An existing mgs is left alone unless --force is given.`,
-	BuildFlags: func(fs *flag.FlagSet) {
-		fs.String("dir", "", "Directory for the shorthand (default: the running binary's directory)")
-		fs.Bool("force", false, "Replace an existing file at the shorthand path")
+	Flags: []Flag{
+		{Name: "dir", Kind: FlagString, Doc: "Directory for the shorthand (default: the running binary's directory)"},
+		{Name: "force", Kind: FlagBool, Doc: "Replace an existing file at the shorthand path"},
 	},
 	Examples: []Example{
 		{"Install mgs next to magus", "magus self install-shorthand"},

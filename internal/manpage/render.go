@@ -77,12 +77,12 @@ func renderCommandRoff(command Command, date, version string) []byte {
 		w.SH("Description")
 		w.Para(command.Long)
 	}
-	if command.BuildFlags != nil {
-		writeFlagsRoff(w, command.Name, command.BuildFlags, "Options")
+	if command.HasFlags() {
+		writeFlagsRoff(w, command.Name, command.BindFlags, "Options")
 	}
 	for _, child := range command.Children {
-		if child.BuildFlags != nil {
-			writeFlagsRoff(w, command.Name+" "+child.Name, child.BuildFlags, command.Name+" "+child.Name+" options")
+		if child.HasFlags() {
+			writeFlagsRoff(w, command.Name+" "+child.Name, child.BindFlags, command.Name+" "+child.Name+" options")
 		}
 	}
 	if len(command.Children) > 0 {

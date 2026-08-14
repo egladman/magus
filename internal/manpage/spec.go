@@ -2,7 +2,10 @@
 // magus CLI and the man-page generator (cmd/magus-manpage).
 package manpage
 
-import "flag"
+import (
+	"flag"
+	"time"
+)
 
 // Command is one node in the recursive magus CLI command tree (e.g. "run", "config", "ci github").
 type Command struct {
@@ -19,24 +22,117 @@ type Command struct {
 	// Auto-augmented with the canonical "cli, magus <name>, <name>" if empty.
 	Tags []string
 
-	// BuildFlags is called with a fresh FlagSet to register command-specific flags.
-	// Do NOT register global flags here (--output, -v, --concurrency, --root, --config).
-	BuildFlags func(fs *flag.FlagSet)
+	// Flags are the command-specific flags, as DATA rather than as a closure that
+	// registers them.
+	//
+	// The closure this replaced could only ever be REPLAYED into a FlagSet, so the
+	// only question anything could ask of it was "what did you just register" - the
+	// answer arrived at runtime, one FlagSet at a time. Nothing could ask for the
+	// names ahead of time, which is why a flag name reached the rest of the binary
+	// as a string literal, and why the man page's copy of the list could disagree
+	// with the CLI's until a test noticed. A slice can be read at generate time, so
+	// the names become constants and the two lists become one.
+	//
+	// Do NOT declare global flags here (--output, -v, --concurrency, --root, --config).
+	Flags []Flag
 
 	Examples []Example // EXAMPLES section entries
 	Children []Command // navigational subcommands (e.g. "github" under "ci")
 	Targets  []Target  // project-scoped targets dispatched by this command
 }
 
+// FlagKind is the value type a flag binds, and so which flag.FlagSet method
+// registers it.
+type FlagKind int
+
+const (
+	FlagBool FlagKind = iota
+	FlagString
+	FlagInt
+	FlagDuration
+)
+
+// Flag is one command-specific flag.
+type Flag struct {
+	Name string   // without leading dashes, e.g. "no-cache"
+	Kind FlagKind // which FlagSet method binds it
+	Doc  string   // one-line help text
+
+	// Default is the zero value the flag takes when unset: bool, string, int, or
+	// time.Duration, matching Kind. A nil Default means the kind's zero value.
+	Default any
+
+	// No Enum field, deliberately. Every closed-set value in this CLI belongs to
+	// the GLOBAL -o flag, which this registry does not model (see Flags above), and
+	// no per-command flag has one - the string flags here take refs, paths, commit
+	// SHAs and queries. The -o list is enumerated once at its real source
+	// (main.CommonFormats, rendered by main.FormatChoices); an unused Enum here
+	// would be a second place to declare a set nothing in this package owns.
+}
+
 // Target is a named unit of work a project spell implements (e.g. "build", "test", "lint").
 type Target struct {
-	Name       string
-	Short      string
-	BuildFlags func(fs *flag.FlagSet)
+	Name  string
+	Short string
+	Flags []Flag
 }
 
 // Example is a single usage example in the man-page EXAMPLES section.
 type Example struct {
 	Comment string // e.g. "Build all Go projects"
 	Command string // e.g. "magus run build"
+}
+
+// BindFlags registers c's flags on fs.
+//
+// This is the one place a declared Flag becomes a bound flag, so the man page,
+// the docs, the completions and the CLI all bind the same list by construction
+// rather than by a test comparing two hand-written copies.
+func (c Command) BindFlags(fs *flag.FlagSet) { bindFlags(fs, c.Flags) }
+
+// BindFlags registers t's flags on fs.
+func (t Target) BindFlags(fs *flag.FlagSet) { bindFlags(fs, t.Flags) }
+
+// HasFlags reports whether anything would be registered, so a caller can skip
+// building a FlagSet it would not use.
+func (c Command) HasFlags() bool { return len(c.Flags) > 0 }
+
+// HasFlags reports whether anything would be registered.
+func (t Target) HasFlags() bool { return len(t.Flags) > 0 }
+
+func bindFlags(fs *flag.FlagSet, flags []Flag) {
+	for _, f := range flags {
+		switch f.Kind {
+		case FlagBool:
+			fs.Bool(f.Name, defaultOf[bool](f.Default), f.Doc)
+		case FlagString:
+			fs.String(f.Name, defaultOf[string](f.Default), f.Doc)
+		case FlagInt:
+			fs.Int(f.Name, defaultOf[int](f.Default), f.Doc)
+		case FlagDuration:
+			fs.Duration(f.Name, defaultOf[time.Duration](f.Default), f.Doc)
+		}
+	}
+}
+
+// defaultOf reads a Flag.Default of the expected type, falling back to the zero
+// value. A mismatched type is treated as unset rather than panicking: a wrong
+// default is a documentation bug, and failing the whole CLI over one would be a
+// worse outcome than binding the zero the field would have had anyway.
+func defaultOf[T any](v any) T {
+	if t, ok := v.(T); ok {
+		return t
+	}
+	var zero T
+	return zero
+}
+
+// Names returns the declared flag names in order, for callers that need to
+// reference a flag without spelling it as a literal.
+func Names(flags []Flag) []string {
+	out := make([]string, 0, len(flags))
+	for _, f := range flags {
+		out = append(out, f.Name)
+	}
+	return out
 }

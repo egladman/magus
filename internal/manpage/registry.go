@@ -1,9 +1,6 @@
 package manpage
 
-import (
-	"flag"
-	"time"
-)
+import "time"
 
 // All is the ordered list of magus top-level commands consumed by the
 // man-page generator (internal/manpage).
@@ -94,13 +91,13 @@ spells that fire, the charm-applied command, and any per-target policy. Add a ch
 and --explain (e.g. "lint:rw --explain") to see each charm reshape the command one
 step at a time.`,
 	Usage: "magus describe <noun> [<name>] [flags]",
-	BuildFlags: func(fs *flag.FlagSet) {
-		fs.Bool("explain", false, "For a target ref with charms: show the per-charm argv trace (base then each charm)")
-		fs.Bool("e", false, "Short for --explain on a target ref, and for --evaluated on a project listing")
-		fs.Bool("evaluated", false, "For projects: print workspace-rooted globs, effective claims, and per-target policies")
-		fs.Bool("cache", false, "For a target ref: show its live cache key, the ref a run would print, and the component classes behind it")
-		fs.String("against", "", "With --cache: diff the live key inputs against the stored lines behind an output ref")
-		fs.Bool("no-default-charms", false, "With --cache: ignore magus.yaml default_charms when keying, matching a run made the same way (CI)")
+	Flags: []Flag{
+		{Name: "explain", Kind: FlagBool, Doc: "For a target ref with charms: show the per-charm argv trace (base then each charm)"},
+		{Name: "e", Kind: FlagBool, Doc: "Short for --explain on a target ref, and for --evaluated on a project listing"},
+		{Name: "evaluated", Kind: FlagBool, Doc: "For projects: print workspace-rooted globs, effective claims, and per-target policies"},
+		{Name: "cache", Kind: FlagBool, Doc: "For a target ref: show its live cache key, the ref a run would print, and the component classes behind it"},
+		{Name: "against", Kind: FlagString, Doc: "With --cache: diff the live key inputs against the stored lines behind an output ref"},
+		{Name: "no-default-charms", Kind: FlagBool, Doc: "With --cache: ignore magus.yaml default_charms when keying, matching a run made the same way (CI)"},
 	},
 	Examples: []Example{
 		{"List every target", "magus describe targets"},
@@ -126,21 +123,21 @@ its steps; your magusfile composes them with magus.needs. magus keeps ci as
 the anchor that the affected set keys off, and always runs it read-only; apply
 the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 	Usage: "magus run <target> [flags] [project...]",
-	BuildFlags: func(fs *flag.FlagSet) {
-		fs.Bool("graph", false, "Render the dependency graph for the selected scope instead of executing")
-		fs.Bool("upstream", false, "With --graph: show dependents instead of dependencies")
-		fs.Int("depth", 0, "With --graph: cap displayed depth (0 = unlimited)")
-		fs.Bool("no-cache", false, "Force a fresh run even on a cache hit; still refreshes the entry")
-		fs.Bool("no-default-charms", false, "Ignore magus.yaml default_charms for this run")
-		fs.Bool("detach", false, "Hand the run to the daemon and return immediately; follow it with magus status --watch")
-		fs.Bool("wait", false, "With --detach, block until the run finishes and exit with its status")
-		fs.Bool("open", false, "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)")
-		fs.Bool("step", false, "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)")
-		fs.String("race", "", "Run the same target repeatedly to surface order-dependent failures")
-		fs.Duration("timeout", 0, "Abort if the run has not finished within this duration (e.g. 5m, 1h30m)")
-		fs.Int("shard", 0, "This run's shard index within a CI matrix; paired with --n-shards")
-		fs.Int("n-shards", 0, "Total shard count for this CI matrix run; paired with --shard")
-		fs.Bool("no-volatility-retry", false, "Disable volatility auto-retry for this run")
+	Flags: []Flag{
+		{Name: "graph", Kind: FlagBool, Doc: "Render the dependency graph for the selected scope instead of executing"},
+		{Name: "upstream", Kind: FlagBool, Doc: "With --graph: show dependents instead of dependencies"},
+		{Name: "depth", Kind: FlagInt, Doc: "With --graph: cap displayed depth (0 = unlimited)"},
+		{Name: "no-cache", Kind: FlagBool, Doc: "Force a fresh run even on a cache hit; still refreshes the entry"},
+		{Name: "no-default-charms", Kind: FlagBool, Doc: "Ignore magus.yaml default_charms for this run"},
+		{Name: "detach", Kind: FlagBool, Doc: "Hand the run to the daemon and return immediately; follow it with magus status --watch"},
+		{Name: "wait", Kind: FlagBool, Doc: "With --detach, block until the run finishes and exit with its status"},
+		{Name: "open", Kind: FlagBool, Doc: "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)"},
+		{Name: "step", Kind: FlagBool, Doc: "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)"},
+		{Name: "race", Kind: FlagString, Doc: "Run the same target repeatedly to surface order-dependent failures"},
+		{Name: "timeout", Kind: FlagDuration, Doc: "Abort if the run has not finished within this duration (e.g. 5m, 1h30m)"},
+		{Name: "shard", Kind: FlagInt, Doc: "This run's shard index within a CI matrix; paired with --n-shards"},
+		{Name: "n-shards", Kind: FlagInt, Doc: "Total shard count for this CI matrix run; paired with --shard"},
+		{Name: "no-volatility-retry", Kind: FlagBool, Doc: "Disable volatility auto-retry for this run"},
 	},
 	Targets: CommonTargets,
 	Examples: []Example{
@@ -235,31 +232,31 @@ JSON shard plan for the named target. Combine --plan with --stdin for a one-shot
 plan of proposed paths before editing. --bisect drives VCS bisect using run
 history to find the commit that introduced a regression.`,
 	Usage: "magus affected <target> [flags]",
-	BuildFlags: func(fs *flag.FlagSet) {
-		fs.Bool("dry-run", false, "Print what would run without executing")
-		fs.String("base", "", "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)")
-		fs.Bool("stdin", false, "Read changed file paths from stdin instead of running a VCS diff")
-		fs.Bool("null", false, "With --stdin: expect NUL-separated paths and double-NUL between batches")
-		fs.String("b", "", "Short for --base")
-		fs.Bool("no-cache", false, "Force a fresh run even on a cache hit; still refreshes the entry")
-		fs.Bool("no-default-charms", false, "Ignore magus.yaml default_charms for this run")
-		fs.Bool("detach", false, "Hand the run to the daemon and return immediately; follow it with magus status --watch")
-		fs.Bool("wait", false, "With --detach, block until the run finishes and exit with its status")
-		fs.Bool("open", false, "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)")
-		fs.Bool("step", false, "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)")
-		fs.String("race", "", "Run the same target repeatedly to surface order-dependent failures")
-		fs.Duration("timeout", 0, "Abort if the run has not finished within this duration (e.g. 5m, 1h30m)")
-		fs.Bool("graph", false, "Render the dependency graph for the affected scope instead of executing")
-		fs.Bool("upstream", false, "With --graph: show dependents instead of dependencies")
-		fs.Int("depth", 0, "With --graph: cap displayed depth (0 = unlimited)")
-		fs.String("explain", "", "Show why <project> is in the affected set instead of executing")
-		fs.Bool("plan", false, "Emit a provider-neutral JSON CI shard plan for the affected set")
-		fs.Int("max-shards", 8, "With --plan: maximum CI shards (-1 = unlimited)")
-		fs.Int("max-parallel-budget", 0, "With --plan: cross-shard concurrency cap; 0 = unlimited")
-		fs.Bool("detail", false, "With --plan: add per-shard detail - the invocation, its spells, the files it declares it writes, and the skills its work routes to")
-		fs.String("bisect", "", "Drive VCS bisect to find the commit that broke <project>")
-		fs.String("good", "", "With --bisect: known-good commit SHA (auto-detected from history when empty)")
-		fs.String("target", "test", "With --bisect: magus target to bisect")
+	Flags: []Flag{
+		{Name: "dry-run", Kind: FlagBool, Doc: "Print what would run without executing"},
+		{Name: "base", Kind: FlagString, Doc: "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)"},
+		{Name: "stdin", Kind: FlagBool, Doc: "Read changed file paths from stdin instead of running a VCS diff"},
+		{Name: "null", Kind: FlagBool, Doc: "With --stdin: expect NUL-separated paths and double-NUL between batches"},
+		{Name: "b", Kind: FlagString, Doc: "Short for --base"},
+		{Name: "no-cache", Kind: FlagBool, Doc: "Force a fresh run even on a cache hit; still refreshes the entry"},
+		{Name: "no-default-charms", Kind: FlagBool, Doc: "Ignore magus.yaml default_charms for this run"},
+		{Name: "detach", Kind: FlagBool, Doc: "Hand the run to the daemon and return immediately; follow it with magus status --watch"},
+		{Name: "wait", Kind: FlagBool, Doc: "With --detach, block until the run finishes and exit with its status"},
+		{Name: "open", Kind: FlagBool, Doc: "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)"},
+		{Name: "step", Kind: FlagBool, Doc: "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)"},
+		{Name: "race", Kind: FlagString, Doc: "Run the same target repeatedly to surface order-dependent failures"},
+		{Name: "timeout", Kind: FlagDuration, Doc: "Abort if the run has not finished within this duration (e.g. 5m, 1h30m)"},
+		{Name: "graph", Kind: FlagBool, Doc: "Render the dependency graph for the affected scope instead of executing"},
+		{Name: "upstream", Kind: FlagBool, Doc: "With --graph: show dependents instead of dependencies"},
+		{Name: "depth", Kind: FlagInt, Doc: "With --graph: cap displayed depth (0 = unlimited)"},
+		{Name: "explain", Kind: FlagString, Doc: "Show why <project> is in the affected set instead of executing"},
+		{Name: "plan", Kind: FlagBool, Doc: "Emit a provider-neutral JSON CI shard plan for the affected set"},
+		{Name: "max-shards", Kind: FlagInt, Default: 8, Doc: "With --plan: maximum CI shards (-1 = unlimited)"},
+		{Name: "max-parallel-budget", Kind: FlagInt, Doc: "With --plan: cross-shard concurrency cap; 0 = unlimited"},
+		{Name: "detail", Kind: FlagBool, Doc: "With --plan: add per-shard detail - the invocation, its spells, the files it declares it writes, and the skills its work routes to"},
+		{Name: "bisect", Kind: FlagString, Doc: "Drive VCS bisect to find the commit that broke <project>"},
+		{Name: "good", Kind: FlagString, Doc: "With --bisect: known-good commit SHA (auto-detected from history when empty)"},
+		{Name: "target", Kind: FlagString, Default: "test", Doc: "With --bisect: magus target to bisect"},
 	},
 	Targets: CommonTargets,
 	Examples: []Example{
@@ -314,18 +311,18 @@ with an id:
 The graph is cache-backed under <cache>/knowledge and only shards whose sources
 changed are rebuilt, so a query is cheap to repeat; --refresh forces a full rebuild.`,
 	Usage: "magus query <terms> [flags]",
-	BuildFlags: func(fs *flag.FlagSet) {
-		fs.Int("budget", 0, "Max nodes in the returned neighborhood (default 50)")
-		fs.String("kind", "", "Restrict matches to these node kinds (comma-separated)")
-		fs.Bool("refresh", false, "Force a full graph rebuild before querying")
-		fs.Bool("global", false, "Query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace")
-		fs.Bool("meta", false, "output <ref>: show the run's identity - descriptor, lineage, cache key, component digests")
-		fs.Bool("attempts", false, "output <ref>: list the ref's stored executions (newest first)")
-		fs.Bool("publish", false, "output <ref>: upload this run's output to the remote cache as a signed bundle")
-		fs.Bool("open", false, "output <ref>: open the captured output in the browser log viewer (delivered privately)")
-		fs.Bool("print", false, "With --open, print the viewer URL instead of launching a browser")
-		fs.String("url", "", "With --open, base URL of the log viewer page (override for a self-hosted mirror)")
-		fs.Bool("secrets", false, "invocation <id>: list only the credential reads (reference and provider, never the value)")
+	Flags: []Flag{
+		{Name: "budget", Kind: FlagInt, Doc: "Max nodes in the returned neighborhood (default 50)"},
+		{Name: "kind", Kind: FlagString, Doc: "Restrict matches to these node kinds (comma-separated)"},
+		{Name: "refresh", Kind: FlagBool, Doc: "Force a full graph rebuild before querying"},
+		{Name: "global", Kind: FlagBool, Doc: "Query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace"},
+		{Name: "meta", Kind: FlagBool, Doc: "output <ref>: show the run's identity - descriptor, lineage, cache key, component digests"},
+		{Name: "attempts", Kind: FlagBool, Doc: "output <ref>: list the ref's stored executions (newest first)"},
+		{Name: "publish", Kind: FlagBool, Doc: "output <ref>: upload this run's output to the remote cache as a signed bundle"},
+		{Name: "open", Kind: FlagBool, Doc: "output <ref>: open the captured output in the browser log viewer (delivered privately)"},
+		{Name: "print", Kind: FlagBool, Doc: "With --open, print the viewer URL instead of launching a browser"},
+		{Name: "url", Kind: FlagString, Doc: "With --open, base URL of the log viewer page (override for a self-hosted mirror)"},
+		{Name: "secrets", Kind: FlagBool, Doc: "invocation <id>: list only the credential reads (reference and provider, never the value)"},
 	},
 	Children: []Command{
 		{Name: "output", Short: "Retrieve one target execution's captured output by reference id"},
@@ -362,9 +359,9 @@ directly: how many nodes can arrive at this one.
 The graph is cache-backed under <cache>/knowledge and only shards whose sources
 changed are rebuilt; --refresh forces a full rebuild.`,
 	Usage: "magus explain <node-id-or-name> [flags]",
-	BuildFlags: func(fs *flag.FlagSet) {
-		fs.Bool("refresh", false, "Force a full graph rebuild before explaining")
-		fs.Bool("global", false, "Resolve across the workspaces registered in config (knowledge.workspaces)")
+	Flags: []Flag{
+		{Name: "refresh", Kind: FlagBool, Doc: "Force a full graph rebuild before explaining"},
+		{Name: "global", Kind: FlagBool, Doc: "Resolve across the workspaces registered in config (knowledge.workspaces)"},
 	},
 	Examples: []Example{
 		{"A target in full", "magus explain target:pkg/api:build"},
@@ -397,9 +394,9 @@ link actually points.
 Each argument is a node ID (target:pkg/foo:build) or a name that resolves to one.
 The graph is cache-backed under <cache>/knowledge; --refresh forces a full rebuild.`,
 	Usage: "magus path <a> <b> [flags]",
-	BuildFlags: func(fs *flag.FlagSet) {
-		fs.Bool("refresh", false, "Force a full graph rebuild before pathfinding")
-		fs.Bool("global", false, "Resolve endpoints across the workspaces registered in config (knowledge.workspaces)")
+	Flags: []Flag{
+		{Name: "refresh", Kind: FlagBool, Doc: "Force a full graph rebuild before pathfinding"},
+		{Name: "global", Kind: FlagBool, Doc: "Resolve endpoints across the workspaces registered in config (knowledge.workspaces)"},
 	},
 	Examples: []Example{
 		{"How are two projects related", "magus path pkg/api pkg/web"},
@@ -445,31 +442,31 @@ Subcommands (the first argument):
            hands it from an ephemeral 127.0.0.1 loopback server (no size limit).`,
 	Usage: "magus graph <deps|export|stats|open> [flags]",
 	Children: []Command{
-		{Name: "deps", Short: "Emit the project dependency DAG (text, json, yaml, dot, mermaid, tree)", BuildFlags: func(fs *flag.FlagSet) {
-			fs.Bool("upstream", false, "Show dependents instead of dependencies")
-			fs.Int("depth", 0, "Cap displayed depth (0 = unlimited)")
-			fs.String("spell", "", "Only projects driven by this spell")
-			fs.String("target", "", "Target whose duration history annotates nodes (default: build)")
+		{Name: "deps", Short: "Emit the project dependency DAG (text, json, yaml, dot, mermaid, tree)", Flags: []Flag{
+			{Name: "upstream", Kind: FlagBool, Doc: "Show dependents instead of dependencies"},
+			{Name: "depth", Kind: FlagInt, Doc: "Cap displayed depth (0 = unlimited)"},
+			{Name: "spell", Kind: FlagString, Doc: "Only projects driven by this spell"},
+			{Name: "target", Kind: FlagString, Doc: "Target whose duration history annotates nodes (default: build)"},
 		}},
-		{Name: "export", Short: "Export the merged knowledge graph (json node-link or graphml)", BuildFlags: func(fs *flag.FlagSet) {
-			fs.Bool("refresh", false, "Force a full graph rebuild before exporting")
-			fs.Bool("global", false, "Union the workspaces registered in config (knowledge.workspaces); node IDs are namespaced by workspace")
-			fs.Bool("reproducible", false, "Omit everything that is not a function of the source tree (locally observed runtime attrs, git history), so two checkouts of one commit export identical bytes")
-			fs.Bool("open", false, "Deliver the graph to the hosted Graph Explorer instead of stdout; it never leaves your machine")
-			fs.Bool("follow", false, "With --open: keep the explorer updating from the running daemon instead of showing a snapshot (needs magus server start)")
-			fs.Bool("targets", false, "With --open: open the target dependency graph instead of the knowledge graph; pass a project path to scope it")
-			fs.Bool("serve", false, "With --open: hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with --targets)")
-			fs.Bool("print", false, "With --open: print the explorer URL to stdout instead of launching a browser")
-			fs.String("url", "https://eli.gladman.cc/magus/console/graph/", "With --open: base URL of the Graph Explorer page (override for a self-hosted mirror)")
-			fs.Bool("static", false, "Deprecated alias for --reproducible")
-			fs.String("select", "", "Export only the neighborhood of a query (same grammar as magus query); required for -o dot and -o mermaid")
-			fs.Int("budget", 50, "Node budget for --select (how many nodes the neighborhood may collect)")
+		{Name: "export", Short: "Export the merged knowledge graph (json node-link or graphml)", Flags: []Flag{
+			{Name: "refresh", Kind: FlagBool, Doc: "Force a full graph rebuild before exporting"},
+			{Name: "global", Kind: FlagBool, Doc: "Union the workspaces registered in config (knowledge.workspaces); node IDs are namespaced by workspace"},
+			{Name: "reproducible", Kind: FlagBool, Doc: "Omit everything that is not a function of the source tree (locally observed runtime attrs, git history), so two checkouts of one commit export identical bytes"},
+			{Name: "open", Kind: FlagBool, Doc: "Deliver the graph to the hosted Graph Explorer instead of stdout; it never leaves your machine"},
+			{Name: "follow", Kind: FlagBool, Doc: "With --open: keep the explorer updating from the running daemon instead of showing a snapshot (needs magus server start)"},
+			{Name: "targets", Kind: FlagBool, Doc: "With --open: open the target dependency graph instead of the knowledge graph; pass a project path to scope it"},
+			{Name: "serve", Kind: FlagBool, Doc: "With --open: hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with --targets)"},
+			{Name: "print", Kind: FlagBool, Doc: "With --open: print the explorer URL to stdout instead of launching a browser"},
+			{Name: "url", Kind: FlagString, Default: "https://eli.gladman.cc/magus/console/graph/", Doc: "With --open: base URL of the Graph Explorer page (override for a self-hosted mirror)"},
+			{Name: "static", Kind: FlagBool, Doc: "Deprecated alias for --reproducible"},
+			{Name: "select", Kind: FlagString, Doc: "Export only the neighborhood of a query (same grammar as magus query); required for -o dot and -o mermaid"},
+			{Name: "budget", Kind: FlagInt, Default: 50, Doc: "Node budget for --select (how many nodes the neighborhood may collect)"},
 		}},
-		{Name: "stats", Short: "Report the knowledge graph's shape: god nodes, orphans, doc coverage", BuildFlags: func(fs *flag.FlagSet) {
-			fs.String("kind", "", "Scope every section to one node kind (spell, target, doc, ...)")
-			fs.Bool("refresh", false, "Force a full graph rebuild first")
-			fs.Bool("global", false, "Union the workspaces registered in config (knowledge.workspaces) before computing stats")
-			fs.Bool("symbols", false, "Include the lazily-loaded symbol shards in the stats; excluded by default because they can dwarf the domain graph")
+		{Name: "stats", Short: "Report the knowledge graph's shape: god nodes, orphans, doc coverage", Flags: []Flag{
+			{Name: "kind", Kind: FlagString, Doc: "Scope every section to one node kind (spell, target, doc, ...)"},
+			{Name: "refresh", Kind: FlagBool, Doc: "Force a full graph rebuild first"},
+			{Name: "global", Kind: FlagBool, Doc: "Union the workspaces registered in config (knowledge.workspaces) before computing stats"},
+			{Name: "symbols", Kind: FlagBool, Doc: "Include the lazily-loaded symbol shards in the stats; excluded by default because they can dwarf the domain graph"},
 		}},
 	},
 	Examples: []Example{
@@ -503,11 +500,11 @@ with a double-NUL, matching the --null flag of magus affected --stdin.
 On startup an --all sentinel batch is emitted (unless --initial=false) to
 trigger a full initial build in the downstream magus affected --stdin.`,
 	Usage: "magus watch [flags]",
-	BuildFlags: func(fs *flag.FlagSet) {
-		fs.Duration("debounce", 200*time.Millisecond, "Quiet window before emitting a batch")
-		fs.Bool("initial", true, "Emit an --all batch on startup before watching")
-		fs.Bool("null", false, "NUL-separate paths; double-NUL between batches")
-		fs.String("backend", "fsnotify", "Notification backend: fsnotify or poll")
+	Flags: []Flag{
+		{Name: "debounce", Kind: FlagDuration, Default: 200 * time.Millisecond, Doc: "Quiet window before emitting a batch"},
+		{Name: "initial", Kind: FlagBool, Default: true, Doc: "Emit an --all batch on startup before watching"},
+		{Name: "null", Kind: FlagBool, Doc: "NUL-separate paths; double-NUL between batches"},
+		{Name: "backend", Kind: FlagString, Default: "fsnotify", Doc: "Notification backend: fsnotify or poll"},
 	},
 	Examples: []Example{
 		{"Continuous build pipeline", "magus watch | magus affected --stdin build"},
@@ -529,15 +526,15 @@ When --watch is non-zero, status polls and reprints at that interval. On a
 TTY the screen is cleared between reprints; piped output appends each
 snapshot on its own line for log capture.`,
 	Usage: "magus status [flags]",
-	BuildFlags: func(fs *flag.FlagSet) {
-		fs.Duration("watch", 0, "Poll and reprint at this interval (minimum 15s; 0 means one-shot)")
-		fs.Duration("W", 0, "Short for --watch")
-		fs.Bool("compact", false, "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)")
-		fs.Bool("c", false, "Short for --compact")
-		fs.Bool("symbols", false, "Include the expensive symbol-index freshness scan")
-		fs.String("socket", "", "Adopt server address as unix:// URL or bare path; default: auto-detect from MAGUS_DAEMON_SOCKET or scan sock dir")
-		fs.String("probe", "", "Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)")
-		fs.String("workspace", "", "Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)")
+	Flags: []Flag{
+		{Name: "watch", Kind: FlagDuration, Doc: "Poll and reprint at this interval (minimum 15s; 0 means one-shot)"},
+		{Name: "W", Kind: FlagDuration, Doc: "Short for --watch"},
+		{Name: "compact", Kind: FlagBool, Doc: "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)"},
+		{Name: "c", Kind: FlagBool, Doc: "Short for --compact"},
+		{Name: "symbols", Kind: FlagBool, Doc: "Include the expensive symbol-index freshness scan"},
+		{Name: "socket", Kind: FlagString, Doc: "Adopt server address as unix:// URL or bare path; default: auto-detect from MAGUS_DAEMON_SOCKET or scan sock dir"},
+		{Name: "probe", Kind: FlagString, Doc: "Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)"},
+		{Name: "workspace", Kind: FlagString, Doc: "Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)"},
 	},
 	Examples: []Example{
 		{"One-shot status snapshot", "magus status"},
@@ -634,8 +631,8 @@ check for the file with [ -S "$socket" ] before starting one.`,
 		{Name: "start", Short: "Start a persistent daemon (auto-backgrounds by default; --foreground blocks)"},
 		{Name: "stop", Short: "Send a graceful shutdown request to a running daemon"},
 	},
-	BuildFlags: func(fs *flag.FlagSet) {
-		fs.Bool("foreground", false, "Run in the foreground and block, instead of auto-backgrounding (server start)")
+	Flags: []Flag{
+		{Name: "foreground", Kind: FlagBool, Doc: "Run in the foreground and block, instead of auto-backgrounding (server start)"},
 	},
 	Examples: []Example{
 		{"Start the daemon (auto-backgrounds)", "magus server start"},
@@ -720,11 +717,11 @@ The "spell" subcommand scaffolds a new spell instead of bootstrapping a
 workspace: "magus init spell <name>" writes spells/<name>/spell.buzz with the
 mgs_ contract stubbed, each function documented, and a runnable test block.`,
 	Usage: "magus init [flags]",
-	BuildFlags: func(fs *flag.FlagSet) {
-		fs.Bool("global", false, "Write only the global config; skip the workspace bootstrap")
-		fs.Bool("local", false, "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/")
-		fs.Bool("force", false, "Overwrite an existing config file")
-		fs.String("vcs", "", "VCS to wire the merge driver for (git|hg); prompts when omitted on a TTY")
+	Flags: []Flag{
+		{Name: "global", Kind: FlagBool, Doc: "Write only the global config; skip the workspace bootstrap"},
+		{Name: "local", Kind: FlagBool, Doc: "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/"},
+		{Name: "force", Kind: FlagBool, Doc: "Overwrite an existing config file"},
+		{Name: "vcs", Kind: FlagString, Doc: "VCS to wire the merge driver for (git|hg); prompts when omitted on a TTY"},
 	},
 	Examples: []Example{
 		{"Bootstrap the current repo", "magus init"},
@@ -765,9 +762,9 @@ the configuration. A workspace with no index has no symbols to report,
 and says so rather than falling back to a text search - a grep result
 and an index result answer different questions, and quietly substituting
 one for the other is how a wrong answer looks right.`,
-	BuildFlags: func(fs *flag.FlagSet) {
-		fs.Bool("refresh", false, "Re-ingest the SCIP index before answering")
-		fs.Bool("occurrences", false, "Every exact source range, uncapped and verified against the tree - the view a mechanical edit needs, where the default line list is capped and describes fan-in")
+	Flags: []Flag{
+		{Name: "refresh", Kind: FlagBool, Doc: "Re-ingest the SCIP index before answering"},
+		{Name: "occurrences", Kind: FlagBool, Doc: "Every exact source range, uncapped and verified against the tree - the view a mechanical edit needs, where the default line list is capped and describes fan-in"},
 	},
 	Usage: "magus refs <symbol> [flags]",
 	Examples: []Example{
@@ -795,8 +792,8 @@ ctx.modifiesExistingFiles, which clean never removes. Preview with the global
 which is what forces a genuinely full rebuild: removing the files alone
 leaves the entries that would replay them.`,
 	Usage: "magus clean [flags] [project...]",
-	BuildFlags: func(fs *flag.FlagSet) {
-		fs.Bool("cache", false, "Also invalidate magus cache entries for the selected projects")
+	Flags: []Flag{
+		{Name: "cache", Kind: FlagBool, Doc: "Also invalidate magus cache entries for the selected projects"},
 	},
 	Examples: []Example{
 		{"Preview what would be removed", "magus clean --dry-run"},
@@ -833,9 +830,9 @@ clone would settle silently, and why resolve exists as the bulk counterpart.
 
 resolve works on git, Mercurial and Jujutsu. Only --against is git-only: merge the
 base in yourself on the others, then run resolve.`,
-	BuildFlags: func(fs *flag.FlagSet) {
-		fs.String("against", "", "Merge this ref first, then settle what it conflicts with (vcs resolve)")
-		fs.Bool("untracked", false, "Also stage undeclared files (vcs add)")
+	Flags: []Flag{
+		{Name: "against", Kind: FlagString, Doc: "Merge this ref first, then settle what it conflicts with (vcs resolve)"},
+		{Name: "untracked", Kind: FlagBool, Doc: "Also stage undeclared files (vcs add)"},
 	},
 	Usage: "magus vcs <add|resolve|merge-driver> [flags]",
 	Children: []Command{
@@ -869,10 +866,10 @@ verify is the maintenance verb: it reports entries that are malformed, stale,
 or that link to something no longer there. The same entries are reachable
 through the magus_memory MCP tool and the console, so a journal written from
 the CLI is readable by an agent without either side learning a new format.`,
-	BuildFlags: func(fs *flag.FlagSet) {
-		fs.String("type", "", "Entry type: pointer, decision, or plan (memory put)")
-		fs.String("status", "", "Lifecycle label, e.g. accepted, active, done, stale (memory put)")
-		fs.String("body", "", "Short why/caption, decision and plan only (memory put)")
+	Flags: []Flag{
+		{Name: "type", Kind: FlagString, Doc: "Entry type: pointer, decision, or plan (memory put)"},
+		{Name: "status", Kind: FlagString, Doc: "Lifecycle label, e.g. accepted, active, done, stale (memory put)"},
+		{Name: "body", Kind: FlagString, Doc: "Short why/caption, decision and plan only (memory put)"},
 	},
 	Usage: "magus memory <ls|get|put|delete|verify> [flags]",
 	Children: []Command{
@@ -949,13 +946,13 @@ magus does not. The most common one is "argument N must be labeled".
 -t runs a file's test blocks and reports pass or fail, which is how Buzz
 code in this ecosystem is tested. The lsp subcommand speaks the Language
 Server Protocol over stdio for an editor integration.`,
-	BuildFlags: func(fs *flag.FlagSet) {
-		fs.String("e", "", "Execute code given on the command line instead of a file")
-		fs.Bool("t", false, `Run the file's test "..." {} blocks and report pass/fail`)
-		fs.Bool("test", false, "Alias for -t")
-		fs.Bool("embedded", false, "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine")
-		fs.Bool("no-autoload", false, "Start the REPL without executing the magusfile")
-		fs.String("C", "", "Working directory for the REPL's import resolution (default: cwd)")
+	Flags: []Flag{
+		{Name: "e", Kind: FlagString, Doc: "Execute code given on the command line instead of a file"},
+		{Name: "t", Kind: FlagBool, Doc: `Run the file's test "..." {} blocks and report pass/fail`},
+		{Name: "test", Kind: FlagBool, Doc: "Alias for -t"},
+		{Name: "embedded", Kind: FlagBool, Doc: "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine"},
+		{Name: "no-autoload", Kind: FlagBool, Doc: "Start the REPL without executing the magusfile"},
+		{Name: "C", Kind: FlagString, Doc: "Working directory for the REPL's import resolution (default: cwd)"},
 	},
 	Usage: "magus buzz [file|-|lsp] [flags]",
 	Children: []Command{
@@ -995,12 +992,12 @@ paths-relative-to-<dir> case. Absolute destinations are refused unless
 		{Name: "install", Short: "Render the embedded skills and write or stream them into named destinations"},
 		{Name: "sample", Short: "Print a starter AGENTS.md to stdout; never writes a file"},
 	},
-	BuildFlags: func(fs *flag.FlagSet) {
-		fs.String("dir", ".", "Repo directory to install into (agent install)")
-		fs.Bool("force", false, "Overwrite existing installed skill files (agent install)")
-		fs.Bool("prune", false, "Also remove installed skills this binary no longer ships; without it they are reported and left in place, and only skills magus wrote are ever candidates (agent install)")
-		fs.Bool("tar", false, "Stream a tar archive to stdout instead of writing files (agent install)")
-		fs.Bool("global", false, "Allow absolute destination paths in write mode (agent install)")
+	Flags: []Flag{
+		{Name: "dir", Kind: FlagString, Default: ".", Doc: "Repo directory to install into (agent install)"},
+		{Name: "force", Kind: FlagBool, Doc: "Overwrite existing installed skill files (agent install)"},
+		{Name: "prune", Kind: FlagBool, Doc: "Also remove installed skills this binary no longer ships; without it they are reported and left in place, and only skills magus wrote are ever candidates (agent install)"},
+		{Name: "tar", Kind: FlagBool, Doc: "Stream a tar archive to stdout instead of writing files (agent install)"},
+		{Name: "global", Kind: FlagBool, Doc: "Allow absolute destination paths in write mode (agent install)"},
 	},
 	Examples: []Example{
 		{"Install into a repo's Claude skills", "magus agent install .claude/skills"},
@@ -1036,11 +1033,11 @@ is an opaque label the caller chooses rather than a set magus knows: a magus
 that enumerated hosts would need a release per host, and a wrapper that
 cannot extract a session id must still be able to get a verdict.`,
 	Usage: "magus hook [--path] [flags]",
-	BuildFlags: func(fs *flag.FlagSet) {
-		fs.Bool("path", false, "Judge the input as a file path an edit is about to write, not as a shell command")
-		fs.String("agent-name", "", "Name of the agent host this invocation came from (attribution only)")
-		fs.String("session", "", "The host's own session id for this invocation")
-		fs.String("event", "", "The host's hook event name (e.g. PreToolUse)")
+	Flags: []Flag{
+		{Name: "path", Kind: FlagBool, Doc: "Judge the input as a file path an edit is about to write, not as a shell command"},
+		{Name: "agent-name", Kind: FlagString, Doc: "Name of the agent host this invocation came from (attribution only)"},
+		{Name: "session", Kind: FlagString, Doc: "The host's own session id for this invocation"},
+		{Name: "event", Kind: FlagString, Doc: "The host's hook event name (e.g. PreToolUse)"},
 	},
 	Examples: []Example{
 		{"Judge a shell command", "printf '%s' 'go build ./...' | magus hook"},
@@ -1064,9 +1061,9 @@ knows nothing about magus's event schema can still raise a well-formed one.
 raises an operating-system notification, which is the part a human notices;
 without it the event is recorded and nothing pops up.`,
 	Usage: "magus notify [--outcome <vocab>] [--desktop]",
-	BuildFlags: func(fs *flag.FlagSet) {
-		fs.String("outcome", "", "Outcome vocabulary for the event")
-		fs.Bool("desktop", false, "Also raise an OS notification")
+	Flags: []Flag{
+		{Name: "outcome", Kind: FlagString, Doc: "Outcome vocabulary for the event"},
+		{Name: "desktop", Kind: FlagBool, Doc: "Also raise an OS notification"},
 	},
 	Examples: []Example{
 		{"Raise a permission prompt on the desktop", "printf '%s\\n' 'needs approval' | magus notify --outcome permission --desktop"},

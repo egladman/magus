@@ -36,6 +36,7 @@
 // Run any subcommand with -h/--help for its own flag list.
 //
 //go:generate go run ../magus-utils config -config ../../internal/config/config.go -out gen/config_flags.go -fields-out ../../schema/gen/fields.go -bind-out gen/bind.go -apply-env-out ../../internal/config/gen/env.go
+//go:generate go run ../magus-utils cliflags -out gen/cli_flags.go
 package main
 
 import (
@@ -787,7 +788,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Global flags (work before or after the subcommand):")
 	fmt.Fprintln(os.Stderr, "  --help, -h           show help (top-level or subcommand)")
-	fmt.Fprintln(os.Stderr, "  --output, -o <fmt>   output format (text|json|yaml|name|template=<go-template>)")
+	fmt.Fprintln(os.Stderr, "  --output, -o <fmt>   output format ("+FormatChoices()+")")
 	fmt.Fprintln(os.Stderr, "  -q, --quiet          suppress progress; only print errors + dump failing project output")
 	fmt.Fprintln(os.Stderr, "  -s, --silent         like -q, but bound failing dumps (tail + log path) and bubble up only 'magus:notice:' lines")
 	fmt.Fprintln(os.Stderr, "  -v, -vv, -vvv        detail (-v), plus live target output (-vv), plus tracing (-vvv)")

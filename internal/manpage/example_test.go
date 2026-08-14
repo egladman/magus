@@ -1,7 +1,6 @@
 package manpage
 
 import (
-	"flag"
 	"fmt"
 )
 
@@ -13,8 +12,8 @@ func ExampleCommand() {
 		Name:  "run",
 		Short: "run a target for selected projects",
 		Usage: "magus run <target> [flags] [project...]",
-		BuildFlags: func(fs *flag.FlagSet) {
-			fs.Bool("dry-run", false, "print what would run without executing")
+		Flags: []Flag{
+			{Name: "dry-run", Kind: FlagBool, Doc: "print what would run without executing"},
 		},
 		Examples: []Example{
 			{Comment: "Build all projects", Command: "magus run build"},
