@@ -1,4 +1,12 @@
-package buzz_test
+// The buzz engine and the magus host bindings, exercised together.
+//
+// This lives in bindings rather than beside the engine because it needs BOTH: the
+// engine registered and this package's init() wiring of magus.project and friends.
+// interp imports engine/buzz, and bindings imports interp, so a test in either of
+// those closes a cycle - bindings is the one package above both that neither imports
+// back. It used to sit in engine/buzz as `package buzz_test` for exactly that reason.
+
+package bindings
 
 import (
 	"context"
@@ -7,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/interp"
-	_ "github.com/egladman/magus/internal/interp/bindings" // init() wires the magus host bindings (magus.project, etc.)
 	"github.com/egladman/magus/internal/interp/engine"
 	_ "github.com/egladman/magus/internal/interp/engine/buzz"
 	"github.com/stretchr/testify/assert"
@@ -122,7 +129,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 type dialect int
 
 const (
-	buzz dialect = iota
+	dialectBuzz dialect = iota
 )
 
 // enginesUnderTest lists the registered engine IDs to benchmark, paired with
@@ -132,7 +139,7 @@ var enginesUnderTest = []struct {
 	id      string
 	dialect dialect
 }{
-	{"buzz", buzz},
+	{"buzz", dialectBuzz},
 }
 
 // src is a workload's source: an optional setup executed once, and the hot
@@ -150,37 +157,37 @@ var workloads = []workload{
 	{
 		name: "Fib", // recursive fib(30): call/return, int arithmetic, branching
 		src: map[dialect]src{
-			buzz: {setup: "fun fib(n) int { if (n <= 1) { return n; } return fib(n - 1) + fib(n - 2); }", hot: "fib(30);"},
+			dialectBuzz: {setup: "fun fib(n) int { if (n <= 1) { return n; } return fib(n - 1) + fib(n - 2); }", hot: "fib(30);"},
 		},
 	},
 	{
 		name: "LoopSum", // tight while-loop summing 1e6 ints
 		src: map[dialect]src{
-			buzz: {hot: "var sum = 0; var i = 0; while (i < 1000000) { sum = sum + i; i = i + 1; }"},
+			dialectBuzz: {hot: "var sum = 0; var i = 0; while (i < 1000000) { sum = sum + i; i = i + 1; }"},
 		},
 	},
 	{
 		name: "ForeachList", // iterate a 1000-element list
 		src: map[dialect]src{
-			buzz: {setup: "var items = mut []; var i = 0; while (i < 1000) { items.append(i); i = i + 1; }", hot: "var sum = 0; foreach (x in items) { sum = sum + x; }"},
+			dialectBuzz: {setup: "var items = mut []; var i = 0; while (i < 1000) { items.append(i); i = i + 1; }", hot: "var sum = 0; foreach (x in items) { sum = sum + x; }"},
 		},
 	},
 	{
 		name: "ForeachMap", // iterate a 10-entry map
 		src: map[dialect]src{
-			buzz: {setup: `final m = {"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8,"i":9,"j":10};`, hot: "var sum = 0; foreach (k, v in m) { sum = sum + v; }"},
+			dialectBuzz: {setup: `final m = {"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8,"i":9,"j":10};`, hot: "var sum = 0; foreach (k, v in m) { sum = sum + v; }"},
 		},
 	},
 	{
 		name: "StringInterp", // build an interpolated string 100x
 		src: map[dialect]src{
-			buzz: {hot: `var s = ""; var i = 0; while (i < 100) { s = "item {i} of 100"; i = i + 1; }`},
+			dialectBuzz: {hot: `var s = ""; var i = 0; while (i < 100) { s = "item {i} of 100"; i = i + 1; }`},
 		},
 	},
 	{
 		name: "Call", // overhead of one trivial function call
 		src: map[dialect]src{
-			buzz: {setup: "fun add(a, b) int { return a + b; }", hot: "add(1, 2);"},
+			dialectBuzz: {setup: "fun add(a, b) int { return a + b; }", hot: "add(1, 2);"},
 		},
 	},
 }
