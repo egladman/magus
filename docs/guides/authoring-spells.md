@@ -75,12 +75,12 @@ the split is not arbitrary:
 
 That single fact decides which members you may call:
 
-|            | members                                                                                          | in a spell                                                                                                                               |
-| ---------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| in-process | `ls`, `affected`, `projectGraph`, `where`, `insight`, `insightMarkdown`                          | **raise [MGS1022](../reference/codes/magusfile/MGS1022.md)** - they read the workspace already open on the context, and there is not one |
-| declaring  | `project`, `cache.remote`, `ci.provider`                                                         | **raise MGS1022** - only a magusfile evaluation has the registry to declare into                                                         |
-| forking    | `cmd`, `run`, `describe`, `doctor`, `describeFile`, `affectedImpact`                             | **work** - each spawns a nested magus that discovers and loads its own workspace                                                         |
-| either     | `targets`                                                                                        | **work** - serves the workspace on the context when there is one, forks a nested magus when there is not                                 |
+|            | members                                                                 | in a spell                                                                                                                               |
+| ---------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| in-process | `ls`, `affected`, `projectGraph`, `where`, `insight`, `insightMarkdown` | **raise [MGS1022](../reference/codes/magusfile/MGS1022.md)** - they read the workspace already open on the context, and there is not one |
+| declaring  | `project`, `cache.remote`, `ci.provider`                                | **raise MGS1022** - only a magusfile evaluation has the registry to declare into                                                         |
+| forking    | `cmd`, `run`, `describe`, `doctor`, `describeFile`, `affectedImpact`    | **work** - each spawns a nested magus that discovers and loads its own workspace                                                         |
+| either     | `targets`                                                               | **work** - serves the workspace on the context when there is one, forks a nested magus when there is not                                 |
 
 So the rule is: from a spell, fork. `magus\cmd("ls", args: ["-o", "json"])` answers what
 `magus\ls()` would have, at the cost of a subprocess.
