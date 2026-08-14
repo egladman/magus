@@ -250,7 +250,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES",
 		Flag:     fieldtype.FlagNames{Long: "daemon-maintenance-rotate-activities"},
 		Kind:     fieldtype.KindDuration,
-		Usage:    "MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES",
+		Usage:    "MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES: RotateActivities is how often the daemon trims the activity trail.",
 	},
 	{
 		GoPath:   "Daemon.Maintenance.RotateLogs",

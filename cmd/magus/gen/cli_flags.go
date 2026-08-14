@@ -177,10 +177,14 @@ const (
 	FlagHookAgentName = "agent-name"
 	// hook: --event
 	FlagHookEvent = "event"
+	// hook: --observe
+	FlagHookObserve = "observe"
 	// hook: --path
 	FlagHookPath = "path"
 	// hook: --session
 	FlagHookSession = "session"
+	// hook: --transcript
+	FlagHookTranscript = "transcript"
 	// init: --force
 	FlagInitForce = "force"
 	// init: --global
@@ -950,18 +954,22 @@ func BindAgent(fs *flag.FlagSet) *AgentFlags {
 
 // HookFlags are the flags declared for `magus hook`.
 type HookFlags struct {
-	Path      bool   // --path
-	AgentName string // --agent-name
-	Session   string // --session
-	Event     string // --event
+	Path       bool   // --path
+	Observe    bool   // --observe
+	AgentName  string // --agent-name
+	Session    string // --session
+	Transcript string // --transcript
+	Event      string // --event
 }
 
 // BindHook registers `magus hook`'s flags on fs and returns the destination.
 func BindHook(fs *flag.FlagSet) *HookFlags {
 	var f HookFlags
 	fs.BoolVar(&f.Path, FlagHookPath, false, "Judge the input as a file path an edit is about to write, not as a shell command")
+	fs.BoolVar(&f.Observe, FlagHookObserve, false, "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass")
 	fs.StringVar(&f.AgentName, FlagHookAgentName, "", "Name of the agent host this invocation came from (attribution only)")
 	fs.StringVar(&f.Session, FlagHookSession, "", "The host's own session id for this invocation")
+	fs.StringVar(&f.Transcript, FlagHookTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
 	fs.StringVar(&f.Event, FlagHookEvent, "", "The host's hook event name (e.g. PreToolUse)")
 	return &f
 }

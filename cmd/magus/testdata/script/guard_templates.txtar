@@ -109,9 +109,50 @@ exec sh $GUARD_TEMPLATES/cursor-guard.sh
 ! stdout .
 stderr 'DECLARED OUTPUT|magus:'
 
+# --- magus-guard-observe.sh: the verdict-free one ------------------------------
+#
+# It declares no guard coverage, so the contract gate above owes it no case and
+# would never have asked for one. That exemption is exactly how an untested shell
+# artifact ships: the OpenCode plugin in the header note declared a correct stance
+# and was still broken, because nothing ran it. These cases run it.
+#
+# There is no `# case: <surface>/<decision>` label on purpose. An observation is
+# not a verdict on a surface, and labeling it would make TestTransportCorpusCovers-
+# TheContract count a cell the guard contract does not have.
+
+# It records a read and says NOTHING to the host. A read is not a decision, so any
+# stdout here would be a response the host has to interpret on every file it opens.
+stdin observe-read.json
+exec sh $GUARD_TEMPLATES/magus-guard-observe.sh
+! stdout .
+! stderr .
+
+# A payload it cannot parse is dropped silently. Under `set -e` this exited non-zero
+# with jq's parse error on stderr, on EVERY read - and some hosts read a non-zero
+# pre-tool hook as "block this call", which would stop the agent reading anything.
+stdin observe-garbage.json
+exec sh $GUARD_TEMPLATES/magus-guard-observe.sh
+! stdout .
+! stderr .
+
+# A search event names no read path, so there is nothing to record and nothing to
+# say. Recording the event whole here would put the query text in the trail.
+stdin observe-search.json
+exec sh $GUARD_TEMPLATES/magus-guard-observe.sh
+! stdout .
+! stderr .
+
 # --- fail-open: a missing magus must degrade the way each template promises ---
 
 env GUARD_MAGUS_BIN=$WORK/nonexistent-magus
+
+# The observer stays silent and exits 0 when magus is absent. Unlike a guard, it
+# enforces nothing, so an announcement per read would report only that an optional
+# record was skipped.
+stdin observe-read.json
+exec sh $GUARD_TEMPLATES/magus-guard-observe.sh
+! stdout .
+! stderr .
 
 # The command template announces itself. An unguarded session you know about beats
 # one you do not.
@@ -168,6 +209,12 @@ magus:
 ---
 
 Prose a person wrote.
+-- observe-read.json --
+{"session_id": "s1", "transcript_path": "/tmp/t.jsonl", "tool_name": "Read", "tool_input": {"file_path": "README.md"}}
+-- observe-garbage.json --
+not json at all
+-- observe-search.json --
+{"session_id": "s1", "tool_name": "Grep", "tool_input": {"pattern": "AWS_SECRET_ACCESS_KEY", "path": "internal/"}}
 -- cursor-shell-deny.json --
 {"command": "git stash", "cwd": ".", "sandbox": false}
 -- cursor-shell-pass.json --

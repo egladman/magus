@@ -1135,6 +1135,120 @@ func TestHookCmd_AttributionIsOptional(t *testing.T) {
 	assert.JSONEq(t, `{"schema_version":1,"tool":"shell.command","command":"ls"}`, string(body))
 }
 
+// TestHookCmd_ObserveRecordsWithoutJudging pins what --observe is for. AGENTS.md is the exact
+// path TestHookCmd_PathAndEmptyInputActivity gets an ADVISE for as a write, so a pass here is
+// specifically the observation being exempted from the write rules rather than the rule
+// failing to fire. Without it, a hook wired to a host's read tool would advise "you are
+// editing a declared output" at a file the agent only opened.
+func TestHookCmd_ObserveRecordsWithoutJudging(t *testing.T) {
+	global = globalFlags{}
+	dir := t.TempDir()
+	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
+	var out bytes.Buffer
+	require.NoError(t, hookCmd(ctx, strings.NewReader("AGENTS.md"), &out, []string{"--observe", "-o", "name"}))
+	assert.Equal(t, "pass\n", out.String())
+
+	events, err := trail.ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	got := events[0]
+	assert.Equal(t, "file.read", got.Action, "a reach is recorded under its own label, not as a write")
+
+	// "observed", not "guard: pass". The trail already distinguishes the two, and recording
+	// a verdict here would have every read claim the guard ran and cleared it - the exact
+	// conflation --observe exists to remove. The wire verdict the host reads is still pass.
+	assert.Equal(t, "observed", got.Preview)
+
+	body, err := trail.ReadBlob(dir, got.RequestRef)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"schema_version":1,"tool":"file.read","path":"AGENTS.md"}`, string(body))
+	body, err = trail.ReadBlob(dir, got.ResponseRef)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"schema_version":1,"decision":""}`, string(body))
+}
+
+// TestHookCmd_ObserveOutranksPath holds the precedence the wrapper depends on: a host whose
+// read event carries a file_path will send --observe alongside the envelope that sets --path,
+// and the observation must win. The reverse would silently restore the false advisory.
+func TestHookCmd_ObserveOutranksPath(t *testing.T) {
+	global = globalFlags{}
+	dir := t.TempDir()
+	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
+	var out bytes.Buffer
+	require.NoError(t, hookCmd(ctx, strings.NewReader("AGENTS.md"), &out, []string{"--path", "--observe", "-o", "name"}))
+	assert.Equal(t, "pass\n", out.String())
+
+	events, err := trail.ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "file.read", events[0].Action)
+}
+
+// TestHookCmd_RecordsTranscriptPath covers the session-to-transcript link. The id groups a
+// session's events; the path is what a reader follows to see the rest. magus records the
+// POINTER and never opens the file, which is what keeps the trail paths-and-timings.
+func TestHookCmd_RecordsTranscriptPath(t *testing.T) {
+	global = globalFlags{}
+	dir := t.TempDir()
+	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
+	var out bytes.Buffer
+	envelope := `{"hook_event_name":"PreToolUse","session_id":"s1","transcript_path":"/tmp/t.jsonl","tool_input":{"command":"ls"}}`
+	require.NoError(t, hookCmd(ctx, strings.NewReader(envelope), &out, []string{"-o", "name"}))
+	assert.Equal(t, "pass\n", out.String())
+
+	events, err := trail.ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	got := events[0]
+	assert.Equal(t, "s1", got.Session)
+
+	body, err := trail.ReadBlob(dir, got.RequestRef)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"schema_version":1,"session":"s1","transcript":"/tmp/t.jsonl","event":"PreToolUse","tool":"shell.command","command":"ls"}`, string(body))
+}
+
+// TestHookCmd_TranscriptFlagRecordsThePointer covers the FLAG path, which is the one the
+// shipped observe template actually uses. That template extracts the path with jq and pipes
+// plain text rather than the whole event, so nothing about the envelope is available to it -
+// without the flag the transcript link exists only for hosts that pipe raw JSON, which is
+// none of the ones magus ships a template for.
+func TestHookCmd_TranscriptFlagRecordsThePointer(t *testing.T) {
+	global = globalFlags{}
+	dir := t.TempDir()
+	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
+	var out bytes.Buffer
+	require.NoError(t, hookCmd(ctx, strings.NewReader("internal/trail/trail.go"), &out,
+		[]string{"--observe", "--agent-name", "claude-code", "--session", "s9", "--transcript", "/tmp/t.jsonl", "--event", "PreToolUse", "-o", "name"}))
+	assert.Equal(t, "pass\n", out.String())
+
+	events, err := trail.ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	got := events[0]
+	assert.Equal(t, "file.read", got.Action)
+	assert.Equal(t, "s9", got.Session)
+
+	body, err := trail.ReadBlob(dir, got.RequestRef)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"schema_version":1,"host":"claude-code","session":"s9","transcript":"/tmp/t.jsonl","event":"PreToolUse","tool":"file.read","path":"internal/trail/trail.go"}`, string(body))
+}
+
+// TestHookCmd_ObserveWithNoInputRecordsNothing: a wrapper whose host event carried no path
+// has nothing to report, and an observation with no subject is dropped like any other empty
+// one rather than being invented as "." - which would claim a reach the host never described.
+func TestHookCmd_ObserveWithNoInputRecordsNothing(t *testing.T) {
+	global = globalFlags{}
+	dir := t.TempDir()
+	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
+	var out bytes.Buffer
+	require.NoError(t, hookCmd(ctx, strings.NewReader(""), &out, []string{"--observe", "-o", "name"}))
+	assert.Equal(t, "pass\n", out.String())
+
+	events, err := trail.ReadRecent(dir, 1)
+	require.NoError(t, err)
+	assert.Empty(t, events)
+}
+
 func TestAgentSampleDocPlainASCIISelfContained(t *testing.T) {
 	doc := agentSampleDoc()
 	assert.Contains(t, doc, "# AGENTS.md")

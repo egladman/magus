@@ -304,6 +304,85 @@ fi
 printf '%s' "$verdict"
 ```
 
+## `magus-guard-observe.sh`
+
+The one template that carries no verdict. Wire it to the tools that only LOOK -
+your host's read equivalent - and it records the path the agent reached without
+judging it. It prints nothing and always exits 0.
+
+Do not point a read tool at `magus-guard-path.sh` instead. A read event carries
+a file path just as a write event does, so the write rules would advise "you are
+editing a declared output" at a file the agent merely opened. `--observe` is
+what separates the two, and only this wrapper can set it, because only it knows
+which of your host's tools look.
+
+It declares no `magus-guard-coverage` line, and that absence is deliberate: a
+coverage declaration states how much of a verdict a host can carry on a guard
+surface, and this file carries no verdict on no surface.
+
+```sh
+#!/usr/bin/env sh
+# magus observe hook: records ONE path an agent reached, and judges nothing.
+#
+# This file is the source of truth. The docs site embeds it, magus's own
+# repository invokes it, and you can download it and do the same. POSIX sh, no
+# bashisms; nothing in it is magus-internal.
+#
+# Contract: reads the host's event as JSON on stdin, selects the path with jq,
+# and pipes it into `magus hook --observe`. Override any of the variables below:
+#
+#   HOST_EVENT_PATH  dot-path to the read path inside your host's event
+#   HOST_SESSION_PATH  dot-path to the session id inside your host's event
+#   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
+#   GUARD_AGENT_NAME  the agent host name recorded alongside the observation
+#   GUARD_MAGUS_BIN  path to the binary, when it is not on PATH
+#
+# magus-guard-template: 4
+
+# NO `set -e`, deliberately. Under it a jq that is missing (127) or handed a
+# payload it cannot parse aborts mid-way on EVERY read, and a PreToolUse hook's
+# exit status is not advisory on every host - some treat a specific non-zero
+# code as "block this tool call". An optional record must never be able to stop
+# the agent from reading, so every failure is swallowed and it ends at exit 0.
+
+[ -n "$HOST_EVENT_PATH" ] || HOST_EVENT_PATH='tool_input.file_path'
+[ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
+[ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
+[ -n "$GUARD_AGENT_NAME" ] || GUARD_AGENT_NAME='claude-code'
+[ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
+
+# An absent observer is SILENT, where an absent guard is loud. Nothing is
+# unenforced here - there is no rule - so announcing a missing magus would be a
+# per-read interruption reporting that an optional record was not written.
+if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
+  exit 0
+fi
+
+# One drain of stdin, selected from more than once. The path is extracted rather
+# than piping the whole event through, because a payload magus does not
+# recognize as an envelope is judged as the literal text it is - and for a
+# search carrying a pattern but no path, that would record the entire event,
+# query text included, as the thing the agent reached.
+event=$(cat)
+path=$(printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH // empty" 2>/dev/null)
+
+# Nothing to record is not a failure. This gate comes BEFORE the remaining
+# selections so the common no-op case costs one jq rather than three.
+[ -n "$path" ] || exit 0
+
+session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty" 2>/dev/null)
+transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty" 2>/dev/null)
+
+# A magus too old for --observe rejects the flag and exits non-zero. That is
+# reported through the trail's own absence rather than through the session: if
+# reads are missing from `magus activity`, the binary is too old.
+printf '%s' "$path" | "$GUARD_MAGUS_BIN" hook --observe \
+  --agent-name "$GUARD_AGENT_NAME" --session "$session" --transcript "$transcript" \
+  --event PreToolUse >/dev/null 2>&1
+
+exit 0
+```
+
 ## What a template must not get wrong
 
 Three failure modes are worth naming, because each one looks like a working

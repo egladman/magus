@@ -120,7 +120,7 @@ func BindConfigFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.StringVar(&cfg.Daemon.Address, "daemon-address", cfg.Daemon.Address, "MAGUS_DAEMON_ADDRESS: Address is the unix:// socket the parent listens on; empty auto-generates one.")
 	fs.DurationVar(&cfg.Daemon.IdleTTL, "daemon-idle-ttl", cfg.Daemon.IdleTTL, "MAGUS_DAEMON_IDLE_TTL: IdleTTL controls workspace eviction in the multi-workspace daemon; 0 = default 6h.")
 	fs.StringVar(&cfg.Daemon.Socket, "daemon-socket", cfg.Daemon.Socket, "MAGUS_DAEMON_SOCKET: Socket is the runtime socket path set by the daemon for forwarded children; unix:// URL or bare path.")
-	fs.DurationVar(&cfg.Daemon.Maintenance.RotateActivities, "daemon-maintenance-rotate-activities", cfg.Daemon.Maintenance.RotateActivities, "MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES")
+	fs.DurationVar(&cfg.Daemon.Maintenance.RotateActivities, "daemon-maintenance-rotate-activities", cfg.Daemon.Maintenance.RotateActivities, "MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES: RotateActivities is how often the daemon trims the activity trail.")
 	fs.DurationVar(&cfg.Daemon.Maintenance.RotateLogs, "daemon-maintenance-rotate-logs", cfg.Daemon.Maintenance.RotateLogs, "MAGUS_DAEMON_MAINTENANCE_ROTATE_LOGS")
 	fs.DurationVar(&cfg.Daemon.Maintenance.SyncGraph, "daemon-maintenance-sync-graph", cfg.Daemon.Maintenance.SyncGraph, "MAGUS_DAEMON_MAINTENANCE_SYNC_GRAPH")
 	fs.StringVar(&cfg.VCS.Name, "vcs-name", cfg.VCS.Name, "MAGUS_VCS_NAME")

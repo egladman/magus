@@ -20,6 +20,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh docs/guides/integrations/agents/magus-guard-observe.sh",
+            "timeout": 10
+          }
+        ]
       }
     ]
   }
