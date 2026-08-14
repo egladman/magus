@@ -18,6 +18,7 @@ import (
 // before it. Keeping the generation order here avoids compiling a spell against
 // yesterday's schema when Command, Service, or Target changes.
 //go:generate go run ../../cmd/magus-utils types -type Path -out gen/types/path.buzz
+//go:generate go run ../../cmd/magus-utils types -type Manifest -out gen/types/manifest.buzz
 //go:generate go run ../../cmd/magus-utils types -type Target -out gen/types/target.buzz
 //go:generate go run ../../cmd/magus-utils types -type PatchOp -out gen/types/patchop.buzz
 //go:generate go run ../../cmd/magus-utils types -type Charm -out gen/types/charm.buzz

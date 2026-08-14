@@ -280,6 +280,7 @@ export object ProjectEntry {
     dependsOn: [str] = [],
     exclusive: bool = false,
     manifests: [str] = [],
+    lockfiles: [str] = [],
 }
 
 export object Projects {

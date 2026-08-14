@@ -729,7 +729,8 @@ func resolveNodeRefs(nodes []types.TargetGraphNode, projectPath string) {
 // projectEntry builds the declared-facts view of p, shared by ListProjects and
 // EvaluateProjects (whose embedded ProjectEntry carries every field this builds,
 // Sources/Outputs excepted - see the field comment on ProjectEntry.Sources).
-func projectEntry(p *types.Project) types.ProjectEntry {
+func projectEntry(p *types.Project, root string) types.ProjectEntry {
+	manifests := projectManifestSpecs(p)
 	return types.ProjectEntry{
 		Path:      p.Path,
 		Name:      p.Name,
@@ -741,7 +742,8 @@ func projectEntry(p *types.Project) types.ProjectEntry {
 		Outputs:   p.Outputs,
 		DependsOn: p.DependsOn,
 		Exclusive: p.Exclusive,
-		Manifests: projectManifests(p),
+		Manifests: manifestNames(manifests),
+		Lockfiles: projectLockfiles(manifests, p.Dir, root),
 	}
 }
 
@@ -754,20 +756,108 @@ func projectEntry(p *types.Project) types.ProjectEntry {
 // manifest-declaring spell concatenates each spell's filtered list in spell order;
 // ordinary workspaces bind at most one language spell per project, so this is
 // almost always zero or one entry.
-func projectManifests(p *types.Project) []string {
-	var out []string
+func projectManifestSpecs(p *types.Project) []spells.Manifest {
+	var out []spells.Manifest
 	for _, name := range p.Spells {
 		sp, ok := project.DefaultSpellRegistry().Lookup(name)
 		if !ok {
 			continue
 		}
-		for _, f := range sp.Manifests() {
-			if _, err := os.Stat(filepath.Join(p.Dir, f)); err == nil {
-				out = append(out, f)
+		for _, m := range sp.Manifests() {
+			if _, err := os.Stat(filepath.Join(p.Dir, m.Value)); err == nil {
+				out = append(out, m)
 			}
 		}
 	}
 	return out
+}
+
+// manifestNames reduces resolved manifests to the bare filenames ProjectEntry.Manifests
+// has always carried.
+func manifestNames(manifests []spells.Manifest) []string {
+	if len(manifests) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(manifests))
+	for _, m := range manifests {
+		out = append(out, m.Value)
+	}
+	return out
+}
+
+// projectLockfiles finds the lockfile each of a project's manifests actually resolves
+// into, by walking from dir up to the workspace root and taking the first candidate
+// that exists. Results are workspace-relative, deduplicated, in the order found.
+//
+// The WALK is the point, and it is why a lockfile cannot be declared the way a manifest
+// is. pnpm, npm, yarn and cargo workspaces hoist ONE lockfile to the workspace root to
+// serve many manifests, so a member project has a package.json or Cargo.toml and no
+// lock beside it. Looking only in dir would report nothing for exactly the monorepo
+// layouts magus exists to run, and report it silently.
+//
+// Which is also why the sibling case proves nothing on its own: this repo happens to
+// keep a lockfile next to every package.json (console/, docs/, evals/,
+// libs/textsearch/), so a dir-only implementation passes here and fails in the field.
+// The test fixture covers a hoisted workspace for that reason.
+//
+// Unlike Manifests, these are workspace-relative rather than bare names: a bare
+// "pnpm-lock.yaml" cannot say WHICH directory won the walk, and that is the only
+// interesting thing this function determines.
+func projectLockfiles(manifests []spells.Manifest, dir, root string) []string {
+	if dir == "" || root == "" {
+		return nil
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, m := range manifests {
+		found, ok := findNearestLock(m.LockCandidates, dir, root)
+		if !ok || seen[found] {
+			continue
+		}
+		seen[found] = true
+		out = append(out, found)
+	}
+	return out
+}
+
+// findNearestLock walks dir and each ancestor up to and including root, returning the
+// first candidate found, as a root-relative slash path. A dir outside root yields no
+// hit rather than walking to the filesystem root.
+//
+// The walk is the OUTER loop and the candidates the inner one, which is the whole
+// subtlety: proximity outranks declared order. A project holding its own yarn.lock
+// inside a workspace whose root holds a pnpm-lock.yaml resolves to ITS yarn.lock, even
+// though pnpm-lock.yaml is declared first - because the candidate list is an
+// alternation over package managers, not a preference between them, and the nearer file
+// is the one the project's own package manager wrote. Candidate order only breaks ties
+// within a single directory, which is a layout that should not exist anyway (two
+// package managers, one project).
+func findNearestLock(candidates []string, dir, root string) (string, bool) {
+	if len(candidates) == 0 {
+		return "", false
+	}
+	rel, err := filepath.Rel(root, dir)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	for cur := dir; ; cur = filepath.Dir(cur) {
+		for _, name := range candidates {
+			if _, err := os.Stat(filepath.Join(cur, name)); err != nil {
+				continue
+			}
+			hit, err := filepath.Rel(root, filepath.Join(cur, name))
+			if err != nil {
+				return "", false
+			}
+			return filepath.ToSlash(hit), true
+		}
+		if cur == root {
+			return "", false
+		}
+		if parent := filepath.Dir(cur); parent == cur {
+			return "", false
+		}
+	}
 }
 
 // ListProjects returns the project inventory of the workspace.
@@ -778,7 +868,7 @@ func (m *Magus) ListProjects(ctx context.Context) (types.ProjectsOutput, error) 
 		if ctx.Err() != nil {
 			return types.ProjectsOutput{}, describeCancelled(ctx, "projects", i, len(all))
 		}
-		entries = append(entries, projectEntry(p))
+		entries = append(entries, projectEntry(p, m.ws.Root))
 	}
 	return types.ProjectsOutput{
 		Definition: types.ProjectDefinition,
@@ -930,7 +1020,7 @@ func (m *Magus) EvaluateProjects(ctx context.Context) (types.EvaluatedProjectsOu
 		// builds - Name and Spell included, the bug this fixes - except Sources and
 		// Outputs, which are overwritten with the RESOLVED, workspace-rooted globs
 		// baseStep computes (see the field comment on ProjectEntry.Sources).
-		pe := projectEntry(p)
+		pe := projectEntry(p, m.ws.Root)
 		pe.Sources = step.Sources
 		pe.Outputs = step.Outputs
 

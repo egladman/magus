@@ -54,6 +54,12 @@ type Inputs struct {
 	// @symbols shard - deterministic, so remote-shareable like the other extracted
 	// shards, and destined for lazy loading (it can dwarf the domain graph).
 	Symbols map[string][]types.KnowledgeSymbol
+	// Packages maps a project path to the third-party dependencies its manifest
+	// declares, at the versions that manifest resolves to. They merge into the single
+	// @packages shard rather than one per project, because a package node is shared
+	// between the projects that require it - see PackagesShardName. Deterministic, so
+	// remote-shareable like the other extracted shards.
+	Packages map[string][]types.KnowledgePackage
 	// VCS carries per-file git history metadata (empty unless knowledge.vcs.enabled and
 	// the workspace is a git repo). It folds onto existing file nodes in the @vcs shard
 	// as attrs - deterministic per commit, so remote-shareable.
@@ -174,6 +180,12 @@ func AssembleShards(in Inputs) []Shard {
 		if n := assembleNotes(in.PrivateNotes, known, PrivateNotesShardName, ScopePrivate); len(n.Nodes) > 0 {
 			shards = append(shards, n)
 		}
+	}
+	// Third-party dependencies, read from the manifests the project shards already
+	// named. One singleton shard rather than one per project, because a package node is
+	// shared by every project requiring it - see PackagesShardName.
+	if pk := assemblePackages(in.Packages); len(pk.Nodes) > 0 {
+		shards = append(shards, pk)
 	}
 	// The runtime shard carries both non-deterministic inputs: emits edges from
 	// prior diagnostics and timing attrs on existing targets. Timings are filtered

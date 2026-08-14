@@ -62,6 +62,33 @@ func ValidatePatch(ops []PatchOp) error {
 	return nil
 }
 
+// Manifest is one manifest an ecosystem declares: the file a project's dependencies
+// are declared in (go.mod, package.json, Cargo.toml, pyproject.toml), plus the
+// lockfiles that ecosystem resolves them into.
+//
+// Value keeps the field name Path uses so the two decode identically. mgs_listManifests
+// returned [Path] before this type existed, and the decoder reads keys structurally, so
+// a spell still returning Path values loads as a Manifest declaring no lockfile rather
+// than failing. That is the whole compat story; there is no second decode path.
+type Manifest struct {
+	Value string `json:"value"`
+	// LockCandidates names the lockfiles this ecosystem MIGHT resolve Value into, of
+	// which exactly one will exist - not the lockfiles a project has. package.json
+	// resolves into any of pnpm-lock.yaml, package-lock.json, npm-shrinkwrap.json,
+	// yarn.lock or a bun lockfile depending on which package manager is in use, and
+	// pyproject.toml into any of poetry.lock, pdm.lock, uv.lock or Pipfile.lock. Go and
+	// Rust have exactly one each, which is what makes the plural easy to misread: a
+	// consumer that takes the first element is right for go.sum and wrong for npm.
+	//
+	// Bare filenames rather than Paths, because a lockfile's DIRECTORY is not knowable
+	// here. mgs_ functions run during spell discovery, before a project exists, and a
+	// workspace hoists one lockfile to its root to serve many manifests. Which
+	// directory holds the live one is resolved by walking up from the project, not
+	// declared. (Locks are also relative to nothing, so Path's base - the reason Path
+	// beats a string elsewhere - has nothing to carry.)
+	LockCandidates []string `json:"lock_candidates,omitempty" buzz:"lockCandidates"`
+}
+
 // Descriptor is a spell's static description. For built-ins it is produced by
 // compiling each spells/<name>/spell.buzz to bytecode (go:generate
 // magus-utils spells), embedding the blob, and resolving its mgs_ functions at load
@@ -76,14 +103,13 @@ type Descriptor struct {
 	// Dot-directories are already skipped structurally, so only non-dot names belong
 	// here. Declared by mgs_listIgnoreDirs.
 	IgnoreDirs []string `json:"ignore_dirs,omitempty"`
-	// Manifests is the ordered list of candidate filenames that carry this spell's
-	// ecosystem's project-version metadata (go.mod, package.json, Cargo.toml,
-	// pyproject.toml). Ordered because some ecosystems have genuine alternatives -
-	// the first one present in a project directory is its manifest. Declared by
+	// Manifests is the ordered list of candidate manifests this spell's ecosystem
+	// declares. Ordered because some ecosystems have genuine alternatives - the first
+	// one present in a project directory is its manifest. Declared by
 	// mgs_listManifests. Distinct from Needs (cache/affected input globs), from a
 	// spell's DeclarationFiles (project discovery, not exposed on Descriptor), and
 	// from VersionCmd (the toolchain's own version, not the project's).
-	Manifests   []string            `json:"manifests,omitempty"`
+	Manifests   []Manifest          `json:"manifests,omitempty"`
 	Opaque      bool                `json:"opaque,omitempty"`
 	TargetNeeds map[string][]string `json:"target_needs,omitempty"`
 	Ops         map[string]Op       `json:"targets,omitempty"`

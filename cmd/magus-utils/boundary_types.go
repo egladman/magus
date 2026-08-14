@@ -18,6 +18,10 @@ import (
 // new mirror cannot silently describe a shape the runtime fails to produce.
 var boundaryTypes = []boundaryType{
 	{Name: "Path", Type: reflect.TypeFor[types.Path]()},
+	// Manifest's fields are a str and a [str], so it references no other mirror and
+	// its position here is free - but it is kept beside Path because a spell authors
+	// the two together in mgs_listManifests, and Path is what Manifest replaced there.
+	{Name: "Manifest", Type: reflect.TypeFor[spells.Manifest]()},
 	{Name: "Target", Type: reflect.TypeFor[types.Target]()},
 	// Leaf first: Command.hints is [Hint], so Hint must already be declared.
 	{Name: "Hint", Type: reflect.TypeFor[spells.Hint]()},

@@ -308,7 +308,7 @@ func kindRank(kind string) int {
 	switch kind {
 	case types.KindProject, types.KindTarget, types.KindSpell, types.KindOp,
 		types.KindTool, types.KindCharm, types.KindModule, types.KindMethod,
-		types.KindDiagnostic, types.KindAuthor, types.KindOwner:
+		types.KindDiagnostic, types.KindAuthor, types.KindOwner, types.KindPackage:
 		return 100
 	default:
 		return 0
