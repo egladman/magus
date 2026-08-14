@@ -182,6 +182,18 @@ It prints, once and never to disk: the secret seed (set it as the
 `MAGUS_CACHE_SIGNING_KEY` CI secret), the public key, and a ready-to-paste
 `cache.remote.trusted_keys` YAML snippet. Add the public key to `magus.yaml`.
 
+To hand the seed to a secret store without reading it, ask for that one field. The
+record is `{keyid, seed, pubkey}`, and `-o template` projects the `-o json` names, so
+it is `{{.seed}}` and not `{{.Seed}}`:
+
+```sh
+magus config cache key generate -o template='{{.seed}}'   # the seed alone on stdout
+```
+
+Everything else moves to stderr in that mode, so a pipe receives the secret and
+nothing else. `--tee` is rejected here rather than honored: it mirrors structured
+output into a file, and a signing key must not come to rest on disk.
+
 ```sh
 magus config cache key id <pubkey>   # show the keyid + pubkey for a key
 magus config cache key id            # same, derived from MAGUS_CACHE_SIGNING_KEY (seed never printed)
@@ -207,24 +219,43 @@ env:
 Four steps, in this order. The cache stays off until the last one, so a half-finished
 setup degrades to local-only rather than breaking a build.
 
-**1. Mint the keypair.** It prints the seed once, to the terminal, and never to disk:
+**1 and 2. Mint the key and store it.** Pick one of two custody models. Both keep the
+seed off disk; they differ in whether you ever see it.
+
+_Hand it straight to the secret store, unseen._ `-o template='{{.seed}}'` puts the seed
+alone on stdout - no banner, and no trailing newline, which matters because
+`gh secret set` stores stdin verbatim and one stray byte becomes part of the secret:
+
+```sh
+set -o pipefail
+magus config cache key generate -o template='{{.seed}}' | gh secret set MAGUS_CACHE_SIGNING_KEY
+```
+
+`set -o pipefail` is not optional here. A pipeline reports only its LAST command's
+status, so without it a failed keygen still looks successful and `gh` stores whatever
+it read - possibly nothing. The keyid and public key are printed to stderr, so you
+still see the half you need for step 3.
+
+_See it once, then file it._ Use this when the seed belongs in your own password
+manager as well. `gh secret set` reads stdin when given no `--body`, so the value stays
+out of your shell history and out of the process list - paste at the prompt, Ctrl-D:
 
 ```sh
 magus config cache key generate
 ```
 
-**2. Store the seed as a secret, over stdin.** `gh secret set` reads the value from
-standard input when you give it no `--body`, so the seed never appears in your shell
-history or in the process list. Paste it at the prompt, then press Ctrl-D:
-
 ```sh
 gh secret set MAGUS_CACHE_SIGNING_KEY
 ```
 
-Never pass a seed as `--body` or with `echo ... |` - both put it in history. If you
-would rather it never reach your terminal at all, use the one-shot CI bootstrap job
-described above, or paste it into the web UI at _Settings -> Secrets and variables ->
-Actions -> Secrets -> New repository secret_.
+Never pass a seed as `--body` or with `echo ... |`; both put it in history. `--tee` is
+refused on `key generate` for the same reason - it writes structured output to a file,
+and a signing key must not come to rest on disk.
+
+The web UI is equally fine for either model: _Settings -> Secrets and variables ->
+Actions -> Secrets -> New repository secret_. A paste into a password field is not in
+your shell history either. And if the seed should never touch your machine at all, use
+the one-shot CI bootstrap job described above.
 
 **3. Publish the public key.** It is not secret, so an argument is fine here. It goes
 in two places - `magus.yaml` is what every consumer verifies against, and the
