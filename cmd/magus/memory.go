@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/cmd/magus/gen"
 	store "github.com/egladman/magus/internal/memory"
 )
 
@@ -142,14 +143,15 @@ func (s *stringList) Set(v string) error {
 }
 
 func memoryPut(root string, args []string) error {
+	// The two repeatable flags stay hand-bound - the registry declares them
+	// FlagCustom so they reach the man page, which never listed them - and the
+	// rest bind from the registry.
 	var refs, references stringList
-	var typ, status, body string
+	var pf *gen.MemoryPutFlags
 	pos, err := cmdParse("memory put", args, func(fs *flag.FlagSet) {
-		fs.Var(&refs, "ref", "Entry ref in 'kind: target' form; repeat for multiple refs")
-		fs.Var(&references, "reference", "Name of another entry this one relates to; repeat as needed")
-		fs.StringVar(&typ, "type", "", "Entry type: pointer, decision, or plan")
-		fs.StringVar(&status, "status", "", "Lifecycle label, e.g. accepted, active, done, stale")
-		fs.StringVar(&body, "body", "", "Short why/caption (decision and plan only)")
+		fs.Var(&refs, gen.FlagMemoryPutRef, "Entry ref in 'kind: target' form; repeat for multiple refs")
+		fs.Var(&references, gen.FlagMemoryPutReference, "Name of another entry this one relates to; repeat as needed")
+		pf = gen.BindMemoryPut(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus memory put <name> --type <pointer|decision|plan> --ref 'kind: target' [--ref ...] [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -173,7 +175,7 @@ func memoryPut(root string, args []string) error {
 		return err
 	}
 	rec, err := store.Put(root, store.Record{
-		Name: pos[0], Type: store.RecordType(typ), Status: status, Body: body,
+		Name: pos[0], Type: store.RecordType(pf.Type), Status: pf.Status, Body: pf.Body,
 		Refs: parsed, References: references,
 	})
 	if err != nil {

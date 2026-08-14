@@ -509,6 +509,7 @@ trigger a full initial build in the downstream magus affected --stdin.`,
 		{Name: "initial", Kind: FlagBool, Default: true, Doc: "Emit an --all batch on startup before watching"},
 		{Name: "null", Kind: FlagBool, Doc: "NUL-separate paths; double-NUL between batches"},
 		{Name: "backend", Kind: FlagString, Default: "fsnotify", Doc: "Notification backend: fsnotify or poll"},
+		{Name: "ignore", Kind: FlagCustom, Doc: "Ignore pattern; repeatable. Form: type=<glob|regex|literal>,pattern=<value>"},
 	},
 	Examples: []Example{
 		{"Continuous build pipeline", "magus watch | magus affected --stdin build"},
@@ -883,16 +884,23 @@ verify is the maintenance verb: it reports entries that are malformed, stale,
 or that link to something no longer there. The same entries are reachable
 through the magus_memory MCP tool and the console, so a journal written from
 the CLI is readable by an agent without either side learning a new format.`,
-	Flags: []Flag{
-		{Name: "type", Kind: FlagString, Doc: "Entry type: pointer, decision, or plan (memory put)"},
-		{Name: "status", Kind: FlagString, Doc: "Lifecycle label, e.g. accepted, active, done, stale (memory put)"},
-		{Name: "body", Kind: FlagString, Doc: "Short why/caption, decision and plan only (memory put)"},
-	},
 	Usage: "magus memory <ls|get|put|delete|verify> [flags]",
 	Children: []Command{
 		{Name: "ls", Short: "Show entries and any repair warnings"},
 		{Name: "get", Short: "Show one entry"},
-		{Name: "put", Short: "Create or replace a named entry"},
+		{
+			Name:  "put",
+			Short: "Create or replace a named entry",
+			Flags: []Flag{
+				{Name: "type", Kind: FlagString, Doc: "Entry type: pointer, decision, or plan"},
+				{Name: "status", Kind: FlagString, Doc: "Lifecycle label, e.g. accepted, active, done, stale"},
+				{Name: "body", Kind: FlagString, Doc: "Short why/caption, decision and plan only"},
+				// Repeatable, so bound by the command itself; declared here only so
+				// they reach the man page, which never listed them.
+				{Name: "ref", Kind: FlagCustom, Doc: "Entry ref in 'kind: target' form; repeat for multiple refs"},
+				{Name: "reference", Kind: FlagCustom, Doc: "Name of another entry this one relates to; repeat as needed"},
+			},
+		},
 		{Name: "delete", Short: "Remove one entry"},
 		{Name: "verify", Short: "Check malformed, stale, and broken-linked entries"},
 	},

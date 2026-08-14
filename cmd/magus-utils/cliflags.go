@@ -80,7 +80,19 @@ func writeBinder(b *bytes.Buffer, command string, flags []clispec.Flag) {
 	if len(flags) == 0 {
 		return
 	}
-	groups := groupAliases(command, flags)
+	// A custom-valued flag is declared for the docs and bound by the command
+	// itself; emitting a field and a second fs.Var for it would panic at parse
+	// time with "flag redefined". Its name constant still comes out, via constsFor.
+	bindable := make([]clispec.Flag, 0, len(flags))
+	for _, f := range flags {
+		if f.Kind != clispec.FlagCustom {
+			bindable = append(bindable, f)
+		}
+	}
+	if len(bindable) == 0 {
+		return
+	}
+	groups := groupAliases(command, bindable)
 
 	typeName := goIdent(command) + "Flags"
 	fmt.Fprintf(b, "\n// %sFlags are the flags declared for `magus %s`.\ntype %s struct {\n", goIdent(command), command, typeName)

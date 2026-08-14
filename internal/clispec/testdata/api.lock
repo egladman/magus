@@ -123,9 +123,6 @@ flag init/force
 flag init/global
 flag init/local
 flag init/vcs
-flag memory/body
-flag memory/status
-flag memory/type
 flag notify/desktop
 flag notify/outcome
 flag path/global
@@ -168,6 +165,7 @@ flag status/watch
 flag status/workspace
 flag watch/backend
 flag watch/debounce
+flag watch/ignore
 flag watch/initial
 flag watch/null
 subcommand affected

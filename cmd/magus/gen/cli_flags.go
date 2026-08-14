@@ -155,12 +155,16 @@ const (
 	FlagInitLocal = "local"
 	// init: --vcs
 	FlagInitVCS = "vcs"
-	// memory: --body
-	FlagMemoryBody = "body"
-	// memory: --status
-	FlagMemoryStatus = "status"
-	// memory: --type
-	FlagMemoryType = "type"
+	// memory put: --body
+	FlagMemoryPutBody = "body"
+	// memory put: --ref
+	FlagMemoryPutRef = "ref"
+	// memory put: --reference
+	FlagMemoryPutReference = "reference"
+	// memory put: --status
+	FlagMemoryPutStatus = "status"
+	// memory put: --type
+	FlagMemoryPutType = "type"
 	// notify: --desktop
 	FlagNotifyDesktop = "desktop"
 	// notify: --outcome
@@ -267,6 +271,8 @@ const (
 	FlagWatchBackend = "backend"
 	// watch: --debounce
 	FlagWatchDebounce = "debounce"
+	// watch: --ignore
+	FlagWatchIgnore = "ignore"
 	// watch: --initial
 	FlagWatchInitial = "initial"
 	// watch: --null
@@ -631,19 +637,19 @@ func BindVCSResolve(fs *flag.FlagSet) *VCSResolveFlags {
 	return &f
 }
 
-// MemoryFlags are the flags declared for `magus memory`.
-type MemoryFlags struct {
+// MemoryPutFlags are the flags declared for `magus memory put`.
+type MemoryPutFlags struct {
 	Type   string // --type
 	Status string // --status
 	Body   string // --body
 }
 
-// BindMemory registers `magus memory`'s flags on fs and returns the destination.
-func BindMemory(fs *flag.FlagSet) *MemoryFlags {
-	var f MemoryFlags
-	fs.StringVar(&f.Type, FlagMemoryType, "", "Entry type: pointer, decision, or plan (memory put)")
-	fs.StringVar(&f.Status, FlagMemoryStatus, "", "Lifecycle label, e.g. accepted, active, done, stale (memory put)")
-	fs.StringVar(&f.Body, FlagMemoryBody, "", "Short why/caption, decision and plan only (memory put)")
+// BindMemoryPut registers `magus memory put`'s flags on fs and returns the destination.
+func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
+	var f MemoryPutFlags
+	fs.StringVar(&f.Type, FlagMemoryPutType, "", "Entry type: pointer, decision, or plan")
+	fs.StringVar(&f.Status, FlagMemoryPutStatus, "", "Lifecycle label, e.g. accepted, active, done, stale")
+	fs.StringVar(&f.Body, FlagMemoryPutBody, "", "Short why/caption, decision and plan only")
 	return &f
 }
 

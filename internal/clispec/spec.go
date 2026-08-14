@@ -67,6 +67,17 @@ const (
 	FlagString   FlagKind = "string"
 	FlagInt      FlagKind = "int"
 	FlagDuration FlagKind = "duration"
+
+	// FlagCustom is a flag whose value type is the command's own: a repeatable
+	// flag.Value like `magus watch --ignore` or `magus memory put --ref`.
+	//
+	// DECLARED here, BOUND by hand. The command keeps its fs.Var call, and the
+	// generator emits only the name constant - no struct field and no second
+	// binding, which would be a "flag redefined" panic. What the declaration buys
+	// is documentation: --ignore, --ref and --reference were each bound by a
+	// command and absent from every man page, because a flag the registry could
+	// not express was simply left out of it.
+	FlagCustom FlagKind = "custom"
 )
 
 // Flag is one command-specific flag.
@@ -151,6 +162,11 @@ func bindFlags(fs *flag.FlagSet, flags []Flag) {
 			fs.Int(f.Name, defaultOf[int](f.Default), f.Doc)
 		case FlagDuration:
 			fs.Duration(f.Name, defaultOf[time.Duration](f.Default), f.Doc)
+		case FlagCustom:
+			// Registered as a string for RENDERING only: this FlagSet is the one the
+			// man-page and docs generators walk, never the one the command parses
+			// with, so this decides how the flag is printed and nothing else.
+			fs.String(f.Name, defaultOf[string](f.Default), f.Doc)
 		default:
 			// No silent fallback. An unset or misspelled Kind used to land on the
 			// string case, which binds a flag that parses but never means what it
